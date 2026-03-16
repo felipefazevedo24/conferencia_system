@@ -276,6 +276,17 @@
                     </a>
                 </div>
             </div>
+
+            <div class="menu-item">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseWMS" role="button" aria-expanded="false">
+                    <span><i class="fas fa-warehouse"></i> WMS</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse submenu" id="collapseWMS" data-bs-parent="#accordionSidebar">
+                    <!-- Subitens WMS serão adicionados aqui -->
+                </div>
+            </div>
             {% endif %}
 
             {% if session.get('role') == 'Admin' %}
