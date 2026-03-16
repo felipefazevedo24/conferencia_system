@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}WMS | Painel Administrativo | ERP FAM{% endblock %}
+
+{% block extra_head %}
+<style>
+    :root {
+        --sap-blue: #0a6ed1;
+        --sap-hover: #085caf;
+        --erp-bg: #f4f6f9;
+        --border-color: #dbe2e8;
+        --text-main: #1a293b;
+        --text-muted: #64748b;
+        --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        --danger-erp: #d92d20;
+    }
+
+    body { background-color: var(--erp-bg); color: var(--text-main); font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+    
+    /* Wrapper para respeitar o menu lateral */
+    .admin-wrapper { padding: 25px; max-width: 1600px; margin: 0 auto; }
+
+    /* Cabeçalho Branco Padronizado */
+    .page-header-erp { 
+        background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+        margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+        display: flex; justify-content: space-between; align-items: center; 
+        color: #000000; border: 1px solid var(--border-color);
+    }
+    .page-header-erp h1 { margin: 0; font-size: 18px; text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+    .page-header-erp i { color: var(--sap-blue); }
+
+    .subtitle { margin: 4px 0 0 0; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+    .toolbar { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* Botões Premium */
+    .btn {
+        border: 1px solid #cbd5e1; background: #fff; color: #475569;
+        border-radius: 8px; padding: 10px 16px; font-size: 12px; font-weight: 700;
+        cursor: pointer; text-decoration: none; transition: all 0.2s;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+    .btn.primary { border-color: var(--sap-blue); background: var(--sap-blue); color: #fff; }
+    .btn.primary:hover { background: var(--sap-hover); transform: translateY(-1px); }
+    .btn.danger { border-color: var(--danger-erp); background: var(--danger-erp); color: #fff; }
+
+    /* Layout Grid */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+
+    /* Cards Estilizados */
+    .card {
+        background: #fff; border: 1px solid var(--border-color);
+        border-radius: 16px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px;
+    }
+    .card h3 {
+        margin: 0 0 15px 0; font-size: 13px; color: var(--sap-blue);
+        font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+        display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;
+    }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px; }
+
+    .input {
+        border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px;
+        font-size: 13px; min-width: 140px; background: #fff; transition: all 0.2s;
+    }
+    .input:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+
+    /* Tabelas */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { 
+        background: #f8fafc; padding: 12px; font-size: 11px; 
+        text-transform: uppercase; color: #64748b; text-align: left; font-weight: 800;
+        border-bottom: 2px solid #edf2f7;
+    }
+    td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    tr:hover td { background: #f0f7ff; }
+
+    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-wrapper">
+    <div class="page-header-erp">
+        <div>
+            <h1><i class="fas fa-cogs"></i> WMS | Painel Administrativo</h1>
+            <p class="subtitle">Gestão técnica de localizações e controle de estornos de endereçamento.</p>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Atualizar Tudo</button>
+            <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Voltar ao Cockpit</a>
+        </div>
+    </div>
+
+    <div class="grid">
+        <section class="card">
+            <h3><i class="fas fa-plus-circle"></i> Cadastro de Novos Endereços</h3>
+            <div class="row">
+                <input id="rua" class="input" placeholder="Rua" />
+                <input id="predio" class="input" placeholder="Prédio" />
+                <input id="nivel" class="input" placeholder="Nível" />
+                <input id="apartamento" class="input" placeholder="Apto" />
+                <button class="btn primary" onclick="criarEndereco()">Cadastrar</button>
+            </div>
+            <div class="table-wrap">
+                <table style="max-height: 500px; display: block; overflow-y: auto;">
+                    <thead style="position: sticky; top: 0; z-index: 10;">
+                        <tr>
+                            <th width="150">Código</th>
+                            <th>Rua</th>
+                            <th>Prédio</th>
+                            <th>Nível</th>
+                            <th>Apto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyLocalizacoes">
+                        <tr><td colspan="5" style="text-align:center;">Carregando localizações...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3><i class="fas fa-undo"></i> Itens Endereçados | Gestão de Estorno</h3>
+            <div class="row">
+                <input id="filtroNotaEnderecada" class="input" placeholder="Filtrar por Nota Fiscal..." />
+                <button class="btn primary" onclick="listarEnderecados()">Pesquisar</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>NF</th>
+                            <th>Produto</th>
+                            <th>Qtd</th>
+                            <th>GRV</th>
+                            <th>OS/OC</th>
+                            <th style="text-align:center;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyEnderecados">
+                        <tr><td colspan="6" style="text-align:center;">Aguardando consulta...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+// --- Lógica JavaScript Original Integrada ---
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.erro || data.msg || 'Falha na requisição');
+    return data;
+}
+
+async function listarLocalizacoes() {
+    const tbody = document.getElementById('tbodyLocalizacoes');
+    try {
+        const locais = await fetchJson('/api/wms/localizacoes');
+        tbody.innerHTML = '';
+        if (!locais.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhum endereço cadastrado.</td></tr>';
+            return;
+        }
+        locais.forEach((loc) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong style="color:var(--sap-blue)">${loc.codigo}</strong></td>
+                <td>${loc.rua || '-'}</td>
+                <td>${loc.predio || '-'}</td>
+                <td>${loc.nivel || '-'}</td>
+                <td>${loc.apartamento || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5">Erro: ${err.message}</td></tr>`;
+    }
+}
+
+async function criarEndereco() {
+    const rua = document.getElementById('rua').value.trim();
+    const predio = document.getElementById('predio').value.trim();
+    const nivel = document.getElementById('nivel').value.trim();
+    const apartamento = document.getElementById('apartamento').value.trim();
+
+    if (!rua || !predio || !nivel || !apartamento) {
+        alert('Preencha rua, prédio, nível e apartamento.');
+        return;
+    }
+
+    try {
+        await fetchJson('/api/wms/localizacoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rua, predio, nivel, apartamento }),
+        });
+        document.getElementById('rua').value = '';
+        document.getElementById('predio').value = '';
+        document.getElementById('nivel').value = '';
+        document.getElementById('apartamento').value = '';
+        await listarLocalizacoes();
+    } catch (err) { alert(err.message); }
+}
+
+async function listarEnderecados() {
+    const nota = document.getElementById('filtroNotaEnderecada').value.trim();
+    const query = nota ? `?nota=${encodeURIComponent(nota)}` : '';
+    const tbody = document.getElementById('tbodyEnderecados');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Buscando...</td></tr>';
+
+    try {
+        const itens = await fetchJson(`/api/wms/itens-enderecados${query}`);
+        tbody.innerHTML = '';
+        if (!itens.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum item localizado.</td></tr>';
+            return;
+        }
+
+        itens.forEach((item) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${item.numero_nota}</strong></td>
+                <td>${item.codigo_item}</td>
+                <td style="font-weight:700;">${Number(item.qtd_atual || 0).toFixed(2)}</td>
+                <td>${item.codigo_grv || '-'}</td>
+                <td><span style="font-size:11px;">${item.ordem_servico || '-'}/${item.ordem_compra || '-'}</span></td>
+                <td style="text-align:center;"><button class="btn danger" style="padding:5px 10px; font-size:10px;" onclick="estornarEnderecamento(${item.id})">Estornar</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) { tbody.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`; }
+}
+
+async function estornarEnderecamento(itemWmsId) {
+    const motivo = prompt('Descreva o motivo do estorno para auditoria:');
+    if (motivo === null) return;
+    try {
+        await fetchJson('/api/wms/estornar-enderecamento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_wms_id: itemWmsId, motivo: motivo || 'Não informado' }),
+        });
+        alert('Estorno realizado. O item voltou para a fila de pendentes.');
+        await listarEnderecados();
+    } catch (err) { alert(err.message); }
+}
+
+async function refreshAll() {
+    await listarLocalizacoes();
+    await listarEnderecados();
+}
+
+document.addEventListener('DOMContentLoaded', refreshAll);
+</script>
+{% endblock %}

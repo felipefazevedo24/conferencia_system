@@ -277,6 +277,7 @@
                 </div>
             </div>
 
+            {% if session.get('role') in ['Admin', 'Fiscal'] %}
             <div class="menu-item">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseWMS" role="button" aria-expanded="false">
@@ -285,13 +286,15 @@
                 </a>
                 <div class="collapse submenu" id="collapseWMS" data-bs-parent="#accordionSidebar">
                     <a href="/wms" class="list-group-item list-group-item-action">
-                        <i class="fas fa-boxes"></i> Gerenciar Armazém
+                        <i class="fas fa-map-marker-alt"></i> Endereçamento
                     </a>
-                    <a href="#" class="list-group-item list-group-item-action">
-                        <i class="fas fa-chart-bar"></i> Relatórios de Estoque
+                    <a href="/wms#relatorio-estoque" class="list-group-item list-group-item-action">
+                        <i class="fas fa-chart-bar"></i> Relatório de Estoque
                     </a>
                 </div>
             </div>
+            {% endif %}
+
             {% endif %}
 
             {% if session.get('role') == 'Admin' %}
@@ -313,6 +316,9 @@
                     </a>
                     <a href="/admin/acessos" class="list-group-item list-group-item-action">
                         <i class="fas fa-user-clock"></i> Auditoria de Acessos
+                    </a>
+                    <a href="/admin/wms-enderecos" class="list-group-item list-group-item-action">
+                        <i class="fas fa-map-signs"></i> Cadastro de Endereços WMS
                     </a>
                 </div>
             </div>

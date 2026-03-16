@@ -49,9 +49,15 @@ def historico_page():
 
 
 @page_bp.route("/wms")
-@roles_required("Admin")
+@roles_required("Fiscal", "Admin")
 def wms_page():
     return render_template("wms.html", user=session["username"])
+
+
+@page_bp.route("/admin/wms-enderecos")
+@roles_required("Admin")
+def wms_enderecos_admin_page():
+    return render_template("admin_wms_enderecos.html", user=session["username"])
 
 
 @page_bp.route("/expedicao/conferencia")

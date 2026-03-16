@@ -19,20 +19,24 @@ class WMSService:
     """Serviço centralizado para operações de WMS"""
 
     @staticmethod
-    def criar_localizacao(corredor, prateleira, posicao, capacidade_maxima=100.0):
+    def criar_localizacao(rua, predio, nivel, apartamento):
         """
         Cria uma nova localização no armazém.
         
         Args:
-            corredor: Identificador do corredor (ex: 'C1')
-            prateleira: Identificador da prateleira (ex: 'P1')
-            posicao: Posição na prateleira (ex: '1')
-            capacidade_maxima: Capacidade máxima em kg/unidades
+            rua: Rua do endereco
+            predio: Predio do endereco
+            nivel: Nivel do endereco
+            apartamento: Apartamento do endereco
             
         Returns:
             LocalizacaoArmazem ou None se já existe
         """
-        codigo = f"{corredor}-{prateleira}-{posicao}"
+        rua = str(rua).strip()
+        predio = str(predio).strip()
+        nivel = str(nivel).strip()
+        apartamento = str(apartamento).strip()
+        codigo = f"{rua}-{predio}-{nivel}-{apartamento}"
         
         # Verifica se já existe
         localizacao = LocalizacaoArmazem.query.filter_by(codigo=codigo).first()
@@ -41,10 +45,15 @@ class WMSService:
             
         localizacao = LocalizacaoArmazem(
             codigo=codigo,
-            corredor=corredor,
-            prateleira=prateleira,
-            posicao=posicao,
-            capacidade_maxima=capacidade_maxima,
+            rua=rua,
+            predio=predio,
+            nivel=nivel,
+            apartamento=apartamento,
+            # Mantidos por compatibilidade com estrutura existente.
+            corredor=rua[:10],
+            prateleira=predio[:10],
+            posicao=f"{nivel}-{apartamento}"[:10],
+            capacidade_maxima=999999.0,
             capacidade_atual=0.0,
             ativo=True
         )
@@ -84,6 +93,8 @@ class WMSService:
         # Usa quantidade da nota se não foi passada
         if qtd_recebida is None:
             qtd_recebida = item_nota.qtd_real or 0
+
+        status_inicial = 'Armazenado' if localizacao_id else 'Pendente Enderecamento'
             
         # Cria registro WMS
         item_wms = ItemWMS(
@@ -99,12 +110,16 @@ class WMSService:
             data_validade=data_validade,
             localizacao_id=localizacao_id,
             usuario_armazenamento=usuario,
-            data_armazenamento=datetime.now(),
-            status='Armazenado',
+            data_armazenamento=datetime.now() if localizacao_id else None,
+            status=status_inicial,
             ativo=True
         )
         db.session.add(item_wms)
         db.session.flush()  # Garante que item_wms.id é gerado
+
+        if not localizacao_id:
+            db.session.commit()
+            return item_wms
         
         # Registra movimentação de armazenamento
         movimentacao = MovimentacaoWMS(
@@ -247,13 +262,17 @@ class WMSService:
         Returns:
             List[{localizacao_codigo, qtd_total, qtd_separada, ...}]
         """
+        codigo_item = (codigo_item or '').strip()
+        if not codigo_item:
+            return []
+
         estoques = db.session.query(
             EstoqueWMS,
             LocalizacaoArmazem.codigo.label('localizacao_codigo')
         ).join(
             LocalizacaoArmazem
         ).filter(
-            EstoqueWMS.codigo_item == codigo_item,
+            func.lower(func.trim(EstoqueWMS.codigo_item)) == codigo_item.lower(),
             LocalizacaoArmazem.ativo == True
         ).all()
         
@@ -337,9 +356,7 @@ class WMSService:
         localizacoes = LocalizacaoArmazem.query.all()
         localizacoes_ativas = [loc for loc in localizacoes if loc.ativo]
         
-        ocupacao_total = sum(loc.capacidade_atual for loc in localizacoes_ativas) if localizacoes_ativas else 0
-        capacidade_total = sum(loc.capacidade_maxima for loc in localizacoes_ativas) if localizacoes_ativas else 1
-        ocupacao_media = (ocupacao_total / capacidade_total * 100) if capacidade_total > 0 else 0
+        ocupacao_media = 0
         
         estoques = EstoqueWMS.query.all()
         qtd_itens = sum(e.qtd_total for e in estoques)
@@ -370,10 +387,178 @@ class WMSService:
             LocalizacaoArmazem ou None
         """
         localizacoes = LocalizacaoArmazem.query.filter(
-            LocalizacaoArmazem.ativo == True,
-            LocalizacaoArmazem.capacidade_atual + qtd <= LocalizacaoArmazem.capacidade_maxima
+            LocalizacaoArmazem.ativo == True
         ).order_by(
-            (LocalizacaoArmazem.capacidade_maxima - LocalizacaoArmazem.capacidade_atual).desc()
+            LocalizacaoArmazem.data_criacao.asc()
         ).first()
         
         return localizacoes
+
+    @staticmethod
+    def listar_pendentes_enderecamento(numero_nota=None):
+        WMSService._sanear_pendencias_enderecamento()
+
+        query = ItemWMS.query.filter_by(localizacao_id=None, ativo=True)
+        if numero_nota:
+            query = query.filter(ItemWMS.numero_nota == str(numero_nota))
+        return query.order_by(ItemWMS.data_criacao.desc()).all()
+
+    @staticmethod
+    def _sanear_pendencias_enderecamento():
+        """
+        Higieniza pendências WMS:
+        1) Desativa pendências de NF que não esteja mais em status Lançado.
+        2) Consolida duplicidades de mesma NF+SKU em um único registro ativo.
+        """
+        alterado = False
+
+        notas_lancadas = {
+            n[0]
+            for n in db.session.query(ItemNota.numero_nota)
+            .filter(ItemNota.status == 'Lançado')
+            .distinct()
+            .all()
+        }
+
+        pendentes = (
+            ItemWMS.query.filter_by(localizacao_id=None, ativo=True)
+            .order_by(ItemWMS.id.asc())
+            .all()
+        )
+
+        agregador = {}
+        for item in pendentes:
+            # Se nota não está lançada, não deve aparecer em pendências de endereçamento.
+            if item.numero_nota not in notas_lancadas:
+                item.ativo = False
+                alterado = True
+                continue
+
+            chave = (str(item.numero_nota or '').strip(), str(item.codigo_item or '').strip())
+            if chave not in agregador:
+                agregador[chave] = item
+                continue
+
+            principal = agregador[chave]
+            principal.qtd_recebida = float(principal.qtd_recebida or 0) + float(item.qtd_recebida or 0)
+            principal.qtd_atual = float(principal.qtd_atual or 0) + float(item.qtd_atual or 0)
+            item.ativo = False
+            alterado = True
+
+        if alterado:
+            db.session.commit()
+
+    @staticmethod
+    def enderecar_item_pendente(item_wms_id, localizacao_id, usuario, codigo_grv, ordem_servico=None, ordem_compra=None):
+        item_wms = ItemWMS.query.get(item_wms_id)
+        localizacao = LocalizacaoArmazem.query.get(localizacao_id)
+
+        if not item_wms or not localizacao:
+            return None
+
+        if item_wms.localizacao_id is not None:
+            return None
+
+        qtd = item_wms.qtd_atual or 0
+
+        if not codigo_grv:
+            return None
+
+        if not ordem_servico and not ordem_compra:
+            return None
+
+        item_wms.localizacao_id = localizacao_id
+        item_wms.usuario_armazenamento = usuario
+        item_wms.data_armazenamento = datetime.now()
+        item_wms.codigo_grv = str(codigo_grv).strip()
+        item_wms.ordem_servico = str(ordem_servico).strip() if ordem_servico else None
+        item_wms.ordem_compra = str(ordem_compra).strip() if ordem_compra else None
+        item_wms.status = 'Armazenado'
+
+        movimentacao = MovimentacaoWMS(
+            item_wms_id=item_wms.id,
+            numero_nota=item_wms.numero_nota,
+            tipo_movimentacao='Armazenamento',
+            localizacao_origem_id=None,
+            localizacao_destino_id=localizacao_id,
+            qtd_movimentada=qtd,
+            motivo='Enderecamento manual apos lancamento',
+            usuario=usuario,
+            data_movimentacao=datetime.now(),
+        )
+        db.session.add(movimentacao)
+
+        estoque = EstoqueWMS.query.filter_by(
+            codigo_item=item_wms.codigo_item,
+            localizacao_id=localizacao_id,
+        ).first()
+        if estoque:
+            estoque.qtd_total += qtd
+            estoque.data_atualizacao = datetime.now()
+        else:
+            db.session.add(
+                EstoqueWMS(
+                    codigo_item=item_wms.codigo_item,
+                    localizacao_id=localizacao_id,
+                    qtd_total=qtd,
+                    qtd_separada=0.0,
+                    data_atualizacao=datetime.now(),
+                )
+            )
+
+        localizacao.capacidade_atual += qtd
+        db.session.commit()
+        return item_wms
+
+    @staticmethod
+    def listar_itens_enderecados(numero_nota=None):
+        query = ItemWMS.query.filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.isnot(None))
+        if numero_nota:
+            query = query.filter(ItemWMS.numero_nota == str(numero_nota).strip())
+        return query.order_by(ItemWMS.data_armazenamento.desc(), ItemWMS.id.desc()).all()
+
+    @staticmethod
+    def estornar_enderecamento(item_wms_id, usuario, motivo=None):
+        item_wms = ItemWMS.query.get(item_wms_id)
+        if not item_wms or not item_wms.localizacao_id:
+            return None
+
+        localizacao_id_origem = item_wms.localizacao_id
+        qtd = item_wms.qtd_atual or 0
+
+        estoque = EstoqueWMS.query.filter_by(
+            codigo_item=item_wms.codigo_item,
+            localizacao_id=localizacao_id_origem,
+        ).first()
+        if estoque:
+            estoque.qtd_total = max((estoque.qtd_total or 0) - qtd, 0)
+            estoque.data_atualizacao = datetime.now()
+
+        localizacao = LocalizacaoArmazem.query.get(localizacao_id_origem)
+        if localizacao:
+            localizacao.capacidade_atual = max((localizacao.capacidade_atual or 0) - qtd, 0)
+
+        item_wms.localizacao_id = None
+        item_wms.status = 'Pendente Enderecamento'
+        item_wms.usuario_armazenamento = None
+        item_wms.data_armazenamento = None
+        item_wms.codigo_grv = None
+        item_wms.ordem_servico = None
+        item_wms.ordem_compra = None
+
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item_wms.id,
+                numero_nota=item_wms.numero_nota,
+                tipo_movimentacao='EstornoEnderecamento',
+                localizacao_origem_id=localizacao_id_origem,
+                localizacao_destino_id=None,
+                qtd_movimentada=qtd,
+                motivo=(motivo or 'Estorno de endereçamento')[:300],
+                usuario=usuario,
+                data_movimentacao=datetime.now(),
+            )
+        )
+
+        db.session.commit()
+        return item_wms

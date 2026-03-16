@@ -210,6 +210,21 @@ def _ensure_wms_tables() -> None:
             "CREATE INDEX IF NOT EXISTS ix_localizacao_armazem_codigo ON localizacao_armazem (codigo)"
         ))
         conn.commit()
+
+        res_loc = conn.execute(db.text("PRAGMA table_info('localizacao_armazem')")).fetchall()
+        cols_loc = [row[1] for row in res_loc]
+        if "rua" not in cols_loc:
+            conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN rua VARCHAR(30)"))
+            conn.commit()
+        if "predio" not in cols_loc:
+            conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN predio VARCHAR(30)"))
+            conn.commit()
+        if "nivel" not in cols_loc:
+            conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN nivel VARCHAR(30)"))
+            conn.commit()
+        if "apartamento" not in cols_loc:
+            conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN apartamento VARCHAR(30)"))
+            conn.commit()
         
         # Tabela item_wms
         conn.execute(
@@ -254,6 +269,18 @@ def _ensure_wms_tables() -> None:
             "CREATE INDEX IF NOT EXISTS ix_item_wms_status ON item_wms (status)"
         ))
         conn.commit()
+
+        res_item_wms = conn.execute(db.text("PRAGMA table_info('item_wms')")).fetchall()
+        cols_item_wms = [row[1] for row in res_item_wms]
+        if "codigo_grv" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN codigo_grv VARCHAR(80)"))
+            conn.commit()
+        if "ordem_servico" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN ordem_servico VARCHAR(80)"))
+            conn.commit()
+        if "ordem_compra" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN ordem_compra VARCHAR(80)"))
+            conn.commit()
         
         # Tabela movimentacao_wms
         conn.execute(

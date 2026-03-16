@@ -492,9 +492,8 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
 
 def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
     """
-    Armazena todos os itens de uma nota no WMS automaticamente quando a nota é lançada.
-    Se não houver localização automática disponível, registra o item sem localização
-    e retorna aviso.
+    Registra todos os itens da nota no WMS como pendentes de endereçamento
+    quando a nota é lançada.
     
     Args:
         numero_nota: Número da nota fiscal
@@ -503,8 +502,7 @@ def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
     Returns:
         {
             'sucesso': bool,
-            'itens_armazenados': int,
-            'itens_sem_localizacao': int,
+            'itens_pendentes': int,
             'mensagem': str
         }
     """
@@ -515,61 +513,46 @@ def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
         if not itens:
             return {
                 'sucesso': True,
-                'itens_armazenados': 0,
-                'itens_sem_localizacao': 0,
+                'itens_pendentes': 0,
                 'mensagem': 'Nenhum item para armazenar'
             }
         
-        itens_armazenados = 0
-        itens_sem_localizacao = 0
+        itens_pendentes = 0
         
         for item in itens:
             try:
                 codigo_item = item.codigo
                 qtd = item.qtd_real or 0
-                
-                # Tenta encontrar localização automática
-                localizacao = WMSService.requisitar_localizacao_automatica(
+
+                # Evita duplicar se já existir qualquer registro ativo para mesma NF+SKU.
+                existente = ItemWMS.query.filter_by(
+                    numero_nota=numero_nota,
                     codigo_item=codigo_item,
-                    qtd=qtd,
-                    usuario=usuario
+                    ativo=True,
+                ).first()
+                if existente:
+                    continue
+
+                # Sempre cria pendente para endereçamento manual no WMS.
+                WMSService.armazenar_item_nota(
+                    numero_nota=numero_nota,
+                    codigo_item=codigo_item,
+                    localizacao_id=None,
+                    usuario=usuario,
+                    qtd_recebida=qtd
                 )
-                
-                if localizacao:
-                    # Armazena com localização automática
-                    WMSService.armazenar_item_nota(
-                        numero_nota=numero_nota,
-                        codigo_item=codigo_item,
-                        localizacao_id=localizacao.id,
-                        usuario=usuario,
-                        qtd_recebida=qtd
-                    )
-                    itens_armazenados += 1
-                else:
-                    # Armazena sem localização (pendente de alocação manual)
-                    WMSService.armazenar_item_nota(
-                        numero_nota=numero_nota,
-                        codigo_item=codigo_item,
-                        localizacao_id=None,
-                        usuario=usuario,
-                        qtd_recebida=qtd
-                    )
-                    itens_sem_localizacao += 1
+                itens_pendentes += 1
                     
             except Exception as e:
                 current_app.logger.warning(f"Erro ao armazenar item {codigo_item} da nota {numero_nota}: {str(e)}")
                 # Continua processando outros itens mesmo se um falhar
                 continue
         
-        total = itens_armazenados + itens_sem_localizacao
-        mensagem = f"WMS: {itens_armazenados}/{total} itens armazenados"
-        if itens_sem_localizacao > 0:
-            mensagem += f" ({itens_sem_localizacao} sem localização automática)"
+        mensagem = f"WMS: {itens_pendentes} itens pendentes para endereçamento"
         
         return {
             'sucesso': True,
-            'itens_armazenados': itens_armazenados,
-            'itens_sem_localizacao': itens_sem_localizacao,
+            'itens_pendentes': itens_pendentes,
             'mensagem': mensagem
         }
         
@@ -577,8 +560,7 @@ def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
         current_app.logger.error(f"Erro ao integrar WMS para nota {numero_nota}: {str(e)}")
         return {
             'sucesso': False,
-            'itens_armazenados': 0,
-            'itens_sem_localizacao': 0,
+            'itens_pendentes': 0,
             'mensagem': f'Erro na integração WMS: {str(e)}'
         }
 
@@ -2853,6 +2835,25 @@ def resetar_nota_admin():
     nota_db = ItemNota.query.filter_by(numero_nota=numero_nota).first()
 
     if nota_db:
+        possui_enderecamento_wms = (
+            ItemWMS.query.filter(
+                ItemWMS.numero_nota == numero_nota,
+                ItemWMS.ativo == True,
+                ItemWMS.localizacao_id.isnot(None),
+            ).first()
+            is not None
+        )
+        if possui_enderecamento_wms:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": "Não é permitido reverter conferência de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
+                    }
+                ),
+                409,
+            )
+
         possui_lancamento_ativo = (
             ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first() is not None
         )
@@ -3018,6 +3019,25 @@ def estornar_lancamento_fiscal():
     possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
+
+    possui_enderecamento_wms = (
+        ItemWMS.query.filter(
+            ItemWMS.numero_nota == numero_nota,
+            ItemWMS.ativo == True,
+            ItemWMS.localizacao_id.isnot(None),
+        ).first()
+        is not None
+    )
+    if possui_enderecamento_wms:
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": "Não é permitido estornar lançamento fiscal de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
+                }
+            ),
+            409,
+        )
 
     ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
         {

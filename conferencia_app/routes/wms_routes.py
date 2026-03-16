@@ -30,30 +30,39 @@ def requer_admin(f):
     return wrapper
 
 
+def requer_wms_operacao(f):
+    """Permite operacao WMS para Fiscal e Admin."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get('role') not in ('Admin', 'Fiscal'):
+            return jsonify({'erro': 'Acesso restrito ao modulo WMS (Fiscal/Admin).'}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
 # ============================================================================
 # LOCALIZAÇÕES
 # ============================================================================
 
 @wms_bp.route('/localizacoes', methods=['GET'])
-@requer_admin
+@requer_wms_operacao
 def listar_localizacoes():
     """Lista todas as localizações do armazém"""
     localizacoes = LocalizacaoArmazem.query.filter_by(ativo=True).order_by(
-        LocalizacaoArmazem.corredor,
-        LocalizacaoArmazem.prateleira,
-        LocalizacaoArmazem.posicao
+        LocalizacaoArmazem.rua,
+        LocalizacaoArmazem.predio,
+        LocalizacaoArmazem.nivel,
+        LocalizacaoArmazem.apartamento,
+        LocalizacaoArmazem.codigo,
     ).all()
     
     resultado = [{
         'id': loc.id,
         'codigo': loc.codigo,
-        'corredor': loc.corredor,
-        'prateleira': loc.prateleira,
-        'posicao': loc.posicao,
-        'capacidade_maxima': loc.capacidade_maxima,
-        'capacidade_atual': loc.capacidade_atual,
-        'ocupacao_percentual': round(loc.capacidade_atual / loc.capacidade_maxima * 100, 2) if loc.capacidade_maxima > 0 else 0,
-        'disponivel': loc.capacidade_maxima - loc.capacidade_atual
+        'rua': loc.rua,
+        'predio': loc.predio,
+        'nivel': loc.nivel,
+        'apartamento': loc.apartamento,
     } for loc in localizacoes]
     
     return jsonify(resultado), 200
@@ -64,20 +73,20 @@ def listar_localizacoes():
 def criar_localizacao():
     """Cria uma nova localização"""
     data = request.get_json() or {}
-    
-    corredor = data.get('corredor')
-    prateleira = data.get('prateleira')
-    posicao = data.get('posicao')
-    capacidade_maxima = float(data.get('capacidade_maxima', 100.0))
-    
-    if not all([corredor, prateleira, posicao]):
-        return jsonify({'erro': 'Campos obrigatórios: corredor, prateleira, posicao'}), 400
+
+    rua = (data.get('rua') or '').strip()
+    predio = (data.get('predio') or '').strip()
+    nivel = (data.get('nivel') or '').strip()
+    apartamento = (data.get('apartamento') or '').strip()
+
+    if not all([rua, predio, nivel, apartamento]):
+        return jsonify({'erro': 'Campos obrigatórios: rua, predio, nivel, apartamento'}), 400
     
     localizacao = WMSService.criar_localizacao(
-        corredor=corredor,
-        prateleira=prateleira,
-        posicao=posicao,
-        capacidade_maxima=capacidade_maxima
+        rua=rua,
+        predio=predio,
+        nivel=nivel,
+        apartamento=apartamento,
     )
     
     if not localizacao:
@@ -109,7 +118,7 @@ def armazenar_item():
     }
     """
     data = request.get_json() or {}
-    usuario = session.get('user', 'Sistema')
+    usuario = session.get('username', 'Sistema')
     
     numero_nota = data.get('numero_nota')
     codigo_item = data.get('codigo_item')
@@ -154,7 +163,7 @@ def armazenar_automatico():
     Armazena item em melhor localização disponível automaticamente.
     """
     data = request.get_json() or {}
-    usuario = session.get('user', 'Sistema')
+    usuario = session.get('username', 'Sistema')
     
     numero_nota = data.get('numero_nota')
     codigo_item = data.get('codigo_item')
@@ -220,7 +229,7 @@ def movimentar_item():
     }
     """
     data = request.get_json() or {}
-    usuario = session.get('user', 'Sistema')
+    usuario = session.get('username', 'Sistema')
     
     item_wms_id = data.get('item_wms_id')
     localizacao_destino_id = data.get('localizacao_destino_id')
@@ -256,6 +265,7 @@ def movimentar_item():
 # ============================================================================
 
 @wms_bp.route('/estoque/sku/<codigo_item>', methods=['GET'])
+@requer_wms_operacao
 def obter_estoque_sku(codigo_item):
     """Obtém saldo consolidado de um SKU em todas as localizações"""
     estoques = WMSService.obter_estoque_por_sku(codigo_item)
@@ -272,6 +282,7 @@ def obter_estoque_sku(codigo_item):
 
 
 @wms_bp.route('/estoque/localizacao/<int:localizacao_id>', methods=['GET'])
+@requer_wms_operacao
 def obter_estoque_localizacao(localizacao_id):
     """Obtém todos os SKUs em uma localização específica"""
     localizacao = LocalizacaoArmazem.query.get(localizacao_id)
@@ -297,7 +308,7 @@ def obter_estoque_localizacao(localizacao_id):
 # ============================================================================
 
 @wms_bp.route('/dashboard', methods=['GET'])
-@requer_admin
+@requer_wms_operacao
 def obter_dashboard_wms():
     """Retorna sumário de utilização do armazém"""
     denso = WMSService.obter_denso_armazem()
@@ -321,6 +332,7 @@ def obter_dashboard_wms():
 
 
 @wms_bp.route('/historico/<int:item_wms_id>', methods=['GET'])
+@requer_wms_operacao
 def obter_historico_item(item_wms_id):
     """Retorna histórico completo de movimentações de um item"""
     item_wms = ItemWMS.query.get(item_wms_id)
@@ -348,6 +360,106 @@ def obter_historico_item(item_wms_id):
             'data': m.data_movimentacao.isoformat()
         } for m in movimentacoes]
     }), 200
+
+
+@wms_bp.route('/pendentes-enderecamento', methods=['GET'])
+@requer_wms_operacao
+def listar_pendentes_enderecamento():
+    numero_nota = (request.args.get('nota') or '').strip() or None
+    pendentes = WMSService.listar_pendentes_enderecamento(numero_nota=numero_nota)
+    return jsonify([
+        {
+            'id': item.id,
+            'numero_nota': item.numero_nota,
+            'codigo_item': item.codigo_item,
+            'descricao': item.descricao,
+            'qtd_atual': item.qtd_atual,
+            'status': item.status,
+            'data_criacao': item.data_criacao.isoformat() if item.data_criacao else None,
+        }
+        for item in pendentes
+    ]), 200
+
+
+@wms_bp.route('/enderecar-item', methods=['POST'])
+@requer_wms_operacao
+def enderecar_item_manual():
+    data = request.get_json() or {}
+    item_wms_id = data.get('item_wms_id')
+    localizacao_id = data.get('localizacao_id')
+    codigo_grv = (data.get('codigo_grv') or '').strip()
+    ordem_servico = (data.get('ordem_servico') or '').strip()
+    ordem_compra = (data.get('ordem_compra') or '').strip()
+    usuario = session.get('username', 'Sistema')
+
+    if not item_wms_id or not localizacao_id:
+        return jsonify({'erro': 'Campos obrigatórios: item_wms_id e localizacao_id'}), 400
+
+    if not codigo_grv:
+        return jsonify({'erro': 'Informe o codigo do produto no GRV.'}), 400
+
+    if not ordem_servico and not ordem_compra:
+        return jsonify({'erro': 'Informe OS e/ou OC para enderecar.'}), 400
+
+    item = WMSService.enderecar_item_pendente(
+        item_wms_id,
+        localizacao_id,
+        usuario,
+        codigo_grv,
+        ordem_servico=ordem_servico or None,
+        ordem_compra=ordem_compra or None,
+    )
+    if not item:
+        return jsonify({'erro': 'Nao foi possivel enderecar item (item invalido, ja enderecado ou sem capacidade).'}), 400
+
+    return jsonify(
+        {
+            'sucesso': True,
+            'item_wms_id': item.id,
+            'localizacao_id': item.localizacao_id,
+            'mensagem': 'Item enderecado com sucesso.',
+        }
+    ), 200
+
+
+@wms_bp.route('/itens-enderecados', methods=['GET'])
+@requer_admin
+def listar_itens_enderecados_admin():
+    numero_nota = (request.args.get('nota') or '').strip() or None
+    itens = WMSService.listar_itens_enderecados(numero_nota=numero_nota)
+    return jsonify([
+        {
+            'id': item.id,
+            'numero_nota': item.numero_nota,
+            'codigo_item': item.codigo_item,
+            'descricao': item.descricao,
+            'qtd_atual': item.qtd_atual,
+            'localizacao_id': item.localizacao_id,
+            'codigo_grv': item.codigo_grv,
+            'ordem_servico': item.ordem_servico,
+            'ordem_compra': item.ordem_compra,
+            'data_armazenamento': item.data_armazenamento.isoformat() if item.data_armazenamento else None,
+        }
+        for item in itens
+    ]), 200
+
+
+@wms_bp.route('/estornar-enderecamento', methods=['POST'])
+@requer_admin
+def estornar_enderecamento_admin():
+    data = request.get_json() or {}
+    item_wms_id = data.get('item_wms_id')
+    motivo = (data.get('motivo') or '').strip()
+    usuario = session.get('username', 'Sistema')
+
+    if not item_wms_id:
+        return jsonify({'erro': 'Campo obrigatório: item_wms_id'}), 400
+
+    item = WMSService.estornar_enderecamento(item_wms_id, usuario, motivo=motivo or None)
+    if not item:
+        return jsonify({'erro': 'Não foi possível estornar este endereçamento.'}), 400
+
+    return jsonify({'sucesso': True, 'mensagem': 'Endereçamento estornado com sucesso.'}), 200
 
 
 def registrar_rotas_wms(app):

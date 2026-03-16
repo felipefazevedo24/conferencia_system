@@ -221,9 +221,13 @@ class ExpedicaoEstorno(db.Model):
 # ============================================================================
 
 class LocalizacaoArmazem(db.Model):
-    """Localização física no armazém (Corredor-Prateleira-Posição)"""
+    """Localização física no armazém (Rua-Prédio-Nível-Apartamento)"""
     id = db.Column(db.Integer, primary_key=True)
-    codigo = db.Column(db.String(50), unique=True, nullable=False, index=True)  # Ex: C1-P1-1
+    codigo = db.Column(db.String(80), unique=True, nullable=False, index=True)  # Ex: R1-PD1-N2-AP03
+    rua = db.Column(db.String(30), index=True)
+    predio = db.Column(db.String(30), index=True)
+    nivel = db.Column(db.String(30), index=True)
+    apartamento = db.Column(db.String(30), index=True)
     corredor = db.Column(db.String(10), nullable=False)  # Ex: C1
     prateleira = db.Column(db.String(10), nullable=False)  # Ex: P1
     posicao = db.Column(db.String(10), nullable=False)  # Ex: 1
@@ -246,6 +250,9 @@ class ItemWMS(db.Model):
     unidade = db.Column(db.String(20))
     lote = db.Column(db.String(50))
     data_validade = db.Column(db.Date)
+    codigo_grv = db.Column(db.String(80), index=True)
+    ordem_servico = db.Column(db.String(80), index=True)
+    ordem_compra = db.Column(db.String(80), index=True)
     localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
     usuario_armazenamento = db.Column(db.String(100))
     data_armazenamento = db.Column(db.DateTime)
