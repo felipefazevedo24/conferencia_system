@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a6ed1">
+    <title>{% block title %}ERP Columbia Machine{% endblock %}</title>
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/ui_erp.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root { 
+            --sap-blue: #0f62c9;
+            --protheus-gray: #22313f;
+            --sidebar-bg: #203040;
+            --sidebar-hover: #2a3f54;
+            --erp-bg: #edf3f8;
+            --text-main: #22313f;
+            --border-color: #d2dce6;
+            --header-bg: #2d445a;
+            --success-erp: #247a47;
+            --danger-erp: #b63a3a;
+            --warning-erp: #b07012;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background:
+                radial-gradient(circle at top right, rgba(15, 98, 201, 0.10), transparent 28%),
+                linear-gradient(180deg, #f4f7fb 0%, var(--erp-bg) 100%);
+            color: var(--text-main);
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #wrapper { display: flex; height: 100vh; width: 100vw; }
+
+        /* Sidebar Estilo ERP Corporativo */
+        #sidebar-wrapper { 
+            min-width: 240px; 
+            max-width: 240px; 
+            background: linear-gradient(180deg, #203040 0%, #24384b 100%);
+            display: flex; 
+            flex-direction: column;
+            transition: all 0.3s;
+            border-right: 1px solid rgba(10,25,40,0.22);
+            box-shadow: 8px 0 24px rgba(16, 37, 58, 0.08);
+        }
+
+        .sidebar-heading { 
+            padding: 20px 15px; 
+            font-size: 14px; 
+            font-weight: 800; 
+            color: #ffffff; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+            background: rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .sidebar-heading span { color: #7fc0ff; }
+
+        .list-group { width: 100%; border-radius: 0; }
+        .list-group-item {
+            border: none;
+            padding: 12px 20px;
+            background-color: transparent;
+            color: #d8e4ef;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+
+        .list-group-item i { width: 20px; text-align: center; font-size: 16px; }
+
+        .list-group-item:hover {
+            background-color: rgba(255,255,255,0.08);
+            color: #ffffff;
+        }
+
+        .list-group-item.active {
+            background: linear-gradient(90deg, var(--sap-blue), #3184e0);
+            color: white;
+            border-left: 4px solid #fff;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+        }
+
+        /* Submenus */
+        .submenu .list-group-item {
+            padding-left: 45px;
+            background-color: rgba(0,0,0,0.08);
+        }
+
+        /* Top Navbar */
+        #page-content-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        .top-nav {
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(12px);
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 8px 24px rgba(29, 52, 77, 0.08);
+        }
+
+        .nav-left { display: flex; align-items: center; gap: 15px; }
+        .nav-right { display: flex; align-items: center; gap: 20px; font-size: 12px; }
+
+        #menu-toggle {
+            background: none;
+            border: none;
+            color: var(--protheus-gray);
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .user-profile { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--protheus-gray); }
+        .user-profile i { color: var(--sap-blue); }
+
+        .btn-logout {
+            color: #d32f2f;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 4px 8px;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+        .btn-logout:hover { border-color: #d32f2f; border-radius: 4px; }
+
+        /* Container do Conteúdo */
+        .content-body { flex: 1; overflow-y: auto; padding: 22px; }
+
+        .main-content { width: 100%; }
+        .table-container { overflow-x: auto; }
+        .hidden { display: none !important; }
+
+        .page-header-erp {
+            background: linear-gradient(135deg, #ffffff 0%, #f4f8fc 100%);
+            padding: 16px 20px;
+            border: 1px solid #dbe4ec;
+            border-bottom: 3px solid var(--sap-blue);
+            border-radius: 14px;
+            margin-bottom: 18px;
+            box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08);
+        }
+
+        .page-header-erp h2 {
+            margin: 0;
+            font-size: 17px;
+            color: var(--protheus-gray);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-sap {
+            border: 1px solid #aebdca;
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
+            color: #284055;
+            text-decoration: none;
+            box-shadow: 0 4px 10px rgba(42, 65, 89, 0.07);
+        }
+
+        .btn-sap:hover { filter: brightness(1.02); transform: translateY(-1px); }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Toggled State */
+        #wrapper.toggled #sidebar-wrapper { margin-left: -240px; }
+
+        @media (max-width: 768px) {
+            body { overflow-x: hidden; overflow-y: auto; }
+            #wrapper { width: 100%; min-height: 100vh; height: auto; }
+            #sidebar-wrapper { margin-left: -240px; position: fixed; z-index: 2500; height: 100vh; }
+            #wrapper.toggled #sidebar-wrapper { margin-left: 0; }
+            #page-content-wrapper { width: 100%; overflow: visible; }
+            .top-nav { padding: 0 10px; gap: 8px; }
+            .nav-right { gap: 10px; }
+            .nav-left span { display: none; }
+            .content-body { padding: 10px; overflow-x: hidden; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div id="wrapper">
+    <div id="sidebar-wrapper">
+        <div class="sidebar-heading">
+            <i class="fas fa-industry"></i> COLUMBIA <span>HELPER</span>
+        </div>
+        <div class="list-group list-group-flush" id="accordionSidebar">
+            {% if session.get('role') == 'Portaria' %}
+            <div class="menu-item">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
+                    <span><i class="fas fa-box-open"></i> RECEBIMENTO</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
+                    <a href="/portaria" class="list-group-item list-group-item-action">
+                        <i class="fas fa-file-import"></i> Inclusão XML
+                    </a>
+                    <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
+                        <i class="fas fa-box-open"></i> NF-e Liberadas
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            
+            <div class="menu-item">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
+                    <span><i class="fas fa-box-open"></i> RECEBIMENTO</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
+                    {% if session.get('role') == 'Admin' %}
+                    <a href="/upload" class="list-group-item list-group-item-action">
+                        <i class="fas fa-file-import"></i> Importação NF-e
+                    </a>
+                    {% endif %}
+                    <a href="/" class="list-group-item list-group-item-action">
+                        <i class="fas fa-barcode"></i> Conferência Cega
+                    </a>
+                    <a href="/lancamento" class="list-group-item list-group-item-action">
+                        <i class="fas fa-file-invoice-dollar"></i> Escrituração Fiscal
+                    </a>
+                    <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
+                        <i class="fas fa-box-open"></i> NF-e Liberadas
+                    </a>
+                </div>
+            </div>
+
+            <div class="menu-item">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseExpedicao" role="button" aria-expanded="false">
+                    <span><i class="fas fa-truck-loading"></i> EXPEDIÇÃO</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse submenu" id="collapseExpedicao" data-bs-parent="#accordionSidebar">
+                    <a href="/expedicao/conferencia" class="list-group-item list-group-item-action">
+                        <i class="fas fa-clipboard-check"></i> Conferência
+                    </a>
+                    {% if session.get('role') == 'Admin' %}
+                    <a href="/expedicao/admin" class="list-group-item list-group-item-action">
+                        <i class="fas fa-user-shield"></i> Controle Admin
+                    </a>
+                    {% endif %}
+                    <a href="/expedicao/romaneio" class="list-group-item list-group-item-action">
+                        <i class="fas fa-receipt"></i> Romaneios
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if session.get('role') == 'Admin' %}
+            <div class="menu-item" style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseAdministracao" role="button" aria-expanded="false">
+                    <span><i class="fas fa-user-shield"></i> ADMINISTRAÇÃO</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse submenu" id="collapseAdministracao" data-bs-parent="#accordionSidebar">
+                    <a href="/admin" class="list-group-item list-group-item-action">
+                        <i class="fas fa-chart-line"></i> Painel de Controle
+                    </a>
+                    <a href="/admin/usuarios" class="list-group-item list-group-item-action">
+                        <i class="fas fa-users-cog"></i> Gestão de Acessos
+                    </a>
+                    <a href="/historico" class="list-group-item list-group-item-action">
+                        <i class="fas fa-clipboard-list"></i> Logs e Auditoria
+                    </a>
+                    <a href="/admin/acessos" class="list-group-item list-group-item-action">
+                        <i class="fas fa-user-clock"></i> Auditoria de Acessos
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="page-content-wrapper">
+        <nav class="top-nav">
+            <div class="nav-left">
+                <button id="menu-toggle"><i class="fas fa-bars"></i></button>
+                <span style="font-size: 11px; font-weight: bold; color: #777; text-transform: uppercase;">
+                    SISTEMA INTEGRADO DE MOVIMENTAÇÃO
+                </span>
+            </div>
+            <div class="nav-right">
+                <div class="user-profile">
+                    <i class="fas fa-user-circle"></i>
+                    <span>{{ user|upper }}</span>
+                </div>
+                <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> SAIR
+                </a>
+            </div>
+        </nav>
+
+        <div class="content-body">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Toggle Menu
+    document.getElementById("menu-toggle").addEventListener("click", function(e) {
+        e.preventDefault();
+        document.getElementById("wrapper").classList.toggle("toggled");
+    });
+
+    // Logout Corporativo
+    function confirmarLogout() {
+        if(confirm('Deseja encerrar a sessão no ERP Columbia?')) {
+            window.location.href = '/logout';
+        }
+    }
+
+    // Marca o link ativo no menu baseado na URL atual e abre a aba correspondente
+    document.addEventListener("DOMContentLoaded", function() {
+        const currentPath = window.location.pathname;
+        const menuItems = document.querySelectorAll('.list-group-item');
+        menuItems.forEach(item => {
+            if(item.getAttribute('href') === currentPath) {
+                item.classList.add('active');
+                // Se for um subitem, garante que o pai esteja expandido
+                const parentCollapse = item.closest('.collapse');
+                if (parentCollapse) {
+                    const bsCollapse = new bootstrap.Collapse(parentCollapse, { toggle: false });
+                    bsCollapse.show();
+                }
+            }
+        });
+    });
+
+    if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+            navigator.serviceWorker.register("/static/sw.js?v=2").catch(() => {});
+        });
+    }
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

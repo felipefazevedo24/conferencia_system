@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria de Sistema | ERP FAM{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --success-erp: #1e7d32;
+            --danger-erp: #d92d20;
+            --card-shadow: 0 10px 30px rgba(26, 49, 74, 0.1);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1450px; margin: 0 auto; }
+        
+        /* Cabeçalho Branco conforme solicitado */
+        .page-header-erp { 
+            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+            display: flex; justify-content: space-between; align-items: center; 
+            color: #000000; border: 1px solid var(--border-color);
+        }
+        .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        .page-header-erp h2 i { color: var(--sap-blue); font-size: 24px; }
+
+        /* Painel de Filtros Profissional */
+        .filter-panel {
+            background: #ffffff; padding: 20px; border-radius: 12px; margin-bottom: 20px;
+            box-shadow: var(--card-shadow); border: 1px solid var(--border-color);
+        }
+        .top-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+        
+        .filter-group { display: flex; flex-direction: column; gap: 5px; }
+        .filter-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-left: 2px; }
+
+        .filtro-nota, .filtro-curto { 
+            border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; 
+            font-size: 12px; background: #fff; transition: all 0.2s; color: #1e293b;
+        }
+        .filtro-nota:focus, .filtro-curto:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+
+        /* Tabela de Auditoria */
+        .table-container { 
+            background: white; border: 1px solid var(--border-color); border-radius: 16px; 
+            box-shadow: var(--card-shadow); overflow: hidden;
+        }
+        .erp-table { width: 100%; border-collapse: collapse; }
+        .erp-table th { 
+            background: #f8fafc; color: #64748b; padding: 15px; text-align: left; 
+            font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #edf2f7;
+            position: sticky; top: 0; font-weight: 800;
+        }
+        .erp-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .erp-table tr:hover td { background: #f0f7ff; }
+
+        /* Status Badges */
+        .status-badge { 
+            padding: 4px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; 
+            border-radius: 20px; display: inline-flex; align-items: center; gap: 5px;
+        }
+        .tag-pendente { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .tag-concluido { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .tag-lancado { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .tag-excluida { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+        /* Divergência Link */
+        .div-sim { 
+            background: #fef2f2; color: var(--danger-erp); padding: 4px 8px; border-radius: 6px;
+            font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #fecaca;
+        }
+        .div-sim:hover { background: var(--danger-erp); color: white; }
+        .div-nao { color: #94a3b8; font-size: 11px; font-weight: 600; }
+
+        /* Modais Modernos */
+        .modal-sap { border-radius: 20px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .modal-header { background: #1e293b; color: white; padding: 20px 25px; font-weight: 700; font-size: 14px; }
+        .modal-body { padding: 25px; background: white; margin: 0; max-height: 500px; overflow-y: auto; }
+        
+        .log-item { 
+            padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0; 
+            background: #f8fafc; font-size: 12px; margin-bottom: 10px; position: relative;
+        }
+        .log-item b { color: var(--sap-blue); }
+
+        .btn-sap { 
+            padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s; border: none;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-refresh { background: var(--sap-blue); color: white; }
+        .btn-refresh:hover { background: var(--sap-hover); transform: translateY(-1px); }
+        .btn-csv { background: #1e7d32; color: white; }
+        .btn-csv:hover { filter: brightness(1.1); }
+        
+        .muted { color: #64748b; font-size: 11px; font-weight: 600; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: var(--sap-blue); font-family: 'Cascadia Code', monospace; }
+
+        @media (max-width: 1100px) { .top-actions { grid-template-columns: 1fr 1fr; } }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header-erp">
+        <h2><i class="fas fa-file-signature"></i> Auditoria de Processamento Fiscal</h2>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-sap btn-csv" onclick="exportarCSV()">
+                <i class="fas fa-file-csv"></i> Exportar
+            </button>
+            <button class="btn-sap btn-refresh" onclick="carregar()">
+                <i class="fas fa-sync-alt"></i> Atualizar Grade
+            </button>
+        </div>
+    </div>
+
+    <div class="filter-panel">
+        <div class="top-actions">
+            <div class="filter-group">
+                <span class="filter-label">Nº Documento</span>
+                <input id="filtro-nota" class="filtro-nota" placeholder="Busca rápida..." oninput="carregar()" />
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Fornecedor</span>
+                <input id="filtro-fornecedor" class="filtro-curto" placeholder="Filtrar emitente..." oninput="carregar()" />
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Responsável</span>
+                <input id="filtro-conferente" class="filtro-curto" placeholder="Conferente..." oninput="carregar()" />
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Status Atual</span>
+                <select id="filtro-status" class="filtro-curto" onchange="carregar()">
+                    <option value="">Todos</option>
+                    <option value="Pendente">Pendente</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Lançado">Lançado</option>
+                    <option value="Devolvido">Devolvido</option>
+                    <option value="Excluída">Excluída</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">De:</span>
+                <input id="filtro-data-ini" type="date" class="filtro-curto" onchange="carregar()" />
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Até:</span>
+                <input id="filtro-data-fim" type="date" class="filtro-curto" onchange="carregar()" />
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="erp-table">
+            <thead>
+                <tr>
+                    <th width="100">Documento</th>
+                    <th>Fornecedor e Status</th>
+                    <th width="160">Execução</th>
+                    <th width="140">Divergências</th>
+                    <th width="180">Escrituração</th>
+                    <th width="220">Logs de Edição</th>
+                    <th width="220" style="text-align:center">Histórico e Documentos</th>
+                </tr>
+            </thead>
+            <tbody id="corpo-hist">
+                <tr><td colspan="7" style="text-align:center; padding: 60px; color: #94a3b8;">Sincronizando base de dados...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-divergencia" class="modal-overlay">
+    <div class="modal-sap">
+        <div class="modal-header">
+            <span id="modal-nota-ref">DETALHES DA AUDITORIA</span>
+            <button onclick="fecharModal()" style="border:none; background:none; color:white; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-logs-summary" style="padding:15px; background:#fff1f1; border-radius:10px; margin-bottom: 20px; border:1px solid #fecaca; color:#b91c1c; font-weight:800; text-align:center;"></div>
+            <div id="modal-logs-list"></div>
+        </div>
+        <div class="modal-foot" style="padding: 15px 25px; display: flex; justify-content: flex-end; background: #f8fafc; border-top: 1px solid #edf2f7;">
+            <button class="btn-sap btn-close" style="background:#64748b; color:white" onclick="fecharModal()">Fechar Auditoria</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-estornos" class="modal-overlay">
+    <div class="modal-sap" style="max-width: 800px;">
+        <div class="modal-header">
+            <span id="modal-estornos-ref">HISTÓRICO DE AJUSTES E ESTORNOS</span>
+            <button onclick="fecharModalEstornos()" style="border:none; background:none; color:white; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+            <table class="erp-table">
+                <thead>
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Tipo de Evento</th>
+                        <th>Usuário</th>
+                        <th>Justificativa</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-estornos-body"></tbody>
+            </table>
+        </div>
+        <div class="modal-foot" style="padding: 15px 25px; display: flex; justify-content: flex-end; background: #f8fafc; border-top: 1px solid #edf2f7;">
+            <button class="btn-sap" style="background:#64748b; color:white" onclick="fecharModalEstornos()">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-timeline" class="modal-overlay">
+    <div class="modal-sap" style="max-width: 600px;">
+        <div class="modal-header">
+            <span id="modal-timeline-ref">RASTREABILIDADE COMPLETA</span>
+            <button onclick="fecharModalTimeline()" style="border:none; background:none; color:white; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-timeline-body" style="border-left: 3px solid var(--sap-blue); padding-left: 20px; margin-left: 10px;"></div>
+        </div>
+        <div class="modal-foot" style="padding: 15px 25px; display: flex; justify-content: flex-end; background: #f8fafc; border-top: 1px solid #edf2f7;">
+            <button class="btn-sap" style="background:#64748b; color:white" onclick="fecharModalTimeline()">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let dadosCompletos = [];
+
+    function buildFiltroQuery() {
+        const params = new URLSearchParams();
+        const nota = document.getElementById('filtro-nota')?.value?.trim();
+        const fornecedor = document.getElementById('filtro-fornecedor')?.value?.trim();
+        const conferente = document.getElementById('filtro-conferente')?.value?.trim();
+        const status = document.getElementById('filtro-status')?.value;
+        const dataIni = document.getElementById('filtro-data-ini')?.value;
+        const dataFim = document.getElementById('filtro-data-fim')?.value;
+        if (nota) params.set('nota', nota);
+        if (fornecedor) params.set('fornecedor', fornecedor);
+        if (conferente) params.set('conferente', conferente);
+        if (status) params.set('status', status);
+        if (dataIni) params.set('data_ini', dataIni);
+        if (dataFim) params.set('data_fim', dataFim);
+        return params.toString();
+    }
+
+    async function carregar() {
+        try {
+            const qsRaw = buildFiltroQuery();
+            const qs = qsRaw ? `?${qsRaw}` : '';
+            const res = await fetch(`/api/historico_completo${qs}`);
+            dadosCompletos = await res.json();
+            const corpo = document.getElementById('corpo-hist');
+            
+            if (dadosCompletos.length === 0) {
+                corpo.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:50px; color:#94a3b8;">Nenhum documento encontrado com os filtros aplicados.</td></tr>';
+                return;
+            }
+
+            corpo.innerHTML = dadosCompletos.map(n => `
+                <tr>
+                    <td><b style="color:var(--sap-blue); font-size:14px;">#${n.nota}</b></td>
+                    <td>
+                        <div style="font-weight:700; color:#1e293b; margin-bottom:4px;">${n.fornecedor}</div>
+                        <span class="status-badge tag-${n.status.toLowerCase()}">${n.status}</span>
+                    </td>
+                    <td class="cell-compact">
+                        <div style="font-weight:700;"><i class="fas fa-user-check"></i> ${n.conferido_por}</div>
+                        <div class="muted"><i class="fas fa-stopwatch"></i> ${n.tempo_conf}</div>
+                    </td>
+                    <td>
+                        ${n.divergencia === 'Sim' 
+                            ? `<span class="div-sim" onclick="abrirAuditoria('${n.nota}')">
+                                <i class="fas fa-exclamation-triangle"></i> DIVERGENTE (${n.tentativas}x)
+                               </span>` 
+                            : `<span class="div-nao"><i class="fas fa-check"></i> Sem Ocorrências</span>`}
+                    </td>
+                    <td class="cell-compact">
+                        <div><code>${n.codigo_lancamento || '---'}</code></div>
+                        <div class="muted">${n.lancado_por || 'Aguardando'}</div>
+                    </td>
+                    <td class="cell-compact" style="max-width: 220px;">
+                        ${n.alterado_por && n.alterado_por !== '---'
+                            ? `<div style="font-weight:700;"><i class="fas fa-edit"></i> ${n.alterado_por}</div><div class="muted">${n.data_alteracao}</div><div class="muted" style="font-style:italic;">${n.motivo_alteracao}</div>`
+                            : '<span class="div-nao">Sem modificações</span>'}
+                    </td>
+                    <td style="text-align:center">
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            ${n.qtd_ajustes > 0
+                                ? `<button class="btn-sap" style="background:#fff3cd; color:#856404; font-size:9px; padding:3px 6px;" onclick="abrirEstornos('${n.nota}')">Ver Ajustes (${n.qtd_ajustes})</button>`
+                                : ''}
+                            ${n.documentos_disponiveis
+                                ? `<button class="btn-sap" style="background:#eff6ff; color:#1d4ed8; font-size:9px; padding:3px 6px;" onclick="baixarDocumento('${n.nota}', 'xml')">XML</button>
+                                   <button class="btn-sap" style="background:#fee2e2; color:#b91c1c; font-size:9px; padding:3px 6px;" onclick="baixarDocumento('${n.nota}', 'pdf')">PDF</button>`
+                                : ''}
+                            <button class="btn-sap btn-refresh" style="font-size:9px; padding:3px 6px;" onclick="abrirTimeline('${n.nota}')">Timeline</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error("Erro ao carregar histórico:", e);
+        }
+    }
+
+    function exportarCSV() {
+        const qsRaw = buildFiltroQuery();
+        const qs = qsRaw ? `?${qsRaw}` : '';
+        window.location.href = `/api/historico/export.csv${qs}`;
+    }
+
+    function baixarDocumento(numeroNota, tipo) {
+        window.open(`/api/consyste/documento?nota=${encodeURIComponent(numeroNota)}&tipo=${encodeURIComponent(tipo)}`, '_blank');
+    }
+
+    function abrirAuditoria(numeroNota) {
+        const nota = dadosCompletos.find(d => d.nota === numeroNota);
+        if (!nota) return;
+        document.getElementById('modal-nota-ref').innerText = `AUDITORIA DE DIVERGÊNCIAS - NF ${numeroNota}`;
+        document.getElementById('modal-logs-summary').innerText = `IDENTIFICADAS ${nota.tentativas} CONTAGENS INVÁLIDAS ANTES DO ACEITE`;
+        const container = document.getElementById('modal-logs-list');
+        const itens = nota.detalhe_divergencia ? nota.detalhe_divergencia.split(', ') : [];
+        container.innerHTML = itens.map(i => {
+            const partes = i.split(' (');
+            const nome = partes[0];
+            const qtdErr = partes[1] ? partes[1].replace(')', '') : '?';
+            return `<div class="log-item"><i class="fas fa-history"></i> <b>ITEM:</b> ${nome} <br><span class="muted" style="margin-left: 18px;"><b>FALHAS REGISTRADAS:</b> ${qtdErr} vezes</span></div>`;
+        }).join('');
+        document.getElementById('modal-divergencia').style.display = 'flex';
+    }
+
+    async function abrirEstornos(numeroNota) {
+        const res = await fetch(`/api/estornos_historico?nota=${encodeURIComponent(numeroNota)}`);
+        const eventos = await res.json();
+        const corpo = document.getElementById('modal-estornos-body');
+        document.getElementById('modal-estornos-ref').innerText = `RASTREIO DE AJUSTES - NF ${numeroNota}`;
+        if (!Array.isArray(eventos) || eventos.length === 0) {
+            corpo.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Nenhum ajuste registrado.</td></tr>';
+        } else {
+            corpo.innerHTML = eventos.map(e => `
+                <tr>
+                    <td style="font-weight:700;">${e.data_fmt}</td>
+                    <td><span class="status-badge tag-excluida">${e.tipo}</span></td>
+                    <td style="font-weight:700;">${e.usuario}</td>
+                    <td style="font-size:11px;">${e.motivo}</td>
+                </tr>
+            `).join('');
+        }
+        document.getElementById('modal-estornos').style.display = 'flex';
+    }
+
+    async function abrirTimeline(numeroNota) {
+        const res = await fetch(`/api/timeline/${encodeURIComponent(numeroNota)}`);
+        const eventos = await res.json();
+        document.getElementById('modal-timeline-ref').innerText = `TIMELINE DE PROCESSAMENTO - NF ${numeroNota}`;
+        const body = document.getElementById('modal-timeline-body');
+        if (!Array.isArray(eventos) || eventos.length === 0) {
+            body.innerHTML = '<div class="muted">Nenhum evento registrado.</div>';
+        } else {
+            body.innerHTML = eventos.map(e => `
+                <div class="log-item" style="border-left:none;">
+                    <div style="color:var(--sap-blue); font-weight:800; font-size:10px;">${e.data}</div>
+                    <div style="font-weight:800; text-transform:uppercase; margin:3px 0;">${e.tipo}</div>
+                    <div class="muted">${e.descricao}</div>
+                </div>
+            `).join('');
+        }
+        document.getElementById('modal-timeline').style.display = 'flex';
+    }
+
+    function fecharModal() { document.getElementById('modal-divergencia').style.display = 'none'; }
+    function fecharModalEstornos() { document.getElementById('modal-estornos').style.display = 'none'; }
+    function fecharModalTimeline() { document.getElementById('modal-timeline').style.display = 'none'; }
+
+    document.addEventListener('DOMContentLoaded', carregar);
+</script>
+{% endblock %}

@@ -1,0 +1,339 @@
+:root {
+    --sap-blue: #0a6ed1;
+    --protheus-gray: #333333;
+    --sidebar-bg: #2f3d4a;
+    --sidebar-hover: #3e4f5f;
+    --erp-bg: #ebeef2;
+    --text-main: #333333;
+    --border-color: #bfcad4;
+    --header-bg: #354a5f;
+    --success-erp: #2b7d2b;
+    --danger-erp: #bb0000;
+    --warning-erp: #8a5b00;
+}
+
+body {
+    background-color: var(--erp-bg);
+    color: var(--text-main);
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    font-size: 12px;
+}
+
+.main-content {
+    padding: 18px;
+    max-width: 1180px;
+    margin: 0 auto;
+}
+
+.page-header-erp {
+    background: linear-gradient(135deg, #ffffff 0%, #f5f9fc 100%);
+    padding: 16px 20px;
+    border: 1px solid #dbe4ec;
+    border-bottom: 3px solid var(--sap-blue);
+    border-radius: 14px;
+    margin-bottom: 18px;
+    box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08);
+}
+
+.page-header-erp h2 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--protheus-gray);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.card-sap {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    border: 1px solid #d9e3ec;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 12px 28px rgba(26, 49, 74, 0.08);
+}
+
+.card-sap h3 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--sap-blue);
+    margin: 0 0 12px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e8eef4;
+    padding-bottom: 8px;
+    letter-spacing: 0.4px;
+}
+
+.form-label,
+.form-group label,
+.card-sap > label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #536577;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+.form-control-sap,
+.card-sap .form-group input,
+.card-sap .form-group select,
+.card-sap .form-group textarea,
+.input-group-sap input,
+.input-group-sap select,
+.input-group-sap textarea {
+    width: 100%;
+    border: 1px solid #b8c6d3;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    box-sizing: border-box;
+    background: #fbfdff;
+    color: #253749;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.form-control-sap:focus,
+.card-sap .form-group input:focus,
+.card-sap .form-group select:focus,
+.card-sap .form-group textarea:focus,
+.input-group-sap input:focus,
+.input-group-sap select:focus,
+.input-group-sap textarea:focus {
+    border-color: #7fb0e4;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(15, 98, 201, 0.10);
+    outline: none;
+}
+
+.input-group-sap {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+}
+
+.input-group-sap .form-control-sap {
+    flex: 1;
+}
+
+.btn-sap {
+    border: 1px solid #aebdca;
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
+    color: #284055;
+    box-shadow: 0 4px 10px rgba(42, 65, 89, 0.07);
+}
+
+.btn-primary-sap {
+    background: linear-gradient(180deg, #1f77dc 0%, var(--sap-blue) 100%);
+    border-color: #0d56ac;
+    color: #fff;
+}
+
+.btn-success-sap {
+    background: linear-gradient(180deg, #2f8f56 0%, var(--success-erp) 100%);
+    border-color: #20653c;
+    color: #fff;
+}
+
+.btn-danger-sap {
+    background: linear-gradient(180deg, #c94b4b 0%, var(--danger-erp) 100%);
+    border-color: #912c2c;
+    color: #fff;
+}
+
+.btn-sap:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.02);
+}
+
+.status-box {
+    display: none;
+    margin-top: 12px;
+    border: 1px solid #dbe4ee;
+    border-left: 4px solid var(--sap-blue);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 11px;
+}
+
+.status-ok {
+    border-left-color: var(--success-erp);
+    color: #1f5f1f;
+}
+
+.status-err {
+    border-left-color: var(--danger-erp);
+    color: #8f0000;
+}
+
+.table-container {
+    border: 1px solid #d7e1ea;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08);
+}
+
+.erp-table,
+.mini-table,
+.table-container table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.erp-table th,
+.erp-table td,
+.mini-table th,
+.mini-table td,
+.table-container table th,
+.table-container table td {
+    border: 1px solid var(--border-color);
+    padding: 7px 10px;
+}
+
+.erp-table th,
+.mini-table th,
+.table-container table th {
+    background: linear-gradient(180deg, #f8fbfd 0%, #eef3f7 100%);
+    text-transform: uppercase;
+    color: #4a5f73;
+    font-size: 10px;
+    letter-spacing: 0.4px;
+}
+
+.erp-table td,
+.mini-table td,
+.table-container table td {
+    color: #294054;
+    background: #fff;
+}
+
+.erp-table tr:hover,
+.mini-table tr:hover,
+.table-container table tr:hover {
+    background: #f5faff;
+}
+
+.badge-role {
+    padding: 2px 6px;
+    border: 1px solid transparent;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.role-admin {
+    background: #ffebee;
+    color: #c62828;
+    border-color: #ef9a9a;
+}
+
+.role-fiscal {
+    background: #e3f2fd;
+    color: #1565c0;
+    border-color: #90caf9;
+}
+
+.role-conferente {
+    background: #f1f8e9;
+    color: #2e7d32;
+    border-color: #c5e1a5;
+}
+
+.role-portaria {
+    background: #fff8e1;
+    color: var(--warning-erp);
+    border-color: #ffe082;
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-sap {
+    background: #fff;
+    border: 1px solid #cad7e3;
+    border-radius: 18px;
+    width: 95%;
+    max-width: 860px;
+    box-shadow: 0 22px 50px rgba(18, 34, 51, 0.22);
+}
+
+.modal-head {
+    background: linear-gradient(135deg, #28445c 0%, var(--header-bg) 100%);
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 700;
+    font-size: 12px;
+    border-radius: 18px 18px 0 0;
+}
+
+.modal-body {
+    padding: 16px;
+    max-height: 460px;
+    overflow-y: auto;
+}
+
+.voltar-link {
+    display: inline-block;
+    margin-top: 20px;
+    color: var(--sap-blue);
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 24px;
+    color: #7a8691;
+    font-style: italic;
+}
+
+code {
+    font-family: "Courier New", monospace;
+    background: #eee;
+    padding: 2px 4px;
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    .input-group-sap {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-sap {
+        width: 100%;
+    }
+}

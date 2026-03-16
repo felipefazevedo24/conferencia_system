@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Expedição - Romaneios{% endblock %}
+
+{% block extra_head %}
+<style>
+    .r-wrap { max-width: 1360px; margin: 0 auto; padding: 14px; }
+    .r-headline { margin-bottom: 10px; }
+    .r-headline h2 { margin: 0; font-size: 17px; text-transform: uppercase; color: #1f2a33; letter-spacing: .3px; }
+    .r-headline p { margin: 3px 0 0; font-size: 12px; color: #4f5d6b; }
+    .r-panel { background: #fff; border: 1px solid #bfc7d1; border-radius: 4px; overflow: hidden; }
+    .r-filters { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; padding: 10px; border-bottom: 1px solid #ccd3db; background: #f5f6f8; }
+    .r-actions { display: flex; gap: 8px; padding: 10px; border-bottom: 1px solid #ccd3db; background: #fafbfc; }
+    .r-input { width: 100%; border: 1px solid #9ea7b1; border-radius: 2px; padding: 7px; font-size: 12px; }
+    .r-btn { border: 1px solid #818d99; border-radius: 2px; padding: 7px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; background: #fff; color: #1f2933; }
+    .r-btn.primary { background: #2b3540; border-color: #1f2933; color: #fff; }
+    .r-status { padding: 8px 12px; border-bottom: 1px solid #ccd3db; background: #fafbfc; color: #3f4c59; font-size: 12px; }
+    .r-list, .r-preview { padding: 10px; }
+
+    .nf-table th, .nf-table td { border: 1px solid #d3dae1; padding: 7px 8px; font-size: 12px; text-align: left; }
+    .nf-table th { background: #f2f4f6; font-size: 11px; text-transform: uppercase; color: #25313d; }
+
+    .manifest { border: 1px solid #555; background: #fff; }
+    .man-header { border-bottom: 1px solid #666; padding: 10px; display: grid; grid-template-columns: 140px 1fr; gap: 10px; }
+    .man-logo { width: 130px; height: 58px; object-fit: contain; border: 1px solid #cfcfcf; }
+    .man-company { font-size: 12px; color: #111; }
+    .man-company h3 { margin: 0 0 4px; font-size: 19px; line-height: 1.1; text-transform: uppercase; letter-spacing: .4px; color: #111; }
+    .man-company .line { margin-top: 2px; }
+    .man-trip, .man-nf { border-bottom: 1px solid #666; }
+    .man-trip table, .man-nf table { width: 100%; border-collapse: collapse; }
+    .man-trip th, .man-trip td, .man-nf th, .man-nf td { border-top: 1px solid #d0d0d0; padding: 6px 8px; font-size: 12px; }
+    .man-trip th, .man-nf th { background: #f2f2f2; text-transform: uppercase; font-size: 11px; color: #222; }
+    .man-nf { padding: 8px; }
+    .man-total { font-weight: 700; }
+
+    @media print {
+        .r-filters, .r-actions, .r-status, .btn-no-print, .r-headline { display: none !important; }
+        body { background: #fff !important; }
+        .r-wrap { max-width: none; padding: 0; }
+        .r-panel { border: none; }
+        .manifest { page-break-inside: avoid; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="r-wrap">
+    <div class="r-headline">
+        <h2><i class="fas fa-receipt"></i> Romaneios da Expedição</h2>
+        <p>Modelo de manifesto de carga com consulta por NF vinculada.</p>
+    </div>
+
+    <div class="r-panel">
+        <div class="r-filters">
+            <input id="f-nf" class="r-input" placeholder="Número da NF (opcional)" />
+            <button class="r-btn" onclick="limparFiltroRomaneio()">Limpar</button>
+            <button class="r-btn primary" onclick="carregarRomaneios()">Buscar</button>
+            <button class="r-btn btn-no-print" onclick="imprimirManifestoAtual()">Imprimir romaneio</button>
+        </div>
+        <div class="r-actions btn-no-print">
+            <button class="r-btn" onclick="marcarTodasNfs(true)">Marcar todas</button>
+            <button class="r-btn" onclick="marcarTodasNfs(false)">Desmarcar todas</button>
+            <button class="r-btn primary" onclick="gerarManifestoSelecionado()">Gerar romaneio selecionado</button>
+        </div>
+        <div id="st-romaneio" class="r-status">Carregando romaneios...</div>
+        <div class="r-list">
+            <table class="nf-table">
+                <thead>
+                    <tr>
+                        <th>Sel.</th>
+                        <th>NF</th>
+                        <th>Data</th>
+                        <th>Transportadora/Tipo</th>
+                        <th>Placa</th>
+                        <th>Motorista</th>
+                        <th>Peso (kg)</th>
+                        <th>Volume</th>
+                    </tr>
+                </thead>
+                <tbody id="tb-nfs"></tbody>
+            </table>
+        </div>
+        <div id="preview" class="r-preview"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const EMPRESA = {
+    razao: 'COLUMBIA MACHINE BRASIL COMERCIO DE EQUIPAMENTOS LTDA',
+    fantasia: 'COLUMBIA MACHINE BRASIL',
+    cnpj: '30.482.274/0001-25',
+    ie: 'N/I',
+    endereco: 'AV CARLOS ROBERTO PRATAVIERA, 600 - JARDIM NOVA EUROPA',
+    cidadeUf: 'HORTOLANDIA - SP',
+    cep: '13.184-889',
+};
+
+let romaneiosCache = [];
+let manifestoAtual = null;
+
+function limparFiltroRomaneio() {
+    document.getElementById('f-nf').value = '';
+    carregarRomaneios();
+}
+
+function renderTabelaNfs(lista) {
+    const tb = document.getElementById('tb-nfs');
+    const preview = document.getElementById('preview');
+    manifestoAtual = null;
+    preview.innerHTML = '';
+    if (!lista.length) {
+        tb.innerHTML = '<tr><td colspan="8">Nenhuma NF encontrada.</td></tr>';
+        return;
+    }
+
+    tb.innerHTML = lista.map(r => {
+        const transporte = (r.transporte_tipo === 'Transportadora')
+            ? (r.transportadora || 'TRANSPORTADORA')
+            : 'TRANSPORTE PROPRIO';
+        return `
+            <tr>
+                <td><input type="checkbox" class="nf-check" value="${r.faturamento_id}" /></td>
+                <td>${r.numero_nf}</td>
+                <td>${r.data}</td>
+                <td>${transporte}</td>
+                <td>${r.placa || '-'}</td>
+                <td>${r.motorista || '-'}</td>
+                <td>${r.peso_bruto != null ? r.peso_bruto : '-'}</td>
+                <td>${r.total_enviado || 0}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function marcarTodasNfs(flag) {
+    document.querySelectorAll('.nf-check').forEach(chk => { chk.checked = !!flag; });
+}
+
+function gerarManifestoSelecionado() {
+    const ids = Array.from(document.querySelectorAll('.nf-check:checked')).map(c => Number(c.value));
+    const selecionados = romaneiosCache.filter(r => ids.includes(Number(r.faturamento_id)));
+    const preview = document.getElementById('preview');
+    if (!selecionados.length) {
+        preview.innerHTML = '<div class="manifest" style="padding:10px;">Selecione ao menos uma NF para montar o romaneio.</div>';
+        manifestoAtual = null;
+        return;
+    }
+
+    const placas = [...new Set(selecionados.map(s => s.placa || 'N/I'))].join(' / ');
+    const motoristas = [...new Set(selecionados.map(s => s.motorista || 'N/I'))].join(' / ');
+    const transporte = [...new Set(selecionados.map(s => s.transporte_tipo === 'Transportadora' ? (s.transportadora || 'TRANSPORTADORA') : 'TRANSPORTE PROPRIO'))].join(' / ');
+    const totalPeso = selecionados.reduce((acc, s) => acc + Number(s.peso_bruto || 0), 0);
+    const totalVolume = selecionados.reduce((acc, s) => acc + Number(s.total_enviado || 0), 0);
+
+    const linhasNf = selecionados.map(s => {
+        const dest = (s.linhas && s.linhas.length) ? (s.linhas[0].cliente || '-') : '-';
+        return `<tr><td>${s.numero_nf}</td><td>${dest}</td><td>${s.total_enviado || 0}</td><td>${s.peso_bruto || '-'}</td><td>${s.data || '-'}</td></tr>`;
+    }).join('');
+
+    manifestoAtual = `
+        <div class="manifest">
+            <div class="man-header">
+                <img class="man-logo" src="https://columbiamachine.com/wp-content/uploads/2022/02/Columbia_logo.jpg" alt="Columbia Machine" />
+                <div class="man-company">
+                    <h3>${EMPRESA.razao}</h3>
+                    <div class="line"><strong>Fantasia:</strong> ${EMPRESA.fantasia}</div>
+                    <div class="line"><strong>CNPJ:</strong> ${EMPRESA.cnpj} | <strong>IE:</strong> ${EMPRESA.ie}</div>
+                    <div class="line"><strong>Endereço:</strong> ${EMPRESA.endereco}</div>
+                    <div class="line"><strong>Cidade/UF:</strong> ${EMPRESA.cidadeUf} | <strong>CEP:</strong> ${EMPRESA.cep}</div>
+                </div>
+            </div>
+
+            <div class="man-trip">
+                <table>
+                    <thead><tr><th>Data/Hora</th><th>Placa</th><th>Motorista</th><th>Transporte</th><th>Peso Total (kg)</th><th>Qtd. NF</th><th>Volume Total</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>${new Date().toLocaleString('pt-BR')}</td>
+                            <td>${placas}</td>
+                            <td>${motoristas}</td>
+                            <td>${transporte}</td>
+                            <td>${totalPeso.toFixed(3).replace('.', ',')}</td>
+                            <td>${selecionados.length}</td>
+                            <td>${totalVolume}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="man-nf">
+                <table>
+                    <thead><tr><th>Nota Fiscal</th><th>Destinatário</th><th>Volume</th><th>Peso (kg)</th><th>Data</th></tr></thead>
+                    <tbody>
+                        ${linhasNf}
+                        <tr class="man-total"><td colspan="2">Totais</td><td>${totalVolume}</td><td>${totalPeso.toFixed(3).replace('.', ',')}</td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    preview.innerHTML = manifestoAtual;
+}
+
+function _imprimirHtml(html, titulo) {
+    const frame = document.createElement('iframe');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '0';
+    frame.style.height = '0';
+    frame.style.border = '0';
+    document.body.appendChild(frame);
+
+    const doc = frame.contentWindow.document;
+    doc.open();
+    doc.write(`
+        <html>
+        <head>
+            <title>${titulo}</title>
+            <style>
+                body { font-family: Arial, sans-serif; color: #111; margin: 12px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+                th, td { border: 1px solid #777; padding: 5px 7px; font-size: 11px; }
+                th { background: #f1f1f1; text-transform: uppercase; }
+                .manifest { border: 1px solid #555; margin-bottom: 12px; }
+                .man-header { border-bottom: 1px solid #666; padding: 8px; display: grid; grid-template-columns: 120px 1fr; gap: 8px; }
+                .man-logo { width: 110px; height: 50px; object-fit: contain; border: 1px solid #d0d0d0; }
+                .man-company { font-size: 11px; }
+                .man-company h3 { margin: 0 0 3px; font-size: 20px; text-transform: uppercase; color: #1b2c44; }
+                .man-trip, .man-nf { border-bottom: 1px solid #666; }
+                .man-nf:last-child { border-bottom: none; }
+                .man-nf { padding: 7px; }
+                .man-nf-head { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+                .man-nf-sub { font-size: 11px; margin-bottom: 6px; }
+                .man-total { font-weight: 700; }
+            </style>
+        </head>
+        <body>
+            ${html}
+        </body>
+        </html>
+    `);
+    doc.close();
+    setTimeout(() => {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+        setTimeout(() => frame.remove(), 500);
+    }, 150);
+}
+
+function imprimirManifestoAtual() {
+    if (!manifestoAtual) {
+        alert('Gere o romaneio selecionado antes de imprimir.');
+        return;
+    }
+    _imprimirHtml(manifestoAtual, 'Romaneio de Carga');
+}
+
+async function carregarRomaneios() {
+    const nf = (document.getElementById('f-nf').value || '').trim();
+    const st = document.getElementById('st-romaneio');
+    st.textContent = 'Consultando romaneios...';
+    const qs = new URLSearchParams({ numero_nf: nf });
+    const resp = await fetch(`/api/expedicao/romaneios?${qs.toString()}`);
+    const data = await resp.json();
+    if (!resp.ok) {
+        st.textContent = data.error || 'Falha ao consultar romaneios.';
+        renderTabelaNfs([]);
+        return;
+    }
+    romaneiosCache = data || [];
+    st.textContent = `Total de romaneios: ${data.length}`;
+    renderTabelaNfs(romaneiosCache);
+}
+
+document.getElementById('f-nf').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') carregarRomaneios();
+});
+
+carregarRomaneios();
+</script>
+{% endblock %}

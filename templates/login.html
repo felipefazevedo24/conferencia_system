@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Acesso - FAM Conferência</title>
+    <style>
+        :root { --primary: #1e3a5f; --success: #059a63; --gray: #64748b; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: linear-gradient(135deg, #1e3a5f 0%, #2c5aa0 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .login-card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); width: 100%; max-width: 400px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo { height: 60px; margin-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 5px; text-transform: uppercase; }
+        input { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; outline: none; transition: 0.2s; }
+        input:focus { border-color: #2563eb; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; color: white; text-transform: uppercase; transition: 0.3s; margin-top: 10px; background: var(--success); }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="header">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-pHF2u3ebLHcHWJA3Fh09axrEJuczUv0RQQ&s" class="logo">
+            <h2 style="color:var(--primary)">Columbia Machine</h2>
+            <p style="color: var(--gray); font-size: 14px; margin-top: 5px;">Acesso ao Sistema</p>
+        </div>
+
+        <div id="form-login">
+            <div class="form-group">
+                <label>Usuário</label>
+                <input type="text" id="user" placeholder="Seu nome de usuário">
+            </div>
+            <div class="form-group">
+                <label>Senha</label>
+                <input type="password" id="pass" placeholder="******">
+            </div>
+            <button onclick="fazerLogin()">Entrar no Sistema</button>
+        </div>
+    </div>
+
+    <script>
+        async function fazerLogin() {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            
+            if(!u || !p) return alert("Preencha usuário e senha");
+
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, password: p})
+            });
+            
+            const data = await res.json();
+            if(data.sucesso) {
+                location.href = data.redirect_to || '/';
+            } else {
+                alert(data.msg);
+            }
+        }
+        // Permitir Enter
+        document.addEventListener('keypress', (e) => { if(e.key === 'Enter') fazerLogin(); });
+    </script>
+</body>
+</html>

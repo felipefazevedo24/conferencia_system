@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Expedicao - Controle Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+    .adm-wrap { max-width: 1200px; margin: 0 auto; padding: 14px; }
+    .adm-panel { background: #fff; border: 1px solid #d6e0ea; border-radius: 10px; margin-top: 12px; overflow: hidden; }
+    .adm-head { padding: 10px 12px; background: #f4f9fe; border-bottom: 1px solid #d6e0ea; display: flex; justify-content: space-between; align-items: center; }
+    .adm-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; }
+    .adm-body { padding: 12px; }
+    .btn-a { border: 1px solid #9bb0c3; border-radius: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; background: #fff; }
+    .btn-danger { background: #b42318; border-color: #8f1b13; color: #fff; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .inp { width: 100%; border: 1px solid #9fb2c5; border-radius: 6px; padding: 7px; font-size: 12px; }
+    th, td { border-bottom: 1px solid #dde5ee; padding: 8px 10px; font-size: 12px; text-align: left; }
+    th { background: #f3f8fd; text-transform: uppercase; font-size: 11px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="adm-wrap">
+    <div class="adm-panel">
+        <div class="adm-head">
+            <h3>Solicitações de autorização (expedir com pendência)</h3>
+            <button class="btn-a" onclick="carregarSolicitacoesPendenciaAdmin()">Atualizar</button>
+        </div>
+        <div class="adm-body">
+            <input id="admin-obs-aprovacao" class="inp" placeholder="Observação da aprovação (opcional)" />
+            <table>
+                <thead><tr><th>Sel</th><th>Solicitação</th><th>Conferência</th><th>Arquivo</th><th>Solicitante</th><th>Motivo</th><th>Data</th></tr></thead>
+                <tbody id="tbody-admin-solicitacoes"></tbody>
+            </table>
+            <div style="margin-top:10px;"><button class="btn-a" onclick="aprovarSolicitacaoPendenciaAdmin()">Aprovar solicitação</button></div>
+        </div>
+    </div>
+
+    <div class="adm-panel">
+        <div class="adm-head">
+            <h3>Estorno total de conferencia</h3>
+            <button class="btn-a" onclick="carregarFaturamentosAdmin()">Atualizar</button>
+        </div>
+        <div class="adm-body">
+            <div class="grid-2">
+                <input id="admin-conferencia-id" class="inp" placeholder="Conferencia ID" />
+                <input id="admin-motivo-total" class="inp" placeholder="Motivo do estorno total" />
+            </div>
+            <div style="margin-top:10px;"><button class="btn-a btn-danger" onclick="estornarTotalAdmin()">Estornar total</button></div>
+        </div>
+    </div>
+
+    <div class="adm-panel">
+        <div class="adm-head"><h3>Estorno parcial por item faturado</h3></div>
+        <div class="adm-body">
+            <input id="admin-motivo-parcial" class="inp" placeholder="Motivo do estorno parcial" />
+            <table>
+                <thead><tr><th>Sel</th><th>Faturamento</th><th>NF</th><th>Conferencia</th><th>Item</th><th>Qtd</th></tr></thead>
+                <tbody id="tbody-admin-faturamentos"></tbody>
+            </table>
+            <div style="margin-top:10px;"><button class="btn-a btn-danger" onclick="estornarParcialAdmin()">Estornar parcial</button></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function carregarSolicitacoesPendenciaAdmin() {
+    const tbody = document.getElementById('tbody-admin-solicitacoes');
+    const resp = await fetch('/api/admin/expedicao/solicitacoes_pendencia');
+    const data = await resp.json();
+    if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="7">Falha ao carregar solicitações.</td></tr>'; return; }
+    tbody.innerHTML = (data || []).map(r =>
+        `<tr>
+            <td><input type="radio" name="solicitacao-pend" class="chk-sol" value="${r.solicitacao_id}" /></td>
+            <td>${r.solicitacao_id}</td>
+            <td>${r.conferencia_id}</td>
+            <td>${r.arquivo}</td>
+            <td>${r.solicitante}</td>
+            <td>${r.motivo}</td>
+            <td>${r.data}</td>
+        </tr>`
+    ).join('') || '<tr><td colspan="7">Sem solicitações pendentes.</td></tr>';
+}
+
+async function aprovarSolicitacaoPendenciaAdmin() {
+    const selecionada = document.querySelector('.chk-sol:checked');
+    const solicitacaoId = Number(selecionada?.value || 0);
+    const observacao = (document.getElementById('admin-obs-aprovacao').value || '').trim();
+    if (!solicitacaoId) { alert('Selecione uma solicitação para aprovar.'); return; }
+    const resp = await fetch('/api/admin/expedicao/aprovar_pendencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ solicitacao_id: solicitacaoId, observacao })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert(data.error || 'Falha ao aprovar solicitação.'); return; }
+    alert('Solicitação aprovada com sucesso.');
+    carregarSolicitacoesPendenciaAdmin();
+}
+
+async function carregarFaturamentosAdmin() {
+    const tbody = document.getElementById('tbody-admin-faturamentos');
+    const resp = await fetch('/api/admin/expedicao/faturamentos');
+    const data = await resp.json();
+    if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="6">Falha ao carregar faturamentos.</td></tr>'; return; }
+    const rows = [];
+    data.forEach(f => {
+        (f.itens || []).forEach(it => {
+            rows.push(`<tr><td><input type="checkbox" class="chk-fat-item" value="${it.faturamento_item_id}" /></td><td>${f.faturamento_id}</td><td>${f.numero_nf}</td><td>${f.conferencia_id}</td><td>${it.conferencia_item_id}</td><td>${it.qtd_enviada}</td></tr>`);
+        });
+    });
+    tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="6">Sem itens faturados ativos.</td></tr>';
+}
+
+async function estornarTotalAdmin() {
+    const conferenciaId = Number(document.getElementById('admin-conferencia-id').value || 0);
+    const motivo = (document.getElementById('admin-motivo-total').value || '').trim();
+    if (!conferenciaId || !motivo) { alert('Informe conferencia ID e motivo.'); return; }
+    const resp = await fetch('/api/admin/expedicao/estornar_total', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferencia_id: conferenciaId, motivo })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert(data.error || 'Falha no estorno total.'); return; }
+    alert('Estorno total concluido.');
+    carregarFaturamentosAdmin();
+}
+
+async function estornarParcialAdmin() {
+    const motivo = (document.getElementById('admin-motivo-parcial').value || '').trim();
+    const ids = Array.from(document.querySelectorAll('.chk-fat-item:checked')).map(x => Number(x.value));
+    if (!motivo || !ids.length) { alert('Selecione itens e informe motivo.'); return; }
+    const resp = await fetch('/api/admin/expedicao/estornar_parcial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faturamento_item_ids: ids, motivo })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert(data.error || 'Falha no estorno parcial.'); return; }
+    alert('Estorno parcial concluido.');
+    carregarFaturamentosAdmin();
+}
+
+carregarFaturamentosAdmin();
+carregarSolicitacoesPendenciaAdmin();
+</script>
+{% endblock %}

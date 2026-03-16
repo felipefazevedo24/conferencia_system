@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Acesso Restrito{% endblock %}
+
+{% block extra_head %}
+<style>
+    .error-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 70vh;
+        text-align: center;
+    }
+    .error-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        padding: 40px;
+        max-width: 500px;
+        box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
+    }
+    .error-icon {
+        font-size: 60px;
+        color: #bb0000;
+        margin-bottom: 20px;
+    }
+    .error-code {
+        font-family: 'Courier New', monospace;
+        background: #eee;
+        padding: 5px 10px;
+        font-weight: bold;
+        color: #555;
+    }
+    .btn-return {
+        margin-top: 25px;
+        display: inline-block;
+        background: var(--sap-blue);
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-card">
+        <div class="error-icon">
+            <i class="fas fa-user-shield"></i>
+        </div>
+        <h2 style="color: #333; text-transform: uppercase; font-size: 18px;">Acesso Não Autorizado</h2>
+        <p style="color: #666; margin-top: 15px;">
+            Seu perfil de usuário (<span class="error-code">{{ session.role }}</span>) não possui privilégios para acessar este módulo.
+        </p>
+        <p style="font-size: 11px; color: #999;">Erro: HTTP 403 - Forbidden / Security Policy Restriction</p>
+        
+        <a href="javascript:history.back()" class="btn-return">
+            <i class="fas fa-arrow-left"></i> Retornar à página anterior
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,583 @@
+{% extends "base.html" %}
+
+{% block title %}Central de Integração | ERP FAM{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --sap-light-blue: #f0f7ff;
+            --protheus-gray: #32363a;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --success-erp: #1e7d32;
+            --danger-erp: #d92d20;
+            --warning-erp: #eaaa08;
+            --card-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1400px; margin: 0 auto; }
+        
+        /* Dashboard Stats Topo */
+        .stats-header { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
+        .stat-badge { 
+            background: white; padding: 15px; border-radius: 12px; border-bottom: 4px solid var(--sap-blue);
+            box-shadow: var(--card-shadow); display: flex; align-items: center; gap: 15px;
+        }
+        .stat-badge i { font-size: 24px; color: var(--sap-blue); opacity: 0.8; }
+        .stat-info span { display: block; font-size: 10px; text-transform: uppercase; font-weight: 800; color: #777; }
+        .stat-info b { font-size: 18px; color: var(--protheus-gray); }
+
+        /* Cabeçalho de Página */
+/* Cabeçalho de Página Atualizado */
+        .page-header-erp { 
+            background: #ffffff; /* Fundo Branco */
+            padding: 18px 25px; 
+            margin-bottom: 25px; 
+            border-radius: 12px; 
+            box-shadow: var(--card-shadow);
+            display: flex; 
+            align-items: center; 
+            color: #000000; /* Letras Pretas */
+            border: 1px solid var(--border-color); /* Adicionado borda suave para definir o card no fundo cinza */
+            border-bottom: 4px solid var(--sap-blue); /* Mantém o detalhe azul do SAP na base */
+        }
+        .page-header-erp h2 { 
+            margin: 0; 
+            font-size: 18px; 
+            text-transform: uppercase; 
+            letter-spacing: 1.5px; 
+            font-weight: 700; /* Negrito para destacar no branco */
+            color: #000000; /* Garante que o texto do h2 seja preto */
+        }
+        .page-header-erp i { 
+            margin-right: 15px; 
+            font-size: 24px; 
+            color: var(--sap-blue); /* Ícone em azul para não ficar tudo "morto" no preto e branco */
+        }
+
+        .upload-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; align-items: start; }
+
+        /* Estilização dos Cards Premium */
+        .card-sap { 
+            background: white; border: 1px solid var(--border-color); padding: 25px; 
+            border-radius: 16px; box-shadow: var(--card-shadow);
+        }
+        .card-sap h3 { 
+            font-size: 13px; font-weight: 800; color: var(--protheus-gray); margin-bottom: 22px; 
+            text-transform: uppercase; border-left: 5px solid var(--sap-blue); padding-left: 12px;
+            display: flex; align-items: center;
+        }
+
+        /* Inputs e Groups */
+        .form-label { font-size: 11px; font-weight: 700; color: #556b82; text-transform: uppercase; margin-bottom: 8px; display: block; opacity: 0.8; }
+        .input-group-sap { display: flex; gap: 8px; margin-bottom: 18px; }
+        .form-control-sap { 
+            flex: 1; padding: 12px 15px; border: 1px solid #ced4da; border-radius: 8px; 
+            font-size: 14px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: #fdfdfd;
+        }
+        .form-control-sap:focus { border-color: var(--sap-blue); box-shadow: 0 0 0 4px rgba(10,110,209,0.15); outline: none; background: #fdfdfd; }
+
+        /* Drop Area Futurista */
+        .file-drop-area { 
+            border: 2px dashed #cbd5e0; padding: 50px 20px; 
+            background: #f8fafc; text-align: center; cursor: pointer; transition: 0.3s; position: relative; border-radius: 16px;
+        }
+        .file-drop-area:hover { border-color: var(--sap-blue); background: #f1f5f9; border-style: solid; }
+        .file-msg { color: #64748b; font-size: 12px; display: block; margin-top: 15px; font-weight: 600; }
+
+        /* Botões Estilo Fiori */
+        .btn-sap { 
+            padding: 12px 20px; border: none; border-radius: 8px; 
+            font-size: 12px; font-weight: 700; cursor: pointer; text-transform: uppercase;
+            transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-primary-sap { background: var(--sap-blue); color: white; }
+        .btn-primary-sap:hover { background: var(--sap-hover); transform: translateY(-1px); }
+        
+        .btn-success-sap { background: var(--success-erp); color: white; width: 100%; margin-top: 15px; }
+        .btn-success-sap:hover { filter: brightness(1.1); }
+
+        .btn-danger-sap { background: #fef2f2; color: var(--danger-erp); border: 1px solid #fee2e2; }
+        .btn-danger-sap:hover { background: var(--danger-erp); color: white; }
+        
+        /* Logs Monospace */
+        #status, #consyste-status { 
+            margin-top: 20px; font-size: 12px; padding: 15px; border-radius: 10px;
+            display: none; background: #1e1e1e; color: #00ff00; border-left: 6px solid var(--sap-blue);
+            font-family: 'Cascadia Code', 'Consolas', monospace; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Tabelas Modernas */
+        .table-container { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; background: white; }
+        .mini-table { width: 100%; border-collapse: collapse; }
+        .mini-table th { background: #f8fafc; padding: 14px; border-bottom: 2px solid var(--border-color); text-transform: uppercase; font-size: 11px; color: #64748b; text-align: left; }
+        .mini-table td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; }
+        .mini-table tr:last-child td { border-bottom: none; }
+        .mini-table tr:hover td { background: var(--sap-light-blue); }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .card-danger { border: 1px solid #fee2e2; }
+        .danger-note {
+            display: block; font-size: 11px; color: #b91c1c; background: #fff1f1;
+            padding: 12px; margin-bottom: 20px; border-radius: 8px; font-weight: 600;
+        }
+
+        .voltar-link { display: inline-block; margin-top: 30px; color: #94a3b8; text-decoration: none; font-weight: 700; text-transform: uppercase; font-size: 11px; }
+        .voltar-link:hover { color: var(--sap-blue); }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    
+    <div class="stats-header">
+        <div class="stat-badge">
+            <i class="fas fa-cloud-download-alt"></i>
+            <div class="stat-info"><span>Web Service</span><b>Consyst-e Online</b></div>
+        </div>
+    </div>
+
+    <div class="page-header-erp">
+        <i class="fas fa-microchip"></i>
+        <h2>Engine de Captura e Processamento de Documentos</h2>
+    </div>
+
+    <div class="upload-grid">
+        <div class="card-sap">
+            <h3><i class="fas fa-network-wired"></i> Terminal Web Service</h3>
+            
+            <label class="form-label">Entrada por Chave (44 Dig)</label>
+            <div class="input-group-sap">
+                <input type="text" id="consyste-chave" class="form-control-sap" maxlength="44" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000" />
+                <button class="btn-sap btn-primary-sap" onclick="buscarPorChave()">
+                    <i class="fas fa-bolt"></i> Puxar
+                </button>
+            </div>
+
+            <label class="form-label" style="margin-top: 25px;">Consulta por Número</label>
+            <div class="input-group-sap">
+                <input type="text" id="consyste-numero" class="form-control-sap" placeholder="Ex: 351" />
+                <button class="btn-sap btn-primary-sap" onclick="buscarPorNumero()">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+            </div>
+            
+            <div id="consyste-status"></div>
+        </div>
+
+        <div class="card-sap">
+            <h3><i class="fas fa-file-upload"></i> Repositório Local</h3>
+            <div class="file-drop-area" id="drop-area">
+                <i class="fas fa-file-code" style="font-size: 40px; color: var(--sap-blue); opacity: 0.5;"></i>
+                <span class="file-msg" id="file-name">Deposite os arquivos XML ou clique para explorar</span>
+                <input type="file" id="xmls" accept=".xml" multiple onchange="updateFileName()">
+            </div>
+            <button id="btn-envio" class="btn-sap btn-success-sap" onclick="fazerUpload()">
+                <i class="fas fa-play"></i> Processar Lote de Arquivos
+            </button>
+            <div id="status"></div>
+        </div>
+    </div>
+
+    <div class="card-sap" style="margin-top:25px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; border:none;"><i class="fas fa-clipboard-check"></i> Controle de Fluxo de Conferência</h3>
+            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarNotasAguardandoLiberacao()">
+                <i class="fas fa-sync"></i> Sincronizar
+            </button>
+        </div>
+        <div class="table-container" style="max-height:300px; overflow-y:auto;">
+            <table class="mini-table">
+                <thead>
+                    <tr>
+                        <th>Nº Nota</th>
+                        <th>Fornecedor</th>
+                        <th>Operador</th>
+                        <th>Data Importação</th>
+                        <th width="140" style="text-align:center;">Gestão</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-liberacao-conferencia">
+                    <tr><td colspan="5" style="text-align:center; padding: 30px; color: #94a3b8;">Aguardando comando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-sap" style="margin-top:25px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; border:none;"><i class="fas fa-undo-alt"></i> Solicitações de Devolução Total</h3>
+            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarSolicitacoesDevolucao()">
+                <i class="fas fa-sync"></i> Atualizar
+            </button>
+        </div>
+        <div class="table-container" style="max-height:260px; overflow-y:auto;">
+            <table class="mini-table">
+                <thead>
+                    <tr>
+                        <th>Nº Nota</th>
+                        <th>Fornecedor</th>
+                        <th>Solicitante</th>
+                        <th>Motivo</th>
+                        <th width="130">Data</th>
+                        <th width="120" style="text-align:center;">Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-solicitacoes-devolucao">
+                    <tr><td colspan="6" style="text-align:center; padding: 25px; color: #94a3b8;">Buscando solicitações...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-sap card-danger" style="margin-top:25px;">
+        <h3><i class="fas fa-eraser"></i> Zona de Exclusão de Pendências</h3>
+        <span class="danger-note"><i class="fas fa-info-circle"></i> A exclusão removerá a nota da fila de conferência permanentemente.</span>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 15px; align-items: end;">
+            <div>
+                <label class="form-label">Nº Documento</label>
+                <input type="text" id="nf-excluir" class="form-control-sap" placeholder="0000" />
+            </div>
+            <div>
+                <label class="form-label">Confirmação</label>
+                <input type="text" id="nf-excluir-confirmacao" class="form-control-sap" placeholder="0000" />
+            </div>
+            <button class="btn-sap btn-danger-sap" style="height: 45px;" onclick="excluirNfPendenteManual()">
+                <i class="fas fa-trash-alt"></i> Aplicar Exclusão
+            </button>
+        </div>
+
+        <div style="margin-top:20px;">
+            <label class="form-label">Justificativa da Baixa</label>
+            <textarea id="nf-excluir-motivo" class="form-control-sap" rows="2" placeholder="Descreva por que este documento está sendo removido..."></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:30px; margin-bottom:15px;">
+            <span class="form-label" style="margin:0; color: var(--danger-erp);"><i class="fas fa-list-ul"></i> Lista de Pendências Atuais</span>
+            <button class="btn-sap btn-primary-sap" style="font-size: 10px; padding: 6px 15px; background: #64748b;" onclick="carregarPendentesParaExclusao()">Refresh</button>
+        </div>
+        
+        <div class="table-container" style="max-height: 200px; overflow-y:auto; border-color: #fee2e2;">
+            <table class="mini-table">
+                <thead>
+                    <tr>
+                        <th style="background:#fffcfc">Nº Nota</th>
+                        <th style="background:#fffcfc">Fornecedor</th>
+                        <th width="110" style="text-align:center; background:#fffcfc">Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-pendentes-excluir">
+                    <tr><td colspan="3" style="text-align:center; padding:20px;">Buscando dados...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <a href="/admin" class="voltar-link"><i class="fas fa-arrow-left"></i> Painel de Controle Principal</a>
+</div>
+
+<div id="modal-selecao" class="modal-overlay">
+    <div class="modal-sap" style="border-radius: 20px; overflow: hidden; border: none;">
+        <div class="modal-head" style="background: #1e293b; padding: 20px;">
+            <span style="letter-spacing: 1px;">SELEÇÃO DE DOCUMENTO LOCALIZADO</span>
+            <button onclick="fecharModalSelecao()" style="color:white; background:rgba(255,255,255,0.1); border:none; cursor:pointer; width:30px; height:30px; border-radius:50%;">&times;</button>
+        </div>
+        <div class="modal-body" style="margin:0; border:none; padding: 25px;">
+            <div class="table-container">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Nº DOC</th>
+                            <th>EMISSÃO</th>
+                            <th>EMITENTE</th>
+                            <th>CHAVE DE ACESSO</th>
+                            <th width="120" style="text-align:center">AÇÃO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-selecao-corpo"></tbody>
+                </table>
+            </div>
+        </div>
+        <div style="padding: 20px; text-align: right; background: #f8fafc;">
+            <button class="btn-sap" style="background: #cbd5e1; color: #475569;" onclick="fecharModalSelecao()">Cancelar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const statusBox = document.getElementById('consyste-status');
+
+    function showStatus(msg, type='info') {
+        statusBox.style.display = "block";
+        statusBox.innerText = ">> Columbia Helper: " + msg.toUpperCase();
+        statusBox.style.color = type === 'error' ? '#ff4d4d' : '#00ff00';
+        statusBox.style.borderLeftColor = type === 'error' ? 'var(--danger-erp)' : 'var(--sap-blue)';
+    }
+
+    // 1. IMPORTAÇÃO POR CHAVE
+    async function importarPorChave(chaveManual) {
+        const chave = chaveManual || document.getElementById('consyste-chave').value.trim();
+        if (!chave) return alert('ERRO: Informe a chave de acesso.');
+
+        showStatus('Iniciando handshake com Consyst-e...');
+        try {
+            const res = await fetch('/api/consyste/download', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ chave: chave })
+            });
+            const d = await res.json();
+            if(res.ok) {
+                showStatus('Sucesso: Documento importado com sucesso!.');
+                fecharModalSelecao();
+                document.getElementById('consyste-chave').value = "";
+                await carregarNotasAguardandoLiberacao();
+            } else {
+                showStatus('Erro: ' + d.error, 'error');
+            }
+        } catch (e) { showStatus('Falha crítica de comunicação', 'error'); }
+    }
+
+    // 1.1 CONSULTA POR CHAVE
+    async function buscarPorChave() {
+        const chave = document.getElementById('consyste-chave').value.trim();
+        if (!chave) return alert('Informe a chave de acesso.');
+
+        showStatus('Querying Web Service by Key...');
+        try {
+            const res = await fetch(`/api/consyste/listar?chave=${encodeURIComponent(chave)}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                showStatus(data.error || 'API Error', 'error');
+                return;
+            }
+
+            const lista = data.documentos || [];
+            if (lista.length === 0) {
+                showStatus('Documento não encontrado no portal.', 'error');
+                return;
+            }
+
+            showStatus('Match found. Requesting XML download...');
+            importarPorChave(lista[0].chave || chave);
+        } catch (e) {
+            showStatus('Internal Server Error', 'error');
+        }
+    }
+
+    // 2. BUSCA POR NÚMERO
+    async function buscarPorNumero() {
+        const numInput = document.getElementById('consyste-numero').value.trim();
+        if (!numInput) return alert('Informe o número da nota');
+
+        showStatus('Scanning Web Service for ID: ' + numInput);
+        
+        try {
+            const res = await fetch(`/api/consyste/listar?numero=${numInput}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                showStatus(data.error || 'WS Error', 'error');
+                return;
+            }
+
+            const lista = data.documentos || [];
+
+            if (lista.length === 0) {
+                showStatus('Resultado nulo para esta consulta.', 'error');
+            } else if (lista.length === 1) {
+                showStatus('Registro único localizado. Importando...');
+                importarPorChave(lista[0].chave);
+            } else {
+                showStatus('Múltiplos registros localizados ('+lista.length+').');
+                abrirModalSelecao(lista);
+            }
+        } catch (e) { 
+            showStatus('Connection Timeout / Refused', 'error'); 
+        }
+    }
+
+    function abrirModalSelecao(documentos) {
+        const corpo = document.getElementById('lista-selecao-corpo');
+        corpo.innerHTML = documentos.map(doc => `
+            <tr>
+                <td><b>${doc.numero}</b></td>
+                <td>${doc.emissao || '---'}</td>
+                <td>${doc.emitente_nome || doc.emit_nome}</td>
+                <td style="font-family:monospace; color: var(--sap-blue)">${doc.chave}</td>
+                <td style="text-align:center">
+                    <button class="btn-sap btn-primary-sap" style="padding: 5px 12px; font-size: 10px;" onclick="importarPorChave('${doc.chave}')">Selecionar</button>
+                </td>
+            </tr>
+        `).join('');
+        document.getElementById('modal-selecao').style.display = 'flex';
+    }
+
+    function fecharModalSelecao() { document.getElementById('modal-selecao').style.display = 'none'; }
+
+    async function excluirNfPendente(numero) {
+        const nf = (numero || document.getElementById('nf-excluir').value || '').trim();
+        const confirmacao = (document.getElementById('nf-excluir-confirmacao').value || '').trim();
+        const motivo = (document.getElementById('nf-excluir-motivo').value || '').trim();
+        if (!nf || !confirmacao || !motivo || motivo.length < 5) {
+            alert('Preencha todos os campos e o motivo (mín. 5 letras)');
+            return;
+        }
+
+        const res = await fetch('/api/excluir_nota_pendente', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: nf, confirmacao_nota: confirmacao, motivo: motivo })
+        });
+        const data = await res.json();
+        if (res.ok && data.sucesso) {
+            showStatus('Registro ' + nf + ' purgado do sistema.');
+            document.getElementById('nf-excluir').value = '';
+            document.getElementById('nf-excluir-confirmacao').value = '';
+            document.getElementById('nf-excluir-motivo').value = '';
+            await carregarPendentesParaExclusao();
+        } else {
+            showStatus(data.msg || 'Erro na deleção', 'error');
+        }
+    }
+
+    async function excluirNfPendenteManual() { await excluirNfPendente(); }
+
+    async function carregarPendentesParaExclusao() {
+        const tbody = document.getElementById('lista-pendentes-excluir');
+        const res = await fetch('/api/pendentes');
+        const lista = await res.json();
+        if (!Array.isArray(lista) || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:15px; color:#999">Nenhuma nota na fila.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = lista.map(n => `
+            <tr>
+                <td><b>${n.numero}</b></td>
+                <td>${n.fornecedor}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-danger-sap" style="padding:4px 10px; font-size:9px" onclick="prepararExclusaoNf('${n.numero}')">CARREGAR</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function prepararExclusaoNf(numero) {
+        document.getElementById('nf-excluir').value = numero;
+        document.getElementById('nf-excluir-confirmacao').value = numero;
+        document.getElementById('nf-excluir-motivo').focus();
+    }
+
+    function updateFileName() {
+        const input = document.getElementById('xmls');
+        document.getElementById('file-name').innerText = input.files.length + " LOTE(S) DE XML SELECIONADO(S)";
+    }
+
+    async function fazerUpload() {
+        const input = document.getElementById('xmls');
+        if (input.files.length === 0) return alert("Selecione arquivos.");
+        document.getElementById('status').style.display = "block";
+        document.getElementById('status').innerText = ">> UPLOAD_ENGINE: PROCESSANDO LOTE LOCAL...";
+        const formData = new FormData();
+        for (let f of input.files) { formData.append('xml', f); }
+        try {
+            const res = await fetch('/importar_xml', { method: 'POST', body: formData });
+            const d = await res.json();
+            alert(d.msg);
+            location.reload();
+        } catch (e) { showStatus("Erro no processamento local", "error"); }
+    }
+
+    async function carregarNotasAguardandoLiberacao() {
+        const tbody = document.getElementById('lista-liberacao-conferencia');
+        const res = await fetch('/api/notas_aguardando_liberacao');
+        const lista = await res.json();
+        if (!Array.isArray(lista) || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Sistema limpo. Sem notas para liberação.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = lista.map(n => `
+            <tr>
+                <td><b>${n.numero}</b></td>
+                <td>${n.fornecedor}</td>
+                <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:10px">${n.importado_por}</span></td>
+                <td style="font-size:11px">${n.data_importacao}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-primary-sap" style="padding:5px 15px; font-size:10px; background:var(--success-erp)" onclick="liberarParaConferencia('${n.numero}')">LIBERAR</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function liberarParaConferencia(numeroNota) {
+        const res = await fetch('/api/admin/liberar_nota_conferencia', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: numeroNota })
+        });
+        if (res.ok) {
+            showStatus('Documento ' + numeroNota + ' movido para fila de conferência.');
+            await carregarNotasAguardandoLiberacao();
+            await carregarPendentesParaExclusao();
+        }
+    }
+
+    async function carregarSolicitacoesDevolucao() {
+        const tbody = document.getElementById('lista-solicitacoes-devolucao');
+        const res = await fetch('/api/admin/recebimento/solicitacoes_devolucao');
+        const lista = await res.json();
+        if (!Array.isArray(lista) || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">Nenhuma solicitação pendente.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = lista.map((item) => `
+            <tr>
+                <td><b>${item.numero}</b></td>
+                <td>${item.fornecedor || '---'}</td>
+                <td>${item.solicitante}</td>
+                <td style="font-size:11px;">${item.motivo}</td>
+                <td style="font-size:11px;">${item.data}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-primary-sap" style="padding:5px 12px; font-size:10px; background:var(--danger-erp);" onclick="aprovarSolicitacaoDevolucao(${item.id}, '${item.numero}')">Aprovar</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function aprovarSolicitacaoDevolucao(solicitacaoId, numeroNota) {
+        const observacao = prompt(`Aprovar devolução total da NF ${numeroNota}. Observação do admin (opcional):`, '') || '';
+        const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ solicitacao_id: solicitacaoId, observacao_admin: observacao })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.msg || data.error || 'Falha ao aprovar devolução.');
+            return;
+        }
+        showStatus(data.msg || `NF ${numeroNota} aprovada para devolução.`);
+        await carregarSolicitacoesDevolucao();
+        await carregarPendentesParaExclusao();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await carregarPendentesParaExclusao();
+        await carregarNotasAguardandoLiberacao();
+        await carregarSolicitacoesDevolucao();
+    });
+</script>
+{% endblock %}

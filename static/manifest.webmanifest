@@ -1,0 +1,9 @@
+{
+  "name": "Conferencia System",
+  "short_name": "Conferencia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ebeef2",
+  "theme_color": "#0a6ed1",
+  "icons": []
+}

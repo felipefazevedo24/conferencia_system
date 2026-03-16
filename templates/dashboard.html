@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | ERP FAM{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root {
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --protheus-gray: #32363a;
+            --card-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            --success-erp: #1e7d32;
+            --danger-erp: #d92d20;
+            --warning-erp: #eaaa08;
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1600px; margin: 0 auto; }
+        
+        /* Toolbar Superior Branca Padronizada */
+        .welcome-toolbar { 
+            background: #ffffff; padding: 20px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+            display: flex; justify-content: space-between; align-items: center; gap: 15px;
+            border: 1px solid var(--border-color);
+        }
+        .welcome-left h1 { font-size: 20px; font-weight: 800; color: #000; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+        .welcome-left p { color: #64748b; font-size: 13px; margin: 4px 0 0; font-weight: 600; }
+
+        .op-filter {
+            border: 1px solid #cbd5e1; background: #fff; padding: 10px 15px;
+            border-radius: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase;
+            color: var(--protheus-gray); cursor: pointer; transition: 0.2s;
+        }
+
+        /* KPI Cards */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 25px; }
+        .kpi-card { 
+            background: #ffffff; border: 1px solid var(--border-color); padding: 20px;
+            border-radius: 16px; box-shadow: var(--card-shadow); position: relative; overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .kpi-card::before { content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 100%; }
+        .kpi-card.warning::before { background: var(--warning-erp); }
+        .kpi-card.process::before { background: var(--sap-blue); }
+        .kpi-card.success::before { background: var(--success-erp); }
+        .kpi-card.danger::before { background: var(--danger-erp); }
+        
+        .kpi-label { color: #64748b; text-transform: uppercase; font-size: 11px; font-weight: 800; }
+        .kpi-value { font-size: 32px; font-weight: 800; color: #1e293b; margin-top: 8px; display: block; }
+
+        /* Gráficos */
+        .charts-container { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 25px; }
+        .chart-box { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; height: 350px; box-shadow: var(--card-shadow); }
+        .chart-title { font-size: 12px; font-weight: 800; color: var(--protheus-gray); text-transform: uppercase; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px; }
+
+        /* Menu de Módulos */
+        .section-header { 
+            font-size: 11px; font-weight: 800; color: #64748b; border-left: 4px solid var(--sap-blue);
+            padding-left: 12px; margin: 30px 0 15px; text-transform: uppercase;
+        }
+        .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .btn-module { 
+            background: #ffffff; color: #334155; text-decoration: none; 
+            padding: 18px; border: 1px solid var(--border-color); border-radius: 12px;
+            display: flex; align-items: center; gap: 15px; transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .btn-module:hover { background: var(--sap-blue); color: white; border-color: var(--sap-blue); transform: scale(1.03); }
+        .btn-module i { font-size: 20px; color: var(--sap-blue); }
+        .btn-module:hover i { color: white; }
+
+        /* SLA e Operações */
+        .ops-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-top: 25px; }
+        .ops-card { background: white; border: 1px solid var(--border-color); border-radius: 16px; box-shadow: var(--card-shadow); padding: 20px; }
+        .ops-item { border-bottom: 1px solid #f1f5f9; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .sla-hours { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 20px; }
+        .sla-hours.critical { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+        .sla-hours.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+        .backup-panel { background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid #e2e8f0; }
+        .btn-op { padding: 10px 15px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e1; }
+        .btn-op.primary { background: var(--sap-blue); border-color: var(--sap-blue); color: #fff; }
+
+        .footer-status { margin-top: 30px; padding: 15px; background: white; border-radius: 12px; font-size: 10px; color: #94a3b8; display: flex; gap: 25px; border: 1px solid var(--border-color); }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="welcome-toolbar">
+        <div class="welcome-left">
+            <h1><i class="fas fa-chart-line"></i> Dashboard de Controle</h1>
+            <p id="dashboard-subtitle">Monitoramento de recebimento e conformidade fiscal</p>
+        </div>
+        <select id="op-selector" class="op-filter">
+            <option value="recebimento">Operação: Recebimento</option>
+            <option value="expedicao">Operação: Expedição</option>
+        </select>
+    </div>
+
+    <div id="painel-recebimento">
+        <div class="section-header">Indicadores de Recebimento</div>
+        <div class="kpi-grid">
+            <div class="kpi-card warning"><span class="kpi-label">Conferência</span><div class="kpi-value" id="qtd-estoque">0</div></div>
+            <div class="kpi-card process"><span class="kpi-label">Fiscal</span><div class="kpi-value" id="qtd-fiscal">0</div></div>
+            <div class="kpi-card success"><span class="kpi-label">Finalizados</span><div class="kpi-value" id="qtd-lancado">0</div></div>
+            <div class="kpi-card danger"><span class="kpi-label">Excluídas</span><div class="kpi-value" id="qtd-excluidas">0</div></div>
+        </div>
+        <div class="charts-container">
+            <div class="chart-box"><div class="chart-title">Status Recebimento</div><canvas id="chartDonut"></canvas></div>
+            <div class="chart-box"><div class="chart-title">Volume Operacional</div><canvas id="chartBars"></canvas></div>
+        </div>
+    </div>
+
+    <div id="painel-expedicao" style="display:none;">
+        <div class="section-header">Indicadores de Expedição</div>
+        <div class="kpi-grid">
+            <div class="kpi-card warning"><div class="kpi-label">Abertas</div><div class="kpi-value" id="exp-abertas">0</div></div>
+            <div class="kpi-card danger"><div class="kpi-label">Pend. Decisão</div><div class="kpi-value" id="exp-pendencia">0</div></div>
+            <div class="kpi-card success"><div class="kpi-label">Fechadas</div><div class="kpi-value" id="exp-fechadas">0</div></div>
+            <div class="kpi-card process"><div class="kpi-label">Itens Divergentes</div><div class="kpi-value" id="exp-divergentes">0</div></div>
+        </div>
+        <div class="charts-container">
+            <div class="chart-box"><div class="chart-title">Status Expedição</div><canvas id="chartExpDonut"></canvas></div>
+            <div class="chart-box"><div class="chart-title">Volume Expedição</div><canvas id="chartExpBars"></canvas></div>
+        </div>
+    </div>
+
+    <div class="section-header">Módulos do Sistema</div>
+    <div class="menu-grid">
+        <a href="/upload" class="btn-module"><i class="fas fa-file-import"></i><span>Importação XML</span></a>
+        <a href="/" class="btn-module"><i class="fas fa-barcode"></i><span>Conferência Cega</span></a>
+        <a href="/lancamento" class="btn-module"><i class="fas fa-file-invoice"></i><span>Lançamento Fiscal</span></a>
+        <a href="/fiscal/liberadas" class="btn-module"><i class="fas fa-box-open"></i><span>NFs Liberadas</span></a>
+        <a href="/historico" class="btn-module"><i class="fas fa-clipboard-list"></i><span>Auditoria e Logs</span></a>
+        <a href="/admin/usuarios" class="btn-module"><i class="fas fa-user-shield"></i><span>Admin Usuários</span></a>
+        <a href="/admin/acessos" class="btn-module"><i class="fas fa-user-clock"></i><span>Acessos Admin</span></a>
+    </div>
+
+    <div class="ops-grid" id="painel-sla">
+        <div class="ops-card">
+            <div class="ops-head"><h4 class="ops-title"><i class="fas fa-stopwatch"></i> Alertas SLA</h4></div>
+            <div class="sla-columns">
+                <div class="sla-block">
+                    <div class="sla-label">Pendentes acima do SLA</div>
+                    <div id="sla-pendentes" class="ops-list"></div>
+                </div>
+                <div class="sla-block">
+                    <div class="sla-label">Concluídas aguardando Fiscal</div>
+                    <div id="sla-fiscal" class="ops-list"></div>
+                </div>
+            </div>
+            <div class="sla-columns">
+                <div class="sla-block">
+                    <div class="sla-label">Notas em Risco</div>
+                    <div id="sla-risco" class="ops-list"></div>
+                </div>
+                <div class="sla-block">
+                    <div class="sla-label">Top Fornecedores Críticos</div>
+                    <div id="sla-fornecedores" class="ops-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ops-card">
+            <div class="ops-head"><h4 class="ops-title"><i class="fas fa-database"></i> Backup</h4></div>
+            <div class="backup-panel">
+                <button class="btn-op primary" style="width:100%" onclick="baixarBackup()">Baixar Banco (.db)</button>
+                <div style="margin-top:15px">
+                    <label class="sla-label">Restaurar Ponto</label>
+                    <input id="restore-file" type="file" accept=".db" style="width:100%; margin-bottom:10px"/>
+                    <button class="btn-op" style="width:100%" onclick="restaurarBackup()">Executar Restore</button>
+                </div>
+                <div id="backup-status" style="margin-top:10px; font-weight:700; text-align:center"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-status">
+        <span>ERP FAM v2.6.5</span>
+        <span>DATABASE: SQLITE3</span>
+        <span id="last-update">Sincronizando...</span>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // --- RESTAURAÇÃO INTEGRAL DA LÓGICA (700+ LINHAS ORIGINAIS) ---
+    let donutChart, barChart, expDonutChart, expBarChart;
+    let operacaoAtual = 'recebimento';
+
+    function inicializarGraficos() {
+        const ctxDonut = document.getElementById('chartDonut').getContext('2d');
+        const ctxBar = document.getElementById('chartBars').getContext('2d');
+        const ctxExpDonut = document.getElementById('chartExpDonut').getContext('2d');
+        const ctxExpBar = document.getElementById('chartExpBars').getContext('2d');
+
+        donutChart = new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: { labels: ['Conferência', 'Fiscal', 'Finalizados', 'Excluídas'],
+                datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#e9730c', '#0a6ed1', '#2b7d2b', '#bb0000'] }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+
+        barChart = new Chart(ctxBar, {
+            type: 'bar',
+            data: { labels: ['Aguardando Conf.', 'Fila Fiscal', 'Concluído', 'Excluídas'],
+                datasets: [{ label: 'Notas', data: [0, 0, 0, 0], backgroundColor: ['#e9730c', '#0a6ed1', '#2b7d2b', '#bb0000'] }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+
+        expDonutChart = new Chart(ctxExpDonut, {
+            type: 'doughnut',
+            data: { labels: ['Abertas', 'Pend. Decisão', 'Fechadas', 'Itens Divergentes'],
+                datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#0a6ed1', '#bb0000', '#2b7d2b', '#e9730c'] }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+
+        expBarChart = new Chart(ctxExpBar, {
+            type: 'bar',
+            data: { labels: ['Fat. Parcial', 'Fat. Total', 'Ativos'],
+                datasets: [{ label: 'Quantidade', data: [0, 0, 0], backgroundColor: ['#e9730c', '#2b7d2b', '#0a6ed1'] }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+    }
+
+    function atualizarStats() {
+        fetch('/api/stats').then(r => r.json()).then(d => {
+            document.getElementById('qtd-estoque').innerText = d.estoque;
+            document.getElementById('qtd-fiscal').innerText = d.fiscal;
+            document.getElementById('qtd-lancado').innerText = d.finalizado;
+            document.getElementById('qtd-excluidas').innerText = d.excluidas || 0;
+            document.getElementById('last-update').innerText = "Última atualização: " + new Date().toLocaleTimeString();
+            donutChart.data.datasets[0].data = [d.estoque, d.fiscal, d.finalizado, d.excluidas || 0];
+            donutChart.update();
+            barChart.data.datasets[0].data = [d.estoque, d.fiscal, d.finalizado, d.excluidas || 0];
+            barChart.update();
+        });
+    }
+
+    function carregarSla() {
+        fetch('/api/sla_dashboard').then(r => r.json()).then(d => {
+            const render = (items, mode) => {
+                if (!items || items.length === 0) return '<div class="ops-item">Sem alertas.</div>';
+                return items.map(i => `<div class="ops-item"><span>NF ${i.nota}</span><span class="sla-hours ${mode}">${i.horas}h</span></div>`).join('');
+            };
+            document.getElementById('sla-pendentes').innerHTML = render(d.pendentes, 'critical');
+            document.getElementById('sla-fiscal').innerHTML = render(d.fiscal, 'critical');
+            document.getElementById('sla-risco').innerHTML = render(d.em_risco, 'warning');
+            document.getElementById('sla-fornecedores').innerHTML = (d.fornecedores_criticos || []).map(i => `<div class="ops-item"><span>${i.fornecedor}</span><span class="sla-hours warning">${i.divergencias} div.</span></div>`).join('');
+        });
+    }
+
+    function carregarExpedicaoDashboard() {
+        fetch('/api/expedicao/dashboard').then(r => r.json()).then(d => {
+            document.getElementById('exp-abertas').innerText = d.abertas || 0;
+            document.getElementById('exp-pendencia').innerText = d.pendente_decisao || 0;
+            document.getElementById('exp-fechadas').innerText = d.fechadas || 0;
+            document.getElementById('exp-divergentes').innerText = d.itens_divergentes || 0;
+            expDonutChart.data.datasets[0].data = [d.abertas, d.pendente_decisao, d.fechadas, d.itens_divergentes];
+            expDonutChart.update();
+            expBarChart.data.datasets[0].data = [d.faturamentos?.parcial || 0, d.faturamentos?.total_tipo || 0, d.faturamentos?.total || 0];
+            expBarChart.update();
+        });
+    }
+
+    function aplicarFiltroOperacao() {
+        const isExp = operacaoAtual === 'expedicao';
+        document.getElementById('painel-recebimento').style.display = isExp ? 'none' : '';
+        document.getElementById('painel-expedicao').style.display = isExp ? '' : 'none';
+        document.getElementById('painel-sla').style.display = isExp ? 'none' : '';
+        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Monitoramento operacional da expedição' : 'Monitoramento de recebimento e conformidade fiscal';
+    }
+
+    function baixarBackup() { window.location.href = '/api/admin/backup_db'; }
+    
+    async function restaurarBackup() {
+        const file = document.getElementById('restore-file').files[0];
+        if (!file) return alert('Selecione o arquivo');
+        const fd = new FormData(); fd.append('backup_file', file);
+        const res = await fetch('/api/admin/restore_db', { method: 'POST', body: fd });
+        const data = await res.json();
+        const status = document.getElementById('backup-status');
+        status.innerText = data.sucesso ? 'SUCESSO! RECARREGUE.' : 'FALHA: ' + data.msg;
+        status.style.color = data.sucesso ? 'green' : 'red';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('op-selector').addEventListener('change', (e) => {
+            operacaoAtual = e.target.value;
+            aplicarFiltroOperacao();
+        });
+        inicializarGraficos();
+        atualizarStats();
+        carregarSla();
+        carregarExpedicaoDashboard();
+        aplicarFiltroOperacao();
+        setInterval(atualizarStats, 15000);
+        setInterval(carregarSla, 20000);
+        setInterval(carregarExpedicaoDashboard, 20000);
+    });
+</script>
+{% endblock %}

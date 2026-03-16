@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Administração de Segurança | ERP FAM{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --protheus-gray: #32363a;
+            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1240px; margin: 0 auto; }
+        
+        /* Cabeçalho Branco Padrão */
+        .page-header-erp { 
+            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+            display: flex; align-items: center; color: #000000; border: 1px solid var(--border-color);
+        }
+        .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        .page-header-erp h2 i { color: var(--sap-blue); font-size: 24px; }
+
+        .management-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+
+        /* Cards Estilizados */
+        .card-sap { 
+            background: white; border: 1px solid var(--border-color); padding: 25px; 
+            border-radius: 16px; box-shadow: var(--card-shadow);
+        }
+        .card-sap h3 { 
+            font-size: 13px; font-weight: 800; color: var(--protheus-gray); margin-bottom: 20px; 
+            text-transform: uppercase; border-bottom: 2px solid #f0f4f8; padding-bottom: 10px;
+        }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; }
+        
+        input[type="text"], input[type="password"], select { 
+            width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; 
+            font-size: 13px; transition: all 0.2s; box-sizing: border-box;
+        }
+        input:focus, select:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+
+        /* Botões */
+        .btn-sap { 
+            padding: 10px 18px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-save { width: 100%; background: var(--sap-blue); color: white; margin-top: 10px; }
+        .btn-save:hover { background: var(--sap-hover); transform: translateY(-1px); }
+
+        .btn-refresh { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+        .btn-refresh:hover { background: #e2e8f0; }
+
+        /* Tabela de Usuários */
+        .table-container { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; padding: 14px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #edf2f7; }
+        td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; background: white; }
+        tr:hover td { background: #f0f7ff; }
+
+        /* Badges de Role */
+        .badge-role { padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
+        .role-admin { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .role-fiscal { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .role-conferente, .role-portaria { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+        .btn-delete { 
+            color: var(--danger-erp); cursor: pointer; font-size: 14px; border: 1px solid #fee2e2; 
+            background: #fef2f2; border-radius: 8px; padding: 8px; transition: all 0.2s;
+        }
+        .btn-delete:hover { background: var(--danger-erp); color: white; border-color: var(--danger-erp); }
+
+        @media (max-width: 960px) {
+            .management-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header-erp">
+        <h2><i class="fas fa-user-lock"></i> Gestão de Acessos e Usuários</h2>
+    </div>
+
+    <div class="management-grid">
+        <div class="card-sap">
+            <h3>Manutenção de Cadastro</h3>
+            <div class="form-group">
+                <label>Username (Identificador)</label>
+                <input type="text" id="reg-user" placeholder="Ex: felipe.azevedo">
+            </div>
+            <div class="form-group">
+                <label>Senha Provisória</label>
+                <input type="password" id="reg-pass" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label>Perfil de Acesso</label>
+                <select id="reg-role">
+                    <option value="Conferente">LOGÍSTICA (CONFERENTE)</option>
+                    <option value="Portaria">PORTARIA (ENTRADA)</option>
+                    <option value="Fiscal">FISCAL (ESCRITURAÇÃO)</option>
+                    <option value="Admin">ADMINISTRADOR (TI)</option>
+                </select>
+            </div>
+            <button class="btn-sap btn-save" onclick="salvarUsuario()">
+                <i class="fas fa-user-plus"></i> Efetivar Registro
+            </button>
+        </div>
+
+        <div class="card-sap">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; border:none; padding:0;">Usuários com Acesso ao Sistema</h3>
+                <button class="btn-sap btn-refresh" onclick="carregarUsuarios()">
+                    <i class="fas fa-sync-alt"></i> Sincronizar
+                </button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Identificador do Usuário</th>
+                            <th>Nível de Permissão</th>
+                            <th width="80" style="text-align:center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-usuarios-corpo">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function salvarUsuario() {
+        const u = document.getElementById('reg-user').value.trim();
+        const p = document.getElementById('reg-pass').value.trim();
+        const r = document.getElementById('reg-role').value;
+        
+        if(!u || !p) return alert("Erro: Defina o usuário e a senha.");
+        
+        const res = await fetch('/api/registrar', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({username: u, password: p, role: r}) 
+        });
+        
+        const data = await res.json();
+        if(data.sucesso) { 
+            alert("Usuário registrado no banco de dados."); 
+            document.getElementById('reg-user').value = '';
+            document.getElementById('reg-pass').value = '';
+            carregarUsuarios(); 
+        } else {
+            alert("Falha: " + data.msg);
+        }
+    }
+
+    async function carregarUsuarios() {
+        const res = await fetch('/api/listar_usuarios');
+        const users = await res.json();
+        document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => `
+            <tr>
+                <td><b style="color:var(--sap-blue)">${u.username}</b></td>
+                <td><span class="badge-role role-${u.role.toLowerCase()}">${u.role}</span></td>
+                <td style="text-align:center">
+                    <button class="btn-delete" title="Remover Acesso" onclick="deletarUsuario('${u.username}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function deletarUsuario(user) {
+        if(!confirm(`Deseja realmente remover o acesso de [${user}]?`)) return;
+        const res = await fetch(`/api/deletar_usuario/${user}`, { method: 'DELETE' });
+        const data = await res.json();
+        if(data.sucesso) carregarUsuarios();
+        else alert("Erro: " + data.msg);
+    }
+    
+    document.addEventListener('DOMContentLoaded', carregarUsuarios);
+</script>
+{% endblock %}

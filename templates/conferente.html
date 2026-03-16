@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+
+{% block title %}Conferência de Materiais | ERP FAM{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --pending-yellow: #f1c40f; 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --header-bg: #1e293b;
+            --success-erp: #1e7d32;
+            --danger-erp: #d92d20;
+            --warning-erp: #eaaa08;
+            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .container-erp { padding: 25px; max-width: 1400px; margin: 0 auto; }
+        
+        /* Toolbar Superior */
+        .erp-toolbar { 
+            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;
+            border-radius: 12px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color);
+        }
+        .erp-toolbar h2 { margin: 0; font-size: 18px; color: #000; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .toolbar-actions { display: flex; align-items: center; gap: 12px; }
+        .filtro-nota { border: 1px solid #ced4da; padding: 10px 15px; border-radius: 8px; min-width: 220px; font-size: 13px; transition: all 0.2s; }
+        .filtro-nota:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+        
+        /* Grid de Notas */
+        .notas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+        .nota-card { 
+            background: #ffffff; padding: 20px; border: 1px solid var(--border-color);
+            border-radius: 16px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02); position: relative; overflow: hidden;
+        }
+        .nota-card::before { content: ''; position: absolute; left: 0; top: 0; width: 4px; height: 100%; background: var(--pending-yellow); }
+        .nota-card:hover { transform: translateY(-4px); box-shadow: var(--card-shadow); border-color: var(--sap-blue); }
+        .nota-card strong { display: block; margin-top: 10px; font-size: 16px; color: var(--sap-blue); font-weight: 800; }
+        .status-label { font-size: 10px; font-weight: 800; color: var(--warning-erp); text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+        
+        /* Prioridades e Progressão */
+        .priority-row { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .priority-pill { font-size: 10px; font-weight: 800; border-radius: 20px; padding: 3px 10px; border: 1px solid #d1d5db; background: #f3f4f6; color: #374151; }
+        .priority-pill.p0 { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+        .priority-pill.p1 { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+        .priority-pill.p4 { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+        .priority-pill.p5 { background: #7f1d1d; border-color: #991b1b; color: white; }
+        .priority-age { font-size: 11px; color: #64748b; font-weight: 700; }
+        .priority-track { margin-top: 8px; height: 6px; border-radius: 10px; background: #e2e8f0; overflow: hidden; }
+        .priority-fill { height: 100%; width: 0%; transition: width 0.4s ease; }
+        .priority-fill.p0 { background: #10b981; }
+        .priority-fill.p5 { background: #ef4444; }
+
+        /* Painel de Conferência */
+        .conf-panel { background: white; border-radius: 20px; overflow: hidden; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
+        .conf-header { 
+            background: var(--header-bg); color: white; padding: 20px 25px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .conf-header h3 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; font-weight: 400; }
+
+        .erp-table { width: 100%; border-collapse: collapse; }
+        .erp-table th { 
+            background: #f8fafc; padding: 15px; font-size: 11px; 
+            text-transform: uppercase; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 800;
+        }
+        .erp-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .erp-table tr:hover td { background: #f8fafc; }
+
+        .status-indicator { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background-color: #cbd5e1; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; }
+        tr.contado .status-indicator { background-color: var(--success-erp) !important; box-shadow: 0 0 0 1px var(--success-erp); } 
+        tr.contado { background-color: #f0fdf4 !important; } 
+
+        .qtd-input { 
+            width: 110px; padding: 10px; border: 2px solid #cbd5e1; border-radius: 8px;
+            text-align: right; font-family: 'Cascadia Code', monospace; font-weight: 800; font-size: 16px; color: var(--sap-blue);
+        }
+        .qtd-input:focus { border-color: var(--sap-blue); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+
+        .btn-sap { 
+            padding: 10px 20px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-primary { background: var(--sap-blue); color: white; }
+        .btn-success { background: var(--success-erp); color: white; }
+        .btn-danger { background: #fff; color: var(--danger-erp); border: 1px solid var(--danger-erp); }
+        .btn-warning { background: var(--warning-erp); color: white; }
+        .btn-secondary { background: #e2e8f0; color: #475569; }
+
+        .modal-sap { border-radius: 24px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .modal-head { padding: 20px 25px; background: #1e293b; color: white; }
+        .modal-body { padding: 25px; background: white; margin: 0; }
+        .modal-foot { padding: 15px 25px; background: #f8fafc; border-top: 1px solid #edf2f7; }
+
+        .hidden { display: none; }
+
+        /* Estilo da Tabela Container no Modal */
+        .table-container { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; background: white; }
+
+        .pendencia-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 16px;
+            background: #f8fafc;
+            margin-bottom: 12px;
+        }
+        .pendencia-item:last-child { margin-bottom: 0; }
+        .pendencia-item strong { display: block; color: #1e293b; margin-bottom: 10px; }
+        .pendencia-item select,
+        .pendencia-item textarea,
+        .devolucao-textarea,
+        .devolucao-check {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #fff;
+        }
+        .pendencia-item textarea,
+        .devolucao-textarea { resize: vertical; min-height: 96px; }
+        .pendencia-meta { color: #64748b; font-size: 11px; margin-bottom: 10px; }
+        .item-alerta { margin-top: 4px; font-size: 10px; font-weight: 700; }
+        .item-alerta.warning { color: #92400e; }
+        .item-alerta.error { color: #b91c1c; }
+        .confirm-box {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 14px;
+        }
+        .confirm-box input { margin-top: 3px; }
+
+        @media (max-width: 900px) {
+            .container-erp { padding: 12px; }
+            .erp-table td::before { font-size: 9px; margin-bottom: 4px; }
+            .qtd-input { font-size: 18px; padding: 12px; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container-erp">
+    
+    <div id="lista-view">
+        <div class="erp-toolbar">
+            <h2><i class="fas fa-barcode"></i> Módulo de Recebimento</h2>
+            <div class="toolbar-actions">
+                <input id="filtro-nota-pendente" class="filtro-nota" placeholder="🔍 Filtrar número da nota..." oninput="renderNotasPendentes()" />
+                <button class="btn-sap btn-primary" onclick="abrirConsultaOcorrencias()">
+                    <i class="fas fa-history"></i> Histórico / Ocorrências
+                </button>
+            </div>
+        </div>
+        
+        <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:12px;" class="alert-pendencia"></div>
+        
+        <div class="notas-grid" id="notas-pendentes"></div>
+    </div>
+
+    <div id="conf-view" class="hidden">
+        <div class="conf-panel">
+            <div class="conf-header">
+                <h3 id="n-atual">EXECUÇÃO DE CONFERÊNCIA FÍSICA</h3>
+                <button class="btn-sap btn-danger" onclick="abrirModalDevolucao()">
+                    <i class="fas fa-undo-alt"></i> Recusar Mercadoria
+                </button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th width="50" style="text-align: center;">Status</th>
+                            <th width="160">Part Number</th>
+                            <th>Descrição do Material</th>
+                            <th width="100" style="text-align: center;">U.M</th>
+                            <th width="140" style="text-align: center;">Contagem Física</th>
+                            <th width="160" style="text-align: center;">Fator Conv.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itens-container"></tbody>
+                </table>
+            </div>
+
+            <div style="padding: 20px 25px; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-top: 1px solid #edf2f7;">
+                <button class="btn-sap" style="background: #e2e8f0; color: #475569;" onclick="cancelarConferencia()">Sair sem salvar</button>
+                <button class="btn-sap btn-success" id="btn-finalizar" onclick="validar()" disabled style="padding: 12px 30px; font-size: 14px;">
+                    <i class="fas fa-check-double"></i> Validar Conferência
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-consulta">
+    <div class="modal-sap" style="max-width: 1100px;"> 
+        <div class="modal-head" style="display: flex; justify-content: space-between; align-items: center;">
+            <span><i class="fas fa-search-plus"></i> LIVRO DE OCORRÊNCIAS E AUDITORIA</span>
+            <button onclick="document.getElementById('modal-consulta').style.display='none'" style="color:white; background:none; border:none; cursor:pointer; font-size: 20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            
+            <div style="background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; display: flex; gap: 15px; align-items: center;">
+                <div style="flex: 1;">
+                    <label class="form-label" style="margin-bottom:5px">Localizar NF no Histórico</label>
+                    <input type="text" id="filtro-historico-modal" class="filtro-nota" style="width: 100%;" placeholder="Digite o número da nota para filtrar..." oninput="filtrarHistoricoModal()">
+                </div>
+                <div style="color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 18px;">
+                    Total: <span id="contador-historico" style="color: var(--sap-blue);">0</span>
+                </div>
+            </div>
+
+            <div class="table-container" style="max-height: 450px; overflow-y: auto;">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th width="100">Nº Nota</th>
+                            <th>Fornecedor</th>
+                            <th width="120">Conferente</th>
+                            <th width="100">Duração</th>
+                            <th>Divergências</th>
+                            {% if session.get('role') in ['Admin', 'Fiscal'] %}<th width="110" style="text-align:center">Ação</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="lista-ocorrencias-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-primary" onclick="document.getElementById('modal-consulta').style.display='none'">Fechar Relatório</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-resultado">
+    <div class="modal-sap">
+        <div class="modal-head"><span>RESULTADO DA VALIDAÇÃO TÉCNICA</span></div>
+        <div class="modal-body" id="modal-conteudo"></div>
+        <div class="modal-foot">
+            <button class="btn-sap" onclick="document.getElementById('modal-resultado').style.display='none'">Corrigir</button>
+            <button id="btn-recontar" class="btn-sap btn-primary" style="display:none" onclick="document.getElementById('modal-resultado').style.display='none'">Recontar Itens</button>
+            <button id="btn-gravar-pendencia" class="btn-sap btn-warning" style="display:none" onclick="prepararModalJustificativa()">Aceitar com Pendência</button>
+            <button id="btn-efetivar-ok" class="btn-sap btn-success" style="display:none" onclick="efetivarGravacaoFinal()">CONFIRMAR RECEBIMENTO</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-motivo" class="modal-overlay" style="z-index: 3000;">
+    <div class="modal-sap" style="max-width: 550px;">
+        <div class="modal-head"><span id="titulo-motivo">JUSTIFICATIVA DE DIVERGÊNCIA</span></div>
+        <div class="modal-body">
+            <div id="lista-itens-divergentes" style="max-height: 300px; overflow-y: auto;"></div>
+            <div id="pendencia-feedback" style="margin-top:12px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="document.getElementById('modal-motivo').style.display='none'">Voltar</button>
+            <button id="btn-confirmar-motivo" class="btn-sap btn-success">Efetivar Registro</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-devolucao" class="modal-overlay" style="z-index: 3200;">
+    <div class="modal-sap" style="max-width: 620px;">
+        <div class="modal-head"><span>SOLICITAÇÃO DE DEVOLUÇÃO TOTAL DA NF</span></div>
+        <div class="modal-body">
+            <div style="font-weight:800; font-size:16px; margin-bottom:8px; color: var(--sap-blue);">NF: <span id="devolucao-nf-ref">---</span></div>
+            <div style="color:#475569; margin-bottom:14px; line-height:1.5;">Esta ação solicita a recusa de todos os itens da nota. A devolução só será efetivada após aprovação de um admin.</div>
+            <label class="form-label">Motivo obrigatório da devolução</label>
+            <textarea id="motivo-devolucao" class="devolucao-textarea" placeholder="Explique por que a NF inteira deve ser devolvida..."></textarea>
+            <div class="confirm-box">
+                <input type="checkbox" id="confirmacao-devolucao-total">
+                <label for="confirmacao-devolucao-total" style="margin:0; color:#9a3412; font-weight:700; text-transform:none;">Confirmo que a recusa é integral e que nenhum item desta NF deve seguir para recebimento.</label>
+            </div>
+            <div id="devolucao-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="fecharModalDevolucao()">Cancelar</button>
+            <button class="btn-sap btn-danger" onclick="solicitarDevolucaoTotal()">Solicitar Aprovação</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-reversao" class="modal-overlay" style="z-index: 3500;">
+    <div class="modal-sap" style="max-width: 560px;">
+        <div class="modal-head"><span>REVERSÃO DE FLUXO</span></div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px; font-weight: 700; color: var(--sap-blue);">NF: <span id="nf-reversao-ref">---</span></div>
+            <label class="form-label">Motivo Padrão</label>
+            <select id="tipo-reversao" class="filtro-nota" style="width:100%; margin-bottom:15px; height: 40px;">
+                <option value="">Selecione...</option>
+                <option value="Erro de contagem">Erro de contagem</option>
+                <option value="Lançamento incorreto">Lançamento incorreto</option>
+                <option value="Solicitação fiscal">Solicitação fiscal</option>
+                <option value="Outro">Outro</option>
+            </select>
+            <label class="form-label">Detalhamento</label>
+            <textarea id="motivo-reversao" rows="4" class="filtro-nota" style="width:100%; resize:none;" placeholder="Descreva o motivo..."></textarea>
+            <div id="reversao-feedback" style="margin-top:8px; color:var(--danger-erp); font-weight: 700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap" onclick="fecharModalReversao()">Cancelar</button>
+            <button id="btn-confirmar-reversao" class="btn-sap btn-warning" onclick="confirmarReversao()">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-checklist" class="modal-overlay" style="z-index: 3600;">
+    <div class="modal-sap" style="max-width: 620px;">
+        <div class="modal-head"><span>CHECKLIST DE DESCARGA</span></div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px; font-weight: 800; font-size: 16px;">NF: <span id="checklist-nf-ref" style="color: var(--sap-blue);">---</span></div>
+            <div style="display: grid; gap: 12px; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-lacre"> <b>Lacre e embalagem íntegros</b></label>
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-volumes"> <b>Quantidade de volumes confere</b></label>
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-avaria"> <b>Sem avaria visual relevante</b></label>
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-etiqueta"> <b>Etiquetas de identificação presentes</b></label>
+            </div>
+            <textarea id="checklist-obs" rows="3" class="filtro-nota" style="width:100%; margin-top:15px;" placeholder="Observações opcionais..."></textarea>
+            <div id="checklist-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap" onclick="cancelarChecklist()">Abortar</button>
+            <button class="btn-sap btn-success" onclick="salvarChecklist()">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-instrucao-pendencia" class="modal-overlay" style="z-index: 3700;">
+    <div class="modal-sap" style="max-width: 700px;">
+        <div class="modal-head"><span>INSTRUÇÕES DE PENDÊNCIA</span></div>
+        <div class="modal-body">
+            <div id="instrucao-titulo" style="font-weight:800; color:#1e293b; font-size:18px; margin-bottom:15px;"></div>
+            <div id="instrucao-destinos" style="margin-bottom:15px; padding: 12px; background: #fffbeb; color: #92400e; border-radius: 8px;"></div>
+            <ol id="instrucao-passos" style="padding-left: 20px; line-height: 1.6;"></ol>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-primary" onclick="fecharTelaInstrucaoPendencia()">Entendi e sair</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let notaSel = "";
+    let notasPendentesCache = [];
+    let dadosHistoricoCache = []; 
+    let ultimosDadosValidacao = null;
+    let notaReversaoSelecionada = null;
+    let checklistPendente = null;
+    let checklistResolver = null;
+    let heartbeatTimer = null;
+    const motivosPadrao = ['Falta de item', 'Sobra de item', 'Item divergente do comprado', 'Avaria'];
+    const canReverter = "{{ '1' if session.get('role') in ['Admin', 'Fiscal'] else '0' }}" === "1";
+
+    function coletarContagens() {
+        const contagens = {};
+        document.querySelectorAll('.qtd-input').forEach((input) => {
+            contagens[input.dataset.id] = input.value;
+        });
+        return contagens;
+    }
+
+    function coletarConversoes() {
+        const conversoes = {};
+        document.querySelectorAll('.qtd-input').forEach((input) => {
+            const id = input.dataset.id;
+            conversoes[id] = {
+                fator: document.querySelector(`.fator-input[data-id="${id}"]`)?.value || '1',
+                unidade: document.querySelector(`.unidade-input[data-id="${id}"]`)?.value || '',
+            };
+        });
+        return conversoes;
+    }
+
+    function unidadeTemTolerancia(unidade) {
+        const unidadeNormalizada = String(unidade || '').trim().toUpperCase();
+        return unidadeNormalizada === 'KG' || unidadeNormalizada === 'MM';
+    }
+
+    function formatarFaixaTolerancia(qtdEsperada, unidade) {
+        if (!unidadeTemTolerancia(unidade)) return '';
+        const esperada = Number(qtdEsperada || 0);
+        const margem = esperada * 0.02;
+        const minimo = esperada - margem;
+        const maximo = esperada + margem;
+        return `Faixa 2%: ${minimo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} a ${maximo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}`;
+    }
+
+    function obterEstadoContagem(qtdDigitada, qtdEsperada, unidade, fator) {
+        const valorInformado = Number(String(qtdDigitada || '').replace(',', '.'));
+        const valorEsperado = Number(qtdEsperada || 0);
+        const fatorConversao = Number(String(fator || '1').replace(',', '.')) || 1;
+        if (!Number.isFinite(valorInformado)) {
+            return { tipo: 'erro', mensagem: 'Quantidade inválida.' };
+        }
+        const valorConvertido = valorInformado * fatorConversao;
+        const diferenca = Math.abs(valorConvertido - valorEsperado);
+        if (!unidadeTemTolerancia(unidade)) {
+            return diferenca <= 0.0001 ? { tipo: 'ok', mensagem: '' } : { tipo: 'erro', mensagem: 'Quantidade divergente. Vai exigir pendência.' };
+        }
+
+        const margem = Math.abs(valorEsperado) * 0.02;
+        if (diferenca <= 0.0001) {
+            return { tipo: 'ok', mensagem: '' };
+        }
+        if (diferenca <= Math.max(margem, 0.0001)) {
+            return { tipo: 'warning', mensagem: `Peso/medida diferente da NF, mas dentro da tolerância de 2% para ${String(unidade || '').toUpperCase()}. Será informado como divergência de peso.` };
+        }
+        return { tipo: 'erro', mensagem: `Quantidade fora da tolerância de 2% para ${String(unidade || '').toUpperCase()}. Vai exigir pendência.` };
+    }
+
+    function mostrarMensagemOperacional(msg, isErro = false) {
+        const box = document.getElementById('msg-lock');
+        box.style.display = 'block';
+        box.style.background = isErro ? '#fef2f2' : '#fffbeb';
+        box.style.color = isErro ? '#991b1b' : '#92400e';
+        box.style.border = isErro ? '1px solid #fecaca' : '1px solid #fef3c7';
+        box.innerText = msg;
+    }
+
+    // --- NOVA LOGICA DE HISTORICO COM FILTRO REAL-TIME ---
+    async function abrirConsultaOcorrencias() {
+        try {
+            const res = await fetch('/api/historico_completo');
+            dadosHistoricoCache = await res.json();
+            if (!res.ok) { mostrarMensagemOperacional('Erro ao carregar histórico.', true); return; }
+            renderizarHistoricoModal(dadosHistoricoCache);
+            document.getElementById('modal-consulta').style.display = 'flex';
+            setTimeout(() => document.getElementById('filtro-historico-modal').focus(), 200);
+        } catch (e) { mostrarMensagemOperacional('Falha de conexão.', true); }
+    }
+
+    function renderizarHistoricoModal(lista) {
+        const corpo = document.getElementById('lista-ocorrencias-body');
+        const contador = document.getElementById('contador-historico');
+        const totalCols = canReverter ? 6 : 5;
+        contador.innerText = lista.length;
+        if (lista.length === 0) {
+            corpo.innerHTML = `<tr><td colspan="${totalCols}" style="text-align:center; padding: 30px; color: #94a3b8;">Nenhum registro encontrado.</td></tr>`;
+            return;
+        }
+        corpo.innerHTML = lista.map(n => `
+            <tr>
+                <td style="font-weight: 800; color: var(--sap-blue);"># ${n.nota}</td>
+                <td>${n.fornecedor}</td>
+                <td><span style="background:#eef2f7; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700;">${n.conferido_por || '---'}</span></td>
+                <td style="font-family: monospace; font-weight: 700;">${n.tempo_conf || '---'}</td>
+                <td style="font-size:11px; color: ${n.divergencia === 'Sim' ? 'var(--danger-erp)' : '#64748b'}">
+                    ${n.divergencia === 'Sim' ? `<i class="fas fa-exclamation-circle"></i> ${n.detalhe_divergencia}` : '✓ Limpa'}
+                </td>
+                ${canReverter ? `
+                <td style="text-align:center">
+                    <button class="btn-sap btn-warning" style="padding:5px 10px; font-size:10px" onclick="reverterConferencia('${n.nota}')">Reverter</button>
+                </td>` : ''}
+            </tr>
+        `).join('');
+    }
+
+    function filtrarHistoricoModal() {
+        const termo = document.getElementById('filtro-historico-modal').value.trim().toLowerCase();
+        const filtrados = dadosHistoricoCache.filter(n => 
+            String(n.nota).toLowerCase().includes(termo) || 
+            n.fornecedor.toLowerCase().includes(termo)
+        );
+        renderizarHistoricoModal(filtrados);
+    }
+
+    // --- LOGICA DE REVERSÃO CORRIGIDA PARA O SEU APP.PY ---
+    async function confirmarReversao() {
+        const tipo = document.getElementById('tipo-reversao').value;
+        const detalhe = document.getElementById('motivo-reversao').value.trim();
+        const feedback = document.getElementById('reversao-feedback');
+        const btn = document.getElementById('btn-confirmar-reversao');
+
+        if (!notaReversaoSelecionada || !tipo) { 
+            feedback.innerText = 'Selecione o motivo.'; return; 
+        }
+        
+        const motivoCompleto = detalhe ? `${tipo} - ${detalhe}` : tipo;
+        feedback.innerText = 'Processando...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/admin/resetar_nota', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ nota: notaReversaoSelecionada, motivo: motivoCompleto }) 
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (res.ok && data.sucesso) { 
+                fecharModalReversao(); 
+                document.getElementById('modal-consulta').style.display = 'none';
+                await carregarNotas(); 
+                alert(`NF ${notaReversaoSelecionada} revertida com sucesso.`);
+            } else { 
+                feedback.innerText = data.msg || 'Erro na reversão.'; 
+            }
+        } catch (e) { btn.disabled = false; feedback.innerText = 'Erro de rede.'; }
+    }
+
+    // --- LOGICA DE CONFERENCIA ---
+    async function carregarNotas() {
+        try {
+            const res = await fetch('/api/pendentes_priorizadas');
+            const data = await res.json();
+            notasPendentesCache = Array.isArray(data) ? data : [];
+            renderNotasPendentes();
+        } catch (e) { mostrarMensagemOperacional('Erro ao carregar notas.', true); }
+    }
+
+    function renderNotasPendentes() {
+        const prioridadeLabels = { 0: 'Baixa', 1: 'Controlada', 2: 'Moderada', 3: 'Elevada', 4: 'Alta', 5: 'Crítica' };
+        const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
+        const notas = termo ? notasPendentesCache.filter(n => String(n.numero).includes(termo)) : notasPendentesCache;
+        document.getElementById('notas-pendentes').innerHTML = notas.map(n => `
+            <div class="nota-card" onclick="abrir('${n.numero}')">
+                <span class="status-label"><i class="fas fa-circle" style="font-size:8px"></i> AGUARDANDO</span>
+                <strong>NF-e: ${n.numero}</strong>
+                <div style="font-size:12px; color:#64748b; font-weight:600; margin-top:4px;">${n.fornecedor}</div>
+                <div style="font-size:11px; color:#475569; font-weight:700; margin-top:6px;">Liberada em: ${n.data_liberacao || '---'}</div>
+                ${n.prioridade_nivel !== undefined ? `
+                    <div class="priority-row">
+                        <span class="priority-pill p${n.prioridade_nivel}">${prioridadeLabels[n.prioridade_nivel]}</span>
+                        <span class="priority-age">${n.idade_label || (n.idade_horas < 1 ? '<1h' : `${n.idade_horas}h`)}</span>
+                    </div>
+                    <div class="priority-track">
+                        <div class="priority-fill p${n.prioridade_nivel}" style="width:${(n.prioridade_nivel/5)*100}%;"></div>
+                    </div>
+                ` : ''}
+            </div>
+        `).join('');
+    }
+
+    async function abrir(n) {
+        notaSel = n;
+        const metaNota = notasPendentesCache.find(item => String(item.numero) === String(n));
+        let res = await fetch('/api/itens/' + n);
+        if (res.status === 423) {
+            const d = await res.json();
+            mostrarMensagemOperacional(`NF ${n} bloqueada por ${d.usuario}. Expira em: ${d.expira_em}`);
+            return;
+        }
+        const checklistOk = await garantirChecklistInicial(n);
+        if (!checklistOk) {
+            await fetch('/api/lock/release', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: n }) });
+            notaSel = ''; return;
+        }
+        document.getElementById('msg-lock').style.display = 'none';
+        document.getElementById('lista-view').classList.add('hidden');
+        document.getElementById('conf-view').classList.remove('hidden');
+        iniciarHeartbeat();
+        document.getElementById('n-atual').innerHTML = `CONFERÊNCIA NF: ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:700;">Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
+        const itens = await res.json();
+        document.getElementById('itens-container').innerHTML = itens.map(i => `
+            <tr>
+                <td style="text-align:center"><span class="status-indicator"></span></td>
+                <td style="font-family:monospace; color:var(--sap-blue); font-weight:800">${i.codigo}</td>
+                <td style="font-weight:600">${i.descricao}</td>
+                <td style="text-align:center; font-weight:800; color:#475569;">${i.unidade || 'UN'}</td>
+                <td style="text-align: center;">
+                    <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${i.unidade || 'UN'}" oninput="atualizarStatusLinha(this)" step="0.001">
+                    ${unidadeTemTolerancia(i.unidade) ? `<div style="margin-top:4px; font-size:10px; color:#92400e; font-weight:700;">${formatarFaixaTolerancia(i.qtd_esperada, i.unidade)}</div>` : ''}
+                    <div class="item-alerta" data-id="${i.id}"></div>
+                </td>
+                <td style="text-align:center;">
+                    <input type="number" class="fator-input" data-id="${i.id}" value="1" oninput="atualizarStatusLinha(document.querySelector('.qtd-input[data-id=\'${i.id}\']'))" step="0.0001" style="width:55px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
+                    <input type="text" class="unidade-input" data-id="${i.id}" value="${i.unidade || 'UN'}" style="width:40px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function validar() {
+        const contagens = coletarContagens();
+        const conversoes = coletarConversoes();
+        const btn = document.getElementById('btn-finalizar');
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
+        const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes }) });
+        ultimosDadosValidacao = await res.json();
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-double"></i> Validar Conferência';
+        document.getElementById('modal-resultado').style.display = 'flex';
+        const ok = ultimosDadosValidacao.sucesso;
+        document.getElementById('modal-conteudo').innerHTML = `
+            <div style="font-size:18px; font-weight:800; color:${ok ? '#1e7d32':'#d92d20'}">${ok ? '✓ CONFERIDO':'⚠ DIVERGÊNCIA'}</div>
+            <div style="margin:10px 0;">Resumo: ${ultimosDadosValidacao?.resumo?.ok} itens OK.</div>
+            <table class="erp-table">${ultimosDadosValidacao.itens.map(i => `<tr><td>${i.descricao}<div style="font-size:11px; color:#64748b; margin-top:4px;">${i.msg || ''}</div></td><td style="font-weight:800; color:${i.status==='OK'?'#1e7d32':'#d92d20'}">${i.status}</td></tr>`).join('')}</table>`;
+        document.getElementById('btn-recontar').style.display = ok ? 'none' : 'inline-block';
+        document.getElementById('btn-gravar-pendencia').style.display = ok ? 'none' : 'inline-block';
+        document.getElementById('btn-efetivar-ok').style.display = ok ? 'inline-block' : 'none';
+    }
+
+    async function efetivarGravacaoFinal() {
+        const r = await fetch('/validar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                nota: notaSel,
+                contagens: coletarContagens(),
+                conversoes_itens: coletarConversoes(),
+                forcar_pendencia: true,
+                motivos_itens: {},
+            }),
+        });
+        if (r.ok) {
+            pararHeartbeat();
+            location.reload();
+        }
+    }
+
+    function prepararModalJustificativa() {
+        if (!ultimosDadosValidacao || !Array.isArray(ultimosDadosValidacao.itens)) {
+            alert('Faça a validação da conferência antes de registrar a pendência.');
+            return;
+        }
+
+        const itensDivergentes = ultimosDadosValidacao.itens.filter((item) => item.status !== 'OK');
+        if (itensDivergentes.length === 0) {
+            alert('Nenhum item divergente encontrado para registrar pendência.');
+            return;
+        }
+
+        const container = document.getElementById('lista-itens-divergentes');
+        document.getElementById('pendencia-feedback').innerText = '';
+        container.innerHTML = itensDivergentes.map((item) => `
+            <div class="pendencia-item">
+                <strong>${item.descricao}</strong>
+                <div class="pendencia-meta">Situação identificada: ${item.msg || 'Divergência de conferência.'}</div>
+                <label class="form-label">Motivo da pendência</label>
+                <select id="pendencia-tipo-${item.id}" data-item-id="${item.id}">
+                    <option value="">Selecione...</option>
+                    ${motivosPadrao.map((motivo) => `<option value="${motivo}">${motivo}</option>`).join('')}
+                </select>
+                <label class="form-label" style="margin-top:10px;">Observação</label>
+                <textarea id="pendencia-obs-${item.id}" data-item-id="${item.id}" placeholder="Explique melhor o que aconteceu com este item..."></textarea>
+            </div>
+        `).join('');
+
+        document.getElementById('btn-confirmar-motivo').onclick = confirmarPendencia;
+        document.getElementById('modal-motivo').style.display = 'flex';
+    }
+
+    async function confirmarPendencia() {
+        const itensDivergentes = (ultimosDadosValidacao?.itens || []).filter((item) => item.status !== 'OK');
+        const motivosItens = {};
+        const motivosTipos = {};
+        const motivosObservacoes = {};
+        const feedback = document.getElementById('pendencia-feedback');
+        feedback.innerText = '';
+
+        document.querySelectorAll('#lista-itens-divergentes select, #lista-itens-divergentes textarea').forEach((el) => {
+            el.style.borderColor = '#cbd5e1';
+        });
+
+        for (const item of itensDivergentes) {
+            const motivoTipo = (document.getElementById(`pendencia-tipo-${item.id}`)?.value || '').trim();
+            const observacao = (document.getElementById(`pendencia-obs-${item.id}`)?.value || '').trim();
+            if (!motivoTipo) {
+                const campoMotivo = document.getElementById(`pendencia-tipo-${item.id}`);
+                if (campoMotivo) campoMotivo.style.borderColor = '#d92d20';
+                feedback.innerText = `Selecione o motivo da pendência para o item ${item.descricao}.`;
+                return;
+            }
+            motivosTipos[String(item.id)] = motivoTipo;
+            motivosObservacoes[String(item.id)] = observacao;
+            motivosItens[String(item.id)] = observacao ? `${motivoTipo}: ${observacao}` : motivoTipo;
+        }
+
+        const response = await fetch('/validar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                nota: notaSel,
+                contagens: coletarContagens(),
+                conversoes_itens: coletarConversoes(),
+                forcar_pendencia: true,
+                motivos_itens: motivosItens,
+                motivos_tipos: motivosTipos,
+                motivos_observacoes: motivosObservacoes,
+            }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            if (Array.isArray(data.motivos_pendentes)) {
+                data.motivos_pendentes.forEach((itemId) => {
+                    const campoMotivo = document.getElementById(`pendencia-tipo-${itemId}`);
+                    if (campoMotivo) campoMotivo.style.borderColor = '#d92d20';
+                });
+            }
+            feedback.innerText = data.msg || 'Não foi possível registrar a pendência.';
+            return;
+        }
+
+        document.getElementById('modal-motivo').style.display = 'none';
+        document.getElementById('modal-resultado').style.display = 'none';
+
+        if (data.instrucoes_pendencia) {
+            document.getElementById('instrucao-titulo').innerText = data.instrucoes_pendencia.titulo || 'Pendência registrada';
+            document.getElementById('instrucao-destinos').innerText = 'Pendência registrada e encaminhada para tratativa operacional/fiscal.';
+            document.getElementById('instrucao-passos').innerHTML = (data.instrucoes_pendencia.passos || []).map((passo) => `<li>${passo}</li>`).join('');
+            document.getElementById('modal-instrucao-pendencia').style.display = 'flex';
+        } else {
+            pararHeartbeat();
+            location.reload();
+        }
+    }
+
+    function atualizarStatusLinha(input) {
+        const row = input.closest('tr');
+        row.classList.toggle('contado', input.value !== "");
+        const id = input.dataset.id;
+        const alerta = document.querySelector(`.item-alerta[data-id="${id}"]`);
+        const fator = document.querySelector(`.fator-input[data-id="${id}"]`)?.value || '1';
+        const estado = obterEstadoContagem(input.value, input.dataset.qtdEsperada, input.dataset.unidade, fator);
+        if (alerta) {
+            alerta.className = 'item-alerta';
+            alerta.innerText = input.value === '' ? '' : estado.mensagem;
+            if (estado.tipo === 'warning') alerta.classList.add('warning');
+            if (estado.tipo === 'erro') alerta.classList.add('error');
+        }
+        const inputs = document.querySelectorAll('.qtd-input');
+        document.getElementById('btn-finalizar').disabled = Array.from(inputs).some(i => i.value === "");
+    }
+
+    function abrirModalDevolucao() {
+        if (!notaSel) {
+            alert('Abra uma NF antes de solicitar a devolução.');
+            return;
+        }
+        document.getElementById('devolucao-nf-ref').innerText = notaSel;
+        document.getElementById('motivo-devolucao').value = '';
+        document.getElementById('confirmacao-devolucao-total').checked = false;
+        document.getElementById('devolucao-feedback').innerText = '';
+        document.getElementById('modal-devolucao').style.display = 'flex';
+    }
+
+    function fecharModalDevolucao() {
+        document.getElementById('modal-devolucao').style.display = 'none';
+    }
+
+    async function solicitarDevolucaoTotal() {
+        const motivo = (document.getElementById('motivo-devolucao').value || '').trim();
+        const confirmado = document.getElementById('confirmacao-devolucao-total').checked;
+        const feedback = document.getElementById('devolucao-feedback');
+
+        if (motivo.length < 5) {
+            feedback.innerText = 'Informe um motivo com pelo menos 5 caracteres.';
+            return;
+        }
+        if (!confirmado) {
+            feedback.innerText = 'Confirme que a recusa é total para toda a NF.';
+            return;
+        }
+
+        feedback.innerText = 'Enviando solicitação para aprovação admin...';
+        const response = await fetch('/api/recebimento/solicitar_devolucao', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: notaSel, motivo }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            feedback.innerText = data.msg || data.error || 'Falha ao solicitar devolução.';
+            return;
+        }
+
+        pararHeartbeat();
+        alert(data.msg || 'Solicitação enviada para aprovação admin.');
+        location.reload();
+    }
+
+    async function cancelarConferencia() {
+        pararHeartbeat();
+        if (notaSel) {
+            await fetch('/api/lock/release', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ nota: notaSel }),
+            });
+        }
+        notaSel = '';
+        document.getElementById('conf-view').classList.add('hidden');
+        document.getElementById('lista-view').classList.remove('hidden');
+        await carregarNotas();
+    }
+
+    async function garantirChecklistInicial(nota) {
+        const res = await fetch(`/api/checklist/${encodeURIComponent(nota)}`);
+        const data = await res.json();
+        if (res.ok && data.existe) return true;
+        checklistPendente = nota;
+        document.getElementById('checklist-nf-ref').innerText = nota;
+        document.getElementById('modal-checklist').style.display = 'flex';
+        return new Promise(resolve => { checklistResolver = resolve; });
+    }
+
+    async function salvarChecklist() {
+        const payload = {
+            nota: checklistPendente,
+            lacre_ok: document.getElementById('chk-lacre').checked,
+            volumes_ok: document.getElementById('chk-volumes').checked,
+            etiqueta_ok: document.getElementById('chk-etiqueta').checked,
+            avaria_visual: document.getElementById('chk-avaria').checked
+        };
+        if (!payload.lacre_ok || !payload.volumes_ok || !payload.etiqueta_ok) { alert('Check obrigatório!'); return; }
+        const res = await fetch('/api/checklist', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        if (res.ok) { document.getElementById('modal-checklist').style.display = 'none'; checklistResolver(true); location.reload(); }
+    }
+
+    function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; location.reload(); }
+    function cancelarChecklist() { document.getElementById('modal-checklist').style.display = 'none'; checklistResolver(false); }
+    function fecharModalReversao() { document.getElementById('modal-reversao').style.display = 'none'; }
+    function iniciarHeartbeat() { heartbeatTimer = setInterval(() => { if(notaSel) fetch('/api/lock/heartbeat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nota:notaSel})}) }, 45000); }
+    function pararHeartbeat() { clearInterval(heartbeatTimer); }
+
+    async function reverterConferencia(numeroNota) {
+        notaReversaoSelecionada = numeroNota;
+        document.getElementById('nf-reversao-ref').innerText = numeroNota;
+        document.getElementById('tipo-reversao').value = '';
+        document.getElementById('motivo-reversao').value = '';
+        document.getElementById('reversao-feedback').innerText = '';
+        document.getElementById('modal-reversao').style.display = 'flex';
+    }
+
+    carregarNotas();
+</script>
+{% endblock %}

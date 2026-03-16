@@ -1,0 +1,888 @@
+{% extends "base.html" %}
+
+{% block title %}Expedição - Conferência Cega{% endblock %}
+
+{% block extra_head %}
+<style>
+    .x-wrap { max-width: 1450px; margin: 0 auto; padding: 14px; }
+    .x-hero { background: linear-gradient(120deg, #1f6aa5, #2a8bd8); color: #fff; border-radius: 10px; padding: 16px; }
+    .x-hero h2 { margin: 0; font-size: 18px; text-transform: uppercase; }
+    .x-hero p { margin: 6px 0 0; font-size: 12px; opacity: .95; }
+    .x-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+    .x-panel { background: #fff; border: 1px solid #d8e2ec; border-radius: 10px; overflow: hidden; }
+    .x-head { background: #f3f8fd; border-bottom: 1px solid #d8e2ec; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+    .x-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; }
+    .x-body { padding: 10px; }
+    .x-status { padding: 8px 12px; border-bottom: 1px solid #d8e2ec; background: #fbfdff; color: #4c6073; font-size: 12px; }
+    .x-btn { border: 1px solid #9bb0c3; border-radius: 6px; padding: 7px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; background: #fff; }
+    .x-primary { background: #1f6aa5; border-color: #14588e; color: #fff; }
+    .x-warn { background: #f79009; border-color: #d87904; color: #fff; }
+    .x-muted { font-size: 11px; color: #60788c; }
+    .x-hidden { display: none; }
+    .x-toolbar { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px; border-bottom: 1px solid #d8e2ec; background: #f9fcff; }
+    .x-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 10px; }
+    .r-card { border: 1px solid #d7e1eb; border-left: 5px solid #1f6aa5; border-radius: 8px; background: #ffffff; padding: 12px; box-shadow: 0 3px 10px rgba(14, 38, 60, 0.06); }
+    .r-card:hover { border-color: #9bb7d0; box-shadow: 0 7px 14px rgba(14, 38, 60, 0.1); }
+    .r-title { font-size: 13px; font-weight: 700; color: #243f58; margin-bottom: 7px; word-break: break-word; }
+    .r-meta { font-size: 11px; color: #5f7588; margin-bottom: 6px; }
+    .r-pending { border-left-color: #d28400; background: #fffaf0; }
+    .r-blocked { border-left-color: #b42318; background: #fff5f5; }
+    .r-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+    .pill { display: inline-block; border-radius: 20px; font-size: 10px; font-weight: 700; padding: 3px 9px; }
+    .pill.ok { color: #13795b; background: #e8f8f1; border: 1px solid #bce6d4; }
+    .pill.no { color: #b42318; background: #fdecec; border: 1px solid #f6c7c3; }
+    .pill.wait { color: #8a5600; background: #fff2d9; border: 1px solid #efcf94; }
+    .x-collapsible > summary { list-style: none; cursor: pointer; padding: 10px 12px; background: #f3f8fd; border-bottom: 1px solid #d8e2ec; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #294760; }
+    .x-collapsible > summary::-webkit-details-marker { display: none; }
+    .x-collapsible[open] > summary { background: #eaf3fb; }
+    .x-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .x-danger { background: #c22e24; border-color: #a2221a; color: #fff; }
+    .x-inline-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .alert-card { border: 1px solid #f2c3bf; background: linear-gradient(180deg, #fff7f6 0%, #fff1ef 100%); border-left: 6px solid #c22e24; }
+    .alert-title { display: flex; align-items: center; gap: 8px; color: #8c1d18; font-weight: 800; text-transform: uppercase; font-size: 12px; }
+    .alert-badge { border-radius: 999px; background: #8c1d18; color: #fff; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+    .alert-icon { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #c22e24; color: #fff; font-size: 12px; }
+    .confirm-box { border: 1px solid #d6e2ee; border-radius: 10px; background: #f7fbff; padding: 10px; margin-top: 8px; }
+    .confirm-title { font-size: 12px; font-weight: 700; color: #20405b; margin-bottom: 6px; text-transform: uppercase; }
+    .confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .flow-top { position: sticky; top: 8px; z-index: 20; background: #fff; }
+    .rom-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    th, td { border-bottom: 1px solid #dde6ef; padding: 8px 10px; font-size: 12px; text-align: left; }
+    th { background: #f7fbff; font-size: 11px; text-transform: uppercase; color: #3f576d; }
+    .click-row { cursor: pointer; }
+    .lnk-btn { border: none; background: transparent; text-decoration: underline; color: #14588e; font-weight: 700; cursor: pointer; padding: 0; }
+    .item { border: 1px solid #dce6ef; border-radius: 10px; margin-bottom: 10px; background: #fff; box-shadow: 0 2px 8px rgba(17, 41, 64, 0.05); }
+    .item.ok { border-left: 5px solid #16814f; background: linear-gradient(180deg, #ffffff 0%, #f4fcf8 100%); }
+    .item.div { border-left: 5px solid #c22e24; background: linear-gradient(180deg, #ffffff 0%, #fff4f4 100%); }
+    .item.pen { border-left: 5px solid #d98a00; background: linear-gradient(180deg, #ffffff 0%, #fffaf0 100%); }
+    .item-grid { display: grid; grid-template-columns: 120px 1fr 220px; gap: 10px; align-items: center; padding: 10px; }
+    .img { width: 108px; height: 76px; object-fit: contain; border: 1px solid #ccd8e4; border-radius: 6px; background: #fff; }
+    .item-title { font-size: 13px; font-weight: 700; color: #1f3f5d; margin-bottom: 5px; }
+    .item-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #5d7284; }
+    .item-status { margin-top: 6px; font-size: 11px; font-weight: 700; color: #4c6073; }
+    .q-wrap { border: 1px solid #d6e2ee; border-radius: 8px; background: #f7fbff; padding: 8px; }
+    .q-label { font-size: 11px; color: #60788c; margin-bottom: 4px; }
+    .n-input, .s-input, .t-input { width: 100%; border: 1px solid #9fb2c5; border-radius: 6px; padding: 7px; font-size: 12px; }
+    .q-input { width: 100%; border: 1px solid #9fb2c5; border-radius: 6px; padding: 7px; font-size: 16px; font-weight: 700; text-align: right; font-family: Consolas, monospace; }
+    .card { border: 1px solid #d8e2ec; border-radius: 10px; background: #f8fcff; padding: 10px; }
+    .result-wrap { border: 1px solid #d7e2ed; border-radius: 10px; background: #ffffff; padding: 10px; }
+    .result-head { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .badge { border-radius: 999px; font-size: 11px; font-weight: 700; padding: 5px 10px; border: 1px solid #ccd8e4; background: #f2f7fb; color: #2f4a61; }
+    .b-ok { background: #e8f8f1; border-color: #bce6d4; color: #13795b; }
+    .b-div { background: #fdecec; border-color: #f6c7c3; color: #b42318; }
+    .b-pen { background: #fff9ed; border-color: #f2ddb0; color: #9b6400; }
+    @media (max-width: 980px) { .item-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="x-wrap">
+    <div class="x-hero">
+        <h2><i class="fas fa-truck-loading"></i> Expedição - Conferência Cega</h2>
+        <p>Passo 1: conferir sem ver quantidade esperada. Passo 2: registrar expedição (NF + foto) em tela separada.</p>
+    </div>
+
+    <div class="x-grid">
+        <div class="x-panel" id="panel-lista">
+            <div class="x-head"><h3>Passo 1 - Escolha do relatório HTML</h3><button class="x-btn" onclick="carregarRelatorios()">Atualizar</button></div>
+            <div id="st-lista" class="x-status">Carregando relatórios...</div>
+            <div class="x-toolbar">
+                <input id="filtro-rel" class="t-input" placeholder="Filtrar relatório por nome" />
+                <button class="x-btn" onclick="limparFiltroRelatorio()">Limpar filtro</button>
+            </div>
+            <div id="cards-rel" class="x-card-grid"></div>
+            <details class="x-collapsible">
+                <summary>Arquivados (conferências fechadas)</summary>
+                <div id="cards-rel-fechados" class="x-card-grid"></div>
+            </details>
+        </div>
+
+        <div class="x-panel x-hidden" id="panel-conferencia">
+            <div class="x-head"><h3 id="ttl-rel">Conferência cega</h3><div><button class="x-btn" onclick="voltarLista()">Voltar</button><button id="btn-resolver-divergencia" class="x-btn x-danger x-hidden" onclick="abrirConfirmacaoDecisao()">Resolver divergência</button><button id="btn-validar-conf" class="x-btn x-primary" onclick="validarConferencia()">Gravar conferência</button></div></div>
+            <div id="st-conf" class="x-status">Abra um relatório para iniciar.</div>
+            <div id="flow-confirm" class="x-body x-hidden flow-top"></div>
+            <div class="x-body" id="box-decisao" style="display:none;">
+                <div class="card alert-card">
+                    <div class="x-inline-between">
+                        <div class="alert-title"><span class="alert-icon"><i class="fas fa-exclamation"></i></span> Divergência detectada <span id="div-count" class="alert-badge">0 itens</span></div>
+                    </div>
+                    <div id="txt-bloqueio" class="x-muted" style="margin-top:6px;">Sem resolver a divergência, o registro de NF fica bloqueado.</div>
+                </div>
+            </div>
+            <div id="lst-itens" class="x-body"></div>
+            <div id="resumo-val" class="x-body"></div>
+        </div>
+
+        <div class="x-panel x-hidden" id="panel-registro">
+            <div class="x-head"><h3>Passo 2 - Registro de expedição</h3><button class="x-btn" onclick="abrirRelatorioAtual()">Voltar na conferência</button></div>
+            <div class="x-body">
+                <div class="card">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;">
+                        <div><label class="x-muted">Numero da NF</label><input id="nf" class="n-input" placeholder="Ex: 123456" /></div>
+                        <div><label class="x-muted">Tipo</label><select id="tipo" class="s-input" onchange="aplicarTipo()"><option value="Parcial">Parcial</option><option value="Total">Total</option></select></div>
+                        <div><button class="x-btn x-primary" onclick="registrarFaturamento()">Registrar expedição</button></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;align-items:end;margin-top:8px;">
+                        <div>
+                            <label class="x-muted">Transporte</label>
+                            <select id="transporte-tipo" class="s-input" onchange="alternarTransporte()">
+                                <option value="Proprio">Próprio</option>
+                                <option value="Transportadora">Transportadora</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="x-muted">Transportadora</label>
+                            <input id="transportadora" class="n-input" placeholder="Nome da transportadora" />
+                        </div>
+                        <div>
+                            <label class="x-muted">Placa</label>
+                            <input id="placa" class="n-input" placeholder="AAA0A00" />
+                        </div>
+                        <div>
+                            <label class="x-muted">Motorista</label>
+                            <input id="motorista" class="n-input" placeholder="Nome do motorista" />
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:end;margin-top:8px;">
+                        <div>
+                            <label class="x-muted">Peso bruto (kg)</label>
+                            <input id="peso-bruto" class="n-input" type="number" min="0" step="0.01" placeholder="0,00" />
+                        </div>
+                        <div>
+                            <label class="x-muted">Observação logística</label>
+                            <input id="obs-logistica" class="n-input" placeholder="Informações adicionais do transporte" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="st-reg" class="x-status">Informe NF, tipo e quantidades enviadas. Foto por item é opcional.</div>
+            <table>
+                <thead><tr><th>Item</th><th>OS</th><th>Cliente</th><th>Restante</th><th>Qtd enviada</th><th>Foto</th><th>Status</th></tr></thead>
+                <tbody id="tb-reg"></tbody>
+            </table>
+        </div>
+
+        <div class="x-panel x-hidden" id="panel-historico">
+            <div class="x-head"><h3>Histórico do que já foi enviado</h3></div>
+            <table>
+                <thead><tr><th>Arquivo</th><th>Codigo</th><th>OS</th><th>Cliente</th><th>Faturada</th><th>Restante</th></tr></thead>
+                <tbody id="tb-hist"></tbody>
+            </table>
+        </div>
+
+        <div class="x-panel">
+            <details class="x-collapsible" id="box-rastreio">
+                <summary>Rastreabilidade detalhada (expandir quando precisar)</summary>
+                <div class="x-body" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;">
+                    <input id="f-os" class="t-input" placeholder="OS" />
+                    <input id="f-codigo" class="t-input" placeholder="Código / peça" />
+                    <input id="f-cliente" class="t-input" placeholder="Cliente" />
+                    <button class="x-btn" onclick="buscarRastreabilidade()">Buscar</button>
+                </div>
+                <table>
+                    <thead><tr><th>Arquivo</th><th>Código</th><th>OS</th><th>Cliente</th><th>Status item</th><th>Conferida</th><th>Faturada</th><th>Restante</th></tr></thead>
+                    <tbody id="tb-rast"></tbody>
+                </table>
+            </details>
+        </div>
+
+            <div class="x-panel">
+                <div class="x-head"><h3>Vínculo HTML ↔ NF</h3></div>
+                <div class="x-body" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;">
+                    <input id="v-file" class="t-input" placeholder="Arquivo HTML (nome completo)" />
+                    <input id="v-nf" class="t-input" placeholder="Número NF" />
+                    <button class="x-btn" onclick="buscarVinculos()">Buscar</button>
+                </div>
+                <table>
+                    <thead><tr><th>Arquivo HTML</th><th>NF</th><th>Tipo</th><th>Status</th><th>Data</th><th>Usuario</th></tr></thead>
+                    <tbody id="tb-vinc"></tbody>
+                </table>
+            </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let relatorioAtual = null;
+let contagensPendentes = null;
+let reportsAbertos = [];
+let reportsFechados = [];
+let tipoDecisaoPendente = null;
+let contagensEmEspera = null;
+
+function fecharTodosOverlays() {}
+
+function limparFluxoConfirmacao() {
+    const box = document.getElementById('flow-confirm');
+    box.classList.add('x-hidden');
+    box.innerHTML = '';
+}
+
+function destacarFluxoConfirmacao() {
+    const box = document.getElementById('flow-confirm');
+    if (!box) return;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function atualizarAlertaDivergencia(total, forcarBotao = false, mensagem = '') {
+    const badge = document.getElementById('div-count');
+    const btn = document.getElementById('btn-resolver-divergencia');
+    const txt = document.getElementById('txt-bloqueio');
+    if (!badge) return;
+    const qtd = Number(total || 0);
+    badge.textContent = `${qtd} ${qtd === 1 ? 'item' : 'itens'}`;
+    if (txt) {
+        txt.textContent = mensagem || 'Sem resolver a divergência, o registro de NF fica bloqueado.';
+    }
+    if (btn) {
+        if (qtd > 0 || forcarBotao) btn.classList.remove('x-hidden');
+        else btn.classList.add('x-hidden');
+    }
+}
+
+function abrirConfirmacaoPendentes(contagens) {
+    const box = document.getElementById('flow-confirm');
+    contagensEmEspera = contagens;
+    box.classList.remove('x-hidden');
+    box.innerHTML = `
+        <div class="confirm-box">
+            <div class="confirm-title">Confirmação de conferência</div>
+            <div class="x-muted">Existem itens sem quantidade preenchida. Eles serão considerados para próximo faturamento. Deseja continuar?</div>
+            <div class="confirm-actions">
+                <button class="x-btn" onclick="cancelarConfirmacaoFluxo()">Cancelar</button>
+                <button class="x-btn x-primary" onclick="confirmarPendentesFluxo()">Confirmar conferência</button>
+            </div>
+        </div>
+    `;
+    destacarFluxoConfirmacao();
+}
+
+function abrirConfirmacaoDecisao() {
+    const box = document.getElementById('flow-confirm');
+    box.classList.remove('x-hidden');
+    box.innerHTML = `
+        <div class="confirm-box">
+            <div class="confirm-title">Divergência encontrada</div>
+            <div class="x-muted">Escolha como deseja continuar o processo.</div>
+            <div class="confirm-actions">
+                <button class="x-btn x-danger" onclick="selecionarTipoDecisao('Recontar')">Recontar</button>
+                <button class="x-btn x-warn" onclick="selecionarTipoDecisao('Pendencia')">Expedir com pendência</button>
+            </div>
+            <div style="margin-top:8px;">
+                <label class="x-muted">Motivo da decisão</label>
+                <textarea id="decisao-inline-motivo" class="t-input" rows="3" placeholder="Descreva o motivo"></textarea>
+            </div>
+            <div id="auth-hint" class="x-muted" style="margin-top:8px;"></div>
+            <div class="confirm-actions">
+                <button class="x-btn" onclick="cancelarConfirmacaoFluxo()">Cancelar</button>
+                <button class="x-btn x-primary" onclick="confirmarDecisaoFluxo()">Confirmar decisão</button>
+            </div>
+        </div>
+    `;
+    destacarFluxoConfirmacao();
+}
+
+function selecionarTipoDecisao(tipo) {
+    tipoDecisaoPendente = tipo;
+    const box = document.getElementById('flow-confirm');
+    const hint = tipo === 'Recontar' ? 'Tipo selecionado: Recontar' : 'Tipo selecionado: Expedir com pendência';
+    box.querySelector('.x-muted').textContent = `Escolha registrada. ${hint}.`;
+    const authHint = document.getElementById('auth-hint');
+    if (authHint) {
+        if (tipo === 'Pendencia') {
+            authHint.textContent = relatorioAtual?.can_authorize_pendencia
+                ? 'Você está com perfil Admin. A autorização será aplicada imediatamente.'
+                : 'A autorização será enviada para aprovação no painel de controle admin.';
+        } else {
+            authHint.textContent = '';
+        }
+    }
+}
+
+function cancelarConfirmacaoFluxo() {
+    contagensEmEspera = null;
+    limparFluxoConfirmacao();
+}
+
+async function confirmarPendentesFluxo() {
+    if (!contagensEmEspera) {
+        limparFluxoConfirmacao();
+        return;
+    }
+    const payload = contagensEmEspera;
+    contagensEmEspera = null;
+    limparFluxoConfirmacao();
+    await executarValidacao(payload);
+}
+
+async function confirmarDecisaoFluxo() {
+    if (!relatorioAtual) return;
+    if (!tipoDecisaoPendente) {
+        alert('Selecione Recontar ou Expedir com pendência.');
+        return;
+    }
+    const motivo = (document.getElementById('decisao-inline-motivo')?.value || '').trim();
+    if (!motivo) {
+        alert('Informe o motivo da decisão.');
+        return;
+    }
+    const res = document.getElementById('resumo-val');
+    try {
+        if (tipoDecisaoPendente === 'Pendencia' && !relatorioAtual?.can_authorize_pendencia) {
+            await solicitarAutorizacaoPendencia(motivo);
+            limparFluxoConfirmacao();
+            res.innerHTML += '<div class="x-status" style="margin-top:8px;background:#fff9ed;color:#8a5600;">Solicitação enviada ao painel admin. Aguarde aprovação.</div>';
+            await carregarRelatorios();
+            await abrirRelatorioAtual();
+            return;
+        }
+        await registrarDecisaoDireta(tipoDecisaoPendente, motivo);
+        limparFluxoConfirmacao();
+        res.innerHTML += `<div class="x-status" style="margin-top:8px;background:#eaf8f0;color:#135c3a;">Decisão registrada: ${tipoDecisaoPendente}.</div>`;
+    } catch (err) {
+        res.innerHTML += `<div class="x-status" style="margin-top:8px;background:#fff2f2;color:#8c1d18;">${err.message}</div>`;
+    }
+}
+
+function limparFiltroRelatorio() {
+    const el = document.getElementById('filtro-rel');
+    if (el) el.value = '';
+    renderCardsRelatorios();
+}
+
+function renderCardsRelatorios() {
+    const cards = document.getElementById('cards-rel');
+    const cardsFechados = document.getElementById('cards-rel-fechados');
+    const filtro = (document.getElementById('filtro-rel')?.value || '').toLowerCase().trim();
+    const lista = reportsAbertos.filter(r => !filtro || r.file_name.toLowerCase().includes(filtro));
+    const listaFechada = reportsFechados.filter(r => !filtro || r.file_name.toLowerCase().includes(filtro));
+    cards.innerHTML = (lista || []).map(r => {
+        const file = encodeURIComponent(r.file_name);
+        const pending = Number(r.itens_pendentes_registro || 0) > 0;
+        const emAndamento = Boolean(r.conferencia_id) && r.status_conferencia !== 'Fechada';
+        const somenteRegistro = pending && r.status_conferencia !== 'PendenteDecisao';
+        const aguardandoAprovacao = !!r.solicitacao_pendencia_ativa;
+        const pendBadge = pending
+            ? `<span class="pill wait">Conferido sem registro (${r.itens_pendentes_registro})</span>`
+            : '<span class="pill ok">Sem pendência de registro</span>';
+        const bloqueado = r.status_conferencia === 'PendenteDecisao';
+        const statusBadge = bloqueado
+            ? '<span class="pill no">Aguardando decisão</span>'
+            : (somenteRegistro
+                ? '<span class="pill wait">Quantidade gravada - falta registrar expedição</span>'
+                : (emAndamento ? '<span class="pill wait">Conferência em andamento</span>' : '<span class="pill ok">Pronto para conferência</span>'));
+            const aprovBadge = aguardandoAprovacao ? '<span class="pill no">Solicitação enviada ao admin</span>' : '';
+        const textoBotao = somenteRegistro ? 'Registrar expedição' : (emAndamento ? 'Continuar conferência' : 'Abrir conferência');
+        const classeBotao = (emAndamento || somenteRegistro) ? 'x-warn' : 'x-primary';
+            return `<div class="r-card js-r ${pending ? 'r-pending' : ''} ${bloqueado ? 'r-blocked' : ''}" data-file="${file}"><div class="r-title">${r.file_name}</div><div class="r-meta">${pendBadge}</div><div class="r-meta">${statusBadge}</div><div class="r-meta">${aprovBadge}</div><div class="r-actions"><button class="x-btn ${classeBotao} js-r" data-file="${file}">${textoBotao}</button></div></div>`;
+    }).join('') || '<div class="r-meta">Nenhum relatório encontrado com esse filtro.</div>';
+
+    cardsFechados.innerHTML = (listaFechada || []).map(r => {
+        const file = encodeURIComponent(r.file_name);
+        return `<div class="r-card js-r" data-file="${file}"><div class="r-title">${r.file_name}</div><div class="r-meta"><span class="pill ok">Fechada</span></div><div class="r-meta">Fechada em: ${r.closed_at || '-'}</div><div class="r-actions"><button class="x-btn js-r" data-file="${file}">Ver conferência</button></div></div>`;
+    }).join('') || '<div class="r-meta">Nenhum relatório fechado.</div>';
+}
+
+async function carregarRelatorios() {
+    const st = document.getElementById('st-lista');
+    const cards = document.getElementById('cards-rel');
+    const cardsFechados = document.getElementById('cards-rel-fechados');
+    st.textContent = 'Carregando relatórios...';
+    cards.innerHTML = '<div class="r-meta">Carregando...</div>';
+    try {
+        const resp = await fetch('/api/expedicao/conferencia/relatorios?max_reports=1000');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Erro ao listar relatórios');
+        if (!data.exists) { st.textContent = `Pasta não encontrada: ${data.base_dir}`; cards.innerHTML = ''; return; }
+        st.textContent = `Base: ${data.base_dir} | Abertos: ${data.total_abertos || 0} | Fechados: ${data.total_fechados || 0}`;
+        reportsAbertos = data.reports_abertos || data.reports || [];
+        reportsFechados = data.reports_fechados || [];
+        renderCardsRelatorios();
+        cards.onclick = (e) => {
+            const t = e.target.closest('.js-r, .click-row');
+            if (!t) return;
+            const row = t.closest('.js-r');
+            const file = t.dataset.file || (row ? row.dataset.file : '');
+            if (file) abrirRelatorio(file);
+        };
+        cardsFechados.onclick = (e) => {
+            const t = e.target.closest('.js-r, .click-row');
+            if (!t) return;
+            const row = t.closest('.js-r');
+            const file = t.dataset.file || (row ? row.dataset.file : '');
+            if (file) abrirRelatorio(file);
+        };
+        const f = document.getElementById('filtro-rel');
+        if (f && !f.dataset.bound) {
+            f.dataset.bound = '1';
+            f.addEventListener('input', () => renderCardsRelatorios());
+        }
+    } catch (err) {
+        st.textContent = `Erro: ${err.message}`;
+        cards.innerHTML = '<div class="r-meta">Falha ao carregar.</div>';
+    }
+}
+
+async function abrirRelatorio(encodedFile) {
+    const fileName = decodeURIComponent(encodedFile);
+    document.getElementById('panel-lista').classList.add('x-hidden');
+    document.getElementById('panel-conferencia').classList.remove('x-hidden');
+    document.getElementById('panel-registro').classList.add('x-hidden');
+    document.getElementById('panel-historico').classList.add('x-hidden');
+    document.getElementById('ttl-rel').textContent = `Conferência cega: ${fileName}`;
+
+    const st = document.getElementById('st-conf');
+    const lst = document.getElementById('lst-itens');
+    const btnValidar = document.getElementById('btn-validar-conf');
+    const btnResolver = document.getElementById('btn-resolver-divergencia');
+    st.textContent = 'Lendo itens...';
+    lst.innerHTML = '';
+
+    const resp = await fetch(`/api/expedicao/conferencia/relatorio?file_name=${encodeURIComponent(fileName)}`);
+    const data = await resp.json();
+    if (!resp.ok) { st.textContent = `Erro: ${data.error || 'Falha ao abrir'}`; return; }
+
+    relatorioAtual = data;
+    document.getElementById('box-decisao').style.display = 'none';
+    atualizarAlertaDivergencia(0);
+    const isFechada = data.status === 'Fechada';
+    const somenteRegistro = !isFechada && data.registro_pendente && data.status !== 'PendenteDecisao';
+    const semConferenciaTotal = data.status === 'PendenteDecisao'
+        && !(data.items || []).some(i => i.divergente)
+        && (data.items || []).every(i => Number(i.qtd_conferida || 0) === 0);
+    st.textContent = isFechada
+        ? 'Conferência fechada: modo consulta para auditoria.'
+        : 'Digite apenas a quantidade contada. Campo em branco = próximo faturamento.';
+    if (somenteRegistro) {
+        st.textContent = 'Conferência de quantidades OK. Registro de expedição pendente (obrigatório), pode ser finalizado depois em Continuar conferência.';
+    }
+    const itensVisiveis = (data.items || []).filter(it => {
+        if (isFechada) return true;
+        const qtdConferida = Number(it.qtd_conferida || 0);
+        const qtdFaturada = Number(it.qtd_faturada || 0);
+        const conferidoOk = qtdConferida > 0 && !it.divergente;
+        const registradoEmNf = qtdFaturada >= qtdConferida;
+        return !(conferidoOk && registradoEmNf);
+    });
+    const ocultosOk = Math.max((data.items || []).length - itensVisiveis.length, 0);
+
+    lst.innerHTML = itensVisiveis.map(it => {
+        const img = it.imagem ? `<img class="img" src="/api/expedicao/conferencia/imagem?file_name=${encodeURIComponent(data.file_name)}&image_name=${encodeURIComponent(it.imagem)}" alt="${it.nome_peca}">` : '<div class="x-muted">Sem imagem</div>';
+        const cls = it.divergente ? 'div' : '';
+        return `<div class="item ${cls}" id="item-${it.index}"><div class="item-grid"><div>${img}</div><div><div class="item-title">${it.nome_peca} <span class="x-muted">(${it.codigo || '-'})</span></div><div class="item-meta"><span><strong>OS:</strong> ${it.os}</span><span><strong>Cliente:</strong> ${it.cliente}</span><span><strong>Dimensão:</strong> ${it.dimensao}</span></div><div class="item-status" id="st-item-${it.index}">Aguardando validação</div></div><div class="q-wrap"><div class="q-label">Qtd contada</div><input id="q-${it.index}" class="q-input" type="number" min="0" step="1" value="${it.qtd_conferida || ''}"></div></div></div>`;
+    }).join('') || '<div class="card">Nenhum item pendente para conferência.</div>';
+
+    if (!isFechada && ocultosOk > 0) {
+        st.textContent += ` Itens já conferidos e registrados em NF ocultados: ${ocultosOk}.`;
+    }
+
+    if (btnValidar) {
+        btnValidar.disabled = isFechada || somenteRegistro;
+        btnValidar.style.opacity = (isFechada || somenteRegistro) ? '0.55' : '1';
+        btnValidar.style.cursor = (isFechada || somenteRegistro) ? 'not-allowed' : 'pointer';
+    }
+
+    if (isFechada || somenteRegistro) {
+        document.querySelectorAll('[id^="q-"]').forEach((el) => {
+            el.readOnly = true;
+            el.disabled = true;
+        });
+        if (btnResolver) btnResolver.classList.add('x-hidden');
+    }
+
+    if (somenteRegistro) {
+        montarRegistro();
+        fecharTodosOverlays();
+        irParaRegistro();
+        return;
+    }
+
+    if (data.status === 'PendenteDecisao' || (data.items || []).some(i => i.divergente)) {
+        document.getElementById('box-decisao').style.display = 'block';
+        const qtdDiv = (data.items || []).filter(i => i.divergente).length;
+        if (semConferenciaTotal) {
+            atualizarAlertaDivergencia(
+                0,
+                true,
+                'Nenhuma quantidade foi conferida. Para seguir com expedição sem conferência, é obrigatória autorização de admin.'
+            );
+        } else {
+            atualizarAlertaDivergencia(qtdDiv);
+        }
+    } else {
+        atualizarAlertaDivergencia(0);
+    }
+}
+
+function coletarContagens() {
+    const cont = {};
+    const pend = [];
+    (relatorioAtual?.items || []).forEach(it => {
+        const el = document.getElementById(`q-${it.index}`);
+        const raw = (el?.value || '').trim();
+        if (!raw) {
+            pend.push(it.index);
+        } else {
+            cont[String(it.index)] = Number(raw);
+        }
+    });
+    return { cont, pend };
+}
+
+
+async function registrarDecisaoDireta(tipo, motivo) {
+    const resp = await fetch('/api/expedicao/conferencia/decisao', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            file_name: relatorioAtual.file_name,
+            tipo,
+            motivo,
+        })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Falha ao registrar decisão.');
+    await abrirRelatorioAtual();
+    if (tipo === 'Pendencia') {
+        montarRegistro();
+        irParaRegistro();
+    }
+}
+
+async function solicitarAutorizacaoPendencia(motivo) {
+    const resp = await fetch('/api/expedicao/conferencia/solicitar_autorizacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: relatorioAtual.file_name, motivo }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Falha ao solicitar autorização.');
+}
+
+async function prepararRegistroAposConferencia() {
+    if (!relatorioAtual) return;
+    try {
+        await abrirRelatorioAtual();
+    } catch (_) {}
+    montarRegistro();
+    fecharTodosOverlays();
+    irParaRegistro();
+}
+
+async function validarConferencia() {
+    if (!relatorioAtual) return;
+    if (relatorioAtual.status === 'Fechada') return;
+    if (relatorioAtual.registro_pendente && relatorioAtual.status !== 'PendenteDecisao') {
+        alert('As quantidades ja foram gravadas. Continue apenas no registro de expedicao.');
+        montarRegistro();
+        irParaRegistro();
+        return;
+    }
+    fecharTodosOverlays();
+    limparFluxoConfirmacao();
+    tipoDecisaoPendente = null;
+    const { cont, pend } = coletarContagens();
+    contagensPendentes = cont;
+    if (pend.length) {
+        abrirConfirmacaoPendentes(contagensPendentes || {});
+        return;
+    }
+    await executarValidacao(cont);
+    montarRegistro();
+    buscarHistoricoEnviado();
+    buscarRastreabilidade();
+}
+
+async function confirmarValidacaoComPendentes() {
+    await executarValidacao(contagensPendentes || {});
+}
+
+async function executarValidacao(contagens) {
+    const res = document.getElementById('resumo-val');
+    res.innerHTML = 'Gravando conferência...';
+    const resp = await fetch('/api/expedicao/conferencia/validar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: relatorioAtual.file_name, contagens })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+        if (resp.status === 409 && data.bloqueio_quantidade) {
+            res.innerHTML = `Aviso: ${data.error || 'Conferencia de quantidades ja gravada.'}`;
+            await abrirRelatorioAtual();
+            montarRegistro();
+            irParaRegistro();
+            return;
+        }
+        res.innerHTML = `Erro: ${data.error || 'Falha na validação'}`;
+        return;
+    }
+
+    (relatorioAtual.items || []).forEach(it => {
+        const box = document.getElementById(`item-${it.index}`);
+        const st = document.getElementById(`st-item-${it.index}`);
+        if (box) box.classList.remove('ok', 'div', 'pen');
+        if (st) st.textContent = 'Aguardando status';
+    });
+
+    (data.ok || []).forEach(it => {
+        const box = document.getElementById(`item-${it.index}`); const st = document.getElementById(`st-item-${it.index}`);
+        if (box) box.classList.add('ok'); if (st) st.textContent = `Correto (${it.qtd_auditada})`;
+    });
+    (data.divergencias || []).forEach(it => {
+        const box = document.getElementById(`item-${it.index}`); const st = document.getElementById(`st-item-${it.index}`);
+        if (box) box.classList.add('div'); if (st) st.textContent = `Errado (${it.qtd_auditada})`;
+    });
+    (data.pendentes || []).forEach(it => {
+        const box = document.getElementById(`item-${it.index}`); const st = document.getElementById(`st-item-${it.index}`);
+        if (box) box.classList.add('pen'); if (st) st.textContent = 'Em branco: próximo faturamento';
+    });
+
+    res.innerHTML = `
+        <div class="result-wrap">
+            <div class="result-head">
+                <span class="badge">Total ${data.total_itens}</span>
+                <span class="badge b-ok">Corretos ${data.total_ok}</span>
+                <span class="badge b-div">Errados ${data.total_divergencias}</span>
+                <span class="badge b-pen">Próximo faturamento ${data.total_pendentes}</span>
+            </div>
+            <div class="x-muted">Itens em vermelho precisam de ajuste. Itens em amarelo foram deixados em branco para próximo faturamento.</div>
+        </div>
+    `;
+
+    if (data.requer_decisao) {
+        document.getElementById('box-decisao').style.display = 'block';
+        if (data.bloqueio_sem_conferencia_total) {
+            atualizarAlertaDivergencia(
+                0,
+                true,
+                'Nenhuma quantidade foi conferida. Para seguir com expedição sem conferência, é obrigatória autorização de admin.'
+            );
+            res.innerHTML += '<div class="x-status" style="margin-top:8px;background:#fff2f2;color:#8c1d18;">Conferência em branco não é aceita sem autorização admin. Registre a decisão: Expedir com pendência.</div>';
+        } else {
+            atualizarAlertaDivergencia(data.total_divergencias || 0);
+            res.innerHTML += '<div class="x-status" style="margin-top:8px;background:#fff2f2;color:#8c1d18;">Faturamento bloqueado até registrar decisão: Recontar ou Expedir com pendência.</div>';
+        }
+        return;
+    }
+
+    res.innerHTML += `
+        <div class="x-status" style="margin-top:8px;background:#eaf8f0;color:#135c3a;">
+            Conferência de quantidades concluída com sucesso. O registro da expedição é obrigatório, mas pode ser feito depois em Continuar conferência.
+        </div>
+        <div style="margin-top:8px;"><button class="x-btn x-primary" onclick="prepararRegistroAposConferencia()">Registrar expedição agora</button></div>
+    `;
+}
+
+async function abrirRelatorioAtual() {
+    if (!relatorioAtual) return;
+    const enc = encodeURIComponent(relatorioAtual.file_name);
+    await abrirRelatorio(enc);
+}
+
+function irParaRegistro() {
+    document.getElementById('panel-conferencia').classList.add('x-hidden');
+    document.getElementById('panel-registro').classList.remove('x-hidden');
+    document.getElementById('panel-historico').classList.remove('x-hidden');
+    document.getElementById('panel-registro').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function aplicarTipo() {
+    if (!relatorioAtual) return;
+    const tipo = document.getElementById('tipo').value;
+    (relatorioAtual.items || []).forEach(it => {
+        const el = document.getElementById(`e-${it.id}`);
+        if (!el) return;
+        const maxPermitido = Number(el.max || 0);
+        if (tipo === 'Total') {
+            el.value = String(Math.max(maxPermitido, 0));
+            el.readOnly = true;
+        } else {
+            el.readOnly = false;
+        }
+    });
+}
+
+function alternarTransporte() {
+    const tipo = document.getElementById('transporte-tipo')?.value || 'Proprio';
+    const campo = document.getElementById('transportadora');
+    if (!campo) return;
+    if (tipo === 'Transportadora') {
+        campo.readOnly = false;
+        campo.placeholder = 'Nome da transportadora';
+    } else {
+        campo.value = '';
+        campo.readOnly = true;
+        campo.placeholder = 'Transporte próprio';
+    }
+}
+
+function montarRegistro() {
+    const tb = document.getElementById('tb-reg');
+    const pendenciaAutorizada = relatorioAtual?.decisao?.tipo === 'Pendencia';
+    tb.innerHTML = (relatorioAtual?.items || []).map(it => `
+        <tr>
+            <td>${it.nome_peca}</td><td>${it.os}</td><td>${it.cliente}</td><td>${it.qtd_restante}</td>
+            <td><input id="e-${it.id}" data-rest="${it.qtd_restante}" data-conf="${pendenciaAutorizada ? (it.qtd_restante || 0) : Math.max((it.qtd_conferida || 0) - (it.qtd_faturada || 0), 0)}" class="n-input" type="number" min="0" step="1" max="${Math.min(it.qtd_restante || 0, pendenciaAutorizada ? (it.qtd_restante || 0) : Math.max((it.qtd_conferida || 0) - (it.qtd_faturada || 0), 0))}" value="0"></td>
+            <td><input id="f-${it.id}" type="file" accept="image/*" capture="environment"></td>
+            <td id="s-${it.id}" class="x-muted">Não enviada</td>
+        </tr>
+    `).join('');
+    aplicarTipo();
+}
+
+async function uploadFoto(itId, nf) {
+    const inp = document.getElementById(`f-${itId}`);
+    const st = document.getElementById(`s-${itId}`);
+    const file = inp?.files?.[0];
+    if (!file) {
+        st.textContent = 'Sem foto';
+        return '';
+    }
+    const fd = new FormData();
+    fd.append('arquivo', file); fd.append('file_name', relatorioAtual.file_name); fd.append('item_id', String(itId)); fd.append('numero_nf', nf);
+    st.textContent = 'Enviando foto...';
+    const resp = await fetch('/api/expedicao/faturamento/foto', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Falha upload');
+    st.textContent = 'Foto OK';
+    return data.foto_path;
+}
+
+async function registrarFaturamento() {
+    if (!relatorioAtual) return;
+    const pendenciaAutorizada = relatorioAtual?.decisao?.tipo === 'Pendencia';
+    const nf = (document.getElementById('nf').value || '').trim();
+    const tipo = document.getElementById('tipo').value;
+    const transporteTipo = document.getElementById('transporte-tipo')?.value || 'Proprio';
+    const transportadora = (document.getElementById('transportadora')?.value || '').trim();
+    const placa = (document.getElementById('placa')?.value || '').trim();
+    const motorista = (document.getElementById('motorista')?.value || '').trim();
+    const pesoBruto = Number(document.getElementById('peso-bruto')?.value || 0);
+    const observacao = (document.getElementById('obs-logistica')?.value || '').trim();
+    if (!nf) { alert('Informe a NF.'); return; }
+    if (transporteTipo === 'Transportadora' && !transportadora) { alert('Informe a transportadora ou selecione transporte próprio.'); return; }
+    if (!placa) { alert('Informe a placa do veículo.'); return; }
+    if (!motorista) { alert('Informe o motorista.'); return; }
+    if (pesoBruto <= 0) { alert('Informe o peso bruto em kg.'); return; }
+
+    const itens = [];
+    for (const it of (relatorioAtual.items || [])) {
+        const qtd = Number(document.getElementById(`e-${it.id}`)?.value || 0);
+        if (!Number.isFinite(qtd) || qtd < 0 || !Number.isInteger(qtd)) {
+            alert(`Item ${it.nome_peca}: informe uma quantidade inteira válida.`);
+            return;
+        }
+        const saldoNesh = Number(document.getElementById(`e-${it.id}`)?.dataset.rest || 0);
+        const saldoConferido = Number(document.getElementById(`e-${it.id}`)?.dataset.conf || 0);
+        const limite = pendenciaAutorizada ? saldoNesh : Math.min(saldoNesh, saldoConferido);
+        if (qtd > limite) {
+            alert(`Item ${it.nome_peca}: quantidade enviada maior que saldo permitido (NESH/Conferido).`);
+            return;
+        }
+        if (qtd > 0) {
+            const foto = await uploadFoto(it.id, nf);
+            itens.push({ item_id: it.id, qtd_enviada: qtd, foto_path: foto });
+        }
+    }
+    if (!itens.length) { alert('Informe ao menos um item enviado.'); return; }
+
+    const st = document.getElementById('st-reg');
+    st.textContent = 'Registrando expedição...';
+    const resp = await fetch('/api/expedicao/faturamento', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            file_name: relatorioAtual.file_name,
+            numero_nf: nf,
+            tipo,
+            transporte_tipo: transporteTipo,
+            transportadora,
+            placa,
+            motorista,
+            peso_bruto: pesoBruto,
+            observacao,
+            itens,
+        })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { st.textContent = `Erro: ${data.error || 'Falha no registro'}`; return; }
+    st.textContent = `Registro concluído. Status conferência: ${data.status}`;
+    if ((data.alertas_parciais || []).length) {
+        st.textContent += ' | Atenção: existem itens enviados com quantidade parcial vs conferida.';
+    }
+    await abrirRelatorioAtual();
+    montarRegistro();
+    buscarHistoricoEnviado();
+    buscarRastreabilidade();
+}
+
+async function buscarRastreabilidade() {
+    const os = (document.getElementById('f-os').value || '').trim();
+    const codigo = (document.getElementById('f-codigo').value || '').trim();
+    const cliente = (document.getElementById('f-cliente').value || '').trim();
+    const qs = new URLSearchParams({ os, codigo, cliente });
+    const resp = await fetch(`/api/expedicao/rastreabilidade?${qs.toString()}`);
+    const data = await resp.json();
+    const tb = document.getElementById('tb-rast');
+    if (!resp.ok) { tb.innerHTML = '<tr><td colspan="8">Falha ao carregar.</td></tr>'; return; }
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="8">Nenhum registro encontrado.</td></tr>'; return; }
+    tb.innerHTML = data.map(r => {
+        const statusItem = r.divergente ? 'Errado' : (r.qtd_conferida > 0 ? 'Correto' : 'Pendente');
+        return `<tr><td>${r.arquivo}</td><td>${r.codigo}</td><td>${r.os}</td><td>${r.cliente}</td><td>${statusItem}</td><td>${r.qtd_conferida}</td><td>${r.qtd_faturada}</td><td>${r.qtd_restante}</td></tr>`;
+    }).join('');
+}
+
+async function buscarHistoricoEnviado() {
+    const resp = await fetch('/api/expedicao/rastreabilidade');
+    const data = await resp.json();
+    const tb = document.getElementById('tb-hist');
+    if (!resp.ok) { tb.innerHTML = '<tr><td colspan="6">Falha ao carregar histórico.</td></tr>'; return; }
+    const enviados = (data || []).filter(x => Number(x.qtd_faturada || 0) > 0);
+    if (!enviados.length) { tb.innerHTML = '<tr><td colspan="6">Sem itens enviados ainda.</td></tr>'; return; }
+    tb.innerHTML = enviados.map(r => `<tr><td>${r.arquivo}</td><td>${r.codigo}</td><td>${r.os}</td><td>${r.cliente}</td><td>${r.qtd_faturada}</td><td>${r.qtd_restante}</td></tr>`).join('');
+}
+
+async function buscarVinculos() {
+    const fileName = (document.getElementById('v-file').value || '').trim();
+    const nf = (document.getElementById('v-nf').value || '').trim();
+    const qs = new URLSearchParams({ file_name: fileName, numero_nf: nf });
+    const resp = await fetch(`/api/expedicao/vinculos?${qs.toString()}`);
+    const data = await resp.json();
+    const tb = document.getElementById('tb-vinc');
+    if (!resp.ok) { tb.innerHTML = '<tr><td colspan="6">Falha ao carregar vínculos.</td></tr>'; return; }
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="6">Nenhum vínculo encontrado.</td></tr>'; return; }
+    tb.innerHTML = data.map(v => `<tr><td>${v.arquivo_html}</td><td>${v.numero_nf}</td><td>${v.tipo}</td><td>${v.status_conferencia}</td><td>${v.data}</td><td>${v.usuario}</td></tr>`).join('');
+}
+
+function voltarLista() {
+    fecharTodosOverlays();
+    atualizarAlertaDivergencia(0);
+    document.getElementById('panel-conferencia').classList.add('x-hidden');
+    document.getElementById('panel-registro').classList.add('x-hidden');
+    document.getElementById('panel-historico').classList.add('x-hidden');
+    document.getElementById('panel-lista').classList.remove('x-hidden');
+}
+
+['f-os','f-codigo','f-cliente'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => {
+        clearTimeout(window.__rastTimer);
+        window.__rastTimer = setTimeout(() => buscarRastreabilidade(), 350);
+    });
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        fecharTodosOverlays();
+    }
+});
+
+fecharTodosOverlays();
+
+carregarRelatorios();
+buscarRastreabilidade();
+buscarHistoricoEnviado();
+buscarVinculos();
+alternarTransporte();
+</script>
+{% endblock %}

@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Portaria - Inclusão XML{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1100px; margin: 0 auto; }
+        
+        /* Cabeçalho Branco Padronizado */
+        .page-header-erp { 
+            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+            display: flex; align-items: center; color: #000000; border: 1px solid var(--border-color);
+        }
+        .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        .page-header-erp i { color: var(--sap-blue); font-size: 24px; }
+
+        /* Card de Ação Principal */
+        .card-sap { 
+            background: white; border: 1px solid var(--border-color); padding: 30px; 
+            border-radius: 16px; box-shadow: var(--card-shadow);
+        }
+        .card-sap h3 { 
+            font-size: 13px; font-weight: 800; color: #1e293b; margin-bottom: 25px; 
+            text-transform: uppercase; border-left: 5px solid var(--sap-blue); padding-left: 12px;
+        }
+
+        .form-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block; }
+        
+        .input-group-sap { display: flex; gap: 10px; margin-bottom: 25px; }
+        .form-control-sap { 
+            flex: 1; padding: 12px 15px; border: 1px solid #cbd5e1; border-radius: 8px; 
+            font-size: 14px; transition: all 0.2s; background: #fdfdfd;
+        }
+        .form-control-sap:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); background: #fff; }
+
+        .btn-sap { 
+            padding: 10px 25px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+            background: var(--sap-blue); color: white; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-sap:hover { background: var(--sap-hover); transform: translateY(-1px); }
+
+        /* Status Box Estilo Terminal */
+        .status-box { 
+            margin-top: 20px; padding: 15px; border-radius: 10px; font-size: 12px; 
+            display: none; border-left: 5px solid var(--sap-blue); background: #f8fafc;
+            font-family: 'Cascadia Code', 'Consolas', monospace; color: #475569;
+        }
+        .status-ok { background: #ecfdf5; border-color: #10b981; color: #065f46; }
+        .status-err { background: #fef2f2; border-color: #ef4444; color: #991b1b; }
+
+        /* Modal e Tabela */
+        .modal-sap { border-radius: 20px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .modal-head { padding: 20px 25px; background: #1e293b; color: white; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 25px; background: white; margin: 0; }
+        
+        .erp-table { width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
+        .erp-table th { background: #f8fafc; padding: 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #edf2f7; }
+        .erp-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .erp-table tr:hover td { background: #f0f7ff; }
+
+        @media (max-width: 768px) { .input-group-sap { flex-direction: column; } .btn-sap { width: 100%; justify-content: center; } }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header-erp">
+        <h2><i class="fas fa-door-open"></i> Portaria - Inclusão de NF para Conferência</h2>
+    </div>
+
+    <div class="card-sap">
+        <h3><i class="fas fa-file-import"></i> Importação via Web Service Consyst-e</h3>
+
+        <div style="max-width: 700px;">
+            <label class="form-label">Identificação por Chave de Acesso</label>
+            <div class="input-group-sap">
+                <input type="text" id="consyste-chave" class="form-control-sap" maxlength="44" placeholder="Informe os 44 dígitos da chave...">
+                <button class="btn-sap" onclick="buscarPorChave()">
+                    <i class="fas fa-barcode"></i> Consultar
+                </button>
+            </div>
+
+            <label class="form-label">Localização por Número da NF</label>
+            <div class="input-group-sap">
+                <input type="text" id="consyste-numero" class="form-control-sap" placeholder="Ex: 1845">
+                <button class="btn-sap" onclick="buscarPorNumero()">
+                    <i class="fas fa-search"></i> Consultar
+                </button>
+            </div>
+        </div>
+
+        <div id="portaria-status" class="status-box"></div>
+    </div>
+</div>
+
+<div id="modal-selecao" class="modal-overlay">
+    <div class="modal-sap" style="max-width: 900px;">
+        <div class="modal-head">
+            <span>OCORRÊNCIAS LOCALIZADAS NO PORTAL</span>
+            <button onclick="fecharModalSelecao()" style="color:white; background:none; border:none; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="table-container">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th width="100">Número</th>
+                            <th width="120">Emissão</th>
+                            <th>Emitente</th>
+                            <th>Chave de Acesso</th>
+                            <th width="110" style="text-align:center;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-selecao-corpo"></tbody>
+                </table>
+            </div>
+        </div>
+        <div style="padding: 15px 25px; background: #f8fafc; text-align: right; border-top: 1px solid #edf2f7;">
+            <button class="btn-sap" style="background:#64748b;" onclick="fecharModalSelecao()">Cancelar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const statusBox = document.getElementById('portaria-status');
+
+    function showStatus(msg, type = 'info') {
+        statusBox.style.display = 'block';
+        statusBox.className = 'status-box';
+        if (type === 'error') statusBox.classList.add('status-err');
+        if (type === 'ok') statusBox.classList.add('status-ok');
+        statusBox.innerHTML = `<b>>> LOG:</b> ${msg.toUpperCase()}`;
+    }
+
+    async function importarPorChave(chaveManual) {
+        const chave = (chaveManual || document.getElementById('consyste-chave').value || '').trim();
+        if (!chave) {
+            showStatus('Informe a chave de acesso.', 'error');
+            return;
+        }
+
+        showStatus('Iniciando transferência do XML...');
+        try {
+            const res = await fetch('/api/consyste/download', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({chave: chave})
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showStatus(data.error || 'Falha ao importar XML.', 'error');
+                return;
+            }
+            showStatus(data.msg || 'NF importada e enviada para fila de liberação.', 'ok');
+            fecharModalSelecao();
+            document.getElementById('consyste-chave').value = '';
+            document.getElementById('consyste-numero').value = '';
+        } catch (e) {
+            showStatus('Erro de comunicação com o servidor.', 'error');
+        }
+    }
+
+    async function buscarPorChave() {
+        const chave = (document.getElementById('consyste-chave').value || '').trim();
+        if (!chave) {
+            showStatus('Informe a chave de acesso.', 'error');
+            return;
+        }
+
+        showStatus('Consultando chave no Web Service...');
+        try {
+            const res = await fetch(`/api/consyste/listar?chave=${encodeURIComponent(chave)}`);
+            const data = await res.json();
+            if (!res.ok) {
+                showStatus(data.error || 'Falha na consulta por chave.', 'error');
+                return;
+            }
+            const lista = data.documentos || [];
+            if (lista.length === 0) {
+                showStatus('Nenhuma NF encontrada para esta chave.', 'error');
+                return;
+            }
+            await importarPorChave(lista[0].chave || chave);
+        } catch (e) {
+            showStatus('Erro ao consultar chave.', 'error');
+        }
+    }
+
+    async function buscarPorNumero() {
+        const numero = (document.getElementById('consyste-numero').value || '').trim();
+        if (!numero) {
+            showStatus('Informe o número da NF.', 'error');
+            return;
+        }
+
+        showStatus('Localizando número da NF...');
+        try {
+            const res = await fetch(`/api/consyste/listar?numero=${encodeURIComponent(numero)}`);
+            const data = await res.json();
+            if (!res.ok) {
+                showStatus(data.error || 'Falha na consulta por número.', 'error');
+                return;
+            }
+            const lista = data.documentos || [];
+            if (lista.length === 0) {
+                showStatus('NF não encontrada para este número.', 'error');
+                return;
+            }
+            if (lista.length === 1) {
+                await importarPorChave(lista[0].chave);
+                return;
+            }
+            abrirModalSelecao(lista);
+        } catch (e) {
+            showStatus('Erro ao consultar número da NF.', 'error');
+        }
+    }
+
+    function abrirModalSelecao(documentos) {
+        const corpo = document.getElementById('lista-selecao-corpo');
+        corpo.innerHTML = documentos.map(doc => `
+            <tr>
+                <td><b style="color:var(--sap-blue)">${doc.numero || '---'}</b></td>
+                <td>${doc.emissao || '---'}</td>
+                <td style="font-weight:600;">${doc.emitente_nome || '---'}</td>
+                <td style="font-family:Consolas, monospace; font-size:11px; color:#64748b;">${doc.chave || '---'}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap" style="padding:5px 12px; font-size:10px;" onclick="importarPorChave('${doc.chave}')">Importar</button>
+                </td>
+            </tr>
+        `).join('');
+        document.getElementById('modal-selecao').style.display = 'flex';
+    }
+
+    function fecharModalSelecao() {
+        document.getElementById('modal-selecao').style.display = 'none';
+    }
+</script>
+{% endblock %}

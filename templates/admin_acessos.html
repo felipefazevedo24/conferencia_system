@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria de Acessos Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+    .main-content { max-width: 1280px; }
+    .filtros { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .filtro { border: 1px solid #b8c6d3; border-radius: 10px; padding: 8px 10px; font-size: 11px; min-width: 120px; background: #fbfdff; color: #294054; }
+    .table-wrap { background: white; border: 1px solid var(--border-color); overflow-x: auto; border-radius: 16px 16px 0 0; box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08); }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .stat-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%); border: 1px solid #d9e3ec; border-radius: 16px; padding: 14px; box-shadow: 0 10px 24px rgba(26, 49, 74, 0.08); }
+    .stat-label { font-size: 10px; color: #666; text-transform: uppercase; font-weight: 700; }
+    .stat-value { font-size: 22px; font-weight: 800; color: #2d3c4a; }
+    .mini-list { margin-top: 6px; font-size: 11px; max-height: 85px; overflow-y: auto; }
+    .mini-item { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 3px 0; gap: 8px; }
+    .mini-item:last-child { border-bottom: none; }
+    .pager { display: flex; justify-content: space-between; align-items: center; background: white; border: 1px solid var(--border-color); border-top: none; border-radius: 0 0 16px 16px; padding: 10px 12px; font-size: 11px; box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08); }
+    .pager-actions { display: flex; gap: 6px; }
+
+    @media (max-width: 980px) {
+        .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 720px) {
+        .stats-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header-erp">
+        <h2><i class="fas fa-user-shield"></i> Auditoria de Acessos Administrativos</h2>
+        <div class="filtros">
+            <input id="f-usuario" class="filtro" placeholder="Usuário" oninput="carregar()" />
+            <input id="f-rota" class="filtro" placeholder="Rota" oninput="carregar()" />
+            <select id="f-metodo" class="filtro" onchange="carregar()">
+                <option value="">Método</option>
+                <option>GET</option>
+                <option>POST</option>
+                <option>PUT</option>
+                <option>DELETE</option>
+            </select>
+            <input id="f-data-ini" type="date" class="filtro" onchange="carregar()" />
+            <input id="f-data-fim" type="date" class="filtro" onchange="carregar()" />
+            <button class="btn-sap" onclick="carregar()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <button class="btn-sap" onclick="exportarCsv()"><i class="fas fa-file-csv"></i> Exportar CSV</button>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Acessos 24h</div>
+            <div id="s-24h" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Acessos 7 dias</div>
+            <div id="s-7d" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Top Usuários (7d)</div>
+            <div id="s-usuarios" class="mini-list"><div class="mini-item"><span>---</span><span>0</span></div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Top Rotas (7d)</div>
+            <div id="s-rotas" class="mini-list"><div class="mini-item"><span>---</span><span>0</span></div></div>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th width="190">Data/Hora</th>
+                    <th width="180">Usuário</th>
+                    <th width="90">Método</th>
+                    <th>Rota</th>
+                </tr>
+            </thead>
+            <tbody id="tb-acessos">
+                <tr><td colspan="4" style="text-align:center">Carregando logs...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pager">
+        <div id="pager-info">Página 1 de 1</div>
+        <div class="pager-actions">
+            <button class="btn-sap" onclick="irPaginaAtual(-1)"><i class="fas fa-chevron-left"></i> Anterior</button>
+            <button class="btn-sap" onclick="irPaginaAtual(1)">Próxima <i class="fas fa-chevron-right"></i></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let paginaAtual = 1;
+let totalPaginas = 1;
+const porPagina = 50;
+
+function queryFiltros() {
+    const p = new URLSearchParams();
+    const usuario = document.getElementById('f-usuario').value.trim();
+    const rota = document.getElementById('f-rota').value.trim();
+    const metodo = document.getElementById('f-metodo').value;
+    const dataIni = document.getElementById('f-data-ini').value;
+    const dataFim = document.getElementById('f-data-fim').value;
+    if (usuario) p.set('usuario', usuario);
+    if (rota) p.set('rota', rota);
+    if (metodo) p.set('metodo', metodo);
+    if (dataIni) p.set('data_ini', dataIni);
+    if (dataFim) p.set('data_fim', dataFim);
+    return p.toString();
+}
+
+async function carregar(pagina = 1) {
+    paginaAtual = pagina;
+    const qs = queryFiltros();
+    const res = await fetch(`/api/admin/acessos?${qs}&page=${paginaAtual}&per_page=${porPagina}`);
+    const dados = await res.json();
+    const body = document.getElementById('tb-acessos');
+    const items = dados.items || [];
+
+    if (!Array.isArray(items) || items.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" style="text-align:center">Nenhum acesso encontrado.</td></tr>';
+        totalPaginas = Number(dados.pages || 1);
+        document.getElementById('pager-info').innerText = `Página ${dados.page || 1} de ${totalPaginas} | Total: ${dados.total || 0}`;
+        return;
+    }
+    totalPaginas = Number(dados.pages || 1);
+    document.getElementById('pager-info').innerText = `Página ${dados.page || 1} de ${totalPaginas} | Total: ${dados.total || 0}`;
+
+    body.innerHTML = items.map(r => `
+        <tr>
+            <td>${r.data}</td>
+            <td><b>${r.usuario}</b></td>
+            <td>${r.metodo}</td>
+            <td style="font-family: monospace;">${r.rota}</td>
+        </tr>
+    `).join('');
+}
+
+function irPaginaAtual(delta) {
+    const destino = paginaAtual + delta;
+    if (destino < 1 || destino > totalPaginas) return;
+    carregar(destino);
+}
+
+function exportarCsv() {
+    const qs = queryFiltros();
+    window.location.href = `/api/admin/acessos/export.csv?${qs}`;
+}
+
+async function carregarResumo() {
+    const res = await fetch('/api/admin/acessos/resumo');
+    const dados = await res.json();
+    document.getElementById('s-24h').innerText = dados.total_24h || 0;
+    document.getElementById('s-7d').innerText = dados.total_7d || 0;
+
+    const topUsuarios = Array.isArray(dados.top_usuarios) ? dados.top_usuarios : [];
+    const topRotas = Array.isArray(dados.top_rotas) ? dados.top_rotas : [];
+    document.getElementById('s-usuarios').innerHTML = (topUsuarios.length ? topUsuarios : [{usuario: '---', qtd: 0}]).map(i =>
+        `<div class="mini-item"><span>${i.usuario}</span><span>${i.qtd}</span></div>`
+    ).join('');
+    document.getElementById('s-rotas').innerHTML = (topRotas.length ? topRotas : [{rota: '---', qtd: 0}]).map(i =>
+        `<div class="mini-item"><span>${i.rota}</span><span>${i.qtd}</span></div>`
+    ).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    carregarResumo();
+    carregar(1);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+
+{% block title %}Fiscal{% endblock %}
+
+{% block extra_head %}
+    <style>
+        :root { 
+            --sap-blue: #0a6ed1;
+            --sap-hover: #085caf;
+            --erp-bg: #f4f6f9;
+            --border-color: #dbe2e8;
+            --header-bg: #354a5f;
+            --success-erp: #1e7d32;
+            --danger-erp: #d92d20;
+            --warning-erp: #eaaa08;
+            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        .main-content { padding: 25px; max-width: 1280px; margin: 0 auto; }
+        
+        /* Cabeçalho do Módulo */
+        .page-header-erp { 
+            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+            display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #000000; border: 1px solid var(--border-color);
+        }
+        .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+        .page-header-erp i { margin-right: 15px; font-size: 24px; color: var(--sap-blue); }
+
+        /* Tabs de Navegação */
+        .tabs-container { display: flex; gap: 10px; margin-bottom: -1px; position: relative; z-index: 2; }
+        .tab-btn { 
+            padding: 12px 22px; border: 1px solid #c9d6e2;
+            background: white; cursor: pointer; font-weight: 700; color: #556b82; font-size: 11px;
+            text-transform: uppercase; border-radius: 10px 10px 0 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.03);
+        }
+        .tab-btn:hover { background: #f8f9fa; color: var(--sap-blue); }
+        .tab-btn.active { 
+            background: white; color: var(--sap-blue); border-color: var(--border-color); 
+            border-bottom: 3px solid white; padding-bottom: 14px; transform: translateY(-2px);
+        }
+
+        /* Conteúdo da View */
+        .view-content { 
+            background: white; border: 1px solid var(--border-color); 
+            border-radius: 0 16px 16px 16px; padding: 25px; min-height: 450px; 
+            box-shadow: var(--card-shadow); position: relative; z-index: 1;
+        }
+
+        /* Tabelas Estilizadas */
+        .erp-table { width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
+        .erp-table th { 
+            background: #f8fafc; text-align: left; padding: 14px; 
+            font-size: 11px; text-transform: uppercase; color: #64748b; 
+            border-bottom: 2px solid #edf2f7; font-weight: 800;
+        }
+        .erp-table td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .erp-table tr:hover td { background: #f0f7ff; }
+
+        /* Badges */
+        .badge-erp { 
+            display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; 
+            border-radius: 20px; font-weight: 700; font-size: 10px; text-transform: uppercase;
+        }
+        .badge-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .badge-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .badge-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-family: monospace; }
+
+        /* Modais Modernos */
+        .modal-sap { 
+            background: #ffffff; border: none; width: 95%; border-radius: 20px;
+            max-width: 600px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+        .modal-head { padding: 20px 25px; background: #1e293b; color: white; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 25px; background: white; }
+        .modal-foot { padding: 15px 25px; display: flex; gap: 10px; justify-content: flex-end; background: #f8fafc; border-top: 1px solid #edf2f7; }
+
+        /* Botões */
+        .btn-sap { 
+            padding: 10px 18px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-primary-sap { background: var(--sap-blue); color: white; }
+        .btn-primary-sap:hover { background: var(--sap-hover); transform: translateY(-1px); }
+        .btn-success { background: var(--success-erp); color: white; }
+        .btn-success:hover { filter: brightness(1.1); }
+        .btn-secondary { background: #e2e8f0; color: #475569; }
+
+        /* Boxes de Detalhes na Auditoria */
+        .detail-box { 
+            background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px;
+            transition: border-color 0.2s;
+        }
+        .detail-box:hover { border-color: var(--sap-blue); }
+        .detail-box label { display: block; font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; }
+        .detail-box span { font-size: 13px; font-weight: 700; color: #1e293b; }
+
+        /* Alerta de Pendência */
+        .alert-pendencia {
+            background: #fff9db; color: #856404; border: 1px solid #ffec99;
+            padding: 15px; font-size: 12px; margin-bottom: 20px; border-radius: 10px;
+            display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+
+        .empty-state { padding: 60px; text-align: center; color: #94a3b8; font-style: italic; }
+        .hidden { display: none; }
+
+        .feedback-card {
+            display: none;
+            margin-bottom: 18px;
+            border-radius: 12px;
+            padding: 14px 16px;
+            border: 1px solid transparent;
+            box-shadow: var(--card-shadow);
+            background: #fff;
+        }
+        .feedback-card.show { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .feedback-card.success { background: #ecfdf5; border-color: #a7f3d0; color: #166534; }
+        .feedback-card.error { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+        .feedback-card.info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+        .feedback-card-title { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
+        .feedback-card-message { font-size: 12px; font-weight: 700; line-height: 1.5; }
+        .feedback-card-close {
+            border: none;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .filter-panel {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 18px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+            gap: 14px;
+            align-items: end;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .filter-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        .filter-input {
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            background: #fff;
+        }
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        @media (max-width: 760px) {
+            .filter-panel { grid-template-columns: 1fr; }
+            .tabs-container { flex-direction: column; }
+            .tab-btn { border-radius: 8px; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-header-erp">
+        <div style="display:flex; align-items:center;">
+            <i class="fas fa-file-invoice-dollar"></i>
+            <h2>Escrituração Fiscal & Livros Oficiais</h2>
+        </div>
+        <button class="btn-sap btn-primary-sap" onclick="window.location.href='/fiscal/liberadas'">
+            <i class="fas fa-box-open"></i> Consultar NFs Liberadas
+        </button>
+    </div>
+
+    <div class="tabs-container">
+        <button class="tab-btn active" id="btn-tab-pendentes" onclick="switchTab('pendentes')">
+            <i class="fas fa-clock"></i> Notas Pendentes (Conferidas)
+        </button>
+        <button class="tab-btn" id="btn-tab-lancadas" onclick="switchTab('lancadas')">
+            <i class="fas fa-book"></i> Livro de Notas Lançadas
+        </button>
+    </div>
+
+    <div id="feedback-card" class="feedback-card">
+        <div>
+            <div id="feedback-card-title" class="feedback-card-title">Retorno do processo fiscal</div>
+            <div id="feedback-card-message" class="feedback-card-message"></div>
+        </div>
+        <button class="feedback-card-close" onclick="ocultarFeedbackCard()">&times;</button>
+    </div>
+
+    <div class="filter-panel">
+        <div class="filter-group">
+            <label class="filter-label" for="filtro-nf">Filtrar por número da NF</label>
+            <input id="filtro-nf" class="filter-input" placeholder="Ex: 202982" oninput="aplicarFiltrosTela()">
+        </div>
+        <div class="filter-group">
+            <label class="filter-label" for="filtro-fornecedor">Filtrar por fornecedor</label>
+            <input id="filtro-fornecedor" class="filter-input" placeholder="Digite o nome do emitente" oninput="aplicarFiltrosTela()">
+        </div>
+        <div class="filter-actions">
+            <button class="btn-sap btn-secondary" onclick="limparFiltrosTela()">
+                <i class="fas fa-eraser"></i> Limpar filtros
+            </button>
+        </div>
+    </div>
+
+    <div class="view-content">
+        <div id="view-pendentes">
+            <table class="erp-table">
+                <thead>
+                    <tr>
+                        <th>Nº Nota</th>
+                        <th>Fornecedor / Emitente</th>
+                        <th width="220">Status Conferência</th>
+                        <th width="150" style="text-align: center;">Escrituração</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-concluidas"></tbody>
+            </table>
+        </div>
+
+        <div id="view-lancadas" class="hidden">
+            <table class="erp-table">
+                <thead>
+                    <tr>
+                        <th>Nº Nota</th>
+                        <th>Emitente</th>
+                        <th>ID de Lançamento GRV</th>
+                        <th>Operador Fiscal</th>
+                        <th width="200" style="text-align: center;">Ações de Controle</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-historico"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="modal-lancamento" class="modal-overlay">
+    <div class="modal-sap" style="max-width: 480px;">
+        <div class="modal-head">
+            <span>EFETIVAR LANÇAMENTO NO SISTEMA</span>
+            <button onclick="fecharModal()" style="color:white; background:none; border:none; cursor:pointer; font-size: 20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="modal-desc-nota" style="font-weight: 800; color: var(--sap-blue); margin-bottom: 15px; font-size: 15px;"></p>
+            
+            <div id="alerta-conferencia" class="alert-pendencia">
+                <i class="fas fa-exclamation-triangle" style="font-size: 16px; margin-right: 10px;"></i>
+                <div style="display:inline-block">
+                    <b>ATENÇÃO FISCAL:</b><br>
+                    <span id="texto-alerta"></span>
+                </div>
+            </div>
+
+            <label class="form-label">CÓDIGO GERADO NO ERP (LANC):</label>
+            <input type="text" id="input-codigo-erp" 
+                   placeholder="Ex: LANC-2026-001"
+                   style="width:100%; padding:12px; border:2px solid #cbd5e1; border-radius: 8px; font-family: 'Cascadia Code', monospace; font-size: 16px; font-weight: bold; box-sizing: border-box; color: var(--sap-blue);">
+            <label style="display:flex; align-items:flex-start; gap:10px; margin-top:16px; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; cursor:pointer;">
+                <input type="checkbox" id="input-manifestar-destinatario" checked style="margin-top:2px;">
+                <span style="font-size:12px; color:#1e3a8a; font-weight:700; line-height:1.4;">
+                    Enviar manifestação do destinatário para SEFAZ
+                    <span style="display:block; font-size:11px; color:#475569; font-weight:600; margin-top:4px;">Tipo aplicado neste lançamento: Confirmação da operação.</span>
+                </span>
+            </label>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="fecharModal()">Cancelar</button>
+            <button class="btn-sap btn-success" onclick="enviarDadosLancamento()">
+                <i class="fas fa-save"></i> Gravar Escrituração
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-detalhes" class="modal-overlay">
+    <div class="modal-sap">
+        <div class="modal-head">
+            <span>AUDITORIA FISCAL DE DOCUMENTO</span>
+            <button onclick="fecharModalDet()" style="color:white; background:none; border:none; cursor:pointer; font-size: 20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                <div class="detail-box"><label>Fornecedor</label><span id="det-forn">---</span></div>
+                <div class="detail-box"><label>ID Lançamento ERP</label><span id="det-erp" class="badge-erp badge-info">---</span></div>
+                <div class="detail-box"><label>Valor Total Líquido</label><span id="det-valor" style="color:var(--success-erp)">---</span></div>
+                <div class="detail-box"><label>Créditos de Impostos</label><span id="det-imposto" style="color:var(--danger-erp)">---</span></div>
+            </div>
+            
+            <label class="form-label">Itens Conferidos</label>
+            <div style="max-height: 250px; overflow-y: auto; border: 1px solid #edf2f7; border-radius: 12px;">
+                <table class="erp-table" style="font-size: 11px;">
+                    <thead>
+                        <tr>
+                            <th style="padding: 10px;">Cód. Item</th>
+                            <th style="padding: 10px;">Descrição Técnica</th>
+                            <th style="text-align:center; padding: 10px;">Qtd.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="det-itens-corpo"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-primary-sap" id="btn-xml"><i class="fas fa-file-code"></i> Baixar XML</button>
+            <button class="btn-sap btn-success" id="btn-pdf"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+            <button class="btn-sap btn-secondary" onclick="fecharModalDet()">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-estorno" class="modal-overlay">
+    <div class="modal-sap" style="max-width: 520px; border-top: 5px solid var(--danger-erp);">
+        <div class="modal-head"><span>ESTORNO DE LANÇAMENTO FISCAL</span></div>
+        <div class="modal-body">
+            <p id="estorno-ref" style="font-weight: 800; color: var(--danger-erp); margin-bottom: 15px; font-size: 15px;">NF: ---</p>
+            <label class="form-label">JUSTIFICATIVA DO ESTORNO (OBRIGATÓRIO):</label>
+            <textarea id="estorno-motivo" rows="4" 
+                      placeholder="Descreva o motivo legal ou erro operacional para o estorno..."
+                      style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius: 8px; box-sizing:border-box; resize:none; font-family: inherit; font-size: 13px;"></textarea>
+            <div id="estorno-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight: 700; font-size:11px;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="fecharModalEstorno()">Cancelar Operação</button>
+            <button class="btn-sap btn-success" id="btn-confirmar-estorno" style="background: var(--danger-erp);" onclick="confirmarEstornoLancamento()">
+                <i class="fas fa-undo"></i> Confirmar Estorno
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let notaSendoLancada = null;
+    let notaSendoEstornada = null;
+    let listaNotasAtuais = [];
+    let notasLancadasAtuais = [];
+
+    function exibirFeedbackCard(tipo, titulo, mensagem) {
+        const card = document.getElementById('feedback-card');
+        card.className = `feedback-card show ${tipo || 'info'}`;
+        document.getElementById('feedback-card-title').innerText = titulo || 'Retorno do processo fiscal';
+        document.getElementById('feedback-card-message').innerText = mensagem || '';
+    }
+
+    function ocultarFeedbackCard() {
+        document.getElementById('feedback-card').className = 'feedback-card';
+    }
+
+    function switchTab(tab) {
+        document.getElementById('btn-tab-pendentes').classList.toggle('active', tab === 'pendentes');
+        document.getElementById('btn-tab-lancadas').classList.toggle('active', tab === 'lancadas');
+        document.getElementById('view-pendentes').classList.toggle('hidden', tab !== 'pendentes');
+        document.getElementById('view-lancadas').classList.toggle('hidden', tab !== 'lancadas');
+        aplicarFiltrosTela();
+    }
+
+    function obterTextoFiltro(id) {
+        return (document.getElementById(id)?.value || '').trim().toLowerCase();
+    }
+
+    function filtrarNotas(lista, campos) {
+        const filtroNf = obterTextoFiltro('filtro-nf');
+        const filtroFornecedor = obterTextoFiltro('filtro-fornecedor');
+
+        return lista.filter((item) => {
+            const matchNf = !filtroNf || String(item.numero || '').toLowerCase().includes(filtroNf);
+            const fornecedorRef = String(item.fornecedor || campos?.fornecedor || '').toLowerCase();
+            const matchFornecedor = !filtroFornecedor || fornecedorRef.includes(filtroFornecedor);
+            return matchNf && matchFornecedor;
+        });
+    }
+
+    function limparFiltrosTela() {
+        document.getElementById('filtro-nf').value = '';
+        document.getElementById('filtro-fornecedor').value = '';
+        aplicarFiltrosTela();
+    }
+
+    function aplicarFiltrosTela() {
+        const tabLancadasAtiva = document.getElementById('btn-tab-lancadas').classList.contains('active');
+        if (tabLancadasAtiva) {
+            renderizarLancadas(filtrarNotas(notasLancadasAtuais));
+            return;
+        }
+        renderizarConcluidas(filtrarNotas(listaNotasAtuais));
+    }
+
+    function renderizarConcluidas(notas) {
+        const container = document.getElementById('lista-concluidas');
+        container.innerHTML = notas.length === 0 ? '<tr><td colspan="4" class="empty-state">Nenhum documento encontrado com os filtros aplicados.</td></tr>' :
+            notas.map(n => {
+                const temPendencia = n.motivo_pendencia && n.motivo_pendencia.trim() !== "";
+                const statusHtml = temPendencia
+                    ? `<span class="badge-erp badge-warning" title="${n.motivo_pendencia}">
+                         <i class="fas fa-exclamation-triangle"></i> COM PENDÊNCIA
+                       </span>`
+                    : `<span class="badge-erp badge-success">
+                         <i class="fas fa-check-circle"></i> CONFERIDO
+                       </span>`;
+
+                return `
+                    <tr>
+                        <td><b>${n.numero}</b></td>
+                        <td>${n.fornecedor}</td>
+                        <td>${statusHtml}</td>
+                        <td style="text-align:center">
+                            <button class="btn-sap btn-primary-sap" onclick="abrirModal('${n.numero}')">Efetivar</button>
+                        </td>
+                    </tr>`;
+            }).join('');
+    }
+
+    function renderizarLancadas(notas) {
+        const container = document.getElementById('lista-historico');
+        container.innerHTML = notas.length === 0 ? '<tr><td colspan="5" class="empty-state">Nenhum lançamento encontrado com os filtros aplicados.</td></tr>' :
+            notas.map(n => `
+                <tr>
+                    <td><b>${n.numero}</b></td>
+                    <td>${n.fornecedor}</td>
+                    <td><span class="badge-erp badge-info">${n.codigo_erp}</span></td>
+                    <td>${n.usuario}</td>
+                    <td style="text-align:center">
+                        <button class="btn-sap btn-secondary" style="padding: 6px 12px;" onclick="verDetalhes('${n.numero}', '${n.codigo_erp}')">Auditar</button>
+                        <button class="btn-sap" style="background:#ecfdf5; color:#166534; padding: 6px 12px; margin-left:6px;" onclick="reenviarManifestacao('${n.numero}')">Manifestar</button>
+                        <button class="btn-sap" style="background:#fff3cd; color:#856404; padding: 6px 12px; margin-left:6px;" onclick="abrirModalEstorno('${n.numero}')">Estorno</button>
+                        ${n.manifestacao
+                            ? `<div style="margin-top:6px; font-size:10px; color:${n.manifestacao.status === 'Sucesso' ? '#166534' : '#b91c1c'}; font-weight:700;">Manifestação: ${n.manifestacao.status} (${n.manifestacao.data})</div>`
+                            : '<div style="margin-top:6px; font-size:10px; color:#64748b; font-weight:700;">Manifestação: pendente</div>'}
+                    </td>
+                </tr>`).join('');
+    }
+
+    async function carregarConcluidas() {
+        const res = await fetch('/api/concluidas');
+        listaNotasAtuais = await res.json();
+        renderizarConcluidas(filtrarNotas(listaNotasAtuais));
+    }
+
+    async function carregarLancadas() {
+        const res = await fetch('/api/notas_lancadas');
+        notasLancadasAtuais = await res.json();
+        renderizarLancadas(filtrarNotas(notasLancadasAtuais));
+    }
+
+    function abrirModal(n) {
+        notaSendoLancada = n;
+        const notaInfo = listaNotasAtuais.find(item => item.numero === n);
+        document.getElementById('modal-desc-nota').innerText = "ESCRITURAR NF: " + n;
+        document.getElementById('input-manifestar-destinatario').checked = true;
+        const alertaDiv = document.getElementById('alerta-conferencia');
+        if (notaInfo && notaInfo.motivo_pendencia) {
+            alertaDiv.style.display = 'block';
+            document.getElementById('texto-alerta').innerText = notaInfo.motivo_pendencia;
+        } else {
+            alertaDiv.style.display = 'none';
+        }
+        document.getElementById('modal-lancamento').style.display = 'flex';
+        setTimeout(() => document.getElementById('input-codigo-erp').focus(), 100);
+    }
+
+    function fecharModal() { document.getElementById('modal-lancamento').style.display = 'none'; }
+    function fecharModalDet() { document.getElementById('modal-detalhes').style.display = 'none'; }
+    function fecharModalEstorno() {
+        document.getElementById('modal-estorno').style.display = 'none';
+        document.getElementById('estorno-feedback').innerText = '';
+        notaSendoEstornada = null;
+    }
+
+    function abrirModalEstorno(numeroNota) {
+        notaSendoEstornada = numeroNota;
+        document.getElementById('estorno-ref').innerText = 'NF: ' + numeroNota;
+        document.getElementById('estorno-motivo').value = '';
+        document.getElementById('modal-estorno').style.display = 'flex';
+    }
+
+    async function confirmarEstornoLancamento() {
+        const motivo = document.getElementById('estorno-motivo').value.trim();
+        if (!notaSendoEstornada || motivo.length < 3) {
+            document.getElementById('estorno-feedback').innerText = 'Motivo obrigatório (mínimo 3 caracteres).';
+            return;
+        }
+        const btn = document.getElementById('btn-confirmar-estorno');
+        btn.disabled = true;
+        const res = await fetch('/api/fiscal/estornar_lancamento', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: notaSendoEstornada, motivo })
+        });
+        const data = await res.json();
+        btn.disabled = false;
+        if (res.ok && data.sucesso) {
+            fecharModalEstorno();
+            await carregarLancadas();
+            await carregarConcluidas();
+        } else {
+            document.getElementById('estorno-feedback').innerText = data.msg || 'Falha ao estornar.';
+        }
+    }
+
+    async function enviarDadosLancamento() {
+        const cod = document.getElementById('input-codigo-erp').value;
+        if (!cod.trim()) {
+            exibirFeedbackCard('error', 'Lançamento não realizado', 'O código do ERP é obrigatório para escrituração.');
+            return;
+        }
+        const manifestarDestinatario = document.getElementById('input-manifestar-destinatario').checked;
+        const res = await fetch('/api/confirmar_lancamento', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: notaSendoLancada, codigo: cod, manifestar_destinatario: manifestarDestinatario })
+        });
+        const data = await res.json();
+        if (data.sucesso) {
+            fecharModal();
+            await carregarConcluidas();
+            await carregarLancadas();
+            if (manifestarDestinatario && data.manifestacao) {
+                exibirFeedbackCard(
+                    data.manifestacao.sucesso ? 'success' : 'error',
+                    data.manifestacao.sucesso ? 'Lançamento e manifestação concluídos' : 'Lançamento gravado com pendência de manifestação',
+                    data.manifestacao.sucesso
+                        ? 'Lançamento gravado e confirmação da operação enviada com sucesso.'
+                        : `Lançamento gravado, mas a manifestação falhou: ${data.manifestacao.msg || 'sem detalhe'}`
+                );
+            } else {
+                exibirFeedbackCard('success', 'Lançamento gravado', 'Escrituração fiscal registrada com sucesso.');
+            }
+        } else {
+            exibirFeedbackCard('error', 'Falha no lançamento', data.msg || 'Não foi possível gravar a escrituração fiscal.');
+        }
+    }
+
+    async function reenviarManifestacao(numeroNota) {
+        const res = await fetch('/api/fiscal/manifestar_destinatario', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nota: numeroNota })
+        });
+        const data = await res.json();
+        exibirFeedbackCard(
+            data.sucesso ? 'success' : 'error',
+            data.sucesso ? 'Manifestação enviada' : 'Falha na manifestação',
+            data.msg || (data.sucesso ? 'Confirmação da operação enviada com sucesso.' : 'Falha ao enviar manifestação.')
+        );
+        await carregarLancadas();
+    }
+
+    function baixarDocumentoFiscal(numeroNota, tipo) {
+        window.open(`/api/consyste/documento?nota=${encodeURIComponent(numeroNota)}&tipo=${encodeURIComponent(tipo)}`, '_blank');
+    }
+
+    async function verDetalhes(numero, codErp) {
+        const res = await fetch(`/api/detalhes_nf/${numero}`);
+        const d = await res.json();
+        document.getElementById('det-forn').innerText = d.fornecedor;
+        document.getElementById('det-erp').innerText = codErp;
+        document.getElementById('det-valor').innerText = d.valor_total;
+        document.getElementById('det-imposto').innerText = d.impostos;
+        document.getElementById('det-itens-corpo').innerHTML = d.itens.map(i => `
+            <tr>
+                <td style="padding:10px;">${i.codigo}</td>
+                <td style="padding:10px;">${i.desc}</td>
+                <td style="text-align:center; padding:10px;"><b>${i.qtd}</b></td>
+            </tr>
+        `).join('');
+        const btnXml = document.getElementById('btn-xml');
+        const btnPdf = document.getElementById('btn-pdf');
+        const documentosDisponiveis = Boolean(d.documentos_disponiveis);
+        btnXml.disabled = !documentosDisponiveis;
+        btnPdf.disabled = !documentosDisponiveis;
+        btnXml.onclick = () => baixarDocumentoFiscal(numero, 'xml');
+        btnPdf.onclick = () => baixarDocumentoFiscal(numero, 'pdf');
+        document.getElementById('modal-detalhes').style.display = 'flex';
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await carregarConcluidas();
+        await carregarLancadas();
+    });
+</script>
+{% endblock %}

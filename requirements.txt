@@ -1,0 +1,8 @@
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+Werkzeug
+requests
+marshmallow
+pytest
+waitress
