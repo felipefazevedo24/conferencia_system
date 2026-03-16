@@ -25,6 +25,8 @@ from ..models import (
     ExpedicaoFaturamentoItem,
     ItemNota,
     ChecklistRecebimento,
+    LocalizacaoArmazem,
+    ItemWMS,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -35,6 +37,7 @@ from ..models import (
     SolicitacaoDevolucaoRecebimento,
     Usuario,
 )
+from ..services import WMSService
 from ..schemas.api_schemas import (
     AprovarSolicitacaoDevolucaoSchema,
     ConfirmarLancamentoSchema,
@@ -485,6 +488,99 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
         descricao_evento="Operação não realizada",
         justificativa=justificativa,
     )
+
+
+def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
+    """
+    Armazena todos os itens de uma nota no WMS automaticamente quando a nota é lançada.
+    Se não houver localização automática disponível, registra o item sem localização
+    e retorna aviso.
+    
+    Args:
+        numero_nota: Número da nota fiscal
+        usuario: Usuário fazendo o lançamento
+        
+    Returns:
+        {
+            'sucesso': bool,
+            'itens_armazenados': int,
+            'itens_sem_localizacao': int,
+            'mensagem': str
+        }
+    """
+    try:
+        # Obtém todos os itens da nota
+        itens = ItemNota.query.filter_by(numero_nota=numero_nota, status='Lançado').all()
+        
+        if not itens:
+            return {
+                'sucesso': True,
+                'itens_armazenados': 0,
+                'itens_sem_localizacao': 0,
+                'mensagem': 'Nenhum item para armazenar'
+            }
+        
+        itens_armazenados = 0
+        itens_sem_localizacao = 0
+        
+        for item in itens:
+            try:
+                codigo_item = item.codigo
+                qtd = item.qtd_real or 0
+                
+                # Tenta encontrar localização automática
+                localizacao = WMSService.requisitar_localizacao_automatica(
+                    codigo_item=codigo_item,
+                    qtd=qtd,
+                    usuario=usuario
+                )
+                
+                if localizacao:
+                    # Armazena com localização automática
+                    WMSService.armazenar_item_nota(
+                        numero_nota=numero_nota,
+                        codigo_item=codigo_item,
+                        localizacao_id=localizacao.id,
+                        usuario=usuario,
+                        qtd_recebida=qtd
+                    )
+                    itens_armazenados += 1
+                else:
+                    # Armazena sem localização (pendente de alocação manual)
+                    WMSService.armazenar_item_nota(
+                        numero_nota=numero_nota,
+                        codigo_item=codigo_item,
+                        localizacao_id=None,
+                        usuario=usuario,
+                        qtd_recebida=qtd
+                    )
+                    itens_sem_localizacao += 1
+                    
+            except Exception as e:
+                current_app.logger.warning(f"Erro ao armazenar item {codigo_item} da nota {numero_nota}: {str(e)}")
+                # Continua processando outros itens mesmo se um falhar
+                continue
+        
+        total = itens_armazenados + itens_sem_localizacao
+        mensagem = f"WMS: {itens_armazenados}/{total} itens armazenados"
+        if itens_sem_localizacao > 0:
+            mensagem += f" ({itens_sem_localizacao} sem localização automática)"
+        
+        return {
+            'sucesso': True,
+            'itens_armazenados': itens_armazenados,
+            'itens_sem_localizacao': itens_sem_localizacao,
+            'mensagem': mensagem
+        }
+        
+    except Exception as e:
+        current_app.logger.error(f"Erro ao integrar WMS para nota {numero_nota}: {str(e)}")
+        return {
+            'sucesso': False,
+            'itens_armazenados': 0,
+            'itens_sem_localizacao': 0,
+            'mensagem': f'Erro na integração WMS: {str(e)}'
+        }
 
 
 def _admin_access_query_from_request():
@@ -2881,10 +2977,15 @@ def confirmar_lancamento():
                 manifestacao_result.get("status_code") or 502,
             )
 
+    # Integração com WMS: armazenar itens automaticamente após lançamento bem-sucedido
+    wms_result = _armazenar_nota_no_wms(numero_nota, session["username"])
+    
     return jsonify(
         {
             "sucesso": True,
             "manifestacao": manifestacao_result,
+            "wms": wms_result if wms_result.get('sucesso') else None,
+            "aviso_wms": wms_result.get('mensagem') if not wms_result.get('sucesso') else None
         }
     )
 

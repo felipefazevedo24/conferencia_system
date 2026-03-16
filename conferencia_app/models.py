@@ -214,3 +214,66 @@ class ExpedicaoEstorno(db.Model):
     motivo = db.Column(db.String(500), nullable=False)
     usuario = db.Column(db.String(100), nullable=False)
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+# ============================================================================
+# MODELOS WMS - WAREHOUSE MANAGEMENT SYSTEM
+# ============================================================================
+
+class LocalizacaoArmazem(db.Model):
+    """Localização física no armazém (Corredor-Prateleira-Posição)"""
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), unique=True, nullable=False, index=True)  # Ex: C1-P1-1
+    corredor = db.Column(db.String(10), nullable=False)  # Ex: C1
+    prateleira = db.Column(db.String(10), nullable=False)  # Ex: P1
+    posicao = db.Column(db.String(10), nullable=False)  # Ex: 1
+    capacidade_maxima = db.Column(db.Float, nullable=False, default=100.0)  # kg ou unidades
+    capacidade_atual = db.Column(db.Float, nullable=False, default=0.0)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ItemWMS(db.Model):
+    """Rastreamento de itens no armazém (liga item de nota com localização)"""
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), index=True, nullable=False)
+    chave_acesso = db.Column(db.String(44))
+    fornecedor = db.Column(db.String(100))
+    codigo_item = db.Column(db.String(50), nullable=False, index=True)
+    descricao = db.Column(db.String(200))
+    qtd_recebida = db.Column(db.Float, nullable=False)
+    qtd_atual = db.Column(db.Float, nullable=False)
+    unidade = db.Column(db.String(20))
+    lote = db.Column(db.String(50))
+    data_validade = db.Column(db.Date)
+    localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
+    usuario_armazenamento = db.Column(db.String(100))
+    data_armazenamento = db.Column(db.DateTime)
+    status = db.Column(db.String(20), nullable=False, default="Armazenado", index=True)  # Armazenado|Separado|Enviado
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class MovimentacaoWMS(db.Model):
+    """Log de movimentações de itens no armazém (rastreabilidade completa)"""
+    id = db.Column(db.Integer, primary_key=True)
+    item_wms_id = db.Column(db.Integer, db.ForeignKey("item_wms.id"), nullable=False, index=True)
+    numero_nota = db.Column(db.String(20), index=True, nullable=False)
+    tipo_movimentacao = db.Column(db.String(30), nullable=False)  # Armazenamento|Reposicionamento|Separacao|Devolucao
+    localizacao_origem_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"))
+    localizacao_destino_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"))
+    qtd_movimentada = db.Column(db.Float, nullable=False)
+    motivo = db.Column(db.String(300))
+    usuario = db.Column(db.String(100), nullable=False)
+    data_movimentacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class EstoqueWMS(db.Model):
+    """Consolidação de estoque por localização e SKU (para relatórios rápidos)"""
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_item = db.Column(db.String(50), nullable=False, index=True)
+    localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), nullable=False, index=True)
+    qtd_total = db.Column(db.Float, nullable=False, default=0.0)
+    qtd_separada = db.Column(db.Float, nullable=False, default=0.0)  # Reservada para separação/despacho
+    data_atualizacao = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    __table_args__ = (db.UniqueConstraint("codigo_item", "localizacao_id", name="_sku_localizacao_uc"),)

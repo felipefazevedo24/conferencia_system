@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}WMS - Warehouse Management System{% endblock %}
+
+{% block content %}
+<style>
+    .wms-container { padding: 20px; }
+    .wms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 30px; }
+    .wms-card { 
+        background: white; 
+        border-radius: 8px; 
+        padding: 20px; 
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-left: 4px solid #0f62c9;
+    }
+    .wms-card h3 { margin-top: 0; color: #22313f; font-size: 14px; text-transform: uppercase; }
+    .wms-card .valor { font-size: 32px; font-weight: bold; color: #0f62c9; }
+    .wms-card .unidade { font-size: 12px; color: #666; margin-top: 5px; }
+    
+    .wms-section { margin-bottom: 30px; }
+    .wms-section-title { 
+        font-size: 16px; 
+        font-weight: 700; 
+        color: #22313f; 
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #0f62c9;
+    }
+    
+    .localizacoes-table { width: 100%; border-collapse: collapse; }
+    .localizacoes-table thead { background: #f4f7fb; }
+    .localizacoes-table th, .localizacoes-table td { 
+        padding: 12px 16px; 
+        text-align: left; 
+        font-size: 13px;
+    }
+    .localizacoes-table tbody tr:hover { background: #edf3f8; }
+    
+    .capacidade-bar { 
+        width: 100%; 
+        height: 8px; 
+        background: #ddd; 
+        border-radius: 4px; 
+        overflow: hidden;
+    }
+    .capacidade-fill { 
+        height: 100%; 
+        background: linear-gradient(90deg, #247a47 0%, #3d9c5f 100%);
+        transition: width 0.3s;
+    }
+    
+    .btn-modal { 
+        background: #0f62c9; 
+        color: white; 
+        border: none; 
+        padding: 10px 20px; 
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .btn-modal:hover { background: #0d52a8; }
+    
+    .modal { 
+        display: none; 
+        position: fixed; 
+        z-index: 3000; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        height: 100%; 
+        background: rgba(0,0,0,0.4);
+    }
+    .modal.show { display: flex; align-items: center; justify-content: center; }
+    .modal-content { 
+        background: white; 
+        padding: 30px; 
+        border-radius: 8px; 
+        width: 90%; 
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .modal-header { 
+        font-size: 16px; 
+        font-weight: 700; 
+        color: #22313f; 
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .modal-close { 
+        background: none; 
+        border: none; 
+        font-size: 24px; 
+        cursor: pointer; 
+        color: #999;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { 
+        display: block; 
+        font-size: 12px; 
+        font-weight: 600; 
+        color: #22313f;
+        margin-bottom: 6px;
+    }
+    .form-group input { 
+        width: 100%; 
+        padding: 10px 12px; 
+        border: 1px solid #ddd; 
+        border-radius: 4px;
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+    .form-group input:focus { 
+        outline: none; 
+        border-color: #0f62c9;
+        box-shadow: 0 0 0 2px rgba(15, 98, 201, 0.1);
+    }
+    
+    .btn-save { 
+        width: 100%; 
+        background: #247a47; 
+        color: white; 
+        border: none; 
+        padding: 12px; 
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    .btn-save:hover { background: #1f6738; }
+    
+    .loading { display: none; text-align: center; padding: 20px; }
+    .loading.show { display: block; }
+    .spinner { 
+        border: 3px solid #f3f3f3; 
+        border-top: 3px solid #0f62c9; 
+        border-radius: 50%; 
+        width: 30px; 
+        height: 30px; 
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    .mensagem { 
+        padding: 12px 16px; 
+        border-radius: 4px; 
+        margin-bottom: 16px;
+        font-size: 13px;
+    }
+    .mensagem.sucesso { 
+        background: #e3f2de; 
+        color: #1d5917;
+        border-left: 4px solid #247a47;
+    }
+    .mensagem.erro { 
+        background: #ffebee; 
+        color: #c62828;
+        border-left: 4px solid #d32f2f;
+    }
+    .mensagem.info { 
+        background: #e3f2fd; 
+        color: #0d47a1;
+        border-left: 4px solid #0f62c9;
+    }
+</style>
+
+<div class="wms-container">
+    <!-- Dashboard Resumo -->
+    <div class="wms-section">
+        <div class="wms-section-title">Dashboard do Armazém</div>
+        <div class="loading show" id="loadingDashboard">
+            <div class="spinner"></div>
+        </div>
+        <div class="wms-grid" id="dashboardGrid" style="display: none;">
+            <div class="wms-card">
+                <h3>Localizações Ativas</h3>
+                <div class="valor" id="locAativas">0</div>
+                <div class="unidade">de localizações no armazém</div>
+            </div>
+            <div class="wms-card">
+                <h3>Ocupação Média</h3>
+                <div class="valor" id="ocupacaoMedia">0%</div>
+                <div class="unidade">capacidade utilizada</div>
+            </div>
+            <div class="wms-card">
+                <h3>Itens Armazenados</h3>
+                <div class="valor" id="itensArmazenados">0</div>
+                <div class="unidade">quantidade total</div>
+            </div>
+            <div class="wms-card">
+                <h3>SKUs Únicos</h3>
+                <div class="valor" id="skusUnicos">0</div>
+                <div class="unidade">códigos diferentes</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Localizações -->
+    <div class="wms-section">
+        <div class="wms-section-title">
+            Localizações do Armazém
+            <button class="btn-modal" style="float: right; margin-top: -5px;" onclick="abrirModalLocalizacao()">
+                <i class="fas fa-plus"></i> Nova Localização
+            </button>
+        </div>
+        <div style="clear: both;"></div>
+        
+        <div class="loading show" id="loadingLocalizacoes">
+            <div class="spinner"></div>
+        </div>
+        
+        <table class="localizacoes-table" id="localizacoesTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Corredor</th>
+                    <th>Prateleira</th>
+                    <th>Posição</th>
+                    <th>Capacidade</th>
+                    <th>Ocupação</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="localizacoesBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Nova Localização -->
+<div class="modal" id="modalLocalizacao">
+    <div class="modal-content">
+        <div class="modal-header">
+            Criar Nova Localização
+            <button class="modal-close" onclick="fecharModalLocalizacao()">×</button>
+        </div>
+        
+        <div id="mensagemModal"></div>
+        
+        <form onsubmit="salvarLocalizacao(event)">
+            <div class="form-group">
+                <label>Corredor (ex: C1)</label>
+                <input type="text" id="inputCorredor" placeholder="C1" required>
+            </div>
+            <div class="form-group">
+                <label>Prateleira (ex: P1)</label>
+                <input type="text" id="inputPrateleira" placeholder="P1" required>
+            </div>
+            <div class="form-group">
+                <label>Posição (ex: 1)</label>
+                <input type="text" id="inputPosicao" placeholder="1" required>
+            </div>
+            <div class="form-group">
+                <label>Capacidade Máxima (kg/unidades)</label>
+                <input type="number" id="inputCapacidade" placeholder="100" value="100" step="0.1" required>
+            </div>
+            <button type="submit" class="btn-save">Criar Localização</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function abrirModalLocalizacao() {
+    document.getElementById('modalLocalizacao').classList.add('show');
+    document.getElementById('inputCorredor').focus();
+    limparMensagemModal();
+}
+
+function fecharModalLocalizacao() {
+    document.getElementById('modalLocalizacao').classList.remove('show');
+    document.getElementById('inputCorredor').value = '';
+    document.getElementById('inputPrateleira').value = '';
+    document.getElementById('inputPosicao').value = '';
+    document.getElementById('inputCapacidade').value = '100';
+}
+
+function limparMensagemModal() {
+    document.getElementById('mensagemModal').innerHTML = '';
+}
+
+async function salvarLocalizacao(event) {
+    event.preventDefault();
+    
+    const corredor = document.getElementById('inputCorredor').value.trim();
+    const prateleira = document.getElementById('inputPrateleira').value.trim();
+    const posicao = document.getElementById('inputPosicao').value.trim();
+    const capacidade = parseFloat(document.getElementById('inputCapacidade').value);
+    
+    if (!corredor || !prateleira || !posicao) {
+        mostrarMensagemModal('Preencha todos os campos obrigatórios.', 'erro');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/wms/localizacoes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                corredor: corredor,
+                prateleira: prateleira,
+                posicao: posicao,
+                capacidade_maxima: capacidade
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            mostrarMensagemModal(`Localização ${data.codigo} criada com sucesso!`, 'sucesso');
+            setTimeout(() => {
+                fecharModalLocalizacao();
+                carregarLocalizacoes();
+            }, 1500);
+        } else {
+            mostrarMensagemModal(data.erro || 'Erro ao criar localização', 'erro');
+        }
+    } catch (erro) {
+        mostrarMensagemModal('Erro de conexão: ' + erro.message, 'erro');
+    }
+}
+
+function mostrarMensagemModal(mensagem, tipo) {
+    const div = document.getElementById('mensagemModal');
+    div.innerHTML = `<div class="mensagem ${tipo}">${mensagem}</div>`;
+}
+
+async function carregarDashboard() {
+    const loading = document.getElementById('loadingDashboard');
+    const grid = document.getElementById('dashboardGrid');
+    
+    try {
+        const response = await fetch('/api/wms/dashboard');
+        if (!response.ok) throw new Error('Erro ao carregar dashboard');
+        
+        const data = await response.json();
+        
+        document.getElementById('locAativas').textContent = data.resumo.localizacoes_ativas;
+        document.getElementById('ocupacaoMedia').textContent = data.resumo.ocupacao_media.toFixed(1) + '%';
+        document.getElementById('itensArmazenados').textContent = Math.round(data.resumo.qtd_itens_armazenados);
+        document.getElementById('skusUnicos').textContent = data.resumo.skus_unicos;
+        
+        loading.style.display = 'none';
+        grid.style.display = 'grid';
+    } catch (erro) {
+        console.error('Erro:', erro);
+        loading.innerHTML = '<div class="mensagem erro">Erro ao carregar dashboard</div>';
+    }
+}
+
+async function carregarLocalizacoes() {
+    const loading = document.getElementById('loadingLocalizacoes');
+    const table = document.getElementById('localizacoesTable');
+    const tbody = document.getElementById('localizacoesBody');
+    
+    tbody.innerHTML = '';
+    
+    try {
+        const response = await fetch('/api/wms/localizacoes');
+        if (!response.ok) throw new Error('Erro ao carregar localizações');
+        
+        const localizacoes = await response.json();
+        
+        localizacoes.forEach(loc => {
+            const ocupacao = loc.ocupacao_percentual;
+            const linha = document.createElement('tr');
+            linha.innerHTML = `
+                <td><strong>${loc.codigo}</strong></td>
+                <td>${loc.corredor}</td>
+                <td>${loc.prateleira}</td>
+                <td>${loc.posicao}</td>
+                <td>${loc.capacidade_maxima.toFixed(1)}</td>
+                <td>
+                    <div class="capacidade-bar">
+                        <div class="capacidade-fill" style="width: ${ocupacao}%"></div>
+                    </div>
+                    <small>${ocupacao.toFixed(1)}% (${loc.capacidade_atual.toFixed(1)}/${loc.capacidade_maxima.toFixed(1)})</small>
+                </td>
+                <td>
+                    <button class="btn-modal" onclick="verEstoqueLocalizacao(${loc.id}, '${loc.codigo}')" style="font-size: 11px; padding: 6px 12px;">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(linha);
+        });
+        
+        loading.style.display = 'none';
+        table.style.display = 'table';
+    } catch (erro) {
+        console.error('Erro:', erro);
+        loading.innerHTML = '<div class="mensagem erro">Erro ao carregar localizações</div>';
+    }
+}
+
+function verEstoqueLocalizacao(locId, codigo) {
+    alert(`Estoque da localização ${codigo} - em desenvolvimento`);
+}
+
+// Carrega ao iniciar página
+document.addEventListener('DOMContentLoaded', () => {
+    carregarDashboard();
+    carregarLocalizacoes();
+});
+
+// Recarrega a cada 2 minutos
+setInterval(carregarDashboard, 120000);
+setInterval(carregarLocalizacoes, 120000);
+</script>
+{% endblock %}

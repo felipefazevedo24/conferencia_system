@@ -48,6 +48,12 @@ def historico_page():
     return render_template("historico.html", user=session["username"])
 
 
+@page_bp.route("/wms")
+@roles_required("Admin")
+def wms_page():
+    return render_template("wms.html", user=session["username"])
+
+
 @page_bp.route("/expedicao/conferencia")
 @roles_required("Conferente", "Admin", "Fiscal")
 def expedicao_conferencia_page():

@@ -158,6 +158,12 @@ def _ensure_item_nota_columns() -> None:
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         db.create_all()
+        
+        # Criar tabelas WMS se não existirem
+        try:
+            _ensure_wms_tables()
+        except Exception:
+            pass
 
         if not Usuario.query.filter_by(username="admin").first():
             admin = Usuario(
@@ -173,3 +179,142 @@ def initialize_database(app: Flask) -> None:
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
             pass
+
+
+def _ensure_wms_tables() -> None:
+    """Garante que as tabelas WMS existam no banco de dados"""
+    conn = db.engine.connect()
+    try:
+        # Tabela localizacao_armazem
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS localizacao_armazem (
+                    id INTEGER PRIMARY KEY,
+                    codigo VARCHAR(50) UNIQUE NOT NULL,
+                    corredor VARCHAR(10) NOT NULL,
+                    prateleira VARCHAR(10) NOT NULL,
+                    posicao VARCHAR(10) NOT NULL,
+                    capacidade_maxima FLOAT NOT NULL DEFAULT 100.0,
+                    capacidade_atual FLOAT NOT NULL DEFAULT 0.0,
+                    ativo BOOLEAN NOT NULL DEFAULT 1,
+                    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        conn.commit()
+        
+        # Create indexes for localizacao_armazem
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_localizacao_armazem_codigo ON localizacao_armazem (codigo)"
+        ))
+        conn.commit()
+        
+        # Tabela item_wms
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS item_wms (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) NOT NULL,
+                    chave_acesso VARCHAR(44),
+                    fornecedor VARCHAR(100),
+                    codigo_item VARCHAR(50) NOT NULL,
+                    descricao VARCHAR(200),
+                    qtd_recebida FLOAT NOT NULL,
+                    qtd_atual FLOAT NOT NULL,
+                    unidade VARCHAR(20),
+                    lote VARCHAR(50),
+                    data_validade DATE,
+                    localizacao_id INTEGER,
+                    usuario_armazenamento VARCHAR(100),
+                    data_armazenamento DATETIME,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Armazenado',
+                    ativo BOOLEAN NOT NULL DEFAULT 1,
+                    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        
+        # Create indexes for item_wms
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_item_wms_numero_nota ON item_wms (numero_nota)"
+        ))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_item_wms_codigo_item ON item_wms (codigo_item)"
+        ))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_item_wms_localizacao_id ON item_wms (localizacao_id)"
+        ))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_item_wms_status ON item_wms (status)"
+        ))
+        conn.commit()
+        
+        # Tabela movimentacao_wms
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS movimentacao_wms (
+                    id INTEGER PRIMARY KEY,
+                    item_wms_id INTEGER NOT NULL,
+                    numero_nota VARCHAR(20) NOT NULL,
+                    tipo_movimentacao VARCHAR(30) NOT NULL,
+                    localizacao_origem_id INTEGER,
+                    localizacao_destino_id INTEGER,
+                    qtd_movimentada FLOAT NOT NULL,
+                    motivo VARCHAR(300),
+                    usuario VARCHAR(100) NOT NULL,
+                    data_movimentacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (item_wms_id) REFERENCES item_wms(id),
+                    FOREIGN KEY (localizacao_origem_id) REFERENCES localizacao_armazem(id),
+                    FOREIGN KEY (localizacao_destino_id) REFERENCES localizacao_armazem(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        
+        # Create indexes for movimentacao_wms
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_movimentacao_wms_item_wms_id ON movimentacao_wms (item_wms_id)"
+        ))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_movimentacao_wms_numero_nota ON movimentacao_wms (numero_nota)"
+        ))
+        conn.commit()
+        
+        # Tabela estoque_wms
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS estoque_wms (
+                    id INTEGER PRIMARY KEY,
+                    codigo_item VARCHAR(50) NOT NULL,
+                    localizacao_id INTEGER NOT NULL,
+                    qtd_total FLOAT NOT NULL DEFAULT 0.0,
+                    qtd_separada FLOAT NOT NULL DEFAULT 0.0,
+                    data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (codigo_item, localizacao_id),
+                    FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        
+        # Create indexes for estoque_wms
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_estoque_wms_codigo_item ON estoque_wms (codigo_item)"
+        ))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_estoque_wms_localizacao_id ON estoque_wms (localizacao_id)"
+        ))
+        conn.commit()
+        
+    finally:
+        conn.close()
