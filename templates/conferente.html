@@ -797,6 +797,8 @@
         await carregarNotas();
     }
 
+// teste
+
     async function garantirChecklistInicial(nota) {
         const res = await fetch(`/api/checklist/${encodeURIComponent(nota)}`);
         const data = await res.json();
