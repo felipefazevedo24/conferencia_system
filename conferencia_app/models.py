@@ -288,6 +288,7 @@ class ItemWMS(db.Model):
     usuario_armazenamento = db.Column(db.String(100))
     data_armazenamento = db.Column(db.DateTime)
     status = db.Column(db.String(20), nullable=False, default="Armazenado", index=True)  # Armazenado|Separado|Enviado
+    deposito_id = db.Column(db.Integer, db.ForeignKey("deposito_wms.id"), index=True)  # DEP 01, 02, 03, CLIENTE, TERCEIROS
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
@@ -385,3 +386,13 @@ class WMSAlertaOperacional(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Aberto", index=True)  # Aberto|Resolvido
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
     resolvido_em = db.Column(db.DateTime)
+
+
+class DepositoWMS(db.Model):
+    """Depósitos fixos para armazenagem: DEP 01, 02, 03, CLIENTE, TERCEIROS"""
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(30), unique=True, nullable=False, index=True)  # Ex: DEP_01, DEP_02, DEP_03, CLIENTE, TERCEIROS
+    nome = db.Column(db.String(100), nullable=False)  # Ex: "DEP 01 - Almoxarifado"
+    descricao = db.Column(db.String(300))
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)

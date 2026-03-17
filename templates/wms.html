@@ -250,6 +250,32 @@
     </div>
 </section>
 
+<section class="sap-card">
+    <h2 class="sap-card-title"><i class="fas fa-exchange-alt"></i> Transferência entre Depósitos</h2>
+    <p class="muted" style="margin-bottom: 15px;"><i class="fas fa-info-circle"></i> Transfere um item para outro depósito. O item ficará pendente de endereçamento no novo depósito.</p>
+    <div class="sap-row">
+        <input id="filtroItemTransf" class="sap-input" placeholder="Filtrar por NF ou SKU..." />
+        <button class="sap-btn primary" onclick="carregarItensParaTransferencia()"><i class="fas fa-search"></i> Buscar</button>
+    </div>
+    <div class="table-wrap">
+        <table class="sap-table">
+            <thead>
+                <tr>
+                    <th>NF</th>
+                    <th>SKU</th>
+                    <th>Descrição</th>
+                    <th>Qtd</th>
+                    <th>Depósito Atual</th>
+                    <th style="text-align:center;">Ação</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyItensTransf">
+                <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">Aguardando busca...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
 <div id="modalEndereco" class="modal-backdrop-wms">
     <div class="modal-box">
         <div class="modal-head">
@@ -295,6 +321,36 @@
                     <button class="sap-btn" onclick="fecharModalEndereco()">Cancelar</button>
                     <button class="sap-btn primary" onclick="confirmarEnderecamento()"><i class="fas fa-check"></i> Confirmar</button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modalTransferencia" class="modal-backdrop-wms">
+    <div class="modal-box">
+        <div class="modal-head">
+            <strong><i class="fas fa-exchange-alt"></i> Transferir Item entre Depósitos</strong>
+            <button class="modal-close" onclick="fecharModalTransferencia()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:15px; color:var(--text-muted); font-size:12px;"><strong id="transfItemInfo"></strong></p>
+            <div class="sap-row">
+                <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase; width:100%; margin-bottom:8px;">Depósito Destino</label>
+                <select id="selectDepositoDestino" class="sap-select" style="width:100%;">
+                    <option value="">-- Selecione um depósito --</option>
+                </select>
+            </div>
+            <div class="sap-row">
+                <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase; width:100%; margin-bottom:8px;">Motivo (Opcional)</label>
+                <input id="inputMotivoTransf" class="sap-input" placeholder="Ex: Separação, Reposicionamento..." style="width:100%" />
+            </div>
+            <p id="msgErroTransf" style="color:#d32f2f; margin:10px 0; display:none;"></p>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <p class="muted" style="margin:0;">Item será marcado como pendente de endereçamento no novo depósito.</p>
+            <div style="display:flex; gap:10px;">
+                <button class="sap-btn" onclick="fecharModalTransferencia()">Cancelar</button>
+                <button class="sap-btn primary" onclick="confirmarTransferencia()"><i class="fas fa-exchange-alt"></i> Transferir</button>
             </div>
         </div>
     </div>
@@ -576,6 +632,122 @@ async function processarFilaIntegracao() {
         await carregarGovernancaWms();
     } catch (err) {
         alert(err.message);
+    }
+}
+
+// ============================================================================
+// FUNÇÕES DE TRANSFERÊNCIA ENTRE DEPÓSITOS
+// ============================================================================
+
+let itemTransferSelected = null;
+
+async function carregarItensParaTransferencia() {
+    const filtro = document.getElementById('filtroItemTransf').value.trim();
+    const tbody = document.getElementById('tbodyItensTransf');
+    
+    if (!filtro) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Informe um filtro para buscar.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Buscando...</td></tr>';
+
+    try {
+        const itens = await fetchJson(`/api/wms/itens-armazenados?filtro=${encodeURIComponent(filtro)}`);
+        
+        tbody.innerHTML = '';
+        if (!itens || !itens.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum item encontrado.</td></tr>';
+            return;
+        }
+
+        itens.forEach((item) => {
+            const tr = document.createElement('tr');
+            const depositoNome = item.deposito_nome || `DEP ${item.deposito_id || '?'}`;
+            tr.innerHTML = `
+                <td><strong>${item.numero_nota}</strong></td>
+                <td style="color:var(--sap-blue); font-weight:700;">${item.codigo_item}</td>
+                <td>${item.descricao || '-'}</td>
+                <td>${item.qtd_atual || 0}</td>
+                <td><span class="pill">${depositoNome}</span></td>
+                <td style="text-align:center;"><button class="sap-btn" style="padding:6px 10px; font-size:10px;" onclick="abrirModalTransferencia(${item.id}, '${item.numero_nota}', '${item.codigo_item}', '${depositoNome}')"><i class="fas fa-exchange-alt"></i> Transferir</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:#d32f2f;">Erro: ${err.message}</td></tr>`;
+    }
+}
+
+async function abrirModalTransferencia(itemId, nota, sku, depositoAtual) {
+    itemTransferSelected = itemId;
+    document.getElementById('transfItemInfo').textContent = `NF: ${nota} | SKU: ${sku} | Depósito Atual: ${depositoAtual}`;
+    document.getElementById('inputMotivoTransf').value = '';
+    document.getElementById('msgErroTransf').style.display = 'none';
+    
+    // Carregar depósitos disponíveis
+    try {
+        const depositos = await fetchJson('/api/wms/depositos');
+        const select = document.getElementById('selectDepositoDestino');
+        select.innerHTML = '<option value="">-- Selecione um depósito --</option>';
+        depositos.forEach((dep) => {
+            const opt = document.createElement('option');
+            opt.value = dep.id;
+            opt.textContent = `${dep.codigo} - ${dep.nome}`;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        document.getElementById('msgErroTransf').textContent = 'Erro ao carregar depósitos';
+        document.getElementById('msgErroTransf').style.display = 'block';
+    }
+    
+    document.getElementById('modalTransferencia').classList.add('show');
+}
+
+function fecharModalTransferencia() {
+    document.getElementById('modalTransferencia').classList.remove('show');
+    itemTransferSelected = null;
+}
+
+async function confirmarTransferencia() {
+    if (!itemTransferSelected) {
+        toast('Nenhum item selecionado', 'err');
+        return;
+    }
+
+    const depositoDestino = document.getElementById('selectDepositoDestino').value;
+    const motivo = document.getElementById('inputMotivoTransf').value.trim();
+    const msgErr = document.getElementById('msgErroTransf');
+    msgErr.style.display = 'none';
+
+    if (!depositoDestino) {
+        msgErr.textContent = 'Selecione um depósito destino';
+        msgErr.style.display = 'block';
+        return;
+    }
+
+    try {
+        const resultado = await fetchJson('/api/wms/transferir-deposito', {
+            method: 'POST',
+            body: {
+                item_wms_id: itemTransferSelected,
+                deposito_destino_id: parseInt(depositoDestino),
+                motivo: motivo || null
+            }
+        });
+
+        if (resultado.sucesso) {
+            toast(resultado.mensagem || 'Transferência realizada com sucesso', 'ok');
+            fecharModalTransferencia();
+            carregarItensParaTransferencia();
+            refreshAll();
+        } else {
+            msgErr.textContent = resultado.erro || 'Erro ao transferir';
+            msgErr.style.display = 'block';
+        }
+    } catch (err) {
+        msgErr.textContent = `Erro: ${err.message}`;
+        msgErr.style.display = 'block';
     }
 }
 

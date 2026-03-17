@@ -15,6 +15,7 @@ from ..models import (
     WMSParametroOperacional,
     WMSReconciliacaoDivergencia,
     WMSAlertaOperacional,
+    DepositoWMS,
 )
 
 
@@ -403,6 +404,69 @@ class WMSService:
             })
             
         return resultado
+
+    @staticmethod
+    def transferir_entre_depositos(item_wms_id, deposito_destino_id, usuario, motivo=None):
+        """
+        Transfere um item de um depósito para outro.
+        Limpa a localização e marca como Pendente Enderecamento no novo depósito.
+        Registra a movimentação no histórico.
+        
+        Args:
+            item_wms_id: ID do item WMS
+            deposito_destino_id: ID do depósito de destino
+            usuario: Usuário que realiza a transferência
+            motivo: Motivo da transferência (opcional)
+            
+        Returns:
+            dict com sucesso/erro e detalhes
+        """
+        item = ItemWMS.query.get(item_wms_id)
+        if not item:
+            return {'sucesso': False, 'erro': 'Item WMS não encontrado'}
+        
+        deposito_dest = DepositoWMS.query.get(deposito_destino_id)
+        if not deposito_dest:
+            return {'sucesso': False, 'erro': 'Depósito destino não encontrado'}
+        
+        if not deposito_dest.ativo:
+            return {'sucesso': False, 'erro': 'Depósito destino inativo'}
+        
+        # Se já está no mesmo depósito, apenas retorna sucesso
+        if item.deposito_id == deposito_destino_id:
+            return {'sucesso': True, 'mensagem': 'Item já está neste depósito'}
+        
+        # Registrar movimentação no histórico
+        deposito_origem_id = item.deposito_id
+        localizacao_origem_id = item.localizacao_id
+        
+        movimentacao = MovimentacaoWMS(
+            item_wms_id=item_wms_id,
+            numero_nota=item.numero_nota,
+            tipo_movimentacao='Transferencia Deposito',
+            localizacao_origem_id=localizacao_origem_id,
+            localizacao_destino_id=None,  # Será endereçado depois no novo depósito
+            qtd_movimentada=item.qtd_atual,
+            motivo=motivo if motivo else f'Transferência DEP {deposito_origem_id} -> {deposito_destino_id}',
+            usuario=usuario,
+            data_movimentacao=datetime.now()
+        )
+        
+        # Atualizar item: novo depósito, limpar localização, marcar como pendente
+        item.deposito_id = deposito_destino_id
+        item.localizacao_id = None  # Será endereçado no novo depósito
+        item.status = 'Pendente Enderecamento'
+        
+        db.session.add(movimentacao)
+        db.session.commit()
+        
+        return {
+            'sucesso': True,
+            'mensagem': 'Transferência realizada. Item pendente de endereçamento no novo depósito.',
+            'item_id': item_wms_id,
+            'deposito_origem': deposito_origem_id,
+            'deposito_destino': deposito_destino_id,
+        }
 
     @staticmethod
     def obter_estoque_por_localizacao(localizacao_id):

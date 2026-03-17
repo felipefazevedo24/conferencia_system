@@ -17,6 +17,7 @@ from ..models import (
     WMSReconciliacaoDivergencia,
     WMSSkuMestre,
     WMSIntegracaoEvento,
+    DepositoWMS,
 )
 from ..services import WMSService
 
@@ -635,6 +636,113 @@ def upsert_sku_mestre():
 
     db.session.commit()
     return jsonify({'sucesso': True, 'id': registro.id}), 200
+
+
+# ============================================================================
+# ITENS ARMAZENADOS
+# ============================================================================
+
+@wms_bp.route('/itens-armazenados', methods=['GET'])
+@requer_wms_operacao
+def listar_itens_armazenados():
+    """Lista itens armazenados com opção de filtro por NF ou SKU"""
+    filtro = (request.args.get('filtro') or '').strip().lower()
+    
+    query = ItemWMS.query.filter_by(ativo=True).filter(
+        ItemWMS.status.in_(['Armazenado', 'Pendente Enderecamento'])
+    )
+    
+    if filtro:
+        from sqlalchemy import or_
+        query = query.filter(
+            or_(
+                func.lower(ItemWMS.numero_nota).contains(filtro),
+                func.lower(ItemWMS.codigo_item).contains(filtro)
+            )
+        )
+    
+    itens = query.order_by(ItemWMS.data_criacao.desc()).limit(50).all()
+    
+    resultado = []
+    for item in itens:
+        deposito_nome = 'N/A'
+        if item.deposito_id:
+            dep = DepositoWMS.query.get(item.deposito_id)
+            if dep:
+                deposito_nome = dep.nome
+        
+        resultado.append({
+            'id': item.id,
+            'numero_nota': item.numero_nota,
+            'codigo_item': item.codigo_item,
+            'descricao': item.descricao,
+            'qtd_atual': item.qtd_atual,
+            'deposito_id': item.deposito_id,
+            'deposito_nome': deposito_nome,
+            'status': item.status,
+        })
+    
+    return jsonify(resultado), 200
+
+@requer_wms_operacao
+def transferir_item_entre_depositos():
+    """
+    Transfere um item entre depósitos.
+    Apenas GERÊNCIA ou quem tem permissão TRANSFERIR_DEPOSITO pode fazer.
+    
+    POST Body:
+    {
+        'item_wms_id': 123,
+        'deposito_destino_id': 2,
+        'motivo': 'Separação para pedido'  # opcional
+    }
+    """
+    from ..auth import pode_executar_acao
+    
+    # Verificar permissão: GERÊNCIA ou TRANSFERIR_DEPOSITO
+    usuario_role = session.get('role', '')
+    usuario = session.get('username', 'Sistema')
+    
+    if usuario_role != 'Gerência' and not pode_executar_acao(usuario, 'TRANSFERIR_DEPOSITO'):
+        return jsonify({'erro': 'Apenas GERÊNCIA ou usuários com permissão especial podem transferir.'}), 403
+    
+    data = request.get_json() or {}
+    item_wms_id = data.get('item_wms_id')
+    deposito_destino_id = data.get('deposito_destino_id')
+    motivo = (data.get('motivo') or '').strip()
+    
+    if not item_wms_id or not deposito_destino_id:
+        return jsonify({'erro': 'Campos obrigatórios: item_wms_id, deposito_destino_id'}), 400
+    
+    resultado = WMSService.transferir_entre_depositos(
+        item_wms_id=item_wms_id,
+        deposito_destino_id=deposito_destino_id,
+        usuario=usuario,
+        motivo=motivo if motivo else None
+    )
+    
+    if not resultado.get('sucesso'):
+        return jsonify({'erro': resultado.get('erro')}), 400
+    
+    return jsonify(resultado), 200
+
+
+@wms_bp.route('/depositos', methods=['GET'])
+@requer_wms_operacao
+def listar_depositos():
+    """Lista todos os depósitos ativos"""
+    from ..models import DepositoWMS
+    depositos = DepositoWMS.query.filter_by(ativo=True).order_by(DepositoWMS.codigo).all()
+    
+    return jsonify([
+        {
+            'id': d.id,
+            'codigo': d.codigo,
+            'nome': d.nome,
+            'descricao': d.descricao,
+        }
+        for d in depositos
+    ]), 200
 
 
 def registrar_rotas_wms(app):

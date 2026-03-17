@@ -2,7 +2,7 @@ from flask import Flask
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
-from .models import Usuario
+from .models import Usuario, DepositoWMS
 
 
 def _ensure_item_nota_columns() -> None:
@@ -248,6 +248,9 @@ def initialize_database(app: Flask) -> None:
             db.session.add(admin)
             db.session.commit()
 
+        # Criar 5 depósitos fixos se não existirem
+        _ensure_depositos_wms()
+
         try:
             _ensure_item_nota_columns()
         except Exception:
@@ -255,10 +258,57 @@ def initialize_database(app: Flask) -> None:
             pass
 
 
+def _ensure_depositos_wms() -> None:
+    """Cria os 5 depósitos fixos se não existirem"""
+    depositos = [
+        ('DEP_01', 'DEP 01 - Almoxarifado', 'Depósito principal de recebimento e almoxarifado'),
+        ('DEP_02', 'DEP 02', 'Depósito secundário'),
+        ('DEP_03', 'DEP 03', 'Depósito terciário'),
+        ('CLIENTE', 'MATERIAL CLIENTE', 'Área de materiais do cliente'),
+        ('TERCEIROS', 'MATERIAL TERCEIROS', 'Área de materiais em poder de terceiros'),
+    ]
+    
+    for codigo, nome, descricao in depositos:
+        existe = DepositoWMS.query.filter_by(codigo=codigo).first()
+        if not existe:
+            novo_deposito = DepositoWMS(
+                codigo=codigo,
+                nome=nome,
+                descricao=descricao,
+                ativo=True,
+            )
+            db.session.add(novo_deposito)
+    
+    db.session.commit()
+
+
 def _ensure_wms_tables() -> None:
     """Garante que as tabelas WMS existam no banco de dados"""
     conn = db.engine.connect()
     try:
+        # Tabela deposito_wms
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS deposito_wms (
+                    id INTEGER PRIMARY KEY,
+                    codigo VARCHAR(30) UNIQUE NOT NULL,
+                    nome VARCHAR(100) NOT NULL,
+                    descricao VARCHAR(300),
+                    ativo BOOLEAN NOT NULL DEFAULT 1,
+                    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        conn.commit()
+        
+        # Create indexes for deposito_wms
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS ix_deposito_wms_codigo ON deposito_wms (codigo)"
+        ))
+        conn.commit()
+
         # Tabela localizacao_armazem
         conn.execute(
             db.text(
@@ -354,6 +404,10 @@ def _ensure_wms_tables() -> None:
             conn.commit()
         if "ordem_compra" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN ordem_compra VARCHAR(80)"))
+            conn.commit()
+        if "deposito_id" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN deposito_id INTEGER"))
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_item_wms_deposito_id ON item_wms (deposito_id)"))
             conn.commit()
         
         # Tabela movimentacao_wms
