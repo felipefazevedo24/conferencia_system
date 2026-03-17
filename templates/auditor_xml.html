@@ -1,0 +1,748 @@
+{% extends "base.html" %}
+
+{% block title %}Compras | Auditor XML{% endblock %}
+
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    :root {
+        --sap-blue: #2563eb;
+        --sap-hover: #1d4ed8;
+        --erp-bg: #f8fafc;
+        --border-color: #e2e8f0;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --success-erp: #10b981;
+        --danger-erp: #ef4444;
+        --warning-erp: #f59e0b;
+        --radius: 12px;
+    }
+
+    body { 
+        background-color: var(--erp-bg); 
+        color: var(--text-main); 
+        font-family: 'Inter', sans-serif; 
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .wrap { padding: 30px; max-width: 1600px; margin: 0 auto; }
+
+    /* Header Estilizado */
+    .header {
+        background: #fff; 
+        border: 1px solid var(--border-color); 
+        border-radius: var(--radius); 
+        box-shadow: var(--card-shadow); 
+        padding: 24px; 
+        margin-bottom: 24px;
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center;
+        transition: transform 0.2s;
+    }
+    .header h1 { 
+        margin: 0; 
+        font-size: 22px; 
+        font-weight: 800; 
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .header h1 i { color: var(--sap-blue); }
+    .header p { margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px; }
+
+    /* Botões Modernos */
+    .btn {
+        border: 1px solid var(--border-color); 
+        background: #fff; 
+        color: #475569;
+        border-radius: 8px; 
+        padding: 10px 18px; 
+        font-size: 13px; 
+        font-weight: 600;
+        cursor: pointer; 
+        text-decoration: none; 
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex; 
+        align-items: center; 
+        gap: 8px;
+    }
+    .btn:hover { background: #f1f5f9; border-color: #cbd5e1; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    
+    .btn.primary { background: var(--sap-blue); color: #fff; border: none; }
+    .btn.primary:hover { background: var(--sap-hover); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+    
+    .btn.success { background: var(--success-erp); color: #fff; border: none; }
+    .btn.success:hover { background: #059669; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+
+    .btn.warning { background: var(--warning-erp); color: #fff; border: none; }
+    .btn.warning:hover { background: #d97706; }
+
+    /* Layout em Grid */
+    .layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: start; }
+
+    /* Cards */
+    .card {
+        background: #fff; 
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius); 
+        box-shadow: var(--card-shadow); 
+        padding: 24px;
+    }
+    .card h3 {
+        margin: 0 0 20px 0; 
+        font-size: 15px; 
+        color: var(--text-main);
+        font-weight: 700; 
+        display: flex; 
+        align-items: center; 
+        gap: 10px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    /* Inputs */
+    .input {
+        border: 1px solid #cbd5e1; 
+        border-radius: 8px; 
+        padding: 11px 14px; 
+        width: 100%; 
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+    .input:focus { 
+        border-color: var(--sap-blue); 
+        outline: none; 
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); 
+    }
+
+    /* Tabelas */
+    .table-wrap { border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; padding: 14px; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; text-align: left; letter-spacing: 0.5px; }
+    td { padding: 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    /* Badges */
+    .badge { 
+        display: inline-flex; 
+        padding: 4px 10px; 
+        border-radius: 6px; 
+        font-size: 11px; 
+        font-weight: 700; 
+        text-transform: uppercase; 
+    }
+    .b-pendente { background: #fffbeb; color: #92400e; border: 1px solid #fef3c7; }
+    .b-ok { background: #f0fdf4; color: #166534; border: 1px solid #dcfce7; }
+    .b-inc { background: #fef2f2; color: #991b1b; border: 1px solid #fee2e2; }
+    .b-dec-ok { background: #ecfdf5; color: #166534; border: 1px solid #86efac; }
+    .b-dec-no { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    /* Detalhes */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .box { 
+        border: 1px solid #f1f5f9; 
+        border-radius: 10px; 
+        padding: 12px; 
+        background: #fbfcfd; 
+        transition: all 0.2s;
+    }
+    .box:hover { border-color: #e2e8f0; }
+    .box label { display: block; font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
+    .box span { font-size: 14px; font-weight: 600; color: var(--text-main); }
+
+    .inconsistencias { 
+        border-left: 4px solid var(--danger-erp); 
+        background: #fff1f2; 
+        border-radius: 8px; 
+        padding: 16px; 
+        margin: 15px 0; 
+    }
+
+    .pedido-result {
+        display: none;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-top: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        border-left: 4px solid;
+    }
+    .pedido-result.ok  { background: #f0fdf4; color: #166534; border-left-color: var(--success-erp); }
+    .pedido-result.err { background: #fef2f2; color: #991b1b; border-left-color: var(--danger-erp); }
+    .pedido-result.warn{ background: #fffbeb; color: #92400e; border-left-color: var(--warning-erp); }
+
+    .po-compare-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+    .po-compare-table th { background: #f1f5f9; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; }
+    .po-compare-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+    .po-compare-table tr:last-child td { border-bottom: none; }
+    .po-compare-table .line-ok  { color: #166534; font-weight: 700; }
+    .po-compare-table .line-err { color: #991b1b; font-weight: 700; }
+    .po-compare-table .line-na  { color: #94a3b8; }
+    .inconsistencias b { color: #991b1b; font-size: 14px; }
+    .inconsistencias ul { margin: 10px 0 0 20px; color: #b91c1c; }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+    .actions .btn:last-child { grid-column: span 2; }
+
+    /* Mensagens de Feedback */
+    .msg { 
+        display: none; 
+        margin-bottom: 20px; 
+        border-radius: 10px; 
+        padding: 14px 20px; 
+        font-weight: 600; 
+        animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .msg.err { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        padding: 32px 36px;
+        max-width: 420px;
+        width: 90%;
+        text-align: center;
+        animation: modalIn 0.18s ease-out;
+    }
+    @keyframes modalIn { from { transform: scale(0.93); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-card .modal-icon { font-size: 36px; color: var(--warning-erp); margin-bottom: 16px; }
+    .modal-card h4 { margin: 0 0 8px; font-size: 17px; font-weight: 800; color: var(--text-main); }
+    .modal-card p  { margin: 0 0 24px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wrap">
+    <div class="header">
+        <div>
+            <h1><i class="fas fa-clipboard-check"></i> Auditor de Compras</h1>
+            <p>Gerenciamento fiscal e validação de Notas Fiscais importadas.</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <a class="btn" href="/upload"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
+            <button class="btn primary" onclick="carregarNotas()"><i class="fas fa-sync"></i> Sincronizar</button>
+        </div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+    <div id="modalOverlay" class="modal-overlay">
+        <div class="modal-card">
+            <i class="fas fa-exclamation-triangle modal-icon"></i>
+            <h4>Confirmar ação</h4>
+            <p id="confirmText"></p>
+            <div class="modal-actions">
+                <button class="btn success" type="button" onclick="responderConfirmacao(true)"><i class="fas fa-check"></i> Confirmar</button>
+                <button class="btn" type="button" onclick="responderConfirmacao(false)"><i class="fas fa-times"></i> Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="diagOverlay" class="modal-overlay">
+        <div class="modal-card" style="max-width: 760px; text-align:left;">
+            <i class="fas fa-triangle-exclamation modal-icon" style="color:#ef4444;"></i>
+            <h4 style="text-align:center;">Inconsistências no XML detectadas</h4>
+            <p style="text-align:center;">Revise os pontos abaixo e registre a decisão fiscal.</p>
+            <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid #fee2e2; border-radius:10px; background:#fff7f7; padding:12px;"></div>
+            <div style="margin-top:12px;">
+                <label for="diagJustificativa" style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Justificativa para recusa (mín. 5 caracteres)</label>
+                <textarea id="diagJustificativa" class="input" rows="3" style="resize:none;" placeholder="Descreva o motivo da recusa..."></textarea>
+            </div>
+            <div id="diagMsg" style="display:none; margin-top:10px; padding:10px 12px; border-radius:8px; font-size:12px; font-weight:700;"></div>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button class="btn success" type="button" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                <button class="btn" style="background:#fff1f2; color:#991b1b; border-color:#fecaca;" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                <button class="btn" type="button" onclick="fecharDiagnostico()"><i class="fas fa-xmark"></i> Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="layout">
+        <section class="card">
+            <h3><i class="fas fa-stream"></i> Fila de Auditoria</h3>
+            <div class="toolbar" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div style="position: relative; flex: 1;">
+                    <i class="fas fa-search" style="position: absolute; left: 12px; top: 14px; color: #94a3b8;"></i>
+                    <input id="filtro" class="input" style="padding-left: 35px;" placeholder="Pesquisar NF, fornecedor ou pedido..." oninput="renderNotas()" />
+                </div>
+                <button class="btn" onclick="carregarNotas()">Atualizar</button>
+            </div>
+            
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>NF / Data</th>
+                            <th>Fornecedor</th>
+                            <th>Status Auditoria</th>
+                            <th>Decisão Fiscal</th>
+                            <th>Status Fluxo</th>
+                            <th style="text-align:center;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyNotas">
+                        <tr><td colspan="6" style="text-align:center; padding: 40px; color: #94a3b8;">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i><br><br>Carregando registros...
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3><i class="fas fa-info-circle"></i> Detalhes da Operação</h3>
+            
+            <div id="detalheVazio" style="padding: 60px 20px; color:#94a3b8; text-align:center; border: 2px dashed #e2e8f0; border-radius: var(--radius);">
+                <i class="fas fa-mouse-pointer fa-3x" style="margin-bottom: 15px; opacity: 0.3;"></i>
+                <p>Selecione um registro na lista ao lado para iniciar a auditoria fiscal.</p>
+            </div>
+
+            <div id="detalheWrap" style="display:none;">
+                <div class="detail-grid">
+                    <div class="box"><label>Número NF</label><span id="dNota">---</span></div>
+                    <div class="box"><label>Status Fluxo</label><span id="dStatusFluxo">---</span></div>
+                    <div class="box"><label>Fornecedor</label><span id="dFornecedor">---</span></div>
+                    <div class="box"><label>Status Auditoria</label><span id="dStatusAuditoria">---</span></div>
+                    <div class="box"><label>CNPJ Destinatário</label><span id="dCnpjDestinatario">---</span></div>
+                    <div class="box"><label>Decisão Fiscal</label><span id="dDecisaoFiscal">---</span></div>
+                </div>
+
+                <div style="display: grid; gap: 15px;">
+                    <div class="box">
+                        <label>Pedido de Compra (Vínculo ERP)</label>
+                        <div style="display:flex; gap:8px; margin-top:5px;">
+                            <input id="pedidoCompra" class="input" placeholder="Ex: OC-2026-0000" />
+                            <button type="button" class="btn" style="white-space:nowrap;" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
+                        </div>
+                        <div id="pedidoResult" class="pedido-result"></div>
+                        <div id="pedidoCompareWrap" style="display:none; margin-top:10px; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
+                            <table class="po-compare-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Código</th>
+                                        <th>Descrição</th>
+                                        <th style="text-align:right;">Qtd NF</th>
+                                        <th style="text-align:right;">Qtd Pedido</th>
+                                        <th style="text-align:center;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyPoCompare"></tbody>
+                            </table>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
+                            <input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente (sem ordem de compra)
+                        </label>
+                    </div>
+                    <div class="box">
+                        <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
+                        <textarea id="justificativaFiscal" class="input" rows="2" style="margin-top: 5px; resize: none;" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+                    </div>
+                    <div class="box">
+                        <label>Observações do Auditor Fiscal</label>
+                        <textarea id="obsFiscal" class="input" rows="3" style="margin-top: 5px; resize: none;" placeholder="Descreva observações relevantes..."></textarea>
+                    </div>
+                </div>
+
+                <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
+
+                <div id="decisaoInconsistenciaBox" class="box" style="display:none; border:1px solid #fecaca; background:#fff7f7;">
+                    <label>Decisão da Inconsistência Fiscal</label>
+                    <p style="margin:8px 0 14px; color:#7f1d1d; font-size:13px;">
+                        Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.
+                    </p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="btn success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                        <button class="btn" style="background:#fff1f2; color:#991b1b; border-color:#fecaca;" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                    <button class="btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
+                    <button class="btn success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
+                </div>
+
+                <h3 style="margin-top:30px; border-bottom: none;"><i class="fas fa-th-list"></i> Itens do Documento</h3>
+                <div class="table-wrap" style="max-height: 300px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Descrição</th>
+                                <th>CFOP</th>
+                                <th>NCM</th>
+                                <th>CST ICMS</th>
+                                <th>CST PIS</th>
+                                <th>CST COFINS</th>
+                                <th style="text-align:right;">Qtd</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyItens"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+let notas = [];
+let notasFiltradas = [];
+let notaSelecionada = null;
+let toastTimer = null;
+let confirmResolver = null;
+
+function toast(msg, tipo='ok') {
+    const el = document.getElementById('msg');
+    el.className = 'msg';
+    el.classList.add(tipo === 'ok' ? 'ok' : 'err');
+    el.textContent = msg;
+    el.style.display = 'block';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function confirmarAcao(msg) {
+    if (confirmResolver) {
+        confirmResolver(false);
+        confirmResolver = null;
+    }
+    const overlay = document.getElementById('modalOverlay');
+    document.getElementById('confirmText').textContent = msg;
+    overlay.classList.add('active');
+    return new Promise(resolve => {
+        confirmResolver = resolve;
+    });
+}
+
+function responderConfirmacao(confirmado) {
+    const overlay = document.getElementById('modalOverlay');
+    overlay.classList.remove('active');
+    if (confirmResolver) {
+        confirmResolver(confirmado);
+        confirmResolver = null;
+    }
+}
+
+function abrirDiagnostico(inconsistencias) {
+    const overlay = document.getElementById('diagOverlay');
+    const list = document.getElementById('diagList');
+    const msg = document.getElementById('diagMsg');
+    const just = document.getElementById('diagJustificativa');
+    if (!inconsistencias || !inconsistencias.length) {
+        list.innerHTML = '<div style="color:#64748b;">Sem inconsistências.</div>';
+    } else {
+        list.innerHTML = `<ul style="margin:0; padding-left:18px; color:#991b1b;">${inconsistencias.map(i => `<li style="margin:6px 0;">${i}</li>`).join('')}</ul>`;
+    }
+    just.value = '';
+    msg.style.display = 'none';
+    msg.textContent = '';
+    overlay.classList.add('active');
+}
+
+function fecharDiagnostico() {
+    document.getElementById('diagOverlay').classList.remove('active');
+}
+
+async function fetchJson(url, options={}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.msg || data.erro || 'Falha na operação');
+    return data;
+}
+
+function badgeClass(st) {
+    if (st === 'SemInconsistencia') return 'b-ok';
+    if (st === 'ComInconsistencia') return 'b-inc';
+    return 'b-pendente';
+}
+
+function badgeDecisaoClass(st) {
+    if (st === 'XML Aprovado') return 'b-dec-ok';
+    if (st === 'XML Recusado') return 'b-dec-no';
+    return 'b-pendente';
+}
+
+function alternarMaterialCliente() {
+    const marcado = document.getElementById('materialCliente').checked;
+    const inputPedido = document.getElementById('pedidoCompra');
+    inputPedido.disabled = marcado;
+    if (marcado) {
+        inputPedido.value = '';
+        inputPedido.placeholder = 'Não aplicável (material de cliente)';
+    } else {
+        inputPedido.placeholder = 'Ex: OC-2026-0000';
+    }
+}
+
+function renderNotas() {
+    const termo = (document.getElementById('filtro').value || '').trim().toLowerCase();
+    notasFiltradas = termo
+        ? notas.filter(n =>
+            String(n.numero || '').toLowerCase().includes(termo) ||
+            String(n.fornecedor || '').toLowerCase().includes(termo) ||
+            String(n.pedido_compra || '').toLowerCase().includes(termo)
+        )
+        : [...notas];
+
+    const tbody = document.getElementById('tbodyNotas');
+    if (!notasFiltradas.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 40px; color:#64748b;">Nenhuma nota encontrada.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = notasFiltradas.map(n => `
+        <tr onclick="selecionarNota('${n.numero}')" style="cursor:pointer; ${notaSelecionada === n.numero ? 'background:#f0f7ff;' : ''}">
+            <td><strong style="color:var(--sap-blue)">${n.numero}</strong><br><small style="color:#64748b">${n.data_importacao || '---'}</small></td>
+            <td>${n.fornecedor || '---'}</td>
+            <td><span class="badge ${badgeClass(n.auditor_status)}">${n.auditor_status || 'NaoAuditado'}</span></td>
+            <td><span class="badge ${badgeDecisaoClass(n.auditor_decisao)}">${n.auditor_decisao || 'PendenteDecisao'}</span></td>
+            <td><span style="font-weight:600; color:#475569">${n.status_fluxo || '---'}</span></td>
+            <td style="text-align:center;"><button class="btn" style="padding:6px 12px;">Abrir</button></td>
+        </tr>
+    `).join('');
+}
+
+async function carregarNotas() {
+    try {
+        notas = await fetchJson('/api/xml_auditor/notas');
+        renderNotas();
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+async function selecionarNota(numero) {
+    notaSelecionada = numero;
+    renderNotas();
+    try {
+        const d = await fetchJson(`/api/xml_auditor/nota/${encodeURIComponent(numero)}`);
+        document.getElementById('detalheVazio').style.display = 'none';
+        document.getElementById('detalheWrap').style.display = '';
+
+        document.getElementById('dNota').textContent = d.numero || '---';
+        document.getElementById('dStatusFluxo').textContent = d.status_fluxo || '---';
+        document.getElementById('dFornecedor').textContent = d.fornecedor || '---';
+        document.getElementById('dStatusAuditoria').textContent = d.auditor_status || 'NaoAuditado';
+        document.getElementById('dCnpjDestinatario').textContent = d.cnpj_destinatario || '---';
+        document.getElementById('dDecisaoFiscal').textContent = d.auditor_decisao || 'PendenteDecisao';
+        document.getElementById('pedidoCompra').value = d.pedido_compra || '';
+        document.getElementById('materialCliente').checked = !!d.material_cliente;
+        alternarMaterialCliente();
+        document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
+        document.getElementById('obsFiscal').value = d.auditor_observacao || '';
+
+        const incBox = document.getElementById('inconsistenciasBox');
+        const decisaoBox = document.getElementById('decisaoInconsistenciaBox');
+        const inconsistencias = d.inconsistencias || [];
+        if (!inconsistencias.length) {
+            incBox.style.display = '';
+            incBox.style.borderLeftColor = 'var(--success-erp)';
+            incBox.style.background = '#f0fdf4';
+            incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#166534; font-weight:700;"><i class="fas fa-check-circle"></i> Nenhuma inconsistência detectada.</div>';
+            decisaoBox.style.display = 'none';
+        } else {
+            incBox.style.display = '';
+            incBox.style.borderLeftColor = 'var(--danger-erp)';
+            incBox.style.background = '#fff1f2';
+            incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#991b1b; font-weight:700;"><i class="fas fa-triangle-exclamation"></i> Inconsistências detectadas. O card de diagnóstico aparece ao executar a auditoria.</div>';
+            decisaoBox.style.display = 'none';
+        }
+
+        document.getElementById('tbodyItens').innerHTML = (d.itens || []).map(i => `
+            <tr>
+                <td><code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${i.codigo || '---'}</code></td>
+                <td>${i.descricao || '---'}</td>
+                <td>${i.cfop || '---'}</td>
+                <td>${i.ncm || '---'}</td>
+                <td>${i.cst_icms || '---'}</td>
+                <td>${i.cst_pis || '---'}</td>
+                <td>${i.cst_cofins || '---'}</td>
+                <td style="text-align:right; font-weight:700;">${Number(i.quantidade || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+async function registrarDecisaoFiscal(autorizado) {
+    if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+    const msg = document.getElementById('diagMsg');
+    const justificativaPagina = (document.getElementById('justificativaFiscal').value || '').trim();
+    const justificativaModal = (document.getElementById('diagJustificativa')?.value || '').trim();
+    const justificativa = justificativaModal || justificativaPagina;
+    if (!autorizado && justificativa.length < 5) {
+        msg.style.display = 'block';
+        msg.style.background = '#fef2f2';
+        msg.style.color = '#991b1b';
+        msg.style.border = '1px solid #fecaca';
+        msg.textContent = 'Para recusar, informe uma justificativa com no mínimo 5 caracteres.';
+        return;
+    }
+    try {
+        const r = await fetchJson('/api/xml_auditor/decisao', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, autorizado, justificativa })
+        });
+        fecharDiagnostico();
+        toast(r.msg || 'Decisão fiscal registrada.', 'ok');
+        await carregarNotas();
+        await selecionarNota(notaSelecionada);
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+async function consultarPedidoExcel() {
+    const pedido = (document.getElementById('pedidoCompra').value || '').trim();
+    const res = document.getElementById('pedidoResult');
+    const wrap = document.getElementById('pedidoCompareWrap');
+    const tbody = document.getElementById('tbodyPoCompare');
+    if (!pedido) {
+        res.className = 'pedido-result warn';
+        res.textContent = 'Informe o número do pedido antes de consultar.';
+        res.style.display = 'block';
+        wrap.style.display = 'none';
+        return;
+    }
+    res.className = 'pedido-result warn';
+    res.textContent = 'Consultando planilha...';
+    res.style.display = 'block';
+    wrap.style.display = 'none';
+    try {
+        const r = await fetchJson('/api/xml_auditor/consultar_pedido', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, pedido })
+        });
+        if (!r.encontrado) {
+            res.className = 'pedido-result warn';
+            res.textContent = `Pedido "${pedido}" não encontrado na planilha.`;
+            wrap.style.display = 'none';
+        } else if (r.total_ok) {
+            res.className = 'pedido-result ok';
+            res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem com o pedido.`;
+            tbody.innerHTML = renderPoRows(r.pares);
+            wrap.style.display = '';
+        } else {
+            res.className = 'pedido-result err';
+            const ndiv = r.pares.filter(p => !p.ok).length;
+            res.textContent = `✘ ${ndiv} linha(s) com divergência de quantidade.`;
+            tbody.innerHTML = renderPoRows(r.pares);
+            wrap.style.display = '';
+        }
+    } catch (e) {
+        res.className = 'pedido-result err';
+        res.textContent = e.message;
+        wrap.style.display = 'none';
+    }
+}
+
+function renderPoRows(pares) {
+    return pares.map(p => {
+        const nfQtd  = p.nf_qtd  !== null ? Number(p.nf_qtd).toLocaleString('pt-BR', {minimumFractionDigits:2})  : '<span class="line-na">—</span>';
+        const poQtd  = p.po_qtd  !== null ? Number(p.po_qtd).toLocaleString('pt-BR', {minimumFractionDigits:2})  : '<span class="line-na">—</span>';
+        const icone  = p.nf_qtd === null || p.po_qtd === null
+            ? '<span class="line-na">—</span>'
+            : p.ok
+                ? '<span class="line-ok">✔</span>'
+                : '<span class="line-err">✘</span>';
+        return `<tr>
+            <td style="color:#94a3b8;">${p.linha}</td>
+            <td><code style="background:#f1f5f9;padding:2px 4px;border-radius:4px;">${p.nf_codigo}</code></td>
+            <td style="color:#475569;">${p.nf_descricao}</td>
+            <td style="text-align:right;font-weight:600;">${nfQtd}</td>
+            <td style="text-align:right;font-weight:600;">${poQtd}</td>
+            <td style="text-align:center;">${icone}</td>
+        </tr>`;
+    }).join('');
+}
+
+async function auditarSelecionada() {
+    if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+    try {
+        const r = await fetchJson('/api/xml_auditor/analisar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada })
+        });
+        toast(r.msg || 'Auditoria concluída.', 'ok');
+        await carregarNotas();
+        await selecionarNota(notaSelecionada);
+        if (Array.isArray(r.inconsistencias) && r.inconsistencias.length) {
+            abrirDiagnostico(r.inconsistencias);
+        }
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+async function salvarPedido() {
+    if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+    const material_cliente = document.getElementById('materialCliente').checked;
+    const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+    if (!material_cliente && !pedido_compra) {
+        return toast('Informe a OC ou marque como material de cliente.', 'err');
+    }
+    const observacao = (document.getElementById('obsFiscal').value || '').trim();
+    try {
+        const r = await fetchJson('/api/xml_auditor/vincular_pedido', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, pedido_compra, material_cliente, observacao })
+        });
+        toast(r.msg || 'Pedido vinculado com sucesso.', 'ok');
+        await carregarNotas();
+        await selecionarNota(notaSelecionada);
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+async function liberarSelecionada() {
+    if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+    const confirmado = await confirmarAcao(`Deseja liberar a NF ${notaSelecionada} para a conferência física?`);
+    if (!confirmado) return;
+    try {
+        const material_cliente = document.getElementById('materialCliente').checked;
+        const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+        const observacao = (document.getElementById('obsFiscal').value || '').trim();
+        const r = await fetchJson('/api/xml_auditor/liberar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, pedido_compra, material_cliente, observacao })
+        });
+        toast(r.msg || 'NF liberada para conferência.', 'ok');
+        await carregarNotas();
+        await selecionarNota(notaSelecionada);
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', carregarNotas);
+</script>
+{% endblock %}

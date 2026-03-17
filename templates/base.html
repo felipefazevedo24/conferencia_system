@@ -214,7 +214,7 @@
             <i class="fas fa-industry"></i> COLUMBIA <span>HELPER</span>
         </div>
         <div class="list-group list-group-flush" id="accordionSidebar">
-            {% if session.get('role') == 'Portaria' %}
+            {% if can_access('PAGE_PORTARIA') and not can_access('PAGE_CONFERENCIA') %}
             <div class="menu-item">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
@@ -222,16 +222,48 @@
                     <i class="fas fa-chevron-down fa-xs"></i>
                 </a>
                 <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
+                    {% if can_access('PAGE_PORTARIA') %}
                     <a href="/portaria" class="list-group-item list-group-item-action">
                         <i class="fas fa-file-import"></i> Inclusão XML
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_FISCAL_LIBERADAS') %}
                     <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
                         <i class="fas fa-box-open"></i> NF-e Liberadas
                     </a>
+                    {% endif %}
                 </div>
             </div>
             {% else %}
             
+            {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}
+            <div class="menu-item">
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                   data-bs-toggle="collapse" href="#collapseCompras" role="button" aria-expanded="true">
+                    <span><i class="fas fa-file-invoice-dollar"></i> COMPRAS</span>
+                    <i class="fas fa-chevron-down fa-xs"></i>
+                </a>
+                <div class="collapse show submenu" id="collapseCompras" data-bs-parent="#accordionSidebar">
+                    {% if can_access('PAGE_UPLOAD') %}
+                    <a href="/upload" class="list-group-item list-group-item-action">
+                        <i class="fas fa-file-import"></i> Pré-Nota de entrada
+                    </a>
+                    {% endif %}
+                    {% if can_access('PAGE_XML_AUDITOR') %}
+                    <a href="/compras/auditor-xml" class="list-group-item list-group-item-action">
+                        <i class="fas fa-shield-alt"></i> Auditor XML
+                    </a>
+                    {% endif %}
+                    {% if can_access('PAGE_LANCAMENTO') %}
+                    <a href="/lancamento" class="list-group-item list-group-item-action">
+                        <i class="fas fa-file-invoice-dollar"></i> Documento de entrada
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') %}
             <div class="menu-item">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
@@ -239,23 +271,21 @@
                     <i class="fas fa-chevron-down fa-xs"></i>
                 </a>
                 <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
-                    {% if session.get('role') == 'Admin' %}
-                    <a href="/upload" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-import"></i> Importação NF-e
-                    </a>
-                    {% endif %}
+                    {% if can_access('PAGE_CONFERENCIA') %}
                     <a href="/" class="list-group-item list-group-item-action">
                         <i class="fas fa-barcode"></i> Conferência Cega
                     </a>
-                    <a href="/lancamento" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-invoice-dollar"></i> Escrituração Fiscal
-                    </a>
+                    {% endif %}
+                    {% if can_access('PAGE_FISCAL_LIBERADAS') %}
                     <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
                         <i class="fas fa-box-open"></i> NF-e Liberadas
                     </a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
+            {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
             <div class="menu-item">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseExpedicao" role="button" aria-expanded="false">
@@ -263,21 +293,26 @@
                     <i class="fas fa-chevron-down fa-xs"></i>
                 </a>
                 <div class="collapse submenu" id="collapseExpedicao" data-bs-parent="#accordionSidebar">
+                    {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}
                     <a href="/expedicao/conferencia" class="list-group-item list-group-item-action">
                         <i class="fas fa-clipboard-check"></i> Conferência
                     </a>
-                    {% if session.get('role') == 'Admin' %}
+                    {% endif %}
+                    {% if can_access('PAGE_EXPEDICAO_ADMIN') %}
                     <a href="/expedicao/admin" class="list-group-item list-group-item-action">
                         <i class="fas fa-user-shield"></i> Controle Admin
                     </a>
                     {% endif %}
+                    {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}
                     <a href="/expedicao/romaneio" class="list-group-item list-group-item-action">
                         <i class="fas fa-receipt"></i> Romaneios
                     </a>
+                    {% endif %}
                 </div>
             </div>
+            {% endif %}
 
-            {% if session.get('role') in ['Admin', 'Fiscal'] %}
+            {% if can_access('PAGE_WMS') %}
             <div class="menu-item">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseWMS" role="button" aria-expanded="false">
@@ -297,7 +332,7 @@
 
             {% endif %}
 
-            {% if session.get('role') == 'Admin' %}
+            {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
             <div class="menu-item" style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
                 <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
                    data-bs-toggle="collapse" href="#collapseAdministracao" role="button" aria-expanded="false">
@@ -305,21 +340,36 @@
                     <i class="fas fa-chevron-down fa-xs"></i>
                 </a>
                 <div class="collapse submenu" id="collapseAdministracao" data-bs-parent="#accordionSidebar">
+                    {% if can_access('PAGE_ADMIN_DASHBOARD') %}
                     <a href="/admin" class="list-group-item list-group-item-action">
                         <i class="fas fa-chart-line"></i> Painel de Controle
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_USUARIOS') %}
                     <a href="/admin/usuarios" class="list-group-item list-group-item-action">
                         <i class="fas fa-users-cog"></i> Gestão de Acessos
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_HISTORICO') %}
                     <a href="/historico" class="list-group-item list-group-item-action">
                         <i class="fas fa-clipboard-list"></i> Logs e Auditoria
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_ACESSOS') %}
                     <a href="/admin/acessos" class="list-group-item list-group-item-action">
                         <i class="fas fa-user-clock"></i> Auditoria de Acessos
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}
                     <a href="/admin/wms-enderecos" class="list-group-item list-group-item-action">
                         <i class="fas fa-map-signs"></i> Cadastro de Endereços WMS
                     </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+                    <a href="/admin/wms-governanca" class="list-group-item list-group-item-action">
+                        <i class="fas fa-sliders-h"></i> Governança WMS
+                    </a>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}

@@ -115,6 +115,8 @@
     <button class="sap-btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Sincronizar Tudo</button>
     <button class="sap-btn" onclick="document.getElementById('filtroNotaPendente').focus()"><i class="fas fa-search"></i> Buscar Pendências</button>
     <button class="sap-btn" onclick="document.getElementById('inputSkuRelatorio').focus()"><i class="fas fa-box-open"></i> Consultar SKU</button>
+    <button class="sap-btn" onclick="executarReconciliacao()"><i class="fas fa-balance-scale"></i> Reconciliar ERP x WMS</button>
+    <button class="sap-btn" onclick="processarFilaIntegracao()"><i class="fas fa-tasks"></i> Processar Fila</button>
 </div>
 
 <div class="sap-grid">
@@ -188,6 +190,65 @@
         </section>
     </div>
 </div>
+
+<section class="sap-card">
+    <h2 class="sap-card-title"><i class="fas fa-shield-alt"></i> Governança Operacional WMS</h2>
+    <div class="sap-row" style="margin-bottom: 18px;">
+        <div class="pill" id="kpiPendentesGov">Pendentes: 0</div>
+        <div class="pill" id="kpiEnderecadosGov">Endereçados: 0</div>
+        <div class="pill" id="kpiAlertasGov">Alertas: 0</div>
+        <div class="pill" id="kpiDivergenciasGov">Divergências: 0</div>
+    </div>
+    <div class="sap-grid" style="grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="table-wrap" style="max-height: 280px; overflow-y: auto;">
+            <table class="sap-table">
+                <thead>
+                    <tr>
+                        <th>Alerta</th>
+                        <th>Ref</th>
+                        <th>Sev.</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyAlertasGovernanca">
+                    <tr><td colspan="4" style="text-align:center;">Carregando alertas...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-wrap" style="max-height: 280px; overflow-y: auto;">
+            <table class="sap-table">
+                <thead>
+                    <tr>
+                        <th>NF</th>
+                        <th>SKU</th>
+                        <th>Dif.</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyReconGovernanca">
+                    <tr><td colspan="4" style="text-align:center;">Carregando divergências...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="table-wrap" style="max-height: 220px; overflow-y: auto; margin-top: 14px;">
+        <table class="sap-table">
+            <thead>
+                <tr>
+                    <th>Fila</th>
+                    <th>Tipo</th>
+                    <th>Ref.</th>
+                    <th>Status</th>
+                    <th>Tentativas</th>
+                    <th>Erro</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyFilaIntegracao">
+                <tr><td colspan="6" style="text-align:center;">Carregando fila...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
 
 <div id="modalEndereco" class="modal-backdrop-wms">
     <div class="modal-box">
@@ -412,9 +473,116 @@ async function buscarEstoquePorSku() {
     } catch (err) { tbody.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`; }
 }
 
+async function carregarGovernancaWms() {
+    const tbodyAlertas = document.getElementById('tbodyAlertasGovernanca');
+    const tbodyRecon = document.getElementById('tbodyReconGovernanca');
+    const tbodyFila = document.getElementById('tbodyFilaIntegracao');
+    try {
+        const data = await fetchJson('/api/wms/governanca');
+        const kpis = data.kpis || {};
+        document.getElementById('kpiPendentesGov').textContent = `Pendentes: ${kpis.pendentes_enderecamento || 0}`;
+        document.getElementById('kpiEnderecadosGov').textContent = `Endereçados: ${kpis.itens_enderecados || 0}`;
+        document.getElementById('kpiAlertasGov').textContent = `Alertas: ${kpis.alertas_abertos || 0}`;
+        document.getElementById('kpiDivergenciasGov').textContent = `Divergências: ${kpis.divergencias_abertas || 0}`;
+
+        const alertas = data.alertas || [];
+        tbodyAlertas.innerHTML = '';
+        if (!alertas.length) {
+            tbodyAlertas.innerHTML = '<tr><td colspan="4" style="text-align:center;">Sem alertas abertos.</td></tr>';
+        } else {
+            alertas.forEach((a) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${a.tipo}</td>
+                    <td>${a.referencia || '-'}</td>
+                    <td><strong>${a.severidade}</strong></td>
+                    <td><button class="sap-btn" style="padding:4px 8px; font-size:10px;" onclick="resolverAlerta(${a.id})">Resolver</button></td>
+                `;
+                tbodyAlertas.appendChild(tr);
+            });
+        }
+
+        const divergencias = data.divergencias || [];
+        tbodyRecon.innerHTML = '';
+        if (!divergencias.length) {
+            tbodyRecon.innerHTML = '<tr><td colspan="4" style="text-align:center;">Sem divergências abertas.</td></tr>';
+        } else {
+            divergencias.forEach((d) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${d.numero_nota}</td>
+                    <td>${d.codigo_item}</td>
+                    <td style="font-weight:700; color:#b91c1c;">${Number(d.diferenca || 0).toFixed(2)}</td>
+                    <td>${d.status}</td>
+                `;
+                tbodyRecon.appendChild(tr);
+            });
+        }
+
+        const fila = data.fila_integracao || [];
+        tbodyFila.innerHTML = '';
+        if (!fila.length) {
+            tbodyFila.innerHTML = '<tr><td colspan="6" style="text-align:center;">Fila vazia.</td></tr>';
+        } else {
+            fila.forEach((f) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>#${f.id}</td>
+                    <td>${f.tipo_evento}</td>
+                    <td>${f.referencia}</td>
+                    <td>${f.status}</td>
+                    <td>${f.tentativas || 0}</td>
+                    <td>${f.ultima_erro || '-'}</td>
+                `;
+                tbodyFila.appendChild(tr);
+            });
+        }
+    } catch (err) {
+        tbodyAlertas.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`;
+        tbodyRecon.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`;
+        tbodyFila.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`;
+    }
+}
+
+async function resolverAlerta(alertaId) {
+    try {
+        await fetchJson(`/api/wms/alertas/${alertaId}/resolver`, { method: 'POST' });
+        await carregarGovernancaWms();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function executarReconciliacao() {
+    try {
+        const resultado = await fetchJson('/api/wms/governanca/reconciliar', { method: 'POST' });
+        alert(`Reconciliacao concluida. Analisadas: ${resultado.resultado.analisadas}, novas divergencias: ${resultado.resultado.novas_divergencias}.`);
+        await carregarGovernancaWms();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function processarFilaIntegracao() {
+    try {
+        const payload = { limite: 50 };
+        const retorno = await fetchJson('/api/wms/integracao/processar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const res = retorno.resultado || {};
+        alert(`Fila processada. Sucesso: ${res.sucesso || 0}, falha: ${res.falha || 0}.`);
+        await carregarGovernancaWms();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
 async function refreshAll() {
     await carregarLocalizacoes();
     await carregarPendentesEnderecamento();
+    await carregarGovernancaWms();
 }
 
 document.addEventListener('DOMContentLoaded', refreshAll);

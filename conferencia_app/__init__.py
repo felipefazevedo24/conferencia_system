@@ -49,5 +49,15 @@ def create_app(test_config=None) -> Flask:
         app.logger.info("%s %s %s %.2fms", request.method, request.path, response.status_code, elapsed_ms)
         return response
 
+    @app.context_processor
+    def inject_access_control_helpers():
+        from .auth import get_effective_permissions, has_permission
+
+        perms = get_effective_permissions() if "username" in session else {}
+        return {
+            "can_access": lambda key: has_permission(key),
+            "access_permissions": perms,
+        }
+
     initialize_database(app)
     return app

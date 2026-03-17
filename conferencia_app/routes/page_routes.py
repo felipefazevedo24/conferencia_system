@@ -1,90 +1,102 @@
 from flask import Blueprint, render_template, session
 
-from ..auth import login_required, roles_required
+from ..auth import permission_required, roles_required
 
 
 page_bp = Blueprint("pages", __name__)
 
 
 @page_bp.route("/")
-@roles_required("Conferente", "Fiscal", "Admin")
+@permission_required("PAGE_CONFERENCIA")
 def home():
     return render_template("conferente.html", user=session["username"])
 
 
 @page_bp.route("/portaria")
-@roles_required("Portaria", "Admin")
+@permission_required("PAGE_PORTARIA")
 def portaria_page():
     return render_template("portaria.html", user=session["username"])
 
 
 @page_bp.route("/admin")
-@roles_required("Admin")
+@permission_required("PAGE_ADMIN_DASHBOARD")
 def dashboard():
     return render_template("dashboard.html", user=session["username"])
 
 
 @page_bp.route("/upload")
-@roles_required("Admin")
+@permission_required("PAGE_UPLOAD")
 def upload_page():
     return render_template("admin.html", user=session["username"])
 
 
+@page_bp.route("/compras/auditor-xml")
+@permission_required("PAGE_XML_AUDITOR")
+def compras_auditor_xml_page():
+    return render_template("auditor_xml.html", user=session["username"])
+
+
 @page_bp.route("/lancamento")
-@roles_required("Fiscal", "Admin")
+@permission_required("PAGE_LANCAMENTO")
 def lancamento_page():
     return render_template("lancamento.html", user=session.get("username", "Fiscal"))
 
 
 @page_bp.route("/fiscal/liberadas")
-@login_required
+@permission_required("PAGE_FISCAL_LIBERADAS")
 def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
 
 
 @page_bp.route("/historico")
-@roles_required("Admin")
+@permission_required("PAGE_ADMIN_HISTORICO")
 def historico_page():
     return render_template("historico.html", user=session["username"])
 
 
 @page_bp.route("/wms")
-@roles_required("Fiscal", "Admin")
+@permission_required("PAGE_WMS")
 def wms_page():
     return render_template("wms.html", user=session["username"])
 
 
 @page_bp.route("/admin/wms-enderecos")
-@roles_required("Admin")
+@permission_required("PAGE_ADMIN_WMS_ENDERECOS")
 def wms_enderecos_admin_page():
     return render_template("admin_wms_enderecos.html", user=session["username"])
 
 
+@page_bp.route("/admin/wms-governanca")
+@permission_required("PAGE_ADMIN_WMS_GOVERNANCA")
+def wms_governanca_admin_page():
+    return render_template("admin_wms_governanca.html", user=session["username"])
+
+
 @page_bp.route("/expedicao/conferencia")
-@roles_required("Conferente", "Admin", "Fiscal")
+@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
 def expedicao_conferencia_page():
     return render_template("expedicao_conferencia.html", user=session["username"])
 
 
 @page_bp.route("/expedicao/admin")
-@roles_required("Admin")
+@permission_required("PAGE_EXPEDICAO_ADMIN")
 def expedicao_admin_page():
     return render_template("expedicao_admin.html", user=session["username"])
 
 
 @page_bp.route("/expedicao/romaneio")
-@roles_required("Conferente", "Admin", "Fiscal")
+@permission_required("PAGE_EXPEDICAO_ROMANEIO")
 def expedicao_romaneio_page():
     return render_template("expedicao_romaneio.html", user=session["username"])
 
 
 @page_bp.route("/admin/usuarios")
-@roles_required("Admin")
+@permission_required("PAGE_ADMIN_USUARIOS")
 def usuarios_page():
     return render_template("usuarios.html", user=session["username"])
 
 
 @page_bp.route("/admin/acessos")
-@roles_required("Admin")
+@permission_required("PAGE_ADMIN_ACESSOS")
 def acessos_admin_page():
     return render_template("admin_acessos.html", user=session["username"])

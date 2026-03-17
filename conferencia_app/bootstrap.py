@@ -29,6 +29,57 @@ def _ensure_item_nota_columns() -> None:
         if "unidade_comercial" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN unidade_comercial VARCHAR(20)"))
             conn.commit()
+        if "cnpj_emitente" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cnpj_emitente VARCHAR(14)"))
+            conn.commit()
+        if "cnpj_destinatario" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cnpj_destinatario VARCHAR(14)"))
+            conn.commit()
+        if "ncm" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN ncm VARCHAR(8)"))
+            conn.commit()
+        if "cst_icms" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cst_icms VARCHAR(3)"))
+            conn.commit()
+        if "cst_pis" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cst_pis VARCHAR(2)"))
+            conn.commit()
+        if "cst_cofins" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cst_cofins VARCHAR(2)"))
+            conn.commit()
+        if "valor_produto" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_produto FLOAT"))
+            conn.commit()
+        if "pedido_compra" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pedido_compra VARCHAR(50)"))
+            conn.commit()
+        if "material_cliente" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN material_cliente BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        if "auditor_status" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_status VARCHAR(30) DEFAULT 'NaoAuditado'"))
+            conn.commit()
+        if "auditor_decisao" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_decisao VARCHAR(20) DEFAULT 'PendenteDecisao'"))
+            conn.commit()
+        if "auditor_diagnostico" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_diagnostico VARCHAR(4000)"))
+            conn.commit()
+        if "auditor_inconsistencias" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_inconsistencias VARCHAR(1000)"))
+            conn.commit()
+        if "auditor_justificativa" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_justificativa VARCHAR(500)"))
+            conn.commit()
+        if "auditor_observacao" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_observacao VARCHAR(500)"))
+            conn.commit()
+        if "auditor_usuario" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_usuario VARCHAR(100)"))
+            conn.commit()
+        if "auditor_data" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_data DATETIME"))
+            conn.commit()
 
         res_log_div = conn.execute(db.text("PRAGMA table_info('log_divergencia')")).fetchall()
         cols_log_div = [row[1] for row in res_log_div]
@@ -127,6 +178,29 @@ def _ensure_item_nota_columns() -> None:
                     data DATETIME NOT NULL
                 )
                 """
+            )
+        )
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS permissao_acesso (
+                    id INTEGER PRIMARY KEY,
+                    scope_type VARCHAR(10) NOT NULL,
+                    scope_id VARCHAR(80) NOT NULL,
+                    permission_key VARCHAR(80) NOT NULL,
+                    allow BOOLEAN NOT NULL DEFAULT 1,
+                    updated_by VARCHAR(100),
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        conn.commit()
+        conn.execute(
+            db.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_permissao_scope_key ON permissao_acesso (scope_type, scope_id, permission_key)"
             )
         )
         conn.commit()
@@ -342,6 +416,117 @@ def _ensure_wms_tables() -> None:
             "CREATE INDEX IF NOT EXISTS ix_estoque_wms_localizacao_id ON estoque_wms (localizacao_id)"
         ))
         conn.commit()
-        
+
+        res_estoque_wms = conn.execute(db.text("PRAGMA table_info('estoque_wms')")).fetchall()
+        cols_estoque_wms = [row[1] for row in res_estoque_wms]
+        if "qtd_bloqueada" not in cols_estoque_wms:
+            conn.execute(db.text("ALTER TABLE estoque_wms ADD COLUMN qtd_bloqueada FLOAT NOT NULL DEFAULT 0.0"))
+            conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_integracao_evento (
+                    id INTEGER PRIMARY KEY,
+                    idempotency_key VARCHAR(120) UNIQUE NOT NULL,
+                    tipo_evento VARCHAR(40) NOT NULL,
+                    referencia VARCHAR(80) NOT NULL,
+                    origem VARCHAR(30) NOT NULL DEFAULT 'ERP',
+                    payload_json TEXT,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                    tentativas INTEGER NOT NULL DEFAULT 0,
+                    proxima_tentativa_em DATETIME,
+                    ultima_erro VARCHAR(500),
+                    processado_em DATETIME,
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_integracao_status ON wms_integracao_evento (status)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_integracao_referencia ON wms_integracao_evento (referencia)"))
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_sku_mestre (
+                    id INTEGER PRIMARY KEY,
+                    codigo_item VARCHAR(50) UNIQUE NOT NULL,
+                    codigo_erp VARCHAR(50),
+                    unidade VARCHAR(20),
+                    fator_conversao FLOAT NOT NULL DEFAULT 1.0,
+                    curva_abc VARCHAR(1) DEFAULT 'C',
+                    politica_validade VARCHAR(10) DEFAULT 'FIFO',
+                    estoque_minimo FLOAT DEFAULT 0.0,
+                    estoque_maximo FLOAT DEFAULT 0.0,
+                    endereco_preferencial VARCHAR(80),
+                    ativo BOOLEAN NOT NULL DEFAULT 1,
+                    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_sku_mestre_codigo_erp ON wms_sku_mestre (codigo_erp)"))
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_parametro_operacional (
+                    id INTEGER PRIMARY KEY,
+                    chave VARCHAR(80) UNIQUE NOT NULL,
+                    valor VARCHAR(200) NOT NULL,
+                    descricao VARCHAR(300),
+                    atualizado_por VARCHAR(100),
+                    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_reconciliacao_divergencia (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) NOT NULL,
+                    codigo_item VARCHAR(50) NOT NULL,
+                    qtd_erp FLOAT NOT NULL DEFAULT 0.0,
+                    qtd_wms FLOAT NOT NULL DEFAULT 0.0,
+                    diferenca FLOAT NOT NULL DEFAULT 0.0,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Aberta',
+                    origem VARCHAR(30) NOT NULL DEFAULT 'Recon',
+                    observacao VARCHAR(400),
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    resolvido_em DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_reconciliacao_nota ON wms_reconciliacao_divergencia (numero_nota)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_reconciliacao_status ON wms_reconciliacao_divergencia (status)"))
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_alerta_operacional (
+                    id INTEGER PRIMARY KEY,
+                    tipo VARCHAR(40) NOT NULL,
+                    severidade VARCHAR(10) NOT NULL DEFAULT 'MEDIA',
+                    referencia VARCHAR(100),
+                    descricao VARCHAR(400) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Aberto',
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    resolvido_em DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_alerta_status ON wms_alerta_operacional (status)"))
+        conn.commit()
+
     finally:
         conn.close()

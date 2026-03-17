@@ -10,6 +10,20 @@ class Usuario(db.Model):
     role = db.Column(db.String(20), default="Conferente")
 
 
+class PermissaoAcesso(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    scope_type = db.Column(db.String(10), nullable=False, index=True)  # ROLE|USER
+    scope_id = db.Column(db.String(80), nullable=False, index=True)  # role name or username
+    permission_key = db.Column(db.String(80), nullable=False, index=True)
+    allow = db.Column(db.Boolean, nullable=False, default=True)
+    updated_by = db.Column(db.String(100))
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("scope_type", "scope_id", "permission_key", name="_perm_scope_key_uc"),
+    )
+
+
 class ItemNota(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), index=True)
@@ -31,6 +45,23 @@ class ItemNota(db.Model):
     valor_total = db.Column(db.String(50))
     valor_imposto = db.Column(db.String(50))
     unidade_comercial = db.Column(db.String(20))
+    cnpj_emitente = db.Column(db.String(14), index=True)
+    cnpj_destinatario = db.Column(db.String(14), index=True)
+    ncm = db.Column(db.String(8), index=True)
+    cst_icms = db.Column(db.String(3), index=True)
+    cst_pis = db.Column(db.String(2), index=True)
+    cst_cofins = db.Column(db.String(2), index=True)
+    valor_produto = db.Column(db.Float)
+    pedido_compra = db.Column(db.String(50), index=True)
+    material_cliente = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    auditor_status = db.Column(db.String(30), default="NaoAuditado", index=True)
+    auditor_decisao = db.Column(db.String(20), default="PendenteDecisao", index=True)
+    auditor_diagnostico = db.Column(db.String(4000))
+    auditor_inconsistencias = db.Column(db.String(1000))
+    auditor_justificativa = db.Column(db.String(500))
+    auditor_observacao = db.Column(db.String(500))
+    auditor_usuario = db.Column(db.String(100))
+    auditor_data = db.Column(db.DateTime)
 
 
 class LogDivergencia(db.Model):
@@ -282,5 +313,75 @@ class EstoqueWMS(db.Model):
     localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), nullable=False, index=True)
     qtd_total = db.Column(db.Float, nullable=False, default=0.0)
     qtd_separada = db.Column(db.Float, nullable=False, default=0.0)  # Reservada para separação/despacho
+    qtd_bloqueada = db.Column(db.Float, nullable=False, default=0.0)  # Quarentena, avaria, qualidade
     data_atualizacao = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
     __table_args__ = (db.UniqueConstraint("codigo_item", "localizacao_id", name="_sku_localizacao_uc"),)
+
+
+class WMSIntegracaoEvento(db.Model):
+    """Fila de integração WMS para eventos vindos do ERP/fiscal."""
+    id = db.Column(db.Integer, primary_key=True)
+    idempotency_key = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    tipo_evento = db.Column(db.String(40), nullable=False, index=True)  # NotaLancada|Reconciliacao
+    referencia = db.Column(db.String(80), nullable=False, index=True)  # numero_nota ou chave externa
+    origem = db.Column(db.String(30), nullable=False, default="ERP")
+    payload_json = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente|Processando|Sucesso|Falha|DeadLetter
+    tentativas = db.Column(db.Integer, nullable=False, default=0)
+    proxima_tentativa_em = db.Column(db.DateTime)
+    ultima_erro = db.Column(db.String(500))
+    processado_em = db.Column(db.DateTime)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class WMSSkuMestre(db.Model):
+    """Cadastro mestre para governança de SKU entre ERP e WMS."""
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_item = db.Column(db.String(50), nullable=False, unique=True, index=True)
+    codigo_erp = db.Column(db.String(50), index=True)
+    unidade = db.Column(db.String(20), default="UN")
+    fator_conversao = db.Column(db.Float, nullable=False, default=1.0)
+    curva_abc = db.Column(db.String(1), default="C")  # A|B|C
+    politica_validade = db.Column(db.String(10), default="FIFO")  # FIFO|FEFO
+    estoque_minimo = db.Column(db.Float, default=0.0)
+    estoque_maximo = db.Column(db.Float, default=0.0)
+    endereco_preferencial = db.Column(db.String(80))
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+
+
+class WMSParametroOperacional(db.Model):
+    """Parâmetros operacionais para políticas logísticas do WMS."""
+    id = db.Column(db.Integer, primary_key=True)
+    chave = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    valor = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.String(300))
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+
+
+class WMSReconciliacaoDivergencia(db.Model):
+    """Divergências entre fonte ERP (fiscal) e WMS por NF/SKU."""
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    codigo_item = db.Column(db.String(50), nullable=False, index=True)
+    qtd_erp = db.Column(db.Float, nullable=False, default=0.0)
+    qtd_wms = db.Column(db.Float, nullable=False, default=0.0)
+    diferenca = db.Column(db.Float, nullable=False, default=0.0)
+    status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)  # Aberta|Tratando|Resolvida
+    origem = db.Column(db.String(30), nullable=False, default="Recon")
+    observacao = db.Column(db.String(400))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    resolvido_em = db.Column(db.DateTime)
+
+
+class WMSAlertaOperacional(db.Model):
+    """Alertas operacionais para gestão diária do armazém."""
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(40), nullable=False, index=True)  # PendenciaAntiga|Ruptura|Capacidade
+    severidade = db.Column(db.String(10), nullable=False, default="MEDIA")  # BAIXA|MEDIA|ALTA
+    referencia = db.Column(db.String(100), index=True)
+    descricao = db.Column(db.String(400), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="Aberto", index=True)  # Aberto|Resolvido
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    resolvido_em = db.Column(db.DateTime)

@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}WMS | Governança Operacional | ERP FAM{% endblock %}
+
+{% block extra_head %}
+<style>
+    :root {
+        --sap-blue: #0a6ed1;
+        --sap-hover: #085caf;
+        --erp-bg: #f4f6f9;
+        --border-color: #dbe2e8;
+        --text-main: #1a293b;
+        --text-muted: #64748b;
+        --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        --danger-erp: #d92d20;
+        --success-erp: #0a8a45;
+        --warning-erp: #e8820c;
+    }
+
+    body { background-color: var(--erp-bg); color: var(--text-main); font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+
+    .admin-wrapper { padding: 25px; max-width: 1700px; margin: 0 auto; }
+
+    .page-header-erp {
+        background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+        margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+        display: flex; justify-content: space-between; align-items: center;
+        color: #000000; border: 1px solid var(--border-color);
+    }
+    .page-header-erp h1 { margin: 0; font-size: 18px; text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+    .page-header-erp i { color: var(--sap-blue); }
+    .subtitle { margin: 4px 0 0 0; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .btn {
+        border: 1px solid #cbd5e1; background: #fff; color: #475569;
+        border-radius: 8px; padding: 10px 16px; font-size: 12px; font-weight: 700;
+        cursor: pointer; text-decoration: none; transition: all 0.2s;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+    .btn.primary { border-color: var(--sap-blue); background: var(--sap-blue); color: #fff; }
+    .btn.primary:hover { background: var(--sap-hover); transform: translateY(-1px); }
+    .btn.success { border-color: var(--success-erp); background: var(--success-erp); color: #fff; }
+    .btn.success:hover { background: #077a3c; }
+    .btn.danger { border-color: var(--danger-erp); background: var(--danger-erp); color: #fff; }
+    .btn.warning { border-color: var(--warning-erp); background: var(--warning-erp); color: #fff; }
+    .btn.sm { padding: 6px 12px; font-size: 11px; }
+
+    .grid-two { display: grid; grid-template-columns: 1fr 1.6fr; gap: 20px; align-items: start; }
+
+    .card {
+        background: #fff; border: 1px solid var(--border-color);
+        border-radius: 16px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px;
+    }
+    .card h3 {
+        margin: 0 0 15px 0; font-size: 13px; color: var(--sap-blue);
+        font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+        display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;
+    }
+
+    .input {
+        border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 13px;
+        font-size: 13px; background: #fff; transition: all 0.2s; width: 100%; box-sizing: border-box;
+    }
+    .input:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+    .input.sm { padding: 6px 10px; font-size: 12px; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+        background: #f8fafc; padding: 11px 12px; font-size: 11px;
+        text-transform: uppercase; color: #64748b; text-align: left; font-weight: 800;
+        border-bottom: 2px solid #edf2f7;
+    }
+    td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f0f7ff; }
+
+    .badge {
+        display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 700;
+    }
+    .badge-a { background: #dcfce7; color: #166534; }
+    .badge-b { background: #fef9c3; color: #854d0e; }
+    .badge-c { background: #f1f5f9; color: #475569; }
+    .badge-fifo { background: #dbeafe; color: #1e40af; }
+    .badge-fefo { background: #ede9fe; color: #5b21b6; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+
+    .row-search { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+
+    .param-desc { font-size: 11px; color: var(--text-muted); }
+
+    .param-input { width: 160px; }
+
+    #toast {
+        position: fixed; bottom: 30px; right: 30px; z-index: 9999;
+        background: #1a293b; color: #fff; padding: 14px 22px; border-radius: 12px;
+        font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        display: none; animation: fadeInUp 0.3s ease;
+    }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1100px) { .grid-two { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-wrapper">
+
+    <div class="page-header-erp">
+        <div>
+            <h1><i class="fas fa-sliders-h"></i> WMS | Governança Operacional</h1>
+            <p class="subtitle">Configuração de parâmetros operacionais e cadastro mestre de SKUs.</p>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit WMS</a>
+            <a class="btn" href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Endereços</a>
+        </div>
+    </div>
+
+    <!-- ===== PARÂMETROS OPERACIONAIS ===== -->
+    <div class="card">
+        <h3><i class="fas fa-cog"></i> Parâmetros Operacionais</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th width="240">Parâmetro</th>
+                        <th>Descrição</th>
+                        <th width="180">Valor atual</th>
+                        <th width="100" style="text-align:center;">Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyParametros">
+                    <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Carregando parâmetros...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top:14px; text-align:right;">
+            <button class="btn success" onclick="salvarParametros()"><i class="fas fa-save"></i> Salvar Todos os Parâmetros</button>
+        </div>
+    </div>
+
+    <!-- ===== SKU MESTRE ===== -->
+    <div class="card">
+        <h3><i class="fas fa-boxes"></i> Cadastro Mestre de SKUs</h3>
+
+        <div style="display:grid; grid-template-columns: 1fr 400px; gap: 20px; align-items: start;">
+
+            <!-- Lista de SKUs -->
+            <div>
+                <div class="row-search">
+                    <input id="filtroSku" class="input" placeholder="Pesquisar por código do item..." style="max-width:320px;" oninput="pesquisarSku()" />
+                    <button class="btn primary sm" onclick="pesquisarSku()"><i class="fas fa-search"></i> Buscar</button>
+                </div>
+                <div class="table-wrap" style="max-height:480px; overflow-y:auto;">
+                    <table>
+                        <thead style="position:sticky; top:0; z-index:10;">
+                            <tr>
+                                <th>Código Item</th>
+                                <th>Cód. ERP</th>
+                                <th>UN</th>
+                                <th>Curva</th>
+                                <th>Política</th>
+                                <th>Est. Mín</th>
+                                <th>Est. Máx</th>
+                                <th>End. Preferencial</th>
+                                <th style="text-align:center;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodySku">
+                            <tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Carregando SKUs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Formulário de cadastro/edição -->
+            <div class="card" style="background:#f8fafc; box-shadow:none; border: 1px solid var(--border-color); margin-bottom:0;">
+                <h3 style="font-size:12px;"><i class="fas fa-edit"></i> <span id="formSkuTitle">Novo SKU</span></h3>
+                <div class="form-grid">
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label>Código do Item *</label>
+                        <input id="skuCodigo" class="input sm" placeholder="Ex: 0001234" />
+                    </div>
+                    <div class="form-group">
+                        <label>Código ERP</label>
+                        <input id="skuCodigoErp" class="input sm" placeholder="Código no ERP" />
+                    </div>
+                    <div class="form-group">
+                        <label>Unidade</label>
+                        <select id="skuUnidade" class="input sm">
+                            <option value="UN">UN</option>
+                            <option value="CX">CX</option>
+                            <option value="KG">KG</option>
+                            <option value="LT">LT</option>
+                            <option value="MT">MT</option>
+                            <option value="PC">PC</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Curva ABC</label>
+                        <select id="skuCurva" class="input sm">
+                            <option value="A">A — Alto giro</option>
+                            <option value="B">B — Médio giro</option>
+                            <option value="C" selected>C — Baixo giro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Política de Validade</label>
+                        <select id="skuPolitica" class="input sm">
+                            <option value="FIFO">FIFO — Primeiro que entra</option>
+                            <option value="FEFO">FEFO — Primeiro que vence</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Estoque Mínimo</label>
+                        <input id="skuEstMin" class="input sm" type="number" min="0" step="0.01" value="0" />
+                    </div>
+                    <div class="form-group">
+                        <label>Estoque Máximo</label>
+                        <input id="skuEstMax" class="input sm" type="number" min="0" step="0.01" value="0" />
+                    </div>
+                    <div class="form-group">
+                        <label>Fator de Conversão</label>
+                        <input id="skuFator" class="input sm" type="number" min="0.001" step="0.001" value="1" />
+                    </div>
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label>Endereço Preferencial</label>
+                        <input id="skuEndereco" class="input sm" placeholder="Ex: R01-P01-N01-A01" />
+                    </div>
+                </div>
+                <div style="margin-top:14px; display:flex; gap:8px;">
+                    <button class="btn success" style="flex:1;" onclick="salvarSku()"><i class="fas fa-save"></i> Salvar SKU</button>
+                    <button class="btn sm" onclick="limparFormSku()"><i class="fas fa-times"></i> Limpar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── Utilidades ─────────────────────────────────────────────────────────────
+
+async function fetchJson(url, options = {}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.erro || data.msg || 'Falha na requisição');
+    return data;
+}
+
+function showToast(msg, tipo = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = tipo === 'ok' ? '#0a8a45' : tipo === 'warn' ? '#e8820c' : '#d92d20';
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+// ─── Parâmetros Operacionais ─────────────────────────────────────────────────
+
+const PARAM_LABELS = {
+    'WMS_FIFO_PADRAO':                 { label: 'Política Padrão de Validade',      desc: 'Política usada para SKUs sem regra própria. Valores: FIFO ou FEFO.' },
+    'WMS_QUARENTENA_ATIVA':            { label: 'Quarentena Ativa',                  desc: 'Ativa processo de quarentena para divergências e avarias. 1 = sim, 0 = não.' },
+    'WMS_PENDENCIA_ALERTA_HORAS':      { label: 'Alerta de Pendência (horas)',        desc: 'Horas sem endereçamento para gerar alerta de pendência antiga.' },
+    'WMS_OCUPACAO_ALERTA_PERCENTUAL':  { label: 'Alerta de Ocupação (%)',             desc: 'Percentual de ocupação de localização para gerar alerta de capacidade.' },
+    'WMS_RECON_DIVERGENCIA_MINIMA':    { label: 'Divergência Mínima (Reconciliação)', desc: 'Diferença mínima entre ERP e WMS para registrar divergência.' },
+};
+
+async function carregarParametros() {
+    const tbody = document.getElementById('tbodyParametros');
+    try {
+        const params = await fetchJson('/api/wms/parametros-operacionais');
+        tbody.innerHTML = '';
+        const chaves = Object.keys(params);
+        if (!chaves.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Nenhum parâmetro encontrado.</td></tr>';
+            return;
+        }
+        chaves.forEach(chave => {
+            const info = PARAM_LABELS[chave] || { label: chave, desc: '' };
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong style="color:var(--text-main)">${info.label}</strong><br/><small style="color:var(--text-muted);font-size:10px;">${chave}</small></td>
+                <td><span class="param-desc">${info.desc}</span></td>
+                <td><input class="input sm param-input" id="param_${chave}" value="${params[chave]}" /></td>
+                <td style="text-align:center;">
+                    <button class="btn primary sm" onclick="salvarParametroUnico('${chave}')">
+                        <i class="fas fa-save"></i> Salvar
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="color:var(--danger-erp);">Erro ao carregar: ${e.message}</td></tr>`;
+    }
+}
+
+async function salvarParametroUnico(chave) {
+    const input = document.getElementById(`param_${chave}`);
+    if (!input) return;
+    const valor = input.value.trim();
+    try {
+        await fetchJson('/api/wms/parametros-operacionais', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parametros: { [chave]: valor } })
+        });
+        showToast(`Parâmetro "${chave}" salvo com sucesso.`);
+    } catch (e) {
+        showToast(`Erro: ${e.message}`, 'err');
+    }
+}
+
+async function salvarParametros() {
+    const tbody = document.getElementById('tbodyParametros');
+    const inputs = tbody.querySelectorAll('.param-input');
+    const parametros = {};
+    inputs.forEach(el => {
+        const chave = el.id.replace('param_', '');
+        parametros[chave] = el.value.trim();
+    });
+    if (!Object.keys(parametros).length) {
+        showToast('Nenhum parâmetro para salvar.', 'warn');
+        return;
+    }
+    try {
+        const res = await fetchJson('/api/wms/parametros-operacionais', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parametros })
+        });
+        showToast(`${res.atualizados} parâmetro(s) salvos com sucesso.`);
+    } catch (e) {
+        showToast(`Erro: ${e.message}`, 'err');
+    }
+}
+
+// ─── SKU Mestre ──────────────────────────────────────────────────────────────
+
+async function pesquisarSku() {
+    const filtro = document.getElementById('filtroSku').value.trim();
+    const tbody = document.getElementById('tbodySku');
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Buscando...</td></tr>';
+    try {
+        const url = '/api/wms/sku-mestre' + (filtro ? `?sku=${encodeURIComponent(filtro)}` : '');
+        const lista = await fetchJson(url);
+        tbody.innerHTML = '';
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">Nenhum SKU encontrado.</td></tr>';
+            return;
+        }
+        lista.forEach(s => {
+            const curvaBadge = s.curva_abc === 'A' ? 'badge-a' : s.curva_abc === 'B' ? 'badge-b' : 'badge-c';
+            const polBadge   = s.politica_validade === 'FEFO' ? 'badge-fefo' : 'badge-fifo';
+            const tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.title = 'Clique para editar';
+            tr.innerHTML = `
+                <td><strong style="color:var(--sap-blue)">${s.codigo_item}</strong></td>
+                <td>${s.codigo_erp || '—'}</td>
+                <td>${s.unidade || 'UN'}</td>
+                <td><span class="badge ${curvaBadge}">${s.curva_abc || 'C'}</span></td>
+                <td><span class="badge ${polBadge}">${s.politica_validade || 'FIFO'}</span></td>
+                <td>${s.estoque_minimo != null ? s.estoque_minimo : '—'}</td>
+                <td>${s.estoque_maximo != null ? s.estoque_maximo : '—'}</td>
+                <td>${s.endereco_preferencial || '—'}</td>
+                <td style="text-align:center;">
+                    <button class="btn sm" onclick="editarSku(event, ${JSON.stringify(s).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger-erp);">Erro: ${e.message}</td></tr>`;
+    }
+}
+
+function editarSku(e, sku) {
+    e.stopPropagation();
+    document.getElementById('formSkuTitle').textContent = `Editando: ${sku.codigo_item}`;
+    document.getElementById('skuCodigo').value = sku.codigo_item || '';
+    document.getElementById('skuCodigo').setAttribute('readonly', true);
+    document.getElementById('skuCodigoErp').value = sku.codigo_erp || '';
+    document.getElementById('skuUnidade').value = sku.unidade || 'UN';
+    document.getElementById('skuCurva').value = sku.curva_abc || 'C';
+    document.getElementById('skuPolitica').value = sku.politica_validade || 'FIFO';
+    document.getElementById('skuEstMin').value = sku.estoque_minimo ?? 0;
+    document.getElementById('skuEstMax').value = sku.estoque_maximo ?? 0;
+    document.getElementById('skuFator').value = sku.fator_conversao ?? 1;
+    document.getElementById('skuEndereco').value = sku.endereco_preferencial || '';
+    document.getElementById('skuCodigo').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function limparFormSku() {
+    document.getElementById('formSkuTitle').textContent = 'Novo SKU';
+    document.getElementById('skuCodigo').value = '';
+    document.getElementById('skuCodigo').removeAttribute('readonly');
+    document.getElementById('skuCodigoErp').value = '';
+    document.getElementById('skuUnidade').value = 'UN';
+    document.getElementById('skuCurva').value = 'C';
+    document.getElementById('skuPolitica').value = 'FIFO';
+    document.getElementById('skuEstMin').value = 0;
+    document.getElementById('skuEstMax').value = 0;
+    document.getElementById('skuFator').value = 1;
+    document.getElementById('skuEndereco').value = '';
+}
+
+async function salvarSku() {
+    const codigo_item = document.getElementById('skuCodigo').value.trim();
+    if (!codigo_item) {
+        showToast('Código do item é obrigatório.', 'warn');
+        return;
+    }
+    const payload = {
+        codigo_item,
+        codigo_erp:         document.getElementById('skuCodigoErp').value.trim(),
+        unidade:            document.getElementById('skuUnidade').value,
+        curva_abc:          document.getElementById('skuCurva').value,
+        politica_validade:  document.getElementById('skuPolitica').value,
+        estoque_minimo:     parseFloat(document.getElementById('skuEstMin').value) || 0,
+        estoque_maximo:     parseFloat(document.getElementById('skuEstMax').value) || 0,
+        fator_conversao:    parseFloat(document.getElementById('skuFator').value) || 1,
+        endereco_preferencial: document.getElementById('skuEndereco').value.trim(),
+    };
+    try {
+        await fetchJson('/api/wms/sku-mestre', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showToast(`SKU "${codigo_item}" salvo com sucesso.`);
+        limparFormSku();
+        pesquisarSku();
+    } catch (e) {
+        showToast(`Erro: ${e.message}`, 'err');
+    }
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+function refreshAll() {
+    carregarParametros();
+    pesquisarSku();
+}
+
+document.addEventListener('DOMContentLoaded', refreshAll);
+
+document.getElementById('filtroSku').addEventListener('keydown', e => {
+    if (e.key === 'Enter') pesquisarSku();
+});
+</script>
+{% endblock %}

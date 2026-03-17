@@ -6,3 +6,4 @@ requests
 marshmallow
 pytest
 waitress
+openpyxl

@@ -11,12 +11,95 @@ from ..models import (
     ItemWMS,
     MovimentacaoWMS,
     EstoqueWMS,
-    ItemNota
+    ItemNota,
+    WMSParametroOperacional,
+    WMSReconciliacaoDivergencia,
+    WMSAlertaOperacional,
 )
 
 
 class WMSService:
     """Serviço centralizado para operações de WMS"""
+
+    STATUS_TRANSITIONS = {
+        'Pendente Enderecamento': {'Armazenado', 'Cancelado'},
+        'Armazenado': {'Separado', 'Devolvido', 'Pendente Enderecamento'},
+        'Separado': {'Armazenado', 'Devolvido'},
+        'Devolvido': set(),
+        'Cancelado': set(),
+    }
+
+    PARAMETROS_PADRAO = {
+        'WMS_FIFO_PADRAO': ('FIFO', 'Politica padrao de validade para SKUs sem regra propria (FIFO/FEFO).'),
+        'WMS_QUARENTENA_ATIVA': ('1', 'Ativa processo de quarentena para divergencias/avarias.'),
+        'WMS_PENDENCIA_ALERTA_HORAS': ('24', 'Horas para alerta de pendencia antiga de enderecamento.'),
+        'WMS_OCUPACAO_ALERTA_PERCENTUAL': ('90', 'Percentual de ocupacao para alerta de capacidade.'),
+        'WMS_RECON_DIVERGENCIA_MINIMA': ('0.01', 'Diferenca minima para registrar divergencia de reconciliacao.'),
+    }
+
+    @staticmethod
+    def _can_transition_status(status_atual, status_novo):
+        status_atual = str(status_atual or '').strip()
+        status_novo = str(status_novo or '').strip()
+        if status_atual == status_novo:
+            return True
+        permitidos = WMSService.STATUS_TRANSITIONS.get(status_atual)
+        return status_novo in (permitidos or set())
+
+    @staticmethod
+    def garantir_parametros_operacionais():
+        alterado = False
+        for chave, (valor, descricao) in WMSService.PARAMETROS_PADRAO.items():
+            existente = WMSParametroOperacional.query.filter_by(chave=chave).first()
+            if existente:
+                continue
+            db.session.add(
+                WMSParametroOperacional(
+                    chave=chave,
+                    valor=str(valor),
+                    descricao=descricao,
+                    atualizado_por='Sistema',
+                )
+            )
+            alterado = True
+        if alterado:
+            db.session.commit()
+
+    @staticmethod
+    def obter_parametros_operacionais():
+        WMSService.garantir_parametros_operacionais()
+        params = WMSParametroOperacional.query.order_by(WMSParametroOperacional.chave.asc()).all()
+        return [
+            {
+                'chave': p.chave,
+                'valor': p.valor,
+                'descricao': p.descricao,
+                'atualizado_por': p.atualizado_por,
+                'atualizado_em': p.atualizado_em.isoformat() if p.atualizado_em else None,
+            }
+            for p in params
+        ]
+
+    @staticmethod
+    def atualizar_parametros_operacionais(parametros, usuario):
+        if not isinstance(parametros, dict):
+            return 0
+        WMSService.garantir_parametros_operacionais()
+        atualizados = 0
+        for chave, valor in parametros.items():
+            registro = WMSParametroOperacional.query.filter_by(chave=str(chave)).first()
+            if not registro:
+                continue
+            novo_valor = str(valor).strip()
+            if registro.valor == novo_valor:
+                continue
+            registro.valor = novo_valor
+            registro.atualizado_por = usuario
+            registro.atualizado_em = datetime.now()
+            atualizados += 1
+        if atualizados:
+            db.session.commit()
+        return atualizados
 
     @staticmethod
     def criar_localizacao(rua, predio, nivel, apartamento):
@@ -89,10 +172,25 @@ class WMSService:
         
         if not item_nota:
             return None
+
+        codigo_item = str(codigo_item or '').strip()
             
         # Usa quantidade da nota se não foi passada
         if qtd_recebida is None:
             qtd_recebida = item_nota.qtd_real or 0
+
+        qtd_recebida = float(qtd_recebida or 0)
+        if qtd_recebida <= 0:
+            return None
+
+        if localizacao_id:
+            localizacao_destino = LocalizacaoArmazem.query.get(localizacao_id)
+            if not localizacao_destino or not localizacao_destino.ativo:
+                return None
+
+            capacidade_disponivel = float(localizacao_destino.capacidade_maxima or 0) - float(localizacao_destino.capacidade_atual or 0)
+            if qtd_recebida > capacidade_disponivel:
+                return None
 
         status_inicial = 'Armazenado' if localizacao_id else 'Pendente Enderecamento'
             
@@ -183,6 +281,23 @@ class WMSService:
         item_wms = ItemWMS.query.get(item_wms_id)
         if not item_wms:
             return None
+
+        qtd_movimentada = float(qtd_movimentada or 0)
+        if qtd_movimentada <= 0:
+            return None
+
+        localizacao_destino = None
+        if localizacao_destino_id:
+            if item_wms.localizacao_id == localizacao_destino_id:
+                return None
+
+            localizacao_destino = LocalizacaoArmazem.query.get(localizacao_destino_id)
+            if not localizacao_destino or not localizacao_destino.ativo:
+                return None
+
+            capacidade_disponivel = float(localizacao_destino.capacidade_maxima or 0) - float(localizacao_destino.capacidade_atual or 0)
+            if qtd_movimentada > capacidade_disponivel:
+                return None
             
         if qtd_movimentada > item_wms.qtd_atual:
             return None  # Quantidade indisponível
@@ -194,7 +309,7 @@ class WMSService:
                 localizacao_id=item_wms.localizacao_id
             ).first()
             if estoque_origem:
-                estoque_origem.qtd_total -= qtd_movimentada
+                estoque_origem.qtd_total = max((estoque_origem.qtd_total or 0) - qtd_movimentada, 0)
                 
             localizacao_origem = LocalizacaoArmazem.query.get(item_wms.localizacao_id)
             if localizacao_origem:
@@ -235,16 +350,15 @@ class WMSService:
                 )
                 db.session.add(estoque_destino)
                 
-            localizacao_destino = LocalizacaoArmazem.query.get(localizacao_destino_id)
             if localizacao_destino:
                 localizacao_destino.capacidade_atual += qtd_movimentada
                 
             item_wms.localizacao_id = localizacao_destino_id
             
-        # Atualiza status baseado no tipo de movimentação
-        if tipo_movimentacao == 'Separacao':
+        # Atualiza status baseado no tipo de movimentação com transições válidas.
+        if tipo_movimentacao == 'Separacao' and WMSService._can_transition_status(item_wms.status, 'Separado'):
             item_wms.status = 'Separado'
-        elif tipo_movimentacao == 'Devolucao':
+        elif tipo_movimentacao == 'Devolucao' and WMSService._can_transition_status(item_wms.status, 'Devolvido'):
             item_wms.status = 'Devolvido'
             
         db.session.commit()
@@ -386,13 +500,26 @@ class WMSService:
         Returns:
             LocalizacaoArmazem ou None
         """
+        qtd = float(qtd or 0)
+        if qtd <= 0:
+            return None
+
         localizacoes = LocalizacaoArmazem.query.filter(
             LocalizacaoArmazem.ativo == True
-        ).order_by(
-            LocalizacaoArmazem.data_criacao.asc()
-        ).first()
-        
-        return localizacoes
+        ).all()
+
+        candidatas = []
+        for loc in localizacoes:
+            capacidade_disponivel = float(loc.capacidade_maxima or 0) - float(loc.capacidade_atual or 0)
+            if capacidade_disponivel >= qtd:
+                candidatas.append((capacidade_disponivel, float(loc.capacidade_atual or 0), loc))
+
+        if not candidatas:
+            return None
+
+        # Prioriza maior capacidade disponível; em empate, menor ocupação atual.
+        candidatas.sort(key=lambda x: (-x[0], x[1], x[2].id or 0))
+        return candidatas[0][2]
 
     @staticmethod
     def listar_pendentes_enderecamento(numero_nota=None):
@@ -453,18 +580,27 @@ class WMSService:
         item_wms = ItemWMS.query.get(item_wms_id)
         localizacao = LocalizacaoArmazem.query.get(localizacao_id)
 
-        if not item_wms or not localizacao:
+        if not item_wms or not localizacao or not item_wms.ativo or not localizacao.ativo:
             return None
 
         if item_wms.localizacao_id is not None:
             return None
 
-        qtd = item_wms.qtd_atual or 0
+        qtd = float(item_wms.qtd_atual or 0)
+        if qtd <= 0:
+            return None
+
+        capacidade_disponivel = float(localizacao.capacidade_maxima or 0) - float(localizacao.capacidade_atual or 0)
+        if qtd > capacidade_disponivel:
+            return None
 
         if not codigo_grv:
             return None
 
         if not ordem_servico and not ordem_compra:
+            return None
+
+        if not WMSService._can_transition_status(item_wms.status, 'Armazenado'):
             return None
 
         item_wms.localizacao_id = localizacao_id
@@ -538,6 +674,9 @@ class WMSService:
         if localizacao:
             localizacao.capacidade_atual = max((localizacao.capacidade_atual or 0) - qtd, 0)
 
+        if not WMSService._can_transition_status(item_wms.status, 'Pendente Enderecamento'):
+            return None
+
         item_wms.localizacao_id = None
         item_wms.status = 'Pendente Enderecamento'
         item_wms.usuario_armazenamento = None
@@ -562,3 +701,190 @@ class WMSService:
 
         db.session.commit()
         return item_wms
+
+    @staticmethod
+    def executar_reconciliacao_erp_wms(usuario='Sistema', numero_nota=None):
+        WMSService.garantir_parametros_operacionais()
+        min_dif = float(
+            (WMSParametroOperacional.query.filter_by(chave='WMS_RECON_DIVERGENCIA_MINIMA').first() or WMSParametroOperacional(valor='0.01')).valor
+            or 0.01
+        )
+
+        query_erp = db.session.query(
+            ItemNota.numero_nota,
+            ItemNota.codigo,
+            func.sum(ItemNota.qtd_real).label('qtd_erp')
+        ).filter(ItemNota.status == 'Lançado')
+
+        if numero_nota:
+            query_erp = query_erp.filter(ItemNota.numero_nota == str(numero_nota).strip())
+
+        registros_erp = query_erp.group_by(ItemNota.numero_nota, ItemNota.codigo).all()
+
+        mapa_wms = {
+            (str(r.numero_nota), str(r.codigo_item)): float(r.qtd or 0)
+            for r in db.session.query(
+                ItemWMS.numero_nota.label('numero_nota'),
+                ItemWMS.codigo_item.label('codigo_item'),
+                func.sum(ItemWMS.qtd_atual).label('qtd')
+            )
+            .filter(ItemWMS.ativo == True)
+            .group_by(ItemWMS.numero_nota, ItemWMS.codigo_item)
+            .all()
+        }
+
+        novas = 0
+        analisadas = 0
+        for reg in registros_erp:
+            chave = (str(reg.numero_nota), str(reg.codigo))
+            qtd_erp = float(reg.qtd_erp or 0)
+            qtd_wms = float(mapa_wms.get(chave, 0.0))
+            diferenca = round(qtd_erp - qtd_wms, 6)
+            analisadas += 1
+
+            if abs(diferenca) < min_dif:
+                continue
+
+            existente = WMSReconciliacaoDivergencia.query.filter_by(
+                numero_nota=chave[0],
+                codigo_item=chave[1],
+                status='Aberta',
+            ).first()
+            if existente:
+                existente.qtd_erp = qtd_erp
+                existente.qtd_wms = qtd_wms
+                existente.diferenca = diferenca
+                existente.observacao = f'Atualizada em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+                continue
+
+            db.session.add(
+                WMSReconciliacaoDivergencia(
+                    numero_nota=chave[0],
+                    codigo_item=chave[1],
+                    qtd_erp=qtd_erp,
+                    qtd_wms=qtd_wms,
+                    diferenca=diferenca,
+                    status='Aberta',
+                    origem='ReconAutomatica',
+                    observacao=f'Gerada por {usuario}',
+                )
+            )
+            novas += 1
+
+        if analisadas:
+            db.session.commit()
+
+        return {'analisadas': analisadas, 'novas_divergencias': novas}
+
+    @staticmethod
+    def gerar_alertas_operacionais(usuario='Sistema'):
+        WMSService.garantir_parametros_operacionais()
+        params = {
+            p.chave: p.valor
+            for p in WMSParametroOperacional.query.all()
+        }
+        horas_pend = float(params.get('WMS_PENDENCIA_ALERTA_HORAS', '24') or 24)
+        limite_ocup = float(params.get('WMS_OCUPACAO_ALERTA_PERCENTUAL', '90') or 90)
+
+        novos_alertas = 0
+        agora = datetime.now()
+
+        pendentes = ItemWMS.query.filter_by(ativo=True, localizacao_id=None).all()
+        for item in pendentes:
+            idade_h = ((agora - item.data_criacao).total_seconds() / 3600) if item.data_criacao else 0
+            if idade_h < horas_pend:
+                continue
+            ref = f"{item.numero_nota}:{item.codigo_item}"
+            existe = WMSAlertaOperacional.query.filter_by(
+                tipo='PendenciaAntiga',
+                referencia=ref,
+                status='Aberto',
+            ).first()
+            if existe:
+                continue
+            db.session.add(
+                WMSAlertaOperacional(
+                    tipo='PendenciaAntiga',
+                    severidade='ALTA',
+                    referencia=ref,
+                    descricao=f'Pendencia de enderecamento acima de {int(horas_pend)}h.',
+                    status='Aberto',
+                )
+            )
+            novos_alertas += 1
+
+        localizacoes = LocalizacaoArmazem.query.filter_by(ativo=True).all()
+        for loc in localizacoes:
+            capacidade = float(loc.capacidade_maxima or 0)
+            if capacidade <= 0:
+                continue
+            ocup = (float(loc.capacidade_atual or 0) / capacidade) * 100
+            if ocup < limite_ocup:
+                continue
+            ref = str(loc.codigo)
+            existe = WMSAlertaOperacional.query.filter_by(
+                tipo='CapacidadeCritica',
+                referencia=ref,
+                status='Aberto',
+            ).first()
+            if existe:
+                continue
+            db.session.add(
+                WMSAlertaOperacional(
+                    tipo='CapacidadeCritica',
+                    severidade='MEDIA' if ocup < 98 else 'ALTA',
+                    referencia=ref,
+                    descricao=f'Ocupacao em {ocup:.1f}% da capacidade.',
+                    status='Aberto',
+                )
+            )
+            novos_alertas += 1
+
+        if novos_alertas:
+            db.session.commit()
+
+        return novos_alertas
+
+    @staticmethod
+    def obter_painel_governanca():
+        WMSService.garantir_parametros_operacionais()
+        WMSService.gerar_alertas_operacionais()
+
+        alertas_abertos = WMSAlertaOperacional.query.filter_by(status='Aberto').order_by(WMSAlertaOperacional.criado_em.desc()).limit(20).all()
+        divergencias_abertas = WMSReconciliacaoDivergencia.query.filter_by(status='Aberta').order_by(WMSReconciliacaoDivergencia.criado_em.desc()).limit(30).all()
+
+        pendentes = ItemWMS.query.filter_by(ativo=True, localizacao_id=None).count()
+        enderecados = ItemWMS.query.filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.isnot(None)).count()
+
+        return {
+            'kpis': {
+                'pendentes_enderecamento': pendentes,
+                'itens_enderecados': enderecados,
+                'alertas_abertos': len(alertas_abertos),
+                'divergencias_abertas': len(divergencias_abertas),
+            },
+            'alertas': [
+                {
+                    'id': a.id,
+                    'tipo': a.tipo,
+                    'severidade': a.severidade,
+                    'referencia': a.referencia,
+                    'descricao': a.descricao,
+                    'criado_em': a.criado_em.isoformat() if a.criado_em else None,
+                }
+                for a in alertas_abertos
+            ],
+            'divergencias': [
+                {
+                    'id': d.id,
+                    'numero_nota': d.numero_nota,
+                    'codigo_item': d.codigo_item,
+                    'qtd_erp': d.qtd_erp,
+                    'qtd_wms': d.qtd_wms,
+                    'diferenca': d.diferenca,
+                    'status': d.status,
+                    'criado_em': d.criado_em.isoformat() if d.criado_em else None,
+                }
+                for d in divergencias_abertas
+            ],
+        }

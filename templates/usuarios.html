@@ -11,6 +11,7 @@
             --border-color: #dbe2e8;
             --protheus-gray: #32363a;
             --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+            --danger-erp: #d92d20;
         }
 
         body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
@@ -77,8 +78,16 @@
         }
         .btn-delete:hover { background: var(--danger-erp); color: white; border-color: var(--danger-erp); }
 
+        .permissions-card { margin-top: 20px; }
+        .permissions-toolbar { display: grid; grid-template-columns: 170px 280px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: 16px; }
+        .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(340px, 1fr)); gap: 10px; }
+        .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px; background: #fafcff; }
+        .perm-item small { color: #64748b; font-size: 10px; }
+
         @media (max-width: 960px) {
             .management-grid { grid-template-columns: 1fr; }
+            .permissions-toolbar { grid-template-columns: 1fr; }
+            .permissions-grid { grid-template-columns: 1fr; }
         }
     </style>
 {% endblock %}
@@ -136,11 +145,49 @@
             </div>
         </div>
     </div>
+
+    <div class="card-sap permissions-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; border:none; padding:0;">Permissões Granulares por Aba</h3>
+        </div>
+
+        <div class="permissions-toolbar">
+            <div class="form-group" style="margin-bottom:0;">
+                <label>Escopo</label>
+                <select id="perm-scope" onchange="alternarEscopoPermissao()">
+                    <option value="ROLE">Cargo</option>
+                    <option value="USER">Usuário específico</option>
+                </select>
+            </div>
+            <div class="form-group" id="wrap-role" style="margin-bottom:0;">
+                <label>Cargo</label>
+                <select id="perm-role">
+                    <option value="Fiscal">Fiscal</option>
+                    <option value="Conferente">Conferente</option>
+                    <option value="Portaria">Portaria</option>
+                    <option value="Admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group" id="wrap-user" style="margin-bottom:0; display:none;">
+                <label>Usuário</label>
+                <select id="perm-user"></select>
+            </div>
+            <button class="btn-sap btn-refresh" onclick="carregarPermissoesAlvo()"><i class="fas fa-filter"></i> Carregar</button>
+            <button class="btn-sap btn-save" style="width:auto; margin-top:0;" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar Permissões</button>
+        </div>
+
+        <div id="perms-meta" style="font-size:12px; color:#64748b; margin-bottom:14px;">Selecione o alvo para editar as abas permitidas.</div>
+        <div id="perms-grid" class="permissions-grid"></div>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    let usuariosCache = [];
+    let catalogoPermissoes = [];
+    let permissoesEditando = {};
+
     async function salvarUsuario() {
         const u = document.getElementById('reg-user').value.trim();
         const p = document.getElementById('reg-pass').value.trim();
@@ -168,6 +215,9 @@
     async function carregarUsuarios() {
         const res = await fetch('/api/listar_usuarios');
         const users = await res.json();
+        usuariosCache = users;
+        atualizarSelectUsuarios();
+
         document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => `
             <tr>
                 <td><b style="color:var(--sap-blue)">${u.username}</b></td>
@@ -188,7 +238,110 @@
         if(data.sucesso) carregarUsuarios();
         else alert("Erro: " + data.msg);
     }
+
+    function atualizarSelectUsuarios() {
+        const select = document.getElementById('perm-user');
+        select.innerHTML = usuariosCache
+            .map(u => `<option value="${u.username}">${u.username} (${u.role})</option>`)
+            .join('');
+    }
+
+    function alternarEscopoPermissao() {
+        const scope = document.getElementById('perm-scope').value;
+        document.getElementById('wrap-role').style.display = scope === 'ROLE' ? '' : 'none';
+        document.getElementById('wrap-user').style.display = scope === 'USER' ? '' : 'none';
+    }
+
+    async function carregarCatalogoPermissoes() {
+        const res = await fetch('/api/permissoes/catalogo');
+        const data = await res.json();
+        catalogoPermissoes = data.catalogo || [];
+    }
+
+    function renderPermissoesGrid(efetivo, base = {}, overrides = {}) {
+        permissoesEditando = { ...efetivo };
+        const grid = document.getElementById('perms-grid');
+        if (!catalogoPermissoes.length) {
+            grid.innerHTML = '<div>Nenhuma permissão cadastrada.</div>';
+            return;
+        }
+
+        grid.innerHTML = catalogoPermissoes.map(p => {
+            const checked = !!efetivo[p.key] ? 'checked' : '';
+            const baseVal = !!base[p.key];
+            const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
+            const origem = hasOverride ? 'customizado' : (baseVal ? 'padrão do cargo: permitido' : 'padrão do cargo: bloqueado');
+            return `
+                <label class="perm-item">
+                    <input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)">
+                    <div>
+                        <div style="font-size:12px; font-weight:700; color:#1e293b;">${p.label}</div>
+                        <small>${p.key} | ${origem}</small>
+                    </div>
+                </label>
+            `;
+        }).join('');
+    }
+
+    function alterarPermissaoChave(chave, valor) {
+        permissoesEditando[chave] = !!valor;
+    }
+
+    async function carregarPermissoesAlvo() {
+        const scope = document.getElementById('perm-scope').value;
+        let url = '';
+        if (scope === 'ROLE') {
+            const role = document.getElementById('perm-role').value;
+            url = `/api/permissoes/role/${encodeURIComponent(role)}`;
+        } else {
+            const username = document.getElementById('perm-user').value;
+            if (!username) return alert('Selecione um usuário para configurar.');
+            url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
+        }
+
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.msg || 'Erro ao carregar permissões.');
+            return;
+        }
+
+        const alvo = scope === 'ROLE' ? `Cargo: ${data.role}` : `Usuário: ${data.username} (${data.role})`;
+        document.getElementById('perms-meta').textContent = `Editando ${alvo}. As marcações abaixo definem quais abas ficam disponíveis.`;
+        renderPermissoesGrid(data.efetivo || {}, data.base || {}, data.overrides || {});
+    }
+
+    async function salvarPermissoesAlvo() {
+        const scope = document.getElementById('perm-scope').value;
+        let url = '';
+        if (scope === 'ROLE') {
+            const role = document.getElementById('perm-role').value;
+            url = `/api/permissoes/role/${encodeURIComponent(role)}`;
+        } else {
+            const username = document.getElementById('perm-user').value;
+            if (!username) return alert('Selecione um usuário para configurar.');
+            url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
+        }
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ permissoes: permissoesEditando }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.sucesso) {
+            alert(data.msg || 'Falha ao salvar permissões.');
+            return;
+        }
+        alert(`Permissões atualizadas (${data.atualizadas}).`);
+        await carregarPermissoesAlvo();
+    }
     
-    document.addEventListener('DOMContentLoaded', carregarUsuarios);
+    document.addEventListener('DOMContentLoaded', async () => {
+        await carregarUsuarios();
+        await carregarCatalogoPermissoes();
+        alternarEscopoPermissao();
+        await carregarPermissoesAlvo();
+    });
 </script>
 {% endblock %}

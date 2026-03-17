@@ -115,10 +115,11 @@
                             <th>Prédio</th>
                             <th>Nível</th>
                             <th>Apto</th>
+                            <th style="text-align:center;">Excluir</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyLocalizacoes">
-                        <tr><td colspan="5" style="text-align:center;">Carregando localizações...</td></tr>
+                        <tr><td colspan="6" style="text-align:center;">Carregando localizações...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -177,11 +178,26 @@ async function listarLocalizacoes() {
                 <td>${loc.predio || '-'}</td>
                 <td>${loc.nivel || '-'}</td>
                 <td>${loc.apartamento || '-'}</td>
+                <td style="text-align:center;">
+                    <button class="btn danger" style="padding:4px 10px; font-size:10px;" onclick="excluirEndereco(${loc.id}, '${loc.codigo}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
             `;
             tbody.appendChild(tr);
         });
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5">Erro: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`;
+    }
+}
+
+async function excluirEndereco(id, codigo) {
+    if (!confirm(`Deseja excluir o endereço "${codigo}"?\n\nEsta operação só é permitida se não houver itens ou estoque vinculados.`)) return;
+    try {
+        await fetchJson(`/api/wms/localizacoes/${id}`, { method: 'DELETE' });
+        await listarLocalizacoes();
+    } catch (err) {
+        alert(`Não foi possível excluir: ${err.message}`);
     }
 }
 

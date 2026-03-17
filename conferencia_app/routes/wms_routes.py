@@ -12,7 +12,11 @@ from ..models import (
     ItemWMS,
     MovimentacaoWMS,
     EstoqueWMS,
-    ItemNota
+    ItemNota,
+    WMSAlertaOperacional,
+    WMSReconciliacaoDivergencia,
+    WMSSkuMestre,
+    WMSIntegracaoEvento,
 )
 from ..services import WMSService
 
@@ -97,6 +101,41 @@ def criar_localizacao():
         'codigo': localizacao.codigo,
         'mensagem': 'Localização criada com sucesso'
     }), 201
+
+
+@wms_bp.route('/localizacoes/<int:localizacao_id>', methods=['DELETE'])
+@requer_admin
+def excluir_localizacao(localizacao_id):
+    """Desativa (soft-delete) uma localização, desde que não tenha estoque ou itens ativos."""
+    loc = LocalizacaoArmazem.query.get(localizacao_id)
+    if not loc:
+        return jsonify({'erro': 'Localização não encontrada'}), 404
+    if not loc.ativo:
+        return jsonify({'erro': 'Localização já está inativa'}), 409
+
+    # Bloqueia exclusão se houver ItemWMS em aberto (pendente ou endereçado)
+    itens_ativos = ItemWMS.query.filter(
+        ItemWMS.localizacao_id == localizacao_id,
+        ItemWMS.status.in_(['Pendente', 'Endereçado', 'Separacao'])
+    ).count()
+    if itens_ativos:
+        return jsonify({
+            'erro': f'Localização possui {itens_ativos} item(ns) ativo(s). Remova ou transfira-os antes de excluir.'
+        }), 409
+
+    # Bloqueia exclusão se houver saldo de estoque
+    estoque_ativo = EstoqueWMS.query.filter(
+        EstoqueWMS.localizacao_id == localizacao_id,
+        EstoqueWMS.quantidade > 0
+    ).count()
+    if estoque_ativo:
+        return jsonify({
+            'erro': f'Localização possui saldo de estoque em {estoque_ativo} SKU(s). Zere o estoque antes de excluir.'
+        }), 409
+
+    loc.ativo = False
+    db.session.commit()
+    return jsonify({'sucesso': True, 'mensagem': f'Localização {loc.codigo} excluída com sucesso.'}), 200
 
 
 # ============================================================================
@@ -460,6 +499,142 @@ def estornar_enderecamento_admin():
         return jsonify({'erro': 'Não foi possível estornar este endereçamento.'}), 400
 
     return jsonify({'sucesso': True, 'mensagem': 'Endereçamento estornado com sucesso.'}), 200
+
+
+@wms_bp.route('/governanca', methods=['GET'])
+@requer_wms_operacao
+def obter_governanca_wms():
+    painel = WMSService.obter_painel_governanca()
+    fila = WMSIntegracaoEvento.query.order_by(WMSIntegracaoEvento.criado_em.desc()).limit(20).all()
+    painel['fila_integracao'] = [
+        {
+            'id': e.id,
+            'tipo_evento': e.tipo_evento,
+            'referencia': e.referencia,
+            'status': e.status,
+            'tentativas': e.tentativas,
+            'ultima_erro': e.ultima_erro,
+            'criado_em': e.criado_em.isoformat() if e.criado_em else None,
+            'processado_em': e.processado_em.isoformat() if e.processado_em else None,
+        }
+        for e in fila
+    ]
+    return jsonify(painel), 200
+
+
+@wms_bp.route('/governanca/reconciliar', methods=['POST'])
+@requer_admin
+def executar_reconciliacao_governanca():
+    data = request.get_json() or {}
+    numero_nota = (data.get('numero_nota') or '').strip() or None
+    usuario = session.get('username', 'Sistema')
+    resultado = WMSService.executar_reconciliacao_erp_wms(usuario=usuario, numero_nota=numero_nota)
+    return jsonify({'sucesso': True, 'resultado': resultado}), 200
+
+
+@wms_bp.route('/parametros-operacionais', methods=['GET'])
+@requer_wms_operacao
+def listar_parametros_operacionais():
+    return jsonify(WMSService.obter_parametros_operacionais()), 200
+
+
+@wms_bp.route('/parametros-operacionais', methods=['POST'])
+@requer_admin
+def atualizar_parametros_operacionais():
+    data = request.get_json() or {}
+    parametros = data.get('parametros') or {}
+    usuario = session.get('username', 'Sistema')
+    atualizados = WMSService.atualizar_parametros_operacionais(parametros, usuario)
+    return jsonify({'sucesso': True, 'atualizados': atualizados}), 200
+
+
+@wms_bp.route('/alertas/<int:alerta_id>/resolver', methods=['POST'])
+@requer_admin
+def resolver_alerta_operacional(alerta_id):
+    alerta = WMSAlertaOperacional.query.get(alerta_id)
+    if not alerta:
+        return jsonify({'erro': 'Alerta não encontrado'}), 404
+    alerta.status = 'Resolvido'
+    alerta.resolvido_em = datetime.now()
+    db.session.commit()
+    return jsonify({'sucesso': True}), 200
+
+
+@wms_bp.route('/reconciliacoes', methods=['GET'])
+@requer_wms_operacao
+def listar_reconciliacoes():
+    status = (request.args.get('status') or '').strip() or 'Aberta'
+    query = WMSReconciliacaoDivergencia.query
+    if status and status != 'Todas':
+        query = query.filter_by(status=status)
+    registros = query.order_by(WMSReconciliacaoDivergencia.criado_em.desc()).limit(100).all()
+    return jsonify([
+        {
+            'id': r.id,
+            'numero_nota': r.numero_nota,
+            'codigo_item': r.codigo_item,
+            'qtd_erp': r.qtd_erp,
+            'qtd_wms': r.qtd_wms,
+            'diferenca': r.diferenca,
+            'status': r.status,
+            'origem': r.origem,
+            'observacao': r.observacao,
+            'criado_em': r.criado_em.isoformat() if r.criado_em else None,
+        }
+        for r in registros
+    ]), 200
+
+
+@wms_bp.route('/sku-mestre', methods=['GET'])
+@requer_wms_operacao
+def listar_sku_mestre():
+    sku = (request.args.get('sku') or '').strip()
+    query = WMSSkuMestre.query.filter_by(ativo=True)
+    if sku:
+        query = query.filter(func.lower(WMSSkuMestre.codigo_item).contains(sku.lower()))
+    registros = query.order_by(WMSSkuMestre.codigo_item.asc()).limit(300).all()
+    return jsonify([
+        {
+            'id': s.id,
+            'codigo_item': s.codigo_item,
+            'codigo_erp': s.codigo_erp,
+            'unidade': s.unidade,
+            'fator_conversao': s.fator_conversao,
+            'curva_abc': s.curva_abc,
+            'politica_validade': s.politica_validade,
+            'estoque_minimo': s.estoque_minimo,
+            'estoque_maximo': s.estoque_maximo,
+            'endereco_preferencial': s.endereco_preferencial,
+        }
+        for s in registros
+    ]), 200
+
+
+@wms_bp.route('/sku-mestre', methods=['POST'])
+@requer_admin
+def upsert_sku_mestre():
+    data = request.get_json() or {}
+    codigo_item = (data.get('codigo_item') or '').strip()
+    if not codigo_item:
+        return jsonify({'erro': 'codigo_item é obrigatório'}), 400
+
+    registro = WMSSkuMestre.query.filter_by(codigo_item=codigo_item).first()
+    if not registro:
+        registro = WMSSkuMestre(codigo_item=codigo_item)
+        db.session.add(registro)
+
+    registro.codigo_erp = (data.get('codigo_erp') or '').strip() or None
+    registro.unidade = (data.get('unidade') or 'UN').strip() or 'UN'
+    registro.fator_conversao = float(data.get('fator_conversao') or 1.0)
+    registro.curva_abc = (data.get('curva_abc') or 'C').strip().upper()[:1]
+    registro.politica_validade = (data.get('politica_validade') or 'FIFO').strip().upper()
+    registro.estoque_minimo = float(data.get('estoque_minimo') or 0.0)
+    registro.estoque_maximo = float(data.get('estoque_maximo') or 0.0)
+    registro.endereco_preferencial = (data.get('endereco_preferencial') or '').strip() or None
+    registro.atualizado_em = datetime.now()
+
+    db.session.commit()
+    return jsonify({'sucesso': True, 'id': registro.id}), 200
 
 
 def registrar_rotas_wms(app):

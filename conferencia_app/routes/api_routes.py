@@ -1,6 +1,7 @@
 from datetime import datetime
 import csv
 import io
+import json
 import re
 import os
 import shutil
@@ -9,11 +10,18 @@ from datetime import timedelta
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
-from ..auth import login_required, roles_required
+from ..auth import (
+    get_base_role_permissions,
+    get_effective_permissions,
+    get_permission_catalog,
+    login_required,
+    permission_required,
+    roles_required,
+)
 from ..extensions import db
 from ..models import (
     ConferenciaLock,
@@ -34,8 +42,10 @@ from ..models import (
     LogManifestacaoDestinatario,
     LogReversaoConferencia,
     LogTentativaConferencia,
+    PermissaoAcesso,
     SolicitacaoDevolucaoRecebimento,
     Usuario,
+    WMSIntegracaoEvento,
 )
 from ..services import WMSService
 from ..schemas.api_schemas import (
@@ -59,6 +69,7 @@ from ..services.expedicao_service import (
     validate_blind_conference,
 )
 from ..services.xml_service import process_xml_and_store
+from ..services.pedidos_service import comparar_pedido_com_nf
 
 
 api_bp = Blueprint("api", __name__)
@@ -76,6 +87,7 @@ aprovar_solicitacao_devolucao_schema = AprovarSolicitacaoDevolucaoSchema()
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
+CNPJ_COLUMBIA_MACHINE = "30482274000125"
 
 
 def _normalize_external_payload(payload):
@@ -97,12 +109,119 @@ def _normalize_cfop(cfop: str) -> str:
     return re.sub(r"\D", "", str(cfop or ""))[:4]
 
 
+def _only_digits(value: str) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def _normalize_cst(value: str, size: int = 2) -> str:
+    clean = _only_digits(value)
+    if not clean:
+        return ""
+    return clean.zfill(size)[-size:]
+
+
 def _filter_itens_para_conferencia(itens):
     itens = list(itens or [])
     tem_cfop_principal = any(_normalize_cfop(item.cfop) in CFOPS_CONFERENCIA_PRINCIPAL for item in itens)
     if not tem_cfop_principal:
         return itens
     return [item for item in itens if _normalize_cfop(item.cfop) not in CFOPS_EXCLUIR_SEM_CONFERENCIA]
+
+
+def _auditar_inconsistencias_fiscais(itens_nota):
+    inconsistencias = []
+    itens_nota = list(itens_nota or [])
+    if not itens_nota:
+        return ["NF sem itens importados."]
+
+    chave = str(itens_nota[0].chave_acesso or "").strip()
+    if len(chave) != 44:
+        inconsistencias.append("Chave de acesso ausente ou inválida (esperado 44 dígitos).")
+
+    fornecedor = str(itens_nota[0].fornecedor or "").strip()
+    if not fornecedor:
+        inconsistencias.append("Fornecedor/emitente não identificado no XML.")
+
+    cnpj_dest = _only_digits(itens_nota[0].cnpj_destinatario or "")
+    if cnpj_dest != CNPJ_COLUMBIA_MACHINE:
+        inconsistencias.append(
+            "CNPJ do destinatário diferente da Columbia Machine (esperado 30.482.274/0001-25)."
+        )
+
+    # Regra simplificada de compatibilidade da operação com CST PIS/COFINS.
+    cst_saida_piscofins = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "49"}
+    cst_entrada_piscofins = {
+        "50",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "60",
+        "61",
+        "62",
+        "63",
+        "64",
+        "65",
+        "66",
+        "67",
+        "70",
+        "71",
+        "72",
+        "73",
+        "74",
+        "75",
+        "98",
+        "99",
+    }
+
+    for item in itens_nota:
+        codigo_item = str(item.codigo or "").strip() or "(sem código)"
+        cfop = _normalize_cfop(item.cfop)
+        if len(cfop) != 4:
+            inconsistencias.append(f"Item {codigo_item}: CFOP ausente ou inválido.")
+        if float(item.qtd_real or 0) <= 0:
+            inconsistencias.append(f"Item {codigo_item}: quantidade zerada ou negativa.")
+        if not str(item.codigo or "").strip():
+            inconsistencias.append("Encontrado item sem código de produto (cProd).")
+
+        if not str(item.ncm or "").strip():
+            inconsistencias.append(f"Item {codigo_item}: NCM não informado.")
+
+        cst_icms = _normalize_cst(item.cst_icms, size=2)
+        cst_pis = _normalize_cst(item.cst_pis, size=2)
+        cst_cofins = _normalize_cst(item.cst_cofins, size=2)
+
+        if not cst_icms:
+            inconsistencias.append(f"Item {codigo_item}: CST/CSOSN de ICMS não informado.")
+        if not cst_pis:
+            inconsistencias.append(f"Item {codigo_item}: CST de PIS não informado.")
+        if not cst_cofins:
+            inconsistencias.append(f"Item {codigo_item}: CST de COFINS não informado.")
+
+        operacao = cfop[:1]
+        if operacao in {"5", "6", "7"}:
+            if cst_pis and cst_pis not in cst_saida_piscofins:
+                inconsistencias.append(
+                    f"Item {codigo_item}: CST PIS {cst_pis} incompatível com CFOP de saída ({cfop})."
+                )
+            if cst_cofins and cst_cofins not in cst_saida_piscofins:
+                inconsistencias.append(
+                    f"Item {codigo_item}: CST COFINS {cst_cofins} incompatível com CFOP de saída ({cfop})."
+                )
+        elif operacao in {"1", "2", "3"}:
+            if cst_pis and cst_pis not in cst_entrada_piscofins:
+                inconsistencias.append(
+                    f"Item {codigo_item}: CST PIS {cst_pis} incompatível com CFOP de entrada ({cfop})."
+                )
+            if cst_cofins and cst_cofins not in cst_entrada_piscofins:
+                inconsistencias.append(
+                    f"Item {codigo_item}: CST COFINS {cst_cofins} incompatível com CFOP de entrada ({cfop})."
+                )
+
+    # Evita repetição de mensagens quando vários itens têm o mesmo problema global.
+    return list(dict.fromkeys(inconsistencias))
 
 
 def _compose_motivo_pendencia(item_id, motivos_itens, motivos_tipos, motivos_observacoes):
@@ -276,7 +395,10 @@ def _compute_pending_priority(numero_nota, fornecedor):
     first = itens[0]
     log_liberacao = (
         LogAcessoAdministrativo.query.filter(
-            LogAcessoAdministrativo.rota.contains("/api/admin/liberar_nota_conferencia"),
+            or_(
+                LogAcessoAdministrativo.rota.contains("/api/admin/liberar_nota_conferencia"),
+                LogAcessoAdministrativo.rota.contains("/api/xml_auditor/liberar"),
+            ),
             LogAcessoAdministrativo.rota.contains(f"nota={numero_nota}"),
         )
         .order_by(LogAcessoAdministrativo.data.desc())
@@ -314,6 +436,8 @@ def _compute_pending_priority(numero_nota, fornecedor):
     return {
         "numero": numero_nota,
         "fornecedor": fornecedor,
+        "pedido_compra": first.pedido_compra or "",
+        "material_cliente": bool(first.material_cliente),
         "score": score,
         "prioridade_nivel": prioridade_nivel,
         "idade_horas": horas,
@@ -491,71 +615,67 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
 
 
 def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
-    """
-    Registra todos os itens da nota no WMS como pendentes de endereçamento
-    quando a nota é lançada.
-    
-    Args:
-        numero_nota: Número da nota fiscal
-        usuario: Usuário fazendo o lançamento
-        
-    Returns:
-        {
-            'sucesso': bool,
-            'itens_pendentes': int,
-            'mensagem': str
-        }
-    """
+    """Registra itens da NF no WMS como pendentes de endereçamento."""
     try:
-        # Obtém todos os itens da nota
         itens = ItemNota.query.filter_by(numero_nota=numero_nota, status='Lançado').all()
-        
+
         if not itens:
             return {
                 'sucesso': True,
                 'itens_pendentes': 0,
                 'mensagem': 'Nenhum item para armazenar'
             }
-        
-        itens_pendentes = 0
-        
-        for item in itens:
-            try:
-                codigo_item = item.codigo
-                qtd = item.qtd_real or 0
 
-                # Evita duplicar se já existir qualquer registro ativo para mesma NF+SKU.
+        itens_pendentes = 0
+        itens_atualizados = 0
+        qtd_por_sku = {}
+
+        for item in itens:
+            codigo_item = (item.codigo or '').strip()
+            if not codigo_item:
+                continue
+            qtd_por_sku[codigo_item] = float(qtd_por_sku.get(codigo_item, 0.0)) + float(item.qtd_real or 0)
+
+        for codigo_item, qtd in qtd_por_sku.items():
+            try:
                 existente = ItemWMS.query.filter_by(
                     numero_nota=numero_nota,
                     codigo_item=codigo_item,
                     ativo=True,
                 ).first()
                 if existente:
+                    if existente.localizacao_id is None:
+                        existente.qtd_recebida = qtd
+                        existente.qtd_atual = qtd
+                        existente.status = 'Pendente Enderecamento'
+                        itens_atualizados += 1
                     continue
 
-                # Sempre cria pendente para endereçamento manual no WMS.
-                WMSService.armazenar_item_nota(
+                item_criado = WMSService.armazenar_item_nota(
                     numero_nota=numero_nota,
                     codigo_item=codigo_item,
                     localizacao_id=None,
                     usuario=usuario,
                     qtd_recebida=qtd
                 )
-                itens_pendentes += 1
-                    
+                if item_criado:
+                    itens_pendentes += 1
+
             except Exception as e:
                 current_app.logger.warning(f"Erro ao armazenar item {codigo_item} da nota {numero_nota}: {str(e)}")
-                # Continua processando outros itens mesmo se um falhar
                 continue
-        
-        mensagem = f"WMS: {itens_pendentes} itens pendentes para endereçamento"
-        
+
+        if itens_atualizados:
+            db.session.commit()
+
+        mensagem = f"WMS: {itens_pendentes} itens pendentes criados e {itens_atualizados} atualizados"
+
         return {
             'sucesso': True,
             'itens_pendentes': itens_pendentes,
             'mensagem': mensagem
         }
-        
+
     except Exception as e:
         current_app.logger.error(f"Erro ao integrar WMS para nota {numero_nota}: {str(e)}")
         return {
@@ -563,6 +683,100 @@ def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
             'itens_pendentes': 0,
             'mensagem': f'Erro na integração WMS: {str(e)}'
         }
+
+
+def _enfileirar_integracao_wms_nota_lancada(numero_nota: str, usuario: str):
+    numero_nota = str(numero_nota or '').strip()
+    usuario = str(usuario or 'Sistema').strip()
+    if not numero_nota:
+        return None, False
+
+    idempotency_key = f"nota_lancada:{numero_nota}"
+    evento = WMSIntegracaoEvento.query.filter_by(idempotency_key=idempotency_key).first()
+    if evento:
+        if evento.status in ('Falha', 'DeadLetter'):
+            evento.status = 'Pendente'
+            evento.proxima_tentativa_em = None
+            evento.ultima_erro = None
+            db.session.commit()
+        return evento, False
+
+    payload = {'numero_nota': numero_nota, 'usuario': usuario}
+    evento = WMSIntegracaoEvento(
+        idempotency_key=idempotency_key,
+        tipo_evento='NotaLancada',
+        referencia=numero_nota,
+        origem='Fiscal',
+        payload_json=json.dumps(payload, ensure_ascii=True),
+        status='Pendente',
+        tentativas=0,
+        criado_em=datetime.now(),
+    )
+    db.session.add(evento)
+    db.session.commit()
+    return evento, True
+
+
+def _processar_evento_integracao_wms(evento: WMSIntegracaoEvento):
+    evento.status = 'Processando'
+    evento.tentativas = int(evento.tentativas or 0) + 1
+    db.session.commit()
+
+    try:
+        payload = json.loads(evento.payload_json or '{}')
+        numero_nota = str(payload.get('numero_nota') or evento.referencia or '').strip()
+        usuario = str(payload.get('usuario') or 'Integrador').strip()
+
+        if evento.tipo_evento == 'NotaLancada':
+            resultado = _armazenar_nota_no_wms(numero_nota, usuario)
+        else:
+            resultado = {'sucesso': False, 'mensagem': f'Tipo de evento nao suportado: {evento.tipo_evento}'}
+
+        if resultado.get('sucesso'):
+            evento.status = 'Sucesso'
+            evento.processado_em = datetime.now()
+            evento.ultima_erro = None
+            evento.proxima_tentativa_em = None
+            db.session.commit()
+            return {'sucesso': True, 'resultado': resultado}
+
+        raise RuntimeError(resultado.get('mensagem') or 'Falha na integracao WMS')
+
+    except Exception as exc:
+        max_tentativas = 5
+        backoff_min = min(60, 2 ** int(evento.tentativas or 1))
+        evento.ultima_erro = str(exc)[:500]
+        evento.status = 'DeadLetter' if int(evento.tentativas or 0) >= max_tentativas else 'Falha'
+        evento.proxima_tentativa_em = datetime.now() + timedelta(minutes=backoff_min)
+        db.session.commit()
+        return {'sucesso': False, 'erro': str(exc)}
+
+
+def _processar_fila_integracao_wms(limite=20):
+    agora = datetime.now()
+    eventos = (
+        WMSIntegracaoEvento.query
+        .filter(
+            WMSIntegracaoEvento.status.in_(['Pendente', 'Falha']),
+            or_(WMSIntegracaoEvento.proxima_tentativa_em.is_(None), WMSIntegracaoEvento.proxima_tentativa_em <= agora),
+        )
+        .order_by(WMSIntegracaoEvento.criado_em.asc())
+        .limit(int(limite or 20))
+        .all()
+    )
+
+    processados = 0
+    sucesso = 0
+    falha = 0
+    for evento in eventos:
+        retorno = _processar_evento_integracao_wms(evento)
+        processados += 1
+        if retorno.get('sucesso'):
+            sucesso += 1
+        else:
+            falha += 1
+
+    return {'processados': processados, 'sucesso': sucesso, 'falha': falha}
 
 
 def _admin_access_query_from_request():
@@ -941,6 +1155,111 @@ def listar_usuarios():
     return jsonify([{"username": u.username, "role": u.role} for u in usuarios])
 
 
+@api_bp.route("/api/permissoes/catalogo", methods=["GET"])
+@roles_required("Admin")
+def listar_catalogo_permissoes():
+    catalogo = get_permission_catalog()
+    return jsonify(
+        {
+            "catalogo": [{"key": key, "label": label} for key, label in catalogo.items()],
+            "roles": ["Admin", "Fiscal", "Conferente", "Portaria"],
+        }
+    )
+
+
+@api_bp.route("/api/permissoes/role/<role>", methods=["GET"])
+@roles_required("Admin")
+def obter_permissoes_role(role):
+    role = (role or "").strip()
+    if role not in ("Admin", "Fiscal", "Conferente", "Portaria"):
+        return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
+
+    base = get_base_role_permissions(role)
+    overrides = {
+        row.permission_key: bool(row.allow)
+        for row in PermissaoAcesso.query.filter_by(scope_type="ROLE", scope_id=role).all()
+    }
+    efetivo = dict(base)
+    efetivo.update(overrides)
+    return jsonify({"role": role, "base": base, "overrides": overrides, "efetivo": efetivo})
+
+
+@api_bp.route("/api/permissoes/role/<role>", methods=["POST"])
+@roles_required("Admin")
+def salvar_permissoes_role(role):
+    role = (role or "").strip()
+    if role not in ("Admin", "Fiscal", "Conferente", "Portaria"):
+        return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
+
+    data = request.get_json() or {}
+    permissoes = data.get("permissoes") or {}
+    catalogo = set(get_permission_catalog().keys())
+
+    for key, allow in permissoes.items():
+        if key not in catalogo:
+            return jsonify({"sucesso": False, "msg": f"Permissão inválida: {key}"}), 400
+        row = PermissaoAcesso.query.filter_by(scope_type="ROLE", scope_id=role, permission_key=key).first()
+        if row is None:
+            row = PermissaoAcesso(scope_type="ROLE", scope_id=role, permission_key=key)
+            db.session.add(row)
+        row.allow = bool(allow)
+        row.updated_by = session.get("username")
+        row.updated_at = datetime.now()
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "atualizadas": len(permissoes)})
+
+
+@api_bp.route("/api/permissoes/usuario/<username>", methods=["GET"])
+@roles_required("Admin")
+def obter_permissoes_usuario(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado"}), 404
+
+    base = get_base_role_permissions(user.role)
+    overrides = {
+        row.permission_key: bool(row.allow)
+        for row in PermissaoAcesso.query.filter_by(scope_type="USER", scope_id=username).all()
+    }
+    efetivo = get_effective_permissions(username=username, role=user.role)
+    return jsonify(
+        {
+            "username": username,
+            "role": user.role,
+            "base": base,
+            "overrides": overrides,
+            "efetivo": efetivo,
+        }
+    )
+
+
+@api_bp.route("/api/permissoes/usuario/<username>", methods=["POST"])
+@roles_required("Admin")
+def salvar_permissoes_usuario(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado"}), 404
+
+    data = request.get_json() or {}
+    permissoes = data.get("permissoes") or {}
+    catalogo = set(get_permission_catalog().keys())
+
+    for key, allow in permissoes.items():
+        if key not in catalogo:
+            return jsonify({"sucesso": False, "msg": f"Permissão inválida: {key}"}), 400
+        row = PermissaoAcesso.query.filter_by(scope_type="USER", scope_id=username, permission_key=key).first()
+        if row is None:
+            row = PermissaoAcesso(scope_type="USER", scope_id=username, permission_key=key)
+            db.session.add(row)
+        row.allow = bool(allow)
+        row.updated_by = session.get("username")
+        row.updated_at = datetime.now()
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "atualizadas": len(permissoes)})
+
+
 @api_bp.route("/api/deletar_usuario/<username>", methods=["DELETE"])
 @roles_required("Admin")
 def deletar_usuario(username):
@@ -949,6 +1268,7 @@ def deletar_usuario(username):
 
     user = Usuario.query.filter_by(username=username).first()
     if user:
+        PermissaoAcesso.query.filter_by(scope_type="USER", scope_id=username).delete()
         db.session.delete(user)
         db.session.commit()
         return jsonify({"sucesso": True})
@@ -1144,6 +1464,302 @@ def listar_notas_aguardando_liberacao():
     )
 
 
+@api_bp.route("/api/xml_auditor/notas", methods=["GET"])
+@permission_required("PAGE_XML_AUDITOR")
+def listar_notas_xml_auditor():
+    rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor),
+            func.max(ItemNota.usuario_importacao),
+            func.max(ItemNota.data_importacao),
+            func.max(ItemNota.auditor_status),
+            func.max(ItemNota.auditor_decisao),
+            func.max(ItemNota.pedido_compra),
+            func.max(ItemNota.material_cliente),
+            func.max(ItemNota.auditor_usuario),
+            func.max(ItemNota.auditor_data),
+            func.max(ItemNota.status),
+        )
+        .filter(ItemNota.status == "AguardandoLiberacao")
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.data_importacao).desc())
+        .all()
+    )
+    return jsonify(
+        [
+            {
+                "numero": r[0],
+                "fornecedor": r[1] or "---",
+                "importado_por": r[2] or "---",
+                "data_importacao": r[3].strftime("%d/%m/%Y %H:%M") if r[3] else "---",
+                "auditor_status": r[4] or "NaoAuditado",
+                "auditor_decisao": r[5] or "PendenteDecisao",
+                "pedido_compra": r[6] or "",
+                "material_cliente": bool(r[7]),
+                "auditado_por": r[8] or "---",
+                "auditado_em": r[9].strftime("%d/%m/%Y %H:%M") if r[9] else "---",
+                "status_fluxo": r[10] or "---",
+            }
+            for r in rows
+        ]
+    )
+
+
+@api_bp.route("/api/xml_auditor/nota/<numero_nota>", methods=["GET"])
+@permission_required("PAGE_XML_AUDITOR")
+def detalhe_nota_xml_auditor(numero_nota):
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    auditor_status = itens[0].auditor_status or "NaoAuditado"
+    auditor_decisao = itens[0].auditor_decisao or "PendenteDecisao"
+    inconsistencias_raw = str(itens[0].auditor_inconsistencias or "").strip()
+    inconsistencias = [i for i in inconsistencias_raw.split(" | ") if i] if inconsistencias_raw else []
+    return jsonify(
+        {
+            "numero": numero_nota,
+            "fornecedor": itens[0].fornecedor,
+            "chave_acesso": itens[0].chave_acesso,
+            "cnpj_emitente": itens[0].cnpj_emitente or "",
+            "cnpj_destinatario": itens[0].cnpj_destinatario or "",
+            "status_fluxo": itens[0].status,
+            "auditor_status": auditor_status,
+            "auditor_decisao": auditor_decisao,
+            "auditor_diagnostico": itens[0].auditor_diagnostico or "",
+            "auditor_justificativa": itens[0].auditor_justificativa or "",
+            "pedido_compra": itens[0].pedido_compra or "",
+            "material_cliente": bool(itens[0].material_cliente),
+            "auditor_observacao": itens[0].auditor_observacao or "",
+            "auditado_por": itens[0].auditor_usuario or "---",
+            "auditado_em": itens[0].auditor_data.strftime("%d/%m/%Y %H:%M") if itens[0].auditor_data else "---",
+            "inconsistencias": inconsistencias,
+            "itens": [
+                {
+                    "codigo": item.codigo,
+                    "descricao": item.descricao,
+                    "cfop": item.cfop,
+                    "ncm": item.ncm,
+                    "cst_icms": item.cst_icms,
+                    "cst_pis": item.cst_pis,
+                    "cst_cofins": item.cst_cofins,
+                    "unidade": item.unidade_comercial,
+                    "quantidade": item.qtd_real,
+                }
+                for item in itens
+            ],
+        }
+    )
+
+
+@api_bp.route("/api/xml_auditor/analisar", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def analisar_nota_xml_auditor():
+    payload = nota_schema.load(request.json or {})
+    numero_nota = str(payload.get("nota") or "").strip()
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    inconsistencias = _auditar_inconsistencias_fiscais(itens)
+    status_auditoria = "ComInconsistencia" if inconsistencias else "SemInconsistencia"
+    usuario = session.get("username", "sistema")
+    agora = datetime.now()
+
+    diagnostico_resumo = (
+        "Diagnóstico fiscal: inconsistências encontradas. Revisar container de pendências antes da decisão."
+        if inconsistencias
+        else "Diagnóstico fiscal: sem inconsistências automáticas nas regras atuais."
+    )
+
+    for item in itens:
+        item.auditor_status = status_auditoria
+        item.auditor_decisao = "PendenteDecisao"
+        item.auditor_diagnostico = diagnostico_resumo
+        item.auditor_inconsistencias = " | ".join(inconsistencias)
+        item.auditor_justificativa = None
+        item.auditor_usuario = usuario
+        item.auditor_data = agora
+
+    db.session.commit()
+    return jsonify(
+        {
+            "sucesso": True,
+            "auditor_status": status_auditoria,
+            "inconsistencias": inconsistencias,
+            "msg": "Auditoria concluída com inconsistências sinalizadas." if inconsistencias else "Auditoria concluída sem inconsistências.",
+        }
+    )
+
+
+@api_bp.route("/api/xml_auditor/decisao", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def registrar_decisao_xml_auditor():
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    autorizado = bool(data.get("autorizado", False))
+    justificativa = str(data.get("justificativa") or "").strip()
+
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    if any((i.auditor_status or "NaoAuditado") == "NaoAuditado" for i in itens):
+        return jsonify({"sucesso": False, "msg": "Execute a auditoria antes de registrar a decisão."}), 409
+
+    if not autorizado and len(justificativa) < 5:
+        return jsonify({"sucesso": False, "msg": "Justificativa mínima de 5 caracteres para reprovação."}), 400
+
+    decisao = "XML Aprovado" if autorizado else "XML Recusado"
+    usuario = session.get("username", "sistema")
+    agora = datetime.now()
+    for item in itens:
+        item.auditor_decisao = decisao
+        item.auditor_justificativa = justificativa[:500] if justificativa else None
+        item.auditor_usuario = usuario
+        item.auditor_data = agora
+
+    db.session.commit()
+    if autorizado:
+        return jsonify({"sucesso": True, "msg": "XML aprovado. Status fiscal registrado para Documento de Entrada."})
+    return jsonify({"sucesso": True, "msg": "XML recusado. Status fiscal registrado para Documento de Entrada."})
+
+
+@api_bp.route("/api/xml_auditor/vincular_pedido", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def vincular_pedido_xml_auditor():
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    pedido_compra = str(data.get("pedido_compra") or "").strip()
+    material_cliente = bool(data.get("material_cliente", False))
+    observacao = str(data.get("observacao") or "").strip()
+
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    for item in itens:
+        item.material_cliente = material_cliente
+        item.pedido_compra = None if material_cliente else (pedido_compra[:50] if pedido_compra else None)
+        item.auditor_observacao = observacao[:500] if observacao else None
+
+    db.session.commit()
+    return jsonify(
+        {
+            "sucesso": True,
+            "msg": (
+                "Marcado como material de cliente. Liberação poderá ocorrer sem OC."
+                if material_cliente
+                else "Pedido de compra vinculado no auditor. Integração com ERP ficará pendente até conexão da base externa."
+            ),
+        }
+    )
+
+
+@api_bp.route("/api/xml_auditor/consultar_pedido", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def consultar_pedido_excel():
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    numero_pedido = str(data.get("pedido") or "").strip()
+
+    if not numero_pedido:
+        return jsonify({"sucesso": False, "msg": "Número do pedido obrigatório."}), 400
+
+    itens_nf = []
+    if numero_nota:
+        itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+        itens_nf = [{"codigo": i.codigo or "---", "descricao": i.descricao or "---", "qtd": i.qtd_real} for i in itens_db]
+
+    try:
+        resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
+    except FileNotFoundError as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 404
+    except Exception as exc:
+        return jsonify({"sucesso": False, "msg": f"Erro ao ler planilha: {exc}"}), 500
+
+    return jsonify({"sucesso": True, **resultado})
+
+
+@api_bp.route("/api/xml_auditor/liberar", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def liberar_nota_via_xml_auditor():
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    # Sincroniza dados informados na tela ao tentar liberar (evita depender do botão "Salvar Vínculo").
+    material_cliente_in_payload = "material_cliente" in data
+    pedido_compra_in_payload = "pedido_compra" in data
+    observacao_in_payload = "observacao" in data
+    if material_cliente_in_payload or pedido_compra_in_payload or observacao_in_payload:
+        material_cliente_payload = bool(data.get("material_cliente", False))
+        pedido_compra_payload = str(data.get("pedido_compra") or "").strip()
+        observacao_payload = str(data.get("observacao") or "").strip()
+
+        for item in itens:
+            if material_cliente_in_payload:
+                item.material_cliente = material_cliente_payload
+
+            if item.material_cliente:
+                item.pedido_compra = None
+            elif pedido_compra_in_payload:
+                item.pedido_compra = pedido_compra_payload[:50] if pedido_compra_payload else None
+
+            if observacao_in_payload:
+                item.auditor_observacao = observacao_payload[:500] if observacao_payload else None
+
+        db.session.commit()
+
+    status_set = {str(i.status or "").strip() for i in itens}
+    if "Pendente" in status_set:
+        return jsonify({"sucesso": False, "msg": "NF já está liberada para conferência."}), 409
+
+    if any((i.auditor_status or "NaoAuditado") == "NaoAuditado" for i in itens):
+        return jsonify(
+            {
+                "sucesso": False,
+                "msg": "Auditoria ainda não executada. Analise a NF no Auditor XML antes de liberar.",
+            }
+        ), 409
+
+    pedido = str(itens[0].pedido_compra or "").strip()
+    material_cliente = bool(itens[0].material_cliente)
+    if not material_cliente and not pedido:
+        return jsonify(
+            {
+                "sucesso": False,
+                "msg": "Informe o pedido de compras no Auditor XML ou marque como material de cliente antes de liberar.",
+            }
+        ), 409
+
+    ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update({"status": "Pendente"})
+    db.session.add(
+        LogAcessoAdministrativo(
+            usuario=session.get("username", "sistema"),
+            rota=f"/api/xml_auditor/liberar?nota={numero_nota}",
+            metodo=request.method,
+        )
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "NF liberada para conferência pelo Auditor XML."})
+
+
 @api_bp.route("/api/admin/liberar_nota_conferencia", methods=["POST"])
 @roles_required("Admin")
 def liberar_nota_conferencia():
@@ -1155,6 +1771,20 @@ def liberar_nota_conferencia():
     itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
+
+    if any((i.auditor_status or "NaoAuditado") == "NaoAuditado" for i in itens):
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": "Auditoria XML ainda não executada. Libere esta NF pelo Auditor XML no menu Compras.",
+                }
+            ),
+            409,
+        )
+
+    if not bool(itens[0].material_cliente) and not str(itens[0].pedido_compra or "").strip():
+        return jsonify({"sucesso": False, "msg": "Pedido de compras não informado no Auditor XML."}), 409
 
     status_set = {str(i.status or "").strip() for i in itens}
     if status_set == {"AguardandoLiberacao"}:
@@ -2259,6 +2889,7 @@ def buscar_itens(nota):
                 "descricao": item.descricao,
                 "qtd_esperada": item.qtd_real,
                 "unidade": item.unidade_comercial or "UN",
+                "pedido_compra": item.pedido_compra or "",
             }
             for item in itens
         ]
@@ -2978,15 +3609,21 @@ def confirmar_lancamento():
                 manifestacao_result.get("status_code") or 502,
             )
 
-    # Integração com WMS: armazenar itens automaticamente após lançamento bem-sucedido
-    wms_result = _armazenar_nota_no_wms(numero_nota, session["username"])
-    
+    # Integração com WMS via fila (idempotente), com tentativa imediata best-effort.
+    evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
+    processamento = _processar_evento_integracao_wms(evento) if evento else {"sucesso": False, "erro": "evento_nao_criado"}
+
     return jsonify(
         {
             "sucesso": True,
             "manifestacao": manifestacao_result,
-            "wms": wms_result if wms_result.get('sucesso') else None,
-            "aviso_wms": wms_result.get('mensagem') if not wms_result.get('sucesso') else None
+            "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
+            "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
+            "fila_integracao": {
+                "evento_id": evento.id if evento else None,
+                "status": evento.status if evento else "NaoCriado",
+                "novo_evento": bool(criado),
+            },
         }
     )
 
@@ -3006,6 +3643,16 @@ def manifestar_destinatario_fiscal():
     resultado = _manifestar_confirmacao_operacao(numero_nota, session["username"])
     status_http = 200 if resultado.get("sucesso") else (resultado.get("status_code") or 500)
     return jsonify({"sucesso": bool(resultado.get("sucesso")), "msg": resultado.get("msg")}), status_http
+
+
+@api_bp.route("/api/wms/integracao/processar", methods=["POST"])
+@roles_required("Admin")
+def processar_fila_integracao_wms():
+    payload = request.get_json(silent=True) or {}
+    limite = int(payload.get("limite") or 20)
+    limite = max(1, min(limite, 200))
+    resultado = _processar_fila_integracao_wms(limite=limite)
+    return jsonify({"sucesso": True, "resultado": resultado})
 
 
 @api_bp.route("/api/fiscal/estornar_lancamento", methods=["POST"])

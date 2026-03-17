@@ -187,28 +187,16 @@
         </div>
     </div>
 
-    <div class="card-sap" style="margin-top:25px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; border:none;"><i class="fas fa-clipboard-check"></i> Controle de Fluxo de Conferência</h3>
-            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarNotasAguardandoLiberacao()">
-                <i class="fas fa-sync"></i> Sincronizar
-            </button>
+    <div class="card-sap" style="margin-top:25px; border-left: 4px solid var(--sap-blue);">
+        <h3 style="margin-bottom:12px; border:none; padding:0;"><i class="fas fa-arrow-right"></i> Próximo Passo do Fluxo</h3>
+        <div style="font-size:12px; color:#475569; line-height:1.6;">
+            A liberação de NF para conferência foi movida para o <b>Auditor XML</b> no menu de Compras.<br>
+            Após importar o XML aqui, acesse <b>Compras &gt; Auditor XML</b> para auditar e liberar.
         </div>
-        <div class="table-container" style="max-height:300px; overflow-y:auto;">
-            <table class="mini-table">
-                <thead>
-                    <tr>
-                        <th>Nº Nota</th>
-                        <th>Fornecedor</th>
-                        <th>Operador</th>
-                        <th>Data Importação</th>
-                        <th width="140" style="text-align:center;">Gestão</th>
-                    </tr>
-                </thead>
-                <tbody id="lista-liberacao-conferencia">
-                    <tr><td colspan="5" style="text-align:center; padding: 30px; color: #94a3b8;">Aguardando comando...</td></tr>
-                </tbody>
-            </table>
+        <div style="margin-top:12px;">
+            <a class="btn-sap btn-primary-sap" href="/compras/auditor-xml" style="text-decoration:none;">
+                <i class="fas fa-shield-alt"></i> Abrir Auditor XML
+            </a>
         </div>
     </div>
 
@@ -342,7 +330,6 @@
                 showStatus('Sucesso: Documento importado com sucesso!.');
                 fecharModalSelecao();
                 document.getElementById('consyste-chave').value = "";
-                await carregarNotasAguardandoLiberacao();
             } else {
                 showStatus('Erro: ' + d.error, 'error');
             }
@@ -500,40 +487,6 @@
         } catch (e) { showStatus("Erro no processamento local", "error"); }
     }
 
-    async function carregarNotasAguardandoLiberacao() {
-        const tbody = document.getElementById('lista-liberacao-conferencia');
-        const res = await fetch('/api/notas_aguardando_liberacao');
-        const lista = await res.json();
-        if (!Array.isArray(lista) || lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Sistema limpo. Sem notas para liberação.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = lista.map(n => `
-            <tr>
-                <td><b>${n.numero}</b></td>
-                <td>${n.fornecedor}</td>
-                <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:10px">${n.importado_por}</span></td>
-                <td style="font-size:11px">${n.data_importacao}</td>
-                <td style="text-align:center;">
-                    <button class="btn-sap btn-primary-sap" style="padding:5px 15px; font-size:10px; background:var(--success-erp)" onclick="liberarParaConferencia('${n.numero}')">LIBERAR</button>
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    async function liberarParaConferencia(numeroNota) {
-        const res = await fetch('/api/admin/liberar_nota_conferencia', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ nota: numeroNota })
-        });
-        if (res.ok) {
-            showStatus('Documento ' + numeroNota + ' movido para fila de conferência.');
-            await carregarNotasAguardandoLiberacao();
-            await carregarPendentesParaExclusao();
-        }
-    }
-
     async function carregarSolicitacoesDevolucao() {
         const tbody = document.getElementById('lista-solicitacoes-devolucao');
         const res = await fetch('/api/admin/recebimento/solicitacoes_devolucao');
@@ -576,7 +529,6 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         await carregarPendentesParaExclusao();
-        await carregarNotasAguardandoLiberacao();
         await carregarSolicitacoesDevolucao();
     });
 </script>
