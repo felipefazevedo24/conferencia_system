@@ -313,6 +313,13 @@
         statusBox.style.borderLeftColor = type === 'error' ? 'var(--danger-erp)' : 'var(--sap-blue)';
     }
 
+    async function parseResponseSafe(res) {
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) return await res.json();
+        const raw = await res.text();
+        return { error: raw ? raw.slice(0, 200) : `HTTP ${res.status}` };
+    }
+
     // 1. IMPORTAÇÃO POR CHAVE
     async function importarPorChave(chaveManual) {
         const chave = chaveManual || document.getElementById('consyste-chave').value.trim();
@@ -325,12 +332,16 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ chave: chave })
             });
-            const d = await res.json();
+            const d = await parseResponseSafe(res);
             if(res.ok) {
                 showStatus('Sucesso: Documento importado com sucesso!.');
                 fecharModalSelecao();
                 document.getElementById('consyste-chave').value = "";
             } else {
+                if (res.status === 403) {
+                    showStatus('Acesso negado: usuário sem permissão PAGE_UPLOAD', 'error');
+                    return;
+                }
                 showStatus('Erro: ' + d.error, 'error');
             }
         } catch (e) { showStatus('Falha crítica de comunicação', 'error'); }
@@ -344,9 +355,13 @@
         showStatus('Querying Web Service by Key...');
         try {
             const res = await fetch(`/api/consyste/listar?chave=${encodeURIComponent(chave)}`);
-            const data = await res.json();
+            const data = await parseResponseSafe(res);
 
             if (!res.ok) {
+                if (res.status === 403) {
+                    showStatus('Acesso negado: usuário sem permissão PAGE_UPLOAD', 'error');
+                    return;
+                }
                 showStatus(data.error || 'API Error', 'error');
                 return;
             }
@@ -373,9 +388,13 @@
         
         try {
             const res = await fetch(`/api/consyste/listar?numero=${numInput}`);
-            const data = await res.json();
+            const data = await parseResponseSafe(res);
 
             if (!res.ok) {
+                if (res.status === 403) {
+                    showStatus('Acesso negado: usuário sem permissão PAGE_UPLOAD', 'error');
+                    return;
+                }
                 showStatus(data.error || 'WS Error', 'error');
                 return;
             }
@@ -391,8 +410,8 @@
                 showStatus('Múltiplos registros localizados ('+lista.length+').');
                 abrirModalSelecao(lista);
             }
-        } catch (e) { 
-            showStatus('Connection Timeout / Refused', 'error'); 
+        } catch (e) {
+            showStatus('Falha de rede: servidor indisponível ou timeout', 'error');
         }
     }
 

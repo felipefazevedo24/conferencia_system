@@ -458,18 +458,86 @@ def _resolve_quantidade_etiqueta_oc(itens_nota: list[ItemNota]) -> float | None:
     return None
 
 
-def _build_etiqueta_payload(numero_nota: str, itens: list[ItemNota] | None = None) -> dict | None:
+def _resolve_descricao_etiqueta_oc(itens_nota: list[ItemNota]) -> str | None:
+    """
+    Prioriza descricao do material vinda da OC com base no vinculo de linha.
+    Em NF com multiplas linhas, agrega descricoes unicas das linhas vinculadas.
+    """
+    if not itens_nota:
+        return None
+
+    linhas_por_pedido = {}
+    used_keys = set()
+    descricoes = []
+
+    for item in itens_nota:
+        pedido_raw = str(item.pedido_compra or "").strip()
+        if not pedido_raw:
+            continue
+
+        if pedido_raw not in linhas_por_pedido:
+            try:
+                linhas_por_pedido[pedido_raw] = buscar_linhas_pedido(pedido_raw)
+            except Exception:
+                linhas_por_pedido[pedido_raw] = []
+
+        linhas = linhas_por_pedido.get(pedido_raw) or []
+        if not linhas:
+            continue
+
+        idx = item.linha_po_vinculada if isinstance(item.linha_po_vinculada, int) and item.linha_po_vinculada >= 0 else None
+        if idx is None:
+            if len(itens_nota) == 1 and len(linhas) == 1:
+                idx = 0
+            else:
+                continue
+
+        if idx >= len(linhas):
+            continue
+
+        dedup_key = (pedido_raw, int(idx))
+        if dedup_key in used_keys:
+            continue
+
+        used_keys.add(dedup_key)
+        descricao = str(linhas[idx].get("descricao_material") or "").strip()
+        if descricao:
+            descricoes.append(descricao)
+
+    descricoes_unicas = list(dict.fromkeys(descricoes))
+    if not descricoes_unicas:
+        return None
+
+    primeira = descricoes_unicas[0]
+    if len(descricoes_unicas) > 1:
+        return f"{primeira} + {len(descricoes_unicas) - 1} item(ns)"
+    return primeira
+
+
+def _build_etiqueta_payload(
+    numero_nota: str,
+    itens: list[ItemNota] | None = None,
+    use_oc_resolution: bool = True,
+) -> dict | None:
     itens_nota = list(itens or ItemNota.query.filter_by(numero_nota=str(numero_nota)).all())
     if not itens_nota:
         return None
 
-    fornecedor = str(itens_nota[0].fornecedor or "").strip()
-    descricao_produto = _formatar_descricao_etiqueta(itens_nota)
+    first_item = itens_nota[0]
+    fornecedor = str(first_item.fornecedor or "").strip()
+    descricao_nf = _formatar_descricao_etiqueta(itens_nota)
+    descricao_oc = _resolve_descricao_etiqueta_oc(itens_nota) if use_oc_resolution else None
+    descricao_produto = descricao_oc or descricao_nf
     codigo_material = next((str(i.codigo or "").strip() for i in itens_nota if str(i.codigo or "").strip()), "")
     numero_oc = _coletar_pedidos_nota(itens_nota)
     quantidade_nf = sum(_to_float(i.qtd_real) for i in itens_nota)
-    quantidade_oc = _resolve_quantidade_etiqueta_oc(itens_nota)
+    quantidade_oc = _resolve_quantidade_etiqueta_oc(itens_nota) if use_oc_resolution else None
     quantidade = quantidade_oc if quantidade_oc is not None else quantidade_nf
+    material_cliente = bool(first_item.material_cliente)
+    remessa = bool(first_item.remessa)
+    sem_conferencia_logistica = bool(first_item.sem_conferencia_logistica)
+    pedido_vinculado = bool(str(numero_oc or "").strip())
+    sem_pedido_vinculado = not pedido_vinculado
 
     data_importacao = max([i.data_importacao for i in itens_nota if i.data_importacao], default=None)
     data_lancamento = max([i.data_lancamento for i in itens_nota if i.data_lancamento], default=None)
@@ -478,14 +546,117 @@ def _build_etiqueta_payload(numero_nota: str, itens: list[ItemNota] | None = Non
     return {
         "numero": str(numero_nota),
         "fornecedor": fornecedor,
-        "produto": fornecedor or descricao_produto,
+        "produto": descricao_produto or fornecedor or "---",
         "quantidade": f"{quantidade:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
         "quantidade_origem": "OC" if quantidade_oc is not None else "NF",
         "data_recebimento": data_referencia.strftime("%d/%m/%Y") if data_referencia else "---",
         "numero_oc": str(numero_oc or "").strip() or "---",
         "codigo_material": codigo_material or "---",
+        "material_cliente": material_cliente,
+        "remessa": remessa,
+        "sem_conferencia_logistica": sem_conferencia_logistica,
+        "sem_pedido_vinculado": sem_pedido_vinculado,
         "obs": "",
     }
+
+
+def _build_itens_etiqueta_payload(itens_nota: list[ItemNota], base_payload: dict) -> list[dict]:
+    """Gera 1 etiqueta por item da NF para impressão."""
+    itens_payload = []
+
+    for item in itens_nota or []:
+        descricao = str(item.descricao or "").strip() or str(base_payload.get("produto") or "---")
+        codigo = str(item.codigo or "").strip() or str(base_payload.get("codigo_material") or "---")
+        pedido_item = str(item.pedido_compra or "").strip() or str(base_payload.get("numero_oc") or "---")
+        qtd_item = _to_float(item.qtd_real)
+        quantidade = f"{qtd_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        itens_payload.append(
+            {
+                "numero": str(base_payload.get("numero") or "---"),
+                "fornecedor": str(base_payload.get("fornecedor") or "---"),
+                "produto": descricao,
+                "quantidade": quantidade,
+                "quantidade_origem": "NF",
+                "data_recebimento": str(base_payload.get("data_recebimento") or "---"),
+                "numero_oc": pedido_item or "---",
+                "codigo_material": codigo,
+                "material_cliente": bool(base_payload.get("material_cliente")),
+                "remessa": bool(base_payload.get("remessa")),
+                "sem_conferencia_logistica": bool(base_payload.get("sem_conferencia_logistica")),
+                "sem_pedido_vinculado": bool(base_payload.get("sem_pedido_vinculado")),
+            }
+        )
+
+    return itens_payload
+
+
+def _select_etiqueta_snapshot(itens_nota: list[ItemNota]) -> list[ItemNota]:
+    """
+    Seleciona apenas o snapshot mais recente da NF para evitar impressão de
+    registros históricos acumulados (reimportações/relançamentos).
+    """
+    itens = list(itens_nota or [])
+    if not itens:
+        return []
+
+    # Prioriza o conjunto atualmente pronto para etiqueta.
+    for status_prioritario in ("Lançado", "Concluído", "Pendente"):
+        subset = [i for i in itens if str(i.status or "").strip() == status_prioritario]
+        if subset:
+            itens = subset
+            break
+
+    def _ref_data(item: ItemNota):
+        return item.data_lancamento or item.fim_conferencia or item.data_importacao or datetime.min
+
+    # Se houver número de lançamento, usa exclusivamente o último lote lançado.
+    itens_com_lancamento = [i for i in itens if str(i.numero_lancamento or "").strip()]
+    if itens_com_lancamento:
+        grupos_lancamento = {}
+        for item in itens_com_lancamento:
+            num_lanc = str(item.numero_lancamento or "").strip()
+            grupos_lancamento.setdefault(num_lanc, []).append(item)
+
+        ultimo_numero_lancamento = max(
+            grupos_lancamento.keys(),
+            key=lambda numero: max(_ref_data(i) for i in grupos_lancamento.get(numero, [])),
+        )
+        itens = grupos_lancamento.get(ultimo_numero_lancamento) or itens
+
+    # Agrupa por minuto do evento para capturar o lote mais recente completo,
+    # mesmo quando registros foram salvos com microssegundos diferentes.
+    grupos = {}
+    for item in itens:
+        ref = _ref_data(item)
+        chave_tempo = ref.replace(second=0, microsecond=0) if ref != datetime.min else datetime.min
+        grupos.setdefault(chave_tempo, []).append(item)
+
+    if not grupos:
+        return itens
+
+    chave_mais_recente = max(grupos.keys())
+    snapshot = grupos.get(chave_mais_recente) or itens
+
+    # Remove clones históricos idênticos do mesmo lote para não multiplicar etiquetas.
+    dedup = {}
+    for item in snapshot:
+        signature = (
+            str(item.codigo or "").strip().upper(),
+            str(item.descricao or "").strip().upper(),
+            round(_to_float(item.qtd_real), 6),
+            str(item.pedido_compra or "").strip().upper(),
+            int(item.linha_po_vinculada) if isinstance(item.linha_po_vinculada, int) else None,
+        )
+        atual = dedup.get(signature)
+        if atual is None or int(item.id or 0) > int(atual.id or 0):
+            dedup[signature] = item
+
+    filtrado = list(dedup.values()) if dedup else snapshot
+
+    # Mantém ordem estável para impressão.
+    filtrado.sort(key=lambda i: (str(i.codigo or ""), str(i.descricao or ""), i.id or 0))
+    return filtrado
 
 
 def _compute_pending_priority(numero_nota, fornecedor):
@@ -1214,6 +1385,10 @@ def _build_notas_liberadas_records(search_nota=None):
                 "numero": numero_nota,
                 "fornecedor": itens[0].fornecedor or "---",
                 "status_atual": status_atual,
+                "material_cliente": bool(itens[0].material_cliente),
+                "remessa": bool(itens[0].remessa),
+                "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+                "sem_pedido_vinculado": not bool(_coletar_pedidos_nota(itens).strip()),
                 "liberado_por": liberado_por,
                 "motivo": motivo_liberacao,
                 "data_liberacao": data_referencia.strftime("%d/%m/%Y %H:%M") if data_referencia else "---",
@@ -1379,7 +1554,7 @@ def deletar_usuario(username):
 
 
 @api_bp.route("/importar_xml", methods=["POST"])
-@roles_required("Admin")
+@permission_required("PAGE_UPLOAD")
 def importar_xml():
     arquivos = request.files.getlist("xml")
     contador = 0
@@ -1392,7 +1567,7 @@ def importar_xml():
 
 
 @api_bp.route("/api/consyste/download", methods=["POST"])
-@roles_required("Admin", "Portaria")
+@permission_required("PAGE_UPLOAD")
 def consyste_download():
     data = consyste_download_schema.load(request.json or {})
     chave_bruta = data.get("chave", "").strip()
@@ -1459,7 +1634,7 @@ def consyste_documento():
 
 
 @api_bp.route("/api/consyste/listar")
-@roles_required("Admin", "Portaria")
+@permission_required("PAGE_UPLOAD")
 def consyste_list():
     token = current_app.config.get("CONSYSTE_TOKEN")
     numero = (request.args.get("numero") or "").strip()
@@ -4251,7 +4426,7 @@ def listar_etiquetas_pendentes():
         numero = str(row[0])
         if numero in notas_arquivadas:
             continue
-        dados = _build_etiqueta_payload(numero)
+        dados = _build_etiqueta_payload(numero, use_oc_resolution=False)
         if not dados:
             continue
         termo = f"{dados['numero']} {dados['fornecedor']} {dados['produto']} {dados['codigo_material']} {dados['numero_oc']}".lower()
@@ -4278,7 +4453,7 @@ def listar_etiquetas_arquivadas():
 
     arquivadas = []
     for registro in registros:
-        dados = _build_etiqueta_payload(str(registro.numero_nota))
+        dados = _build_etiqueta_payload(str(registro.numero_nota), use_oc_resolution=False)
         if not dados:
             dados = {
                 "numero": str(registro.numero_nota),
@@ -4306,9 +4481,13 @@ def listar_etiquetas_arquivadas():
 @api_bp.route("/api/etiquetas/<numero_nota>", methods=["GET"])
 @permission_required("PAGE_ETIQUETAS")
 def obter_etiqueta(numero_nota):
-    dados = _build_etiqueta_payload(str(numero_nota))
+    itens_brutos = ItemNota.query.filter_by(numero_nota=str(numero_nota)).all()
+    itens_nota = _select_etiqueta_snapshot(itens_brutos)
+    dados = _build_etiqueta_payload(str(numero_nota), itens=itens_nota)
     if not dados:
         return jsonify({"sucesso": False, "msg": "NF não encontrada para etiqueta."}), 404
+
+    dados["itens_etiqueta"] = _build_itens_etiqueta_payload(itens_nota, dados)
 
     registro = EtiquetaRecebimento.query.filter_by(numero_nota=str(numero_nota)).first()
     if registro:
@@ -4474,6 +4653,10 @@ def detalhes_nota_liberada_lancamento(numero):
             "numero": str(numero),
             "fornecedor": itens[0].fornecedor or "---",
             "status_atual": status_atual,
+            "material_cliente": bool(itens[0].material_cliente),
+            "remessa": bool(itens[0].remessa),
+            "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+            "sem_pedido_vinculado": not bool(_coletar_pedidos_nota(itens).strip()),
             "conferido_por": usuario_conferencia or "---",
             "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M") if fim_conferencia else "---",
             "lancado_por": usuario_lancamento or "---",

@@ -471,6 +471,9 @@
                 <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
             </div>
             <div style="padding:16px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button id="btnConfirmarDivergencia" class="btn" type="button" onclick="confirmarVinculacaoComDivergencia()" style="display:none; background:#fffbeb; color:#92400e; border-color:#fcd34d;">
+                    <i class="fas fa-triangle-exclamation"></i> Confirmar vinculação mesmo com divergência de valor
+                </button>
                 <button class="btn" onclick="fecharModalVinculacao()" style="background:#fff;"><i class="fas fa-times"></i> Fechar</button>
                 <button class="btn success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
             </div>
@@ -969,6 +972,13 @@ async function consultarPedidoExcel() {
             res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem perfeitamente. Nenhuma vinculação manual necessária!`;
             wrap.style.display = 'none';
             document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
+        } else if (possuiMarcadorConfirmacaoDivergencia()) {
+            const ndivQtd = r.pares.filter(p => !p.qtd_ok).length;
+            const ndivVlr = r.pares.filter(p => !p.valor_ok).length;
+            res.className = 'pedido-result ok';
+            res.textContent = `✔ Vínculo aceito com divergência confirmada (quantidade: ${ndivQtd} | valor: ${ndivVlr}). Fluxo liberado para avançar.`;
+            wrap.style.display = 'none';
+            document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
         } else {
             res.className = 'pedido-result err';
             const ndivQtd = r.pares.filter(p => !p.qtd_ok).length;
@@ -997,9 +1007,139 @@ async function consultarPedidoExcel() {
 let xmlLineSelecionada = null;
 let xmlDados = {};
 let poDados = {};
+let confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+
+function obterDivergenciasValorSelecionadas() {
+    const pares = window.paresVinculacao || [];
+    const linhasPo = window.linhasPoVinculacao || [];
+    const selects = document.querySelectorAll('.vinculacao-select');
+    const divergencias = [];
+
+    for (const select of selects) {
+        if (select.disabled) continue;
+
+        const linhaPoSelecionada = select.value;
+        if (linhaPoSelecionada === '' || linhaPoSelecionada === null) continue;
+
+        const idxPar = parseInt(select.dataset.xmlIdx, 10);
+        const idxPo = parseInt(linhaPoSelecionada, 10);
+        if (!Number.isInteger(idxPar) || !Number.isInteger(idxPo)) continue;
+
+        const par = pares[idxPar];
+        const po = linhasPo[idxPo];
+        if (!par || !po) continue;
+
+        const nfValorUnit = Number(par.nf_valor_unit || 0);
+        const nfValorTotal = Number(par.nf_valor_total || 0);
+        const poValorUnit = Number(po.valor_unit || 0);
+        const poQtd = Number(po.qtd || 0);
+
+        const unitOk = Math.abs(nfValorUnit - poValorUnit) <= 0.01;
+        const totalOk = Math.abs((poQtd * poValorUnit) - nfValorTotal) <= 0.02;
+
+        if (!unitOk && !totalOk) {
+            divergencias.push({
+                linhaXml: Number(par.linha || (idxPar + 1)),
+                linhaPo: idxPo + 1,
+            });
+        }
+    }
+
+    return divergencias;
+}
+
+function atualizarEstadoConfirmacaoDivergencia() {
+    const btn = document.getElementById('btnConfirmarDivergencia');
+    if (!btn) return;
+
+    const divergencias = obterDivergenciasValorSelecionadas();
+    const chaveAtual = divergencias.map(d => `${d.linhaXml}-${d.linhaPo}`).join('|');
+
+    if (chaveAtual !== confirmacaoDivergenciaValor.chave) {
+        confirmacaoDivergenciaValor.aceita = false;
+        confirmacaoDivergenciaValor.chave = chaveAtual;
+    }
+
+    if (!divergencias.length) {
+        btn.style.display = 'none';
+        return;
+    }
+
+    btn.style.display = 'inline-flex';
+    if (confirmacaoDivergenciaValor.aceita) {
+        btn.style.background = '#ecfdf5';
+        btn.style.color = '#166534';
+        btn.style.borderColor = '#86efac';
+        btn.innerHTML = `<i class="fas fa-check-circle"></i> Divergência de valor confirmada (${divergencias.length})`;
+    } else {
+        btn.style.background = '#fffbeb';
+        btn.style.color = '#92400e';
+        btn.style.borderColor = '#fcd34d';
+        btn.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Confirmar vinculação mesmo com divergência de valor (${divergencias.length})`;
+    }
+}
+
+function confirmarVinculacaoComDivergencia() {
+    const divergencias = obterDivergenciasValorSelecionadas();
+    if (!divergencias.length) {
+        confirmacaoDivergenciaValor.aceita = false;
+        confirmacaoDivergenciaValor.chave = '';
+        atualizarEstadoConfirmacaoDivergencia();
+        return;
+    }
+
+    confirmacaoDivergenciaValor.aceita = true;
+    confirmacaoDivergenciaValor.chave = divergencias.map(d => `${d.linhaXml}-${d.linhaPo}`).join('|');
+    atualizarEstadoConfirmacaoDivergencia();
+    toast('Confirmação registrada. Agora você pode salvar a vinculação com divergência de valor.', 'ok');
+}
+
+function montarResumoDivergenciasValor(divergencias) {
+    if (!Array.isArray(divergencias) || !divergencias.length) return '';
+    return divergencias.map(d => `XML ${d.linhaXml}->PO ${d.linhaPo}`).join(', ');
+}
+
+function possuiMarcadorConfirmacaoDivergencia() {
+    const obs = String(document.getElementById('obsFiscal')?.value || '').trim();
+    return obs.includes('[CONFIRMADO_DIVERGENCIA_VALOR]');
+}
+
+async function registrarObservacaoDivergenciaValor(divergencias) {
+    if (!notaSelecionada || !Array.isArray(divergencias) || !divergencias.length) return;
+
+    const obsEl = document.getElementById('obsFiscal');
+    const pedido = (document.getElementById('pedidoCompra').value || '').trim();
+    const material_cliente = !!document.getElementById('materialCliente')?.checked;
+    const remessa = !!document.getElementById('remessa')?.checked;
+    const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
+
+    const observacaoAtual = String(obsEl?.value || '').trim();
+    const marcador = '[CONFIRMADO_DIVERGENCIA_VALOR]';
+    if (observacaoAtual.includes(marcador)) return;
+
+    const detalhe = montarResumoDivergenciasValor(divergencias);
+    const sufixo = detalhe ? ` Linhas: ${detalhe}.` : '';
+    const novaObservacao = `${observacaoAtual ? `${observacaoAtual}\n` : ''}${marcador} Vinculacao de pedido confirmada mesmo com divergencia de valor.${sufixo}`.slice(0, 500);
+
+    if (obsEl) obsEl.value = novaObservacao;
+
+    await fetchJson('/api/xml_auditor/vincular_pedido', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            nota: notaSelecionada,
+            pedido_compra: pedido,
+            material_cliente,
+            remessa,
+            sem_conferencia_logistica,
+            observacao: novaObservacao,
+        })
+    });
+}
 
 function renderPoLinkingInterface(pares, linhasPo, numeronota) {
     window.paresVinculacao = pares;
+    window.linhasPoVinculacao = linhasPo;
+    confirmacaoDivergenciaValor = { aceita: false, chave: '' };
 
     const linhasPerfeitasReservadas = new Set(
         pares
@@ -1056,7 +1196,7 @@ function renderPoLinkingInterface(pares, linhasPo, numeronota) {
                 </div>
                 <div class="vinculacao-select-wrap">
                     <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
-                    <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" ${selectDisabled}>
+                    <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarEstadoConfirmacaoDivergencia()" ${selectDisabled}>
                         <option value="">-- Sem vínculo manual (usar posição) --</option>
                         ${listaPoOptions}
                     </select>
@@ -1068,6 +1208,7 @@ function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         `;
     }).join('');
 
+    atualizarEstadoConfirmacaoDivergencia();
     document.getElementById('vinculacaoOverlay').classList.add('active');
 }
 
@@ -1085,6 +1226,7 @@ function habilitarEdicaoVinculo(idx) {
 
 function fecharModalVinculacao() {
     document.getElementById('vinculacaoOverlay').classList.remove('active');
+    confirmacaoDivergenciaValor = { aceita: false, chave: '' };
 }
 
 async function salvarVinculacoes() {
@@ -1092,29 +1234,124 @@ async function salvarVinculacoes() {
     const pedidoAtual = (document.getElementById('pedidoCompra').value || '').trim();
     let vinculacoesAtualizadas = 0;
 
+    const alteracoes = [];
     for (const select of selects) {
         if (select.disabled) continue;
-        const linhaPoSelecionada = select.value;
-        const itemId = select.dataset.itemId;
-        if (!itemId) continue;
 
-        try {
+        const itemIdRaw = String(select.dataset.itemId || '').trim();
+        if (!itemIdRaw) continue;
+
+        const atualRaw = String(select.dataset.currentPo || '').trim();
+        const desejadaRaw = String(select.value || '').trim();
+
+        const linhaPoAtual = atualRaw === '' ? null : parseInt(atualRaw, 10);
+        const linhaPoDesejada = desejadaRaw === '' ? null : parseInt(desejadaRaw, 10);
+
+        if (linhaPoAtual === linhaPoDesejada) continue;
+
+        alteracoes.push({
+            itemId: parseInt(itemIdRaw, 10),
+            linhaPoAtual,
+            linhaPoDesejada,
+        });
+    }
+
+    // Previne duplicidade de seleção no client antes de chamar a API.
+    const desejadas = alteracoes
+        .filter(a => Number.isInteger(a.linhaPoDesejada) && a.linhaPoDesejada >= 0)
+        .map(a => a.linhaPoDesejada);
+    if (new Set(desejadas).size !== desejadas.length) {
+        toast('A mesma linha do pedido foi selecionada para mais de um item da NF.', 'err');
+        return;
+    }
+
+    try {
+        // Fase 1: limpa vínculos atuais que vão mudar (evita 409 em troca de linhas).
+        for (const a of alteracoes) {
+            if (!Number.isInteger(a.linhaPoAtual) || a.linhaPoAtual < 0) continue;
             await fetchJson('/api/xml_auditor/vincular_linha_po', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    item_id: parseInt(itemId),
-                    linha_po: linhaPoSelecionada === '' ? null : parseInt(linhaPoSelecionada),
+                    item_id: a.itemId,
+                    linha_po: null,
                     pedido: pedidoAtual,
                 })
             });
-            vinculacoesAtualizadas++;
-        } catch (e) {
-            toast(`Erro ao vincular linha: ${e.message}`, 'err');
+        }
+
+        // Fase 2: aplica os novos vínculos.
+        for (const a of alteracoes) {
+            if (!Number.isInteger(a.linhaPoDesejada) || a.linhaPoDesejada < 0) continue;
+            await fetchJson('/api/xml_auditor/vincular_linha_po', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: a.itemId,
+                    linha_po: a.linhaPoDesejada,
+                    pedido: pedidoAtual,
+                })
+            });
+        }
+
+        vinculacoesAtualizadas = alteracoes.length;
+    } catch (e) {
+        toast(`Erro ao vincular linha: ${e.message}`, 'err');
+        return;
+    }
+
+    const resultado = document.getElementById('pedidoResult');
+    if (resultado) {
+        resultado.className = 'pedido-result warn';
+        resultado.style.display = 'block';
+        resultado.textContent = `Vínculos atualizados: ${vinculacoesAtualizadas}. Reprocessando divergências...`;
+    }
+
+    // Reprocessa imediatamente após salvar para validar se ainda existem divergências.
+    let reprocessado = null;
+    try {
+        reprocessado = await fetchJson('/api/xml_auditor/consultar_pedido', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, pedido: pedidoAtual })
+        });
+    } catch (e) {
+        toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
+        return;
+    }
+
+    const paresDivergentes = (reprocessado?.pares || []).filter(p => !p.ok);
+    const divergenciasPersistem = Boolean(reprocessado && reprocessado.encontrado && !reprocessado.total_ok && paresDivergentes.length);
+
+    if (divergenciasPersistem) {
+        if (resultado) {
+            const qtdDiv = paresDivergentes.filter(p => !p.qtd_ok).length;
+            const valDiv = paresDivergentes.filter(p => !p.valor_ok).length;
+            resultado.className = 'pedido-result err';
+            resultado.textContent = `Divergências após salvar: quantidade (${qtdDiv}) | valor (${valDiv}).`;
+        }
+
+        const confirmar = await confirmarAcao(
+            `Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`
+        );
+
+        if (!confirmar) {
+            toast('Vínculos salvos. Ajuste as linhas divergentes para prosseguir.', 'err');
+            renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], notaSelecionada);
             return;
+        }
+
+        const divergenciasParaLog = paresDivergentes
+            .filter(p => Number.isInteger(p.po_index) && p.po_index >= 0)
+            .map(p => ({ linhaXml: Number(p.linha || 0), linhaPo: Number(p.po_index) + 1 }));
+
+        if (divergenciasParaLog.length) {
+            try {
+                await registrarObservacaoDivergenciaValor(divergenciasParaLog);
+            } catch (e) {
+                toast(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err');
+            }
         }
     }
 
-    toast(`Vínculos atualizados: ${vinculacoesAtualizadas}. Revalidando pedido...`, 'ok');
+    toast(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
     fecharModalVinculacao();
     await consultarPedidoExcel();
 }
