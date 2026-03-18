@@ -25,6 +25,7 @@ from ..auth import (
 from ..extensions import db
 from ..models import (
     ConferenciaLock,
+    EtiquetaRecebimento,
     ExpedicaoConferencia,
     ExpedicaoConferenciaDecisao,
     ExpedicaoConferenciaItem,
@@ -69,7 +70,7 @@ from ..services.expedicao_service import (
     validate_blind_conference,
 )
 from ..services.xml_service import process_xml_and_store
-from ..services.pedidos_service import comparar_pedido_com_nf
+from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf, formatar_codigo_material_padrao
 
 
 api_bp = Blueprint("api", __name__)
@@ -386,6 +387,107 @@ def _summarize_divergencia_nota(numero_nota: str):
     }
 
 
+def _formatar_descricao_etiqueta(itens):
+    descricoes = [str(i.descricao or "").strip() for i in itens if str(i.descricao or "").strip()]
+    if not descricoes:
+        return "---"
+    primeira = descricoes[0]
+    unicas = list(dict.fromkeys(descricoes))
+    if len(unicas) > 1:
+        return f"{primeira} + {len(unicas) - 1} item(ns)"
+    return primeira
+
+
+def _to_float(value) -> float:
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
+def _resolve_quantidade_etiqueta_oc(itens_nota: list[ItemNota]) -> float | None:
+    """
+    Prioriza quantidade vinda da OC quando houver vínculo de linha.
+    Para NF com múltiplas linhas, soma as linhas de OC vinculadas (sem duplicar índice).
+    Retorna None quando não conseguir resolver por OC.
+    """
+    if not itens_nota:
+        return None
+
+    linhas_por_pedido = {}
+    used_keys = set()
+    total_qtd_oc = 0.0
+    tem_vinculo_oc = False
+
+    for item in itens_nota:
+        pedido_raw = str(item.pedido_compra or "").strip()
+        if not pedido_raw:
+            continue
+
+        if pedido_raw not in linhas_por_pedido:
+            try:
+                linhas_por_pedido[pedido_raw] = buscar_linhas_pedido(pedido_raw)
+            except Exception:
+                linhas_por_pedido[pedido_raw] = []
+
+        linhas = linhas_por_pedido.get(pedido_raw) or []
+        if not linhas:
+            continue
+
+        idx = item.linha_po_vinculada if isinstance(item.linha_po_vinculada, int) and item.linha_po_vinculada >= 0 else None
+        if idx is None:
+            # Caso simples: item único com OC de uma única linha.
+            if len(itens_nota) == 1 and len(linhas) == 1:
+                idx = 0
+            else:
+                continue
+
+        if idx >= len(linhas):
+            continue
+
+        dedup_key = (pedido_raw, int(idx))
+        if dedup_key in used_keys:
+            continue
+
+        used_keys.add(dedup_key)
+        total_qtd_oc += _to_float(linhas[idx].get("qtd"))
+        tem_vinculo_oc = True
+
+    if tem_vinculo_oc:
+        return total_qtd_oc
+    return None
+
+
+def _build_etiqueta_payload(numero_nota: str, itens: list[ItemNota] | None = None) -> dict | None:
+    itens_nota = list(itens or ItemNota.query.filter_by(numero_nota=str(numero_nota)).all())
+    if not itens_nota:
+        return None
+
+    fornecedor = str(itens_nota[0].fornecedor or "").strip()
+    descricao_produto = _formatar_descricao_etiqueta(itens_nota)
+    codigo_material = next((str(i.codigo or "").strip() for i in itens_nota if str(i.codigo or "").strip()), "")
+    numero_oc = _coletar_pedidos_nota(itens_nota)
+    quantidade_nf = sum(_to_float(i.qtd_real) for i in itens_nota)
+    quantidade_oc = _resolve_quantidade_etiqueta_oc(itens_nota)
+    quantidade = quantidade_oc if quantidade_oc is not None else quantidade_nf
+
+    data_importacao = max([i.data_importacao for i in itens_nota if i.data_importacao], default=None)
+    data_lancamento = max([i.data_lancamento for i in itens_nota if i.data_lancamento], default=None)
+    data_referencia = data_importacao or data_lancamento
+
+    return {
+        "numero": str(numero_nota),
+        "fornecedor": fornecedor,
+        "produto": fornecedor or descricao_produto,
+        "quantidade": f"{quantidade:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+        "quantidade_origem": "OC" if quantidade_oc is not None else "NF",
+        "data_recebimento": data_referencia.strftime("%d/%m/%Y") if data_referencia else "---",
+        "numero_oc": str(numero_oc or "").strip() or "---",
+        "codigo_material": codigo_material or "---",
+        "obs": "",
+    }
+
+
 def _compute_pending_priority(numero_nota, fornecedor):
     now = datetime.now()
     itens = _filter_itens_para_conferencia(ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente").all())
@@ -436,8 +538,9 @@ def _compute_pending_priority(numero_nota, fornecedor):
     return {
         "numero": numero_nota,
         "fornecedor": fornecedor,
-        "pedido_compra": first.pedido_compra or "",
+        "pedido_compra": _coletar_pedidos_nota(itens),
         "material_cliente": bool(first.material_cliente),
+        "remessa": bool(first.remessa),
         "score": score,
         "prioridade_nivel": prioridade_nivel,
         "idade_horas": horas,
@@ -1477,6 +1580,8 @@ def listar_notas_xml_auditor():
             func.max(ItemNota.auditor_decisao),
             func.max(ItemNota.pedido_compra),
             func.max(ItemNota.material_cliente),
+            func.max(ItemNota.remessa),
+            func.max(ItemNota.sem_conferencia_logistica),
             func.max(ItemNota.auditor_usuario),
             func.max(ItemNota.auditor_data),
             func.max(ItemNota.status),
@@ -1497,9 +1602,11 @@ def listar_notas_xml_auditor():
                 "auditor_decisao": r[5] or "PendenteDecisao",
                 "pedido_compra": r[6] or "",
                 "material_cliente": bool(r[7]),
-                "auditado_por": r[8] or "---",
-                "auditado_em": r[9].strftime("%d/%m/%Y %H:%M") if r[9] else "---",
-                "status_fluxo": r[10] or "---",
+                "remessa": bool(r[8]),
+                "sem_conferencia_logistica": bool(r[9]),
+                "auditado_por": r[10] or "---",
+                "auditado_em": r[11].strftime("%d/%m/%Y %H:%M") if r[11] else "---",
+                "status_fluxo": r[12] or "---",
             }
             for r in rows
         ]
@@ -1531,6 +1638,8 @@ def detalhe_nota_xml_auditor(numero_nota):
             "auditor_justificativa": itens[0].auditor_justificativa or "",
             "pedido_compra": itens[0].pedido_compra or "",
             "material_cliente": bool(itens[0].material_cliente),
+            "remessa": bool(itens[0].remessa),
+            "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
             "auditor_observacao": itens[0].auditor_observacao or "",
             "auditado_por": itens[0].auditor_usuario or "---",
             "auditado_em": itens[0].auditor_data.strftime("%d/%m/%Y %H:%M") if itens[0].auditor_data else "---",
@@ -1632,6 +1741,94 @@ def registrar_decisao_xml_auditor():
     return jsonify({"sucesso": True, "msg": "XML recusado. Status fiscal registrado para Documento de Entrada."})
 
 
+def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str, resultado_comparacao: dict | None = None):
+    """
+    Sincroniza vínculo de linha PO e código interno (coluna D) no item_nota.
+    Garante que etapas seguintes sempre leiam o código interno já vinculado.
+    """
+    numero_nota = str(numero_nota or "").strip()
+    numero_pedido = str(numero_pedido or "").strip()
+    if not numero_nota or not numero_pedido:
+        return {"atualizou": False}
+
+    itens_nf = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    if not itens_nf:
+        return {"atualizou": False}
+
+    payload_nf = [
+        {
+            "item_id": i.id,
+            "codigo": i.codigo or "---",
+            "descricao": i.descricao or "---",
+            "qtd": i.qtd_real,
+            "linha_po_vinculada": i.linha_po_vinculada,
+            "valor_unit": round(float(i.valor_produto or 0) / float(i.qtd_real), 10) if float(i.qtd_real or 0) > 0 else 0.0,
+            "valor_total_linha": float(i.valor_produto or 0),
+        }
+        for i in itens_nf
+    ]
+
+    resultado = resultado_comparacao or comparar_pedido_com_nf(numero_pedido, payload_nf)
+    itens_por_id = {i.id: i for i in itens_nf}
+    atualizou = False
+
+    for par in resultado.get("pares", []):
+        item_id = par.get("item_id")
+        po_index = par.get("po_index")
+        if item_id is None or po_index is None:
+            continue
+
+        item = itens_por_id.get(item_id)
+        if not item:
+            continue
+
+        if item.linha_po_vinculada != po_index:
+            item.linha_po_vinculada = po_index
+            atualizou = True
+
+        po_pedido = str(par.get("po_pedido") or "").strip()
+        if po_pedido and item.pedido_compra != po_pedido:
+            item.pedido_compra = po_pedido[:50]
+            atualizou = True
+
+        codigo_material = formatar_codigo_material_padrao(par.get("po_codigo_material"))
+        descricao_material = str(par.get("po_descricao_material") or "").strip()
+        if codigo_material and item.codigo != codigo_material:
+            item.codigo = codigo_material
+            atualizou = True
+        if descricao_material and item.descricao != descricao_material:
+            item.descricao = descricao_material
+            atualizou = True
+
+    # Retroativo: saneia codigos ja gravados para o padrao operacional (inclui casos ...02010 -> ...00010).
+    for item in itens_nf:
+        codigo_saneado = formatar_codigo_material_padrao(item.codigo)
+        if codigo_saneado and item.codigo != codigo_saneado:
+            item.codigo = codigo_saneado
+            atualizou = True
+
+    if atualizou:
+        db.session.commit()
+
+    return {"atualizou": atualizou}
+
+
+def _coletar_pedidos_nota(itens) -> str:
+    pedidos = []
+    vistos = set()
+    for item in itens or []:
+        raw = str(item.pedido_compra or "").strip()
+        if not raw:
+            continue
+        for parte in re.split(r"[;,\n]+", raw):
+            pedido = str(parte or "").strip()
+            if not pedido or pedido in vistos:
+                continue
+            vistos.add(pedido)
+            pedidos.append(pedido)
+    return ",".join(sorted(pedidos))
+
+
 @api_bp.route("/api/xml_auditor/vincular_pedido", methods=["POST"])
 @permission_required("PAGE_XML_AUDITOR")
 def vincular_pedido_xml_auditor():
@@ -1639,6 +1836,8 @@ def vincular_pedido_xml_auditor():
     numero_nota = str(data.get("nota") or "").strip()
     pedido_compra = str(data.get("pedido_compra") or "").strip()
     material_cliente = bool(data.get("material_cliente", False))
+    remessa = bool(data.get("remessa", False))
+    sem_conferencia_logistica = bool(data.get("sem_conferencia_logistica", False))
     observacao = str(data.get("observacao") or "").strip()
 
     if not numero_nota:
@@ -1648,18 +1847,39 @@ def vincular_pedido_xml_auditor():
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
+    novo_pedido = pedido_compra[:50] if pedido_compra else None
     for item in itens:
+        pedido_anterior = item.pedido_compra
         item.material_cliente = material_cliente
-        item.pedido_compra = None if material_cliente else (pedido_compra[:50] if pedido_compra else None)
+        item.remessa = remessa
+        item.sem_conferencia_logistica = sem_conferencia_logistica
+        item.pedido_compra = None if (material_cliente or remessa) else novo_pedido
         item.auditor_observacao = observacao[:500] if observacao else None
 
+        # Ao trocar o pedido, limpamos vínculo manual para evitar herdar amarração antiga.
+        if (pedido_anterior or None) != (item.pedido_compra or None):
+            item.linha_po_vinculada = None
+
     db.session.commit()
+
+    # Tenta vincular automaticamente as linhas XML x PO imediatamente após informar a OC.
+    if not material_cliente and not remessa and pedido_compra:
+        try:
+            _sincronizar_codigo_interno_por_pedido(numero_nota, pedido_compra)
+        except Exception:
+            # Não bloqueia o fluxo de salvar vínculo caso haja indisponibilidade do Sheets.
+            db.session.rollback()
     return jsonify(
         {
             "sucesso": True,
             "msg": (
+                "NF marcada para pular conferência logística. Após liberar no Auditor XML, irá direto para Documento de Entrada."
+                if sem_conferencia_logistica
+                else
                 "Marcado como material de cliente. Liberação poderá ocorrer sem OC."
                 if material_cliente
+                else "Marcado como NF de remessa. Liberação poderá ocorrer sem OC."
+                if remessa
                 else "Pedido de compra vinculado no auditor. Integração com ERP ficará pendente até conexão da base externa."
             ),
         }
@@ -1679,7 +1899,20 @@ def consultar_pedido_excel():
     itens_nf = []
     if numero_nota:
         itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-        itens_nf = [{"codigo": i.codigo or "---", "descricao": i.descricao or "---", "qtd": i.qtd_real} for i in itens_db]
+        itens_nf = [
+            {
+                "item_id": i.id,
+                "codigo": i.codigo or "---",
+                "descricao": i.descricao or "---",
+                "qtd": i.qtd_real,
+                "linha_po_vinculada": i.linha_po_vinculada,
+                # valor_produto = vProd (total do item). Calculamos o unit aqui
+                # para comparação; o fallback usa o total diretamente.
+                "valor_unit": round(float(i.valor_produto or 0) / float(i.qtd_real), 10) if float(i.qtd_real or 0) > 0 else 0.0,
+                "valor_total_linha": float(i.valor_produto or 0),
+            }
+            for i in itens_db
+        ]
 
     try:
         resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
@@ -1688,7 +1921,183 @@ def consultar_pedido_excel():
     except Exception as exc:
         return jsonify({"sucesso": False, "msg": f"Erro ao ler planilha: {exc}"}), 500
 
+    # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
+    if numero_nota and itens_nf:
+        _sincronizar_codigo_interno_por_pedido(numero_nota, numero_pedido, resultado)
+
     return jsonify({"sucesso": True, **resultado})
+
+
+@api_bp.route("/api/xml_auditor/sugestoes_vinculacao", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def sugestoes_vinculacao():
+    """
+    Retorna sugestões de qual linha do pedido de compra vincular a cada linha da NF.
+    Baseado na comparação de quantidade e valor.
+    
+    Body:
+      {
+        "nota": "123456",
+        "pedido": "OC-2026-0001"
+      }
+    
+    Response:
+      {
+        "sucesso": true,
+        "sugestoes": [
+          {
+            "linha_nf": 1,
+            "item_id": 5,
+            "nf_codigo": "SKU123",
+            "nf_descricao": "Produto ABC",
+            "nf_qtd": 100,
+            "nf_valor_unit": 10.50,
+            "linha_po_sugerida": 0,
+            "confianca": "ALTA",
+            "qtd_ok": true,
+            "valor_ok": true
+          },
+          ...
+        ],
+        "total_analisadas": 5
+      }
+    """
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    numero_pedido = str(data.get("pedido") or "").strip()
+
+    if not numero_nota or not numero_pedido:
+        return jsonify({"sucesso": False, "msg": "NF e Pedido obrigatórios."}), 400
+
+    # Recupera items da NF
+    itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    
+    itens_nf = [
+        {
+            "linha": i,
+            "item_id": item.id,
+            "codigo": item.codigo or "---",
+            "descricao": item.descricao or "---",
+            "qtd": item.qtd_real,
+            "valor_unit": round(float(item.valor_produto or 0) / float(item.qtd_real), 10) if float(item.qtd_real or 0) > 0 else 0.0,
+            "valor_total_linha": float(item.valor_produto or 0),
+        }
+        for i, item in enumerate(itens_db, 1)
+    ]
+
+    # Comparação posicional (primeiro match)
+    try:
+        resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
+    except Exception as exc:
+        return jsonify({"sucesso": False, "msg": f"Erro ao ler planilha: {exc}"}), 500
+
+    if not resultado.get("encontrado"):
+        return jsonify({"sucesso": False, "msg": "Pedido não encontrado na planilha."}), 404
+
+    sugestoes = []
+    for par in resultado.get("pares", []):
+        linha_nf = par["linha"]
+        item_nf = next((i for i in itens_nf if i["linha"] == linha_nf), None)
+        
+        if not item_nf:
+            continue
+
+        # Determina confiança baseado no match
+        confianca = "ALTA" if par["ok"] else ("MEDIA" if (par["qtd_ok"] or par["valor_ok"]) else "BAIXA")
+        
+        sugestoes.append({
+            "linha_nf": linha_nf,
+            "item_id": item_nf["item_id"],
+            "nf_codigo": item_nf["codigo"],
+            "nf_descricao": item_nf["descricao"],
+            "nf_qtd": item_nf["qtd"],
+            "nf_valor_unit": item_nf["valor_unit"],
+            "nf_valor_total": item_nf["valor_total_linha"],
+            "linha_po_sugerida": linha_nf - 1,  # 0-based index para linha do PO
+            "po_qtd": par["po_qtd"],
+            "po_valor_unit": par["po_valor_unit"],
+            "confianca": confianca,
+            "qtd_ok": par["qtd_ok"],
+            "valor_ok": par["valor_ok"],
+            "ok": par["ok"]
+        })
+
+    return jsonify({
+        "sucesso": True,
+        "sugestoes": sugestoes,
+        "total_analisadas": len(itens_nf)
+    })
+
+
+@api_bp.route("/api/xml_auditor/vincular_linha_po", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def vincular_linha_po():
+    """
+    Permite ao auditor vincular manualmente uma linha do XML a uma linha do pedido de compra.
+    
+    Body:
+      {
+        "item_id": 5,
+        "linha_po": 0
+      }
+    """
+    data = request.get_json() or {}
+    item_id = data.get("item_id")
+    linha_po = data.get("linha_po")
+    pedido_payload = str(data.get("pedido") or "").strip()
+
+    if item_id is None:
+        return jsonify({"sucesso": False, "msg": "ID do item obrigatório."}), 400
+
+    item = ItemNota.query.get(item_id)
+    if not item:
+        return jsonify({"sucesso": False, "msg": "Item não encontrado."}), 404
+
+    # linha_po pode ser None (desvinculação manual) ou um inteiro >= 0
+    if linha_po is not None and (not isinstance(linha_po, int) or linha_po < 0):
+        return jsonify({"sucesso": False, "msg": "linha_po deve ser None ou um inteiro >= 0."}), 400
+
+    if linha_po is not None:
+        pedido = pedido_payload or str(item.pedido_compra or "").strip()
+        if pedido:
+            linhas_po = buscar_linhas_pedido(pedido)
+            if linha_po >= len(linhas_po):
+                return jsonify({"sucesso": False, "msg": "linha_po fora do intervalo do pedido."}), 400
+
+            # Evita duplicidade: uma linha PO só pode ficar vinculada a um item da mesma NF.
+            conflito = (
+                ItemNota.query
+                .filter(
+                    ItemNota.numero_nota == item.numero_nota,
+                    ItemNota.id != item.id,
+                    ItemNota.linha_po_vinculada == linha_po,
+                )
+                .first()
+            )
+            if conflito:
+                return jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": f"A linha {linha_po + 1} do pedido já está vinculada a outro item desta NF.",
+                    }
+                ), 409
+
+            codigo_material = str(linhas_po[linha_po].get("codigo_material") or "").strip()
+            descricao_material = str(linhas_po[linha_po].get("descricao_material") or "").strip()
+            if codigo_material:
+                item.codigo = codigo_material
+            if descricao_material:
+                item.descricao = descricao_material
+
+    item.linha_po_vinculada = linha_po
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "msg": f"Linha vinculada manualmente." if linha_po is not None else "Vínculo removido.",
+        "item_id": item_id,
+        "linha_po_vinculada": item.linha_po_vinculada
+    })
 
 
 @api_bp.route("/api/xml_auditor/liberar", methods=["POST"])
@@ -1705,21 +2114,33 @@ def liberar_nota_via_xml_auditor():
 
     # Sincroniza dados informados na tela ao tentar liberar (evita depender do botão "Salvar Vínculo").
     material_cliente_in_payload = "material_cliente" in data
+    remessa_in_payload = "remessa" in data
+    sem_conf_logistica_in_payload = "sem_conferencia_logistica" in data
     pedido_compra_in_payload = "pedido_compra" in data
     observacao_in_payload = "observacao" in data
-    if material_cliente_in_payload or pedido_compra_in_payload or observacao_in_payload:
+    if material_cliente_in_payload or remessa_in_payload or sem_conf_logistica_in_payload or pedido_compra_in_payload or observacao_in_payload:
         material_cliente_payload = bool(data.get("material_cliente", False))
+        remessa_payload = bool(data.get("remessa", False))
+        sem_conf_logistica_payload = bool(data.get("sem_conferencia_logistica", False))
         pedido_compra_payload = str(data.get("pedido_compra") or "").strip()
         observacao_payload = str(data.get("observacao") or "").strip()
 
         for item in itens:
+            pedido_anterior = item.pedido_compra
             if material_cliente_in_payload:
                 item.material_cliente = material_cliente_payload
+            if remessa_in_payload:
+                item.remessa = remessa_payload
+            if sem_conf_logistica_in_payload:
+                item.sem_conferencia_logistica = sem_conf_logistica_payload
 
-            if item.material_cliente:
+            if item.material_cliente or bool(item.remessa):
                 item.pedido_compra = None
             elif pedido_compra_in_payload:
                 item.pedido_compra = pedido_compra_payload[:50] if pedido_compra_payload else None
+
+            if (pedido_anterior or None) != (item.pedido_compra or None):
+                item.linha_po_vinculada = None
 
             if observacao_in_payload:
                 item.auditor_observacao = observacao_payload[:500] if observacao_payload else None
@@ -1738,17 +2159,39 @@ def liberar_nota_via_xml_auditor():
             }
         ), 409
 
-    pedido = str(itens[0].pedido_compra or "").strip()
+    pedidos_nota = _coletar_pedidos_nota(itens)
     material_cliente = bool(itens[0].material_cliente)
-    if not material_cliente and not pedido:
+    remessa = bool(itens[0].remessa)
+    sem_conferencia_logistica = bool(itens[0].sem_conferencia_logistica)
+    if not material_cliente and not remessa and not pedidos_nota:
         return jsonify(
             {
                 "sucesso": False,
-                "msg": "Informe o pedido de compras no Auditor XML ou marque como material de cliente antes de liberar.",
+                "msg": "Informe o pedido de compras no Auditor XML ou marque como material de cliente/remessa antes de liberar.",
             }
         ), 409
 
-    ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update({"status": "Pendente"})
+    # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
+    if not material_cliente and not remessa and pedidos_nota:
+        try:
+            _sincronizar_codigo_interno_por_pedido(numero_nota, pedidos_nota)
+        except Exception as exc:
+            return jsonify({"sucesso": False, "msg": f"Não foi possível sincronizar código interno da OC: {exc}"}), 409
+
+    if sem_conferencia_logistica:
+        now = datetime.now()
+        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update(
+            {
+                "status": "Concluído",
+                "usuario_conferencia": session.get("username", "sistema"),
+                "inicio_conferencia": now,
+                "fim_conferencia": now,
+            }
+        )
+        msg_liberacao = "NF liberada sem conferência logística. Documento enviado direto para Entrada (Concluído)."
+    else:
+        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update({"status": "Pendente"})
+        msg_liberacao = "NF liberada para conferência pelo Auditor XML."
     db.session.add(
         LogAcessoAdministrativo(
             usuario=session.get("username", "sistema"),
@@ -1757,7 +2200,7 @@ def liberar_nota_via_xml_auditor():
         )
     )
     db.session.commit()
-    return jsonify({"sucesso": True, "msg": "NF liberada para conferência pelo Auditor XML."})
+    return jsonify({"sucesso": True, "msg": msg_liberacao})
 
 
 @api_bp.route("/api/admin/liberar_nota_conferencia", methods=["POST"])
@@ -1783,7 +2226,7 @@ def liberar_nota_conferencia():
             409,
         )
 
-    if not bool(itens[0].material_cliente) and not str(itens[0].pedido_compra or "").strip():
+    if not bool(itens[0].material_cliente) and not bool(itens[0].remessa) and not str(itens[0].pedido_compra or "").strip():
         return jsonify({"sucesso": False, "msg": "Pedido de compras não informado no Auditor XML."}), 409
 
     status_set = {str(i.status or "").strip() for i in itens}
@@ -2872,6 +3315,18 @@ def buscar_itens(nota):
             423,
         )
 
+    itens_nota = ItemNota.query.filter_by(numero_nota=nota).all()
+    if itens_nota:
+        pedido = _coletar_pedidos_nota(itens_nota)
+        material_cliente = bool(itens_nota[0].material_cliente)
+        remessa = bool(itens_nota[0].remessa)
+        if pedido and not material_cliente and not remessa:
+            try:
+                _sincronizar_codigo_interno_por_pedido(str(nota), pedido)
+            except Exception:
+                # Não bloqueia abertura da conferência se planilha estiver indisponível.
+                db.session.rollback()
+
     itens = _filter_itens_para_conferencia(ItemNota.query.filter_by(numero_nota=nota, status="Pendente").all())
     if not itens:
         _release_lock(nota)
@@ -3544,9 +3999,14 @@ def resetar_nota_admin():
 @roles_required("Fiscal", "Admin")
 def listar_concluidas():
     notas_db = (
-        db.session.query(ItemNota.numero_nota, ItemNota.fornecedor)
+        db.session.query(
+            ItemNota.numero_nota,
+            ItemNota.fornecedor,
+            func.max(ItemNota.material_cliente),
+            func.max(ItemNota.remessa),
+        )
         .filter_by(status="Concluído")
-        .distinct()
+        .group_by(ItemNota.numero_nota, ItemNota.fornecedor)
         .all()
     )
     lista = []
@@ -3559,6 +4019,8 @@ def listar_concluidas():
             {
                 "numero": numero_nota,
                 "fornecedor": nota[1],
+                "material_cliente": bool(nota[2]),
+                "remessa": bool(nota[3]),
                 "motivo_pendencia": motivo,
                 "divergencia_status": resumo_divergencia["divergencia_status"],
             }
@@ -3573,7 +4035,26 @@ def confirmar_lancamento():
     payload = confirmar_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
     codigo = payload.get("codigo")
+    codigo_material = str(payload.get("codigo_material") or "").strip()
     manifestar_destinatario = bool(payload.get("manifestar_destinatario", True))
+
+    itens_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
+    if not itens_concluidos:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
+
+    exige_codigo_material = bool(itens_concluidos[0].material_cliente) or bool(itens_concluidos[0].remessa)
+    if exige_codigo_material and not codigo_material:
+        return jsonify(
+            {
+                "sucesso": False,
+                "msg": "Para NF de remessa/material de cliente, informe o código do material.",
+            }
+        ), 400
+
+    if exige_codigo_material:
+        for item in itens_concluidos:
+            item.codigo = codigo_material[:50]
+        db.session.commit()
 
     ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").update(
         {
@@ -3745,10 +4226,153 @@ def listar_lancadas():
     )
 
 
+@api_bp.route("/api/etiquetas/pendentes", methods=["GET"])
+@permission_required("PAGE_ETIQUETAS")
+def listar_etiquetas_pendentes():
+    filtro = str(request.args.get("q") or "").strip().lower()
+    limite = _parse_positive_int(request.args.get("limit"), default=120, min_value=1, max_value=500)
+
+    notas_lancadas = (
+        db.session.query(ItemNota.numero_nota)
+        .filter(ItemNota.status == "Lançado")
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.data_lancamento).desc(), ItemNota.numero_nota.desc())
+        .limit(limite * 2)
+        .all()
+    )
+
+    notas_arquivadas = {
+        str(row.numero_nota)
+        for row in EtiquetaRecebimento.query.with_entities(EtiquetaRecebimento.numero_nota).all()
+    }
+
+    pendentes = []
+    for row in notas_lancadas:
+        numero = str(row[0])
+        if numero in notas_arquivadas:
+            continue
+        dados = _build_etiqueta_payload(numero)
+        if not dados:
+            continue
+        termo = f"{dados['numero']} {dados['fornecedor']} {dados['produto']} {dados['codigo_material']} {dados['numero_oc']}".lower()
+        if filtro and filtro not in termo:
+            continue
+        pendentes.append(dados)
+        if len(pendentes) >= limite:
+            break
+
+    return jsonify(pendentes)
+
+
+@api_bp.route("/api/etiquetas/arquivadas", methods=["GET"])
+@permission_required("PAGE_ETIQUETAS")
+def listar_etiquetas_arquivadas():
+    filtro = str(request.args.get("q") or "").strip().lower()
+    limite = _parse_positive_int(request.args.get("limit"), default=200, min_value=1, max_value=1000)
+
+    registros = (
+        EtiquetaRecebimento.query.order_by(EtiquetaRecebimento.data_impressao.desc())
+        .limit(limite * 2)
+        .all()
+    )
+
+    arquivadas = []
+    for registro in registros:
+        dados = _build_etiqueta_payload(str(registro.numero_nota))
+        if not dados:
+            dados = {
+                "numero": str(registro.numero_nota),
+                "fornecedor": "---",
+                "produto": "---",
+                "data_recebimento": "---",
+                "numero_oc": "---",
+                "codigo_material": "---",
+                "obs": "",
+            }
+        dados["data_impressao"] = registro.data_impressao.strftime("%d/%m/%Y %H:%M") if registro.data_impressao else "---"
+        dados["usuario_impressao"] = str(registro.usuario_impressao or "---")
+        dados["quantidade_impressao"] = int(registro.quantidade_impressao or 1)
+
+        termo = f"{dados['numero']} {dados['fornecedor']} {dados['produto']} {dados['codigo_material']} {dados['numero_oc']} {dados['usuario_impressao']}".lower()
+        if filtro and filtro not in termo:
+            continue
+        arquivadas.append(dados)
+        if len(arquivadas) >= limite:
+            break
+
+    return jsonify(arquivadas)
+
+
+@api_bp.route("/api/etiquetas/<numero_nota>", methods=["GET"])
+@permission_required("PAGE_ETIQUETAS")
+def obter_etiqueta(numero_nota):
+    dados = _build_etiqueta_payload(str(numero_nota))
+    if not dados:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada para etiqueta."}), 404
+
+    registro = EtiquetaRecebimento.query.filter_by(numero_nota=str(numero_nota)).first()
+    if registro:
+        dados["data_impressao"] = registro.data_impressao.strftime("%d/%m/%Y %H:%M") if registro.data_impressao else "---"
+        dados["usuario_impressao"] = str(registro.usuario_impressao or "---")
+        dados["quantidade_impressao"] = int(registro.quantidade_impressao or 1)
+
+    return jsonify(dados)
+
+
+@api_bp.route("/api/etiquetas/imprimir", methods=["POST"])
+@permission_required("PAGE_ETIQUETAS")
+def imprimir_etiqueta():
+    payload = request.get_json(silent=True) or {}
+    numero_nota = str(payload.get("nota") or "").strip()
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "Número da NF é obrigatório."}), 400
+
+    itens_lancados = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").all()
+    registro = EtiquetaRecebimento.query.filter_by(numero_nota=numero_nota).first()
+
+    if not itens_lancados and not registro:
+        return jsonify({"sucesso": False, "msg": "NF não está lançada para impressão de etiqueta."}), 409
+
+    if not registro:
+        registro = EtiquetaRecebimento(
+            numero_nota=numero_nota,
+            usuario_impressao=session.get("username", "Operacao"),
+            data_impressao=datetime.now(),
+            quantidade_impressao=1,
+        )
+        db.session.add(registro)
+    else:
+        registro.usuario_impressao = session.get("username", "Operacao")
+        registro.data_impressao = datetime.now()
+        registro.quantidade_impressao = int(registro.quantidade_impressao or 0) + 1
+
+    db.session.commit()
+    return jsonify(
+        {
+            "sucesso": True,
+            "numero": numero_nota,
+            "data_impressao": registro.data_impressao.strftime("%d/%m/%Y %H:%M") if registro.data_impressao else "---",
+            "usuario_impressao": registro.usuario_impressao,
+            "quantidade_impressao": int(registro.quantidade_impressao or 1),
+        }
+    )
+
+
 @api_bp.route("/api/detalhes_nf/<numero>")
 @roles_required("Fiscal", "Admin")
 def detalhes_nf(numero):
     itens = ItemNota.query.filter_by(numero_nota=numero).all()
+    if itens:
+        pedido = _coletar_pedidos_nota(itens)
+        material_cliente = bool(itens[0].material_cliente)
+        remessa = bool(itens[0].remessa)
+        if pedido and not material_cliente and not remessa:
+            try:
+                _sincronizar_codigo_interno_por_pedido(str(numero), pedido)
+            except Exception:
+                db.session.rollback()
+            itens = ItemNota.query.filter_by(numero_nota=numero).all()
+
     if not itens:
         return jsonify({"erro": "Nota não encontrada"}), 404
 
@@ -3776,6 +4400,17 @@ def listar_notas_liberadas_lancamento():
 @login_required
 def detalhes_nota_liberada_lancamento(numero):
     itens = ItemNota.query.filter_by(numero_nota=str(numero)).all()
+    if itens:
+        pedido = _coletar_pedidos_nota(itens)
+        material_cliente = bool(itens[0].material_cliente)
+        remessa = bool(itens[0].remessa)
+        if pedido and not material_cliente and not remessa:
+            try:
+                _sincronizar_codigo_interno_por_pedido(str(numero), pedido)
+            except Exception:
+                db.session.rollback()
+            itens = ItemNota.query.filter_by(numero_nota=str(numero)).all()
+
     if not itens:
         return jsonify({"erro": "Nota não encontrada"}), 404
 

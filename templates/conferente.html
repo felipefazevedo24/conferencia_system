@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Conferência de Materiais | ERP FAM{% endblock %}
+{% block title %}Conferência de Materiais{% endblock %}
 
 {% block extra_head %}
     <style>
@@ -529,7 +529,7 @@
                 <span class="status-label"><i class="fas fa-circle" style="font-size:8px"></i> AGUARDANDO</span>
                 <strong>NF-e: ${n.numero}</strong>
                 <div style="font-size:12px; color:#64748b; font-weight:600; margin-top:4px;">${n.fornecedor}</div>
-                <div style="font-size:11px; color:#334155; font-weight:700; margin-top:4px;">${n.material_cliente ? 'Material do cliente (sem OC)' : `Pedido: ${n.pedido_compra || '---'}`}</div>
+                <div style="font-size:11px; color:#334155; font-weight:700; margin-top:4px;">${n.remessa ? 'NF de remessa' : (n.material_cliente ? 'Material do cliente' : `Pedido: ${n.pedido_compra || '---'}`)}</div>
                 <div style="font-size:11px; color:#475569; font-weight:700; margin-top:6px;">Liberada em: ${n.data_liberacao || '---'}</div>
                 ${n.prioridade_nivel !== undefined ? `
                     <div class="priority-row">
@@ -562,7 +562,7 @@
         document.getElementById('lista-view').classList.add('hidden');
         document.getElementById('conf-view').classList.remove('hidden');
         iniciarHeartbeat();
-        const refPedido = metaNota?.material_cliente ? 'Material do cliente (sem OC)' : `Pedido: ${metaNota?.pedido_compra || '---'}`;
+        const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || '---'}`);
         document.getElementById('n-atual').innerHTML = `CONFERÊNCIA NF: ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:700;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
         const itens = await res.json();
         document.getElementById('itens-container').innerHTML = itens.map(i => `

@@ -188,6 +188,140 @@
     .po-compare-table .line-ok  { color: #166534; font-weight: 700; }
     .po-compare-table .line-err { color: #991b1b; font-weight: 700; }
     .po-compare-table .line-na  { color: #94a3b8; }
+
+    /* Tabelas de Linking lado-a-lado */
+    .po-linking-table { width: 100%; border-collapse: collapse; }
+    .po-linking-table thead tr { background: #fafbfc; }
+    .po-linking-table th { padding: 10px 12px; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; text-align: left; border-bottom: 1px solid #e2e8f0; letter-spacing: 0.5px; }
+    .po-linking-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+    .po-linking-table tr:last-child td { border-bottom: none; }
+    .po-linking-table tbody tr { cursor: pointer; transition: all 0.15s; }
+    .po-linking-table tbody tr:hover { background: #f8fafc; }
+    .po-linking-table tbody tr.selected { background: #dbeafe; border-left: 3px solid #0284c7; }
+    .po-linking-table tbody tr.matched { background: #f0fdf4; border-left: 3px solid var(--success-erp); }
+    .po-linking-table tbody tr.conflict { background: #fff5f5; border-left: 3px solid var(--danger-erp); }
+    .po-linking-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .po-linking-badge.ok { background: #dcfce7; color: var(--success-erp); }
+    .po-linking-badge.conflict { background: #fee2e2; color: var(--danger-erp); }
+    .po-linking-badge.linked { background: #dbeafe; color: #0284c7; }
+
+    /* Card de Vinculação Individual */
+    .vinculacao-card {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 16px;
+        background: #fff;
+        transition: all 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .vinculacao-card:hover {
+        border-color: #2563eb;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+    }
+    .vinculacao-card.divergencia {
+        border-left: 4px solid var(--danger-erp);
+        background: #fff5f5;
+    }
+    .vinculacao-card.ok {
+        border-left: 4px solid var(--success-erp);
+        background: #f0fdf4;
+    }
+    .vinculacao-linha-xml {
+        padding: 12px 14px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 12px;
+    }
+    .vinculacao-linha-xml-titulo {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 6px;
+    }
+    .vinculacao-linha-xml-dados {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        font-size: 12px;
+        color: #0f172a;
+    }
+    .vinculacao-linha-xml-dados div {
+        display: flex;
+        justify-content: space-between;
+    }
+    .vinculacao-linha-xml-dados strong {
+        font-weight: 700;
+        color: #2563eb;
+    }
+    .vinculacao-select-wrap {
+        margin: 12px 0;
+    }
+    .vinculacao-select-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #475569;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+    }
+    .vinculacao-select {
+        width: 100%;
+        padding: 11px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 13px;
+        font-family: inherit;
+        background: #fff;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .vinculacao-select:hover {
+        border-color: #2563eb;
+    }
+    .vinculacao-select:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    }
+    .vinculacao-select:disabled {
+        background: #f8fafc;
+        color: #64748b;
+        cursor: not-allowed;
+        border-color: #cbd5e1;
+    }
+    .vinc-status {
+        margin-top: 8px;
+        font-size: 12px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-transform: uppercase;
+    }
+    .vinc-status.ok {
+        color: #166534;
+    }
+    .vinc-status.err {
+        color: #991b1b;
+    }
+    .vinc-edit-btn {
+        margin-top: 10px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .vinc-edit-btn:hover {
+        border-color: #2563eb;
+        color: #1d4ed8;
+    }
+
     .inconsistencias b { color: #991b1b; font-size: 14px; }
     .inconsistencias ul { margin: 10px 0 0 20px; color: #b91c1c; }
 
@@ -212,7 +346,7 @@
         position: fixed;
         inset: 0;
         background: rgba(15, 23, 42, 0.45);
-        z-index: 1000;
+        z-index: 3000;
         align-items: center;
         justify-content: center;
     }
@@ -232,6 +366,47 @@
     .modal-card h4 { margin: 0 0 8px; font-size: 17px; font-weight: 800; color: var(--text-main); }
     .modal-card p  { margin: 0 0 24px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
     .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+    .vinculacao-overlay-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 22px 60px rgba(2, 6, 23, 0.35);
+        width: min(980px, 95vw);
+        max-height: 86vh;
+        overflow: hidden;
+        animation: modalIn 0.2s ease-out;
+        border: 2px solid #2563eb;
+    }
+
+    .pendencia-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 22px 60px rgba(2, 6, 23, 0.35);
+        width: min(560px, 94vw);
+        padding: 24px;
+        border: 2px solid #f59e0b;
+        animation: modalIn 0.2s ease-out;
+    }
+    .pendencia-card h4 {
+        margin: 0;
+        font-size: 18px;
+        color: #7c2d12;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .pendencia-card p {
+        margin: 10px 0 16px;
+        color: #475569;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+    .pendencia-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
 
     @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
 </style>
@@ -279,6 +454,34 @@
                 <button class="btn" style="background:#fff1f2; color:#991b1b; border-color:#fecaca;" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
                 <button class="btn" type="button" onclick="fecharDiagnostico()"><i class="fas fa-xmark"></i> Fechar</button>
             </div>
+        </div>
+    </div>
+
+    <div id="vinculacaoOverlay" class="modal-overlay" onclick="if(event.target===this)fecharModalVinculacao()">
+        <div class="vinculacao-overlay-card">
+            <div style="background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding:20px; color:#fff;">
+                <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:10px;">
+                    <i class="fas fa-link"></i> Vincular Linhas do Pedido
+                </h3>
+                <p style="margin:8px 0 0 0; font-size:13px; font-weight:500; opacity:0.95;">
+                    Selecione qual linha do Pedido corresponde a cada linha do XML abaixo
+                </p>
+            </div>
+            <div style="padding:20px; max-height:62vh; overflow-y:auto;">
+                <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
+            </div>
+            <div style="padding:16px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn" onclick="fecharModalVinculacao()" style="background:#fff;"><i class="fas fa-times"></i> Fechar</button>
+                <button class="btn success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pendenciaOverlay" class="modal-overlay" onclick="if(event.target===this)fecharPendenciaObrigatoria()">
+        <div class="pendencia-card">
+            <h4><i class="fas fa-triangle-exclamation"></i> Ação obrigatória antes de liberar</h4>
+            <p id="pendenciaTexto"></p>
+            <div id="pendenciaActions" class="pendencia-actions"></div>
         </div>
     </div>
 
@@ -334,30 +537,36 @@
 
                 <div style="display: grid; gap: 15px;">
                     <div class="box">
-                        <label>Pedido de Compra (Vínculo ERP)</label>
+                        <label>Pedido(s) de Compra (Vínculo ERP)</label>
                         <div style="display:flex; gap:8px; margin-top:5px;">
-                            <input id="pedidoCompra" class="input" placeholder="Ex: OC-2026-0000" />
+                            <input id="pedidoCompra" class="input" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
                             <button type="button" class="btn" style="white-space:nowrap;" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
                         </div>
                         <div id="pedidoResult" class="pedido-result"></div>
-                        <div id="pedidoCompareWrap" style="display:none; margin-top:10px; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
-                            <table class="po-compare-table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Código</th>
-                                        <th>Descrição</th>
-                                        <th style="text-align:right;">Qtd NF</th>
-                                        <th style="text-align:right;">Qtd Pedido</th>
-                                        <th style="text-align:center;"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyPoCompare"></tbody>
-                            </table>
+                        <div id="pedidoCompareWrap" style="display:none;"></div>
+                        <div id="sugestoesVinculacaoWrap" style="display:none; margin-top:15px; border:1px solid #dbeafe; border-radius:8px; background:#f0f9ff; padding:14px;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                                <i class="fas fa-lightbulb" style="color:#0284c7; font-size:14px;"></i>
+                                <strong style="color:#0c4a6e; font-size:13px;">Sugestões de Vinculação</strong>
+                                <span id="sugestoesConfianca" style="font-size:11px; color:#64748b;"></span>
+                            </div>
+                            <div id="listasugestoes" style="display:flex; flex-direction:column; gap:8px;"></div>
+                            <p style="margin:10px 0 0 0; font-size:11px; color:#475569; text-transform:none; font-weight:400;">
+                                💡 <strong>Dica:</strong> Clique em uma sugestão (verde = confiança alta) para vincular. Você também pode desvincular após salvar.
+                            </p>
                         </div>
                         <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
-                            <input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente (sem ordem de compra)
+                            <input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente
                         </label>
+                        <label style="display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
+                            <input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
+                            <input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística
+                        </label>
+                        <p style="margin:8px 0 0; font-size:11px; color:#475569; line-height:1.45;">
+                            Quando marcado, após a liberação no Auditor XML a NF pula a conferência física e vai direto para Documento de Entrada (como concluída).
+                        </p>
                     </div>
                     <div class="box">
                         <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
@@ -450,6 +659,98 @@ function responderConfirmacao(confirmado) {
     }
 }
 
+function fecharPendenciaObrigatoria() {
+    document.getElementById('pendenciaOverlay').classList.remove('active');
+}
+
+function abrirPendenciaObrigatoria(tipo) {
+    const texto = document.getElementById('pendenciaTexto');
+    const actions = document.getElementById('pendenciaActions');
+
+    if (tipo === 'auditoria') {
+        texto.textContent = 'Você ainda não executou a auditoria XML desta NF. Execute a auditoria agora para liberar a conferência.';
+        actions.innerHTML = `
+            <button class="btn warning" type="button" onclick="fecharPendenciaObrigatoria(); auditarSelecionada();">
+                <i class="fas fa-robot"></i> Executar Auditoria
+            </button>
+            <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();">
+                <i class="fas fa-times"></i> Fechar
+            </button>
+        `;
+    } else {
+        texto.textContent = 'Informe o pedido de compra ou escolha o tipo do documento para liberar sem OC.';
+        actions.innerHTML = `
+            <button class="btn" type="button" onclick="irParaCampoPedido();">
+                <i class="fas fa-keyboard"></i> Informar Pedido
+            </button>
+            <button class="btn" type="button" onclick="marcarTipoDocumento('material');">
+                <i class="fas fa-user-tag"></i> Material de Cliente
+            </button>
+            <button class="btn" type="button" onclick="marcarTipoDocumento('remessa');">
+                <i class="fas fa-truck"></i> Remessa
+            </button>
+            <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();">
+                <i class="fas fa-times"></i> Fechar
+            </button>
+        `;
+    }
+
+    document.getElementById('pendenciaOverlay').classList.add('active');
+}
+
+function detectarTipoPendencia(msgRaw) {
+    const msg = String(msgRaw || '').toLowerCase();
+    if (
+        msg.includes('auditoria ainda não executada') ||
+        msg.includes('execute a auditoria') ||
+        msg.includes('analise a nf') ||
+        msg.includes('naoauditado')
+    ) {
+        return 'auditoria';
+    }
+    if (
+        msg.includes('pedido de compras') ||
+        msg.includes('informe o pedido') ||
+        msg.includes('material de cliente/remessa') ||
+        msg.includes('sem oc') ||
+        msg.includes('número do pedido obrigatório')
+    ) {
+        return 'pedido';
+    }
+    return null;
+}
+
+function irParaCampoPedido() {
+    fecharPendenciaObrigatoria();
+    const campo = document.getElementById('pedidoCompra');
+    const box = campo?.closest('.box');
+    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (campo) {
+        campo.disabled = false;
+        campo.focus();
+    }
+}
+
+async function marcarTipoDocumento(tipo) {
+    const material = document.getElementById('materialCliente');
+    const remessa = document.getElementById('remessa');
+    const semConf = document.getElementById('semConferenciaLogistica');
+    if (!material || !remessa) return;
+
+    if (tipo === 'material') {
+        material.checked = true;
+        remessa.checked = false;
+    } else if (tipo === 'remessa') {
+        remessa.checked = true;
+        material.checked = false;
+    }
+
+    alternarMaterialCliente();
+    if (semConf) semConf.checked = false;
+    fecharPendenciaObrigatoria();
+    await salvarPedido();
+}
+
 function abrirDiagnostico(inconsistencias) {
     const overlay = document.getElementById('diagOverlay');
     const list = document.getElementById('diagList');
@@ -490,12 +791,14 @@ function badgeDecisaoClass(st) {
 }
 
 function alternarMaterialCliente() {
-    const marcado = document.getElementById('materialCliente').checked;
+    const materialMarcado = document.getElementById('materialCliente').checked;
+    const remessaMarcada = document.getElementById('remessa').checked;
+    const marcado = materialMarcado || remessaMarcada;
     const inputPedido = document.getElementById('pedidoCompra');
     inputPedido.disabled = marcado;
     if (marcado) {
         inputPedido.value = '';
-        inputPedido.placeholder = 'Não aplicável (material de cliente)';
+        inputPedido.placeholder = remessaMarcada ? 'Não aplicável (NF de remessa)' : 'Não aplicável (material de cliente)';
     } else {
         inputPedido.placeholder = 'Ex: OC-2026-0000';
     }
@@ -554,6 +857,8 @@ async function selecionarNota(numero) {
         document.getElementById('dDecisaoFiscal').textContent = d.auditor_decisao || 'PendenteDecisao';
         document.getElementById('pedidoCompra').value = d.pedido_compra || '';
         document.getElementById('materialCliente').checked = !!d.material_cliente;
+        document.getElementById('remessa').checked = !!d.remessa;
+        document.getElementById('semConferenciaLogistica').checked = !!d.sem_conferencia_logistica;
         alternarMaterialCliente();
         document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
         document.getElementById('obsFiscal').value = d.auditor_observacao || '';
@@ -622,21 +927,34 @@ async function registrarDecisaoFiscal(autorizado) {
 
 async function consultarPedidoExcel() {
     const pedido = (document.getElementById('pedidoCompra').value || '').trim();
+    const observacao = (document.getElementById('obsFiscal').value || '').trim();
     const res = document.getElementById('pedidoResult');
     const wrap = document.getElementById('pedidoCompareWrap');
-    const tbody = document.getElementById('tbodyPoCompare');
     if (!pedido) {
-        res.className = 'pedido-result warn';
-        res.textContent = 'Informe o número do pedido antes de consultar.';
-        res.style.display = 'block';
-        wrap.style.display = 'none';
+        abrirPendenciaObrigatoria('pedido');
         return;
     }
     res.className = 'pedido-result warn';
     res.textContent = 'Consultando planilha...';
     res.style.display = 'block';
     wrap.style.display = 'none';
+    document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
     try {
+        // Salva automaticamente a OC ao consultar, evitando clique extra em "Salvar".
+        if (notaSelecionada) {
+            await fetchJson('/api/xml_auditor/vincular_pedido', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nota: notaSelecionada,
+                    pedido_compra: pedido,
+                    material_cliente: false,
+                    remessa: false,
+                    sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
+                    observacao,
+                })
+            });
+        }
+
         const r = await fetchJson('/api/xml_auditor/consultar_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nota: notaSelecionada, pedido })
@@ -645,41 +963,207 @@ async function consultarPedidoExcel() {
             res.className = 'pedido-result warn';
             res.textContent = `Pedido "${pedido}" não encontrado na planilha.`;
             wrap.style.display = 'none';
+            document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
         } else if (r.total_ok) {
             res.className = 'pedido-result ok';
-            res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem com o pedido.`;
-            tbody.innerHTML = renderPoRows(r.pares);
-            wrap.style.display = '';
+            res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem perfeitamente. Nenhuma vinculação manual necessária!`;
+            wrap.style.display = 'none';
+            document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
         } else {
             res.className = 'pedido-result err';
-            const ndiv = r.pares.filter(p => !p.ok).length;
-            res.textContent = `✘ ${ndiv} linha(s) com divergência de quantidade.`;
-            tbody.innerHTML = renderPoRows(r.pares);
-            wrap.style.display = '';
+            const ndivQtd = r.pares.filter(p => !p.qtd_ok).length;
+            const ndivVlr = r.pares.filter(p => !p.valor_ok).length;
+            res.textContent = `✘ Divergências detectadas: quantidade (${ndivQtd}) | valor (${ndivVlr}). Vincule as linhas manualmente.`;
+            
+            // Renderiza interface interativa de linking
+            renderPoLinkingInterface(r.pares, r.linhas_po || [], notaSelecionada);
+            wrap.style.display = 'none';
+            document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
         }
     } catch (e) {
+        const tipo = detectarTipoPendencia(e.message);
+        if (tipo) {
+            abrirPendenciaObrigatoria(tipo);
+            return;
+        }
         res.className = 'pedido-result err';
         res.textContent = e.message;
         wrap.style.display = 'none';
+        document.getElementById('sugestoesVinculacaoWrap').style.display = 'none';
     }
+}
+
+// Estado global para seleção de linhas
+let xmlLineSelecionada = null;
+let xmlDados = {};
+let poDados = {};
+
+function renderPoLinkingInterface(pares, linhasPo, numeronota) {
+    window.paresVinculacao = pares;
+
+    const linhasPerfeitasReservadas = new Set(
+        pares
+            .filter(px => Number.isInteger(px.po_index) && px.po_index >= 0 && px.qtd_ok && px.valor_ok)
+            .map(px => Number(px.po_index))
+    );
+
+    const container = document.getElementById('vinculacoesContainer');
+    container.innerHTML = pares.map((p, idx) => {
+        const matchPerfeito = !!(p.qtd_ok && p.valor_ok);
+        const poIndexValido = Number.isInteger(p.po_index) && p.po_index >= 0;
+        const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
+        const poSelecionada = matchPerfeito
+            ? null
+            : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
+
+        const listaPoOptions = linhasPo
+            .map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
+            .filter(({ idxPoOriginal }) => !linhasPerfeitasReservadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
+            .map(({ po, idxPoOriginal }) => {
+                const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
+                const codigoMaterial = (po.codigo_material || '').trim();
+                const pedidoPo = (po.pedido_compra || '').trim();
+                const pedidoTxt = pedidoPo ? `Pedido: ${pedidoPo} | ` : '';
+                const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
+                return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+            }).join('');
+
+        const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
+        const statusHtml = matchPerfeito
+            ? '<div class="vinc-status ok"><i class="fas fa-check-circle"></i> Verde: quantidade e valor batem</div>'
+            : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>';
+
+        const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
+            ? `<div style="margin-top:8px; font-size:11px; color:#166534; font-weight:700;">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>`
+            : '';
+
+        const selectDisabled = matchPerfeito ? 'disabled' : '';
+        const editBtn = matchPerfeito
+            ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>`
+            : '';
+
+        const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
+        return `
+            <div class="vinculacao-card ${cardClasse}">
+                <div class="vinculacao-linha-xml">
+                    <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}</div>
+                    <div class="vinculacao-linha-xml-dados">
+                        <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
+                        <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
+                        <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                        <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                    </div>
+                </div>
+                <div class="vinculacao-select-wrap">
+                    <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
+                    <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" ${selectDisabled}>
+                        <option value="">-- Sem vínculo manual (usar posição) --</option>
+                        ${listaPoOptions}
+                    </select>
+                    ${statusHtml}
+                    ${detalheVinculoAuto}
+                    ${editBtn}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('vinculacaoOverlay').classList.add('active');
+}
+
+function habilitarEdicaoVinculo(idx) {
+    const select = document.getElementById(`select_${idx}`);
+    if (!select) return;
+
+    select.disabled = false;
+    const par = (window.paresVinculacao || [])[idx] || {};
+    if (select.value === '' && Number.isInteger(par.po_index) && par.po_index >= 0) {
+        select.value = String(par.po_index);
+    }
+    select.focus();
+}
+
+function fecharModalVinculacao() {
+    document.getElementById('vinculacaoOverlay').classList.remove('active');
+}
+
+async function salvarVinculacoes() {
+    const selects = document.querySelectorAll('.vinculacao-select');
+    const pedidoAtual = (document.getElementById('pedidoCompra').value || '').trim();
+    let vinculacoesAtualizadas = 0;
+
+    for (const select of selects) {
+        if (select.disabled) continue;
+        const linhaPoSelecionada = select.value;
+        const itemId = select.dataset.itemId;
+        if (!itemId) continue;
+
+        try {
+            await fetchJson('/api/xml_auditor/vincular_linha_po', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: parseInt(itemId),
+                    linha_po: linhaPoSelecionada === '' ? null : parseInt(linhaPoSelecionada),
+                    pedido: pedidoAtual,
+                })
+            });
+            vinculacoesAtualizadas++;
+        } catch (e) {
+            toast(`Erro ao vincular linha: ${e.message}`, 'err');
+            return;
+        }
+    }
+
+    toast(`Vínculos atualizados: ${vinculacoesAtualizadas}. Revalidando pedido...`, 'ok');
+    fecharModalVinculacao();
+    await consultarPedidoExcel();
 }
 
 function renderPoRows(pares) {
     return pares.map(p => {
-        const nfQtd  = p.nf_qtd  !== null ? Number(p.nf_qtd).toLocaleString('pt-BR', {minimumFractionDigits:2})  : '<span class="line-na">—</span>';
-        const poQtd  = p.po_qtd  !== null ? Number(p.po_qtd).toLocaleString('pt-BR', {minimumFractionDigits:2})  : '<span class="line-na">—</span>';
-        const icone  = p.nf_qtd === null || p.po_qtd === null
+        const fmt = (v) => v !== null && v !== undefined
+            ? Number(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})
+            : '<span class="line-na">—</span>';
+
+        const nfQtd = fmt(p.nf_qtd);
+        const poQtd = fmt(p.po_qtd);
+
+        // Valor unit: se passou pelo fallback do total, mostra aviso
+        const nfVlrRaw = p.nf_valor_unit;
+        const poVlrRaw = p.po_valor_unit;
+        let nfVlr = fmt(nfVlrRaw);
+        let poVlr = fmt(poVlrRaw);
+
+        // Ícone de status para valor: ✔ exato | ≈ passou pelo total | ✘ diverge
+        let valorIcone;
+        if (nfVlrRaw === null || nfVlrRaw === undefined || poVlrRaw === null) {
+            valorIcone = '<span class="line-na">—</span>';
+        } else if (p.valor_via_total) {
+            // unidades divergem mas total bate — sinaliza com aviso
+            valorIcone = '<span title="Valor unitário difere mas total da linha confere" style="color:#b45309;font-weight:700;">≈</span>';
+            nfVlr += `<br><span style="font-size:10px;color:#b45309;">Total: ${fmt(p.nf_valor_total)}</span>`;
+        } else if (p.valor_ok) {
+            valorIcone = '<span class="line-ok">✔</span>';
+        } else {
+            valorIcone = '<span class="line-err">✘</span>';
+        }
+
+        const qtdIcone = p.nf_qtd === null || p.po_qtd === null
             ? '<span class="line-na">—</span>'
-            : p.ok
-                ? '<span class="line-ok">✔</span>'
-                : '<span class="line-err">✘</span>';
-        return `<tr>
+            : p.qtd_ok ? '<span class="line-ok">✔</span>' : '<span class="line-err">✘</span>';
+
+        const rowOk = p.ok;
+        const rowStyle = rowOk ? '' : 'background:#fff5f5;';
+
+        return `<tr style="${rowStyle}">
             <td style="color:#94a3b8;">${p.linha}</td>
             <td><code style="background:#f1f5f9;padding:2px 4px;border-radius:4px;">${p.nf_codigo}</code></td>
             <td style="color:#475569;">${p.nf_descricao}</td>
             <td style="text-align:right;font-weight:600;">${nfQtd}</td>
-            <td style="text-align:right;font-weight:600;">${poQtd}</td>
-            <td style="text-align:center;">${icone}</td>
+            <td style="text-align:right;font-weight:600;">${poQtd} ${qtdIcone}</td>
+            <td style="text-align:right;font-weight:600;">${nfVlr}</td>
+            <td style="text-align:right;font-weight:600;">${poVlr} ${valorIcone}</td>
+            <td style="text-align:center;">${rowOk ? '<span class="line-ok">✔</span>' : '<span class="line-err">✘</span>'}</td>
         </tr>`;
     }).join('');
 }
@@ -705,40 +1189,84 @@ async function auditarSelecionada() {
 async function salvarPedido() {
     if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
     const material_cliente = document.getElementById('materialCliente').checked;
+    const remessa = document.getElementById('remessa').checked;
+    const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
     const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
-    if (!material_cliente && !pedido_compra) {
-        return toast('Informe a OC ou marque como material de cliente.', 'err');
+    if (!material_cliente && !remessa && !pedido_compra) {
+        abrirPendenciaObrigatoria('pedido');
+        return;
     }
     const observacao = (document.getElementById('obsFiscal').value || '').trim();
     try {
         const r = await fetchJson('/api/xml_auditor/vincular_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: notaSelecionada, pedido_compra, material_cliente, observacao })
+            body: JSON.stringify({
+                nota: notaSelecionada,
+                pedido_compra,
+                material_cliente,
+                remessa,
+                sem_conferencia_logistica,
+                observacao,
+            })
         });
         toast(r.msg || 'Pedido vinculado com sucesso.', 'ok');
         await carregarNotas();
         await selecionarNota(notaSelecionada);
     } catch (e) {
+        const tipo = detectarTipoPendencia(e.message);
+        if (tipo) {
+            abrirPendenciaObrigatoria(tipo);
+            return;
+        }
         toast(e.message, 'err');
     }
 }
 
 async function liberarSelecionada() {
     if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
-    const confirmado = await confirmarAcao(`Deseja liberar a NF ${notaSelecionada} para a conferência física?`);
+
+    const auditoriaStatus = (document.getElementById('dStatusAuditoria').textContent || '').trim();
+    if (auditoriaStatus === 'NaoAuditado') {
+        abrirPendenciaObrigatoria('auditoria');
+        return;
+    }
+
+    const material_cliente = document.getElementById('materialCliente').checked;
+    const remessa = document.getElementById('remessa').checked;
+    const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
+    const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+    if (!material_cliente && !remessa && !pedido_compra) {
+        abrirPendenciaObrigatoria('pedido');
+        return;
+    }
+
+    const textoConfirmacao = sem_conferencia_logistica
+        ? `Deseja liberar a NF ${notaSelecionada} sem conferência logística? Ela irá direto para Documento de Entrada.`
+        : `Deseja liberar a NF ${notaSelecionada} para a conferência física?`;
+    const confirmado = await confirmarAcao(textoConfirmacao);
     if (!confirmado) return;
     try {
-        const material_cliente = document.getElementById('materialCliente').checked;
-        const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
         const observacao = (document.getElementById('obsFiscal').value || '').trim();
         const r = await fetchJson('/api/xml_auditor/liberar', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: notaSelecionada, pedido_compra, material_cliente, observacao })
+            body: JSON.stringify({
+                nota: notaSelecionada,
+                pedido_compra,
+                material_cliente,
+                remessa,
+                sem_conferencia_logistica,
+                observacao,
+            })
         });
         toast(r.msg || 'NF liberada para conferência.', 'ok');
         await carregarNotas();
         await selecionarNota(notaSelecionada);
     } catch (e) {
+        const tipo = detectarTipoPendencia(e.message);
+        if (tipo) {
+            abrirPendenciaObrigatoria(tipo);
+            return;
+        }
         toast(e.message, 'err');
     }
 }

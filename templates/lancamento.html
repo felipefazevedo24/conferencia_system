@@ -267,6 +267,7 @@
         </div>
         <div class="modal-body">
             <p id="modal-desc-nota" style="font-weight: 800; color: var(--sap-blue); margin-bottom: 15px; font-size: 15px;"></p>
+            <p id="modal-tipo-doc" style="display:none; margin:-8px 0 12px; font-size:12px; font-weight:800; color:#7c2d12; background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:8px 10px;"></p>
             
             <div id="alerta-conferencia" class="alert-pendencia">
                 <i class="fas fa-exclamation-triangle" style="font-size: 16px; margin-right: 10px;"></i>
@@ -280,6 +281,13 @@
             <input type="text" id="input-codigo-erp" 
                    placeholder="Ex: LANC-2026-001"
                    style="width:100%; padding:12px; border:2px solid #cbd5e1; border-radius: 8px; font-family: 'Cascadia Code', monospace; font-size: 16px; font-weight: bold; box-sizing: border-box; color: var(--sap-blue);">
+
+                 <div id="material-code-wrap" style="display:none; margin-top:12px;">
+                  <label class="form-label">CÓDIGO DO MATERIAL (OBRIGATÓRIO PARA REMESSA/MATERIAL CLIENTE):</label>
+                  <input type="text" id="input-codigo-material"
+                      placeholder="Informe o código interno do material"
+                      style="width:100%; padding:12px; border:2px solid #f59e0b; border-radius: 8px; font-family: 'Cascadia Code', monospace; font-size: 15px; font-weight: bold; box-sizing: border-box; color: #7c2d12;">
+                 </div>
             <label style="display:flex; align-items:flex-start; gap:10px; margin-top:16px; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; cursor:pointer;">
                 <input type="checkbox" id="input-manifestar-destinatario" checked style="margin-top:2px;">
                 <span style="font-size:12px; color:#1e3a8a; font-weight:700; line-height:1.4;">
@@ -473,6 +481,20 @@
         const notaInfo = listaNotasAtuais.find(item => item.numero === n);
         document.getElementById('modal-desc-nota').innerText = "ESCRITURAR NF: " + n;
         document.getElementById('input-manifestar-destinatario').checked = true;
+        document.getElementById('input-codigo-material').value = '';
+
+        const exigeCodigoMaterial = Boolean(notaInfo && (notaInfo.material_cliente || notaInfo.remessa));
+        document.getElementById('material-code-wrap').style.display = exigeCodigoMaterial ? 'block' : 'none';
+        const tipoDocEl = document.getElementById('modal-tipo-doc');
+        if (exigeCodigoMaterial) {
+            const tipo = notaInfo.remessa ? 'NF de Remessa' : 'Material de Cliente';
+            tipoDocEl.style.display = 'block';
+            tipoDocEl.textContent = `${tipo}: informe também o código do material neste lançamento.`;
+        } else {
+            tipoDocEl.style.display = 'none';
+            tipoDocEl.textContent = '';
+        }
+
         const alertaDiv = document.getElementById('alerta-conferencia');
         if (notaInfo && notaInfo.motivo_pendencia) {
             alertaDiv.style.display = 'block';
@@ -529,11 +551,25 @@
             exibirFeedbackCard('error', 'Lançamento não realizado', 'O código do ERP é obrigatório para escrituração.');
             return;
         }
+
+        const notaInfo = listaNotasAtuais.find(item => item.numero === notaSendoLancada);
+        const exigeCodigoMaterial = Boolean(notaInfo && (notaInfo.material_cliente || notaInfo.remessa));
+        const codigoMaterial = (document.getElementById('input-codigo-material').value || '').trim();
+        if (exigeCodigoMaterial && !codigoMaterial) {
+            exibirFeedbackCard('error', 'Lançamento não realizado', 'Para NF de remessa/material de cliente, informe o código do material.');
+            return;
+        }
+
         const manifestarDestinatario = document.getElementById('input-manifestar-destinatario').checked;
         const res = await fetch('/api/confirmar_lancamento', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ nota: notaSendoLancada, codigo: cod, manifestar_destinatario: manifestarDestinatario })
+            body: JSON.stringify({
+                nota: notaSendoLancada,
+                codigo: cod,
+                codigo_material: codigoMaterial,
+                manifestar_destinatario: manifestarDestinatario,
+            })
         });
         const data = await res.json();
         if (data.sucesso) {

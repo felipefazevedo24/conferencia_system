@@ -47,6 +47,7 @@ class ResetNotaSchema(Schema):
 class ConfirmarLancamentoSchema(Schema):
     nota = fields.Raw(required=True)
     codigo = fields.Str(required=True, validate=validate.Length(min=1, max=80))
+    codigo_material = fields.Str(required=False, load_default="", validate=validate.Length(max=50))
     manifestar_destinatario = fields.Bool(required=False, load_default=True)
 
 

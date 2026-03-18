@@ -56,6 +56,12 @@ def _ensure_item_nota_columns() -> None:
         if "material_cliente" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN material_cliente BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
+        if "remessa" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN remessa BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        if "sem_conferencia_logistica" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN sem_conferencia_logistica BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
         if "auditor_status" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_status VARCHAR(30) DEFAULT 'NaoAuditado'"))
             conn.commit()
@@ -116,6 +122,20 @@ def _ensure_item_nota_columns() -> None:
                     etiqueta_ok BOOLEAN NOT NULL DEFAULT 0,
                     observacao VARCHAR(500),
                     data DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        conn.commit()
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS etiqueta_recebimento (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) UNIQUE NOT NULL,
+                    usuario_impressao VARCHAR(100) NOT NULL,
+                    data_impressao DATETIME NOT NULL,
+                    quantidade_impressao INTEGER NOT NULL DEFAULT 1
                 )
                 """
             )

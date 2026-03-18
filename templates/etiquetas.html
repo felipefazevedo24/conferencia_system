@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}Recebimento | Etiquetas{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<style>
+    :root {
+        --brand: #002e5d;
+        --brand-light: #0f62c9;
+        --ink: #111827;
+        --muted: #64748b;
+        --line: #d1d5db;
+        --bg-soft: #f8fafc;
+        /* CONFIGURAÇÃO RÍGIDA 90x55mm */
+        --label-w: 90mm;
+        --label-h: 55mm;
+    }
+
+    /* Interface do Usuário (Tela) */
+    .etiquetas-wrap { max-width: 1400px; margin: 0 auto; padding: 20px; font-family: 'Inter', system-ui, sans-serif; }
+    .etiquetas-header {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #fff; border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px 20px; box-shadow: 0 8px 20px rgba(16, 37, 58, 0.08); margin-bottom: 16px;
+    }
+    .etiquetas-header h2 { margin: 0; font-size: 20px; text-transform: uppercase; color: var(--brand); letter-spacing: 0.8px; }
+    .etiquetas-header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; font-weight: 600; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 14px; }
+    .tab-btn {
+        border: 1px solid var(--line); background: #fff; color: #334155;
+        border-radius: 10px; padding: 10px 14px; font-size: 11px; font-weight: 800;
+        text-transform: uppercase; cursor: pointer;
+    }
+    .tab-btn.active { border-color: var(--brand); color: var(--brand); box-shadow: 0 0 0 2px rgba(0, 46, 93, 0.12); }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 8px 20px rgba(16, 37, 58, 0.08); }
+    .filter-row { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 10px; margin-bottom: 14px; }
+    .filter-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 700; }
+    .btn { border: 1px solid var(--line); border-radius: 8px; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer; padding: 10px 12px; transition: 0.2s; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn.print { background: #ecfeff; color: #0f766e; border-color: #99f6e4; }
+    .btn.reprint { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+    .table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th { background: var(--bg-soft); color: #475569; text-align: left; font-size: 10px; text-transform: uppercase; padding: 10px; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 10px; border-bottom: 1px solid #eef2f7; font-size: 12px; vertical-align: middle; }
+    .action-group { display: flex; gap: 8px; justify-content: center; }
+    .hidden { display: none; }
+
+    /* Estrutura da Etiqueta */
+    .printer-area { position: absolute; left: -10000px; top: -10000px; }
+    .label-sheet {
+        width: var(--label-w); height: var(--label-h); padding: 2mm;
+        box-sizing: border-box; color: #000; font-family: Arial, sans-serif;
+        background: #fff; display: flex; flex-direction: column; gap: 1mm;
+        overflow: hidden; border: 1px solid #eee; /* Borda apenas visual na tela */
+    }
+    .label-grid-header { display: grid; grid-template-columns: 1fr 1.8fr; gap: 1mm; height: 12mm; }
+    .l-box { border: 1.5pt solid #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .logo-img-label { 
+        width: 85%; 
+        filter: brightness(0) saturate(100%) invert(11%) sepia(87%) saturate(1614%) hue-rotate(196deg) brightness(95%) contrast(105%);
+    }
+    .l-title { font-size: 4mm; font-weight: 900; margin: 0; text-align: center; line-height: 1; }
+    .l-full { border: 1.2pt solid #000; padding: 0.8mm 1.5mm; display: flex; align-items: center; gap: 2mm; overflow: hidden; }
+    .l-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1mm; }
+    .l-key { font-size: 2.8mm; font-weight: 900; white-space: nowrap; text-transform: uppercase; }
+    .l-val { font-size: 3.2mm; font-weight: 700; text-transform: uppercase; word-break: break-all; }
+    .l-barcode-wrap { border: 1.2pt solid #000; flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 1mm; min-height: 0; }
+    #barcode { width: 100%; height: auto; max-height: 13mm; }
+
+    /* Modais */
+    .app-modal-overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.45); display: none; align-items: center; justify-content: center; z-index: 3500; }
+    .app-modal-overlay.active { display: flex; }
+    .app-modal-card { width: min(500px, 90vw); background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+    .app-modal-head { padding: 14px; background: var(--brand); color: #fff; font-weight: 800; text-transform: uppercase; }
+    .app-modal-body { padding: 20px; font-weight: 600; line-height: 1.5; }
+    .app-modal-foot { padding: 12px; background: #f8fafc; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #eee; }
+
+/* REGRAS DE IMPRESSÃO - CORRIGIDO */
+@media print {
+    @page { 
+        size: 90mm 55mm; /* ❌ removido landscape */
+        margin: 0;
+    }
+    
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 90mm;
+        height: 55mm;
+        overflow: hidden;
+    }
+
+    body * { visibility: hidden; }
+
+    .printer-area, .printer-area * { 
+        visibility: visible; 
+    }
+
+  .printer-area { 
+        position: absolute; 
+        left: 0;
+        top: 0;
+    }
+
+    .label-sheet {
+        width: var(--label-w);
+        height: var(--label-h);
+        padding: 1mm;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8mm;
+        overflow: hidden;
+    }
+
+    .label-grid-header {
+        display: grid;
+        grid-template-columns: 1fr 1.8fr;
+        gap: 1mm;
+        height: 10mm;
+    }
+
+    .l-box {
+        border: 1pt solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .logo-img-label { width: 80%; }
+
+    .l-title {
+        font-size: 3.2mm;
+        font-weight: 900;
+        margin: 0;
+        text-align: center;
+    }
+
+    .l-full {
+        border: 1pt solid #000;
+        padding: 0.5mm 1mm;
+        display: flex;
+        align-items: center;
+        gap: 1.5mm;
+    }
+
+    .l-split {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 1mm;
+    }
+
+    .l-key {
+        font-size: 2.4mm;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    .l-val {
+        font-size: 2.8mm;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .l-barcode-wrap {
+        border: 1pt solid #000;
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5mm;
+    }
+
+    #barcode {
+        width: 100%;
+        max-height: 10mm;
+    }
+
+    /* ================= IMPRESSÃO ================= */
+
+    @media print {
+        @page { size: 90mm 55mm; margin: 0; }
+
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        body * { visibility: hidden; }
+
+        .printer-area, .printer-area * { visibility: visible; }
+
+        .printer-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 90mm;
+            height: 55mm;
+        }
+
+        .label-sheet {
+            width: 88mm;
+            height: 52mm;
+            padding: 1mm;
+        }
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="etiquetas-wrap">
+    <div class="etiquetas-header">
+        <div>
+            <h2><i class="fas fa-tags"></i> Etiquetas de Recebimento</h2>
+            <p>Impressão e arquivamento automático das notas fiscais lançadas</p>
+        </div>
+        <button class="btn" onclick="window.location.href='/fiscal/liberadas'">
+            <i class="fas fa-box-open"></i> Consultar NF-e Liberadas
+        </button>
+    </div>
+
+    <div class="tabs">
+        <button id="tab-pendentes" class="tab-btn active" onclick="trocarAba('pendentes')">
+            <i class="fas fa-clock"></i> Pendentes de Etiqueta
+        </button>
+        <button id="tab-arquivadas" class="tab-btn" onclick="trocarAba('arquivadas')">
+            <i class="fas fa-archive"></i> Arquivadas
+        </button>
+    </div>
+
+    <div class="panel">
+        <div class="filter-row">
+            <input id="filtro-busca" class="filter-input" placeholder="Buscar por NF, fornecedor, produto, código do material ou OC" oninput="buscarComDebounce()">
+            <button class="btn" onclick="recarregarAbaAtual()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+        </div>
+
+        <div id="view-pendentes">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nº NF Entrada</th>
+                            <th>Fornecedor</th>
+                            <th>Código do material</th>
+                            <th>Nº OC</th>
+                            <th>Dt. Receb.</th>
+                            <th style="text-align:center; width:210px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-pendentes"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-arquivadas" class="hidden">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nº NF Entrada</th>
+                            <th>Fornecedor</th>
+                            <th>Código do material</th>
+                            <th>Nº OC</th>
+                            <th>Dt. Receb.</th>
+                            <th>Última impressão</th>
+                            <th>Operador</th>
+                            <th>Qtde.</th>
+                            <th style="text-align:center; width:150px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-arquivadas"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="printer-area" aria-hidden="true">
+    <div id="label-sheet" class="label-sheet"></div>
+</div>
+
+<div id="print-confirm-overlay" class="app-modal-overlay">
+    <div class="app-modal-card">
+        <div class="app-modal-head">Confirmação de impressão</div>
+        <div id="print-confirm-message" class="app-modal-body"></div>
+        <div class="app-modal-foot">
+            <button class="btn" onclick="fecharConfirmacaoImpressao()">Não, cancelar</button>
+            <button class="btn primary" onclick="confirmarImpressaoEtiqueta()">Sim, já imprimi</button>
+        </div>
+    </div>
+</div>
+
+<div id="notice-overlay" class="app-modal-overlay">
+    <div class="app-modal-card">
+        <div class="app-modal-head">Aviso</div>
+        <div id="notice-message" class="app-modal-body"></div>
+        <div class="app-modal-foot">
+            <button class="btn primary" onclick="fecharAviso()">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let abaAtual = 'pendentes';
+    let debounceId = null;
+    let impressaoPendente = null;
+
+    function trocarAba(aba) {
+        abaAtual = aba;
+        document.getElementById('tab-pendentes').classList.toggle('active', aba === 'pendentes');
+        document.getElementById('tab-arquivadas').classList.toggle('active', aba === 'arquivadas');
+        document.getElementById('view-pendentes').classList.toggle('hidden', aba !== 'pendentes');
+        document.getElementById('view-arquivadas').classList.toggle('hidden', aba !== 'arquivadas');
+        recarregarAbaAtual();
+    }
+
+    function buscarComDebounce() {
+        if (debounceId) clearTimeout(debounceId);
+        debounceId = setTimeout(() => recarregarAbaAtual(), 250);
+    }
+
+    function escapeHtml(texto) {
+        return String(texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function filtroAtual() { return (document.getElementById('filtro-busca').value || '').trim(); }
+
+    function renderPendentes(lista) {
+        const tbody = document.getElementById('tbody-pendentes');
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b">Nenhuma NF pendente.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = lista.map(item => `
+            <tr>
+                <td><strong>${escapeHtml(item.numero)}</strong></td>
+                <td>${escapeHtml(item.produto)}</td>
+                <td><code>${escapeHtml(item.codigo_material)}</code></td>
+                <td>${escapeHtml(item.numero_oc)}</td>
+                <td>${escapeHtml(item.data_recebimento)}</td>
+                <td>
+                    <div class="action-group">
+                        <button class="btn print" onclick="imprimirEtiqueta('${escapeHtml(item.numero)}')">
+                            <i class="fas fa-print"></i> Imprimir
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderArquivadas(lista) {
+        const tbody = document.getElementById('tbody-arquivadas');
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b">Nenhum registro no arquivo.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = lista.map(item => `
+            <tr>
+                <td><strong>${escapeHtml(item.numero)}</strong></td>
+                <td>${escapeHtml(item.produto)}</td>
+                <td><code>${escapeHtml(item.codigo_material)}</code></td>
+                <td>${escapeHtml(item.numero_oc)}</td>
+                <td>${escapeHtml(item.data_recebimento)}</td>
+                <td>${escapeHtml(item.data_impressao || '---')}</td>
+                <td>${escapeHtml(item.usuario_impressao || '---')}</td>
+                <td style="text-align:center">${escapeHtml(item.quantidade_impressao || 1)}</td>
+                <td>
+                    <div class="action-group">
+                        <button class="btn reprint" onclick="imprimirEtiqueta('${escapeHtml(item.numero)}', true)">
+                            <i class="fas fa-print"></i> Reimprimir
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function carregarPendentes() {
+        const res = await fetch(`/api/etiquetas/pendentes?q=${encodeURIComponent(filtroAtual())}`);
+        renderPendentes(await res.json());
+    }
+
+    async function carregarArquivadas() {
+        const res = await fetch(`/api/etiquetas/arquivadas?q=${encodeURIComponent(filtroAtual())}`);
+        renderArquivadas(await res.json());
+    }
+
+    async function recarregarAbaAtual() {
+        if (abaAtual === 'arquivadas') await carregarArquivadas();
+        else await carregarPendentes();
+    }
+
+    function abrirAviso(m) { document.getElementById('notice-message').textContent = m; document.getElementById('notice-overlay').classList.add('active'); }
+    function fecharAviso() { document.getElementById('notice-overlay').classList.remove('active'); }
+
+    function abrirConfirmacaoImpressao(numeroNota, isReprint) {
+        impressaoPendente = { numeroNota, isReprint: !!isReprint };
+        document.getElementById('print-confirm-message').textContent = `A impressão da NF ${numeroNota} foi concluída?`;
+        document.getElementById('print-confirm-overlay').classList.add('active');
+    }
+
+    function fecharConfirmacaoImpressao() {
+        impressaoPendente = null;
+        document.getElementById('print-confirm-overlay').classList.remove('active');
+    }
+
+    async function confirmarImpressaoEtiqueta() {
+        if (!impressaoPendente) return;
+        const { numeroNota } = impressaoPendente;
+        fecharConfirmacaoImpressao();
+        await fetch('/api/etiquetas/imprimir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: numeroNota })
+        });
+        await recarregarAbaAtual();
+    }
+
+    function montarMarkupEtiqueta(dados) {
+        return `
+            <div class="label-grid-header">
+                <div class="l-box"><img src="https://www.columbiamachine.com.br/img/columbia_logo.png" class="logo-img-label"></div>
+                <div class="l-box"><h1 class="l-title">RECEBIMENTO COLUMBIA</h1></div>
+            </div>
+            <div class="l-full"><span class="l-key">Fornecedor:</span><span class="l-val">${escapeHtml(dados.produto)}</span></div>
+            <div class="l-split">
+                <div class="l-full"><span class="l-key">NF:</span><span class="l-val">${escapeHtml(dados.numero)}</span></div>
+                <div class="l-full"><span class="l-key">OC:</span><span class="l-val">${escapeHtml(dados.numero_oc)}</span></div>
+            </div>
+            <div class="l-split">
+                <div class="l-full"><span class="l-key">Qtd:</span><span class="l-val">${escapeHtml(dados.quantidade)}</span></div>
+                <div class="l-full"><span class="l-key">Cód:</span><span class="l-val">${escapeHtml(dados.codigo_material)}</span></div>
+            </div>
+            <div class="l-barcode-wrap"><svg id="barcode"></svg></div>
+        `;
+    }
+
+    async function imprimirEtiqueta(numeroNota, isReprint = false) {
+        const res = await fetch(`/api/etiquetas/${encodeURIComponent(numeroNota)}`);
+        const dados = await res.json();
+        const sheet = document.getElementById('label-sheet');
+        sheet.innerHTML = montarMarkupEtiqueta(dados);
+
+        JsBarcode("#barcode", dados.codigo_material, {
+            format: "CODE128",
+            width: 2.2,
+            height: 40,
+            displayValue: false,
+            margin: 0
+        });
+
+        setTimeout(() => {
+            window.print();
+            abrirConfirmacaoImpressao(numeroNota, isReprint);
+        }, 400);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => carregarPendentes());
+</script>
+{% endblock %}

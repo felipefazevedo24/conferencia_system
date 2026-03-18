@@ -53,7 +53,10 @@ class ItemNota(db.Model):
     cst_cofins = db.Column(db.String(2), index=True)
     valor_produto = db.Column(db.Float)
     pedido_compra = db.Column(db.String(50), index=True)
+    linha_po_vinculada = db.Column(db.Integer, nullable=True, comment="Índice 0-based da linha do PO vinculada manualmente")
     material_cliente = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    remessa = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    sem_conferencia_logistica = db.Column(db.Boolean, nullable=False, default=False, index=True)
     auditor_status = db.Column(db.String(30), default="NaoAuditado", index=True)
     auditor_decisao = db.Column(db.String(20), default="PendenteDecisao", index=True)
     auditor_diagnostico = db.Column(db.String(4000))
@@ -104,6 +107,14 @@ class ChecklistRecebimento(db.Model):
     etiqueta_ok = db.Column(db.Boolean, nullable=False, default=False)
     observacao = db.Column(db.String(500))
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class EtiquetaRecebimento(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), index=True, nullable=False, unique=True)
+    usuario_impressao = db.Column(db.String(100), nullable=False)
+    data_impressao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    quantidade_impressao = db.Column(db.Integer, nullable=False, default=1)
 
 
 class LogReversaoConferencia(db.Model):
