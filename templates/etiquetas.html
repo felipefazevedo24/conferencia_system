@@ -157,6 +157,52 @@
     .app-modal-head { padding: 14px; background: var(--brand); color: #fff; font-weight: 800; text-transform: uppercase; }
     .app-modal-body { padding: 20px; font-weight: 600; line-height: 1.5; }
     .app-modal-foot { padding: 12px; background: #f8fafc; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #eee; }
+    .split-meta { display: grid; gap: 6px; margin-bottom: 12px; }
+    .split-kpi { font-size: 12px; color: #334155; font-weight: 700; }
+    .split-kpi strong { color: #0f172a; }
+    .split-rows { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding-right: 2px; }
+    .split-row {
+        display: grid;
+        grid-template-columns: 95px 1fr auto;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px;
+        background: #fff;
+    }
+    .split-row-label { font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; }
+    .split-row input {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 9px;
+        font-size: 13px;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .split-row-remove {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        color: #9f1239;
+        border-radius: 8px;
+        padding: 7px 8px;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 800;
+    }
+    .split-remaining {
+        margin-top: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #1e293b;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+    .split-remaining.ok { color: #166534; background: #f0fdf4; border-color: #86efac; }
+    .split-remaining.err { color: #9a3412; background: #fff7ed; border-color: #fdba74; }
 
 /* REGRAS DE IMPRESSÃO */
 @media print {
@@ -360,6 +406,24 @@
         </div>
     </div>
 </div>
+
+<div id="split-overlay" class="app-modal-overlay">
+    <div class="app-modal-card" style="width:min(620px, 94vw);">
+        <div class="app-modal-head">Distribuir Quantidade da Etiqueta</div>
+        <div class="app-modal-body">
+            <div class="split-meta">
+                <div id="split-meta-item" class="split-kpi">Item: <strong>---</strong></div>
+                <div id="split-meta-total" class="split-kpi">Quantidade total: <strong>0,00</strong></div>
+            </div>
+            <div id="split-rows" class="split-rows"></div>
+            <div id="split-remaining" class="split-remaining">Restante para distribuir: 0,00</div>
+        </div>
+        <div class="app-modal-foot">
+            <button class="btn" onclick="cancelarDivisaoQuantidadeMenu()">Sem dividir</button>
+            <button class="btn primary" onclick="confirmarDivisaoQuantidadeMenu()">Aplicar distribuição</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -370,6 +434,7 @@
     let filtrosColuna = {};
     let listaBaseColuna = [];
     let colunaFiltroAtual = null;
+    let splitMenuState = null;
 
     function buscarComDebounce() {
         if (debounceId) clearTimeout(debounceId);
@@ -602,6 +667,167 @@
     function abrirAviso(m) { document.getElementById('notice-message').textContent = m; document.getElementById('notice-overlay').classList.add('active'); }
     function fecharAviso() { document.getElementById('notice-overlay').classList.remove('active'); }
 
+    function parseQuantidadeBr(valor) {
+        const raw = String(valor || '').trim();
+        if (!raw) return 0;
+        const normalizado = raw.replace(/\./g, '').replace(',', '.');
+        const n = Number(normalizado);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function formatarQuantidadeBr(valor) {
+        return Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function obterSplitValoresValidos() {
+        const inputs = Array.from(document.querySelectorAll('#split-rows .split-input'));
+        return inputs
+            .map((i) => parseQuantidadeBr(i.value))
+            .filter((v) => v > 0)
+            .map((v) => Number(v.toFixed(6)));
+    }
+
+    function recalcularSplitRestante() {
+        if (!splitMenuState) return;
+        const soma = obterSplitValoresValidos().reduce((acc, v) => acc + v, 0);
+        const restanteRaw = Number((splitMenuState.total - soma).toFixed(6));
+        const restante = restanteRaw < 0.000001 ? 0 : restanteRaw;
+        const restanteEl = document.getElementById('split-remaining');
+        restanteEl.textContent = `Restante para distribuir: ${formatarQuantidadeBr(restante)}`;
+        restanteEl.classList.remove('ok', 'err');
+        if (restante === 0) restanteEl.classList.add('ok');
+        else restanteEl.classList.add('err');
+        return restante;
+    }
+
+    function renderizarSplitRows() {
+        if (!splitMenuState) return;
+        const wrap = document.getElementById('split-rows');
+        wrap.innerHTML = splitMenuState.rows.map((row, idx) => `
+            <div class="split-row">
+                <div class="split-row-label">Etiqueta ${idx + 1}</div>
+                <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="split-input"
+                    data-idx="${idx}"
+                    value="${row}"
+                    oninput="onSplitRowInput(${idx}, this.value)"
+                    placeholder="0,00"
+                >
+                ${idx === 0 ? '<span></span>' : `<button type="button" class="split-row-remove" onclick="removerSplitRow(${idx})">Remover</button>`}
+            </div>
+        `).join('');
+        recalcularSplitRestante();
+    }
+
+    function onSplitRowInput(idx, valor) {
+        if (!splitMenuState) return;
+        splitMenuState.rows[idx] = valor;
+        const validos = obterSplitValoresValidos();
+        const soma = validos.reduce((acc, v) => acc + v, 0);
+        const restante = Number((splitMenuState.total - soma).toFixed(6));
+
+        const ultimoIdx = splitMenuState.rows.length - 1;
+        const ultimoVal = parseQuantidadeBr(splitMenuState.rows[ultimoIdx]);
+
+        if (restante > 0.000001 && ultimoVal > 0) {
+            splitMenuState.rows.push('');
+            renderizarSplitRows();
+            return;
+        }
+
+        if (restante <= 0.000001) {
+            while (splitMenuState.rows.length > 1) {
+                const last = parseQuantidadeBr(splitMenuState.rows[splitMenuState.rows.length - 1]);
+                if (last > 0) break;
+                splitMenuState.rows.pop();
+            }
+            renderizarSplitRows();
+            return;
+        }
+
+        recalcularSplitRestante();
+    }
+
+    function removerSplitRow(idx) {
+        if (!splitMenuState || idx <= 0 || idx >= splitMenuState.rows.length) return;
+        splitMenuState.rows.splice(idx, 1);
+        if (!splitMenuState.rows.length) splitMenuState.rows = [''];
+        renderizarSplitRows();
+    }
+
+    function abrirDivisaoQuantidadeMenu(etq) {
+        return new Promise((resolve) => {
+            splitMenuState = {
+                etq,
+                total: Number(parseQuantidadeBr(etq?.quantidade).toFixed(6)),
+                rows: [''],
+                resolve,
+            };
+            document.getElementById('split-meta-item').innerHTML = `Item: <strong>NF ${escapeHtml(etq.numero)} | ${escapeHtml(etq.codigo_material)}</strong>`;
+            document.getElementById('split-meta-total').innerHTML = `Quantidade total: <strong>${formatarQuantidadeBr(splitMenuState.total)}</strong>`;
+            renderizarSplitRows();
+            document.getElementById('split-overlay').classList.add('active');
+            setTimeout(() => document.querySelector('#split-rows .split-input')?.focus(), 0);
+        });
+    }
+
+    function fecharDivisaoQuantidadeMenu() {
+        document.getElementById('split-overlay').classList.remove('active');
+    }
+
+    function cancelarDivisaoQuantidadeMenu() {
+        if (!splitMenuState) return;
+        const { etq, resolve } = splitMenuState;
+        fecharDivisaoQuantidadeMenu();
+        splitMenuState = null;
+        resolve([etq]);
+    }
+
+    function confirmarDivisaoQuantidadeMenu() {
+        if (!splitMenuState) return;
+        const { etq, total, resolve } = splitMenuState;
+        const partes = obterSplitValoresValidos();
+        if (!partes.length) {
+            fecharDivisaoQuantidadeMenu();
+            splitMenuState = null;
+            resolve([etq]);
+            return;
+        }
+
+        const soma = Number(partes.reduce((acc, v) => acc + v, 0).toFixed(6));
+        const restante = Number((total - soma).toFixed(6));
+        if (restante > 0.000001) {
+            abrirAviso(`Ainda falta distribuir ${formatarQuantidadeBr(restante)}.`);
+            return;
+        }
+        if (restante < -0.000001) {
+            abrirAviso(`A soma das etiquetas excedeu o total de ${formatarQuantidadeBr(total)}.`);
+            return;
+        }
+
+        const etiquetasSplit = partes.map((q) => ({ ...etq, quantidade: formatarQuantidadeBr(q) }));
+        fecharDivisaoQuantidadeMenu();
+        splitMenuState = null;
+        resolve(etiquetasSplit);
+    }
+
+    async function aplicarDivisaoQuantidadeEtiquetas(etiquetas) {
+        const resultado = [];
+        for (const etq of etiquetas) {
+            const qtdTotal = parseQuantidadeBr(etq?.quantidade);
+            if (!(qtdTotal > 1)) {
+                resultado.push(etq);
+                continue;
+            }
+            const dividido = await abrirDivisaoQuantidadeMenu(etq);
+            resultado.push(...(Array.isArray(dividido) ? dividido : [etq]));
+        }
+        return resultado;
+    }
+
     function abrirConfirmacaoImpressao(numeroNota, isReprint) {
         impressaoPendente = { numeroNota, isReprint: !!isReprint };
         document.getElementById('print-confirm-message').textContent = `A impressão da NF ${numeroNota} foi concluída?`;
@@ -658,12 +884,14 @@
             ? dados.itens_etiqueta
             : [dados];
 
-        const etiquetas = etiquetasBrutas.filter((etq) => {
+        let etiquetas = etiquetasBrutas.filter((etq) => {
             const numero = String(etq?.numero || '').trim();
             const produto = String(etq?.produto || '').trim();
             const codigo = String(etq?.codigo_material || '').trim();
             return !!(numero && (produto || codigo));
         });
+
+        etiquetas = await aplicarDivisaoQuantidadeEtiquetas(etiquetas);
 
         if (!etiquetas.length) {
             abrirAviso('Nenhuma etiqueta válida encontrada para impressão dessa NF.');

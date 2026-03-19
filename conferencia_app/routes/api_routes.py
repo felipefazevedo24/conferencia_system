@@ -2067,6 +2067,7 @@ def consultar_pedido_excel():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
     numero_pedido = str(data.get("pedido") or "").strip()
+    conversoes_itens = data.get("conversoes_itens") or {}
 
     if not numero_pedido:
         return jsonify({"sucesso": False, "msg": "Número do pedido obrigatório."}), 400
@@ -2074,20 +2075,48 @@ def consultar_pedido_excel():
     itens_nf = []
     if numero_nota:
         itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-        itens_nf = [
-            {
-                "item_id": i.id,
-                "codigo": i.codigo or "---",
-                "descricao": i.descricao or "---",
-                "qtd": i.qtd_real,
-                "linha_po_vinculada": i.linha_po_vinculada,
-                # valor_produto = vProd (total do item). Calculamos o unit aqui
-                # para comparação; o fallback usa o total diretamente.
-                "valor_unit": round(float(i.valor_produto or 0) / float(i.qtd_real), 10) if float(i.qtd_real or 0) > 0 else 0.0,
-                "valor_total_linha": float(i.valor_produto or 0),
-            }
-            for i in itens_db
-        ]
+        mapa_conversoes = conversoes_itens if isinstance(conversoes_itens, dict) else {}
+
+        def _resolver_conversao_item(item: ItemNota):
+            cfg = mapa_conversoes.get(str(item.id), {}) if isinstance(mapa_conversoes, dict) else {}
+            fator = 1.0
+            unidade = str(item.unidade_comercial or "UN").strip().upper() or "UN"
+            if isinstance(cfg, dict):
+                try:
+                    fator = float(str(cfg.get("fator") or "1").replace(",", "."))
+                except Exception:
+                    fator = 1.0
+                unidade_cfg = str(cfg.get("unidade") or "").strip().upper()
+                if unidade_cfg:
+                    unidade = unidade_cfg[:20]
+            if fator <= 0:
+                fator = 1.0
+            return fator, unidade
+
+        itens_nf = []
+        for i in itens_db:
+            fator_conv, unidade_conv = _resolver_conversao_item(i)
+            qtd_original = float(i.qtd_real or 0)
+            qtd_convertida = qtd_original * fator_conv
+            valor_total_linha = float(i.valor_produto or 0)
+            valor_unit = round(valor_total_linha / qtd_convertida, 10) if qtd_convertida > 0 else 0.0
+            itens_nf.append(
+                {
+                    "item_id": i.id,
+                    "codigo": i.codigo or "---",
+                    "descricao": i.descricao or "---",
+                    "qtd": qtd_convertida,
+                    "qtd_original": qtd_original,
+                    "unidade_comercial": i.unidade_comercial or "UN",
+                    "conversao_fator": fator_conv,
+                    "conversao_unidade": unidade_conv,
+                    "linha_po_vinculada": i.linha_po_vinculada,
+                    # valor_produto = vProd (total do item). Quando houver conversão,
+                    # recalculamos o valor unitário mantendo o mesmo total da linha.
+                    "valor_unit": valor_unit,
+                    "valor_total_linha": valor_total_linha,
+                }
+            )
 
     try:
         resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)

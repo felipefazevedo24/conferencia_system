@@ -960,7 +960,11 @@ async function consultarPedidoExcel() {
 
         const r = await fetchJson('/api/xml_auditor/consultar_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: notaSelecionada, pedido })
+            body: JSON.stringify({
+                nota: notaSelecionada,
+                pedido,
+                conversoes_itens: coletarConversoesAuditor(),
+            })
         });
         if (!r.encontrado) {
             res.className = 'pedido-result warn';
@@ -1008,6 +1012,57 @@ let xmlLineSelecionada = null;
 let xmlDados = {};
 let poDados = {};
 let confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+const CONVERSAO_OPCOES_AUDITOR = [
+    { unidade: 'UN', fator: 1 },
+    { unidade: 'DUZIA', fator: 12 },
+    { unidade: 'DEZENA', fator: 10 },
+    { unidade: 'CENTO', fator: 100 },
+    { unidade: 'MILHEIRO', fator: 1000 },
+];
+
+function parseConversaoValor(value) {
+    const raw = String(value || '').trim();
+    const [unidadeRaw, fatorRaw] = raw.split('|');
+    const unidade = String(unidadeRaw || 'UN').trim().toUpperCase() || 'UN';
+    const fator = Number(String(fatorRaw || '1').replace(',', '.'));
+    return {
+        unidade,
+        fator: Number.isFinite(fator) && fator > 0 ? fator : 1,
+    };
+}
+
+function coletarConversoesAuditor() {
+    const mapa = {};
+    document.querySelectorAll('.conversao-select[data-item-id]').forEach((el) => {
+        const itemId = String(el.dataset.itemId || '').trim();
+        if (!itemId) return;
+        const conv = parseConversaoValor(el.value);
+        mapa[itemId] = conv;
+    });
+    return mapa;
+}
+
+function labelOpcaoConversao(unidade, fator) {
+    const fatorFmt = Number(fator || 1).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+    return `${String(unidade || 'UN').toUpperCase()} (x${fatorFmt})`;
+}
+
+function buildConversaoOptionsHtml(fatorAtual, unidadeAtual) {
+    const fatorRef = Number(fatorAtual || 1);
+    const unidadeRef = String(unidadeAtual || 'UN').trim().toUpperCase() || 'UN';
+    const opcoes = CONVERSAO_OPCOES_AUDITOR.map((op) => ({ ...op }));
+    const existe = opcoes.some((op) => Number(op.fator) === fatorRef && String(op.unidade).toUpperCase() === unidadeRef);
+    if (!existe) {
+        opcoes.push({ unidade: unidadeRef, fator: fatorRef });
+    }
+    return opcoes
+        .map((op) => {
+            const selected = Number(op.fator) === fatorRef && String(op.unidade).toUpperCase() === unidadeRef ? 'selected' : '';
+            const value = `${String(op.unidade).toUpperCase()}|${Number(op.fator)}`;
+            return `<option value="${value}" ${selected}>${labelOpcaoConversao(op.unidade, op.fator)}</option>`;
+        })
+        .join('');
+}
 
 function obterDivergenciasValorSelecionadas() {
     const pares = window.paresVinculacao || [];
@@ -1193,6 +1248,19 @@ function renderPoLinkingInterface(pares, linhasPo, numeronota) {
                         <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
                         <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
                     </div>
+                    <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <label style="font-size:11px; color:#334155; font-weight:700;">Conversão da quantidade:</label>
+                        <select
+                            class="conversao-select"
+                            data-item-id="${p.item_id}"
+                            style="min-width:170px; border:1px solid #cbd5e1; border-radius:6px; padding:4px 6px; font-size:12px; font-weight:700;"
+                        >
+                            ${buildConversaoOptionsHtml(p.conversao_fator, p.conversao_unidade)}
+                        </select>
+                        <button type="button" class="vinc-edit-btn" onclick="consultarPedidoExcel()">
+                            <i class="fas fa-arrows-rotate"></i> Aplicar conversão
+                        </button>
+                    </div>
                 </div>
                 <div class="vinculacao-select-wrap">
                     <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
@@ -1310,7 +1378,11 @@ async function salvarVinculacoes() {
     try {
         reprocessado = await fetchJson('/api/xml_auditor/consultar_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: notaSelecionada, pedido: pedidoAtual })
+            body: JSON.stringify({
+                nota: notaSelecionada,
+                pedido: pedidoAtual,
+                conversoes_itens: coletarConversoesAuditor(),
+            })
         });
     } catch (e) {
         toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
