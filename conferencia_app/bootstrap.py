@@ -50,6 +50,18 @@ def _ensure_item_nota_columns() -> None:
         if "valor_produto" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_produto FLOAT"))
             conn.commit()
+        if "pagamento_xml" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pagamento_xml BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        if "tipo_pagamento_xml" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN tipo_pagamento_xml VARCHAR(100)"))
+            conn.commit()
+        if "valor_pagamento_xml" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_pagamento_xml FLOAT"))
+            conn.commit()
+        if "vencimento_pagamento_xml" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN vencimento_pagamento_xml DATETIME"))
+            conn.commit()
         if "pedido_compra" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pedido_compra VARCHAR(50)"))
             conn.commit()
@@ -221,6 +233,27 @@ def _ensure_item_nota_columns() -> None:
         conn.execute(
             db.text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_permissao_scope_key ON permissao_acesso (scope_type, scope_id, permission_key)"
+            )
+        )
+        conn.commit()
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS boleto_conta_receber (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) NOT NULL UNIQUE,
+                    chave_acesso VARCHAR(44),
+                    banco VARCHAR(80) NOT NULL DEFAULT 'BOFA - Bank of America',
+                    valor FLOAT NOT NULL DEFAULT 0,
+                    nosso_numero VARCHAR(40) NOT NULL UNIQUE,
+                    linha_digitavel VARCHAR(120) NOT NULL,
+                    codigo_barras VARCHAR(120) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Gerado',
+                    usuario_geracao VARCHAR(100) NOT NULL,
+                    data_geracao DATETIME NOT NULL
+                )
+                """
             )
         )
         conn.commit()

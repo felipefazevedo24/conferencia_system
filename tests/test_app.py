@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import ItemNota, LogDivergencia, LogEstornoLancamento, LogManifestacaoDestinatario, SolicitacaoDevolucaoRecebimento
+from conferencia_app.models import BoletoContaReceber, ItemNota, LogDivergencia, LogEstornoLancamento, LogManifestacaoDestinatario, SolicitacaoDevolucaoRecebimento
 from conferencia_app.services.xml_service import process_xml_and_store
 from werkzeug.security import generate_password_hash
 
@@ -351,6 +351,147 @@ def test_portaria_pode_consultar_nfes_liberadas_mas_nao_baixar_documento(tmp_pat
 
     download = client.get("/api/consyste/documento?nota=322&tipo=xml")
     assert download.status_code == 403
+
+
+def test_financeiro_contas_receber_page_disponivel_para_fiscal(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+
+    response = client.get("/financeiro/contas-receber")
+    assert response.status_code == 200
+    assert b"Contas a Receber" in response.data
+
+
+def test_portaria_sem_acesso_a_financeiro_contas_receber(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_portaria(client, app)
+
+    response = client.get("/financeiro/contas-receber")
+    assert response.status_code == 403
+
+
+def test_fiscal_sem_acesso_a_financeiro_faturamento(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+
+    response = client.get("/financeiro/faturamento")
+    assert response.status_code == 403
+
+
+def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="CR100",
+                fornecedor="Fornecedor CR",
+                codigo="CR-1",
+                descricao="Item com pagamento",
+                qtd_real=1.0,
+                status="Lançado",
+                pagamento_xml=True,
+                tipo_pagamento_xml="01",
+                valor_pagamento_xml=150.75,
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="CR101",
+                fornecedor="Fornecedor sem pagamento",
+                codigo="CR-2",
+                descricao="Item sem pagamento",
+                qtd_real=1.0,
+                status="Lançado",
+                pagamento_xml=False,
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/financeiro/contas-receber/notas")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["total"] == 1
+    assert data["itens"][0]["numero_nota"] == "CR100"
+    assert data["itens"][0]["boleto_gerado"] is False
+
+
+def test_api_financeiro_gerar_boleto_e_mostrar_na_lista(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="CR200",
+                fornecedor="Fornecedor boleto",
+                codigo="CR-3",
+                descricao="Item boleto",
+                qtd_real=1.0,
+                status="Lançado",
+                pagamento_xml=True,
+                tipo_pagamento_xml="15",
+                valor_pagamento_xml=500.00,
+            )
+        )
+        db.session.commit()
+
+    gera = client.post("/api/financeiro/contas-receber/gerar-boleto", json={"nota": "CR200"})
+    assert gera.status_code == 200
+    payload = gera.get_json()
+    assert payload["sucesso"] is True
+    assert payload["boleto"]["banco"] == "BOFA - Bank of America"
+
+    with app.app_context():
+        boleto = BoletoContaReceber.query.filter_by(numero_nota="CR200").first()
+        assert boleto is not None
+
+    lista = client.get("/api/financeiro/contas-receber/notas")
+    assert lista.status_code == 200
+    data = lista.get_json()
+    item = next((x for x in data["itens"] if x["numero_nota"] == "CR200"), None)
+    assert item is not None
+    assert item["boleto_gerado"] is True
+
+
+def test_api_consyste_emissao_solicitar_bloqueada_para_admin(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config["CONSYSTE_TOKEN"] = "token_teste_valido"
+    client = app.test_client()
+    login_admin(client)
+
+    response = client.post(
+        "/api/consyste/emissao/solicitar",
+        json={
+            "ambiente": 2,
+            "cnpj": "88309136000129",
+            "txt_payload": "NOTAFISCAL|1\nA|3.10||\nB|35||VENDA",
+        },
+    )
+    assert response.status_code == 403
+
+
+
+def test_api_consyste_emissao_consultar_bloqueada_para_admin(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config["CONSYSTE_TOKEN"] = "token_teste_valido"
+    client = app.test_client()
+    login_admin(client)
+
+    response = client.post(
+        "/api/consyste/emissao/consultar",
+        json={
+            "ambiente": 2,
+            "emissao_id": "62b080477bbe81e57e06b5bc",
+        },
+    )
+    assert response.status_code == 403
 
 
 def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):

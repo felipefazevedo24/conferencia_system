@@ -54,3 +54,52 @@ def manifestar_destinatario_consyste(
     except Exception:
         payload = {"raw": response.text}
     return response.ok, response.status_code, _normalize_consyste_payload(payload)
+
+
+def solicitar_emissao_nfe_consyste(
+    cnpj: str,
+    txt_payload: str,
+    ambiente: int = 2,
+    timeout: int = 30,
+):
+    token = current_app.config.get("CONSYSTE_TOKEN")
+    cnpj_limpo = re.sub(r"\D", "", str(cnpj or ""))
+    amb = 1 if int(ambiente) == 1 else 2
+
+    url = f"{current_app.config['CONSYSTE_API_BASE']}/emissao/{amb}/nfe"
+    headers = {
+        "X-Consyste-Auth-Token": token,
+        "Content-Type": "text/plain",
+        "Accept": "application/json",
+    }
+    params = {"cnpj": cnpj_limpo}
+
+    response = requests.post(url, headers=headers, params=params, data=str(txt_payload or ""), timeout=timeout)
+    try:
+        payload = response.json() if response.content else {}
+    except Exception:
+        payload = {"raw": response.text}
+    return response.ok, response.status_code, _normalize_consyste_payload(payload)
+
+
+def consultar_emissao_nfe_consyste(
+    emissao_id: str,
+    ambiente: int = 2,
+    timeout: int = 20,
+):
+    token = current_app.config.get("CONSYSTE_TOKEN")
+    amb = 1 if int(ambiente) == 1 else 2
+    emissao_id_limpo = str(emissao_id or "").strip()
+
+    url = f"{current_app.config['CONSYSTE_API_BASE']}/emissao/{amb}/nfe/{emissao_id_limpo}"
+    headers = {
+        "X-Consyste-Auth-Token": token,
+        "Accept": "application/json",
+    }
+
+    response = requests.get(url, headers=headers, timeout=timeout)
+    try:
+        payload = response.json() if response.content else {}
+    except Exception:
+        payload = {"raw": response.text}
+    return response.ok, response.status_code, _normalize_consyste_payload(payload)

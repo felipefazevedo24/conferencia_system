@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Financeiro - Contas a Receber{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cr-wrap { max-width: 1200px; margin: 0 auto; }
+    .cr-header {
+        background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%);
+        border: 1px solid #dbe4ec;
+        border-bottom: 3px solid #0f62c9;
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 16px;
+    }
+    .cr-title { margin: 0; font-size: 18px; font-weight: 800; color: #22313f; text-transform: uppercase; }
+    .cr-sub { margin: 4px 0 0; color: #556575; font-size: 12px; font-weight: 600; }
+    .cr-card {
+        background: #fff;
+        border: 1px solid #dbe4ec;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 8px 20px rgba(18, 38, 58, 0.06);
+    }
+    .cr-row { display: grid; grid-template-columns: 1fr 1fr 160px auto; gap: 10px; margin-bottom: 12px; }
+    .cr-field label { display: block; font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+    .cr-field input {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+    .cr-actions { display: flex; gap: 8px; align-items: flex-end; }
+    .btn-cr {
+        border: 1px solid #9fb3c7;
+        border-radius: 8px;
+        background: #fff;
+        color: #1f3347;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 8px 12px;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+    .btn-cr.primary { background: #0f62c9; border-color: #0f62c9; color: #fff; }
+    .cr-msg { font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+    .cr-ok { color: #166534; }
+    .cr-err { color: #b91c1c; }
+    .cr-table-wrap { overflow: auto; border: 1px solid #dbe4ec; border-radius: 10px; }
+    .cr-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        min-width: 1050px;
+    }
+    .cr-table th, .cr-table td {
+        border-bottom: 1px solid #eef2f7;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+    .cr-table th {
+        background: #f8fafc;
+        text-transform: uppercase;
+        font-size: 10px;
+        color: #475569;
+        font-weight: 800;
+    }
+    .pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+    .pill.ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .pill.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .mono { font-family: Consolas, monospace; font-size: 11px; }
+
+    @media (max-width: 980px) {
+        .cr-row { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cr-wrap">
+    <div class="cr-header">
+        <h2 class="cr-title"><i class="fas fa-hand-holding-usd"></i> Financeiro - Contas a Receber</h2>
+        <p class="cr-sub">Painel financeiro para acompanhamento de titulos a receber.</p>
+    </div>
+
+    <div class="cr-card">
+        <div class="cr-row">
+            <div class="cr-field">
+                <label for="sync-numero">Consulta Consyste por Numero da NF</label>
+                <input id="sync-numero" placeholder="Ex: 12345" />
+            </div>
+            <div class="cr-field">
+                <label for="sync-chave">Ou Chave de Acesso</label>
+                <input id="sync-chave" placeholder="44 digitos" />
+            </div>
+            <div class="cr-actions">
+                <button class="btn-cr" onclick="sincronizarConsyste()">Sincronizar Consyste</button>
+            </div>
+            <div class="cr-actions">
+                <button class="btn-cr primary" onclick="carregarContasReceber()">Atualizar Lista</button>
+            </div>
+        </div>
+
+        <div id="cr-msg" class="cr-msg"></div>
+
+        <div class="cr-table-wrap">
+            <table class="cr-table">
+                <thead>
+                    <tr>
+                        <th>NF</th>
+                        <th>Fornecedor</th>
+                        <th>Status</th>
+                        <th>Pagamento XML</th>
+                        <th>Vencimento</th>
+                        <th>Banco</th>
+                        <th>Boleto</th>
+                        <th>Acoes</th>
+                    </tr>
+                </thead>
+                <tbody id="cr-tbody">
+                    <tr><td colspan="8">Carregando contas a receber...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function onlyDigits(value) {
+        return String(value || '').replace(/\D/g, '');
+    }
+
+    function setMsg(text, ok) {
+        const el = document.getElementById('cr-msg');
+        el.className = 'cr-msg ' + (ok ? 'cr-ok' : 'cr-err');
+        el.innerText = text;
+    }
+
+    async function parseApiResponse(res) {
+        const text = await res.text();
+        if (!text) return {};
+        try {
+            return JSON.parse(text);
+        } catch (_) {
+            return { raw: text };
+        }
+    }
+
+    function formatMoney(value) {
+        const n = Number(value || 0);
+        return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function renderTabela(itens) {
+        const tbody = document.getElementById('cr-tbody');
+        if (!Array.isArray(itens) || !itens.length) {
+            tbody.innerHTML = '<tr><td colspan="8">Nenhuma NF com pagamento no XML encontrada.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = itens.map((item) => {
+            const boleto = item.boleto || null;
+            const badge = item.boleto_gerado
+                ? '<span class="pill ok">Gerado</span>'
+                : '<span class="pill warn">Pendente</span>';
+            const banco = boleto ? boleto.banco : 'BOFA - Bank of America';
+            const detalhesBoleto = boleto
+                ? `<div class="mono">Nosso numero: ${boleto.nosso_numero}</div><div class="mono">Linha: ${boleto.linha_digitavel}</div>`
+                : '<div class="mono">-</div>';
+
+            return `
+                <tr>
+                    <td>${item.numero_nota || '-'}</td>
+                    <td>${item.fornecedor || '-'}</td>
+                    <td>${item.status || '-'}</td>
+                    <td>
+                        <div>${item.tipo_pagamento || '-'}</div>
+                        <div class="mono">${formatMoney(item.valor_pagamento || 0)}</div>
+                    </td>
+                    <td>${item.vencimento || '-'}</td>
+                    <td>${banco}</td>
+                    <td>${badge}${detalhesBoleto}</td>
+                    <td>
+                        <button class="btn-cr" onclick="gerarBoleto('${item.numero_nota}')" ${item.boleto_gerado ? 'disabled' : ''}>Gerar Boleto</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function carregarContasReceber() {
+        try {
+            const res = await fetch('/api/financeiro/contas-receber/notas');
+            const data = await parseApiResponse(res);
+            if (!res.ok) {
+                setMsg(`Falha ao carregar lista: HTTP ${res.status}`, false);
+                return;
+            }
+            renderTabela(data.itens || []);
+            setMsg(`Lista atualizada. ${data.total || 0} nota(s) com pagamento no XML.`, true);
+        } catch (err) {
+            setMsg('Erro ao carregar contas a receber: ' + err.message, false);
+        }
+    }
+
+    async function gerarBoleto(numeroNota) {
+        if (!numeroNota) return;
+        try {
+            const res = await fetch('/api/financeiro/contas-receber/gerar-boleto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: numeroNota }),
+            });
+            const data = await parseApiResponse(res);
+            if (!res.ok || !data.sucesso) {
+                setMsg(data.error || `Falha ao gerar boleto (HTTP ${res.status}).`, false);
+                return;
+            }
+            setMsg(data.ja_existia ? `Boleto da NF ${numeroNota} ja existia.` : `Boleto da NF ${numeroNota} gerado com sucesso.`, true);
+            await carregarContasReceber();
+        } catch (err) {
+            setMsg('Erro ao gerar boleto: ' + err.message, false);
+        }
+    }
+
+    async function sincronizarConsyste() {
+        const numero = String(document.getElementById('sync-numero').value || '').trim();
+        const chave = onlyDigits(document.getElementById('sync-chave').value || '');
+
+        if (!numero && !chave) {
+            setMsg('Informe numero da NF ou chave para sincronizar com a Consyste.', false);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/financeiro/contas-receber/sincronizar-consyste', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ numero, chave }),
+            });
+            const data = await parseApiResponse(res);
+            if (!res.ok || !data.sucesso) {
+                setMsg(data.error || `Falha na sincronizacao (HTTP ${res.status}).`, false);
+                return;
+            }
+            setMsg(`Sincronizacao concluida. Docs: ${data.docs_encontrados}, XML importados: ${data.xml_importados}, atualizadas: ${data.notas_atualizadas}.`, true);
+            await carregarContasReceber();
+        } catch (err) {
+            setMsg('Erro ao sincronizar com Consyste: ' + err.message, false);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        carregarContasReceber();
+    });
+</script>
+{% endblock %}

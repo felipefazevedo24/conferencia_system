@@ -16,6 +16,17 @@ class ConsysteDownloadSchema(Schema):
     chave = fields.Str(required=True, validate=validate.Length(min=44, max=60))
 
 
+class ConsysteEmissaoSolicitarSchema(Schema):
+    cnpj = fields.Str(required=True, validate=validate.Length(min=14, max=18))
+    txt_payload = fields.Str(required=True, validate=validate.Length(min=20))
+    ambiente = fields.Int(required=False, load_default=2, validate=validate.OneOf([1, 2]))
+
+
+class ConsysteEmissaoConsultarSchema(Schema):
+    emissao_id = fields.Str(required=True, validate=validate.Length(min=8, max=80))
+    ambiente = fields.Int(required=False, load_default=2, validate=validate.OneOf([1, 2]))
+
+
 class ValidarSchema(Schema):
     nota = fields.Raw(required=True)
     contagens = fields.Dict(required=True)

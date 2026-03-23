@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+
+{% block title %}Financeiro - Faturamento{% endblock %}
+
+{% block extra_head %}
+<style>
+    .fat-wrap { max-width: 1200px; margin: 0 auto; }
+    .fat-header {
+        background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%);
+        border: 1px solid #dbe4ec;
+        border-bottom: 3px solid #0f62c9;
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 16px;
+    }
+    .fat-title { margin: 0; font-size: 18px; font-weight: 800; color: #22313f; text-transform: uppercase; }
+    .fat-sub { margin: 4px 0 0; color: #556575; font-size: 12px; font-weight: 600; }
+
+    .fat-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+    .fat-card {
+        background: #fff;
+        border: 1px solid #dbe4ec;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 8px 20px rgba(18, 38, 58, 0.06);
+    }
+    .fat-card h3 { font-size: 12px; margin: 0 0 12px; text-transform: uppercase; color: #22313f; font-weight: 800; }
+
+    .fat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .fat-field label { display: block; font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+    .fat-field input, .fat-field select, .fat-field textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        background: #fff;
+    }
+    .fat-field textarea { min-height: 220px; font-family: Consolas, monospace; }
+    .fat-help {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e3a8a;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .fat-items-list { display: grid; gap: 8px; margin-bottom: 8px; }
+    .fat-item-row {
+        border: 1px solid #dbe4ec;
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8fafc;
+    }
+    .fat-item-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        font-size: 11px;
+        font-weight: 800;
+        color: #334155;
+        text-transform: uppercase;
+    }
+    .btn-fat.danger { border-color: #fecaca; color: #b91c1c; background: #fff5f5; }
+
+    .fat-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .btn-fat {
+        border: 1px solid #9fb3c7;
+        border-radius: 8px;
+        background: #fff;
+        color: #1f3347;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 8px 12px;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+    .btn-fat.primary { background: #0f62c9; border-color: #0f62c9; color: #fff; }
+
+    .fat-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px;
+        min-height: 120px;
+        font-size: 12px;
+        white-space: pre-wrap;
+        color: #1f2937;
+    }
+    .fat-status { font-size: 12px; font-weight: 700; margin-top: 8px; }
+    .ok { color: #166534; }
+    .err { color: #b91c1c; }
+
+    @media (max-width: 920px) {
+        .fat-grid { grid-template-columns: 1fr; }
+        .fat-row { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fat-wrap">
+    <div class="fat-header">
+        <h2 class="fat-title"><i class="fas fa-file-signature"></i> Financeiro - Faturamento (Consyste)</h2>
+        <p class="fat-sub">Solicite emissao de NF-e por TXT e acompanhe o status da solicitacao por ID.</p>
+    </div>
+
+    <div class="fat-grid">
+        <section class="fat-card">
+            <h3>1. Solicitar Emissao</h3>
+            <div class="fat-help">
+                Preencha os campos abaixo e clique em "Gerar TXT automaticamente". O sistema monta um TXT base no padrao Consyste para voce revisar e enviar.
+            </div>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="ambiente">Ambiente</label>
+                    <select id="ambiente">
+                        <option value="2" selected>Homologacao (2)</option>
+                        <option value="1">Producao (1)</option>
+                    </select>
+                </div>
+                <div class="fat-field">
+                    <label for="cnpj">CNPJ Emitente</label>
+                    <input id="cnpj" placeholder="00.000.000/0000-00" />
+                </div>
+            </div>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="numero-nf">Numero NF</label>
+                    <input id="numero-nf" placeholder="Ex: 12345" />
+                </div>
+                <div class="fat-field">
+                    <label for="serie-nf">Serie</label>
+                    <input id="serie-nf" placeholder="Ex: 1" value="1" />
+                </div>
+            </div>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="natureza-operacao">Natureza Operacao</label>
+                    <input id="natureza-operacao" placeholder="Ex: VENDA" value="VENDA" />
+                </div>
+                <div class="fat-field">
+                    <label for="codigo-municipio">Codigo Municipio IBGE</label>
+                    <input id="codigo-municipio" placeholder="Ex: 3550308" value="3550308" />
+                </div>
+            </div>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="data-emissao">Data Emissao</label>
+                    <input id="data-emissao" type="date" />
+                </div>
+                <div class="fat-field">
+                    <label for="data-saida">Data Saida</label>
+                    <input id="data-saida" type="date" />
+                </div>
+            </div>
+
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="dest-cnpj">CNPJ/CPF Destinatario</label>
+                    <input id="dest-cnpj" placeholder="00.000.000/0000-00" />
+                </div>
+                <div class="fat-field">
+                    <label for="dest-nome">Nome Destinatario</label>
+                    <input id="dest-nome" placeholder="Razao social/Nome" />
+                </div>
+            </div>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="dest-cidade">Cidade Destinatario</label>
+                    <input id="dest-cidade" placeholder="Ex: SAO PAULO" />
+                </div>
+                <div class="fat-field">
+                    <label for="dest-uf">UF Destinatario</label>
+                    <input id="dest-uf" placeholder="Ex: SP" maxlength="2" />
+                </div>
+            </div>
+
+            <div class="fat-field">
+                <label>Itens da NF</label>
+                <div id="itens-lista" class="fat-items-list"></div>
+                <div class="fat-actions" style="margin-top:0;">
+                    <button class="btn-fat" type="button" onclick="adicionarItem()">Adicionar Item</button>
+                </div>
+            </div>
+
+            <div class="fat-field">
+                <label for="txt-payload">TXT da NF-e</label>
+                <textarea id="txt-payload" placeholder="Cole aqui o TXT no padrao da Consyste"></textarea>
+            </div>
+            <div class="fat-actions">
+                <button class="btn-fat" onclick="gerarTxtAutomatico()">Gerar TXT Automaticamente</button>
+                <button class="btn-fat primary" onclick="solicitarEmissao()">Solicitar Emissao</button>
+                <button class="btn-fat" onclick="limparSolicitacao()">Limpar</button>
+            </div>
+            <div id="status-solicitacao" class="fat-status"></div>
+            <div id="resultado-solicitacao" class="fat-box" style="margin-top:8px;">Aguardando envio...</div>
+        </section>
+
+        <section class="fat-card">
+            <h3>2. Consultar Solicitacao</h3>
+            <div class="fat-row">
+                <div class="fat-field">
+                    <label for="ambiente-consulta">Ambiente</label>
+                    <select id="ambiente-consulta">
+                        <option value="2" selected>Homologacao (2)</option>
+                        <option value="1">Producao (1)</option>
+                    </select>
+                </div>
+                <div class="fat-field">
+                    <label for="emissao-id">ID da Solicitacao</label>
+                    <input id="emissao-id" placeholder="Ex: 62b080477bbe81e57e06b5bc" />
+                </div>
+            </div>
+            <div class="fat-actions">
+                <button class="btn-fat primary" onclick="consultarEmissao()">Consultar Status</button>
+            </div>
+            <div id="status-consulta" class="fat-status"></div>
+            <div id="resultado-consulta" class="fat-box" style="margin-top:8px;">Aguardando consulta...</div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toPrettyJson(data) {
+        try {
+            return JSON.stringify(data, null, 2);
+        } catch (_) {
+            return String(data || '');
+        }
+    }
+
+    function onlyDigits(value) {
+        return String(value || '').replace(/\D/g, '');
+    }
+
+    function setStatus(elId, msg, ok) {
+        const el = document.getElementById(elId);
+        el.className = 'fat-status ' + (ok ? 'ok' : 'err');
+        el.innerText = msg;
+    }
+
+    async function parseApiResponse(res) {
+        const text = await res.text();
+        if (!text) return {};
+        try {
+            return JSON.parse(text);
+        } catch (_) {
+            return { raw: text };
+        }
+    }
+
+    function escTxt(value) {
+        return String(value || '').replace(/\|/g, ' ').replace(/\n/g, ' ').trim();
+    }
+
+    function todayIsoDate() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function toIsoDateTime(dateValue) {
+        const date = dateValue || todayIsoDate();
+        return `${date}T00:00:00-03:00`;
+    }
+
+    function toDecimal(value) {
+        const normalized = String(value || '').replace(',', '.');
+        const n = Number(normalized);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function money4(n) {
+        return toDecimal(n).toFixed(4);
+    }
+
+    function money2(n) {
+        return toDecimal(n).toFixed(2);
+    }
+
+    function buildItemRowHtml(idx) {
+        return `
+            <div class="fat-item-row" data-item-index="${idx}">
+                <div class="fat-item-head">
+                    <span>Item ${idx + 1}</span>
+                    <button class="btn-fat danger" type="button" onclick="removerItem(${idx})">Remover</button>
+                </div>
+                <div class="fat-row">
+                    <div class="fat-field"><label>Codigo</label><input data-key="codigo" placeholder="SKU-001" /></div>
+                    <div class="fat-field"><label>Descricao</label><input data-key="descricao" placeholder="Descricao do item" /></div>
+                </div>
+                <div class="fat-row">
+                    <div class="fat-field"><label>NCM</label><input data-key="ncm" placeholder="00000000" /></div>
+                    <div class="fat-field"><label>CFOP</label><input data-key="cfop" placeholder="5102" /></div>
+                </div>
+                <div class="fat-row">
+                    <div class="fat-field"><label>Unidade</label><input data-key="unidade" placeholder="UN" value="UN" /></div>
+                    <div class="fat-field"><label>Quantidade</label><input data-key="qtd" placeholder="1" value="1" /></div>
+                </div>
+                <div class="fat-row">
+                    <div class="fat-field"><label>Valor Unitario</label><input data-key="vlr_unit" placeholder="10,00" value="0" /></div>
+                    <div class="fat-field"><label>Aliquota ICMS (%)</label><input data-key="aliq_icms" placeholder="18" value="0" /></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renumerarItens() {
+        const rows = Array.from(document.querySelectorAll('.fat-item-row'));
+        rows.forEach((row, idx) => {
+            row.dataset.itemIndex = String(idx);
+            const title = row.querySelector('.fat-item-head span');
+            if (title) title.innerText = `Item ${idx + 1}`;
+            const btn = row.querySelector('.fat-item-head button');
+            if (btn) btn.setAttribute('onclick', `removerItem(${idx})`);
+        });
+    }
+
+    function adicionarItem() {
+        const lista = document.getElementById('itens-lista');
+        const idx = lista.querySelectorAll('.fat-item-row').length;
+        lista.insertAdjacentHTML('beforeend', buildItemRowHtml(idx));
+    }
+
+    function removerItem(idx) {
+        const row = document.querySelector(`.fat-item-row[data-item-index="${idx}"]`);
+        if (row) row.remove();
+        renumerarItens();
+    }
+
+    function coletarItensFormulario() {
+        const rows = Array.from(document.querySelectorAll('.fat-item-row'));
+        return rows.map((row) => {
+            const get = (key) => row.querySelector(`[data-key="${key}"]`)?.value || '';
+            return {
+                codigo: escTxt(get('codigo')),
+                descricao: escTxt(get('descricao')),
+                ncm: onlyDigits(get('ncm')),
+                cfop: onlyDigits(get('cfop')),
+                unidade: escTxt(get('unidade')) || 'UN',
+                qtd: toDecimal(get('qtd')),
+                vlr_unit: toDecimal(get('vlr_unit')),
+                aliq_icms: toDecimal(get('aliq_icms')),
+            };
+        }).filter((item) => item.codigo && item.descricao && item.qtd > 0);
+    }
+
+    function gerarTxtAutomatico() {
+        const cnpj = onlyDigits(document.getElementById('cnpj').value);
+        const numeroNF = escTxt(document.getElementById('numero-nf').value);
+        const serieNF = escTxt(document.getElementById('serie-nf').value || '1');
+        const natureza = escTxt(document.getElementById('natureza-operacao').value || 'VENDA');
+        const codMunicipio = onlyDigits(document.getElementById('codigo-municipio').value || '3550308');
+        const dataEmissao = toIsoDateTime(document.getElementById('data-emissao').value);
+        const dataSaida = toIsoDateTime(document.getElementById('data-saida').value);
+        const destCnpj = onlyDigits(document.getElementById('dest-cnpj').value);
+        const destNome = escTxt(document.getElementById('dest-nome').value);
+        const destCidade = escTxt(document.getElementById('dest-cidade').value);
+        const destUf = escTxt(document.getElementById('dest-uf').value).toUpperCase();
+        const itens = coletarItensFormulario();
+
+        if (cnpj.length !== 14) {
+            setStatus('status-solicitacao', 'Para gerar TXT, informe CNPJ emitente com 14 digitos.', false);
+            return;
+        }
+        if (!numeroNF) {
+            setStatus('status-solicitacao', 'Para gerar TXT, informe o numero da NF.', false);
+            return;
+        }
+        if (destCnpj.length < 11 || !destNome) {
+            setStatus('status-solicitacao', 'Para gerar TXT, informe CNPJ/CPF e nome do destinatario.', false);
+            return;
+        }
+        if (!itens.length) {
+            setStatus('status-solicitacao', 'Adicione ao menos 1 item valido para gerar o TXT.', false);
+            return;
+        }
+
+        const valorTotal = itens.reduce((sum, item) => sum + (item.qtd * item.vlr_unit), 0);
+        const linhas = [];
+
+        linhas.push('NOTAFISCAL|1');
+        linhas.push('A|3.10||');
+        linhas.push(`B|35||${natureza}|2|55|${serieNF}|${numeroNF}|${dataEmissao}|${dataSaida}|1|1|${codMunicipio}|1|1|||1|0|0|1|3.10|||`);
+        linhas.push(`C|${cnpj}|||||||||`);
+        linhas.push(`E|${destCnpj}|${destNome}|${destCidade}|${destUf}||||||`);
+
+        itens.forEach((item, index) => {
+            const numeroItem = index + 1;
+            const totalItem = item.qtd * item.vlr_unit;
+            linhas.push(`H|${numeroItem}|${item.codigo}|${item.descricao}|${item.ncm}|${item.cfop}|${item.unidade}|${money4(item.qtd)}|${money4(item.vlr_unit)}|${money2(totalItem)}|${money2(item.aliq_icms)}`);
+        });
+
+        linhas.push(`W|${money2(valorTotal)}`);
+        linhas.push('Z|TXT GERADO AUTOMATICAMENTE PELO ERP - REVISE DADOS FISCAIS ANTES DE EMITIR');
+
+        document.getElementById('txt-payload').value = linhas.join('\n');
+        setStatus('status-solicitacao', 'TXT base gerado com sucesso. Revise e clique em Solicitar Emissao.', true);
+    }
+
+    async function solicitarEmissao() {
+        const ambiente = Number(document.getElementById('ambiente').value || 2);
+        const cnpj = onlyDigits(document.getElementById('cnpj').value);
+        const txt_payload = document.getElementById('txt-payload').value || '';
+
+        if (cnpj.length !== 14) {
+            setStatus('status-solicitacao', 'CNPJ invalido. Informe 14 digitos.', false);
+            return;
+        }
+        if (txt_payload.trim().length < 20) {
+            setStatus('status-solicitacao', 'TXT muito curto para emissao.', false);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/consyste/emissao/solicitar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ambiente, cnpj, txt_payload }),
+            });
+            const data = await parseApiResponse(res);
+
+            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Solicitacao processada' : 'Falha na solicitacao'}`;
+            if (res.status === 400 && String(data.error || '').includes('CONSYSTE_TOKEN')) {
+                mensagem = 'Configuração inválida: token Consyste não configurado no servidor.';
+            } else if (res.status === 502) {
+                mensagem = 'Consyste retornou 502. Verifique token, CNPJ autorizado e se o TXT está no layout completo esperado.';
+            }
+
+            setStatus('status-solicitacao', mensagem, data.sucesso);
+            document.getElementById('resultado-solicitacao').innerText = toPrettyJson(data);
+
+            const nfeId = data?.payload?.nfe_id;
+            if (nfeId) {
+                document.getElementById('emissao-id').value = nfeId;
+            }
+        } catch (err) {
+            setStatus('status-solicitacao', 'Erro ao solicitar emissao: ' + err.message, false);
+            document.getElementById('resultado-solicitacao').innerText = String(err);
+        }
+    }
+
+    async function consultarEmissao() {
+        const ambiente = Number(document.getElementById('ambiente-consulta').value || 2);
+        const emissao_id = String(document.getElementById('emissao-id').value || '').trim();
+
+        if (!emissao_id) {
+            setStatus('status-consulta', 'Informe o ID da solicitacao.', false);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/consyste/emissao/consultar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ambiente, emissao_id }),
+            });
+            const data = await parseApiResponse(res);
+            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Consulta concluida' : 'Consulta retornou alerta/erro'}`;
+            if (res.status === 400 && String(data.error || '').includes('CONSYSTE_TOKEN')) {
+                mensagem = 'Configuração inválida: token Consyste não configurado no servidor.';
+            } else if (res.status === 502) {
+                mensagem = 'Consyste retornou 502 na consulta. Tente novamente em alguns segundos.';
+            }
+            setStatus('status-consulta', mensagem, data.sucesso);
+            document.getElementById('resultado-consulta').innerText = toPrettyJson(data);
+        } catch (err) {
+            setStatus('status-consulta', 'Erro ao consultar emissao: ' + err.message, false);
+            document.getElementById('resultado-consulta').innerText = String(err);
+        }
+    }
+
+    function limparSolicitacao() {
+        document.getElementById('cnpj').value = '';
+        document.getElementById('numero-nf').value = '';
+        document.getElementById('serie-nf').value = '1';
+        document.getElementById('natureza-operacao').value = 'VENDA';
+        document.getElementById('codigo-municipio').value = '3550308';
+        document.getElementById('data-emissao').value = '';
+        document.getElementById('data-saida').value = '';
+        document.getElementById('dest-cnpj').value = '';
+        document.getElementById('dest-nome').value = '';
+        document.getElementById('dest-cidade').value = '';
+        document.getElementById('dest-uf').value = '';
+        document.getElementById('itens-lista').innerHTML = '';
+        document.getElementById('txt-payload').value = '';
+        document.getElementById('resultado-solicitacao').innerText = 'Aguardando envio...';
+        setStatus('status-solicitacao', '', true);
+        adicionarItem();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('data-emissao').value = todayIsoDate();
+        document.getElementById('data-saida').value = todayIsoDate();
+        adicionarItem();
+    });
+</script>
+{% endblock %}

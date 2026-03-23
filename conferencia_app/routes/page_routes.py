@@ -66,6 +66,18 @@ def wms_page():
     return render_template("wms.html", user=session["username"])
 
 
+@page_bp.route("/financeiro/faturamento")
+@permission_required("PAGE_FINANCEIRO_FATURAMENTO")
+def financeiro_faturamento_page():
+    return render_template("faturamento.html", user=session["username"])
+
+
+@page_bp.route("/financeiro/contas-receber")
+@permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
+def financeiro_contas_receber_page():
+    return render_template("contas_receber.html", user=session["username"])
+
+
 @page_bp.route("/admin/wms-enderecos")
 @permission_required("PAGE_ADMIN_WMS_ENDERECOS")
 def wms_enderecos_admin_page():

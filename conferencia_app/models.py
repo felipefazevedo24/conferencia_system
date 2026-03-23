@@ -52,6 +52,10 @@ class ItemNota(db.Model):
     cst_pis = db.Column(db.String(2), index=True)
     cst_cofins = db.Column(db.String(2), index=True)
     valor_produto = db.Column(db.Float)
+    pagamento_xml = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    tipo_pagamento_xml = db.Column(db.String(100))
+    valor_pagamento_xml = db.Column(db.Float)
+    vencimento_pagamento_xml = db.Column(db.DateTime)
     pedido_compra = db.Column(db.String(50), index=True)
     linha_po_vinculada = db.Column(db.Integer, nullable=True, comment="Índice 0-based da linha do PO vinculada manualmente")
     material_cliente = db.Column(db.Boolean, nullable=False, default=False, index=True)
@@ -142,6 +146,20 @@ class LogManifestacaoDestinatario(db.Model):
     detalhe = db.Column(db.String(500))
     usuario = db.Column(db.String(100), nullable=False)
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class BoletoContaReceber(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    chave_acesso = db.Column(db.String(44), index=True)
+    banco = db.Column(db.String(80), nullable=False, default="BOFA - Bank of America")
+    valor = db.Column(db.Float, nullable=False, default=0.0)
+    nosso_numero = db.Column(db.String(40), nullable=False, unique=True, index=True)
+    linha_digitavel = db.Column(db.String(120), nullable=False)
+    codigo_barras = db.Column(db.String(120), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="Gerado", index=True)
+    usuario_geracao = db.Column(db.String(100), nullable=False)
+    data_geracao = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
 class LogExclusaoNota(db.Model):

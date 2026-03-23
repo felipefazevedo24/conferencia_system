@@ -1,4 +1,5 @@
 from datetime import datetime
+import hashlib
 import csv
 import io
 import json
@@ -36,6 +37,7 @@ from ..models import (
     ChecklistRecebimento,
     LocalizacaoArmazem,
     ItemWMS,
+    BoletoContaReceber,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -51,6 +53,8 @@ from ..models import (
 from ..services import WMSService
 from ..schemas.api_schemas import (
     AprovarSolicitacaoDevolucaoSchema,
+    ConsysteEmissaoConsultarSchema,
+    ConsysteEmissaoSolicitarSchema,
     ConfirmarLancamentoSchema,
     ConsysteDownloadSchema,
     DevolverMaterialSchema,
@@ -63,6 +67,7 @@ from ..schemas.api_schemas import (
     ValidarSchema,
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
+from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -76,6 +81,8 @@ from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com
 api_bp = Blueprint("api", __name__)
 register_schema = RegisterSchema()
 consyste_download_schema = ConsysteDownloadSchema()
+consyste_emissao_solicitar_schema = ConsysteEmissaoSolicitarSchema()
+consyste_emissao_consultar_schema = ConsysteEmissaoConsultarSchema()
 validar_schema = ValidarSchema()
 devolver_schema = DevolverMaterialSchema()
 reset_schema = ResetNotaSchema()
@@ -97,6 +104,13 @@ def _normalize_external_payload(payload):
     if payload is None:
         return {}
     return {"raw": str(payload)[:1000]}
+
+
+def _consyste_token_configurado_corretamente() -> bool:
+    token = str(current_app.config.get("CONSYSTE_TOKEN") or "").strip()
+    if not token:
+        return False
+    return True
 
 
 def _get_db_file_path() -> str:
@@ -1599,6 +1613,83 @@ def consyste_download():
         return jsonify({"error": str(exc)}), 500
 
 
+@api_bp.route("/api/consyste/emissao/solicitar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_FATURAMENTO")
+def consyste_solicitar_emissao_nfe():
+    if not _consyste_token_configurado_corretamente():
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "error": "CONSYSTE_TOKEN não configurado. Defina um token válido da sua conta Consyste.",
+                }
+            ),
+            400,
+        )
+
+    data = consyste_emissao_solicitar_schema.load(request.json or {})
+    cnpj = data.get("cnpj")
+    txt_payload = data.get("txt_payload")
+    ambiente = data.get("ambiente", 2)
+
+    try:
+        ok, status_code, payload = solicitar_emissao_nfe_consyste(
+            cnpj=cnpj,
+            txt_payload=txt_payload,
+            ambiente=ambiente,
+        )
+        return (
+            jsonify(
+                {
+                    "sucesso": bool(ok),
+                    "ambiente": int(ambiente),
+                    "payload": _normalize_external_payload(payload),
+                }
+            ),
+            status_code,
+        )
+    except Exception as exc:
+        return jsonify({"sucesso": False, "error": str(exc)[:500]}), 500
+
+
+@api_bp.route("/api/consyste/emissao/consultar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_FATURAMENTO")
+def consyste_consultar_emissao_nfe():
+    if not _consyste_token_configurado_corretamente():
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "error": "CONSYSTE_TOKEN não configurado. Defina um token válido da sua conta Consyste.",
+                }
+            ),
+            400,
+        )
+
+    data = consyste_emissao_consultar_schema.load(request.json or {})
+    emissao_id = data.get("emissao_id")
+    ambiente = data.get("ambiente", 2)
+
+    try:
+        ok, status_code, payload = consultar_emissao_nfe_consyste(
+            emissao_id=emissao_id,
+            ambiente=ambiente,
+        )
+        return (
+            jsonify(
+                {
+                    "sucesso": bool(ok),
+                    "ambiente": int(ambiente),
+                    "emissao_id": str(emissao_id),
+                    "payload": _normalize_external_payload(payload),
+                }
+            ),
+            status_code,
+        )
+    except Exception as exc:
+        return jsonify({"sucesso": False, "error": str(exc)[:500]}), 500
+
+
 @api_bp.route("/api/consyste/documento")
 @roles_required("Admin", "Fiscal", "Conferente")
 def consyste_documento():
@@ -1699,6 +1790,244 @@ def consyste_list():
         return jsonify({"documentos": []})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+def _gerar_campos_boleto(numero_nota: str, valor: float):
+    numero_digits = _only_digits(numero_nota) or "0"
+    valor_centavos = int(round(max(float(valor or 0.0), 0.0) * 100))
+    base = f"{numero_digits}|{valor_centavos}|{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    hash_digits = str(int(hashlib.sha1(base.encode("utf-8")).hexdigest(), 16))
+
+    nosso_numero = (
+        f"{datetime.now().strftime('%y%m%d')}"
+        f"{numero_digits.zfill(10)[-10:]}"
+        f"{hash_digits[-4:]}"
+    )
+
+    campo_livre = f"{nosso_numero}{numero_digits.zfill(10)}{hash_digits[-30:]}"[:25].ljust(25, "0")
+    # Estrutura simplificada numérica de 44 dígitos (banco+moeda+dv+fator+valor+campo livre).
+    codigo_barras = f"00199{'0000'}{valor_centavos:010d}{campo_livre}"
+    linha_digitavel = (
+        f"{codigo_barras[0:5]}.{codigo_barras[5:10]} "
+        f"{codigo_barras[10:15]}.{codigo_barras[15:21]} "
+        f"{codigo_barras[21:26]}.{codigo_barras[26:32]} "
+        f"{codigo_barras[32:33]} {codigo_barras[33:44]}"
+    )
+    return nosso_numero, linha_digitavel, codigo_barras
+
+
+@api_bp.route("/api/financeiro/contas-receber/notas")
+@permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
+def financeiro_contas_receber_notas():
+    rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor),
+            func.max(ItemNota.chave_acesso),
+            func.max(ItemNota.status),
+            func.max(ItemNota.valor_pagamento_xml),
+            func.max(ItemNota.tipo_pagamento_xml),
+            func.max(ItemNota.vencimento_pagamento_xml),
+            func.max(ItemNota.data_lancamento),
+            func.max(ItemNota.data_importacao),
+        )
+        .filter(ItemNota.pagamento_xml.is_(True))
+        .filter(ItemNota.status != "Excluído")
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.data_lancamento).desc(), func.max(ItemNota.data_importacao).desc())
+        .all()
+    )
+
+    boletos = {b.numero_nota: b for b in BoletoContaReceber.query.all()}
+    resultado = []
+    for r in rows:
+        numero = str(r[0] or "").strip()
+        boleto = boletos.get(numero)
+        resultado.append(
+            {
+                "numero_nota": numero,
+                "fornecedor": str(r[1] or "---"),
+                "chave_acesso": str(r[2] or ""),
+                "status": str(r[3] or "---"),
+                "valor_pagamento": float(r[4] or 0.0),
+                "tipo_pagamento": str(r[5] or "---"),
+                "vencimento": r[6].strftime("%d/%m/%Y") if r[6] else "---",
+                "data_ref": (r[7] or r[8]).strftime("%d/%m/%Y %H:%M") if (r[7] or r[8]) else "---",
+                "boleto_gerado": bool(boleto),
+                "boleto": {
+                    "banco": boleto.banco,
+                    "valor": float(boleto.valor or 0.0),
+                    "nosso_numero": boleto.nosso_numero,
+                    "linha_digitavel": boleto.linha_digitavel,
+                    "codigo_barras": boleto.codigo_barras,
+                    "status": boleto.status,
+                    "data_geracao": boleto.data_geracao.strftime("%d/%m/%Y %H:%M"),
+                }
+                if boleto
+                else None,
+            }
+        )
+
+    return jsonify({"itens": resultado, "total": len(resultado), "banco_padrao": "BOFA - Bank of America"})
+
+
+@api_bp.route("/api/financeiro/contas-receber/gerar-boleto", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
+def financeiro_contas_receber_gerar_boleto():
+    data = request.json or {}
+    nota = str(data.get("nota") or "").strip()
+    if not nota:
+        return jsonify({"sucesso": False, "error": "Informe a nota."}), 400
+
+    boleto_existente = BoletoContaReceber.query.filter_by(numero_nota=nota).first()
+    if boleto_existente:
+        return jsonify(
+            {
+                "sucesso": True,
+                "ja_existia": True,
+                "boleto": {
+                    "banco": boleto_existente.banco,
+                    "valor": float(boleto_existente.valor or 0.0),
+                    "nosso_numero": boleto_existente.nosso_numero,
+                    "linha_digitavel": boleto_existente.linha_digitavel,
+                    "codigo_barras": boleto_existente.codigo_barras,
+                    "status": boleto_existente.status,
+                    "data_geracao": boleto_existente.data_geracao.strftime("%d/%m/%Y %H:%M"),
+                },
+            }
+        )
+
+    nota_info = (
+        db.session.query(
+            func.max(ItemNota.chave_acesso),
+            func.max(ItemNota.valor_pagamento_xml),
+            func.max(ItemNota.pagamento_xml),
+        )
+        .filter(ItemNota.numero_nota == nota)
+        .first()
+    )
+    if not nota_info or not bool(nota_info[2]):
+        return jsonify({"sucesso": False, "error": "Nota sem informação de pagamento no XML."}), 400
+
+    valor = float(nota_info[1] or 0.0)
+    nosso_numero, linha_digitavel, codigo_barras = _gerar_campos_boleto(nota, valor)
+
+    boleto = BoletoContaReceber(
+        numero_nota=nota,
+        chave_acesso=str(nota_info[0] or ""),
+        banco="BOFA - Bank of America",
+        valor=valor,
+        nosso_numero=nosso_numero,
+        linha_digitavel=linha_digitavel,
+        codigo_barras=codigo_barras,
+        status="Gerado",
+        usuario_geracao=session.get("username", "sistema"),
+    )
+    db.session.add(boleto)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "sucesso": True,
+            "ja_existia": False,
+            "boleto": {
+                "banco": boleto.banco,
+                "valor": float(boleto.valor or 0.0),
+                "nosso_numero": boleto.nosso_numero,
+                "linha_digitavel": boleto.linha_digitavel,
+                "codigo_barras": boleto.codigo_barras,
+                "status": boleto.status,
+                "data_geracao": boleto.data_geracao.strftime("%d/%m/%Y %H:%M"),
+            },
+        }
+    )
+
+
+@api_bp.route("/api/financeiro/contas-receber/sincronizar-consyste", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
+def financeiro_contas_receber_sincronizar_consyste():
+    if not _consyste_token_configurado_corretamente():
+        return jsonify({"sucesso": False, "error": "CONSYSTE_TOKEN não configurado."}), 400
+
+    data = request.json or {}
+    numero = str(data.get("numero") or "").strip()
+    chave = re.sub(r"\D", "", str(data.get("chave") or "").strip())
+    if not numero and not chave:
+        return jsonify({"sucesso": False, "error": "Informe número da NF ou chave de acesso."}), 400
+
+    token = current_app.config.get("CONSYSTE_TOKEN")
+    headers = {"X-Consyste-Auth-Token": token, "Accept": "application/json"}
+
+    docs = []
+
+    try:
+        if chave:
+            if len(chave) != 44:
+                return jsonify({"sucesso": False, "error": f"Chave inválida: possui {len(chave)} dígitos."}), 400
+            consulta_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/{chave}"
+            resp = requests.get(consulta_url, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                doc = resp.json() if resp.content else {}
+                docs = [doc] if isinstance(doc, dict) else []
+        else:
+            filtros = ["emitidos", "todos", "recebidos"]
+            termos = [f"numero:{numero}", numero]
+            for filtro in filtros:
+                base_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/lista/{filtro}"
+                for termo in termos:
+                    params = {"q": termo, "campos": "id,chave,emitido_em,numero,emit_nome,dest_nome"}
+                    resp = requests.get(base_url, headers=headers, params=params, timeout=15)
+                    if resp.status_code != 200:
+                        continue
+                    dados = resp.json() if resp.content else {}
+                    lista = dados.get("documentos", []) if isinstance(dados, dict) else []
+                    docs_filtrados = [d for d in lista if str(d.get("numero", "")).strip() == numero]
+                    if docs_filtrados:
+                        docs = docs_filtrados
+                        break
+                if docs:
+                    break
+
+        importadas = 0
+        atualizadas = 0
+        for doc in docs:
+            chave_doc = re.sub(r"\D", "", str(doc.get("chave") or ""))
+            numero_doc = str(doc.get("numero") or "").strip()
+            if len(chave_doc) != 44:
+                continue
+
+            download_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/{chave_doc}/download.xml"
+            download_resp = requests.get(download_url, headers=headers, timeout=20)
+            if not download_resp.ok:
+                continue
+
+            added = process_xml_and_store(download_resp.content, session.get("username", "financeiro"), status_inicial="Lançado")
+            if added:
+                importadas += 1
+            else:
+                rows = ItemNota.query.filter(
+                    or_(
+                        ItemNota.numero_nota == numero_doc,
+                        ItemNota.chave_acesso == chave_doc,
+                    )
+                ).all()
+                if rows:
+                    for row in rows:
+                        row.status = "Lançado"
+                    atualizadas += 1
+
+        db.session.commit()
+        return jsonify(
+            {
+                "sucesso": True,
+                "docs_encontrados": len(docs),
+                "xml_importados": importadas,
+                "notas_atualizadas": atualizadas,
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"sucesso": False, "error": str(exc)[:500]}), 500
 
 
 @api_bp.route("/api/pendentes")

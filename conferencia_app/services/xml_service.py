@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as et
+from datetime import datetime
 
 from ..extensions import db
 from ..models import ItemNota
@@ -33,6 +34,25 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
         v_icms = root.find(".//nfe:total/nfe:ICMSTot/nfe:vICMS", ns)
         txt_total = f"R$ {v_nf.text}" if v_nf is not None else "---"
         txt_imposto = f"R$ {v_icms.text}" if v_icms is not None else "---"
+
+        det_pag_list = root.findall(".//nfe:pag/nfe:detPag", ns)
+        pagamento_xml = len(det_pag_list) > 0
+        tipos_pagamento = []
+        valor_pagamento_xml = 0.0
+        for det_pag in det_pag_list:
+            tipo = _txt(det_pag, "nfe:tPag", ns, "").strip()
+            if tipo and tipo not in tipos_pagamento:
+                tipos_pagamento.append(tipo)
+            valor_pagamento_xml += float(_txt(det_pag, "nfe:vPag", ns, "0") or 0)
+
+        tipo_pagamento_xml = ",".join(tipos_pagamento)
+        vencimento_pagamento_xml = None
+        vencimento_raw = _txt(root, ".//nfe:cobr/nfe:dup/nfe:dVenc", ns, "").strip()
+        if vencimento_raw:
+            try:
+                vencimento_pagamento_xml = datetime.strptime(vencimento_raw[:10], "%Y-%m-%d")
+            except Exception:
+                vencimento_pagamento_xml = None
 
         if ItemNota.query.filter_by(numero_nota=numero_nota).first():
             return 0
@@ -111,6 +131,10 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     cst_pis=item["cst_pis"],
                     cst_cofins=item["cst_cofins"],
                     valor_produto=item["valor_produto"],
+                    pagamento_xml=pagamento_xml,
+                    tipo_pagamento_xml=tipo_pagamento_xml,
+                    valor_pagamento_xml=valor_pagamento_xml,
+                    vencimento_pagamento_xml=vencimento_pagamento_xml,
                     status=status_inicial,
                     usuario_importacao=user,
                     valor_total=txt_total,
