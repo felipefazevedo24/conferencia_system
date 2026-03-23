@@ -79,7 +79,44 @@
     td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
     tr:hover td { background: #f0f7ff; }
 
-    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+    .assist-card {
+        background: linear-gradient(135deg, #f8fbff, #eef6ff);
+        border: 1px solid #cfe3fb;
+    }
+    .assist-steps {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+    }
+    .assist-step {
+        background: #fff;
+        border: 1px solid #dbe2e8;
+        border-radius: 12px;
+        padding: 12px;
+    }
+    .assist-step h4 {
+        margin: 0 0 8px 0;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #334155;
+        letter-spacing: 0.4px;
+    }
+    .assist-preview {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #0f172a;
+        color: #fff;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    @media (max-width: 1100px) {
+        .grid { grid-template-columns: 1fr; }
+        .assist-steps { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock %}
 
@@ -96,25 +133,64 @@
         </div>
     </div>
 
+    <section class="card assist-card">
+        <h3><i class="fas fa-magic"></i> Assistente de Cadastro de Endereço</h3>
+        <div class="assist-steps">
+            <div class="assist-step">
+                <h4>1. Depósito</h4>
+                <select id="assistDepositoEndereco" class="input" style="min-width:100%;"></select>
+                <p style="margin:8px 0 0 0; color:var(--text-muted); font-size:12px;">Escolha onde o endereço será criado.</p>
+            </div>
+            <div class="assist-step">
+                <h4>2. Endereço Base</h4>
+                <input id="assistRua" class="input" placeholder="Rua (ex: PA)" list="assistRuas" style="min-width:100%; margin-bottom:8px;" />
+                <input id="assistColuna" class="input" placeholder="Coluna (ex: 01)" list="assistColunas" style="min-width:100%; margin-bottom:8px;" />
+                <input id="assistNivel" class="input" placeholder="Nível (ex: 00)" list="assistNiveis" style="min-width:100%;" />
+                <datalist id="assistRuas"></datalist>
+                <datalist id="assistColunas"></datalist>
+                <datalist id="assistNiveis"></datalist>
+            </div>
+            <div class="assist-step">
+                <h4>3. Ação</h4>
+                <div class="assist-preview">Prévia: <span id="assistPreviewCodigo">-</span></div>
+                <div class="row" style="margin-top:10px; margin-bottom:0;">
+                    <button class="btn primary" onclick="criarEnderecoAssistido()"><i class="fas fa-plus"></i> Criar Endereço</button>
+                </div>
+                <div class="row" style="margin-top:8px; margin-bottom:0;">
+                    <input id="assistQtdColunas" class="input" type="number" min="1" value="1" style="max-width:120px;" />
+                    <input id="assistQtdNiveis" class="input" type="number" min="1" value="1" style="max-width:120px;" />
+                    <button class="btn" onclick="gerarSequenciaAssistida()"><i class="fas fa-layer-group"></i> Gerar Sequência</button>
+                </div>
+                <p style="margin:8px 0 0 0; color:var(--text-muted); font-size:12px;">Sequência cria a partir da coluna/nível inicial.</p>
+            </div>
+        </div>
+    </section>
+
     <div class="grid">
         <section class="card">
             <h3><i class="fas fa-plus-circle"></i> Cadastro de Novos Endereços</h3>
             <div class="row">
+                <select id="depositoEndereco" class="input" style="min-width: 180px;"></select>
                 <input id="rua" class="input" placeholder="Rua" />
-                <input id="predio" class="input" placeholder="Prédio" />
+                <input id="predio" class="input" placeholder="Coluna" />
                 <input id="nivel" class="input" placeholder="Nível" />
-                <input id="apartamento" class="input" placeholder="Apto" />
                 <button class="btn primary" onclick="criarEndereco()">Cadastrar</button>
+            </div>
+            <div class="row" style="padding:10px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px;">
+                <select id="ruaExistenteEndereco" class="input" style="min-width: 160px;"></select>
+                <select id="colunaExistenteEndereco" class="input" style="min-width: 160px;"></select>
+                <select id="nivelExistenteEndereco" class="input" style="min-width: 160px;"></select>
+                <span style="color:var(--text-muted); font-size:12px;">Assistente: selecione opções já existentes para preencher rápido.</span>
             </div>
             <div class="table-wrap">
                 <table style="max-height: 500px; display: block; overflow-y: auto;">
                     <thead style="position: sticky; top: 0; z-index: 10;">
                         <tr>
                             <th width="150">Código</th>
+                            <th>Depósito</th>
                             <th>Rua</th>
-                            <th>Prédio</th>
+                            <th>Coluna</th>
                             <th>Nível</th>
-                            <th>Apto</th>
                             <th style="text-align:center;">Excluir</th>
                         </tr>
                     </thead>
@@ -150,10 +226,182 @@
             </div>
         </section>
     </div>
+
+    <section class="card">
+        <h3><i class="fas fa-layer-group"></i> Criação em Lote (Rua x Coluna x Nível)</h3>
+        <div class="row">
+            <select id="depositoLote" class="input" style="min-width: 180px;"></select>
+            <input id="ruaLote" class="input" placeholder="Rua (ex: PA)" style="min-width: 180px;" />
+            <input id="colunaInicioLote" class="input" type="number" min="0" placeholder="Coluna inicial" style="max-width: 140px;" />
+            <input id="colunaFimLote" class="input" type="number" min="0" placeholder="Coluna final" style="max-width: 140px;" />
+            <input id="nivelInicioLote" class="input" type="number" min="0" placeholder="Nível inicial" style="max-width: 140px;" />
+            <input id="nivelFimLote" class="input" type="number" min="0" placeholder="Nível final" style="max-width: 140px;" />
+            <button class="btn primary" onclick="criarLoteEnderecos()"><i class="fas fa-magic"></i> Gerar Lote</button>
+        </div>
+        <p style="margin:0; color:var(--text-muted); font-size:12px;">
+            Exemplo: Rua PA, coluna 1-20 e nível 0-5 gera automaticamente AL-PA-01-00 ... AL-PA-20-05.
+        </p>
+    </section>
+
+    <section class="card">
+        <h3><i class="fas fa-box-open"></i> Entrada de Estoque Legado (por Código de Material)</h3>
+        <div class="row">
+            <select id="depositoEstoqueInicial" class="input" style="min-width: 180px;"></select>
+            <select id="ruaFiltroEstoque" class="input" style="min-width: 160px;"></select>
+            <select id="colunaFiltroEstoque" class="input" style="min-width: 160px;"></select>
+            <select id="nivelFiltroEstoque" class="input" style="min-width: 160px;"></select>
+            <select id="localizacaoEstoqueInicial" class="input" style="min-width: 320px;"></select>
+            <input id="codigoEstoqueInicial" class="input" placeholder="Código do material" />
+            <input id="descricaoEstoqueInicial" class="input" placeholder="Descrição" style="min-width: 280px;" />
+            <input id="qtdEstoqueInicial" class="input" type="number" step="0.01" min="0.01" placeholder="Quantidade" />
+            <input id="unidadeEstoqueInicial" class="input" value="UN" placeholder="Unidade" style="max-width: 90px; min-width: 90px;" />
+            <input id="numeroNotaEstoqueInicial" class="input" value="ESTOQUE_INICIAL" placeholder="Documento de referência" style="min-width: 220px;" />
+            <button class="btn primary" onclick="cadastrarEstoqueInicial()"><i class="fas fa-save"></i> Cadastrar</button>
+            <button class="btn" onclick="sugerirEnderecoPorSku()"><i class="fas fa-lightbulb"></i> Sugerir Endereço</button>
+        </div>
+        <p style="margin:0; color:var(--text-muted); font-size:12px;">
+            Escolha o depósito e selecione um endereço já cadastrado para gravar o item legado no local correto.
+        </p>
+    </section>
 </div>
 
 <script>
 // --- Lógica JavaScript Original Integrada ---
+let cacheDepositos = [];
+let cacheLocalizacoesAdmin = [];
+
+function obterDepositoPorId(depositoId) {
+    return cacheDepositos.find((d) => Number(d.id) === Number(depositoId));
+}
+
+function normalizarBlocoEndereco(valor, tamanho = 2) {
+    const txt = String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    if (!txt) return '';
+    if (/^\d+$/.test(txt)) return txt.padStart(tamanho, '0').slice(-tamanho);
+    return txt.slice(0, tamanho).padEnd(tamanho, 'X');
+}
+
+function atualizarPreviewAssistenteEndereco() {
+    const depositoId = Number(document.getElementById('assistDepositoEndereco')?.value || 0);
+    const dep = obterDepositoPorId(depositoId);
+    const depCodigo = normalizarBlocoEndereco(dep?.codigo || '');
+    const rua = normalizarBlocoEndereco(document.getElementById('assistRua')?.value || '');
+    const coluna = normalizarBlocoEndereco(document.getElementById('assistColuna')?.value || '');
+    const nivel = normalizarBlocoEndereco(document.getElementById('assistNivel')?.value || '');
+
+    const preview = document.getElementById('assistPreviewCodigo');
+    if (!preview) return;
+
+    if (!depCodigo || !rua || !coluna || !nivel) {
+        preview.textContent = '-';
+        return;
+    }
+    preview.textContent = `${depCodigo}-${rua}-${coluna}-${nivel}`;
+}
+
+function atualizarDatalistsAssistente() {
+    const depositoId = Number(document.getElementById('assistDepositoEndereco')?.value || 0);
+    const base = cacheLocalizacoesAdmin.filter((loc) => {
+        if (!depositoId) return true;
+        return Number(loc.deposito_id) === depositoId;
+    });
+
+    const ruas = [...new Set(base.map((loc) => String(loc.rua || '').trim()).filter(Boolean))].sort();
+    const colunas = [...new Set(base.map((loc) => String(loc.predio || '').trim()).filter(Boolean))].sort();
+    const niveis = [...new Set(base.map((loc) => String(loc.nivel || '').trim()).filter(Boolean))].sort();
+
+    const dlRuas = document.getElementById('assistRuas');
+    const dlColunas = document.getElementById('assistColunas');
+    const dlNiveis = document.getElementById('assistNiveis');
+    if (!dlRuas || !dlColunas || !dlNiveis) return;
+
+    dlRuas.innerHTML = ruas.map((v) => `<option value="${v}"></option>`).join('');
+    dlColunas.innerHTML = colunas.map((v) => `<option value="${v}"></option>`).join('');
+    dlNiveis.innerHTML = niveis.map((v) => `<option value="${v}"></option>`).join('');
+}
+
+async function criarEnderecoAssistido() {
+    const deposito_id = Number(document.getElementById('assistDepositoEndereco')?.value || 0);
+    const rua = String(document.getElementById('assistRua')?.value || '').trim();
+    const predio = String(document.getElementById('assistColuna')?.value || '').trim();
+    const nivel = String(document.getElementById('assistNivel')?.value || '').trim();
+
+    if (!deposito_id || !rua || !predio || !nivel) {
+        alert('Preencha depósito, rua, coluna e nível no assistente.');
+        return;
+    }
+
+    try {
+        const novoEndereco = await fetchJson('/api/wms/localizacoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deposito_id, rua, predio, nivel }),
+        });
+        await listarLocalizacoes();
+        imprimirEtiquetaEndereco(novoEndereco);
+        alert('Endereço criado com sucesso pelo assistente.');
+    } catch (err) {
+        alert(`Falha ao criar endereço: ${err.message}`);
+    }
+}
+
+async function gerarSequenciaAssistida() {
+    const deposito_id = Number(document.getElementById('assistDepositoEndereco')?.value || 0);
+    const rua = String(document.getElementById('assistRua')?.value || '').trim();
+    const colunaInicial = Number(document.getElementById('assistColuna')?.value || NaN);
+    const nivelInicial = Number(document.getElementById('assistNivel')?.value || NaN);
+    const qtdColunas = Number(document.getElementById('assistQtdColunas')?.value || NaN);
+    const qtdNiveis = Number(document.getElementById('assistQtdNiveis')?.value || NaN);
+
+    if (!deposito_id || !rua || !Number.isFinite(colunaInicial) || !Number.isFinite(nivelInicial) || !Number.isFinite(qtdColunas) || !Number.isFinite(qtdNiveis)) {
+        alert('Preencha os dados do assistente e quantidades válidas para gerar sequência.');
+        return;
+    }
+
+    const coluna_fim = colunaInicial + Math.max(qtdColunas, 1) - 1;
+    const nivel_fim = nivelInicial + Math.max(qtdNiveis, 1) - 1;
+
+    try {
+        const data = await fetchJson('/api/wms/localizacoes/lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                deposito_id,
+                rua,
+                coluna_inicio: colunaInicial,
+                coluna_fim,
+                nivel_inicio: nivelInicial,
+                nivel_fim,
+            }),
+        });
+        await listarLocalizacoes();
+        alert(data.mensagem || 'Sequência criada com sucesso.');
+    } catch (err) {
+        alert(`Falha ao gerar sequência: ${err.message}`);
+    }
+}
+
+function preencherSelect(selectEl, options, defaultLabel, valueField = 'value', textField = 'label') {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = defaultLabel;
+    selectEl.appendChild(def);
+
+    (options || []).forEach((opt) => {
+        const option = document.createElement('option');
+        if (typeof opt === 'string' || typeof opt === 'number') {
+            option.value = String(opt);
+            option.textContent = String(opt);
+        } else {
+            option.value = String(opt[valueField] ?? '');
+            option.textContent = String(opt[textField] ?? opt[valueField] ?? '');
+        }
+        selectEl.appendChild(option);
+    });
+}
+
 async function fetchJson(url, options = {}) {
     const response = await fetch(url, options);
     const data = await response.json().catch(() => ({}));
@@ -165,19 +413,21 @@ async function listarLocalizacoes() {
     const tbody = document.getElementById('tbodyLocalizacoes');
     try {
         const locais = await fetchJson('/api/wms/localizacoes');
+        cacheLocalizacoesAdmin = Array.isArray(locais) ? locais : [];
         tbody.innerHTML = '';
         if (!locais.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhum endereço cadastrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum endereço cadastrado.</td></tr>';
+            atualizarOpcoesEnderecoEstoqueInicial();
             return;
         }
         locais.forEach((loc) => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><strong style="color:var(--sap-blue)">${loc.codigo}</strong></td>
+                <td>${loc.deposito_codigo || '-'}</td>
                 <td>${loc.rua || '-'}</td>
                 <td>${loc.predio || '-'}</td>
                 <td>${loc.nivel || '-'}</td>
-                <td>${loc.apartamento || '-'}</td>
                 <td style="text-align:center;">
                     <button class="btn danger" style="padding:4px 10px; font-size:10px;" onclick="excluirEndereco(${loc.id}, '${loc.codigo}')">
                         <i class="fas fa-trash-alt"></i>
@@ -186,9 +436,91 @@ async function listarLocalizacoes() {
             `;
             tbody.appendChild(tr);
         });
+        atualizarDatalistsAssistente();
+        atualizarPreviewAssistenteEndereco();
+        atualizarOpcoesEnderecoEstoqueInicial();
     } catch (err) {
+        cacheLocalizacoesAdmin = [];
+        atualizarDatalistsAssistente();
+        atualizarPreviewAssistenteEndereco();
+        atualizarOpcoesEnderecoEstoqueInicial();
         tbody.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`;
     }
+}
+
+async function carregarOpcoesCadastroEndereco() {
+    const depositoId = Number(document.getElementById('depositoEndereco').value || 0);
+    const ruaSelecionada = document.getElementById('ruaExistenteEndereco').value || '';
+    const colunaSelecionada = document.getElementById('colunaExistenteEndereco').value || '';
+
+    const selRuas = document.getElementById('ruaExistenteEndereco');
+    const selColunas = document.getElementById('colunaExistenteEndereco');
+    const selNiveis = document.getElementById('nivelExistenteEndereco');
+
+    preencherSelect(selRuas, [], 'Ruas já cadastradas');
+    preencherSelect(selColunas, [], 'Colunas já cadastradas');
+    preencherSelect(selNiveis, [], 'Níveis já cadastrados');
+    if (!depositoId) return;
+
+    try {
+        const paramsBase = new URLSearchParams({ deposito_id: String(depositoId) });
+        const base = await fetchJson(`/api/wms/localizacoes/opcoes?${paramsBase.toString()}`);
+        preencherSelect(selRuas, base.ruas || [], 'Ruas já cadastradas');
+
+        if (ruaSelecionada) {
+            selRuas.value = ruaSelecionada;
+            document.getElementById('rua').value = ruaSelecionada;
+            const paramsCol = new URLSearchParams({ deposito_id: String(depositoId), rua: ruaSelecionada });
+            const colData = await fetchJson(`/api/wms/localizacoes/opcoes?${paramsCol.toString()}`);
+            preencherSelect(selColunas, colData.colunas || [], 'Colunas já cadastradas');
+        }
+
+        if (ruaSelecionada && colunaSelecionada) {
+            selColunas.value = colunaSelecionada;
+            document.getElementById('predio').value = colunaSelecionada;
+            const paramsNiv = new URLSearchParams({
+                deposito_id: String(depositoId),
+                rua: ruaSelecionada,
+                predio: colunaSelecionada,
+            });
+            const nivData = await fetchJson(`/api/wms/localizacoes/opcoes?${paramsNiv.toString()}`);
+            preencherSelect(selNiveis, nivData.niveis || [], 'Níveis já cadastrados');
+        }
+    } catch (err) {
+        console.error('Falha ao carregar opções de endereço:', err.message);
+    }
+}
+
+function atualizarFiltrosEnderecoEstoqueInicial() {
+    const depositoValue = Number(document.getElementById('depositoEstoqueInicial').value || 0);
+    const selRua = document.getElementById('ruaFiltroEstoque');
+    const selColuna = document.getElementById('colunaFiltroEstoque');
+    const selNivel = document.getElementById('nivelFiltroEstoque');
+
+    preencherSelect(selRua, [], 'Filtrar Rua');
+    preencherSelect(selColuna, [], 'Filtrar Coluna');
+    preencherSelect(selNivel, [], 'Filtrar Nível');
+
+    if (!depositoValue) {
+        atualizarOpcoesEnderecoEstoqueInicial();
+        return;
+    }
+
+    const base = cacheLocalizacoesAdmin.filter((loc) => Number(loc.deposito_id) === depositoValue);
+    const ruas = [...new Set(base.map((loc) => String(loc.rua || '').trim()).filter(Boolean))].sort();
+    preencherSelect(selRua, ruas, 'Filtrar Rua');
+
+    const ruaSelecionada = selRua.value;
+    const colBase = ruaSelecionada ? base.filter((loc) => String(loc.rua || '') === ruaSelecionada) : base;
+    const colunas = [...new Set(colBase.map((loc) => String(loc.predio || '').trim()).filter(Boolean))].sort();
+    preencherSelect(selColuna, colunas, 'Filtrar Coluna');
+
+    const colunaSelecionada = selColuna.value;
+    const nivBase = colunaSelecionada ? colBase.filter((loc) => String(loc.predio || '') === colunaSelecionada) : colBase;
+    const niveis = [...new Set(nivBase.map((loc) => String(loc.nivel || '').trim()).filter(Boolean))].sort();
+    preencherSelect(selNivel, niveis, 'Filtrar Nível');
+
+    atualizarOpcoesEnderecoEstoqueInicial();
 }
 
 async function excluirEndereco(id, codigo) {
@@ -202,27 +534,28 @@ async function excluirEndereco(id, codigo) {
 }
 
 async function criarEndereco() {
+    const deposito_id = Number(document.getElementById('depositoEndereco').value || 0);
     const rua = document.getElementById('rua').value.trim();
     const predio = document.getElementById('predio').value.trim();
     const nivel = document.getElementById('nivel').value.trim();
-    const apartamento = document.getElementById('apartamento').value.trim();
 
-    if (!rua || !predio || !nivel || !apartamento) {
-        alert('Preencha rua, prédio, nível e apartamento.');
+    if (!deposito_id || !rua || !predio || !nivel) {
+        alert('Preencha depósito, rua, coluna e nível.');
         return;
     }
 
     try {
-        await fetchJson('/api/wms/localizacoes', {
+        const novoEndereco = await fetchJson('/api/wms/localizacoes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rua, predio, nivel, apartamento }),
+            body: JSON.stringify({ deposito_id, rua, predio, nivel }),
         });
+        document.getElementById('depositoEndereco').value = '';
         document.getElementById('rua').value = '';
         document.getElementById('predio').value = '';
         document.getElementById('nivel').value = '';
-        document.getElementById('apartamento').value = '';
         await listarLocalizacoes();
+        imprimirEtiquetaEndereco(novoEndereco);
     } catch (err) { alert(err.message); }
 }
 
@@ -269,11 +602,281 @@ async function estornarEnderecamento(itemWmsId) {
     } catch (err) { alert(err.message); }
 }
 
+async function carregarDepositosEstoqueInicial() {
+    const selectEstoque = document.getElementById('depositoEstoqueInicial');
+    const selectEndereco = document.getElementById('depositoEndereco');
+    const selectLote = document.getElementById('depositoLote');
+    const selectAssist = document.getElementById('assistDepositoEndereco');
+    try {
+        cacheDepositos = await fetchJson('/api/wms/depositos');
+    } catch (err) {
+        cacheDepositos = [];
+    }
+
+    preencherSelect(selectEstoque, cacheDepositos.map((d) => ({ value: d.id, label: `${d.codigo} - ${d.nome}` })), 'Depósito');
+    preencherSelect(selectEndereco, cacheDepositos.map((d) => ({ value: d.id, label: `${d.codigo} - ${d.nome}` })), 'Depósito');
+    preencherSelect(selectLote, cacheDepositos.map((d) => ({ value: d.id, label: `${d.codigo} - ${d.nome}` })), 'Depósito do lote');
+    preencherSelect(selectAssist, cacheDepositos.map((d) => ({ value: d.id, label: `${d.codigo} - ${d.nome}` })), 'Depósito do assistente');
+
+    const depAl = cacheDepositos.find((d) => d.codigo === 'AL');
+    if (depAl) {
+        selectEstoque.value = String(depAl.id);
+        selectEndereco.value = String(depAl.id);
+        if (selectLote) selectLote.value = String(depAl.id);
+        if (selectAssist) selectAssist.value = String(depAl.id);
+    }
+
+    atualizarFiltrosEnderecoEstoqueInicial();
+    atualizarOpcoesEnderecoEstoqueInicial();
+    atualizarDatalistsAssistente();
+    atualizarPreviewAssistenteEndereco();
+    await carregarOpcoesCadastroEndereco();
+}
+
+function atualizarOpcoesEnderecoEstoqueInicial() {
+    const depositoValue = Number(document.getElementById('depositoEstoqueInicial').value || 0);
+    const selectEndereco = document.getElementById('localizacaoEstoqueInicial');
+    const selecionadoAtual = selectEndereco.value;
+    const filtroRua = (document.getElementById('ruaFiltroEstoque').value || '').trim();
+    const filtroColuna = (document.getElementById('colunaFiltroEstoque').value || '').trim();
+    const filtroNivel = (document.getElementById('nivelFiltroEstoque').value || '').trim();
+
+    selectEndereco.innerHTML = '<option value="">Selecione o endereço cadastrado</option>';
+    if (!depositoValue) return;
+
+    const opcoes = cacheLocalizacoesAdmin.filter((loc) => {
+        if (Number(loc.deposito_id) !== depositoValue) return false;
+        if (filtroRua && String(loc.rua || '') !== filtroRua) return false;
+        if (filtroColuna && String(loc.predio || '') !== filtroColuna) return false;
+        if (filtroNivel && String(loc.nivel || '') !== filtroNivel) return false;
+        return true;
+    });
+
+    opcoes.forEach((loc) => {
+        const option = document.createElement('option');
+        option.value = String(loc.id);
+        option.textContent = `${loc.codigo} | Rua ${loc.rua || '-'} | Col ${loc.predio || '-'} | Niv ${loc.nivel || '-'}`;
+        selectEndereco.appendChild(option);
+    });
+
+    if (selecionadoAtual && opcoes.some((loc) => String(loc.id) === String(selecionadoAtual))) {
+        selectEndereco.value = selecionadoAtual;
+    }
+}
+
+async function cadastrarEstoqueInicial() {
+    const codigo_item = document.getElementById('codigoEstoqueInicial').value.trim();
+    const descricao = document.getElementById('descricaoEstoqueInicial').value.trim();
+    const qtd = Number(document.getElementById('qtdEstoqueInicial').value || 0);
+    const unidade = document.getElementById('unidadeEstoqueInicial').value.trim() || 'UN';
+    const numero_nota = document.getElementById('numeroNotaEstoqueInicial').value.trim() || 'ESTOQUE_INICIAL';
+    const depositoValue = document.getElementById('depositoEstoqueInicial').value;
+    const localizacaoValue = document.getElementById('localizacaoEstoqueInicial').value;
+
+    if (!codigo_item) {
+        alert('Informe o código do material.');
+        return;
+    }
+
+    if (!Number.isFinite(qtd) || qtd <= 0) {
+        alert('Informe uma quantidade válida maior que zero.');
+        return;
+    }
+
+    if (!depositoValue || !localizacaoValue) {
+        alert('Selecione depósito e endereço cadastrado.');
+        return;
+    }
+
+    try {
+        await fetchJson('/api/wms/estoque-inicial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                codigo_item,
+                descricao,
+                qtd,
+                unidade,
+                numero_nota,
+                deposito_id: Number(depositoValue),
+                localizacao_id: Number(localizacaoValue),
+            }),
+        });
+
+        document.getElementById('codigoEstoqueInicial').value = '';
+        document.getElementById('descricaoEstoqueInicial').value = '';
+        document.getElementById('qtdEstoqueInicial').value = '';
+        document.getElementById('localizacaoEstoqueInicial').value = '';
+        alert('Item legado cadastrado e endereçado com sucesso.');
+    } catch (err) {
+        alert(`Falha no cadastro do estoque legado: ${err.message}`);
+    }
+}
+
+async function criarLoteEnderecos() {
+    const deposito_id = Number(document.getElementById('depositoLote').value || 0);
+    const rua = document.getElementById('ruaLote').value.trim();
+    const coluna_inicio = Number(document.getElementById('colunaInicioLote').value || NaN);
+    const coluna_fim = Number(document.getElementById('colunaFimLote').value || NaN);
+    const nivel_inicio = Number(document.getElementById('nivelInicioLote').value || NaN);
+    const nivel_fim = Number(document.getElementById('nivelFimLote').value || NaN);
+
+    if (!deposito_id || !rua || !Number.isFinite(coluna_inicio) || !Number.isFinite(coluna_fim) || !Number.isFinite(nivel_inicio) || !Number.isFinite(nivel_fim)) {
+        alert('Preencha depósito, rua e intervalos de coluna/nível para gerar lote.');
+        return;
+    }
+
+    try {
+        const data = await fetchJson('/api/wms/localizacoes/lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                deposito_id,
+                rua,
+                coluna_inicio,
+                coluna_fim,
+                nivel_inicio,
+                nivel_fim,
+            }),
+        });
+        alert(data.mensagem || 'Lote criado com sucesso.');
+        await listarLocalizacoes();
+    } catch (err) {
+        alert(`Falha ao criar lote: ${err.message}`);
+    }
+}
+
+async function sugerirEnderecoPorSku() {
+    const deposito_id = Number(document.getElementById('depositoEstoqueInicial').value || 0);
+    const codigo_item = document.getElementById('codigoEstoqueInicial').value.trim();
+    if (!deposito_id || !codigo_item) {
+        alert('Informe depósito e código do material para sugerir endereço.');
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams({ deposito_id: String(deposito_id), codigo_item });
+        const data = await fetchJson(`/api/wms/localizacoes/sugestao?${params.toString()}`);
+        const loc = data.localizacao;
+        if (!loc || !loc.id) {
+            alert('Sem sugestão automática para este material neste depósito.');
+            return;
+        }
+
+        document.getElementById('ruaFiltroEstoque').value = loc.rua || '';
+        atualizarFiltrosEnderecoEstoqueInicial();
+        document.getElementById('colunaFiltroEstoque').value = loc.predio || '';
+        atualizarOpcoesEnderecoEstoqueInicial();
+        document.getElementById('nivelFiltroEstoque').value = loc.nivel || '';
+        atualizarOpcoesEnderecoEstoqueInicial();
+        document.getElementById('localizacaoEstoqueInicial').value = String(loc.id);
+
+        const fonte = data.fonte || 'automatica';
+        alert(`Endereço sugerido (${fonte}): ${loc.codigo}`);
+    } catch (err) {
+        alert(`Falha ao sugerir endereço: ${err.message}`);
+    }
+}
+
+function imprimirEtiquetaEndereco(localizacao) {
+    if (!localizacao || !localizacao.codigo) return;
+    const codigo = String(localizacao.codigo || '').toUpperCase();
+    const deposito = cacheDepositos.find((d) => Number(d.id) === Number(localizacao.deposito_id));
+    const depositoTitulo = deposito ? `${deposito.codigo} - ${deposito.nome}` : 'DEPÓSITO';
+
+    const html = `
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Etiqueta de Endereço ${codigo}</title>
+                <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 12px; background: #f8fafc; }
+                    .label { width: 420px; border: 2px solid #0a6ed1; border-radius: 14px; background: #fff; padding: 12px; }
+                    .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+                    .head img { height: 38px; object-fit: contain; }
+                    .title { font-size: 13px; font-weight: 700; color: #0a6ed1; }
+                    .code { margin-top: 12px; font-size: 42px; font-weight: 900; letter-spacing: 3px; color: #0f172a; text-align: center; }
+                    .meta { margin-top: 8px; font-size: 12px; color: #334155; text-align: center; }
+                    .barcode-wrap { margin-top: 8px; display: flex; justify-content: center; }
+                    .barcode { max-width: 100%; }
+                </style>
+            </head>
+            <body>
+                <div class="label">
+                    <div class="head">
+                        <img src="https://www.columbiamachine.com.br/img/columbia_logo.png" alt="Columbia Machine" />
+                        <div class="title">ETIQUETA DE ENDEREÇO WMS</div>
+                    </div>
+                    <div class="code">${codigo}</div>
+                    <div class="barcode-wrap"><svg id="barcodeEndereco" class="barcode"></svg></div>
+                    <div class="meta">${depositoTitulo} | Rua ${localizacao.rua || '-'} | Coluna ${localizacao.predio || '-'} | Nível ${localizacao.nivel || '-'}</div>
+                </div>
+                <script>
+                    if (window.JsBarcode) {
+                        JsBarcode('#barcodeEndereco', '${codigo}', {
+                            format: 'CODE128',
+                            lineColor: '#0f172a',
+                            width: 2,
+                            height: 58,
+                            displayValue: false,
+                            margin: 0
+                        });
+                    }
+                    window.print();
+                <\/script>
+            </body>
+        </html>
+    `;
+
+    const win = window.open('', '_blank', 'width=560,height=420');
+    if (!win) {
+        alert('Não foi possível abrir a janela de impressão da etiqueta.');
+        return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+}
+
 async function refreshAll() {
+    await carregarDepositosEstoqueInicial();
     await listarLocalizacoes();
     await listarEnderecados();
 }
 
 document.addEventListener('DOMContentLoaded', refreshAll);
+document.getElementById('depositoEstoqueInicial').addEventListener('change', atualizarFiltrosEnderecoEstoqueInicial);
+document.getElementById('ruaFiltroEstoque').addEventListener('change', atualizarFiltrosEnderecoEstoqueInicial);
+document.getElementById('colunaFiltroEstoque').addEventListener('change', atualizarFiltrosEnderecoEstoqueInicial);
+document.getElementById('nivelFiltroEstoque').addEventListener('change', atualizarOpcoesEnderecoEstoqueInicial);
+
+document.getElementById('depositoEndereco').addEventListener('change', carregarOpcoesCadastroEndereco);
+document.getElementById('ruaExistenteEndereco').addEventListener('change', async (ev) => {
+    document.getElementById('rua').value = ev.target.value || '';
+    await carregarOpcoesCadastroEndereco();
+});
+document.getElementById('colunaExistenteEndereco').addEventListener('change', async (ev) => {
+    document.getElementById('predio').value = ev.target.value || '';
+    await carregarOpcoesCadastroEndereco();
+});
+document.getElementById('nivelExistenteEndereco').addEventListener('change', (ev) => {
+    document.getElementById('nivel').value = ev.target.value || '';
+});
+
+document.getElementById('codigoEstoqueInicial').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+        ev.preventDefault();
+        sugerirEnderecoPorSku();
+    }
+});
+
+document.getElementById('assistDepositoEndereco').addEventListener('change', () => {
+    atualizarDatalistsAssistente();
+    atualizarPreviewAssistenteEndereco();
+});
+document.getElementById('assistRua').addEventListener('input', atualizarPreviewAssistenteEndereco);
+document.getElementById('assistColuna').addEventListener('input', atualizarPreviewAssistenteEndereco);
+document.getElementById('assistNivel').addEventListener('input', atualizarPreviewAssistenteEndereco);
 </script>
 {% endblock %}

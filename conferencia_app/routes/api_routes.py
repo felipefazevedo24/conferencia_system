@@ -2081,7 +2081,9 @@ def consultar_pedido_excel():
             cfg = mapa_conversoes.get(str(item.id), {}) if isinstance(mapa_conversoes, dict) else {}
             fator = 1.0
             unidade = str(item.unidade_comercial or "UN").strip().upper() or "UN"
+            manual = False
             if isinstance(cfg, dict):
+                manual = "fator" in cfg or "unidade" in cfg
                 try:
                     fator = float(str(cfg.get("fator") or "1").replace(",", "."))
                 except Exception:
@@ -2091,28 +2093,28 @@ def consultar_pedido_excel():
                     unidade = unidade_cfg[:20]
             if fator <= 0:
                 fator = 1.0
-            return fator, unidade
+            return fator, unidade, manual
 
         itens_nf = []
         for i in itens_db:
-            fator_conv, unidade_conv = _resolver_conversao_item(i)
+            fator_conv, unidade_conv, conversao_manual = _resolver_conversao_item(i)
             qtd_original = float(i.qtd_real or 0)
-            qtd_convertida = qtd_original * fator_conv
             valor_total_linha = float(i.valor_produto or 0)
-            valor_unit = round(valor_total_linha / qtd_convertida, 10) if qtd_convertida > 0 else 0.0
+            valor_unit = round(valor_total_linha / qtd_original, 10) if qtd_original > 0 else 0.0
             itens_nf.append(
                 {
                     "item_id": i.id,
                     "codigo": i.codigo or "---",
                     "descricao": i.descricao or "---",
-                    "qtd": qtd_convertida,
+                    "qtd": qtd_original,
                     "qtd_original": qtd_original,
                     "unidade_comercial": i.unidade_comercial or "UN",
                     "conversao_fator": fator_conv,
                     "conversao_unidade": unidade_conv,
+                    "conversao_manual": conversao_manual,
                     "linha_po_vinculada": i.linha_po_vinculada,
-                    # valor_produto = vProd (total do item). Quando houver conversão,
-                    # recalculamos o valor unitário mantendo o mesmo total da linha.
+                    # valor_produto = vProd (total do item).
+                    # A conversao automatica e aplicada na fase de comparacao.
                     "valor_unit": valor_unit,
                     "valor_total_linha": valor_total_linha,
                 }
@@ -4959,6 +4961,165 @@ def _build_sla_dashboard_data():
             "notas_em_risco": len(em_risco),
         },
     }
+
+
+def _status_etapa_processo(status: str) -> str:
+    status = str(status or "").strip()
+    if status == "AguardandoLiberacao":
+        return "Pre-Nota"
+    if status == "Pendente":
+        return "Conferencia"
+    if status == "Concluído":
+        return "DocumentoEntrada"
+    if status == "Lançado":
+        return "Finalizado"
+    return "Outros"
+
+
+@api_bp.route("/api/processo/recebimento_painel")
+@roles_required("Admin", "Fiscal")
+def processo_recebimento_painel():
+    dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
+    limite_fila = _parse_positive_int(request.args.get("limite_fila"), default=30, min_value=5, max_value=100)
+    agora = datetime.now()
+    corte = agora - timedelta(days=dias)
+
+    rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor),
+            func.max(ItemNota.status),
+            func.max(ItemNota.data_importacao),
+            func.max(ItemNota.fim_conferencia),
+            func.max(ItemNota.data_lancamento),
+            func.max(ItemNota.auditor_status),
+            func.max(ItemNota.auditor_decisao),
+            func.max(ItemNota.pedido_compra),
+            func.max(ItemNota.remessa),
+            func.max(ItemNota.material_cliente),
+            func.max(ItemNota.sem_conferencia_logistica),
+        )
+        .filter(
+            or_(
+                ItemNota.data_importacao >= corte,
+                ItemNota.fim_conferencia >= corte,
+                ItemNota.data_lancamento >= corte,
+            )
+        )
+        .group_by(ItemNota.numero_nota)
+        .all()
+    )
+
+    divergencias_por_nota = {
+        str(r[0]): int(r[1] or 0)
+        for r in db.session.query(LogDivergencia.numero_nota, func.count(LogDivergencia.id))
+        .filter(LogDivergencia.data_erro >= corte)
+        .group_by(LogDivergencia.numero_nota)
+        .all()
+    }
+
+    etapas = {
+        "pre_nota": 0,
+        "auditoria_pendente": 0,
+        "conferencia": 0,
+        "documento_entrada": 0,
+        "finalizado": 0,
+        "outros": 0,
+    }
+    fila_excecao = []
+    lancadas_periodo = 0
+    lancadas_sem_divergencia = 0
+
+    for r in rows:
+        numero = str(r[0] or "").strip()
+        fornecedor = str(r[1] or "---").strip() or "---"
+        status = str(r[2] or "").strip()
+        importado_em = r[3]
+        fim_conferencia = r[4]
+        lancado_em = r[5]
+        auditor_status = str(r[6] or "").strip()
+        auditor_decisao = str(r[7] or "").strip()
+        pedido_compra = str(r[8] or "").strip()
+        remessa = bool(r[9])
+        material_cliente = bool(r[10])
+        sem_conferencia = bool(r[11])
+        qtd_div = int(divergencias_por_nota.get(numero, 0))
+
+        etapa = _status_etapa_processo(status)
+        if etapa == "Pre-Nota":
+            etapas["pre_nota"] += 1
+        elif etapa == "Conferencia":
+            etapas["conferencia"] += 1
+        elif etapa == "DocumentoEntrada":
+            etapas["documento_entrada"] += 1
+        elif etapa == "Finalizado":
+            etapas["finalizado"] += 1
+        else:
+            etapas["outros"] += 1
+
+        auditoria_pendente = (
+            status == "AguardandoLiberacao"
+            and auditor_decisao not in ("Aprovado", "AprovadoAutomatico")
+        )
+        if auditoria_pendente:
+            etapas["auditoria_pendente"] += 1
+
+        if status == "Lançado" and lancado_em and lancado_em >= corte:
+            lancadas_periodo += 1
+            if qtd_div == 0:
+                lancadas_sem_divergencia += 1
+
+        motivos = []
+        if auditoria_pendente:
+            motivos.append("Auditoria pendente")
+        if qtd_div > 0:
+            motivos.append(f"{qtd_div} divergencia(s)")
+        if not pedido_compra and not remessa and not material_cliente:
+            motivos.append("Sem pedido de compra")
+        if sem_conferencia:
+            motivos.append("Marcada sem conferencia logistica")
+
+        if not motivos:
+            continue
+
+        horas = 0
+        if status == "Concluído" and fim_conferencia:
+            horas = int((agora - fim_conferencia).total_seconds() / 3600)
+        elif importado_em:
+            horas = int((agora - importado_em).total_seconds() / 3600)
+
+        score = (qtd_div * 10) + (8 if auditoria_pendente else 0) + (6 if (not pedido_compra and not remessa and not material_cliente) else 0) + min(horas, 72)
+        fila_excecao.append(
+            {
+                "nota": numero,
+                "fornecedor": fornecedor,
+                "status": status or "---",
+                "etapa": etapa,
+                "auditor_status": auditor_status or "---",
+                "auditor_decisao": auditor_decisao or "---",
+                "horas_em_fila": horas,
+                "divergencias": qtd_div,
+                "motivos": motivos,
+                "score": score,
+            }
+        )
+
+    fila_excecao.sort(key=lambda x: x["score"], reverse=True)
+    taxa_sem_intervencao = round((lancadas_sem_divergencia / lancadas_periodo) * 100, 2) if lancadas_periodo else 0.0
+
+    return jsonify(
+        {
+            "janela_dias": dias,
+            "etapas": etapas,
+            "kpis": {
+                "notas_lancadas_periodo": lancadas_periodo,
+                "notas_lancadas_sem_divergencia": lancadas_sem_divergencia,
+                "taxa_sem_intervencao_percentual": taxa_sem_intervencao,
+                "fila_excecao_total": len(fila_excecao),
+            },
+            "fila_excecao": fila_excecao[:limite_fila],
+        }
+    )
 
 
 @api_bp.route("/api/expedicao/dashboard")

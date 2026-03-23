@@ -48,6 +48,29 @@ class WMSService:
         return status_novo in (permitidos or set())
 
     @staticmethod
+    def _normalizar_bloco_endereco(valor, tamanho=2):
+        txt = ''.join(ch for ch in str(valor or '').upper().strip() if ch.isalnum())
+        if not txt:
+            return ''
+        if txt.isdigit():
+            return txt.zfill(tamanho)[-tamanho:]
+        return txt[:tamanho].ljust(tamanho, 'X')
+
+    @staticmethod
+    def _obter_deposito_padrao_al():
+        return DepositoWMS.query.filter_by(codigo='AL', ativo=True).first()
+
+    @staticmethod
+    def formatar_codigo_localizacao(deposito_codigo, rua, coluna, nivel):
+        dep = WMSService._normalizar_bloco_endereco(deposito_codigo, 2)
+        rua_fmt = WMSService._normalizar_bloco_endereco(rua, 2)
+        coluna_fmt = WMSService._normalizar_bloco_endereco(coluna, 2)
+        nivel_fmt = WMSService._normalizar_bloco_endereco(nivel, 2)
+        if not all([dep, rua_fmt, coluna_fmt, nivel_fmt]):
+            return ''
+        return f"{dep}-{rua_fmt}-{coluna_fmt}-{nivel_fmt}"
+
+    @staticmethod
     def garantir_parametros_operacionais():
         alterado = False
         for chave, (valor, descricao) in WMSService.PARAMETROS_PADRAO.items():
@@ -103,7 +126,7 @@ class WMSService:
         return atualizados
 
     @staticmethod
-    def criar_localizacao(rua, predio, nivel, apartamento):
+    def criar_localizacao(rua, predio, nivel, apartamento, deposito_id=None):
         """
         Cria uma nova localização no armazém.
         
@@ -119,16 +142,37 @@ class WMSService:
         rua = str(rua).strip()
         predio = str(predio).strip()
         nivel = str(nivel).strip()
-        apartamento = str(apartamento).strip()
-        codigo = f"{rua}-{predio}-{nivel}-{apartamento}"
+        apartamento = str(apartamento or '').strip()
+        deposito = DepositoWMS.query.get(deposito_id) if deposito_id else WMSService._obter_deposito_padrao_al()
+        if not deposito or not deposito.ativo:
+            return None
+
+        codigo = WMSService.formatar_codigo_localizacao(deposito.codigo, rua, predio, nivel)
+        if not codigo:
+            return None
         
         # Verifica se já existe
         localizacao = LocalizacaoArmazem.query.filter_by(codigo=codigo).first()
         if localizacao:
-            return None
+            if localizacao.ativo:
+                return None
+
+            # Soft-delete: se já existia inativo, reativa o mesmo endereço.
+            localizacao.ativo = True
+            localizacao.deposito_id = deposito.id
+            localizacao.rua = rua
+            localizacao.predio = predio
+            localizacao.nivel = nivel
+            localizacao.apartamento = apartamento
+            localizacao.corredor = rua[:10]
+            localizacao.prateleira = predio[:10]
+            localizacao.posicao = f"{nivel}-{apartamento}"[:10]
+            db.session.commit()
+            return localizacao
             
         localizacao = LocalizacaoArmazem(
             codigo=codigo,
+            deposito_id=deposito.id,
             rua=rua,
             predio=predio,
             nivel=nivel,
@@ -184,6 +228,10 @@ class WMSService:
         if qtd_recebida <= 0:
             return None
 
+        deposito_padrao = WMSService._obter_deposito_padrao_al()
+        deposito_padrao_id = deposito_padrao.id if deposito_padrao else None
+
+        localizacao_destino = None
         if localizacao_id:
             localizacao_destino = LocalizacaoArmazem.query.get(localizacao_id)
             if not localizacao_destino or not localizacao_destino.ativo:
@@ -211,6 +259,7 @@ class WMSService:
             usuario_armazenamento=usuario,
             data_armazenamento=datetime.now() if localizacao_id else None,
             status=status_inicial,
+            deposito_id=(localizacao_destino.deposito_id if localizacao_id else deposito_padrao_id),
             ativo=True
         )
         db.session.add(item_wms)
@@ -406,7 +455,7 @@ class WMSService:
         return resultado
 
     @staticmethod
-    def transferir_entre_depositos(item_wms_id, deposito_destino_id, usuario, motivo=None):
+    def transferir_entre_depositos(item_wms_id, deposito_destino_id, usuario, motivo=None, localizacao_destino_id=None):
         """
         Transfere um item de um depósito para outro.
         Limpa a localização e marca como Pendente Enderecamento no novo depósito.
@@ -432,40 +481,95 @@ class WMSService:
         if not deposito_dest.ativo:
             return {'sucesso': False, 'erro': 'Depósito destino inativo'}
         
-        # Se já está no mesmo depósito, apenas retorna sucesso
-        if item.deposito_id == deposito_destino_id:
+        localizacao_destino = None
+        if localizacao_destino_id:
+            localizacao_destino = LocalizacaoArmazem.query.get(localizacao_destino_id)
+            if not localizacao_destino or not localizacao_destino.ativo:
+                return {'sucesso': False, 'erro': 'Endereço destino não encontrado'}
+            if int(localizacao_destino.deposito_id or 0) != int(deposito_destino_id):
+                return {'sucesso': False, 'erro': 'Endereço destino não pertence ao depósito selecionado'}
+
+        # Se já está no mesmo depósito e sem mudança de endereço, apenas retorna sucesso
+        if item.deposito_id == deposito_destino_id and not localizacao_destino_id:
             return {'sucesso': True, 'mensagem': 'Item já está neste depósito'}
         
         # Registrar movimentação no histórico
         deposito_origem_id = item.deposito_id
         localizacao_origem_id = item.localizacao_id
         
+        qtd_item = float(item.qtd_atual or 0)
+
+        if item.localizacao_id:
+            estoque_origem = EstoqueWMS.query.filter_by(
+                codigo_item=item.codigo_item,
+                localizacao_id=item.localizacao_id,
+            ).first()
+            if estoque_origem:
+                estoque_origem.qtd_total = max(float(estoque_origem.qtd_total or 0) - qtd_item, 0)
+                estoque_origem.data_atualizacao = datetime.now()
+
+            loc_origem = LocalizacaoArmazem.query.get(item.localizacao_id)
+            if loc_origem:
+                loc_origem.capacidade_atual = max(float(loc_origem.capacidade_atual or 0) - qtd_item, 0)
+
         movimentacao = MovimentacaoWMS(
             item_wms_id=item_wms_id,
             numero_nota=item.numero_nota,
             tipo_movimentacao='Transferencia Deposito',
             localizacao_origem_id=localizacao_origem_id,
-            localizacao_destino_id=None,  # Será endereçado depois no novo depósito
-            qtd_movimentada=item.qtd_atual,
-            motivo=motivo if motivo else f'Transferência DEP {deposito_origem_id} -> {deposito_destino_id}',
+            localizacao_destino_id=localizacao_destino_id,
+            qtd_movimentada=qtd_item,
+            motivo=motivo if motivo else f'Transferencia {deposito_origem_id} -> {deposito_destino_id}',
             usuario=usuario,
             data_movimentacao=datetime.now()
         )
         
-        # Atualizar item: novo depósito, limpar localização, marcar como pendente
+        # Atualizar item: novo depósito e opcionalmente já com endereço destino.
         item.deposito_id = deposito_destino_id
-        item.localizacao_id = None  # Será endereçado no novo depósito
-        item.status = 'Pendente Enderecamento'
+        item.localizacao_id = localizacao_destino_id if localizacao_destino else None
+        if localizacao_destino:
+            capacidade_disp = float(localizacao_destino.capacidade_maxima or 0) - float(localizacao_destino.capacidade_atual or 0)
+            if qtd_item > capacidade_disp:
+                return {'sucesso': False, 'erro': 'Endereço destino sem capacidade disponível'}
+
+            estoque_destino = EstoqueWMS.query.filter_by(
+                codigo_item=item.codigo_item,
+                localizacao_id=localizacao_destino.id,
+            ).first()
+            if estoque_destino:
+                estoque_destino.qtd_total = float(estoque_destino.qtd_total or 0) + qtd_item
+                estoque_destino.data_atualizacao = datetime.now()
+            else:
+                db.session.add(
+                    EstoqueWMS(
+                        codigo_item=item.codigo_item,
+                        localizacao_id=localizacao_destino.id,
+                        qtd_total=qtd_item,
+                        qtd_separada=0.0,
+                        data_atualizacao=datetime.now(),
+                    )
+                )
+            localizacao_destino.capacidade_atual = float(localizacao_destino.capacidade_atual or 0) + qtd_item
+            item.status = 'Armazenado'
+            item.data_armazenamento = datetime.now()
+        else:
+            item.status = 'Pendente Enderecamento'
+            item.data_armazenamento = None
         
         db.session.add(movimentacao)
         db.session.commit()
+
+        mensagem = 'Transferência realizada. Item pendente de endereçamento no novo depósito.'
+        if localizacao_destino:
+            mensagem = 'Transferência realizada com sucesso para o novo depósito e endereço.'
         
         return {
             'sucesso': True,
-            'mensagem': 'Transferência realizada. Item pendente de endereçamento no novo depósito.',
+            'mensagem': mensagem,
             'item_id': item_wms_id,
             'deposito_origem': deposito_origem_id,
             'deposito_destino': deposito_destino_id,
+            'localizacao_destino_id': localizacao_destino_id,
         }
 
     @staticmethod
@@ -586,12 +690,148 @@ class WMSService:
         return candidatas[0][2]
 
     @staticmethod
-    def listar_pendentes_enderecamento(numero_nota=None):
+    def cadastrar_estoque_inicial_pendente(
+        codigo_item,
+        descricao,
+        qtd,
+        usuario,
+        unidade='UN',
+        deposito_id=None,
+        localizacao_id=None,
+        numero_nota='ESTOQUE_INICIAL',
+    ):
+        codigo_item = str(codigo_item or '').strip()
+        descricao = str(descricao or '').strip()
+        unidade = str(unidade or 'UN').strip().upper() or 'UN'
+        numero_nota = str(numero_nota or 'ESTOQUE_INICIAL').strip() or 'ESTOQUE_INICIAL'
+
+        try:
+            qtd = float(qtd or 0)
+        except Exception:
+            return {'sucesso': False, 'erro': 'Quantidade invalida.'}
+
+        if not codigo_item:
+            return {'sucesso': False, 'erro': 'Codigo do material e obrigatorio.'}
+        if qtd <= 0:
+            return {'sucesso': False, 'erro': 'Quantidade deve ser maior que zero.'}
+
+        deposito = DepositoWMS.query.get(deposito_id) if deposito_id else WMSService._obter_deposito_padrao_al()
+        if not deposito or not deposito.ativo:
+            return {'sucesso': False, 'erro': 'Deposito informado nao existe ou esta inativo.'}
+
+        localizacao = None
+        if localizacao_id:
+            localizacao = LocalizacaoArmazem.query.get(localizacao_id)
+            if not localizacao or not localizacao.ativo:
+                return {'sucesso': False, 'erro': 'Endereco informado nao existe.'}
+            if int(localizacao.deposito_id or 0) != int(deposito.id):
+                return {'sucesso': False, 'erro': 'Endereco informado nao pertence ao deposito selecionado.'}
+            capacidade_disp = float(localizacao.capacidade_maxima or 0) - float(localizacao.capacidade_atual or 0)
+            if qtd > capacidade_disp:
+                return {'sucesso': False, 'erro': 'Endereco sem capacidade suficiente para este cadastro.'}
+
+        item_existente = ItemWMS.query.filter_by(
+            numero_nota=numero_nota,
+            codigo_item=codigo_item,
+            localizacao_id=(localizacao.id if localizacao else None),
+            origem_estoque_inicial=True,
+            ativo=True,
+        ).first()
+
+        if item_existente:
+            item_existente.qtd_recebida = float(item_existente.qtd_recebida or 0) + qtd
+            item_existente.qtd_atual = float(item_existente.qtd_atual or 0) + qtd
+            if descricao and not item_existente.descricao:
+                item_existente.descricao = descricao
+            item_existente.deposito_id = deposito.id
+            item_existente.unidade = unidade
+            if localizacao:
+                item_existente.localizacao_id = localizacao.id
+                item_existente.status = 'Armazenado'
+                item_existente.data_armazenamento = datetime.now()
+                item_existente.usuario_armazenamento = usuario
+            item_id = item_existente.id
+        else:
+            novo = ItemWMS(
+                numero_nota=numero_nota,
+                chave_acesso=None,
+                fornecedor='Estoque Inicial',
+                codigo_item=codigo_item,
+                descricao=descricao or codigo_item,
+                qtd_recebida=qtd,
+                qtd_atual=qtd,
+                unidade=unidade,
+                lote=None,
+                data_validade=None,
+                localizacao_id=(localizacao.id if localizacao else None),
+                usuario_armazenamento=(usuario if localizacao else None),
+                data_armazenamento=(datetime.now() if localizacao else None),
+                status=('Armazenado' if localizacao else 'Pendente Enderecamento'),
+                deposito_id=deposito.id,
+                origem_estoque_inicial=True,
+                ativo=True,
+            )
+            db.session.add(novo)
+            db.session.flush()
+            item_id = novo.id
+
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item_id,
+                numero_nota=numero_nota,
+                tipo_movimentacao='CadastroEstoqueInicial',
+                localizacao_origem_id=None,
+                localizacao_destino_id=(localizacao.id if localizacao else None),
+                qtd_movimentada=qtd,
+                motivo='Cadastro manual de estoque legado',
+                usuario=usuario,
+                data_movimentacao=datetime.now(),
+            )
+        )
+
+        if localizacao:
+            estoque = EstoqueWMS.query.filter_by(
+                codigo_item=codigo_item,
+                localizacao_id=localizacao.id,
+            ).first()
+            if estoque:
+                estoque.qtd_total = float(estoque.qtd_total or 0) + qtd
+                estoque.data_atualizacao = datetime.now()
+            else:
+                db.session.add(
+                    EstoqueWMS(
+                        codigo_item=codigo_item,
+                        localizacao_id=localizacao.id,
+                        qtd_total=qtd,
+                        qtd_separada=0.0,
+                        data_atualizacao=datetime.now(),
+                    )
+                )
+            localizacao.capacidade_atual = float(localizacao.capacidade_atual or 0) + qtd
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return {'sucesso': False, 'erro': 'Falha ao salvar cadastro de estoque inicial.'}
+
+        return {
+            'sucesso': True,
+            'item_id': item_id,
+            'codigo_item': codigo_item,
+            'numero_nota': numero_nota,
+            'mensagem': 'Item de estoque inicial cadastrado para enderecamento.',
+        }
+
+    @staticmethod
+    def listar_pendentes_enderecamento(numero_nota=None, codigo_item=None):
         WMSService._sanear_pendencias_enderecamento()
 
         query = ItemWMS.query.filter_by(localizacao_id=None, ativo=True)
         if numero_nota:
             query = query.filter(ItemWMS.numero_nota == str(numero_nota))
+        if codigo_item:
+            query = query.filter(func.lower(func.trim(ItemWMS.codigo_item)) == str(codigo_item).strip().lower())
         return query.order_by(ItemWMS.data_criacao.desc()).all()
 
     @staticmethod
@@ -619,6 +859,9 @@ class WMSService:
 
         agregador = {}
         for item in pendentes:
+            if bool(getattr(item, 'origem_estoque_inicial', False)):
+                continue
+
             # Se nota não está lançada, não deve aparecer em pendências de endereçamento.
             if item.numero_nota not in notas_lancadas:
                 item.ativo = False
@@ -647,6 +890,11 @@ class WMSService:
         if not item_wms or not localizacao or not item_wms.ativo or not localizacao.ativo:
             return None
 
+        if item_wms.deposito_id and localizacao.deposito_id and int(item_wms.deposito_id) != int(localizacao.deposito_id):
+            return None
+        if not item_wms.deposito_id and localizacao.deposito_id:
+            item_wms.deposito_id = localizacao.deposito_id
+
         if item_wms.localizacao_id is not None:
             return None
 
@@ -658,7 +906,8 @@ class WMSService:
         if qtd > capacidade_disponivel:
             return None
 
-        if not codigo_grv:
+        codigo_grv_final = str(codigo_grv or item_wms.codigo_grv or item_wms.codigo_item or '').strip()
+        if not codigo_grv_final:
             return None
 
         if not ordem_servico and not ordem_compra:
@@ -670,7 +919,7 @@ class WMSService:
         item_wms.localizacao_id = localizacao_id
         item_wms.usuario_armazenamento = usuario
         item_wms.data_armazenamento = datetime.now()
-        item_wms.codigo_grv = str(codigo_grv).strip()
+        item_wms.codigo_grv = codigo_grv_final
         item_wms.ordem_servico = str(ordem_servico).strip() if ordem_servico else None
         item_wms.ordem_compra = str(ordem_compra).strip() if ordem_compra else None
         item_wms.status = 'Armazenado'

@@ -322,6 +322,39 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     if not linhas_po:
         return {"encontrado": False, "pares": [], "total_ok": False}
 
+    def _normalizar_fator(valor) -> float:
+        try:
+            f = float(valor or 1.0)
+        except Exception:
+            f = 1.0
+        return f if f > 0 else 1.0
+
+    def _fatores_candidatos(nf_item: dict, po_item: dict) -> list[float]:
+        fator_manual = _normalizar_fator(nf_item.get("conversao_fator"))
+        if bool(nf_item.get("conversao_manual")):
+            return [fator_manual]
+
+        candidatos = {
+            1.0,
+            10.0,
+            12.0,
+            100.0,
+            1000.0,
+            0.1,
+            1.0 / 12.0,
+            0.01,
+            0.001,
+        }
+
+        nf_qtd_base = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
+        po_qtd = float(po_item.get("qtd") or 0) if po_item else 0
+        if nf_qtd_base > 0 and po_qtd > 0:
+            ratio = po_qtd / nf_qtd_base
+            if 0.0001 <= ratio <= 10000:
+                candidatos.add(round(ratio, 6))
+
+        return sorted(candidatos)
+
     def _metricas_match(nf_item: dict, po_item: dict) -> dict:
         po_qtd = po_item["qtd"] if po_item else None
         po_valor_unit = po_item["valor_unit"] if po_item else None
@@ -329,51 +362,102 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
         po_codigo = po_item.get("codigo_material") if po_item else ""
         po_descricao = po_item.get("descricao_material") if po_item else ""
 
-        nf_qtd = float(nf_item.get("qtd") or 0)
-        nf_valor_unit = float(nf_item.get("valor_unit") or 0)
+        nf_qtd_base = float(nf_item.get("qtd_original") or nf_item.get("qtd") or 0)
         nf_valor_total = float(nf_item.get("valor_total_linha") or 0)
         nf_codigo = _normalizar_codigo_material(nf_item.get("codigo"))
-
-        qtd_ok = po_qtd is not None and abs(nf_qtd - po_qtd) < 0.0001
-        unit_ok = po_valor_unit is not None and abs(nf_valor_unit - po_valor_unit) <= 0.01
-
-        total_fallback_ok = False
-        if not unit_ok and po_qtd is not None and po_valor_unit is not None:
-            total_po = po_qtd * po_valor_unit
-            total_fallback_ok = abs(total_po - nf_valor_total) <= 0.02
-
         po_codigo_norm = _normalizar_codigo_material(po_codigo)
         codigo_ok = bool(nf_codigo and po_codigo_norm and nf_codigo == po_codigo_norm)
 
-        valor_ok = unit_ok or total_fallback_ok
-        ok = qtd_ok and valor_ok
+        melhor = None
+        fatores = _fatores_candidatos(nf_item, po_item)
+        for fator in fatores:
+            nf_qtd = nf_qtd_base * fator
+            nf_valor_unit = (nf_valor_total / nf_qtd) if nf_qtd > 0 else 0.0
 
-        score = 0
-        if codigo_ok:
-            score += 200
-        if qtd_ok:
-            score += 120
-        if unit_ok:
-            score += 100
-        elif total_fallback_ok:
-            score += 60
+            qtd_diff = abs((po_qtd or 0) - nf_qtd) if po_qtd is not None else float("inf")
+            qtd_ok = po_qtd is not None and qtd_diff < 0.0001
+            unit_diff = abs((po_valor_unit or 0) - nf_valor_unit) if po_valor_unit is not None else float("inf")
+            unit_ok = po_valor_unit is not None and unit_diff <= 0.01
 
-        return {
-            "po_qtd": po_qtd,
-            "po_valor_unit": po_valor_unit,
-            "po_pedido": po_pedido,
-            "po_codigo_material": po_codigo,
-            "po_descricao_material": po_descricao,
-            "nf_qtd": nf_qtd,
-            "nf_valor_unit": nf_valor_unit,
-            "nf_valor_total": nf_valor_total,
-            "qtd_ok": qtd_ok,
-            "valor_ok": valor_ok,
-            "valor_via_total": total_fallback_ok and not unit_ok,
-            "codigo_ok": codigo_ok,
-            "ok": ok,
-            "score": score,
-        }
+            total_fallback_ok = False
+            total_diff = float("inf")
+            if po_qtd is not None and po_valor_unit is not None:
+                total_po = po_qtd * po_valor_unit
+                total_diff = abs(total_po - nf_valor_total)
+                if not unit_ok:
+                    total_fallback_ok = total_diff <= 0.02
+
+            valor_ok = unit_ok or total_fallback_ok
+            ok = qtd_ok and valor_ok
+
+            score = 0
+            if codigo_ok:
+                score += 200
+            if qtd_ok:
+                score += 140
+            if unit_ok:
+                score += 120
+            elif total_fallback_ok:
+                score += 80
+
+            if not qtd_ok and qtd_diff != float("inf"):
+                score -= min(40, qtd_diff)
+            if not unit_ok and unit_diff != float("inf"):
+                score -= min(20, unit_diff * 10)
+
+            candidato = {
+                "po_qtd": po_qtd,
+                "po_valor_unit": po_valor_unit,
+                "po_pedido": po_pedido,
+                "po_codigo_material": po_codigo,
+                "po_descricao_material": po_descricao,
+                "nf_qtd": nf_qtd,
+                "nf_valor_unit": nf_valor_unit,
+                "nf_valor_total": nf_valor_total,
+                "qtd_ok": qtd_ok,
+                "valor_ok": valor_ok,
+                "valor_via_total": total_fallback_ok and not unit_ok,
+                "codigo_ok": codigo_ok,
+                "ok": ok,
+                "score": score,
+                "fator_aplicado": fator,
+                "qtd_diff": qtd_diff,
+                "unit_diff": unit_diff,
+                "total_diff": total_diff,
+            }
+
+            if melhor is None:
+                melhor = candidato
+                continue
+
+            atual_rank = (candidato["score"], candidato["ok"], candidato["qtd_ok"], candidato["valor_ok"], -candidato["qtd_diff"], -candidato["unit_diff"], -candidato["total_diff"])
+            melhor_rank = (melhor["score"], melhor["ok"], melhor["qtd_ok"], melhor["valor_ok"], -melhor["qtd_diff"], -melhor["unit_diff"], -melhor["total_diff"])
+            if atual_rank > melhor_rank:
+                melhor = candidato
+
+        if melhor is None:
+            melhor = {
+                "po_qtd": po_qtd,
+                "po_valor_unit": po_valor_unit,
+                "po_pedido": po_pedido,
+                "po_codigo_material": po_codigo,
+                "po_descricao_material": po_descricao,
+                "nf_qtd": nf_qtd_base,
+                "nf_valor_unit": float(nf_item.get("valor_unit") or 0),
+                "nf_valor_total": nf_valor_total,
+                "qtd_ok": False,
+                "valor_ok": False,
+                "valor_via_total": False,
+                "codigo_ok": codigo_ok,
+                "ok": False,
+                "score": 0,
+                "fator_aplicado": _normalizar_fator(nf_item.get("conversao_fator")),
+                "qtd_diff": float("inf"),
+                "unit_diff": float("inf"),
+                "total_diff": float("inf"),
+            }
+
+        return melhor
 
     total_nf = len(itens_nf)
     atribuicoes = [None] * total_nf
@@ -457,7 +541,7 @@ def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
                 "nf_qtd": met["nf_qtd"],
                 "nf_qtd_original": float(nf.get("qtd_original") or met["nf_qtd"] or 0),
                 "nf_unidade": nf.get("unidade_comercial") or "UN",
-                "conversao_fator": float(nf.get("conversao_fator") or 1.0),
+                "conversao_fator": float(met.get("fator_aplicado") or nf.get("conversao_fator") or 1.0),
                 "conversao_unidade": nf.get("conversao_unidade") or (nf.get("unidade_comercial") or "UN"),
                 "po_qtd": met["po_qtd"],
                 "nf_valor_unit": met["nf_valor_unit"],

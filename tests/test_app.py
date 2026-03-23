@@ -655,6 +655,43 @@ def test_api_sla_dashboard_retorna_estrutura(tmp_path):
     assert "resumo" in data
 
 
+def test_api_processo_recebimento_painel_retorna_estrutura(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="PROC100",
+                fornecedor="Fornecedor Processo",
+                codigo="PROC-1",
+                descricao="Item processo",
+                qtd_real=2.0,
+                status="AguardandoLiberacao",
+                data_importacao=datetime.now(),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/processo/recebimento_painel?dias=30&limite_fila=10")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "janela_dias" in data
+    assert "etapas" in data
+    assert "kpis" in data
+    assert "fila_excecao" in data
+
+
+def test_api_processo_recebimento_painel_bloqueia_portaria(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_portaria(client, app)
+
+    response = client.get("/api/processo/recebimento_painel")
+    assert response.status_code == 403
+
+
 def test_api_pendentes_priorizadas_retorna_escala_0_a_5(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

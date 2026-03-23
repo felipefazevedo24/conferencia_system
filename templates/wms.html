@@ -98,11 +98,54 @@
     .modal-body { padding: 25px; }
     .modal-close { border: none; background: transparent; color: #fff; cursor: pointer; font-size: 24px; }
 
+    .assist-backdrop {
+        position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+        display: none; z-index: 5200;
+    }
+    .assist-backdrop.show { display: block; }
+    .assist-drawer {
+        position: fixed; top: 0; right: -520px; height: 100vh; width: min(520px, 96vw);
+        background: #ffffff; box-shadow: -12px 0 40px rgba(2, 6, 23, 0.24);
+        transition: right 0.25s ease; z-index: 5201; display: flex; flex-direction: column;
+        border-left: 1px solid #dbe2e8;
+    }
+    .assist-drawer.show { right: 0; }
+    .assist-head {
+        background: linear-gradient(120deg, #0a6ed1, #0b4f9b); color: #fff;
+        padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .assist-title { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3px; }
+    .assist-close { border: none; background: transparent; color: #fff; font-size: 24px; cursor: pointer; }
+    .assist-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .assist-step {
+        border: 1px solid #dbe2e8; border-radius: 12px; background: #f8fafc; padding: 12px;
+    }
+    .assist-step h4 {
+        margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #334155; letter-spacing: 0.4px;
+    }
+    .assist-pendente-list { max-height: 240px; overflow-y: auto; display: grid; gap: 8px; }
+    .assist-item {
+        border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; padding: 10px;
+        cursor: pointer; transition: all 0.15s ease;
+    }
+    .assist-item:hover { border-color: #0a6ed1; transform: translateY(-1px); }
+    .assist-item.active { border-color: #0a6ed1; box-shadow: 0 0 0 2px rgba(10,110,209,0.15); }
+    .assist-item-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; }
+    .assist-item-sub { color: #64748b; font-size: 11px; margin-top: 4px; }
+    .assist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .assist-muted { color: #64748b; font-size: 11px; margin: 0; }
+
+    @media (max-width: 720px) {
+        .assist-grid { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 1100px) { .sap-grid { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
 {% block content %}
+{% set is_admin_wms = session.get('role') == 'Admin' %}
+<div id="wmsPageRoot" data-is-admin="{{ '1' if is_admin_wms else '0' }}">
 <div class="page-header-erp">
     <div>
         <h1><i class="fas fa-boxes"></i> WMS | Cockpit Operacional</h1>
@@ -113,11 +156,63 @@
 
 <div class="sap-toolbar">
     <button class="sap-btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Sincronizar Tudo</button>
+    <button class="sap-btn primary" onclick="abrirAssistenteEndereco()"><i class="fas fa-magic"></i> Assistente de Endereçamento</button>
     <button class="sap-btn" onclick="document.getElementById('filtroNotaPendente').focus()"><i class="fas fa-search"></i> Buscar Pendências</button>
-    <button class="sap-btn" onclick="document.getElementById('inputSkuRelatorio').focus()"><i class="fas fa-box-open"></i> Consultar SKU</button>
+    <button class="sap-btn" onclick="document.getElementById('inputSkuRelatorio').focus()"><i class="fas fa-box-open"></i> Consultar Material</button>
+    {% if is_admin_wms %}
     <button class="sap-btn" onclick="executarReconciliacao()"><i class="fas fa-balance-scale"></i> Reconciliar ERP x WMS</button>
     <button class="sap-btn" onclick="processarFilaIntegracao()"><i class="fas fa-tasks"></i> Processar Fila</button>
+    {% endif %}
 </div>
+
+<section class="sap-card" style="padding: 10px 14px; margin-bottom:14px;">
+    <div class="sap-row" style="margin:0;">
+        <span class="pill" style="background:#e0f2fe; color:#075985; border-color:#7dd3fc;">Categoria WMS | Operação</span>
+        {% if is_admin_wms %}
+        <span class="pill" style="background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe;">Categoria WMS | Gestão (Admin)</span>
+        {% endif %}
+    </div>
+</section>
+
+<div id="assistBackdrop" class="assist-backdrop" onclick="fecharAssistenteEndereco()"></div>
+<aside id="assistDrawer" class="assist-drawer" aria-hidden="true">
+    <div class="assist-head">
+        <div>
+            <p class="assist-title"><i class="fas fa-magic"></i> Assistente de Endereçamento</p>
+            <p style="margin:4px 0 0 0; font-size:11px; opacity:0.9;">Fluxo rápido: escolher item, endereço e confirmar.</p>
+        </div>
+        <button class="assist-close" onclick="fecharAssistenteEndereco()">&times;</button>
+    </div>
+    <div class="assist-body">
+        <div class="assist-step">
+            <h4>1. Escolha o item pendente</h4>
+            <div class="sap-row" style="margin-bottom:8px;">
+                <input id="assistFiltro" class="sap-input" style="min-width:100%;" placeholder="Filtrar por NF, material ou descrição..." />
+            </div>
+            <div id="assistListaPendentes" class="assist-pendente-list"></div>
+        </div>
+
+        <div class="assist-step">
+            <h4>2. Defina o local e dados</h4>
+            <p id="assistItemSelecionadoInfo" class="assist-muted">Nenhum item selecionado.</p>
+            <div class="sap-row" style="margin-top:8px;">
+                <select id="assistLocalizacao" class="sap-select" style="min-width:100%;">
+                    <option value="">Selecione o endereço</option>
+                </select>
+            </div>
+            <div class="assist-grid">
+                <input id="assistCodigoGrv" class="sap-input" placeholder="Código interno (opcional)" />
+                <input id="assistOrdemCompra" class="sap-input" placeholder="Ordem de Compra (OC)" />
+            </div>
+            <div class="sap-row" style="margin-top:10px; margin-bottom:0;">
+                <button class="sap-btn primary" style="width:100%; justify-content:center;" onclick="confirmarAssistenteEnderecamento()">
+                    <i class="fas fa-check"></i> Confirmar Endereçamento
+                </button>
+            </div>
+            <p class="assist-muted" style="margin-top:8px;">A OC pode vir preenchida automaticamente da NF. Código interno é opcional.</p>
+        </div>
+    </div>
+</aside>
 
 <div class="sap-grid">
     <section class="sap-card">
@@ -148,9 +243,9 @@
 
     <div class="sap-col">
         <section class="sap-card" id="relatorio-estoque">
-            <h2 class="sap-card-title"><i class="fas fa-clipboard-list"></i> Estoque por SKU</h2>
+            <h2 class="sap-card-title"><i class="fas fa-clipboard-list"></i> Estoque por Código do Material</h2>
             <div class="sap-row">
-                <input id="inputSkuRelatorio" class="sap-input" placeholder="Digite o SKU..." />
+                <input id="inputSkuRelatorio" class="sap-input" placeholder="Digite o código do material..." />
                 <button class="sap-btn primary" onclick="buscarEstoquePorSku()">Consultar</button>
             </div>
             <div class="table-wrap">
@@ -164,7 +259,7 @@
                         </tr>
                     </thead>
                     <tbody id="tbodyRelatorioSku">
-                        <tr><td colspan="4" style="text-align:center; padding:15px; color:var(--text-muted);">Informe um SKU para detalhamento.</td></tr>
+                        <tr><td colspan="4" style="text-align:center; padding:15px; color:var(--text-muted);">Informe um código de material para detalhamento.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -178,10 +273,10 @@
                     <thead>
                         <tr>
                             <th>Código</th>
+                            <th>Depósito</th>
                             <th>Rua</th>
                             <th>Prédio</th>
                             <th>Nível</th>
-                            <th>Apto</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyLocResumo"></tbody>
@@ -191,6 +286,7 @@
     </div>
 </div>
 
+{% if is_admin_wms %}
 <section class="sap-card">
     <h2 class="sap-card-title"><i class="fas fa-shield-alt"></i> Governança Operacional WMS</h2>
     <div class="sap-row" style="margin-bottom: 18px;">
@@ -220,7 +316,7 @@
                 <thead>
                     <tr>
                         <th>NF</th>
-                        <th>SKU</th>
+                        <th>Material</th>
                         <th>Dif.</th>
                         <th>Status</th>
                     </tr>
@@ -249,12 +345,14 @@
         </table>
     </div>
 </section>
+{% endif %}
 
+{% if is_admin_wms %}
 <section class="sap-card">
     <h2 class="sap-card-title"><i class="fas fa-exchange-alt"></i> Transferência entre Depósitos</h2>
     <p class="muted" style="margin-bottom: 15px;"><i class="fas fa-info-circle"></i> Transfere um item para outro depósito. O item ficará pendente de endereçamento no novo depósito.</p>
     <div class="sap-row">
-        <input id="filtroItemTransf" class="sap-input" placeholder="Filtrar por NF ou SKU..." />
+        <input id="filtroItemTransf" class="sap-input" placeholder="Filtrar por NF ou código do material..." />
         <button class="sap-btn primary" onclick="carregarItensParaTransferencia()"><i class="fas fa-search"></i> Buscar</button>
     </div>
     <div class="table-wrap">
@@ -262,7 +360,7 @@
             <thead>
                 <tr>
                     <th>NF</th>
-                    <th>SKU</th>
+                    <th>Material</th>
                     <th>Descrição</th>
                     <th>Qtd</th>
                     <th>Depósito Atual</th>
@@ -275,6 +373,7 @@
         </table>
     </div>
 </section>
+{% endif %}
 
 <div id="modalEndereco" class="modal-backdrop-wms">
     <div class="modal-box">
@@ -289,7 +388,7 @@
                     <input id="modalNf" class="sap-input" readonly style="width:100%" />
                 </div>
                 <div style="flex:1">
-                    <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase">SKU</label>
+                    <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase">Código do Material</label>
                     <input id="modalSku" class="sap-input" readonly style="width:100%" />
                 </div>
             </div>
@@ -301,7 +400,7 @@
                     </div>
                     <div style="flex:1">
                         <label style="font-size:10px; font-weight:800; color:var(--sap-blue); text-transform:uppercase">Cód. Produto GRV</label>
-                        <input id="modalCodigoGrv" class="sap-input" placeholder="Informe o código..." style="width:100%" />
+                        <input id="modalCodigoGrv" class="sap-input" placeholder="Opcional (preenchimento automático)" style="width:100%" />
                     </div>
                 </div>
                 <div class="sap-row" style="margin-top:15px">
@@ -316,7 +415,7 @@
                 </div>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <p class="muted" style="margin:0;">* Requisito: Código GRV e pelo menos uma Ordem (OS/OC).</p>
+                <p class="muted" style="margin:0;">* Requisito: pelo menos uma Ordem (OS/OC). Quando a OC já estiver na NF, o sistema preenche sozinho.</p>
                 <div style="display:flex; gap:10px;">
                     <button class="sap-btn" onclick="fecharModalEndereco()">Cancelar</button>
                     <button class="sap-btn primary" onclick="confirmarEnderecamento()"><i class="fas fa-check"></i> Confirmar</button>
@@ -341,6 +440,12 @@
                 </select>
             </div>
             <div class="sap-row">
+                <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase; width:100%; margin-bottom:8px;">Endereço Destino (Opcional)</label>
+                <select id="selectLocalizacaoDestino" class="sap-select" style="width:100%;">
+                    <option value="">-- Manter pendente de endereçamento --</option>
+                </select>
+            </div>
+            <div class="sap-row">
                 <label style="font-size:10px; font-weight:800; color:var(--text-muted); text-transform:uppercase; width:100%; margin-bottom:8px;">Motivo (Opcional)</label>
                 <input id="inputMotivoTransf" class="sap-input" placeholder="Ex: Separação, Reposicionamento..." style="width:100%" />
             </div>
@@ -358,8 +463,12 @@
 
 <script>
 // --- LÓGICA JAVASCRIPT PRESERVADA INTEGRALMENTE ---
+const IS_ADMIN_WMS = document.getElementById('wmsPageRoot')?.dataset?.isAdmin === '1';
 let cacheLocalizacoes = [];
+let cachePendentes = [];
 let itemSelecionado = null;
+let itemAssistenteSelecionado = null;
+let cacheDepositosTransfer = [];
 
 function formatarData(iso) {
     if (!iso) return '-';
@@ -385,10 +494,10 @@ function renderLocalizacoesResumo() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong style="color:var(--sap-blue)">${loc.codigo}</strong></td>
+            <td>${loc.deposito_codigo || '-'}</td>
             <td>${loc.rua || '-'}</td>
             <td>${loc.predio || '-'}</td>
             <td>${loc.nivel || '-'}</td>
-            <td>${loc.apartamento || '-'}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -413,12 +522,19 @@ async function carregarPendentesEnderecamento() {
 
     try {
         const itens = await fetchJson(`/api/wms/pendentes-enderecamento${query}`);
+        cachePendentes = Array.isArray(itens) ? itens : [];
+        renderAssistentePendentes();
         tbody.innerHTML = '';
         if (!itens.length) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum item pendente.</td></tr>';
             return;
         }
         itens.forEach((item) => {
+            const nf = String(item.numero_nota || '').replace(/'/g, "\\'");
+            const codigoMaterial = String(item.codigo_item || '').replace(/'/g, "\\'");
+            const osSug = String(item.ordem_servico_sugerida || '').replace(/'/g, "\\'");
+            const ocSug = String(item.ordem_compra_sugerida || '').replace(/'/g, "\\'");
+            const depositoId = Number(item.deposito_id || 0);
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><strong>${item.numero_nota}</strong></td>
@@ -426,31 +542,171 @@ async function carregarPendentesEnderecamento() {
                 <td>${item.descricao || '-'}</td>
                 <td style="font-weight:700;">${Number(item.qtd_atual || 0).toFixed(2)}</td>
                 <td><span class="pill">${item.status || 'Pendente'}</span></td>
-                <td style="text-align:center;"><button class="sap-btn primary" style="padding:6px 10px; font-size:10px;" onclick="abrirModalEndereco(${item.id}, '${item.numero_nota}', '${item.codigo_item}')">Enderecar</button></td>
+                <td style="text-align:center;"><button class="sap-btn primary" style="padding:6px 10px; font-size:10px;" onclick="abrirModalEndereco(${item.id}, '${nf}', '${codigoMaterial}', ${depositoId}, '${osSug}', '${ocSug}')">Enderecar</button></td>
             `;
             tbody.appendChild(tr);
         });
     } catch (err) {
+        cachePendentes = [];
+        renderAssistentePendentes();
         tbody.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`;
     }
 }
 
-function abrirModalEndereco(itemId, nf, sku) {
-    itemSelecionado = { itemId, nf, sku };
+function abrirAssistenteEndereco() {
+    document.getElementById('assistBackdrop').classList.add('show');
+    document.getElementById('assistDrawer').classList.add('show');
+    document.getElementById('assistDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('assistFiltro').value = '';
+    itemAssistenteSelecionado = null;
+    document.getElementById('assistCodigoGrv').value = '';
+    document.getElementById('assistOrdemCompra').value = '';
+    document.getElementById('assistItemSelecionadoInfo').textContent = 'Nenhum item selecionado.';
+    document.getElementById('assistLocalizacao').innerHTML = '<option value="">Selecione o endereço</option>';
+    renderAssistentePendentes();
+}
+
+function fecharAssistenteEndereco() {
+    document.getElementById('assistBackdrop').classList.remove('show');
+    document.getElementById('assistDrawer').classList.remove('show');
+    document.getElementById('assistDrawer').setAttribute('aria-hidden', 'true');
+}
+
+function renderAssistentePendentes() {
+    const container = document.getElementById('assistListaPendentes');
+    if (!container) return;
+    const filtro = String(document.getElementById('assistFiltro')?.value || '').trim().toLowerCase();
+    const lista = (cachePendentes || []).filter((item) => {
+        if (!filtro) return true;
+        const texto = [item.numero_nota, item.codigo_item, item.descricao].map((v) => String(v || '').toLowerCase()).join(' ');
+        return texto.includes(filtro);
+    });
+
+    container.innerHTML = '';
+    if (!lista.length) {
+        container.innerHTML = '<div class="assist-muted">Nenhum item pendente para esse filtro.</div>';
+        return;
+    }
+
+    lista.forEach((item) => {
+        const el = document.createElement('div');
+        const ativo = itemAssistenteSelecionado && Number(itemAssistenteSelecionado.id) === Number(item.id);
+        el.className = `assist-item${ativo ? ' active' : ''}`;
+        el.innerHTML = `
+            <div class="assist-item-top">
+                <span>NF ${item.numero_nota || '-'}</span>
+                <span>${Number(item.qtd_atual || 0).toFixed(2)}</span>
+            </div>
+            <div class="assist-item-sub"><strong>${item.codigo_item || '-'}</strong> | ${item.descricao || 'Sem descrição'}</div>
+        `;
+        el.addEventListener('click', () => selecionarItemAssistente(item.id));
+        container.appendChild(el);
+    });
+}
+
+function preencherLocalizacoesAssistente(depositoId) {
+    const select = document.getElementById('assistLocalizacao');
+    select.innerHTML = '<option value="">Selecione o endereço</option>';
+
+    const locaisFiltrados = cacheLocalizacoes.filter((loc) => {
+        if (!depositoId) return true;
+        const depLoc = Number(loc.deposito_id || 0);
+        return depLoc === Number(depositoId) || depLoc === 0;
+    });
+
+    locaisFiltrados.forEach((loc) => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.textContent = `${loc.codigo} | ${loc.deposito_codigo || '-'} | Rua ${loc.rua || '-'} | Col ${loc.predio || '-'} | Niv ${loc.nivel || '-'}`;
+        select.appendChild(opt);
+    });
+}
+
+function selecionarItemAssistente(itemId) {
+    const item = (cachePendentes || []).find((x) => Number(x.id) === Number(itemId));
+    if (!item) return;
+    itemAssistenteSelecionado = item;
+    document.getElementById('assistItemSelecionadoInfo').textContent = `NF ${item.numero_nota} | Material ${item.codigo_item} | Qtd ${Number(item.qtd_atual || 0).toFixed(2)}`;
+    document.getElementById('assistOrdemCompra').value = item.ordem_compra_sugerida || '';
+    preencherLocalizacoesAssistente(item.deposito_id);
+    renderAssistentePendentes();
+}
+
+async function confirmarAssistenteEnderecamento() {
+    if (!itemAssistenteSelecionado) {
+        alert('Selecione um item pendente no passo 1.');
+        return;
+    }
+
+    const localizacaoId = Number(document.getElementById('assistLocalizacao').value || 0);
+    const codigoGrv = document.getElementById('assistCodigoGrv').value.trim();
+    const ordemCompra = document.getElementById('assistOrdemCompra').value.trim();
+
+    if (!localizacaoId) {
+        alert('Informe o endereço para concluir.');
+        return;
+    }
+
+    try {
+        await fetchJson('/api/wms/enderecar-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                item_wms_id: itemAssistenteSelecionado.id,
+                localizacao_id: localizacaoId,
+                codigo_grv: codigoGrv,
+                ordem_compra: ordemCompra || '',
+            }),
+        });
+
+        const codigoSelecionado = itemAssistenteSelecionado.codigo_item;
+        itemAssistenteSelecionado = null;
+        document.getElementById('assistCodigoGrv').value = '';
+        document.getElementById('assistOrdemCompra').value = '';
+        document.getElementById('assistItemSelecionadoInfo').textContent = 'Item endereçado com sucesso. Selecione o próximo item.';
+        document.getElementById('assistLocalizacao').innerHTML = '<option value="">Selecione o endereço</option>';
+
+        await carregarPendentesEnderecamento();
+        await buscarEstoquePorSkuSilencioso(codigoSelecionado);
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function abrirModalEndereco(itemId, nf, codigoMaterial, depositoId = 0, ordemServicoSugerida = '', ordemCompraSugerida = '') {
+    itemSelecionado = { itemId, nf, codigoMaterial, depositoId };
     document.getElementById('modalNf').value = nf;
-    document.getElementById('modalSku').value = sku;
+    document.getElementById('modalSku').value = codigoMaterial;
     document.getElementById('modalCodigoGrv').value = '';
-    document.getElementById('modalOs').value = '';
-    document.getElementById('modalOc').value = '';
+    document.getElementById('modalOs').value = ordemServicoSugerida || '';
+    document.getElementById('modalOc').value = ordemCompraSugerida || '';
+
+    // Garante lista atualizada ao abrir o modal.
+    await carregarLocalizacoes();
 
     const select = document.getElementById('modalLocalizacao');
     select.innerHTML = '<option value="">Selecione a localizacao...</option>';
-    cacheLocalizacoes.forEach((loc) => {
+
+    const locaisFiltrados = cacheLocalizacoes.filter((loc) => {
+        if (!depositoId) return true;
+        const depLoc = Number(loc.deposito_id || 0);
+        return depLoc === depositoId || depLoc === 0;
+    });
+
+    locaisFiltrados.forEach((loc) => {
         const option = document.createElement('option');
         option.value = loc.id;
-        option.textContent = loc.codigo;
+        option.textContent = `${loc.codigo} | ${loc.deposito_codigo || '-'} | Rua ${loc.rua || '-'} | Col ${loc.predio || '-'} | Niv ${loc.nivel || '-'}`;
         select.appendChild(option);
     });
+
+    if (!locaisFiltrados.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Sem endereços ativos para este depósito';
+        select.appendChild(option);
+    }
+
     document.getElementById('modalEndereco').classList.add('show');
 }
 
@@ -461,14 +717,14 @@ function fecharModalEndereco() {
 
 async function confirmarEnderecamento() {
     if (!itemSelecionado) return;
-    const skuSelecionado = itemSelecionado.sku;
+    const codigoSelecionado = itemSelecionado.codigoMaterial;
     const localizacao_id = parseInt(document.getElementById('modalLocalizacao').value || '0', 10);
     const codigo_grv = document.getElementById('modalCodigoGrv').value.trim();
     const ordem_servico = document.getElementById('modalOs').value.trim();
     const ordem_compra = document.getElementById('modalOc').value.trim();
 
-    if (!localizacao_id || !codigo_grv || (!ordem_servico && !ordem_compra)) {
-        alert('Preencha localizacao, GRV e OS/OC.');
+    if (!localizacao_id || (!ordem_servico && !ordem_compra)) {
+        alert('Preencha local de destino e OS/OC.');
         return;
     }
 
@@ -486,7 +742,7 @@ async function confirmarEnderecamento() {
         });
         fecharModalEndereco();
         await carregarPendentesEnderecamento();
-        await buscarEstoquePorSkuSilencioso(skuSelecionado);
+        await buscarEstoquePorSkuSilencioso(codigoSelecionado);
     } catch (err) { alert(err.message); }
 }
 
@@ -504,7 +760,7 @@ async function buscarEstoquePorSku() {
     resumo.textContent = '';
 
     if (!sku) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Informe um SKU.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Informe um código de material.</td></tr>';
         return;
     }
 
@@ -512,7 +768,7 @@ async function buscarEstoquePorSku() {
         const data = await fetchJson(`/api/wms/estoque/sku/${encodeURIComponent(sku)}`);
         const linhas = data.skus || [];
         if (!linhas.length) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Sem estoque para o SKU ${sku}.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Sem estoque para o material ${sku}.</td></tr>`;
             return;
         }
         linhas.forEach((linha) => {
@@ -530,6 +786,7 @@ async function buscarEstoquePorSku() {
 }
 
 async function carregarGovernancaWms() {
+    if (!IS_ADMIN_WMS) return;
     const tbodyAlertas = document.getElementById('tbodyAlertasGovernanca');
     const tbodyRecon = document.getElementById('tbodyReconGovernanca');
     const tbodyFila = document.getElementById('tbodyFilaIntegracao');
@@ -642,6 +899,7 @@ async function processarFilaIntegracao() {
 let itemTransferSelected = null;
 
 async function carregarItensParaTransferencia() {
+    if (!IS_ADMIN_WMS) return;
     const filtro = document.getElementById('filtroItemTransf').value.trim();
     const tbody = document.getElementById('tbodyItensTransf');
     
@@ -680,17 +938,19 @@ async function carregarItensParaTransferencia() {
 }
 
 async function abrirModalTransferencia(itemId, nota, sku, depositoAtual) {
+    if (!IS_ADMIN_WMS) return;
     itemTransferSelected = itemId;
-    document.getElementById('transfItemInfo').textContent = `NF: ${nota} | SKU: ${sku} | Depósito Atual: ${depositoAtual}`;
+    document.getElementById('transfItemInfo').textContent = `NF: ${nota} | Material: ${sku} | Depósito Atual: ${depositoAtual}`;
     document.getElementById('inputMotivoTransf').value = '';
     document.getElementById('msgErroTransf').style.display = 'none';
+    document.getElementById('selectLocalizacaoDestino').innerHTML = '<option value="">-- Manter pendente de endereçamento --</option>';
     
     // Carregar depósitos disponíveis
     try {
-        const depositos = await fetchJson('/api/wms/depositos');
+        cacheDepositosTransfer = await fetchJson('/api/wms/depositos');
         const select = document.getElementById('selectDepositoDestino');
         select.innerHTML = '<option value="">-- Selecione um depósito --</option>';
-        depositos.forEach((dep) => {
+        cacheDepositosTransfer.forEach((dep) => {
             const opt = document.createElement('option');
             opt.value = dep.id;
             opt.textContent = `${dep.codigo} - ${dep.nome}`;
@@ -704,18 +964,40 @@ async function abrirModalTransferencia(itemId, nota, sku, depositoAtual) {
     document.getElementById('modalTransferencia').classList.add('show');
 }
 
+async function atualizarLocalizacoesDestinoTransferencia() {
+    if (!IS_ADMIN_WMS) return;
+    const depositoId = Number(document.getElementById('selectDepositoDestino').value || 0);
+    const selectLoc = document.getElementById('selectLocalizacaoDestino');
+    selectLoc.innerHTML = '<option value="">-- Manter pendente de endereçamento --</option>';
+
+    if (!depositoId) return;
+
+    const deposito = cacheDepositosTransfer.find((d) => Number(d.id) === depositoId);
+    if (!deposito) return;
+
+    const locais = cacheLocalizacoes.filter((l) => Number(l.deposito_id) === depositoId);
+    locais.forEach((loc) => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.textContent = `${loc.codigo} (${loc.rua || '-'}-${loc.predio || '-'}-${loc.nivel || '-'})`;
+        selectLoc.appendChild(opt);
+    });
+}
+
 function fecharModalTransferencia() {
     document.getElementById('modalTransferencia').classList.remove('show');
     itemTransferSelected = null;
 }
 
 async function confirmarTransferencia() {
+    if (!IS_ADMIN_WMS) return;
     if (!itemTransferSelected) {
         toast('Nenhum item selecionado', 'err');
         return;
     }
 
     const depositoDestino = document.getElementById('selectDepositoDestino').value;
+    const localizacaoDestino = document.getElementById('selectLocalizacaoDestino').value;
     const motivo = document.getElementById('inputMotivoTransf').value.trim();
     const msgErr = document.getElementById('msgErroTransf');
     msgErr.style.display = 'none';
@@ -729,11 +1011,13 @@ async function confirmarTransferencia() {
     try {
         const resultado = await fetchJson('/api/wms/transferir-deposito', {
             method: 'POST',
-            body: {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
                 item_wms_id: itemTransferSelected,
                 deposito_destino_id: parseInt(depositoDestino),
+                localizacao_destino_id: localizacaoDestino ? parseInt(localizacaoDestino, 10) : null,
                 motivo: motivo || null
-            }
+            })
         });
 
         if (resultado.sucesso) {
@@ -751,6 +1035,11 @@ async function confirmarTransferencia() {
     }
 }
 
+if (document.getElementById('selectDepositoDestino')) {
+    document.getElementById('selectDepositoDestino').addEventListener('change', atualizarLocalizacoesDestinoTransferencia);
+}
+document.getElementById('assistFiltro').addEventListener('input', renderAssistentePendentes);
+
 async function refreshAll() {
     await carregarLocalizacoes();
     await carregarPendentesEnderecamento();
@@ -759,4 +1048,5 @@ async function refreshAll() {
 
 document.addEventListener('DOMContentLoaded', refreshAll);
 </script>
+</div>
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard | ERP FAM{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block extra_head %}
     <style>
@@ -55,6 +55,20 @@
         .charts-container { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 25px; }
         .chart-box { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; height: 350px; box-shadow: var(--card-shadow); }
         .chart-title { font-size: 12px; font-weight: 800; color: var(--protheus-gray); text-transform: uppercase; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px; }
+
+        .process-wrap { background: #fff; border: 1px solid var(--border-color); border-radius: 16px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 25px; }
+        .process-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        .process-mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+        .process-mini .label { display: block; font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+        .process-mini .value { display: block; font-size: 22px; font-weight: 800; color: #1e293b; margin-top: 6px; }
+        .process-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .process-kpi-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; font-size: 11px; font-weight: 700; color: #334155; }
+        .process-list { max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+        .process-row { display: grid; grid-template-columns: 1fr 1.2fr .9fr .8fr .7fr; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; align-items: center; }
+        .process-row.head { font-weight: 800; text-transform: uppercase; font-size: 10px; background: #f8fafc; position: sticky; top: 0; }
+        .process-row:last-child { border-bottom: 0; }
+        .process-score { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 800; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .process-empty { padding: 12px; font-size: 11px; color: #64748b; text-align: center; }
 
         /* Menu de Módulos */
         .section-header { 
@@ -111,6 +125,29 @@
         <div class="charts-container">
             <div class="chart-box"><div class="chart-title">Status Recebimento</div><canvas id="chartDonut"></canvas></div>
             <div class="chart-box"><div class="chart-title">Volume Operacional</div><canvas id="chartBars"></canvas></div>
+        </div>
+
+        <div id="processo-wrap" class="process-wrap">
+            <div class="chart-title">Fluxo Integrado de Recebimento</div>
+            <div class="process-grid">
+                <div class="process-mini"><span class="label">Pre-Nota</span><span class="value" id="proc-pre-nota">0</span></div>
+                <div class="process-mini"><span class="label">Auditoria Pendente</span><span class="value" id="proc-auditoria">0</span></div>
+                <div class="process-mini"><span class="label">Conferência</span><span class="value" id="proc-conferencia">0</span></div>
+                <div class="process-mini"><span class="label">Documento de Entrada</span><span class="value" id="proc-documento">0</span></div>
+                <div class="process-mini"><span class="label">Finalizado</span><span class="value" id="proc-finalizado">0</span></div>
+            </div>
+
+            <div class="process-kpi">
+                <div class="process-kpi-item" id="proc-kpi-lancadas">Lançadas no período: 0</div>
+                <div class="process-kpi-item" id="proc-kpi-sem-div">Lançadas sem divergência: 0</div>
+                <div class="process-kpi-item" id="proc-kpi-taxa">Taxa sem intervenção: 0%</div>
+                <div class="process-kpi-item" id="proc-kpi-fila">Fila de exceção: 0</div>
+            </div>
+
+            <div class="process-list" id="proc-fila-lista">
+                <div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div>
+                <div class="process-empty">Carregando fila de exceção...</div>
+            </div>
         </div>
     </div>
 
@@ -257,6 +294,58 @@
         });
     }
 
+    async function carregarPainelProcesso() {
+        const wrap = document.getElementById('processo-wrap');
+        const fila = document.getElementById('proc-fila-lista');
+        if (!wrap || !fila) return;
+
+        try {
+            const response = await fetch('/api/processo/recebimento_painel?dias=30&limite_fila=12');
+            if (!response.ok) {
+                if (response.status === 403) {
+                    wrap.style.display = 'none';
+                    return;
+                }
+                throw new Error('Falha ao carregar painel de processo.');
+            }
+
+            const d = await response.json();
+            const etapas = d.etapas || {};
+            const kpis = d.kpis || {};
+            const filaExcecao = Array.isArray(d.fila_excecao) ? d.fila_excecao : [];
+
+            document.getElementById('proc-pre-nota').innerText = etapas.pre_nota || 0;
+            document.getElementById('proc-auditoria').innerText = etapas.auditoria_pendente || 0;
+            document.getElementById('proc-conferencia').innerText = etapas.conferencia || 0;
+            document.getElementById('proc-documento').innerText = etapas.documento_entrada || 0;
+            document.getElementById('proc-finalizado').innerText = etapas.finalizado || 0;
+
+            document.getElementById('proc-kpi-lancadas').innerText = `Lançadas no período: ${kpis.notas_lancadas_periodo || 0}`;
+            document.getElementById('proc-kpi-sem-div').innerText = `Lançadas sem divergência: ${kpis.notas_lancadas_sem_divergencia || 0}`;
+            document.getElementById('proc-kpi-taxa').innerText = `Taxa sem intervenção: ${kpis.taxa_sem_intervencao_percentual || 0}%`;
+            document.getElementById('proc-kpi-fila').innerText = `Fila de exceção: ${kpis.fila_excecao_total || 0}`;
+
+            if (!filaExcecao.length) {
+                fila.innerHTML = '<div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div><div class="process-empty">Sem exceções relevantes no período.</div>';
+                return;
+            }
+
+            const linhas = filaExcecao.map((item) => `
+                <div class="process-row">
+                    <span>${item.nota || '-'}</span>
+                    <span title="${(item.motivos || []).join(', ')}">${item.fornecedor || '-'}</span>
+                    <span>${item.etapa || '-'}</span>
+                    <span>${item.horas_em_fila || 0}h</span>
+                    <span><span class="process-score">${item.score || 0}</span></span>
+                </div>
+            `).join('');
+
+            fila.innerHTML = '<div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div>' + linhas;
+        } catch (e) {
+            fila.innerHTML = '<div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div><div class="process-empty">Não foi possível atualizar o painel agora.</div>';
+        }
+    }
+
     function carregarExpedicaoDashboard() {
         fetch('/api/expedicao/dashboard').then(r => r.json()).then(d => {
             document.getElementById('exp-abertas').innerText = d.abertas || 0;
@@ -299,10 +388,12 @@
         inicializarGraficos();
         atualizarStats();
         carregarSla();
+        carregarPainelProcesso();
         carregarExpedicaoDashboard();
         aplicarFiltroOperacao();
         setInterval(atualizarStats, 15000);
         setInterval(carregarSla, 20000);
+        setInterval(carregarPainelProcesso, 30000);
         setInterval(carregarExpedicaoDashboard, 20000);
     });
 </script>

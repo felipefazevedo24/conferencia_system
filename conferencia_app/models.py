@@ -266,6 +266,7 @@ class LocalizacaoArmazem(db.Model):
     """Localização física no armazém (Rua-Prédio-Nível-Apartamento)"""
     id = db.Column(db.Integer, primary_key=True)
     codigo = db.Column(db.String(80), unique=True, nullable=False, index=True)  # Ex: R1-PD1-N2-AP03
+    deposito_id = db.Column(db.Integer, db.ForeignKey("deposito_wms.id"), index=True)
     rua = db.Column(db.String(30), index=True)
     predio = db.Column(db.String(30), index=True)
     nivel = db.Column(db.String(30), index=True)
@@ -300,6 +301,7 @@ class ItemWMS(db.Model):
     data_armazenamento = db.Column(db.DateTime)
     status = db.Column(db.String(20), nullable=False, default="Armazenado", index=True)  # Armazenado|Separado|Enviado
     deposito_id = db.Column(db.Integer, db.ForeignKey("deposito_wms.id"), index=True)  # DEP 01, 02, 03, CLIENTE, TERCEIROS
+    origem_estoque_inicial = db.Column(db.Boolean, nullable=False, default=False, index=True)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
 

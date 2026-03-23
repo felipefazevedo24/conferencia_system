@@ -4,7 +4,7 @@ Rotas API do WMS - Warehouse Management System
 from flask import Blueprint, request, jsonify, session
 from datetime import datetime
 from functools import wraps
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from ..extensions import db
 from ..models import (
@@ -53,7 +53,20 @@ def requer_wms_operacao(f):
 @requer_wms_operacao
 def listar_localizacoes():
     """Lista todas as localizações do armazém"""
-    localizacoes = LocalizacaoArmazem.query.filter_by(ativo=True).order_by(
+    deposito_codigo = (request.args.get('deposito_codigo') or '').strip().upper()
+
+    query = db.session.query(LocalizacaoArmazem, DepositoWMS).outerjoin(
+        DepositoWMS, LocalizacaoArmazem.deposito_id == DepositoWMS.id
+    ).filter(
+        LocalizacaoArmazem.ativo == True,
+        or_(DepositoWMS.id.is_(None), DepositoWMS.ativo == True),
+    )
+
+    if deposito_codigo:
+        query = query.filter(func.upper(DepositoWMS.codigo) == deposito_codigo)
+
+    localizacoes = query.order_by(
+        DepositoWMS.codigo,
         LocalizacaoArmazem.rua,
         LocalizacaoArmazem.predio,
         LocalizacaoArmazem.nivel,
@@ -61,14 +74,20 @@ def listar_localizacoes():
         LocalizacaoArmazem.codigo,
     ).all()
     
-    resultado = [{
-        'id': loc.id,
-        'codigo': loc.codigo,
-        'rua': loc.rua,
-        'predio': loc.predio,
-        'nivel': loc.nivel,
-        'apartamento': loc.apartamento,
-    } for loc in localizacoes]
+    resultado = [
+        {
+            'id': loc.id,
+            'codigo': loc.codigo,
+            'deposito_id': loc.deposito_id,
+            'deposito_codigo': dep.codigo if dep else None,
+            'deposito_nome': dep.nome if dep else None,
+            'rua': loc.rua,
+            'predio': loc.predio,
+            'nivel': loc.nivel,
+            'apartamento': loc.apartamento,
+        }
+        for loc, dep in localizacoes
+    ]
     
     return jsonify(resultado), 200
 
@@ -83,15 +102,23 @@ def criar_localizacao():
     predio = (data.get('predio') or '').strip()
     nivel = (data.get('nivel') or '').strip()
     apartamento = (data.get('apartamento') or '').strip()
+    deposito_id = data.get('deposito_id')
 
-    if not all([rua, predio, nivel, apartamento]):
-        return jsonify({'erro': 'Campos obrigatórios: rua, predio, nivel, apartamento'}), 400
+    if deposito_id is not None:
+        try:
+            deposito_id = int(deposito_id)
+        except Exception:
+            return jsonify({'erro': 'Depósito inválido'}), 400
+
+    if not all([rua, predio, nivel]):
+        return jsonify({'erro': 'Campos obrigatórios: rua, predio (coluna) e nivel'}), 400
     
     localizacao = WMSService.criar_localizacao(
         rua=rua,
         predio=predio,
         nivel=nivel,
         apartamento=apartamento,
+        deposito_id=deposito_id,
     )
     
     if not localizacao:
@@ -100,6 +127,11 @@ def criar_localizacao():
     return jsonify({
         'id': localizacao.id,
         'codigo': localizacao.codigo,
+        'deposito_id': localizacao.deposito_id,
+        'rua': localizacao.rua,
+        'predio': localizacao.predio,
+        'nivel': localizacao.nivel,
+        'apartamento': localizacao.apartamento,
         'mensagem': 'Localização criada com sucesso'
     }), 201
 
@@ -117,7 +149,9 @@ def excluir_localizacao(localizacao_id):
     # Bloqueia exclusão se houver ItemWMS em aberto (pendente ou endereçado)
     itens_ativos = ItemWMS.query.filter(
         ItemWMS.localizacao_id == localizacao_id,
-        ItemWMS.status.in_(['Pendente', 'Endereçado', 'Separacao'])
+        ItemWMS.status.in_(['Pendente', 'Endereçado', 'Separacao', 'Armazenado', 'Separado']),
+        ItemWMS.ativo == True,
+        ItemWMS.qtd_atual > 0,
     ).count()
     if itens_ativos:
         return jsonify({
@@ -127,7 +161,7 @@ def excluir_localizacao(localizacao_id):
     # Bloqueia exclusão se houver saldo de estoque
     estoque_ativo = EstoqueWMS.query.filter(
         EstoqueWMS.localizacao_id == localizacao_id,
-        EstoqueWMS.quantidade > 0
+        EstoqueWMS.qtd_total > 0,
     ).count()
     if estoque_ativo:
         return jsonify({
@@ -137,6 +171,254 @@ def excluir_localizacao(localizacao_id):
     loc.ativo = False
     db.session.commit()
     return jsonify({'sucesso': True, 'mensagem': f'Localização {loc.codigo} excluída com sucesso.'}), 200
+
+
+@wms_bp.route('/localizacoes/validar', methods=['POST'])
+@requer_wms_operacao
+def validar_localizacao_por_endereco():
+    data = request.get_json() or {}
+    deposito_id = data.get('deposito_id')
+    rua = (data.get('rua') or '').strip()
+    predio = (data.get('predio') or '').strip()
+    nivel = (data.get('nivel') or '').strip()
+    apartamento = (data.get('apartamento') or '').strip()
+
+    if not all([deposito_id, rua, predio, nivel]):
+        return jsonify({'erro': 'Informe deposito_id, rua, predio e nivel.'}), 400
+
+    try:
+        deposito_id = int(deposito_id)
+    except Exception:
+        return jsonify({'erro': 'deposito_id invalido.'}), 400
+
+    deposito = DepositoWMS.query.get(deposito_id)
+    if not deposito:
+        return jsonify({'erro': 'Deposito informado nao encontrado.'}), 404
+
+    codigo = WMSService.formatar_codigo_localizacao(
+        deposito_codigo=deposito.codigo,
+        rua=rua,
+        coluna=predio,
+        nivel=nivel,
+    )
+
+    query = LocalizacaoArmazem.query.filter_by(
+        deposito_id=deposito_id,
+        rua=rua,
+        predio=predio,
+        nivel=nivel,
+        ativo=True,
+    )
+    if apartamento:
+        query = query.filter(LocalizacaoArmazem.apartamento == apartamento)
+
+    localizacao = query.first()
+    return jsonify(
+        {
+            'existe': bool(localizacao),
+            'codigo_esperado': codigo,
+            'localizacao': (
+                {
+                    'id': localizacao.id,
+                    'codigo': localizacao.codigo,
+                    'deposito_id': localizacao.deposito_id,
+                }
+                if localizacao
+                else None
+            ),
+        }
+    ), 200
+
+
+@wms_bp.route('/localizacoes/opcoes', methods=['GET'])
+@requer_wms_operacao
+def listar_opcoes_localizacoes():
+    deposito_id = request.args.get('deposito_id')
+    rua = (request.args.get('rua') or '').strip()
+    predio = (request.args.get('predio') or '').strip()
+
+    try:
+        deposito_id = int(deposito_id)
+    except Exception:
+        return jsonify({'erro': 'deposito_id inválido.'}), 400
+
+    base = LocalizacaoArmazem.query.filter_by(ativo=True, deposito_id=deposito_id)
+
+    ruas = [
+        r[0]
+        for r in base.with_entities(LocalizacaoArmazem.rua)
+        .filter(LocalizacaoArmazem.rua.isnot(None), LocalizacaoArmazem.rua != '')
+        .distinct()
+        .order_by(LocalizacaoArmazem.rua.asc())
+        .all()
+    ]
+
+    colunas_query = base
+    if rua:
+        colunas_query = colunas_query.filter(LocalizacaoArmazem.rua == rua)
+    colunas = [
+        r[0]
+        for r in colunas_query.with_entities(LocalizacaoArmazem.predio)
+        .filter(LocalizacaoArmazem.predio.isnot(None), LocalizacaoArmazem.predio != '')
+        .distinct()
+        .order_by(LocalizacaoArmazem.predio.asc())
+        .all()
+    ]
+
+    niveis_query = base
+    if rua:
+        niveis_query = niveis_query.filter(LocalizacaoArmazem.rua == rua)
+    if predio:
+        niveis_query = niveis_query.filter(LocalizacaoArmazem.predio == predio)
+    niveis = [
+        r[0]
+        for r in niveis_query.with_entities(LocalizacaoArmazem.nivel)
+        .filter(LocalizacaoArmazem.nivel.isnot(None), LocalizacaoArmazem.nivel != '')
+        .distinct()
+        .order_by(LocalizacaoArmazem.nivel.asc())
+        .all()
+    ]
+
+    return jsonify({'ruas': ruas, 'colunas': colunas, 'niveis': niveis}), 200
+
+
+@wms_bp.route('/localizacoes/lote', methods=['POST'])
+@requer_admin
+def criar_localizacoes_em_lote():
+    data = request.get_json() or {}
+    deposito_id = data.get('deposito_id')
+    rua = (data.get('rua') or '').strip()
+
+    try:
+        deposito_id = int(deposito_id)
+        coluna_inicio = int(data.get('coluna_inicio'))
+        coluna_fim = int(data.get('coluna_fim'))
+        nivel_inicio = int(data.get('nivel_inicio'))
+        nivel_fim = int(data.get('nivel_fim'))
+    except Exception:
+        return jsonify({'erro': 'Preencha depósito e intervalos válidos de coluna/nível.'}), 400
+
+    if not rua:
+        return jsonify({'erro': 'Rua é obrigatória para criação em lote.'}), 400
+
+    if coluna_fim < coluna_inicio or nivel_fim < nivel_inicio:
+        return jsonify({'erro': 'Intervalos inválidos: fim deve ser maior ou igual ao início.'}), 400
+
+    total = 0
+    criadas = 0
+    ignoradas = 0
+
+    for coluna in range(coluna_inicio, coluna_fim + 1):
+        for nivel in range(nivel_inicio, nivel_fim + 1):
+            total += 1
+            loc = WMSService.criar_localizacao(
+                rua=rua,
+                predio=str(coluna).zfill(2),
+                nivel=str(nivel).zfill(2),
+                apartamento='',
+                deposito_id=deposito_id,
+            )
+            if loc:
+                criadas += 1
+            else:
+                ignoradas += 1
+
+    return jsonify(
+        {
+            'sucesso': True,
+            'total_processado': total,
+            'criadas': criadas,
+            'ignoradas': ignoradas,
+            'mensagem': f'Lote finalizado: {criadas} criadas, {ignoradas} já existentes/ignoradas.',
+        }
+    ), 200
+
+
+@wms_bp.route('/localizacoes/sugestao', methods=['GET'])
+@requer_wms_operacao
+def sugerir_localizacao_para_sku():
+    deposito_id = request.args.get('deposito_id')
+    codigo_item = (request.args.get('codigo_item') or '').strip()
+
+    try:
+        deposito_id = int(deposito_id)
+    except Exception:
+        return jsonify({'erro': 'deposito_id inválido.'}), 400
+
+    if not codigo_item:
+        return jsonify({'erro': 'codigo_item é obrigatório.'}), 400
+
+    # 1) Preferência cadastrada no SKU mestre.
+    sku_mestre = WMSSkuMestre.query.filter_by(codigo_item=codigo_item, ativo=True).first()
+    if sku_mestre and sku_mestre.endereco_preferencial:
+        loc_pref = LocalizacaoArmazem.query.filter_by(
+            codigo=str(sku_mestre.endereco_preferencial).strip(),
+            deposito_id=deposito_id,
+            ativo=True,
+        ).first()
+        if loc_pref:
+            return jsonify(
+                {
+                    'fonte': 'sku_mestre',
+                    'localizacao': {
+                        'id': loc_pref.id,
+                        'codigo': loc_pref.codigo,
+                        'rua': loc_pref.rua,
+                        'predio': loc_pref.predio,
+                        'nivel': loc_pref.nivel,
+                    },
+                }
+            ), 200
+
+    # 2) Último endereço usado para o SKU no mesmo depósito.
+    ultimo = (
+        db.session.query(ItemWMS, LocalizacaoArmazem)
+        .join(LocalizacaoArmazem, ItemWMS.localizacao_id == LocalizacaoArmazem.id)
+        .filter(
+            ItemWMS.ativo == True,
+            func.lower(func.trim(ItemWMS.codigo_item)) == codigo_item.lower(),
+            LocalizacaoArmazem.ativo == True,
+            LocalizacaoArmazem.deposito_id == deposito_id,
+        )
+        .order_by(ItemWMS.data_armazenamento.desc(), ItemWMS.id.desc())
+        .first()
+    )
+    if ultimo:
+        _, loc_hist = ultimo
+        return jsonify(
+            {
+                'fonte': 'historico_sku',
+                'localizacao': {
+                    'id': loc_hist.id,
+                    'codigo': loc_hist.codigo,
+                    'rua': loc_hist.rua,
+                    'predio': loc_hist.predio,
+                    'nivel': loc_hist.nivel,
+                },
+            }
+        ), 200
+
+    # 3) Menor ocupação atual no depósito.
+    loc_livre = (
+        LocalizacaoArmazem.query.filter_by(ativo=True, deposito_id=deposito_id)
+        .order_by(LocalizacaoArmazem.capacidade_atual.asc(), LocalizacaoArmazem.codigo.asc())
+        .first()
+    )
+    if loc_livre:
+        return jsonify(
+            {
+                'fonte': 'menor_ocupacao',
+                'localizacao': {
+                    'id': loc_livre.id,
+                    'codigo': loc_livre.codigo,
+                    'rua': loc_livre.rua,
+                    'predio': loc_livre.predio,
+                    'nivel': loc_livre.nivel,
+                },
+            }
+        ), 200
+
+    return jsonify({'fonte': 'sem_sugestao', 'localizacao': None}), 200
 
 
 # ============================================================================
@@ -406,7 +688,32 @@ def obter_historico_item(item_wms_id):
 @requer_wms_operacao
 def listar_pendentes_enderecamento():
     numero_nota = (request.args.get('nota') or '').strip() or None
-    pendentes = WMSService.listar_pendentes_enderecamento(numero_nota=numero_nota)
+    codigo_item = (request.args.get('codigo_item') or '').strip() or None
+    pendentes = WMSService.listar_pendentes_enderecamento(numero_nota=numero_nota, codigo_item=codigo_item)
+
+    # Cache local para evitar consultas repetidas da mesma NF+codigo.
+    cache_pedido_compra = {}
+
+    def _pedido_compra_sugerido(item):
+        if item.ordem_compra:
+            return item.ordem_compra
+        chave = (str(item.numero_nota or '').strip(), str(item.codigo_item or '').strip())
+        if chave in cache_pedido_compra:
+            return cache_pedido_compra[chave]
+        nota, codigo = chave
+        if not nota or not codigo:
+            cache_pedido_compra[chave] = None
+            return None
+        item_nota = ItemNota.query.filter(
+            func.trim(ItemNota.numero_nota) == nota,
+            func.trim(ItemNota.codigo) == codigo,
+            ItemNota.pedido_compra.isnot(None),
+            func.trim(ItemNota.pedido_compra) != '',
+        ).order_by(ItemNota.id.desc()).first()
+        sugestao = (item_nota.pedido_compra if item_nota else None)
+        cache_pedido_compra[chave] = sugestao
+        return sugestao
+
     return jsonify([
         {
             'id': item.id,
@@ -415,10 +722,87 @@ def listar_pendentes_enderecamento():
             'descricao': item.descricao,
             'qtd_atual': item.qtd_atual,
             'status': item.status,
+            'deposito_id': item.deposito_id,
+            'localizacao_id': item.localizacao_id,
+            'ordem_servico_sugerida': item.ordem_servico,
+            'ordem_compra_sugerida': _pedido_compra_sugerido(item),
             'data_criacao': item.data_criacao.isoformat() if item.data_criacao else None,
         }
         for item in pendentes
     ]), 200
+
+
+@wms_bp.route('/estoque-inicial', methods=['POST'])
+@requer_admin
+def cadastrar_estoque_inicial():
+    data = request.get_json() or {}
+    usuario = session.get('username', 'Sistema')
+
+    codigo_item = (data.get('codigo_item') or '').strip()
+    descricao = (data.get('descricao') or '').strip()
+    unidade = (data.get('unidade') or 'UN').strip() or 'UN'
+    numero_nota = (data.get('numero_nota') or 'ESTOQUE_INICIAL').strip() or 'ESTOQUE_INICIAL'
+    deposito_id = data.get('deposito_id')
+    localizacao_id = data.get('localizacao_id')
+    rua = (data.get('rua') or '').strip()
+    predio = (data.get('predio') or '').strip()
+    nivel = (data.get('nivel') or '').strip()
+    apartamento = (data.get('apartamento') or '').strip()
+
+    try:
+        qtd = float(data.get('qtd') or 0)
+    except Exception:
+        return jsonify({'erro': 'Quantidade invalida.'}), 400
+
+    try:
+        deposito_id = int(deposito_id)
+    except Exception:
+        return jsonify({'erro': 'Deposito invalido.'}), 400
+
+    if localizacao_id is not None and str(localizacao_id).strip() != '':
+        try:
+            localizacao_id = int(localizacao_id)
+        except Exception:
+            return jsonify({'erro': 'Endereco invalido.'}), 400
+
+    localizacao = None
+    if localizacao_id:
+        localizacao = LocalizacaoArmazem.query.filter_by(id=localizacao_id, ativo=True).first()
+        if not localizacao:
+            return jsonify({'erro': 'Endereco selecionado nao foi encontrado.'}), 400
+        if int(localizacao.deposito_id or 0) != int(deposito_id):
+            return jsonify({'erro': 'Endereco selecionado nao pertence ao deposito informado.'}), 400
+    else:
+        if not all([deposito_id, rua, predio, nivel]):
+            return jsonify({'erro': 'Informe depósito e selecione um endereço cadastrado.'}), 400
+
+        localizacao_query = LocalizacaoArmazem.query.filter_by(
+            deposito_id=deposito_id,
+            rua=rua,
+            predio=predio,
+            nivel=nivel,
+            ativo=True,
+        )
+        if apartamento:
+            localizacao_query = localizacao_query.filter(LocalizacaoArmazem.apartamento == apartamento)
+        localizacao = localizacao_query.first()
+    if not localizacao:
+        return jsonify({'erro': 'Endereço não encontrado no depósito selecionado. Cadastre o endereço antes de lançar o produto.'}), 400
+
+    resultado = WMSService.cadastrar_estoque_inicial_pendente(
+        codigo_item=codigo_item,
+        descricao=descricao,
+        qtd=qtd,
+        usuario=usuario,
+        unidade=unidade,
+        deposito_id=deposito_id,
+        localizacao_id=localizacao.id,
+        numero_nota=numero_nota,
+    )
+    if not resultado.get('sucesso'):
+        return jsonify({'erro': resultado.get('erro') or 'Nao foi possivel cadastrar o estoque inicial.'}), 400
+
+    return jsonify(resultado), 201
 
 
 @wms_bp.route('/enderecar-item', methods=['POST'])
@@ -435,11 +819,41 @@ def enderecar_item_manual():
     if not item_wms_id or not localizacao_id:
         return jsonify({'erro': 'Campos obrigatórios: item_wms_id e localizacao_id'}), 400
 
+    try:
+        item_wms_id = int(item_wms_id)
+        localizacao_id = int(localizacao_id)
+    except Exception:
+        return jsonify({'erro': 'IDs inválidos para endereçamento.'}), 400
+
+    item = ItemWMS.query.get(item_wms_id)
+    if not item:
+        return jsonify({'erro': 'Item não encontrado para endereçamento.'}), 404
+
+    # Codigo GRV passa a ser opcional no fluxo do operador.
+    # Se nao for informado, reaproveita o que ja existe no item ou cai para o codigo do material.
     if not codigo_grv:
-        return jsonify({'erro': 'Informe o codigo do produto no GRV.'}), 400
+        if item.codigo_grv:
+            codigo_grv = str(item.codigo_grv).strip()
+        else:
+            codigo_grv = str(item.codigo_item or '').strip()
+
+    # Reaproveita automaticamente informações já conhecidas para evitar retrabalho no operador.
+    if not ordem_servico and item.ordem_servico:
+        ordem_servico = str(item.ordem_servico).strip()
+    if not ordem_compra and item.ordem_compra:
+        ordem_compra = str(item.ordem_compra).strip()
+    if not ordem_compra:
+        item_nota = ItemNota.query.filter(
+            func.trim(ItemNota.numero_nota) == str(item.numero_nota or '').strip(),
+            func.trim(ItemNota.codigo) == str(item.codigo_item or '').strip(),
+            ItemNota.pedido_compra.isnot(None),
+            func.trim(ItemNota.pedido_compra) != '',
+        ).order_by(ItemNota.id.desc()).first()
+        if item_nota and item_nota.pedido_compra:
+            ordem_compra = str(item_nota.pedido_compra).strip()
 
     if not ordem_servico and not ordem_compra:
-        return jsonify({'erro': 'Informe OS e/ou OC para enderecar.'}), 400
+        return jsonify({'erro': 'Não encontramos OS/OC para este item. Vincule o pedido na NF ou informe manualmente.'}), 400
 
     item = WMSService.enderecar_item_pendente(
         item_wms_id,
@@ -666,10 +1080,15 @@ def listar_itens_armazenados():
     resultado = []
     for item in itens:
         deposito_nome = 'N/A'
+        localizacao_codigo = None
         if item.deposito_id:
             dep = DepositoWMS.query.get(item.deposito_id)
             if dep:
                 deposito_nome = dep.nome
+        if item.localizacao_id:
+            loc = LocalizacaoArmazem.query.get(item.localizacao_id)
+            if loc:
+                localizacao_codigo = loc.codigo
         
         resultado.append({
             'id': item.id,
@@ -679,11 +1098,14 @@ def listar_itens_armazenados():
             'qtd_atual': item.qtd_atual,
             'deposito_id': item.deposito_id,
             'deposito_nome': deposito_nome,
+            'localizacao_id': item.localizacao_id,
+            'localizacao_codigo': localizacao_codigo,
             'status': item.status,
         })
     
     return jsonify(resultado), 200
 
+@wms_bp.route('/transferir-deposito', methods=['POST'])
 @requer_wms_operacao
 def transferir_item_entre_depositos():
     """
@@ -697,28 +1119,37 @@ def transferir_item_entre_depositos():
         'motivo': 'Separação para pedido'  # opcional
     }
     """
-    from ..auth import pode_executar_acao
+    from ..auth import has_permission
     
     # Verificar permissão: GERÊNCIA ou TRANSFERIR_DEPOSITO
     usuario_role = session.get('role', '')
     usuario = session.get('username', 'Sistema')
     
-    if usuario_role != 'Gerência' and not pode_executar_acao(usuario, 'TRANSFERIR_DEPOSITO'):
+    if usuario_role not in ('Gerência', 'Admin') and not has_permission('TRANSFERIR_DEPOSITO', username=usuario, role=usuario_role):
         return jsonify({'erro': 'Apenas GERÊNCIA ou usuários com permissão especial podem transferir.'}), 403
     
     data = request.get_json() or {}
     item_wms_id = data.get('item_wms_id')
     deposito_destino_id = data.get('deposito_destino_id')
+    localizacao_destino_id = data.get('localizacao_destino_id')
     motivo = (data.get('motivo') or '').strip()
     
     if not item_wms_id or not deposito_destino_id:
         return jsonify({'erro': 'Campos obrigatórios: item_wms_id, deposito_destino_id'}), 400
+
+    try:
+        item_wms_id = int(item_wms_id)
+        deposito_destino_id = int(deposito_destino_id)
+        localizacao_destino_id = int(localizacao_destino_id) if localizacao_destino_id else None
+    except Exception:
+        return jsonify({'erro': 'IDs inválidos para transferência.'}), 400
     
     resultado = WMSService.transferir_entre_depositos(
         item_wms_id=item_wms_id,
         deposito_destino_id=deposito_destino_id,
         usuario=usuario,
-        motivo=motivo if motivo else None
+        motivo=motivo if motivo else None,
+        localizacao_destino_id=localizacao_destino_id,
     )
     
     if not resultado.get('sucesso'):

@@ -279,15 +279,15 @@ def initialize_database(app: Flask) -> None:
 
 
 def _ensure_depositos_wms() -> None:
-    """Cria os 5 depósitos fixos se não existirem"""
+    """Garante os depósitos operacionais padrão (AL, CH, LOG)."""
     depositos = [
-        ('DEP_01', 'DEP 01 - Almoxarifado', 'Depósito principal de recebimento e almoxarifado'),
-        ('DEP_02', 'DEP 02', 'Depósito secundário'),
-        ('DEP_03', 'DEP 03', 'Depósito terciário'),
-        ('CLIENTE', 'MATERIAL CLIENTE', 'Área de materiais do cliente'),
-        ('TERCEIROS', 'MATERIAL TERCEIROS', 'Área de materiais em poder de terceiros'),
+        ('AL', 'AL - Almoxarifado', 'Depósito padrão de recebimento e armazenagem'),
+        ('CH', 'CH - Chaparia', 'Depósito de itens de chaparia'),
+        ('LOG', 'LOG - Expedição', 'Depósito logístico de expedição'),
     ]
     
+    codigos_validos = {codigo for codigo, _, _ in depositos}
+
     for codigo, nome, descricao in depositos:
         existe = DepositoWMS.query.filter_by(codigo=codigo).first()
         if not existe:
@@ -298,6 +298,15 @@ def _ensure_depositos_wms() -> None:
                 ativo=True,
             )
             db.session.add(novo_deposito)
+        else:
+            existe.nome = nome
+            existe.descricao = descricao
+            existe.ativo = True
+
+    # Mantem historico, mas remove da operacao os depositos fora do padrao AL/CH/LOG.
+    for dep in DepositoWMS.query.all():
+        if dep.codigo not in codigos_validos:
+            dep.ativo = False
     
     db.session.commit()
 
@@ -336,13 +345,15 @@ def _ensure_wms_tables() -> None:
                 CREATE TABLE IF NOT EXISTS localizacao_armazem (
                     id INTEGER PRIMARY KEY,
                     codigo VARCHAR(50) UNIQUE NOT NULL,
+                    deposito_id INTEGER,
                     corredor VARCHAR(10) NOT NULL,
                     prateleira VARCHAR(10) NOT NULL,
                     posicao VARCHAR(10) NOT NULL,
                     capacidade_maxima FLOAT NOT NULL DEFAULT 100.0,
                     capacidade_atual FLOAT NOT NULL DEFAULT 0.0,
                     ativo BOOLEAN NOT NULL DEFAULT 1,
-                    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (deposito_id) REFERENCES deposito_wms(id)
                 )
                 """
             )
@@ -369,6 +380,10 @@ def _ensure_wms_tables() -> None:
         if "apartamento" not in cols_loc:
             conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN apartamento VARCHAR(30)"))
             conn.commit()
+        if "deposito_id" not in cols_loc:
+            conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN deposito_id INTEGER"))
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_localizacao_armazem_deposito_id ON localizacao_armazem (deposito_id)"))
+            conn.commit()
         
         # Tabela item_wms
         conn.execute(
@@ -390,6 +405,7 @@ def _ensure_wms_tables() -> None:
                     usuario_armazenamento VARCHAR(100),
                     data_armazenamento DATETIME,
                     status VARCHAR(20) NOT NULL DEFAULT 'Armazenado',
+                    origem_estoque_inicial BOOLEAN NOT NULL DEFAULT 0,
                     ativo BOOLEAN NOT NULL DEFAULT 1,
                     data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id)
@@ -428,6 +444,10 @@ def _ensure_wms_tables() -> None:
         if "deposito_id" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN deposito_id INTEGER"))
             conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_item_wms_deposito_id ON item_wms (deposito_id)"))
+            conn.commit()
+        if "origem_estoque_inicial" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN origem_estoque_inicial BOOLEAN NOT NULL DEFAULT 0"))
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_item_wms_origem_estoque_inicial ON item_wms (origem_estoque_inicial)"))
             conn.commit()
         
         # Tabela movimentacao_wms
