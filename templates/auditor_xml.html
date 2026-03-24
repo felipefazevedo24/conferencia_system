@@ -597,6 +597,7 @@
                 <div class="actions">
                     <button class="btn warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
                     <button class="btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
+                    <button class="btn" style="background:#fff7ed; color:#9a3412; border-color:#fdba74;" onclick="retirarNotaDoAuditor()"><i class="fas fa-arrow-rotate-left"></i> Retirar do Auditor</button>
                     <button class="btn success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
                 </div>
 
@@ -629,6 +630,15 @@ let notasFiltradas = [];
 let notaSelecionada = null;
 let toastTimer = null;
 let confirmResolver = null;
+
+function obterNotaInicialDaUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        return (params.get('nota') || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
 
 function toast(msg, tipo='ok') {
     const el = document.getElementById('msg');
@@ -842,6 +852,25 @@ async function carregarNotas() {
     } catch (e) {
         toast(e.message, 'err');
     }
+}
+
+async function aplicarSelecaoInicialDaUrl() {
+    const notaInicial = obterNotaInicialDaUrl();
+    if (!notaInicial) return;
+
+    const filtro = document.getElementById('filtro');
+    if (filtro) {
+        filtro.value = notaInicial;
+        renderNotas();
+    }
+
+    const existeNaFila = notas.some(n => String(n.numero || '').trim() === notaInicial);
+    if (!existeNaFila) {
+        toast(`NF ${notaInicial} não está na fila atual do Auditor XML.`, 'err');
+        return;
+    }
+
+    await selecionarNota(notaInicial);
 }
 
 async function selecionarNota(numero) {
@@ -1531,6 +1560,34 @@ async function salvarPedido() {
     }
 }
 
+async function retirarNotaDoAuditor() {
+    if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+
+    const motivo = prompt(`Informe o motivo para retirar a NF ${notaSelecionada} do Auditor XML (mín. 5 caracteres):`, '');
+    if (motivo === null) return;
+    if (!motivo || motivo.trim().length < 5) {
+        toast('Informe um motivo com no mínimo 5 caracteres.', 'err');
+        return;
+    }
+
+    const confirmou = await confirmarAcao(`Retirar a NF ${notaSelecionada} da fila do Auditor XML e devolver para Pré-Nota?`);
+    if (!confirmou) return;
+
+    try {
+        const r = await fetchJson('/api/xml_auditor/retirar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: notaSelecionada, motivo: motivo.trim() })
+        });
+        toast(r.msg || 'NF retirada da fila do Auditor XML.', 'ok');
+        notaSelecionada = null;
+        document.getElementById('detalheWrap').style.display = 'none';
+        document.getElementById('detalheVazio').style.display = '';
+        await carregarNotas();
+    } catch (e) {
+        toast(e.message, 'err');
+    }
+}
+
 async function liberarSelecionada() {
     if (!notaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
 
@@ -1580,6 +1637,9 @@ async function liberarSelecionada() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', carregarNotas);
+document.addEventListener('DOMContentLoaded', async () => {
+    await carregarNotas();
+    await aplicarSelecaoInicialDaUrl();
+});
 </script>
 {% endblock %}

@@ -18,10 +18,180 @@ def _digits(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _local_name(tag: str) -> str:
+    return str(tag or "").split("}")[-1].lower()
+
+
+def _first_text_any(root, paths):
+    for path in paths:
+        node = root.find(path)
+        if node is not None and node.text is not None and str(node.text).strip():
+            return str(node.text).strip()
+    return ""
+
+
+def _first_text_by_local_names(root, local_names):
+    wanted = {str(name or "").strip().lower() for name in (local_names or []) if str(name or "").strip()}
+    if not wanted:
+        return ""
+    for node in root.iter():
+        if _local_name(node.tag) in wanted and node.text is not None and str(node.text).strip():
+            return str(node.text).strip()
+    return ""
+
+
+def _is_nfse_document(root) -> bool:
+    alvo = {"compnfse", "nfse", "infnfse", "declaracaoprestacaoservico", "rps"}
+    return any(_local_name(n.tag) in alvo for n in root.iter())
+
+
+def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -> int:
+    id_externo = ""
+    for node in root.iter():
+        local = _local_name(node.tag)
+        if local in {"infnfse", "nfse"}:
+            id_externo = str(node.attrib.get("Id") or node.attrib.get("id") or "").strip()
+            if id_externo:
+                break
+        if not id_externo:
+            id_externo = str(node.attrib.get("Id") or node.attrib.get("id") or "").strip()
+
+    numero_nota = _first_text_any(
+        root,
+        [
+            ".//{*}InfNfse/{*}Numero",
+            ".//{*}Nfse/{*}InfNfse/{*}Numero",
+            ".//{*}Numero",
+            ".//{*}NumeroNfse",
+            ".//{*}numero_nfse",
+        ],
+    )
+    if not numero_nota:
+        numero_nota = _first_text_by_local_names(root, ["numero", "numeronfse", "numero_nfse", "numnfse"])
+
+    codigo_verificacao = _first_text_any(root, [".//{*}CodigoVerificacao", ".//{*}codigo_verificacao"])
+    if not codigo_verificacao:
+        codigo_verificacao = _first_text_by_local_names(root, ["codigoverificacao", "codigo_verificacao"])
+
+    if not numero_nota:
+        id_digits = _digits(id_externo)
+        if id_digits:
+            numero_nota = id_digits[-20:]
+        elif codigo_verificacao:
+            numero_nota = f"NFSE-{str(codigo_verificacao).strip()}"[:20]
+
+    if not numero_nota:
+        return 0
+
+    chave = _first_text_any(root, [".//{*}ChaveNFe", ".//{*}chave", ".//{*}Chave"])
+    if not chave:
+        chave = _first_text_by_local_names(root, ["chavenfe", "chave"])
+    chave = _digits(chave)
+
+    fornecedor = _first_text_any(
+        root,
+        [
+            ".//{*}PrestadorServico/{*}RazaoSocial",
+            ".//{*}Prestador/{*}RazaoSocial",
+            ".//{*}prestador_razao_social",
+        ],
+    )
+    tomador = _first_text_any(
+        root,
+        [
+            ".//{*}TomadorServico/{*}RazaoSocial",
+            ".//{*}Tomador/{*}RazaoSocial",
+            ".//{*}tomador_razao_social",
+        ],
+    )
+    descricao = _first_text_any(
+        root,
+        [
+            ".//{*}Discriminacao",
+            ".//{*}DiscriminacaoServico",
+            ".//{*}discriminacao",
+        ],
+    )
+    if not descricao:
+        descricao = "Serviço (NFS-e)"
+
+    cnpj_emitente = _digits(
+        _first_text_any(
+            root,
+            [
+                ".//{*}PrestadorServico/{*}IdentificacaoPrestador/{*}Cnpj",
+                ".//{*}Prestador/{*}CpfCnpj/{*}Cnpj",
+                ".//{*}prestador_cpf_cnpj",
+            ],
+        )
+    )[:14]
+    cnpj_destinatario = _digits(
+        _first_text_any(
+            root,
+            [
+                ".//{*}TomadorServico/{*}IdentificacaoTomador/{*}CpfCnpj/{*}Cnpj",
+                ".//{*}Tomador/{*}CpfCnpj/{*}Cnpj",
+                ".//{*}tomador_cpf_cnpj",
+            ],
+        )
+    )[:14]
+
+    valor_raw = _first_text_any(
+        root,
+        [
+            ".//{*}Servico/{*}Valores/{*}ValorServicos",
+            ".//{*}Valores/{*}ValorLiquidoNfse",
+            ".//{*}valor",
+        ],
+    )
+    try:
+        valor = float(str(valor_raw or "0").replace(",", "."))
+    except Exception:
+        valor = 0.0
+
+    duplicado = (
+        ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFSE").first()
+        or (ItemNota.query.filter_by(documento_externo_id=id_externo, tipo_documento="NFSE").first() if id_externo else None)
+    )
+    if duplicado:
+        return 0
+
+    db.session.add(
+        ItemNota(
+            tipo_documento="NFSE",
+            documento_externo_id=id_externo or None,
+            codigo_verificacao=codigo_verificacao[:40] if codigo_verificacao else None,
+            numero_nota=numero_nota[:20],
+            fornecedor=(fornecedor or tomador or "Prestador de Serviço")[:100],
+            chave_acesso=chave[:44] if chave else None,
+            cfop="",
+            codigo="SERVICO",
+            descricao=descricao[:200],
+            qtd_real=1.0,
+            unidade_comercial="UN",
+            cnpj_emitente=cnpj_emitente,
+            cnpj_destinatario=cnpj_destinatario,
+            valor_produto=valor,
+            status=status_inicial,
+            usuario_importacao=user,
+            valor_total=f"R$ {valor:.2f}",
+            valor_imposto="---",
+            sem_conferencia_logistica=True,
+            auditor_status="SemInconsistencia",
+            auditor_decisao="PendenteDecisao",
+        )
+    )
+
+    return 1
+
+
 def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pendente") -> int:
     ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
     try:
         root = et.fromstring(xml_bytes)
+
+        if _is_nfse_document(root):
+            return _process_nfse_and_store(root, user, status_inicial=status_inicial)
 
         numero_nota = _txt(root, ".//nfe:ide/nfe:nNF", ns, "").strip()
         inf_nfe = root.find(".//nfe:infNFe", ns)
@@ -54,7 +224,7 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
             except Exception:
                 vencimento_pagamento_xml = None
 
-        if ItemNota.query.filter_by(numero_nota=numero_nota).first():
+        if ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFE").first():
             return 0
 
         itens_xml = []
@@ -116,6 +286,7 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
         for item in itens_filtrados:
             db.session.add(
                 ItemNota(
+                    tipo_documento="NFE",
                     numero_nota=numero_nota,
                     fornecedor=fornecedor,
                     chave_acesso=chave,

@@ -288,6 +288,10 @@
                       placeholder="Informe o código interno do material"
                       style="width:100%; padding:12px; border:2px solid #f59e0b; border-radius: 8px; font-family: 'Cascadia Code', monospace; font-size: 15px; font-weight: bold; box-sizing: border-box; color: #7c2d12;">
                  </div>
+                  <div id="material-code-items-wrap" style="display:none; margin-top:12px; border:1px solid #fdba74; border-radius:10px; background:#fff7ed; padding:10px;">
+                   <label class="form-label" style="display:block; margin-bottom:8px;">CÓDIGO DO MATERIAL POR ITEM XML (OBRIGATÓRIO PARA REMESSA):</label>
+                   <div id="material-code-items-container" style="max-height:220px; overflow:auto; display:flex; flex-direction:column; gap:8px;"></div>
+                  </div>
             <label style="display:flex; align-items:flex-start; gap:10px; margin-top:16px; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; cursor:pointer;">
                 <input type="checkbox" id="input-manifestar-destinatario" checked style="margin-top:2px;">
                 <span style="font-size:12px; color:#1e3a8a; font-weight:700; line-height:1.4;">
@@ -368,6 +372,7 @@
     let notaSendoEstornada = null;
     let listaNotasAtuais = [];
     let notasLancadasAtuais = [];
+    let itensNotaModal = [];
 
     function exibirFeedbackCard(tipo, titulo, mensagem) {
         const card = document.getElementById('feedback-card');
@@ -476,23 +481,82 @@
         renderizarLancadas(filtrarNotas(notasLancadasAtuais));
     }
 
-    function abrirModal(n) {
+    async function carregarItensNotaParaModal(numeroNota) {
+        try {
+            const res = await fetch(`/api/detalhes_nf/${encodeURIComponent(numeroNota)}`);
+            if (!res.ok) {
+                itensNotaModal = [];
+                return;
+            }
+            const data = await res.json();
+            itensNotaModal = Array.isArray(data.itens) ? data.itens : [];
+        } catch (e) {
+            itensNotaModal = [];
+        }
+    }
+
+    function renderizarCamposCodigoPorItem() {
+        const container = document.getElementById('material-code-items-container');
+        if (!container) return;
+
+        if (!itensNotaModal.length) {
+            container.innerHTML = '<div style="font-size:12px; color:#7c2d12; font-weight:700;">Não foi possível carregar os itens XML desta NF.</div>';
+            return;
+        }
+
+        container.innerHTML = itensNotaModal.map((item, idx) => {
+            const descricao = item.descricao || item.desc || 'Item sem descrição';
+            const qtd = item.qtd ?? '---';
+            const codigoAtual = item.codigo || '';
+            const itemId = Number(item.id || 0);
+            return `
+                <div style="display:grid; grid-template-columns: minmax(0, 1fr) 220px; gap:10px; align-items:center; background:#fff; border:1px solid #fed7aa; border-radius:8px; padding:8px 10px;">
+                    <div style="font-size:12px; color:#7c2d12; font-weight:700;">
+                        <div>Item ${idx + 1}: ${descricao}</div>
+                        <div style="font-size:11px; color:#9a3412; margin-top:2px;">Qtd XML: ${qtd}</div>
+                    </div>
+                    <input
+                        class="item-material-code"
+                        data-item-id="${itemId}"
+                        type="text"
+                        value="${codigoAtual}"
+                        placeholder="Código do material"
+                        style="width:100%; padding:10px; border:2px solid #f59e0b; border-radius:8px; font-family:'Cascadia Code', monospace; font-size:13px; font-weight:700; color:#7c2d12; box-sizing:border-box;"
+                    >
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function abrirModal(n) {
         notaSendoLancada = n;
         const notaInfo = listaNotasAtuais.find(item => item.numero === n);
         document.getElementById('modal-desc-nota').innerText = "ESCRITURAR NF: " + n;
         document.getElementById('input-manifestar-destinatario').checked = true;
         document.getElementById('input-codigo-material').value = '';
+        document.getElementById('material-code-items-container').innerHTML = '';
+        itensNotaModal = [];
 
-        const exigeCodigoMaterial = Boolean(notaInfo && (notaInfo.material_cliente || notaInfo.remessa));
-        document.getElementById('material-code-wrap').style.display = exigeCodigoMaterial ? 'block' : 'none';
+        const ehRemessa = Boolean(notaInfo && notaInfo.remessa);
+        const ehRemessaComExigencia = Boolean(notaInfo && notaInfo.exige_codigo_material_remessa);
+        const ehMaterialCliente = Boolean(notaInfo && notaInfo.material_cliente);
+        document.getElementById('material-code-wrap').style.display = ehMaterialCliente ? 'block' : 'none';
+        document.getElementById('material-code-items-wrap').style.display = ehRemessaComExigencia ? 'block' : 'none';
         const tipoDocEl = document.getElementById('modal-tipo-doc');
-        if (exigeCodigoMaterial) {
-            const tipo = notaInfo.remessa ? 'NF de Remessa' : 'Material de Cliente';
+        if (ehRemessaComExigencia || ehMaterialCliente) {
+            const tipo = ehRemessaComExigencia ? 'NF de Remessa de Industrialização' : 'Material de Cliente';
             tipoDocEl.style.display = 'block';
-            tipoDocEl.textContent = `${tipo}: informe também o código do material neste lançamento.`;
+            tipoDocEl.textContent = ehRemessaComExigencia
+                ? `${tipo}: vincule o código do material por item XML neste lançamento.`
+                : `${tipo}: informe também o código do material neste lançamento.`;
         } else {
             tipoDocEl.style.display = 'none';
             tipoDocEl.textContent = '';
+        }
+
+        if (ehRemessaComExigencia) {
+            await carregarItensNotaParaModal(n);
+            renderizarCamposCodigoPorItem();
         }
 
         const alertaDiv = document.getElementById('alerta-conferencia');
@@ -553,10 +617,27 @@
         }
 
         const notaInfo = listaNotasAtuais.find(item => item.numero === notaSendoLancada);
-        const exigeCodigoMaterial = Boolean(notaInfo && (notaInfo.material_cliente || notaInfo.remessa));
+        const ehRemessa = Boolean(notaInfo && notaInfo.remessa);
+        const ehRemessaComExigencia = Boolean(notaInfo && notaInfo.exige_codigo_material_remessa);
+        const ehMaterialCliente = Boolean(notaInfo && notaInfo.material_cliente);
         const codigoMaterial = (document.getElementById('input-codigo-material').value || '').trim();
-        if (exigeCodigoMaterial && !codigoMaterial) {
-            exibirFeedbackCard('error', 'Lançamento não realizado', 'Para NF de remessa/material de cliente, informe o código do material.');
+
+        let codigosMateriais = [];
+        if (ehRemessaComExigencia) {
+            const inputs = Array.from(document.querySelectorAll('#material-code-items-container .item-material-code'));
+            codigosMateriais = inputs.map((el) => ({
+                item_id: Number(el.dataset.itemId || 0),
+                codigo_material: (el.value || '').trim(),
+            }));
+            const algumVazio = codigosMateriais.some((entry) => !entry.item_id || !entry.codigo_material);
+            if (!codigosMateriais.length || algumVazio) {
+                exibirFeedbackCard('error', 'Lançamento não realizado', 'Para NF de remessa de industrialização, informe o código do material para cada item XML.');
+                return;
+            }
+        }
+
+        if (ehMaterialCliente && !codigoMaterial) {
+            exibirFeedbackCard('error', 'Lançamento não realizado', 'Para NF de material de cliente, informe o código do material.');
             return;
         }
 
@@ -568,6 +649,7 @@
                 nota: notaSendoLancada,
                 codigo: cod,
                 codigo_material: codigoMaterial,
+                codigos_materiais: codigosMateriais,
                 manifestar_destinatario: manifestarDestinatario,
             })
         });

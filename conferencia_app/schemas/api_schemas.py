@@ -13,7 +13,9 @@ class RegisterSchema(Schema):
 
 
 class ConsysteDownloadSchema(Schema):
-    chave = fields.Str(required=True, validate=validate.Length(min=44, max=60))
+    modelo = fields.Str(required=False, load_default="nfe", validate=validate.OneOf(["nfe", "nfse"]))
+    chave = fields.Str(required=False, load_default="", validate=validate.Length(max=80))
+    documento_id = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
 
 
 class ConsysteEmissaoSolicitarSchema(Schema):
@@ -55,10 +57,16 @@ class ResetNotaSchema(Schema):
     motivo = fields.Str(required=True, validate=validate.Length(min=3, max=500))
 
 
+class CodigoMaterialItemSchema(Schema):
+    item_id = fields.Int(required=True, validate=validate.Range(min=1))
+    codigo_material = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+
+
 class ConfirmarLancamentoSchema(Schema):
     nota = fields.Raw(required=True)
     codigo = fields.Str(required=True, validate=validate.Length(min=1, max=80))
     codigo_material = fields.Str(required=False, load_default="", validate=validate.Length(max=50))
+    codigos_materiais = fields.List(fields.Nested(CodigoMaterialItemSchema), required=False, load_default=[])
     manifestar_destinatario = fields.Bool(required=False, load_default=True)
 
 

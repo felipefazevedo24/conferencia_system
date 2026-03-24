@@ -73,6 +73,63 @@ def build_test_nfe_xml(numero_nota, itens, fornecedor="Fornecedor XML"):
         """.encode("utf-8")
 
 
+def build_test_nfse_xml(numero_nota="7001", prestador="Prestador Servicos", tomador="Tomador Teste"):
+        return f"""
+        <CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd">
+            <Nfse>
+                <InfNfse Id="NFSE{numero_nota}">
+                    <Numero>{numero_nota}</Numero>
+                    <CodigoVerificacao>ABCD1234</CodigoVerificacao>
+                    <ValoresNfse>
+                        <ValorLiquidoNfse>250.00</ValorLiquidoNfse>
+                    </ValoresNfse>
+                    <PrestadorServico>
+                        <RazaoSocial>{prestador}</RazaoSocial>
+                        <IdentificacaoPrestador>
+                            <Cnpj>11222333000181</Cnpj>
+                        </IdentificacaoPrestador>
+                    </PrestadorServico>
+                    <TomadorServico>
+                        <RazaoSocial>{tomador}</RazaoSocial>
+                        <IdentificacaoTomador>
+                            <CpfCnpj>
+                                <Cnpj>55444333000199</Cnpj>
+                            </CpfCnpj>
+                        </IdentificacaoTomador>
+                    </TomadorServico>
+                    <Servico>
+                        <Valores>
+                            <ValorServicos>250.00</ValorServicos>
+                        </Valores>
+                        <Discriminacao>Servico de manutencao</Discriminacao>
+                    </Servico>
+                </InfNfse>
+            </Nfse>
+        </CompNfse>
+        """.encode("utf-8")
+
+
+def build_test_nfse_xml_sem_numero(id_externo="NFSESEMNUM123456", prestador="Prestador Sem Numero"):
+        return f"""
+        <CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd">
+            <Nfse>
+                <InfNfse Id="{id_externo}">
+                    <CodigoVerificacao>ZXCV7788</CodigoVerificacao>
+                    <PrestadorServico>
+                        <RazaoSocial>{prestador}</RazaoSocial>
+                    </PrestadorServico>
+                    <Servico>
+                        <Valores>
+                            <ValorServicos>180.50</ValorServicos>
+                        </Valores>
+                        <Discriminacao>Servico sem numero explicito</Discriminacao>
+                    </Servico>
+                </InfNfse>
+            </Nfse>
+        </CompNfse>
+        """.encode("utf-8")
+
+
 def test_login_success(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -265,6 +322,153 @@ def test_confirmar_lancamento_reverte_quando_manifestacao_falha(tmp_path):
         assert item.usuario_lancamento is None
         assert log is not None
         assert log.status == "Falha"
+
+
+def test_confirmar_lancamento_remessa_exige_codigo_material_por_item(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add_all(
+            [
+                ItemNota(
+                    numero_nota="2010",
+                    fornecedor="Fornecedor Remessa",
+                    cfop="5124",
+                    codigo="",
+                    descricao="Item Remessa A",
+                    qtd_real=2.0,
+                    status="Concluído",
+                    remessa=True,
+                ),
+                ItemNota(
+                    numero_nota="2010",
+                    fornecedor="Fornecedor Remessa",
+                    cfop="5124",
+                    codigo="",
+                    descricao="Item Remessa B",
+                    qtd_real=1.0,
+                    status="Concluído",
+                    remessa=True,
+                ),
+            ]
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/confirmar_lancamento",
+        json={"nota": "2010", "codigo": "ERP-2010", "manifestar_destinatario": False},
+    )
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["sucesso"] is False
+    assert "industrialização" in data["msg"].lower()
+
+
+def test_confirmar_lancamento_remessa_persiste_codigo_material_por_item(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        item_a = ItemNota(
+            numero_nota="2011",
+            fornecedor="Fornecedor Remessa",
+            cfop="5124",
+            codigo="",
+            descricao="Item Remessa A",
+            qtd_real=2.0,
+            status="Concluído",
+            remessa=True,
+        )
+        item_b = ItemNota(
+            numero_nota="2011",
+            fornecedor="Fornecedor Remessa",
+            cfop="5124",
+            codigo="",
+            descricao="Item Remessa B",
+            qtd_real=1.0,
+            status="Concluído",
+            remessa=True,
+        )
+        db.session.add_all([item_a, item_b])
+        db.session.commit()
+        item_a_id = item_a.id
+        item_b_id = item_b.id
+
+    response = client.post(
+        "/api/confirmar_lancamento",
+        json={
+            "nota": "2011",
+            "codigo": "ERP-2011",
+            "codigos_materiais": [
+                {"item_id": item_a_id, "codigo_material": "MAT-REM-01"},
+                {"item_id": item_b_id, "codigo_material": "MAT-REM-02"},
+            ],
+            "manifestar_destinatario": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+
+    with app.app_context():
+        itens = ItemNota.query.filter_by(numero_nota="2011").order_by(ItemNota.id.asc()).all()
+        assert len(itens) == 2
+        assert itens[0].status == "Lançado"
+        assert itens[1].status == "Lançado"
+        assert itens[0].codigo == "MAT-REM-01"
+        assert itens[1].codigo == "MAT-REM-02"
+
+
+def test_confirmar_lancamento_remessa_cfop_5902_nao_exige_codigo_material(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add_all(
+            [
+                ItemNota(
+                    numero_nota="2012",
+                    fornecedor="Fornecedor Remessa 5902",
+                    cfop="5902",
+                    codigo="",
+                    descricao="Item Remessa 5902 A",
+                    qtd_real=1.0,
+                    status="Concluído",
+                    remessa=True,
+                ),
+                ItemNota(
+                    numero_nota="2012",
+                    fornecedor="Fornecedor Remessa 5902",
+                    cfop="5902",
+                    codigo="",
+                    descricao="Item Remessa 5902 B",
+                    qtd_real=3.0,
+                    status="Concluído",
+                    remessa=True,
+                ),
+            ]
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/confirmar_lancamento",
+        json={"nota": "2012", "codigo": "ERP-2012", "manifestar_destinatario": False},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+
+    with app.app_context():
+        itens = ItemNota.query.filter_by(numero_nota="2012").order_by(ItemNota.id.asc()).all()
+        assert len(itens) == 2
+        assert all(item.status == "Lançado" for item in itens)
 
 
 def test_reenvio_manifestacao_exige_nf_lancada(tmp_path):
@@ -822,6 +1026,50 @@ def test_api_processo_recebimento_painel_retorna_estrutura(tmp_path):
     assert "etapas" in data
     assert "kpis" in data
     assert "fila_excecao" in data
+
+
+def test_retirar_nf_do_auditor_remove_nf_definitivamente(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="AUX900",
+                fornecedor="Fornecedor Auditor",
+                codigo="AUD-1",
+                descricao="Item Auditor",
+                qtd_real=1.0,
+                status="AguardandoLiberacao",
+            )
+        )
+        db.session.commit()
+
+    retirar = client.post(
+        "/api/xml_auditor/retirar",
+        json={"nota": "AUX900", "motivo": "Devolver para ajuste de pre-nota"},
+    )
+    assert retirar.status_code == 200
+    assert retirar.get_json()["sucesso"] is True
+
+    fila_auditor = client.get("/api/xml_auditor/notas")
+    assert fila_auditor.status_code == 200
+    notas_auditor = fila_auditor.get_json()
+    assert not any(str(n.get("numero")) == "AUX900" for n in notas_auditor)
+
+    aguardando = client.get("/api/notas_aguardando_liberacao")
+    assert aguardando.status_code == 200
+    notas_aguardando = aguardando.get_json()
+    assert not any(str(n.get("numero")) == "AUX900" for n in notas_aguardando)
+
+    hist = client.get("/api/historico_completo?nota=AUX900")
+    assert hist.status_code == 200
+    data_hist = hist.get_json()
+    assert isinstance(data_hist, list)
+    assert len(data_hist) == 1
+    assert data_hist[0]["nota"] == "AUX900"
+    assert data_hist[0]["status"] == "Excluída"
 
 
 def test_api_processo_recebimento_painel_bloqueia_portaria(tmp_path):
@@ -1552,3 +1800,99 @@ def test_aprovar_devolucao_recebimento_manifesta_operacao_nao_realizada(tmp_path
         assert log is not None
         assert log.manifestacao == "operacao_nao_realizada"
         assert log.status == "Sucesso"
+
+
+def test_process_xml_store_nfse_com_tipo_documento(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        added = process_xml_and_store(build_test_nfse_xml(numero_nota="7010"), "admin", status_inicial="AguardandoLiberacao")
+        db.session.commit()
+
+        assert added == 1
+        item = ItemNota.query.filter_by(numero_nota="7010").first()
+        assert item is not None
+        assert item.tipo_documento == "NFSE"
+        assert item.sem_conferencia_logistica is True
+        assert item.documento_externo_id == "NFSE7010"
+        assert item.codigo_verificacao == "ABCD1234"
+
+
+def test_consyste_download_nfse_importa_por_documento_id(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config["CONSYSTE_TOKEN"] = "token_teste_valido"
+    client = app.test_client()
+    login_admin(client)
+
+    xml_nfse = build_test_nfse_xml(numero_nota="7020")
+    with patch(
+        "conferencia_app.routes.api_routes.download_documento_consyste",
+        return_value=(True, 200, xml_nfse),
+    ) as download_mock:
+        response = client.post(
+            "/api/consyste/download",
+            json={"modelo": "nfse", "documento_id": "12345"},
+        )
+
+    assert response.status_code == 200
+    download_mock.assert_called_once()
+
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="7020").first()
+        assert item is not None
+        assert item.tipo_documento == "NFSE"
+        assert item.status == "AguardandoLiberacao"
+
+
+def test_liberar_nfse_envia_direto_entrada_concluido(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="7030",
+                fornecedor="Prestador Servicos",
+                tipo_documento="NFSE",
+                documento_externo_id="NFSE7030",
+                codigo="SERVICO",
+                descricao="Servico tecnico",
+                qtd_real=1.0,
+                status="AguardandoLiberacao",
+                auditor_status="SemInconsistencia",
+                sem_conferencia_logistica=True,
+                pedido_compra="PO-123",
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/xml_auditor/liberar",
+        json={"nota": "7030"},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["sucesso"] is True
+
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="7030").first()
+        assert item.status == "Concluído"
+
+
+def test_process_xml_store_nfse_sem_numero_usa_fallback(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        added = process_xml_and_store(
+            build_test_nfse_xml_sem_numero(id_externo="NFSESEMNUM123456"),
+            "admin",
+            status_inicial="AguardandoLiberacao",
+        )
+        db.session.commit()
+
+        assert added == 1
+        item = ItemNota.query.filter_by(tipo_documento="NFSE", documento_externo_id="NFSESEMNUM123456").first()
+        assert item is not None
+        assert item.status == "AguardandoLiberacao"
+        assert str(item.numero_nota or "").strip() != ""

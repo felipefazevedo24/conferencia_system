@@ -132,6 +132,61 @@
 
         .voltar-link { display: inline-block; margin-top: 30px; color: #94a3b8; text-decoration: none; font-weight: 700; text-transform: uppercase; font-size: 11px; }
         .voltar-link:hover { color: var(--sap-blue); }
+
+        .auditor-embed-shell {
+            background: #fff;
+            width: min(98vw, 1440px);
+            height: min(94vh, 980px);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+            border: 1px solid #cbd5e1;
+            display: flex;
+            flex-direction: column;
+        }
+        .auditor-embed-head {
+            background: #0f172a;
+            color: #fff;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .auditor-embed-frame {
+            flex: 1;
+            border: none;
+            width: 100%;
+            background: #fff;
+        }
+        .modelo-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .modelo-btn {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            border-radius: 999px;
+            padding: 9px 16px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .modelo-btn:hover {
+            transform: translateY(-1px);
+            border-color: #94a3b8;
+        }
+        .modelo-btn.active {
+            background: linear-gradient(135deg, #0a6ed1, #0f5fb0);
+            color: #fff;
+            border-color: #0a6ed1;
+            box-shadow: 0 8px 18px rgba(10, 110, 209, 0.25);
+        }
     </style>
 {% endblock %}
 
@@ -152,7 +207,14 @@
 
     <div class="upload-grid">
         <div class="card-sap">
-            <h3><i class="fas fa-network-wired"></i> Terminal Web Service</h3>
+            <h3><i class="fas fa-network-wired"></i>Terminal Web Service</h3>
+
+            <label class="form-label">Modelo de Documento</label>
+            <div class="modelo-toggle" role="group" aria-label="Modelo de documento Consyste">
+                <button type="button" class="modelo-btn" data-modelo="nfse" onclick="selecionarModeloConsyste('nfse', this)">NFS-e</button>
+                <button type="button" class="modelo-btn active" data-modelo="nfe" onclick="selecionarModeloConsyste('nfe', this)">NF-e</button>
+            </div>
+            <input type="hidden" id="consyste-modelo" value="nfe" />
             
             <label class="form-label">Entrada por Chave (44 Dig)</label>
             <div class="input-group-sap">
@@ -187,16 +249,31 @@
         </div>
     </div>
 
-    <div class="card-sap" style="margin-top:25px; border-left: 4px solid var(--sap-blue);">
-        <h3 style="margin-bottom:12px; border:none; padding:0;"><i class="fas fa-arrow-right"></i> Próximo Passo do Fluxo</h3>
-        <div style="font-size:12px; color:#475569; line-height:1.6;">
-            A liberação de NF para conferência foi movida para o <b>Auditor XML</b> no menu de Compras.<br>
-            Após importar o XML aqui, acesse <b>Compras &gt; Auditor XML</b> para auditar e liberar.
+    <div class="card-sap" style="margin-top:25px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; border:none;"><i class="fas fa-diagram-project"></i> Integração Pré-Nota x Auditor XML</h3>
+            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarIntegracaoAuditorPreNota()">
+                <i class="fas fa-sync"></i> Atualizar
+            </button>
         </div>
-        <div style="margin-top:12px;">
-            <a class="btn-sap btn-primary-sap" href="/compras/auditor-xml" style="text-decoration:none;">
-                <i class="fas fa-shield-alt"></i> Abrir Auditor XML
-            </a>
+        <div style="font-size:12px; color:#475569; line-height:1.6; margin-bottom:12px;">
+            Acompanhe aqui as NFs em <b>Aguardando Liberação</b> e veja o status da auditoria. Quando uma NF for retirada no Auditor, ela é removida do sistema e só volta com nova importação.
+        </div>
+        <div class="table-container" style="max-height:260px; overflow-y:auto;">
+            <table class="mini-table">
+                <thead>
+                    <tr>
+                        <th>Nº Nota</th>
+                        <th>Fornecedor</th>
+                        <th>Status Auditoria</th>
+                        <th>Decisão</th>
+                        <th width="170" style="text-align:center;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="lista-integracao-auditor-prenota">
+                    <tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Carregando integração...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -284,10 +361,11 @@
                 <table class="erp-table">
                     <thead>
                         <tr>
+                            <th>MODELO</th>
                             <th>Nº DOC</th>
                             <th>EMISSÃO</th>
                             <th>EMITENTE</th>
-                            <th>CHAVE DE ACESSO</th>
+                            <th>CHAVE / ID</th>
                             <th width="120" style="text-align:center">AÇÃO</th>
                         </tr>
                     </thead>
@@ -300,11 +378,36 @@
         </div>
     </div>
 </div>
+
+<div id="modal-auditor-integrado" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharAuditorIntegrado()">
+    <div class="auditor-embed-shell">
+        <div class="auditor-embed-head">
+            <div style="font-size:13px; font-weight:800; letter-spacing:0.6px; text-transform:uppercase;">Auditor XML Integrado na Pré-Nota</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <a class="btn-sap" href="/compras/auditor-xml" target="_blank" rel="noopener" style="padding:6px 10px; font-size:10px; background:#1e293b; color:#fff; border:1px solid #334155; text-decoration:none;">Abrir em nova aba</a>
+                <button class="btn-sap" type="button" onclick="fecharAuditorIntegrado()" style="padding:6px 10px; font-size:10px; background:#fff; color:#0f172a;">Fechar</button>
+            </div>
+        </div>
+        <iframe id="auditor-integrado-iframe" class="auditor-embed-frame" src="about:blank" title="Auditor XML Integrado"></iframe>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     const statusBox = document.getElementById('consyste-status');
+    let documentosModal = [];
+
+    function selecionarModeloConsyste(modelo, buttonEl) {
+        const inputModelo = document.getElementById('consyste-modelo');
+        inputModelo.value = (modelo || 'nfe').toLowerCase();
+        document.querySelectorAll('.modelo-btn').forEach(btn => btn.classList.remove('active'));
+        if (buttonEl) buttonEl.classList.add('active');
+    }
+
+    function getConsysteModeloSelecionado() {
+        return (document.getElementById('consyste-modelo').value || 'nfe').toLowerCase();
+    }
 
     function showStatus(msg, type='info') {
         statusBox.style.display = "block";
@@ -321,16 +424,20 @@
     }
 
     // 1. IMPORTAÇÃO POR CHAVE
-    async function importarPorChave(chaveManual) {
-        const chave = chaveManual || document.getElementById('consyste-chave').value.trim();
-        if (!chave) return alert('ERRO: Informe a chave de acesso.');
+    async function importarDocumento(doc) {
+        const modelo = (doc && doc.modelo) || 'nfe';
+        const chave = (doc && doc.chave) || '';
+        const documentoId = (doc && doc.documento_id) || (doc && doc.id) || '';
+
+        if (modelo === 'nfse' && !documentoId) return alert('ERRO: NFS-e sem ID de documento.');
+        if (modelo === 'nfe' && !chave) return alert('ERRO: NF-e sem chave de acesso.');
 
         showStatus('Iniciando handshake com Consyst-e...');
         try {
             const res = await fetch('/api/consyste/download', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ chave: chave })
+                body: JSON.stringify({ modelo: modelo, chave: chave, documento_id: documentoId })
             });
             const d = await parseResponseSafe(res);
             if(res.ok) {
@@ -347,14 +454,27 @@
         } catch (e) { showStatus('Falha crítica de comunicação', 'error'); }
     }
 
+    async function importarPorChave(chaveManual) {
+        const chave = chaveManual || document.getElementById('consyste-chave').value.trim();
+        if (!chave) return alert('ERRO: Informe a chave de acesso.');
+        await importarDocumento({ modelo: 'nfe', chave: chave });
+    }
+
     // 1.1 CONSULTA POR CHAVE
     async function buscarPorChave() {
         const chave = document.getElementById('consyste-chave').value.trim();
         if (!chave) return alert('Informe a chave de acesso.');
 
+        const modelo = getConsysteModeloSelecionado();
+        if (modelo === 'nfe') {
+            showStatus('Baixando NF-e por chave...');
+            await importarPorChave(chave);
+            return;
+        }
+
         showStatus('Querying Web Service by Key...');
         try {
-            const res = await fetch(`/api/consyste/listar?chave=${encodeURIComponent(chave)}`);
+            const res = await fetch(`/api/consyste/listar?modelo=${encodeURIComponent(modelo)}&chave=${encodeURIComponent(chave)}`);
             const data = await parseResponseSafe(res);
 
             if (!res.ok) {
@@ -368,12 +488,13 @@
 
             const lista = data.documentos || [];
             if (lista.length === 0) {
-                showStatus('Documento não encontrado no portal.', 'error');
+                showStatus('Documento não encontrado no portal. Para NFS-e prefira busca por número.', 'error');
                 return;
             }
 
             showStatus('Match found. Requesting XML download...');
-            importarPorChave(lista[0].chave || chave);
+            const alvo = lista[0] || { modelo: 'nfe', chave: chave };
+            importarDocumento(alvo);
         } catch (e) {
             showStatus('Internal Server Error', 'error');
         }
@@ -387,7 +508,8 @@
         showStatus('Scanning Web Service for ID: ' + numInput);
         
         try {
-            const res = await fetch(`/api/consyste/listar?numero=${numInput}`);
+            const modelo = getConsysteModeloSelecionado();
+            const res = await fetch(`/api/consyste/listar?modelo=${encodeURIComponent(modelo)}&numero=${encodeURIComponent(numInput)}`);
             const data = await parseResponseSafe(res);
 
             if (!res.ok) {
@@ -405,7 +527,7 @@
                 showStatus('Resultado nulo para esta consulta.', 'error');
             } else if (lista.length === 1) {
                 showStatus('Registro único localizado. Importando...');
-                importarPorChave(lista[0].chave);
+                importarDocumento(lista[0]);
             } else {
                 showStatus('Múltiplos registros localizados ('+lista.length+').');
                 abrirModalSelecao(lista);
@@ -416,19 +538,27 @@
     }
 
     function abrirModalSelecao(documentos) {
+        documentosModal = documentos || [];
         const corpo = document.getElementById('lista-selecao-corpo');
-        corpo.innerHTML = documentos.map(doc => `
+        corpo.innerHTML = documentosModal.map((doc, idx) => `
             <tr>
+                <td><b>${(doc.modelo || 'nfe').toUpperCase()}</b></td>
                 <td><b>${doc.numero}</b></td>
                 <td>${doc.emissao || '---'}</td>
                 <td>${doc.emitente_nome || doc.emit_nome}</td>
-                <td style="font-family:monospace; color: var(--sap-blue)">${doc.chave}</td>
+                <td style="font-family:monospace; color: var(--sap-blue)">${doc.chave || doc.documento_id || doc.id || '---'}</td>
                 <td style="text-align:center">
-                    <button class="btn-sap btn-primary-sap" style="padding: 5px 12px; font-size: 10px;" onclick="importarPorChave('${doc.chave}')">Selecionar</button>
+                    <button class="btn-sap btn-primary-sap" style="padding: 5px 12px; font-size: 10px;" onclick="importarDaSelecao(${idx})">Selecionar</button>
                 </td>
             </tr>
         `).join('');
         document.getElementById('modal-selecao').style.display = 'flex';
+    }
+
+    function importarDaSelecao(idx) {
+        const doc = documentosModal[idx];
+        if (!doc) return;
+        importarDocumento(doc);
     }
 
     function fecharModalSelecao() { document.getElementById('modal-selecao').style.display = 'none'; }
@@ -546,9 +676,62 @@
         await carregarPendentesParaExclusao();
     }
 
+    function badgeAuditoria(st) {
+        if (st === 'SemInconsistencia') return '<span style="font-size:11px; font-weight:800; color:#166534;">Sem inconsistência</span>';
+        if (st === 'ComInconsistencia') return '<span style="font-size:11px; font-weight:800; color:#991b1b;">Com inconsistência</span>';
+        return '<span style="font-size:11px; font-weight:800; color:#64748b;">Não auditado</span>';
+    }
+
+    function badgeDecisaoAuditor(decisao) {
+        if (decisao === 'XML Aprovado') return '<span style="font-size:11px; font-weight:800; color:#166534;">XML Aprovado</span>';
+        if (decisao === 'XML Recusado') return '<span style="font-size:11px; font-weight:800; color:#991b1b;">XML Recusado</span>';
+        return '<span style="font-size:11px; font-weight:800; color:#64748b;">Pendente decisão</span>';
+    }
+
+    async function carregarIntegracaoAuditorPreNota() {
+        const tbody = document.getElementById('lista-integracao-auditor-prenota');
+        const res = await fetch('/api/notas_aguardando_liberacao');
+        const lista = await res.json();
+
+        if (!Array.isArray(lista) || !lista.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Nenhuma NF em Aguardando Liberação.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = lista.map((n) => `
+            <tr>
+                <td><b>${n.numero}</b></td>
+                <td>${n.fornecedor || '---'}</td>
+                <td>${badgeAuditoria(n.auditor_status)}</td>
+                <td>${badgeDecisaoAuditor(n.auditor_decisao)}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-primary-sap" type="button" style="padding:5px 10px; font-size:10px;" onclick="abrirAuditorIntegrado('${n.numero}')">Abrir Auditor</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function abrirAuditorIntegrado(numeroNota = '') {
+        const modal = document.getElementById('modal-auditor-integrado');
+        const iframe = document.getElementById('auditor-integrado-iframe');
+        const rota = numeroNota
+            ? `/compras/auditor-xml?nota=${encodeURIComponent(numeroNota)}`
+            : '/compras/auditor-xml';
+        iframe.src = rota;
+        modal.style.display = 'flex';
+    }
+
+    function fecharAuditorIntegrado() {
+        const modal = document.getElementById('modal-auditor-integrado');
+        const iframe = document.getElementById('auditor-integrado-iframe');
+        iframe.src = 'about:blank';
+        modal.style.display = 'none';
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
         await carregarPendentesParaExclusao();
         await carregarSolicitacoesDevolucao();
+        await carregarIntegracaoAuditorPreNota();
     });
 </script>
 {% endblock %}

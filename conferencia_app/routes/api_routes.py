@@ -68,6 +68,7 @@ from ..schemas.api_schemas import (
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
+from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -95,6 +96,7 @@ aprovar_solicitacao_devolucao_schema = AprovarSolicitacaoDevolucaoSchema()
 
 CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
+CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL = {"5124", "5125", "6124", "6125"}
 CNPJ_COLUMBIA_MACHINE = "30482274000125"
 
 
@@ -133,6 +135,13 @@ def _normalize_cst(value: str, size: int = 2) -> str:
     if not clean:
         return ""
     return clean.zfill(size)[-size:]
+
+
+def _remessa_exige_codigo_material(itens) -> bool:
+    for item in itens or []:
+        if _normalize_cfop(getattr(item, "cfop", "")) in CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL:
+            return True
+    return False
 
 
 def _filter_itens_para_conferencia(itens):
@@ -1584,26 +1593,35 @@ def importar_xml():
 @permission_required("PAGE_UPLOAD")
 def consyste_download():
     data = consyste_download_schema.load(request.json or {})
-    chave_bruta = data.get("chave", "").strip()
+    modelo = str(data.get("modelo") or "nfe").strip().lower()
+    chave_bruta = str(data.get("chave") or "").strip()
+    documento_id = str(data.get("documento_id") or "").strip()
     chave = re.sub(r"\D", "", chave_bruta)
 
-    if len(chave) != 44:
-        return jsonify({"error": f"Chave inválida: possui {len(chave)} dígitos."}), 400
-
-    token = current_app.config.get("CONSYSTE_TOKEN")
-    url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/{chave}/download.xml"
+    if modelo == "nfse":
+        if not documento_id:
+            return jsonify({"error": "Para NFS-e, informe o ID do documento."}), 400
+    else:
+        if len(chave) != 44:
+            return jsonify({"error": f"Chave inválida: possui {len(chave)} dígitos."}), 400
 
     try:
-        resp = requests.get(url, headers={"X-Consyste-Auth-Token": token}, timeout=15)
-        if not resp.ok:
-            return jsonify({"error": f"Consyste diz: {resp.text}"}), resp.status_code
+        ok, status_code, payload = download_documento_consyste(
+            modelo=modelo,
+            formato="xml",
+            chave=chave,
+            documento_id=documento_id,
+            timeout=30,
+        )
+        if not ok:
+            return jsonify({"error": "Falha ao baixar XML na Consyste."}), status_code
 
-        added = process_xml_and_store(resp.content, session["username"], status_inicial="AguardandoLiberacao")
+        added = process_xml_and_store(payload, session["username"], status_inicial="AguardandoLiberacao")
         db.session.commit()
         return jsonify(
             {
                 "msg": (
-                    "XML importado com sucesso! NF aguardando liberação do admin para conferência."
+                    "XML importado com sucesso! Documento aguardando liberação do admin."
                     if added
                     else "Nota já estava no banco"
                 ),
@@ -1727,67 +1745,143 @@ def consyste_documento():
 @api_bp.route("/api/consyste/listar")
 @permission_required("PAGE_UPLOAD")
 def consyste_list():
-    token = current_app.config.get("CONSYSTE_TOKEN")
+    modelo = str(request.args.get("modelo") or "todos").strip().lower()
     numero = (request.args.get("numero") or "").strip()
     chave = re.sub(r"\D", "", (request.args.get("chave") or "").strip())
     if not numero and not chave:
         return jsonify({"error": "Informe número da nota ou chave de acesso."}), 400
 
-    headers = {
-        "X-Consyste-Auth-Token": token,
-        "Accept": "application/json",
-    }
+    modelos_busca = [modelo] if modelo in {"nfe", "nfse"} else ["nfe", "nfse"]
 
-    def _normalizar(documentos):
+    def _normalizar(documentos, modelo_doc: str):
         resultado = []
         for doc in documentos:
             resultado.append(
                 {
+                    "modelo": modelo_doc,
                     "id": doc.get("id"),
+                    "documento_id": str(doc.get("id") or ""),
                     "numero": str(doc.get("numero", "")),
                     "emissao": doc.get("emitido_em") or doc.get("emissao"),
-                    "emitente_nome": doc.get("emit_nome") or doc.get("emitente_nome") or doc.get("dest_nome"),
-                    "chave": doc.get("chave"),
+                    "emitente_nome": (
+                        doc.get("emit_nome")
+                        or doc.get("emitente_nome")
+                        or doc.get("prestador_nome")
+                        or doc.get("prestador_razao_social")
+                        or doc.get("dest_nome")
+                        or doc.get("tomador_nome")
+                        or doc.get("tomador_razao_social")
+                    ),
+                    "chave": str(doc.get("chave") or ""),
+                    "codigo_verificacao": str(doc.get("codigo_verificacao") or ""),
                 }
             )
         return resultado
 
+    def _extrair_documentos(payload):
+        if isinstance(payload, dict):
+            docs = payload.get("documentos")
+            if isinstance(docs, list):
+                return docs
+            return []
+        if isinstance(payload, list):
+            return payload
+        return []
+
     try:
-        if chave:
-            if len(chave) != 44:
-                return jsonify({"error": f"Chave inválida: possui {len(chave)} dígitos."}), 400
-
-            consulta_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/{chave}"
-            resp = requests.get(consulta_url, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                dados = resp.json()
-                doc = dados if isinstance(dados, dict) else {}
-                return jsonify({"documentos": _normalizar([doc])})
-            if resp.status_code == 404:
-                return jsonify({"documentos": []})
-            return jsonify({"error": f"Consyste diz: {resp.text}"}), resp.status_code
-
-        # Busca por numero de NF-e na lista de recebidos/todos/emitidos.
-        filtros = ["recebidos", "todos", "emitidos"]
-        termos = [f"numero:{numero}", numero]
-        for filtro in filtros:
-            base_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/lista/{filtro}"
-            for termo in termos:
-                params = {
-                    "q": termo,
-                    "campos": "id,chave,emitido_em,numero,emit_nome,dest_nome",
+        encontrados = []
+        for m in modelos_busca:
+            if m == "nfe":
+                token = current_app.config.get("CONSYSTE_TOKEN")
+                headers = {
+                    "X-Consyste-Auth-Token": token,
+                    "Accept": "application/json",
                 }
-                resp = requests.get(base_url, headers=headers, params=params, timeout=15)
-                if resp.status_code != 200:
+
+                if chave:
+                    if len(chave) != 44:
+                        continue
+
+                    consulta_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/{chave}"
+                    resp = requests.get(consulta_url, headers=headers, timeout=15)
+                    if resp.status_code == 200:
+                        dados = resp.json()
+                        doc = dados if isinstance(dados, dict) else {}
+                        encontrados.extend(_normalizar([doc], "nfe"))
+                    elif resp.status_code >= 500:
+                        return jsonify({"error": "Falha ao consultar Consyste."}), resp.status_code
                     continue
 
-                dados = resp.json() if resp.content else {}
-                docs = dados.get("documentos", []) if isinstance(dados, dict) else []
-                docs_filtrados = [d for d in docs if str(d.get("numero", "")).strip() == str(numero).strip()]
-                if docs_filtrados:
-                    return jsonify({"documentos": _normalizar(docs_filtrados)})
+                # Busca por numero de NF-e na lista de recebidos/todos/emitidos (compatibilidade API atual Consyste).
+                filtros = ["recebidos", "todos", "emitidos"]
+                termos = [f"numero:{numero}", numero]
+                docs_nfe = []
+                for filtro in filtros:
+                    base_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/lista/{filtro}"
+                    for termo in termos:
+                        params = {
+                            "q": termo,
+                            "campos": "id,chave,emitido_em,numero,emit_nome,dest_nome",
+                        }
+                        resp = requests.get(base_url, headers=headers, params=params, timeout=15)
+                        if resp.status_code != 200:
+                            continue
+                        dados = resp.json() if resp.content else {}
+                        docs = dados.get("documentos", []) if isinstance(dados, dict) else []
+                        docs_nfe.extend([d for d in docs if str(d.get("numero", "")).strip() == numero])
+                encontrados.extend(_normalizar(docs_nfe, "nfe"))
+                continue
 
-        return jsonify({"documentos": []})
+            if m == "nfse":
+                queries = []
+                if numero:
+                    queries.extend([f"numero:{numero}", numero])
+                elif chave:
+                    queries.extend([f"chave:{chave}", chave])
+
+                if not queries:
+                    continue
+
+                campos_tentativas = [
+                    "id,numero,emissao,prestador_razao_social,tomador_razao_social,chave,codigo_verificacao",
+                    None,
+                ]
+
+                docs_nfse = []
+                erro_nfse_status = None
+                for q_nfse in queries:
+                    if docs_nfse:
+                        break
+                    for campos_nfse in campos_tentativas:
+                        ok, status_code, dados = listar_documentos_consyste(
+                            modelo="nfse",
+                            q=q_nfse,
+                            campos=campos_nfse,
+                            timeout=15,
+                        )
+                        if ok:
+                            docs_nfse = _extrair_documentos(dados)
+                            if numero:
+                                filtrados = [d for d in docs_nfse if str(d.get("numero", "")).strip() == numero]
+                                if filtrados:
+                                    docs_nfse = filtrados
+                            break
+
+                        if status_code >= 500:
+                            erro_nfse_status = status_code
+
+                if docs_nfse:
+                    encontrados.extend(_normalizar(docs_nfse, "nfse"))
+                elif modelo == "nfse" and erro_nfse_status:
+                    return jsonify({"documentos": [], "warning": "Consyste NFS-e indisponível no momento."}), 200
+                continue
+
+        # Remove duplicados por modelo+id para evitar repetição em buscas amplas.
+        unicos = {}
+        for d in encontrados:
+            k = f"{d.get('modelo')}|{d.get('documento_id') or d.get('chave') or d.get('numero')}"
+            unicos[k] = d
+        return jsonify({"documentos": list(unicos.values())})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -2051,6 +2145,10 @@ def listar_notas_aguardando_liberacao():
             ItemNota.fornecedor,
             func.max(ItemNota.usuario_importacao),
             func.max(ItemNota.data_importacao),
+            func.max(ItemNota.auditor_status),
+            func.max(ItemNota.auditor_decisao),
+            func.max(ItemNota.auditor_usuario),
+            func.max(ItemNota.auditor_data),
         )
         .filter_by(status="AguardandoLiberacao")
         .group_by(ItemNota.numero_nota, ItemNota.fornecedor)
@@ -2065,6 +2163,10 @@ def listar_notas_aguardando_liberacao():
                 "fornecedor": r[1],
                 "importado_por": r[2] or "---",
                 "data_importacao": r[3].strftime("%d/%m/%Y %H:%M") if r[3] else "---",
+                "auditor_status": r[4] or "NaoAuditado",
+                "auditor_decisao": r[5] or "PendenteDecisao",
+                "auditado_por": r[6] or "---",
+                "auditado_em": r[7].strftime("%d/%m/%Y %H:%M") if r[7] else "---",
             }
             for r in rows
         ]
@@ -2243,6 +2345,51 @@ def registrar_decisao_xml_auditor():
     if autorizado:
         return jsonify({"sucesso": True, "msg": "XML aprovado. Status fiscal registrado para Documento de Entrada."})
     return jsonify({"sucesso": True, "msg": "XML recusado. Status fiscal registrado para Documento de Entrada."})
+
+
+@api_bp.route("/api/xml_auditor/retirar", methods=["POST"])
+@permission_required("PAGE_XML_AUDITOR")
+def retirar_nota_da_fila_auditor_xml():
+    data = request.get_json() or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    motivo = str(data.get("motivo") or "").strip()
+
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+    if len(motivo) < 5:
+        return jsonify({"sucesso": False, "msg": "Informe o motivo com no mínimo 5 caracteres."}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada em Aguardando Liberação."}), 404
+
+    usuario = session.get("username", "sistema")
+    fornecedor = itens[0].fornecedor
+
+    db.session.add(
+        LogExclusaoNota(
+            numero_nota=numero_nota,
+            fornecedor=fornecedor,
+            usuario_exclusao=usuario,
+            motivo=f"Retirada no Auditor XML: {motivo}"[:500],
+        )
+    )
+
+    ItemNota.query.filter_by(numero_nota=numero_nota).delete()
+    LogDivergencia.query.filter_by(numero_nota=numero_nota).delete()
+    LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).delete()
+    LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).delete()
+    _release_lock(numero_nota)
+
+    db.session.add(
+        LogAcessoAdministrativo(
+            usuario=usuario,
+            rota=f"/api/xml_auditor/retirar?nota={numero_nota}",
+            metodo=request.method,
+        )
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "NF removida do sistema pelo Auditor XML. Para processar novamente, importe o XML outra vez."})
 
 
 def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str, resultado_comparacao: dict | None = None):
@@ -4550,12 +4697,15 @@ def listar_concluidas():
         numero_nota = nota[0]
         resumo_divergencia = _summarize_divergencia_nota(numero_nota)
         motivo = resumo_divergencia["detalhe_divergencia"] if resumo_divergencia["divergencia"] == "Sim" else ""
+        itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
+        exige_codigo_material_remessa = bool(nota[3]) and _remessa_exige_codigo_material(itens_nota)
         lista.append(
             {
                 "numero": numero_nota,
                 "fornecedor": nota[1],
                 "material_cliente": bool(nota[2]),
                 "remessa": bool(nota[3]),
+                "exige_codigo_material_remessa": exige_codigo_material_remessa,
                 "motivo_pendencia": motivo,
                 "divergencia_status": resumo_divergencia["divergencia_status"],
             }
@@ -4571,22 +4721,54 @@ def confirmar_lancamento():
     numero_nota = str(payload.get("nota"))
     codigo = payload.get("codigo")
     codigo_material = str(payload.get("codigo_material") or "").strip()
+    codigos_materiais_payload = payload.get("codigos_materiais") or []
     manifestar_destinatario = bool(payload.get("manifestar_destinatario", True))
 
     itens_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
     if not itens_concluidos:
         return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
 
-    exige_codigo_material = bool(itens_concluidos[0].material_cliente) or bool(itens_concluidos[0].remessa)
-    if exige_codigo_material and not codigo_material:
-        return jsonify(
-            {
-                "sucesso": False,
-                "msg": "Para NF de remessa/material de cliente, informe o código do material.",
-            }
-        ), 400
+    eh_material_cliente = bool(itens_concluidos[0].material_cliente)
+    eh_remessa = bool(itens_concluidos[0].remessa)
+    remessa_exige_codigo_material = eh_remessa and _remessa_exige_codigo_material(itens_concluidos)
 
-    if exige_codigo_material:
+    if remessa_exige_codigo_material:
+        codigos_por_item = {}
+        for entrada in codigos_materiais_payload:
+            item_id = entrada.get("item_id")
+            codigo_item = str(entrada.get("codigo_material") or "").strip()
+            if not isinstance(item_id, int):
+                continue
+            if not codigo_item:
+                continue
+            codigos_por_item[item_id] = codigo_item[:50]
+
+        itens_sem_codigo = [item.id for item in itens_concluidos if not codigos_por_item.get(item.id)]
+        if itens_sem_codigo:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": "Para NF de remessa de industrialização, informe o código do material para cada item do XML no lançamento.",
+                    }
+                ),
+                400,
+            )
+
+        for item in itens_concluidos:
+            item.codigo = codigos_por_item.get(item.id)
+        db.session.commit()
+    elif eh_material_cliente:
+        if not codigo_material:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": "Para NF de material de cliente, informe o código do material.",
+                    }
+                ),
+                400,
+            )
         for item in itens_concluidos:
             item.codigo = codigo_material[:50]
         db.session.commit()
@@ -4915,7 +5097,16 @@ def detalhes_nf(numero):
     if not itens:
         return jsonify({"erro": "Nota não encontrada"}), 404
 
-    lista_itens = [{"codigo": i.codigo, "desc": i.descricao, "qtd": i.qtd_real} for i in itens]
+    lista_itens = [
+        {
+            "id": i.id,
+            "codigo": i.codigo,
+            "desc": i.descricao,
+            "descricao": i.descricao,
+            "qtd": i.qtd_real,
+        }
+        for i in itens
+    ]
     return jsonify(
         {
             "numero": numero,

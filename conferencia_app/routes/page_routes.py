@@ -1,14 +1,20 @@
 from flask import Blueprint, render_template, session
 
-from ..auth import permission_required, roles_required
+from ..auth import login_required, permission_required, roles_required
 
 
 page_bp = Blueprint("pages", __name__)
 
 
 @page_bp.route("/")
-@permission_required("PAGE_CONFERENCIA")
+@login_required
 def home():
+    return render_template("menu_principal.html", user=session.get("username", "Usuário"))
+
+
+@page_bp.route("/conferencia")
+@permission_required("PAGE_CONFERENCIA")
+def conferencia_page():
     return render_template("conferente.html", user=session["username"])
 
 

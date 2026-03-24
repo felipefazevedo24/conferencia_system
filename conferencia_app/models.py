@@ -26,6 +26,9 @@ class PermissaoAcesso(db.Model):
 
 class ItemNota(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    tipo_documento = db.Column(db.String(10), nullable=False, default="NFE", index=True)
+    documento_externo_id = db.Column(db.String(120), index=True)
+    codigo_verificacao = db.Column(db.String(40), index=True)
     numero_nota = db.Column(db.String(20), index=True)
     chave_acesso = db.Column(db.String(44))
     cfop = db.Column(db.String(4), index=True)

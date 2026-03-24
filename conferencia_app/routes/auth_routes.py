@@ -36,7 +36,7 @@ def login_page():
             session.permanent = True
             session["last_activity"] = datetime.now().isoformat()
             _login_attempts.pop(key, None)
-            redirect_to = "/portaria" if user.role == "Portaria" else "/"
+            redirect_to = "/"
             return jsonify({"sucesso": True, "redirect_to": redirect_to})
 
         max_attempts = current_app.config.get("LOGIN_MAX_ATTEMPTS", 5)

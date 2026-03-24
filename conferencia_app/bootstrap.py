@@ -14,6 +14,15 @@ def _ensure_item_nota_columns() -> None:
         if "numero_lancamento" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN numero_lancamento VARCHAR"))
             conn.commit()
+        if "tipo_documento" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN tipo_documento VARCHAR(10) NOT NULL DEFAULT 'NFE'"))
+            conn.commit()
+        if "documento_externo_id" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN documento_externo_id VARCHAR(120)"))
+            conn.commit()
+        if "codigo_verificacao" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN codigo_verificacao VARCHAR(40)"))
+            conn.commit()
         if "valor_total" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_total VARCHAR"))
             conn.commit()
