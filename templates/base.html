@@ -331,8 +331,9 @@
 
 <div id="wrapper" class="toggled">
     <div id="sidebar-wrapper">
-        <div class="sidebar-heading" style="flex-direction: column; align-items: flex-start; gap: 2px;">
-            <span style="font-size: 15px; font-weight: 900; letter-spacing: 1.5px; color: #fff;">COLUMBIA</span><span style="font-size: 15px; font-weight: 900; color: #0065b3; letter-spacing: 1.2px; margin-top: -2px;">SYNC</span>
+        <div class="sidebar-heading">
+            <span class="brand-logo-mask" role="img" aria-label="Logo Columbia"></span>
+            COLUMBIA <span>SYNC</span>
         </div>
         <div class="list-group list-group-flush" id="accordionSidebar">
             {% if can_access('PAGE_PORTARIA') and not can_access('PAGE_CONFERENCIA') %}
@@ -351,6 +352,11 @@
                     {% if can_access('PAGE_FISCAL_LIBERADAS') %}
                     <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
                         <i class="fas fa-box-open"></i> NF-e Liberadas
+                    </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ETIQUETAS') %}
+                    <a href="/recebimento/etiquetas" class="list-group-item list-group-item-action">
+                        <i class="fas fa-tag"></i> Etiquetas
                     </a>
                     {% endif %}
                 </div>
@@ -400,6 +406,11 @@
                     {% if can_access('PAGE_FISCAL_LIBERADAS') %}
                     <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
                         <i class="fas fa-box-open"></i> NF-e Liberadas
+                    </a>
+                    {% endif %}
+                    {% if can_access('PAGE_ETIQUETAS') %}
+                    <a href="/recebimento/etiquetas" class="list-group-item list-group-item-action">
+                        <i class="fas fa-tag"></i> Etiquetas
                     </a>
                     {% endif %}
                 </div>
@@ -518,9 +529,12 @@
         <nav class="top-nav">
             <div class="nav-left">
                 <button id="menu-toggle"><i class="fas fa-bars"></i></button>
-                <span class="top-brand" style="display: flex; align-items: center; gap: 6px; padding: 4px 14px 4px 10px;">
-                    <span style="font-size: 13px; font-weight: 800; color: #000000; letter-spacing: 1.2px;">COLUMBIA</span>
-                    <span style="font-size: 13px; font-weight: 800; color: #0065b3; letter-spacing: 1.1px; margin-left: 2px;">SYNC</span>
+                <span class="top-brand">
+                    <span class="brand-logo-mask top" role="img" aria-label="Logo Columbia"></span>
+                    Columbia
+                </span>
+                <span style="font-size: 11px; font-weight: bold; color: #777; text-transform: uppercase;">
+                    COLUMBIA SYNC
                 </span>
             </div>
             <div class="nav-right">
@@ -573,6 +587,9 @@
                     {% endif %}
                     {% if can_access('PAGE_FISCAL_LIBERADAS') %}
                     <li><a class="dropdown-item shortcut-item" href="/fiscal/liberadas"><i class="fas fa-box-open"></i> NF-e Liberadas</a></li>
+                    {% endif %}
+                    {% if can_access('PAGE_ETIQUETAS') %}
+                    <li><a class="dropdown-item shortcut-item" href="/recebimento/etiquetas"><i class="fas fa-tags"></i> Etiquetas</a></li>
                     {% endif %}
                 </ul>
             </div>

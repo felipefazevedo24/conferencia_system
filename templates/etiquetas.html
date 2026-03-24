@@ -1,0 +1,994 @@
+{% extends "base.html" %}
+
+{% block title %}Recebimento | Etiquetas{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<style>
+    :root {
+        --brand: #002e5d;
+        --brand-light: #0f62c9;
+        --ink: #111827;
+        --muted: #64748b;
+        --line: #d1d5db;
+        --bg-soft: #f8fafc;
+        /* CONFIGURAÇÃO RÍGIDA 90x55mm */
+        --label-w: 90mm;
+        --label-h: 55mm;
+    }
+
+    /* Interface do Usuário (Tela) */
+    .etiquetas-wrap { max-width: 1400px; margin: 0 auto; padding: 20px; font-family: 'Inter', system-ui, sans-serif; }
+    .etiquetas-header {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #fff; border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px 20px; box-shadow: 0 8px 20px rgba(16, 37, 58, 0.08); margin-bottom: 16px;
+    }
+    .etiquetas-header h2 { margin: 0; font-size: 20px; text-transform: uppercase; color: var(--brand); letter-spacing: 0.8px; }
+    .etiquetas-header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; font-weight: 600; }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 8px 20px rgba(16, 37, 58, 0.08); }
+    .filter-row { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 10px; margin-bottom: 14px; }
+    .filter-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 700; }
+    .date-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(170px, 230px));
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .date-input {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 9px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f172a;
+        background: #fff;
+    }
+    .status-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-chip {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+    .filter-chip.active { border-color: var(--brand); color: var(--brand); background: #eff6ff; }
+    .btn { border: 1px solid var(--line); border-radius: 8px; background: #fff; font-weight: 700; font-size: 12px; cursor: pointer; padding: 10px 12px; transition: 0.2s; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn.print { background: #ecfeff; color: #0f766e; border-color: #99f6e4; }
+    .btn.reprint { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+    .table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th { background: var(--bg-soft); color: #475569; text-align: left; font-size: 10px; text-transform: uppercase; padding: 10px; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 10px; border-bottom: 1px solid #eef2f7; font-size: 12px; vertical-align: middle; }
+    .action-group { display: flex; gap: 8px; justify-content: center; }
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .status-chip.pending { background: #e0f2fe; color: #0c4a6e; border: 1px solid #bae6fd; }
+    .status-chip.reprint { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .ident-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+    .ident-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        font-weight: 900;
+        font-size: 10px;
+        border: 1px solid transparent;
+        letter-spacing: 0.2px;
+    }
+    .ident-badge.mc { background: #ecfdf5; color: #065f46; border-color: #86efac; }
+    .ident-badge.rm { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+    .ident-badge.sc { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+    .ident-badge.sp { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+    .ident-badge.oc { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+    .filterable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+    .filterable-th .ficon { font-size: 10px; color: #94a3b8; margin-left: 6px; }
+    .col-filter-menu {
+        position: fixed;
+        z-index: 4200;
+        width: 300px;
+        background: #fff;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        box-shadow: 0 18px 36px rgba(15, 23, 42, 0.2);
+        display: none;
+        overflow: hidden;
+    }
+    .col-filter-head { padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-weight: 800; }
+    .col-filter-search { padding: 8px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    .col-filter-search input {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 7px 9px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .col-filter-list { max-height: 220px; overflow: auto; padding: 8px; display: grid; gap: 6px; }
+    .col-filter-item { font-size: 12px; font-weight: 700; color: #334155; display: flex; gap: 8px; align-items: center; }
+    .col-filter-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
+
+    /* Estrutura da Etiqueta */
+    .printer-area { position: absolute; left: -10000px; top: -10000px; }
+    .label-stack { display: flex; flex-direction: column; gap: 0; }
+    .label-sheet {
+        width: var(--label-w); height: var(--label-h); padding: 2mm 2mm 1.5mm 2mm;
+        box-sizing: border-box; color: #000; font-family: Arial, sans-serif;
+        background: #fff; display: flex; flex-direction: column; gap: 1mm;
+        overflow: hidden; border: 1px solid #eee; /* Borda apenas visual na tela */
+    }
+    .label-grid-header { display: grid; grid-template-columns: 1fr 1.8fr; gap: 1mm; height: 12mm; }
+    .l-box { border: 1.5pt solid #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .logo-img-label { 
+        width: 85%; 
+        filter: brightness(0) saturate(100%) invert(11%) sepia(87%) saturate(1614%) hue-rotate(196deg) brightness(95%) contrast(105%);
+    }
+    .l-title { font-size: 4mm; font-weight: 900; margin: 0; text-align: center; line-height: 1; }
+    .l-full { border: 1.2pt solid #000; padding: 0.5mm 1.2mm; display: flex; align-items: center; gap: 1.4mm; overflow: hidden; min-height: 5.4mm; }
+    .l-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1mm; }
+    .l-key { font-size: 2.5mm; font-weight: 900; white-space: nowrap; text-transform: uppercase; }
+    .l-val { font-size: 2.9mm; font-weight: 700; text-transform: uppercase; word-break: break-word; line-height: 1.05; }
+    .l-barcode-wrap { border: 1.2pt solid #000; margin-top: 0.4mm; display: flex; align-items: center; justify-content: center; padding: 0.6mm 1mm; min-height: 11.5mm; flex-grow: 0; }
+    #barcode { width: 100%; height: auto; max-height: 9.2mm; }
+
+    /* Modais */
+    .app-modal-overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.45); display: none; align-items: center; justify-content: center; z-index: 3500; }
+    .app-modal-overlay.active { display: flex; }
+    .app-modal-card { width: min(500px, 90vw); background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+    .app-modal-head { padding: 14px; background: var(--brand); color: #fff; font-weight: 800; text-transform: uppercase; }
+    .app-modal-body { padding: 20px; font-weight: 600; line-height: 1.5; }
+    .app-modal-foot { padding: 12px; background: #f8fafc; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #eee; }
+    .split-meta { display: grid; gap: 6px; margin-bottom: 12px; }
+    .split-kpi { font-size: 12px; color: #334155; font-weight: 700; }
+    .split-kpi strong { color: #0f172a; }
+    .split-rows { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding-right: 2px; }
+    .split-row {
+        display: grid;
+        grid-template-columns: 95px 1fr auto;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px;
+        background: #fff;
+    }
+    .split-row-label { font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; }
+    .split-row input {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 9px;
+        font-size: 13px;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .split-row-remove {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        color: #9f1239;
+        border-radius: 8px;
+        padding: 7px 8px;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 800;
+    }
+    .split-remaining {
+        margin-top: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #1e293b;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+    .split-remaining.ok { color: #166534; background: #f0fdf4; border-color: #86efac; }
+    .split-remaining.err { color: #9a3412; background: #fff7ed; border-color: #fdba74; }
+
+/* REGRAS DE IMPRESSÃO */
+@media print {
+    @page {
+        size: 90mm 55mm;
+        margin: 0;
+    }
+
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body * { visibility: hidden !important; }
+
+    .printer-area,
+    .printer-area * {
+        visibility: visible !important;
+    }
+
+    .printer-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+    }
+
+    .label-stack {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .label-sheet {
+        width: 90mm !important;
+        height: 55mm !important;
+        padding: 3.6mm 1.6mm 1.2mm 1.6mm !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        break-after: page;
+        page-break-after: always;
+    }
+
+    .label-sheet:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    .label-grid-header {
+        display: grid;
+        grid-template-columns: 1fr 1.8fr;
+        gap: 1mm;
+        height: 10mm;
+    }
+
+    .l-box {
+        border: 1pt solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .logo-img-label { width: 80%; }
+
+    .l-title {
+        font-size: 3.2mm;
+        font-weight: 900;
+        margin: 0;
+        text-align: center;
+    }
+
+    .l-full {
+        border: 1pt solid #000;
+        padding: 0.35mm 0.9mm;
+        display: flex;
+        align-items: center;
+        gap: 1.2mm;
+        min-height: 4.8mm;
+    }
+
+    .l-split {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 1mm;
+    }
+
+    .l-key {
+        font-size: 2.2mm;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    .l-val {
+        font-size: 2.55mm;
+        font-weight: 700;
+        text-transform: uppercase;
+        line-height: 1.02;
+    }
+
+    .l-barcode-wrap {
+        border: 1pt solid #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0.3mm;
+        padding: 0.45mm;
+        min-height: 9.4mm;
+        flex-grow: 0;
+    }
+
+    svg[id^="barcode-"] {
+        width: 100%;
+        max-height: 8.2mm;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="etiquetas-wrap">
+    <div class="etiquetas-header">
+        <div>
+            <h2><i class="fas fa-tags"></i> Etiquetas de Recebimento</h2>
+            <p>Impressão e arquivamento automático das notas fiscais lançadas</p>
+        </div>
+        <button class="btn" onclick="window.location.href='/fiscal/liberadas'">
+            <i class="fas fa-box-open"></i> Consultar NF-e Liberadas
+        </button>
+    </div>
+
+    <div class="panel">
+        <div class="filter-row">
+            <input id="filtro-busca" class="filter-input" placeholder="Buscar por NF, fornecedor, código do material ou OC" oninput="buscarComDebounce()">
+            <button class="btn" onclick="recarregarTabela()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+        </div>
+
+        <div class="status-filters">
+            <button id="chip-todos" class="filter-chip active" type="button" onclick="aplicarFiltroStatus('todos')">
+                Todos
+            </button>
+            <button id="chip-primeira" class="filter-chip" type="button" onclick="aplicarFiltroStatus('primeira')">
+                Primeira impressão
+            </button>
+            <button id="chip-reeimpressao" class="filter-chip" type="button" onclick="aplicarFiltroStatus('reeimpressao')">
+                Reeimpressão
+            </button>
+        </div>
+
+        <div class="date-filters">
+            <input id="filtro-data-inicio" class="date-input" type="date" oninput="buscarComDebounce()" title="Data inicial de recebimento">
+            <input id="filtro-data-fim" class="date-input" type="date" oninput="buscarComDebounce()" title="Data final de recebimento">
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'numero')">Nº NF Entrada<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'status')">Status<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'identificacao')">ID<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'fornecedor')">Fornecedor<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'codigo')">Código do material<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'oc')">Nº OC<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'recebimento')">Dt. Receb.<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'impressao')">Última impressão<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'operador')">Operador<span class="ficon">▼</span></th>
+                        <th class="filterable-th" onclick="abrirFiltroColuna(event, 'qtd')">Qtde.<span class="ficon">▼</span></th>
+                        <th style="text-align:center; width:190px;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-etiquetas"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="col-filter-menu" class="col-filter-menu">
+    <div id="col-filter-head" class="col-filter-head">Filtro da coluna</div>
+    <div class="col-filter-search">
+        <input id="col-filter-search-input" type="text" placeholder="Digite para filtrar opções..." oninput="filtrarOpcoesMenuColuna(this.value)">
+    </div>
+    <div id="col-filter-list" class="col-filter-list"></div>
+    <div class="col-filter-actions">
+        <button class="btn" type="button" onclick="limparFiltroColunaAtual()">Limpar</button>
+        <button class="btn primary" type="button" onclick="aplicarFiltroColunaAtual()">Aplicar</button>
+    </div>
+</div>
+
+<div class="printer-area" aria-hidden="true">
+    <div id="label-sheet" class="label-stack"></div>
+</div>
+
+<div id="print-confirm-overlay" class="app-modal-overlay">
+    <div class="app-modal-card">
+        <div class="app-modal-head">Confirmação de impressão</div>
+        <div id="print-confirm-message" class="app-modal-body"></div>
+        <div class="app-modal-foot">
+            <button class="btn" onclick="fecharConfirmacaoImpressao()">Não, cancelar</button>
+            <button class="btn primary" onclick="confirmarImpressaoEtiqueta()">Sim, já imprimi</button>
+        </div>
+    </div>
+</div>
+
+<div id="notice-overlay" class="app-modal-overlay">
+    <div class="app-modal-card">
+        <div class="app-modal-head">Aviso</div>
+        <div id="notice-message" class="app-modal-body"></div>
+        <div class="app-modal-foot">
+            <button class="btn primary" onclick="fecharAviso()">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div id="split-overlay" class="app-modal-overlay">
+    <div class="app-modal-card" style="width:min(620px, 94vw);">
+        <div class="app-modal-head">Distribuir Quantidade da Etiqueta</div>
+        <div class="app-modal-body">
+            <div class="split-meta">
+                <div id="split-meta-item" class="split-kpi">Item: <strong>---</strong></div>
+                <div id="split-meta-total" class="split-kpi">Quantidade total: <strong>0,00</strong></div>
+            </div>
+            <div id="split-rows" class="split-rows"></div>
+            <div id="split-remaining" class="split-remaining">Restante para distribuir: 0,00</div>
+        </div>
+        <div class="app-modal-foot">
+            <button class="btn" onclick="cancelarDivisaoQuantidadeMenu()">Sem dividir</button>
+            <button class="btn primary" onclick="confirmarDivisaoQuantidadeMenu()">Aplicar distribuição</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let debounceId = null;
+    let impressaoPendente = null;
+    let filtroStatusAtual = 'todos';
+    let filtrosColuna = {};
+    let listaBaseColuna = [];
+    let colunaFiltroAtual = null;
+    let splitMenuState = null;
+
+    function buscarComDebounce() {
+        if (debounceId) clearTimeout(debounceId);
+        debounceId = setTimeout(() => recarregarTabela(), 250);
+    }
+
+    function escapeHtml(texto) {
+        return String(texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function filtroAtual() { return (document.getElementById('filtro-busca').value || '').trim(); }
+
+    function parseDataRecebimentoBr(dataStr) {
+        const raw = String(dataStr || '').trim();
+        if (!raw || raw === '---') return null;
+        const [dia, mes, ano] = raw.split('/');
+        if (!dia || !mes || !ano) return null;
+        const dt = new Date(Number(ano), Number(mes) - 1, Number(dia), 0, 0, 0, 0);
+        return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+
+    function parseInputDate(id, endOfDay = false) {
+        const val = String(document.getElementById(id)?.value || '').trim();
+        if (!val) return null;
+        const dt = new Date(`${val}T00:00:00`);
+        if (Number.isNaN(dt.getTime())) return null;
+        if (endOfDay) dt.setHours(23, 59, 59, 999);
+        return dt;
+    }
+
+    function dentroDoFiltroData(item) {
+        const inicio = parseInputDate('filtro-data-inicio', false);
+        const fim = parseInputDate('filtro-data-fim', true);
+        if (!inicio && !fim) return true;
+
+        const dataReceb = parseDataRecebimentoBr(item.data_recebimento);
+        if (!dataReceb) return false;
+        if (inicio && dataReceb < inicio) return false;
+        if (fim && dataReceb > fim) return false;
+        return true;
+    }
+
+    function aplicarFiltroStatus(status) {
+        filtroStatusAtual = status;
+        document.getElementById('chip-todos').classList.toggle('active', status === 'todos');
+        document.getElementById('chip-primeira').classList.toggle('active', status === 'primeira');
+        document.getElementById('chip-reeimpressao').classList.toggle('active', status === 'reeimpressao');
+        recarregarTabela();
+    }
+
+    function renderEtiquetas(lista) {
+        const tbody = document.getElementById('tbody-etiquetas');
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:30px; color:#64748b">Nenhuma etiqueta encontrada.</td></tr>';
+            return;
+        }
+
+        const montarIdentificacao = (item) => {
+            const badges = [];
+            if (item.material_cliente) badges.push('<span class="ident-badge mc" title="Material de cliente">MC</span>');
+            if (item.remessa) badges.push('<span class="ident-badge rm" title="Remessa">RM</span>');
+            if (item.sem_conferencia_logistica) badges.push('<span class="ident-badge sc" title="Sem conferência logística">SC</span>');
+            if (item.sem_pedido_vinculado && !item.remessa) badges.push('<span class="ident-badge sp" title="Sem pedido vinculado">SP</span>');
+            if (!badges.length) badges.push('<span class="ident-badge oc" title="Cenário normal com pedido de compra vinculado">OC</span>');
+            return badges.length ? `<div class="ident-badges">${badges.join('')}</div>` : '<span style="color:#94a3b8; font-weight:700;">---</span>';
+        };
+
+        tbody.innerHTML = lista.map(item => `
+            <tr>
+                <td><strong>${escapeHtml(item.numero)}</strong></td>
+                <td>
+                    ${item.reimpressao
+                        ? '<span class="status-chip reprint"><i class="fas fa-rotate-right"></i> Reimpressão</span>'
+                        : '<span class="status-chip pending"><i class="fas fa-print"></i> Primeira impressão</span>'}
+                </td>
+                <td>${montarIdentificacao(item)}</td>
+                <td>${escapeHtml(item.fornecedor || item.produto || '---')}</td>
+                <td><code>${escapeHtml(item.codigo_material)}</code></td>
+                <td>${escapeHtml(item.numero_oc)}</td>
+                <td>${escapeHtml(item.data_recebimento)}</td>
+                <td>${escapeHtml(item.data_impressao || '---')}</td>
+                <td>${escapeHtml(item.usuario_impressao || '---')}</td>
+                <td style="text-align:center">${escapeHtml(item.quantidade_impressao || 1)}</td>
+                <td>
+                    <div class="action-group">
+                        <button class="btn ${item.reimpressao ? 'reprint' : 'print'}" onclick="imprimirEtiqueta('${escapeHtml(item.numero)}', ${item.reimpressao ? 'true' : 'false'})">
+                            <i class="fas fa-print"></i> ${item.reimpressao ? 'Reeimpressão' : 'Imprimir'}
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function recarregarTabela() {
+        const q = encodeURIComponent(filtroAtual());
+        const [resPendentes, resArquivadas] = await Promise.all([
+            fetch(`/api/etiquetas/pendentes?q=${q}`),
+            fetch(`/api/etiquetas/arquivadas?q=${q}`),
+        ]);
+
+        const pendentes = await resPendentes.json();
+        const arquivadas = await resArquivadas.json();
+
+        let lista = [
+            ...pendentes.map((item) => ({
+                ...item,
+                reimpressao: false,
+                data_impressao: '---',
+                usuario_impressao: '---',
+                quantidade_impressao: 1,
+            })),
+            ...arquivadas.map((item) => ({
+                ...item,
+                reimpressao: true,
+            })),
+        ];
+
+        // Regra operacional: primeiro a etapa atual (primeira impressao), depois reimpressao.
+        // Dentro de cada etapa, preserva a ordem do backend (mais recente primeiro).
+        lista = [
+            ...lista.filter(item => !item.reimpressao),
+            ...lista.filter(item => item.reimpressao),
+        ];
+
+        if (filtroStatusAtual === 'primeira') {
+            lista = lista.filter(item => !item.reimpressao);
+        } else if (filtroStatusAtual === 'reeimpressao') {
+            lista = lista.filter(item => item.reimpressao);
+        }
+
+        lista = lista.filter(dentroDoFiltroData);
+        listaBaseColuna = [...lista];
+        lista = lista.filter(passaFiltrosColuna);
+
+        renderEtiquetas(lista);
+    }
+
+    function obterResumoIdentificacao(item) {
+        const tags = [];
+        if (item.material_cliente) tags.push('Material de cliente');
+        if (item.remessa) tags.push('Remessa');
+        if (item.sem_conferencia_logistica) tags.push('Sem conferência');
+        if (item.sem_pedido_vinculado && !item.remessa) tags.push('Sem pedido vinculado');
+        return tags.join(' | ') || 'OC normal';
+    }
+
+    function obterValorColuna(item, col) {
+        if (col === 'numero') return String(item.numero || '---');
+        if (col === 'status') return item.reimpressao ? 'Reeimpressão' : 'Primeira impressão';
+        if (col === 'identificacao') return obterResumoIdentificacao(item);
+        if (col === 'fornecedor') return String(item.fornecedor || item.produto || '---');
+        if (col === 'codigo') return String(item.codigo_material || '---');
+        if (col === 'oc') return String(item.numero_oc || '---');
+        if (col === 'recebimento') return String(item.data_recebimento || '---');
+        if (col === 'impressao') return String(item.data_impressao || '---');
+        if (col === 'operador') return String(item.usuario_impressao || '---');
+        if (col === 'qtd') return String(item.quantidade_impressao || 1);
+        return '---';
+    }
+
+    function passaFiltrosColuna(item) {
+        for (const [col, selecionados] of Object.entries(filtrosColuna)) {
+            if (!Array.isArray(selecionados) || !selecionados.length) continue;
+            if (!selecionados.includes(obterValorColuna(item, col))) return false;
+        }
+        return true;
+    }
+
+    function abrirFiltroColuna(event, col) {
+        event.stopPropagation();
+        colunaFiltroAtual = col;
+        const menu = document.getElementById('col-filter-menu');
+        const head = document.getElementById('col-filter-head');
+        const list = document.getElementById('col-filter-list');
+
+        const opcoes = Array.from(new Set(listaBaseColuna.map(item => obterValorColuna(item, col)))).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+        const selecionados = new Set(filtrosColuna[col] || opcoes);
+
+        head.textContent = `Filtro: ${event.currentTarget.textContent.replace('▼', '').trim()}`;
+        list.innerHTML = opcoes.map((op, idx) => `
+            <label class="col-filter-item">
+                <input type="checkbox" class="col-filter-opt" value="${escapeHtml(op)}" ${selecionados.has(op) ? 'checked' : ''}>
+                <span>${escapeHtml(op)}</span>
+            </label>
+        `).join('') || '<div style="font-size:12px;color:#94a3b8;">Sem opções.</div>';
+
+        const buscaInput = document.getElementById('col-filter-search-input');
+        if (buscaInput) {
+            buscaInput.value = '';
+            setTimeout(() => buscaInput.focus(), 0);
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        menu.style.left = `${Math.max(10, rect.left)}px`;
+        menu.style.top = `${rect.bottom + 6}px`;
+        menu.style.display = 'block';
+    }
+
+    function filtrarOpcoesMenuColuna(termo) {
+        const t = String(termo || '').trim().toLowerCase();
+        const itens = document.querySelectorAll('#col-filter-list .col-filter-item');
+        itens.forEach((el) => {
+            const txt = String(el.textContent || '').trim().toLowerCase();
+            el.style.display = !t || txt.includes(t) ? 'flex' : 'none';
+        });
+    }
+
+    function aplicarFiltroColunaAtual() {
+        if (!colunaFiltroAtual) return;
+        const checks = Array.from(document.querySelectorAll('.col-filter-opt:checked')).map(el => el.value);
+        if (checks.length) filtrosColuna[colunaFiltroAtual] = checks;
+        else delete filtrosColuna[colunaFiltroAtual];
+        fecharMenuFiltroColuna();
+        recarregarTabela();
+    }
+
+    function limparFiltroColunaAtual() {
+        if (!colunaFiltroAtual) return;
+        delete filtrosColuna[colunaFiltroAtual];
+        fecharMenuFiltroColuna();
+        recarregarTabela();
+    }
+
+    function fecharMenuFiltroColuna() {
+        document.getElementById('col-filter-menu').style.display = 'none';
+        colunaFiltroAtual = null;
+    }
+
+    function abrirAviso(m) { document.getElementById('notice-message').textContent = m; document.getElementById('notice-overlay').classList.add('active'); }
+    function fecharAviso() { document.getElementById('notice-overlay').classList.remove('active'); }
+
+    function parseQuantidadeBr(valor) {
+        const raw = String(valor || '').trim();
+        if (!raw) return 0;
+        const normalizado = raw.replace(/\./g, '').replace(',', '.');
+        const n = Number(normalizado);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function formatarQuantidadeBr(valor) {
+        return Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function obterSplitValoresValidos() {
+        const inputs = Array.from(document.querySelectorAll('#split-rows .split-input'));
+        return inputs
+            .map((i) => parseQuantidadeBr(i.value))
+            .filter((v) => v > 0)
+            .map((v) => Number(v.toFixed(6)));
+    }
+
+    function recalcularSplitRestante() {
+        if (!splitMenuState) return;
+        const soma = obterSplitValoresValidos().reduce((acc, v) => acc + v, 0);
+        const restanteRaw = Number((splitMenuState.total - soma).toFixed(6));
+        const restante = restanteRaw < 0.000001 ? 0 : restanteRaw;
+        const restanteEl = document.getElementById('split-remaining');
+        restanteEl.textContent = `Restante para distribuir: ${formatarQuantidadeBr(restante)}`;
+        restanteEl.classList.remove('ok', 'err');
+        if (restante === 0) restanteEl.classList.add('ok');
+        else restanteEl.classList.add('err');
+        return restante;
+    }
+
+    function renderizarSplitRows() {
+        if (!splitMenuState) return;
+        const wrap = document.getElementById('split-rows');
+        wrap.innerHTML = splitMenuState.rows.map((row, idx) => `
+            <div class="split-row">
+                <div class="split-row-label">Etiqueta ${idx + 1}</div>
+                <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="split-input"
+                    data-idx="${idx}"
+                    value="${row}"
+                    oninput="onSplitRowInput(${idx}, this.value)"
+                    placeholder="0,00"
+                >
+                ${idx === 0 ? '<span></span>' : `<button type="button" class="split-row-remove" onclick="removerSplitRow(${idx})">Remover</button>`}
+            </div>
+        `).join('');
+        recalcularSplitRestante();
+    }
+
+    function onSplitRowInput(idx, valor) {
+        if (!splitMenuState) return;
+        splitMenuState.rows[idx] = valor;
+        const validos = obterSplitValoresValidos();
+        const soma = validos.reduce((acc, v) => acc + v, 0);
+        const restante = Number((splitMenuState.total - soma).toFixed(6));
+
+        const ultimoIdx = splitMenuState.rows.length - 1;
+        const ultimoVal = parseQuantidadeBr(splitMenuState.rows[ultimoIdx]);
+
+        if (restante > 0.000001 && ultimoVal > 0) {
+            splitMenuState.rows.push('');
+            renderizarSplitRows();
+            return;
+        }
+
+        if (restante <= 0.000001) {
+            while (splitMenuState.rows.length > 1) {
+                const last = parseQuantidadeBr(splitMenuState.rows[splitMenuState.rows.length - 1]);
+                if (last > 0) break;
+                splitMenuState.rows.pop();
+            }
+            renderizarSplitRows();
+            return;
+        }
+
+        recalcularSplitRestante();
+    }
+
+    function removerSplitRow(idx) {
+        if (!splitMenuState || idx <= 0 || idx >= splitMenuState.rows.length) return;
+        splitMenuState.rows.splice(idx, 1);
+        if (!splitMenuState.rows.length) splitMenuState.rows = [''];
+        renderizarSplitRows();
+    }
+
+    function abrirDivisaoQuantidadeMenu(etq) {
+        return new Promise((resolve) => {
+            splitMenuState = {
+                etq,
+                total: Number(parseQuantidadeBr(etq?.quantidade).toFixed(6)),
+                rows: [''],
+                resolve,
+            };
+            document.getElementById('split-meta-item').innerHTML = `Item: <strong>NF ${escapeHtml(etq.numero)} | ${escapeHtml(etq.codigo_material)}</strong>`;
+            document.getElementById('split-meta-total').innerHTML = `Quantidade total: <strong>${formatarQuantidadeBr(splitMenuState.total)}</strong>`;
+            renderizarSplitRows();
+            document.getElementById('split-overlay').classList.add('active');
+            setTimeout(() => document.querySelector('#split-rows .split-input')?.focus(), 0);
+        });
+    }
+
+    function fecharDivisaoQuantidadeMenu() {
+        document.getElementById('split-overlay').classList.remove('active');
+    }
+
+    function cancelarDivisaoQuantidadeMenu() {
+        if (!splitMenuState) return;
+        const { etq, resolve } = splitMenuState;
+        fecharDivisaoQuantidadeMenu();
+        splitMenuState = null;
+        resolve([etq]);
+    }
+
+    function confirmarDivisaoQuantidadeMenu() {
+        if (!splitMenuState) return;
+        const { etq, total, resolve } = splitMenuState;
+        const partes = obterSplitValoresValidos();
+        if (!partes.length) {
+            fecharDivisaoQuantidadeMenu();
+            splitMenuState = null;
+            resolve([etq]);
+            return;
+        }
+
+        const soma = Number(partes.reduce((acc, v) => acc + v, 0).toFixed(6));
+        const restante = Number((total - soma).toFixed(6));
+        if (restante > 0.000001) {
+            abrirAviso(`Ainda falta distribuir ${formatarQuantidadeBr(restante)}.`);
+            return;
+        }
+        if (restante < -0.000001) {
+            abrirAviso(`A soma das etiquetas excedeu o total de ${formatarQuantidadeBr(total)}.`);
+            return;
+        }
+
+        const etiquetasSplit = partes.map((q) => ({ ...etq, quantidade: formatarQuantidadeBr(q) }));
+        fecharDivisaoQuantidadeMenu();
+        splitMenuState = null;
+        resolve(etiquetasSplit);
+    }
+
+    async function aplicarDivisaoQuantidadeEtiquetas(etiquetas) {
+        const resultado = [];
+        for (const etq of etiquetas) {
+            const qtdTotal = parseQuantidadeBr(etq?.quantidade);
+            if (!(qtdTotal > 1)) {
+                resultado.push(etq);
+                continue;
+            }
+            const dividido = await abrirDivisaoQuantidadeMenu(etq);
+            resultado.push(...(Array.isArray(dividido) ? dividido : [etq]));
+        }
+        return resultado;
+    }
+
+    function abrirConfirmacaoImpressao(numeroNota, isReprint) {
+        impressaoPendente = { numeroNota, isReprint: !!isReprint };
+        document.getElementById('print-confirm-message').textContent = `A impressão da NF ${numeroNota} foi concluída?`;
+        document.getElementById('print-confirm-overlay').classList.add('active');
+    }
+
+    function fecharConfirmacaoImpressao() {
+        impressaoPendente = null;
+        document.getElementById('print-confirm-overlay').classList.remove('active');
+    }
+
+    async function confirmarImpressaoEtiqueta() {
+        if (!impressaoPendente) return;
+        const { numeroNota } = impressaoPendente;
+        fecharConfirmacaoImpressao();
+        await fetch('/api/etiquetas/imprimir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: numeroNota })
+        });
+        await recarregarTabela();
+    }
+
+    function montarMarkupEtiqueta(dados) {
+        return `
+            <div class="label-grid-header">
+                <div class="l-box"><img src="https://www.columbiamachine.com.br/img/columbia_logo.png" class="logo-img-label"></div>
+                <div class="l-box"><h1 class="l-title">RECEBIMENTO COLUMBIA</h1></div>
+            </div>
+            <div class="l-full"><span class="l-key">Descrição:</span><span class="l-val">${escapeHtml(dados.produto)}</span></div>
+            <div class="l-split">
+                <div class="l-full"><span class="l-key">NF:</span><span class="l-val">${escapeHtml(dados.numero)}</span></div>
+                <div class="l-full"><span class="l-key">OC:</span><span class="l-val">${escapeHtml(dados.numero_oc)}</span></div>
+            </div>
+            <div class="l-split">
+                <div class="l-full"><span class="l-key">Qtd:</span><span class="l-val">${escapeHtml(dados.quantidade)}</span></div>
+                <div class="l-full"><span class="l-key">Cód:</span><span class="l-val">${escapeHtml(dados.codigo_material)}</span></div>
+            </div>
+            <div class="l-full"><span class="l-key">Tipo:</span><span class="l-val">${escapeHtml([
+                dados.material_cliente ? 'MATERIAL CLIENTE' : '',
+                dados.remessa ? 'REMESSA' : '',
+                dados.sem_conferencia_logistica ? 'SEM CONFERENCIA' : '',
+                (dados.sem_pedido_vinculado && !dados.remessa) ? 'SEM PEDIDO VINCULADO' : ''
+            ].filter(Boolean).join(' | ') || 'PADRAO')}</span></div>
+            <div class="l-barcode-wrap"><svg id="barcode"></svg></div>
+        `;
+    }
+
+    async function imprimirEtiqueta(numeroNota, isReprint = false) {
+        const res = await fetch(`/api/etiquetas/${encodeURIComponent(numeroNota)}`);
+        const dados = await res.json();
+        const sheet = document.getElementById('label-sheet');
+        const etiquetasBrutas = Array.isArray(dados.itens_etiqueta) && dados.itens_etiqueta.length
+            ? dados.itens_etiqueta
+            : [dados];
+
+        let etiquetas = etiquetasBrutas.filter((etq) => {
+            const numero = String(etq?.numero || '').trim();
+            const produto = String(etq?.produto || '').trim();
+            const codigo = String(etq?.codigo_material || '').trim();
+            return !!(numero && (produto || codigo));
+        });
+
+        etiquetas = await aplicarDivisaoQuantidadeEtiquetas(etiquetas);
+
+        if (!etiquetas.length) {
+            abrirAviso('Nenhuma etiqueta válida encontrada para impressão dessa NF.');
+            return;
+        }
+
+        sheet.innerHTML = etiquetas.map((etq, idx) => `
+            <div class="label-sheet" data-idx="${idx}">
+                ${montarMarkupEtiqueta(etq).replace('id="barcode"', `id="barcode-${idx}"`)}
+            </div>
+        `).join('');
+
+        etiquetas.forEach((etq, idx) => {
+            JsBarcode(`#barcode-${idx}`, etq.codigo_material, {
+                format: "CODE128",
+                width: 2.2,
+                height: 40,
+                displayValue: false,
+                margin: 0
+            });
+        });
+
+        setTimeout(() => {
+            const printWindow = window.open('', '_blank', 'width=1000,height=700');
+            if (!printWindow) {
+                abrirAviso('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-up.');
+                return;
+            }
+
+            const markup = sheet.innerHTML;
+            printWindow.document.open();
+            printWindow.document.write(`
+                <!doctype html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Etiquetas NF ${escapeHtml(numeroNota)}</title>
+                    <style>
+                        @page { size: 90mm 55mm; margin: 0; }
+                        html, body { margin: 0; padding: 0; }
+                        .label-stack { margin: 0; padding: 0; }
+                        .label-sheet {
+                            width: 90mm;
+                            height: 55mm;
+                            padding: 3.6mm 1.6mm 1.2mm 1.6mm;
+                            box-sizing: border-box;
+                            color: #000;
+                            font-family: Arial, sans-serif;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 0.8mm;
+                            overflow: hidden;
+                            break-after: page;
+                            page-break-after: always;
+                        }
+                        .label-sheet:last-child { break-after: auto; page-break-after: auto; }
+                        .label-grid-header { display: grid; grid-template-columns: 1fr 1.8fr; gap: 1mm; height: 10mm; }
+                        .l-box { border: 1pt solid #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+                        .logo-img-label { width: 80%; }
+                        .l-title { font-size: 3.2mm; font-weight: 900; margin: 0; text-align: center; }
+                        .l-full { border: 1pt solid #000; padding: 0.35mm 0.9mm; display: flex; align-items: center; gap: 1.2mm; min-height: 4.8mm; }
+                        .l-split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1mm; }
+                        .l-key { font-size: 2.2mm; font-weight: 900; text-transform: uppercase; }
+                        .l-val { font-size: 2.55mm; font-weight: 700; text-transform: uppercase; line-height: 1.02; }
+                        .l-barcode-wrap { border: 1pt solid #000; display: flex; align-items: center; justify-content: center; margin-top: 0.3mm; padding: 0.45mm; min-height: 9.4mm; flex-grow: 0; }
+                        svg[id^="barcode-"] { width: 100%; max-height: 8.2mm; }
+                    </style>
+                </head>
+                <body>
+                    <div class="label-stack">${markup}</div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.addEventListener('afterprint', () => {
+                try { printWindow.close(); } catch (e) { /* noop */ }
+            });
+            printWindow.print();
+            abrirConfirmacaoImpressao(numeroNota, isReprint);
+        }, 400);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => recarregarTabela());
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('col-filter-menu');
+        if (menu.style.display !== 'block') return;
+        if (!menu.contains(e.target) && !e.target.closest('.filterable-th')) fecharMenuFiltroColuna();
+    });
+</script>
+{% endblock %}

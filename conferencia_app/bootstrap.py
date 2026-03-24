@@ -140,7 +140,7 @@ def _ensure_item_nota_columns() -> None:
                     lacre_ok BOOLEAN NOT NULL DEFAULT 0,
                     volumes_ok BOOLEAN NOT NULL DEFAULT 0,
                     avaria_visual BOOLEAN NOT NULL DEFAULT 0,
-
+                    etiqueta_ok BOOLEAN NOT NULL DEFAULT 0,
                     observacao VARCHAR(500),
                     data DATETIME NOT NULL
                 )
@@ -151,7 +151,15 @@ def _ensure_item_nota_columns() -> None:
         conn.execute(
             db.text(
                 """
-
+                CREATE TABLE IF NOT EXISTS etiqueta_recebimento (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) UNIQUE NOT NULL,
+                    usuario_impressao VARCHAR(100) NOT NULL,
+                    data_impressao DATETIME NOT NULL,
+                    quantidade_impressao INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
         )
         conn.commit()
         conn.execute(

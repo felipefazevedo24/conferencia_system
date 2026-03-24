@@ -323,7 +323,7 @@
                 <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-lacre"> <b>Lacre e embalagem íntegros</b></label>
                 <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-volumes"> <b>Quantidade de volumes confere</b></label>
                 <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-avaria"> <b>Sem avaria visual relevante</b></label>
-
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-etiqueta"> <b>Etiquetas de identificação presentes</b></label>
             </div>
             <textarea id="checklist-obs" rows="3" class="filtro-nota" style="width:100%; margin-top:15px;" placeholder="Observações opcionais..."></textarea>
             <div id="checklist-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
@@ -816,10 +816,10 @@
             nota: checklistPendente,
             lacre_ok: document.getElementById('chk-lacre').checked,
             volumes_ok: document.getElementById('chk-volumes').checked,
-            // etiqueta_ok removido
+            etiqueta_ok: document.getElementById('chk-etiqueta').checked,
             avaria_visual: document.getElementById('chk-avaria').checked
         };
-        if (!payload.lacre_ok || !payload.volumes_ok) { alert('Check obrigatório!'); return; }
+        if (!payload.lacre_ok || !payload.volumes_ok || !payload.etiqueta_ok) { alert('Check obrigatório!'); return; }
         const res = await fetch('/api/checklist', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
         if (res.ok) { document.getElementById('modal-checklist').style.display = 'none'; checklistResolver(true); location.reload(); }
     }
