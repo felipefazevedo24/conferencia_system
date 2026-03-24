@@ -111,17 +111,12 @@ class ChecklistRecebimento(db.Model):
     lacre_ok = db.Column(db.Boolean, nullable=False, default=False)
     volumes_ok = db.Column(db.Boolean, nullable=False, default=False)
     avaria_visual = db.Column(db.Boolean, nullable=False, default=False)
-    etiqueta_ok = db.Column(db.Boolean, nullable=False, default=False)
+
     observacao = db.Column(db.String(500))
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
-class EtiquetaRecebimento(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    numero_nota = db.Column(db.String(20), index=True, nullable=False, unique=True)
-    usuario_impressao = db.Column(db.String(100), nullable=False)
-    data_impressao = db.Column(db.DateTime, default=datetime.now, nullable=False)
-    quantidade_impressao = db.Column(db.Integer, nullable=False, default=1)
+
 
 
 class LogReversaoConferencia(db.Model):

@@ -7,7 +7,7 @@ PERMISSION_CATALOG = {
     "PAGE_CONFERENCIA": "Recebimento > Conferencia cega",
     "PAGE_PORTARIA": "Recebimento > Inclusao XML (Portaria)",
     "PAGE_FISCAL_LIBERADAS": "Recebimento > NF-e liberadas",
-    "PAGE_ETIQUETAS": "Recebimento > Etiquetas",
+
     "PAGE_UPLOAD": "Compras > Pre-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
@@ -29,7 +29,7 @@ BASE_ROLE_PERMISSIONS = {
     "Fiscal": {
         "PAGE_CONFERENCIA",
         "PAGE_FISCAL_LIBERADAS",
-        "PAGE_ETIQUETAS",
+
         "PAGE_XML_AUDITOR",
         "PAGE_LANCAMENTO",
         "PAGE_WMS",
@@ -40,7 +40,7 @@ BASE_ROLE_PERMISSIONS = {
     "Conferente": {
         "PAGE_CONFERENCIA",
         "PAGE_FISCAL_LIBERADAS",
-        "PAGE_ETIQUETAS",
+
         "PAGE_EXPEDICAO_CONFERENCIA",
         "PAGE_EXPEDICAO_ROMANEIO",
     },

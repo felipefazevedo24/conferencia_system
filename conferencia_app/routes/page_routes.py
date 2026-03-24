@@ -54,10 +54,7 @@ def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
 
 
-@page_bp.route("/recebimento/etiquetas")
-@permission_required("PAGE_ETIQUETAS")
-def etiquetas_page():
-    return render_template("etiquetas.html", user=session.get("username", "Operacao"))
+
 
 
 @page_bp.route("/historico")

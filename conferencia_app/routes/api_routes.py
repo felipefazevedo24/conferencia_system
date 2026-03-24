@@ -26,7 +26,6 @@ from ..auth import (
 from ..extensions import db
 from ..models import (
     ConferenciaLock,
-    EtiquetaRecebimento,
     ExpedicaoConferencia,
     ExpedicaoConferenciaDecisao,
     ExpedicaoConferenciaItem,
@@ -42,644 +41,10 @@ from ..models import (
     LogDivergencia,
     LogExclusaoNota,
     LogEstornoLancamento,
-    LogManifestacaoDestinatario,
     LogReversaoConferencia,
-    LogTentativaConferencia,
-    PermissaoAcesso,
-    SolicitacaoDevolucaoRecebimento,
-    Usuario,
+    LogManifestacaoDestinatario,
     WMSIntegracaoEvento,
 )
-from ..services import WMSService
-from ..schemas.api_schemas import (
-    AprovarSolicitacaoDevolucaoSchema,
-    ConsysteEmissaoConsultarSchema,
-    ConsysteEmissaoSolicitarSchema,
-    ConfirmarLancamentoSchema,
-    ConsysteDownloadSchema,
-    DevolverMaterialSchema,
-    ExcluirNotaPendenteSchema,
-    EstornoLancamentoSchema,
-    ManifestarDestinatarioSchema,
-    NotaSchema,
-    RegisterSchema,
-    ResetNotaSchema,
-    ValidarSchema,
-)
-from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
-from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
-from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
-from ..services.expedicao_service import (
-    list_conferencia_reports,
-    parse_conferencia_report,
-    resolve_report_image_path,
-    validate_blind_conference,
-)
-from ..services.xml_service import process_xml_and_store
-from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf, formatar_codigo_material_padrao
-
-
-api_bp = Blueprint("api", __name__)
-register_schema = RegisterSchema()
-consyste_download_schema = ConsysteDownloadSchema()
-consyste_emissao_solicitar_schema = ConsysteEmissaoSolicitarSchema()
-consyste_emissao_consultar_schema = ConsysteEmissaoConsultarSchema()
-validar_schema = ValidarSchema()
-devolver_schema = DevolverMaterialSchema()
-reset_schema = ResetNotaSchema()
-confirmar_schema = ConfirmarLancamentoSchema()
-estorno_lancamento_schema = EstornoLancamentoSchema()
-manifestar_destinatario_schema = ManifestarDestinatarioSchema()
-nota_schema = NotaSchema()
-excluir_nota_schema = ExcluirNotaPendenteSchema()
-aprovar_solicitacao_devolucao_schema = AprovarSolicitacaoDevolucaoSchema()
-
-CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
-CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
-CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL = {"5124", "5125", "6124", "6125"}
-CNPJ_COLUMBIA_MACHINE = "30482274000125"
-
-
-def _normalize_external_payload(payload):
-    if isinstance(payload, dict):
-        return payload
-    if payload is None:
-        return {}
-    return {"raw": str(payload)[:1000]}
-
-
-def _consyste_token_configurado_corretamente() -> bool:
-    token = str(current_app.config.get("CONSYSTE_TOKEN") or "").strip()
-    if not token:
-        return False
-    return True
-
-
-def _get_db_file_path() -> str:
-    uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if uri.startswith("sqlite:///"):
-        return uri.replace("sqlite:///", "", 1)
-    return ""
-
-
-def _normalize_cfop(cfop: str) -> str:
-    return re.sub(r"\D", "", str(cfop or ""))[:4]
-
-
-def _only_digits(value: str) -> str:
-    return re.sub(r"\D", "", str(value or ""))
-
-
-def _normalize_cst(value: str, size: int = 2) -> str:
-    clean = _only_digits(value)
-    if not clean:
-        return ""
-    return clean.zfill(size)[-size:]
-
-
-def _remessa_exige_codigo_material(itens) -> bool:
-    for item in itens or []:
-        if _normalize_cfop(getattr(item, "cfop", "")) in CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL:
-            return True
-    return False
-
-
-def _filter_itens_para_conferencia(itens):
-    itens = list(itens or [])
-    tem_cfop_principal = any(_normalize_cfop(item.cfop) in CFOPS_CONFERENCIA_PRINCIPAL for item in itens)
-    if not tem_cfop_principal:
-        return itens
-    return [item for item in itens if _normalize_cfop(item.cfop) not in CFOPS_EXCLUIR_SEM_CONFERENCIA]
-
-
-def _auditar_inconsistencias_fiscais(itens_nota):
-    inconsistencias = []
-    itens_nota = list(itens_nota or [])
-    if not itens_nota:
-        return ["NF sem itens importados."]
-
-    chave = str(itens_nota[0].chave_acesso or "").strip()
-    if len(chave) != 44:
-        inconsistencias.append("Chave de acesso ausente ou inválida (esperado 44 dígitos).")
-
-    fornecedor = str(itens_nota[0].fornecedor or "").strip()
-    if not fornecedor:
-        inconsistencias.append("Fornecedor/emitente não identificado no XML.")
-
-    cnpj_dest = _only_digits(itens_nota[0].cnpj_destinatario or "")
-    if cnpj_dest != CNPJ_COLUMBIA_MACHINE:
-        inconsistencias.append(
-            "CNPJ do destinatário diferente da Columbia Machine (esperado 30.482.274/0001-25)."
-        )
-
-    # Regra simplificada de compatibilidade da operação com CST PIS/COFINS.
-    cst_saida_piscofins = {"01", "02", "03", "04", "05", "06", "07", "08", "09", "49"}
-    cst_entrada_piscofins = {
-        "50",
-        "51",
-        "52",
-        "53",
-        "54",
-        "55",
-        "56",
-        "60",
-        "61",
-        "62",
-        "63",
-        "64",
-        "65",
-        "66",
-        "67",
-        "70",
-        "71",
-        "72",
-        "73",
-        "74",
-        "75",
-        "98",
-        "99",
-    }
-
-    for item in itens_nota:
-        codigo_item = str(item.codigo or "").strip() or "(sem código)"
-        cfop = _normalize_cfop(item.cfop)
-        if len(cfop) != 4:
-            inconsistencias.append(f"Item {codigo_item}: CFOP ausente ou inválido.")
-        if float(item.qtd_real or 0) <= 0:
-            inconsistencias.append(f"Item {codigo_item}: quantidade zerada ou negativa.")
-        if not str(item.codigo or "").strip():
-            inconsistencias.append("Encontrado item sem código de produto (cProd).")
-
-        if not str(item.ncm or "").strip():
-            inconsistencias.append(f"Item {codigo_item}: NCM não informado.")
-
-        cst_icms = _normalize_cst(item.cst_icms, size=2)
-        cst_pis = _normalize_cst(item.cst_pis, size=2)
-        cst_cofins = _normalize_cst(item.cst_cofins, size=2)
-
-        if not cst_icms:
-            inconsistencias.append(f"Item {codigo_item}: CST/CSOSN de ICMS não informado.")
-        if not cst_pis:
-            inconsistencias.append(f"Item {codigo_item}: CST de PIS não informado.")
-        if not cst_cofins:
-            inconsistencias.append(f"Item {codigo_item}: CST de COFINS não informado.")
-
-        operacao = cfop[:1]
-        if operacao in {"5", "6", "7"}:
-            if cst_pis and cst_pis not in cst_saida_piscofins:
-                inconsistencias.append(
-                    f"Item {codigo_item}: CST PIS {cst_pis} incompatível com CFOP de saída ({cfop})."
-                )
-            if cst_cofins and cst_cofins not in cst_saida_piscofins:
-                inconsistencias.append(
-                    f"Item {codigo_item}: CST COFINS {cst_cofins} incompatível com CFOP de saída ({cfop})."
-                )
-        elif operacao in {"1", "2", "3"}:
-            if cst_pis and cst_pis not in cst_entrada_piscofins:
-                inconsistencias.append(
-                    f"Item {codigo_item}: CST PIS {cst_pis} incompatível com CFOP de entrada ({cfop})."
-                )
-            if cst_cofins and cst_cofins not in cst_entrada_piscofins:
-                inconsistencias.append(
-                    f"Item {codigo_item}: CST COFINS {cst_cofins} incompatível com CFOP de entrada ({cfop})."
-                )
-
-    # Evita repetição de mensagens quando vários itens têm o mesmo problema global.
-    return list(dict.fromkeys(inconsistencias))
-
-
-def _compose_motivo_pendencia(item_id, motivos_itens, motivos_tipos, motivos_observacoes):
-    item_key = str(item_id)
-    motivo_completo = str(motivos_itens.get(item_key) or "").strip()
-    if motivo_completo:
-        return motivo_completo
-
-    motivo_tipo = str(motivos_tipos.get(item_key) or "").strip()
-    observacao = str(motivos_observacoes.get(item_key) or "").strip()
-    if motivo_tipo and observacao:
-        return f"{motivo_tipo}: {observacao}"
-    return motivo_tipo or observacao
-
-
-def _release_lock(numero_nota: str) -> None:
-    ConferenciaLock.query.filter_by(numero_nota=str(numero_nota)).delete()
-
-
-def _acquire_lock(numero_nota: str, usuario: str):
-    now = datetime.now()
-    lock_minutes = current_app.config.get("LOCK_TIMEOUT_MINUTES", 25)
-    heartbeat_timeout = current_app.config.get("LOCK_HEARTBEAT_SECONDS", 120)
-    lock = ConferenciaLock.query.filter_by(numero_nota=str(numero_nota)).first()
-
-    heartbeat_age = (now - (lock.heartbeat_at or lock.lock_until)).total_seconds() if lock else 0
-    lock_stale = lock and heartbeat_age > heartbeat_timeout
-
-    if lock and lock.lock_until > now and lock.usuario != usuario and not lock_stale:
-        return False, lock
-
-    if not lock:
-        lock = ConferenciaLock(numero_nota=str(numero_nota), usuario=usuario, lock_until=now, heartbeat_at=now)
-        db.session.add(lock)
-
-    lock.usuario = usuario
-    lock.lock_until = now + timedelta(minutes=lock_minutes)
-    lock.heartbeat_at = now
-    db.session.commit()
-    return True, lock
-
-
-def _append_attempt_log(
-    numero_nota,
-    item,
-    tentativa_numero,
-    qtd_digitada,
-    qtd_convertida,
-    unidade_informada,
-    fator_conversao,
-    status_item,
-    motivo,
-    usuario,
-):
-    db.session.add(
-        LogTentativaConferencia(
-            numero_nota=str(numero_nota),
-            item_id=item.id,
-            tentativa_numero=tentativa_numero,
-            qtd_esperada=item.qtd_real,
-            qtd_digitada=qtd_digitada,
-            qtd_convertida=qtd_convertida,
-            unidade_informada=unidade_informada,
-            fator_conversao=fator_conversao,
-            status_item=status_item,
-            motivo=motivo,
-            usuario=usuario,
-        )
-    )
-
-
-def _normalize_unidade_medida(unidade: str) -> str:
-    return str(unidade or "").strip().upper()
-
-
-def _get_tolerancia_quantidade(item: ItemNota) -> float:
-    quantidade_esperada = float(item.qtd_real or 0)
-    unidade = _normalize_unidade_medida(item.unidade_comercial)
-    tolerancia = 0.0001
-    if unidade in {"KG", "MM"}:
-        tolerancia = max(abs(quantidade_esperada) * 0.02, tolerancia)
-    return tolerancia
-
-
-def _quantidade_esta_dentro_da_tolerancia(item: ItemNota, quantidade_convertida: float) -> bool:
-    quantidade_esperada = float(item.qtd_real or 0)
-    tolerancia = _get_tolerancia_quantidade(item)
-    return abs(quantidade_convertida - quantidade_esperada) <= tolerancia
-
-
-def _quantidade_divergente_mas_tolerada(item: ItemNota, quantidade_convertida: float) -> bool:
-    unidade = _normalize_unidade_medida(item.unidade_comercial)
-    if unidade not in {"KG", "MM"}:
-        return False
-    quantidade_esperada = float(item.qtd_real or 0)
-    diferenca = abs(quantidade_convertida - quantidade_esperada)
-    return 0.0001 < diferenca <= _get_tolerancia_quantidade(item)
-
-
-def _summarize_divergencia_nota(numero_nota: str):
-    tentativas = (
-        LogTentativaConferencia.query.filter_by(numero_nota=str(numero_nota))
-        .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
-        .all()
-    )
-    if not tentativas:
-        return {
-            "divergencia": "Não",
-            "divergencia_status": "Não",
-            "tentativas_invalidas": 0,
-            "detalhe_divergencia": "",
-        }
-
-    tentativas_com_divergencia = sorted(
-        {
-            int(t.tentativa_numero)
-            for t in tentativas
-            if str(t.status_item or "").upper() == "DIVERGÊNCIA"
-        }
-    )
-    total_invalidas = len(tentativas_com_divergencia)
-    if total_invalidas == 0:
-        return {
-            "divergencia": "Não",
-            "divergencia_status": "Não",
-            "tentativas_invalidas": 0,
-            "detalhe_divergencia": "",
-        }
-
-    ultima_tentativa = max(int(t.tentativa_numero) for t in tentativas)
-    divergencias_ultima = [
-        t
-        for t in tentativas
-        if int(t.tentativa_numero) == ultima_tentativa and str(t.status_item or "").upper() == "DIVERGÊNCIA"
-    ]
-
-    if divergencias_ultima:
-        itens_ultima = (
-            ItemNota.query.filter(
-                ItemNota.numero_nota == str(numero_nota),
-                ItemNota.id.in_({int(t.item_id) for t in divergencias_ultima}),
-            ).all()
-        )
-        descricao_por_id = {int(i.id): i.descricao for i in itens_ultima}
-        detalhes = []
-        for t in divergencias_ultima:
-            desc = descricao_por_id.get(int(t.item_id), f"Item {t.item_id}")
-            motivo = str(t.motivo or "Divergência").strip()
-            detalhes.append(f"{desc} ({motivo})")
-        return {
-            "divergencia": "Sim",
-            "divergencia_status": "Ativa",
-            "tentativas_invalidas": total_invalidas,
-            "detalhe_divergencia": ", ".join(detalhes),
-        }
-
-    return {
-        "divergencia": "Não",
-        "divergencia_status": "Resolvida",
-        "tentativas_invalidas": total_invalidas,
-        "detalhe_divergencia": f"Divergências resolvidas após {total_invalidas} tentativa(s) inválida(s).",
-    }
-
-
-def _formatar_descricao_etiqueta(itens):
-    descricoes = [str(i.descricao or "").strip() for i in itens if str(i.descricao or "").strip()]
-    if not descricoes:
-        return "---"
-    primeira = descricoes[0]
-    unicas = list(dict.fromkeys(descricoes))
-    if len(unicas) > 1:
-        return f"{primeira} + {len(unicas) - 1} item(ns)"
-    return primeira
-
-
-def _to_float(value) -> float:
-    try:
-        return float(value or 0)
-    except Exception:
-        return 0.0
-
-
-def _resolve_quantidade_etiqueta_oc(itens_nota: list[ItemNota]) -> float | None:
-    """
-    Prioriza quantidade vinda da OC quando houver vínculo de linha.
-    Para NF com múltiplas linhas, soma as linhas de OC vinculadas (sem duplicar índice).
-    Retorna None quando não conseguir resolver por OC.
-    """
-    if not itens_nota:
-        return None
-
-    linhas_por_pedido = {}
-    used_keys = set()
-    total_qtd_oc = 0.0
-    tem_vinculo_oc = False
-
-    for item in itens_nota:
-        pedido_raw = str(item.pedido_compra or "").strip()
-        if not pedido_raw:
-            continue
-
-        if pedido_raw not in linhas_por_pedido:
-            try:
-                linhas_por_pedido[pedido_raw] = buscar_linhas_pedido(pedido_raw)
-            except Exception:
-                linhas_por_pedido[pedido_raw] = []
-
-        linhas = linhas_por_pedido.get(pedido_raw) or []
-        if not linhas:
-            continue
-
-        idx = item.linha_po_vinculada if isinstance(item.linha_po_vinculada, int) and item.linha_po_vinculada >= 0 else None
-        if idx is None:
-            # Caso simples: item único com OC de uma única linha.
-            if len(itens_nota) == 1 and len(linhas) == 1:
-                idx = 0
-            else:
-                continue
-
-        if idx >= len(linhas):
-            continue
-
-        dedup_key = (pedido_raw, int(idx))
-        if dedup_key in used_keys:
-            continue
-
-        used_keys.add(dedup_key)
-        total_qtd_oc += _to_float(linhas[idx].get("qtd"))
-        tem_vinculo_oc = True
-
-    if tem_vinculo_oc:
-        return total_qtd_oc
-    return None
-
-
-def _resolve_descricao_etiqueta_oc(itens_nota: list[ItemNota]) -> str | None:
-    """
-    Prioriza descricao do material vinda da OC com base no vinculo de linha.
-    Em NF com multiplas linhas, agrega descricoes unicas das linhas vinculadas.
-    """
-    if not itens_nota:
-        return None
-
-    linhas_por_pedido = {}
-    used_keys = set()
-    descricoes = []
-
-    for item in itens_nota:
-        pedido_raw = str(item.pedido_compra or "").strip()
-        if not pedido_raw:
-            continue
-
-        if pedido_raw not in linhas_por_pedido:
-            try:
-                linhas_por_pedido[pedido_raw] = buscar_linhas_pedido(pedido_raw)
-            except Exception:
-                linhas_por_pedido[pedido_raw] = []
-
-        linhas = linhas_por_pedido.get(pedido_raw) or []
-        if not linhas:
-            continue
-
-        idx = item.linha_po_vinculada if isinstance(item.linha_po_vinculada, int) and item.linha_po_vinculada >= 0 else None
-        if idx is None:
-            if len(itens_nota) == 1 and len(linhas) == 1:
-                idx = 0
-            else:
-                continue
-
-        if idx >= len(linhas):
-            continue
-
-        dedup_key = (pedido_raw, int(idx))
-        if dedup_key in used_keys:
-            continue
-
-        used_keys.add(dedup_key)
-        descricao = str(linhas[idx].get("descricao_material") or "").strip()
-        if descricao:
-            descricoes.append(descricao)
-
-    descricoes_unicas = list(dict.fromkeys(descricoes))
-    if not descricoes_unicas:
-        return None
-
-    primeira = descricoes_unicas[0]
-    if len(descricoes_unicas) > 1:
-        return f"{primeira} + {len(descricoes_unicas) - 1} item(ns)"
-    return primeira
-
-
-def _build_etiqueta_payload(
-    numero_nota: str,
-    itens: list[ItemNota] | None = None,
-    use_oc_resolution: bool = True,
-) -> dict | None:
-    itens_nota = list(itens or ItemNota.query.filter_by(numero_nota=str(numero_nota)).all())
-    if not itens_nota:
-        return None
-
-    first_item = itens_nota[0]
-    fornecedor = str(first_item.fornecedor or "").strip()
-    descricao_nf = _formatar_descricao_etiqueta(itens_nota)
-    descricao_oc = _resolve_descricao_etiqueta_oc(itens_nota) if use_oc_resolution else None
-    descricao_produto = descricao_oc or descricao_nf
-    codigo_material = next((str(i.codigo or "").strip() for i in itens_nota if str(i.codigo or "").strip()), "")
-    numero_oc = _coletar_pedidos_nota(itens_nota)
-    quantidade_nf = sum(_to_float(i.qtd_real) for i in itens_nota)
-    quantidade_oc = _resolve_quantidade_etiqueta_oc(itens_nota) if use_oc_resolution else None
-    quantidade = quantidade_oc if quantidade_oc is not None else quantidade_nf
-    material_cliente = bool(first_item.material_cliente)
-    remessa = bool(first_item.remessa)
-    sem_conferencia_logistica = bool(first_item.sem_conferencia_logistica)
-    pedido_vinculado = bool(str(numero_oc or "").strip())
-    sem_pedido_vinculado = not pedido_vinculado
-
-    data_importacao = max([i.data_importacao for i in itens_nota if i.data_importacao], default=None)
-    data_lancamento = max([i.data_lancamento for i in itens_nota if i.data_lancamento], default=None)
-    data_referencia = data_importacao or data_lancamento
-
-    return {
-        "numero": str(numero_nota),
-        "fornecedor": fornecedor,
-        "produto": descricao_produto or fornecedor or "---",
-        "quantidade": f"{quantidade:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-        "quantidade_origem": "OC" if quantidade_oc is not None else "NF",
-        "data_recebimento": data_referencia.strftime("%d/%m/%Y") if data_referencia else "---",
-        "numero_oc": str(numero_oc or "").strip() or "---",
-        "codigo_material": codigo_material or "---",
-        "material_cliente": material_cliente,
-        "remessa": remessa,
-        "sem_conferencia_logistica": sem_conferencia_logistica,
-        "sem_pedido_vinculado": sem_pedido_vinculado,
-        "obs": "",
-    }
-
-
-def _build_itens_etiqueta_payload(itens_nota: list[ItemNota], base_payload: dict) -> list[dict]:
-    """Gera 1 etiqueta por item da NF para impressão."""
-    itens_payload = []
-
-    for item in itens_nota or []:
-        descricao = str(item.descricao or "").strip() or str(base_payload.get("produto") or "---")
-        codigo = str(item.codigo or "").strip() or str(base_payload.get("codigo_material") or "---")
-        pedido_item = str(item.pedido_compra or "").strip() or str(base_payload.get("numero_oc") or "---")
-        qtd_item = _to_float(item.qtd_real)
-        quantidade = f"{qtd_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        itens_payload.append(
-            {
-                "numero": str(base_payload.get("numero") or "---"),
-                "fornecedor": str(base_payload.get("fornecedor") or "---"),
-                "produto": descricao,
-                "quantidade": quantidade,
-                "quantidade_origem": "NF",
-                "data_recebimento": str(base_payload.get("data_recebimento") or "---"),
-                "numero_oc": pedido_item or "---",
-                "codigo_material": codigo,
-                "material_cliente": bool(base_payload.get("material_cliente")),
-                "remessa": bool(base_payload.get("remessa")),
-                "sem_conferencia_logistica": bool(base_payload.get("sem_conferencia_logistica")),
-                "sem_pedido_vinculado": bool(base_payload.get("sem_pedido_vinculado")),
-            }
-        )
-
-    return itens_payload
-
-
-def _select_etiqueta_snapshot(itens_nota: list[ItemNota]) -> list[ItemNota]:
-    """
-    Seleciona apenas o snapshot mais recente da NF para evitar impressão de
-    registros históricos acumulados (reimportações/relançamentos).
-    """
-    itens = list(itens_nota or [])
-    if not itens:
-        return []
-
-    # Prioriza o conjunto atualmente pronto para etiqueta.
-    for status_prioritario in ("Lançado", "Concluído", "Pendente"):
-        subset = [i for i in itens if str(i.status or "").strip() == status_prioritario]
-        if subset:
-            itens = subset
-            break
-
-    def _ref_data(item: ItemNota):
-        return item.data_lancamento or item.fim_conferencia or item.data_importacao or datetime.min
-
-    # Se houver número de lançamento, usa exclusivamente o último lote lançado.
-    itens_com_lancamento = [i for i in itens if str(i.numero_lancamento or "").strip()]
-    if itens_com_lancamento:
-        grupos_lancamento = {}
-        for item in itens_com_lancamento:
-            num_lanc = str(item.numero_lancamento or "").strip()
-            grupos_lancamento.setdefault(num_lanc, []).append(item)
-
-        ultimo_numero_lancamento = max(
-            grupos_lancamento.keys(),
-            key=lambda numero: max(_ref_data(i) for i in grupos_lancamento.get(numero, [])),
-        )
-        itens = grupos_lancamento.get(ultimo_numero_lancamento) or itens
-
-    # Agrupa por minuto do evento para capturar o lote mais recente completo,
-    # mesmo quando registros foram salvos com microssegundos diferentes.
-    grupos = {}
-    for item in itens:
-        ref = _ref_data(item)
-        chave_tempo = ref.replace(second=0, microsecond=0) if ref != datetime.min else datetime.min
-        grupos.setdefault(chave_tempo, []).append(item)
-
-    if not grupos:
-        return itens
-
-    chave_mais_recente = max(grupos.keys())
-    snapshot = grupos.get(chave_mais_recente) or itens
-
-    # Remove clones históricos idênticos do mesmo lote para não multiplicar etiquetas.
-    dedup = {}
-    for item in snapshot:
-        signature = (
-            str(item.codigo or "").strip().upper(),
-            str(item.descricao or "").strip().upper(),
-            round(_to_float(item.qtd_real), 6),
-            str(item.pedido_compra or "").strip().upper(),
-            int(item.linha_po_vinculada) if isinstance(item.linha_po_vinculada, int) else None,
-        )
-        atual = dedup.get(signature)
-        if atual is None or int(item.id or 0) > int(atual.id or 0):
-            dedup[signature] = item
-
-    filtrado = list(dedup.values()) if dedup else snapshot
-
-    # Mantém ordem estável para impressão.
-    filtrado.sort(key=lambda i: (str(i.codigo or ""), str(i.descricao or ""), i.id or 0))
-    return filtrado
 
 
 def _compute_pending_priority(numero_nota, fornecedor):
@@ -2834,12 +2199,15 @@ def liberar_nota_via_xml_auditor():
         return jsonify({"sucesso": False, "msg": "NF já está liberada para conferência."}), 409
 
     if any((i.auditor_status or "NaoAuditado") == "NaoAuditado" for i in itens):
-        return jsonify(
-            {
-                "sucesso": False,
-                "msg": "Auditoria ainda não executada. Analise a NF no Auditor XML antes de liberar.",
-            }
-        ), 409
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": "Auditoria XML ainda não executada. Analise a NF no Auditor XML antes de liberar.",
+                }
+            ),
+            409,
+        )
 
     pedidos_nota = _coletar_pedidos_nota(itens)
     material_cliente = bool(itens[0].material_cliente)
@@ -3279,17 +2647,17 @@ def registrar_faturamento_expedicao():
     if not file_name or not numero_nf:
         return jsonify({"error": "file_name e numero_nf sao obrigatorios."}), 400
     if tipo not in {"Parcial", "Total"}:
-        return jsonify({"error": "tipo deve ser Parcial ou Total."}), 400
+        return jsonify({"sucesso": False, "msg": "tipo deve ser Parcial ou Total."}), 400
     if transporte_tipo not in {"Proprio", "Transportadora"}:
-        return jsonify({"error": "transporte_tipo deve ser Proprio ou Transportadora."}), 400
+        return jsonify({"sucesso": False, "msg": "transporte_tipo deve ser Proprio ou Transportadora."}), 400
     if transporte_tipo == "Transportadora" and not transportadora:
-        return jsonify({"error": "Informe a transportadora ou selecione transporte proprio."}), 400
+        return jsonify({"sucesso": False, "msg": "Informe a transportadora ou selecione transporte proprio."}), 400
     placa = placa or "N/I"
     motorista = motorista or "N/I"
     if peso_bruto < 0:
-        return jsonify({"error": "Peso bruto invalido."}), 400
+        return jsonify({"sucesso": False, "msg": "Peso bruto invalido."}), 400
     if not isinstance(itens, list) or not itens:
-        return jsonify({"error": "itens obrigatorios."}), 400
+        return jsonify({"sucesso": False, "msg": "itens obrigatorios."}), 400
 
     conferencia = ExpedicaoConferencia.query.filter_by(report_file_name=file_name).first()
     if not conferencia:
@@ -3419,7 +2787,7 @@ def registrar_decisao_expedicao_conferencia():
         return jsonify({"error": "file_name, tipo(Recontar|Pendencia) e motivo sao obrigatorios."}), 400
 
     if tipo == "Pendencia" and session.get("role") != "Admin":
-        return jsonify({"error": "Somente admin pode autorizar pendencia. Solicite no painel admin."}), 403
+        return jsonify({"sucesso": False, "msg": "Somente admin pode autorizar pendencia. Solicite no painel admin."}), 403
 
     conferencia = ExpedicaoConferencia.query.filter_by(report_file_name=file_name).first()
     if not conferencia:
@@ -3610,7 +2978,7 @@ def listar_romaneios_expedicao():
         payload.append(
             {
                 "faturamento_id": fat.id,
-                "arquivo": conferencia.report_file_name,
+                "arquivo": conferencia.report_file_name if conferencia else "---",
                 "numero_nf": fat.numero_nf,
                 "tipo": fat.tipo,
                 "transporte_tipo": fat.transporte_tipo,
@@ -3654,8 +3022,8 @@ def vinculos_html_nf_expedicao():
         payload.append(
             {
                 "conferencia_id": conf.id,
-                "arquivo_html": conf.report_file_name,
-                "status_conferencia": conf.status,
+                "arquivo_html": conf.report_file_name if conf else "---",
+                "status_conferencia": conf.status if conf else "---",
                 "numero_nf": fat.numero_nf,
                 "tipo": fat.tipo,
                 "usuario": fat.usuario,
@@ -4096,11 +3464,11 @@ def gravar_checklist():
         db.session.add(checklist)
 
     checklist.usuario = session["username"]
-    checklist.lacre_ok = bool(data.get("lacre_ok"))
-    checklist.volumes_ok = bool(data.get("volumes_ok"))
-    checklist.avaria_visual = bool(data.get("avaria_visual"))
-    checklist.etiqueta_ok = bool(data.get("etiqueta_ok"))
-    checklist.observacao = str(data.get("observacao") or "").strip()[:500]
+    checklist.lacre_ok = bool(checklist_payload.get("lacre_ok"))
+    checklist.volumes_ok = bool(checklist_payload.get("volumes_ok"))
+    checklist.avaria_visual = bool(checklist_payload.get("avaria_visual"))
+    checklist.etiqueta_ok = bool(checklist_payload.get("etiqueta_ok"))
+    checklist.observacao = str(checklist_payload.get("observacao") or "").strip()[:500]
     checklist.data = datetime.now()
     db.session.commit()
     return jsonify({"sucesso": True})
@@ -4236,103 +3604,9 @@ def validar():
                 )
                 continue
 
-            conv_cfg = conversoes_itens.get(str(item.id), {}) if isinstance(conversoes_itens, dict) else {}
-            fator = 1.0
-            unidade_informada = ""
-            if isinstance(conv_cfg, dict):
-                unidade_informada = str(conv_cfg.get("unidade") or "").strip()[:20]
-                try:
-                    fator = float(str(conv_cfg.get("fator") or "1").replace(",", "."))
-                except Exception:
-                    fator = 1.0
-            if fator <= 0:
-                fator = 1.0
-
-            quantidade_convertida = quantidade * fator
-
-            if not _quantidade_esta_dentro_da_tolerancia(item, quantidade_convertida):
-                msg_erro = _compose_motivo_pendencia(item.id, motivos_itens, motivos_tipos, motivos_observacoes) or "Divergência"
-                unidade_item = _normalize_unidade_medida(item.unidade_comercial)
-                msg_resultado = (
-                    f"Quantidade fora da tolerância de 2% para {unidade_item}."
-                    if unidade_item in {"KG", "MM"}
-                    else "Quantidade divergente."
-                )
-                motivo_tipo = str(motivos_tipos.get(str(item.id)) or "Não classificado")[:80]
-                destino_fisico = str(destinos_itens.get(str(item.id)) or "Aguardando decisão fiscal")[:80]
-                evidencia = str(evidencias_itens.get(str(item.id)) or "")[:300]
-                erros.append(item.descricao)
-                divergencias_ids.append(str(item.id))
-                db.session.add(
-                    LogDivergencia(
-                        numero_nota=numero_nota,
-                        item_descricao=f"{item.descricao} (Motivo: {msg_erro})",
-                        qtd_esperada=item.qtd_real,
-                        qtd_contada=quantidade_convertida,
-                        usuario_erro=user,
-                        motivo_tipo=motivo_tipo,
-                        destino_fisico=destino_fisico,
-                        evidencia_path=evidencia,
-                        tentativa_numero=tentativa_numero,
-                    )
-                )
-                _append_attempt_log(
-                    numero_nota,
-                    item,
-                    tentativa_numero,
-                    quantidade,
-                    quantidade_convertida,
-                    unidade_informada,
-                    fator,
-                    "DIVERGÊNCIA",
-                    msg_erro,
-                    user,
-                )
-                resultado_itens.append(
-                    {
-                        "id": item.id,
-                        "descricao": item.descricao,
-                        "status": "DIVERGÊNCIA",
-                        "msg": msg_resultado,
-                    }
-                )
-            else:
-                divergencia_tolerada = _quantidade_divergente_mas_tolerada(item, quantidade_convertida)
-                msg_ok = (
-                    f"Quantidade diferente da NF, mas dentro da tolerância de 2% para {_normalize_unidade_medida(item.unidade_comercial)}. Será informado como divergência de peso."
-                    if divergencia_tolerada
-                    else "Conferido."
-                )
-                _append_attempt_log(
-                    numero_nota,
-                    item,
-                    tentativa_numero,
-                    quantidade,
-                    quantidade_convertida,
-                    unidade_informada,
-                    fator,
-                    "OK",
-                    msg_ok,
-                    user,
-                )
-                resultado_itens.append(
-                    {"id": item.id, "descricao": item.descricao, "status": "OK", "msg": msg_ok}
-                )
         except Exception:
             erros.append(item.descricao)
             divergencias_ids.append(str(item.id))
-            _append_attempt_log(
-                numero_nota,
-                item,
-                tentativa_numero,
-                None,
-                None,
-                "",
-                1.0,
-                "DIVERGÊNCIA",
-                "Quantidade inválida",
-                user,
-            )
             resultado_itens.append(
                 {
                     "id": item.id,
@@ -4451,17 +3725,6 @@ def devolver_material():
         if not manifestacao_result.get("sucesso"):
             return jsonify({"sucesso": False, "msg": manifestacao_result.get("msg")}), manifestacao_result.get("status_code") or 502
 
-        ok, status_code, payload = enviar_decisao_consyste(nota_db.chave_acesso, "devolver", f"DEVOLUÇÃO: {motivo}")
-        payload = _normalize_external_payload(payload)
-        if not ok:
-            detalhe = (
-                (payload or {}).get("error")
-                or (payload or {}).get("motivo")
-                or (payload or {}).get("raw")
-                or "Falha ao enviar devolução para o Consyste."
-            )
-            return jsonify({"sucesso": False, "msg": str(detalhe)[:500]}), status_code or 502
-
     ItemNota.query.filter_by(numero_nota=numero_nota).update({"status": "Devolvido"})
     _release_lock(numero_nota)
     db.session.commit()
@@ -4547,7 +3810,7 @@ def aprovar_devolucao_recebimento():
         status="Pendente",
     ).first()
     if not solicitacao:
-        return jsonify({"sucesso": False, "msg": "Solicitação não encontrada ou já processada."}), 404
+        return jsonify({"sucesso": False, "msg": "Solicitacao nao encontrada ou ja processada."}), 404
 
     nota_db = ItemNota.query.filter_by(numero_nota=solicitacao.numero_nota).first()
     if not nota_db:
@@ -5010,7 +4273,7 @@ def listar_etiquetas_arquivadas():
         dados["usuario_impressao"] = str(registro.usuario_impressao or "---")
         dados["quantidade_impressao"] = int(registro.quantidade_impressao or 1)
 
-        termo = f"{dados['numero']} {dados['fornecedor']} {dados['produto']} {dados['codigo_material']} {dados['numero_oc']} {dados['usuario_impressao']}".lower()
+        termo = f"{dados['numero']} {dados['fornecedor']} {dados['produto']} {dados['codigo_material']} {dados['usuario_impressao']}".lower()
         if filtro and filtro not in termo:
             continue
         arquivadas.append(dados)

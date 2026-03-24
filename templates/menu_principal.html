@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Painel de Entrada | Columbia SYNC{% endblock %}
+{% block title %}Columbia SYNC{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -208,16 +208,10 @@
     <div class="hub-head">
         <div>
             <div class="hub-brand">
-                <span class="hub-logo" role="img" aria-label="Logo Columbia"></span>
-                <div class="hub-brand-name">
-                    <span>COLUMBIA</span>
-                    <span class="sync">SYNC</span>
-                </div>
+                <div class="hub-brand-name"><span>COLUMBIA</span><span class="sync">SYNC</span><span>- MENU PRINCIPAL</span></div>
             </div>
-            <h2 class="hub-title">Painel de Entrada</h2>
-            <div class="hub-sub">Escolha um modulo para iniciar. Caso o perfil nao tenha permissao, o sistema exibira acesso negado.</div>
+            <div class="hub-sub">Escolha um módulo para acessar.</div>
         </div>
-        <div class="hub-note">SYNC sempre no azul-marinho corporativo: #0065b3</div>
     </div>
 
     <div class="tiles-grid">
@@ -275,14 +269,7 @@
             </div>
         </a>
 
-        <a href="/recebimento/etiquetas" class="tile t-violet">
-            <span class="kicker">Recebimento</span>
-            <i class="fas fa-tags"></i>
-            <div>
-                <div class="label">Etiquetas</div>
-                <div class="hint">Impressão de etiquetas</div>
-            </div>
-        </a>
+
 
         <a href="/wms" class="tile t-green">
             <span class="kicker">Logística</span>
@@ -330,11 +317,11 @@
         </a>
 
         <a href="/expedicao/romaneio" class="tile t-orange">
-            <span class="kicker">Expedicao</span>
+            <span class="kicker">Logística</span>
             <i class="fas fa-truck-ramp-box"></i>
             <div>
                 <div class="label">Romaneios</div>
-                <div class="hint">Separacao de carga</div>
+                <div class="hint">Separação de carga</div>
             </div>
         </a>
 
@@ -343,7 +330,7 @@
             <i class="fas fa-file-invoice-dollar"></i>
             <div>
                 <div class="label">Faturamento</div>
-                <div class="hint">Emissao</div>
+                <div class="hint">Emissão de notas fiscais</div>
             </div>
         </a>
 
@@ -352,7 +339,7 @@
             <i class="fas fa-wallet"></i>
             <div>
                 <div class="label">Contas a Receber</div>
-                <div class="hint">Titulos e boletos</div>
+                <div class="hint">Títulos e boletos</div>
             </div>
         </a>
 
