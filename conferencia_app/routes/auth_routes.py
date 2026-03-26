@@ -1,4 +1,7 @@
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from ..models import ActiveSession
+from ..extensions import db
+import uuid
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for, send_from_directory
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta
 from flask import current_app
@@ -35,6 +38,17 @@ def login_page():
             session["role"] = user.role
             session.permanent = True
             session["last_activity"] = datetime.now().isoformat()
+            # Gerar um session_id único e registrar sessão ativa
+            session_id = str(uuid.uuid4())
+            session["session_id"] = session_id
+            db.session.add(ActiveSession(
+                username=user.username,
+                session_id=session_id,
+                created_at=datetime.now(),
+                last_activity=datetime.now(),
+                is_active=True
+            ))
+            db.session.commit()
             _login_attempts.pop(key, None)
             redirect_to = "/"
             return jsonify({"sucesso": True, "redirect_to": redirect_to})
@@ -56,5 +70,20 @@ def login_page():
 
 @auth_bp.route("/logout")
 def logout():
+    # Marcar sessão como inativa se existir
+    session_id = session.get("session_id")
+    if session_id:
+        sessao = ActiveSession.query.filter_by(session_id=session_id, is_active=True).first()
+        if sessao:
+            sessao.is_active = False
+            db.session.commit()
     session.clear()
     return redirect(url_for("auth.login_page"))
+
+
+# Teste de logo estática
+@auth_bp.route('/test-logo')
+def test_logo():
+    import os
+    static_folder = os.path.join(current_app.root_path, '..', 'static')
+    return send_from_directory(static_folder, 'columbia_logo.png')

@@ -1,6 +1,14 @@
-from datetime import datetime
 
+from datetime import datetime
 from .extensions import db
+
+class ActiveSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False, index=True)
+    session_id = db.Column(db.String(128), nullable=False, unique=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    last_activity = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 
 class Usuario(db.Model):

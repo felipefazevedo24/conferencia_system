@@ -1,3 +1,20 @@
+from .models import ActiveSession
+from .extensions import db
+from flask import abort
+import datetime
+# Middleware para atualizar sessão ativa e forçar logout se necessário
+def check_active_session():
+    session_id = session.get("session_id")
+    if not session_id:
+        return
+    sessao = ActiveSession.query.filter_by(session_id=session_id).first()
+    if not sessao or not sessao.is_active:
+        session.clear()
+        abort(401, description="Sessão expirada ou removida pelo administrador.")
+    # Atualiza last_activity
+    sessao.last_activity = datetime.datetime.now()
+    db.session.commit()
+
 from functools import wraps
 
 from flask import g, redirect, render_template, request, session, url_for
@@ -137,6 +154,7 @@ def login_required(fn):
     def decorated_function(*args, **kwargs):
         if "username" not in session:
             return redirect(url_for("auth.login_page"))
+        check_active_session()
         return fn(*args, **kwargs)
 
     return decorated_function

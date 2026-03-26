@@ -1,3 +1,47 @@
+from flask import Blueprint
+api_bp = Blueprint("api", __name__)
+from sqlalchemy import desc
+
+from ..auth import permission_required
+
+from ..models import ActiveSession
+
+# Sessões ativas - ADMIN
+def listar_sessoes_ativas():
+    username = request.args.get("usuario")
+    query = ActiveSession.query.filter_by(is_active=True)
+    if username:
+        query = query.filter_by(username=username)
+    sessoes = query.order_by(desc(ActiveSession.last_activity)).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "username": s.username,
+            "session_id": s.session_id,
+            "created_at": s.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "last_activity": s.last_activity.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for s in sessoes
+    ])
+
+def forcar_logout_sessao(sessao_id):
+    sessao = ActiveSession.query.get(sessao_id)
+    if not sessao or not sessao.is_active:
+        return jsonify({"sucesso": False, "msg": "Sessão não encontrada ou já inativa."}), 404
+    sessao.is_active = False
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": f"Sessão de {sessao.username} encerrada."})
+
+# Registrar rotas após definição de api_bp
+
+# Certifique-se de que api_bp está definido antes de registrar as rotas
+try:
+    api_bp
+except NameError:
+    from . import api_bp as api_bp
+
+api_bp.add_url_rule("/admin/sessoes", view_func=permission_required("PAGE_ADMIN_ACESSOS")(listar_sessoes_ativas), methods=["GET"])
+api_bp.add_url_rule("/admin/sessoes/<int:sessao_id>/logout", view_func=permission_required("PAGE_ADMIN_ACESSOS")(forcar_logout_sessao), methods=["POST"])
 from datetime import datetime
 import hashlib
 import csv
@@ -79,7 +123,6 @@ from ..services.xml_service import process_xml_and_store
 from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf, formatar_codigo_material_padrao
 
 
-api_bp = Blueprint("api", __name__)
 register_schema = RegisterSchema()
 consyste_download_schema = ConsysteDownloadSchema()
 consyste_emissao_solicitar_schema = ConsysteEmissaoSolicitarSchema()

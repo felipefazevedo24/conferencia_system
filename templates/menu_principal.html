@@ -165,6 +165,7 @@
     .t-cyan { background: linear-gradient(135deg, #2d82b9, #1d6c9f); }
     .t-red { background: linear-gradient(135deg, #d84834, #be2f1d); }
     .t-orange { background: linear-gradient(135deg, #d06d12, #b85a08); }
+    .t-warning { background: linear-gradient(135deg, #ffd700, #ffb300); }
     .t-violet { background: linear-gradient(135deg, #5a49b8, #43379b); }
     .t-slate { background: linear-gradient(135deg, #516276, #3a4a5f); }
 
@@ -208,21 +209,19 @@
     <div class="hub-head">
         <div>
             <div class="hub-brand">
-                <span class="hub-logo" role="img" aria-label="Logo Columbia"></span>
                 <div class="hub-brand-name">
                     <span>COLUMBIA</span>
                     <span class="sync">SYNC</span>
                 </div>
             </div>
             <h2 class="hub-title">Painel de Entrada</h2>
-            <div class="hub-sub">Escolha um modulo para iniciar. Caso o perfil nao tenha permissao, o sistema exibira acesso negado.</div>
+            <div class="hub-sub">Escolha um módulo para navegar.</div>
         </div>
-        <div class="hub-note">SYNC sempre no azul-marinho corporativo: #0065b3</div>
     </div>
 
     <div class="tiles-grid">
-        <a href="/portaria" class="tile t-green">
-            <span class="kicker">Recebimento</span>
+        <a href="/portaria" class="tile t-warning">
+            <span class="kicker">Portaria</span>
             <i class="fas fa-door-open"></i>
             <div>
                 <div class="label">Portaria</div>
@@ -239,7 +238,7 @@
             </div>
         </a>
 
-        <a href="/compras/auditor-xml" class="tile t-slate">
+        <a href="/compras/auditor-xml" class="tile t-orange">
             <span class="kicker">Compras</span>
             <i class="fas fa-shield-halved"></i>
             <div>
@@ -248,7 +247,7 @@
             </div>
         </a>
 
-        <a href="/lancamento" class="tile t-cyan">
+        <a href="/lancamento" class="tile t-orange">
             <span class="kicker">Compras</span>
             <i class="fas fa-file-signature"></i>
             <div>
@@ -258,7 +257,7 @@
         </a>
 
         <a href="/conferencia" class="tile t-blue">
-            <span class="kicker">Recebimento</span>
+            <span class="kicker">Logística</span>
             <i class="fas fa-barcode"></i>
             <div>
                 <div class="label">Conferencia Cega</div>
@@ -266,8 +265,8 @@
             </div>
         </a>
 
-        <a href="/fiscal/liberadas" class="tile t-cyan">
-            <span class="kicker">Recebimento</span>
+        <a href="/fiscal/liberadas" class="tile t-blue">
+            <span class="kicker">Logística</span>
             <i class="fas fa-box-open"></i>
             <div>
                 <div class="label">NF-e Liberadas</div>
@@ -275,8 +274,8 @@
             </div>
         </a>
 
-        <a href="/recebimento/etiquetas" class="tile t-violet">
-            <span class="kicker">Recebimento</span>
+        <a href="/recebimento/etiquetas" class="tile t-blue">
+            <span class="kicker">Logística</span>
             <i class="fas fa-tags"></i>
             <div>
                 <div class="label">Etiquetas</div>
@@ -284,26 +283,26 @@
             </div>
         </a>
 
-        <a href="/wms" class="tile t-green">
+        <a href="/wms" class="tile t-blue">
             <span class="kicker">Logística</span>
             <i class="fas fa-warehouse"></i>
             <div>
-                <div class="label">WMS</div>
+                <div class="label">Logística</div>
                 <div class="hint">Endereço e estoque</div>
             </div>
         </a>
 
-        <a href="/admin/wms-enderecos" class="tile t-cyan">
-            <span class="kicker">WMS</span>
+        <a href="/admin/wms-enderecos" class="tile t-blue">
+            <span class="kicker">Logística</span>
             <i class="fas fa-map-location-dot"></i>
             <div>
-                <div class="label">Cadastro de Endereços WMS</div>
+                <div class="label">Cadastro de Endereços Logística</div>
                 <div class="hint">Cadastro mestre</div>
             </div>
         </a>
 
-        <a href="/admin/wms-governanca" class="tile t-slate">
-            <span class="kicker">WMS</span>
+        <a href="/admin/wms-governanca" class="tile t-blue">
+            <span class="kicker">Logística</span>
             <i class="fas fa-sitemap"></i>
             <div>
                 <div class="label">Governança WMS</div>
@@ -320,21 +319,13 @@
             </div>
         </a>
 
-        <a href="/expedicao/admin" class="tile t-red">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-screwdriver-wrench"></i>
-            <div>
-                <div class="label">Controle Admin</div>
-                <div class="hint">Gestão operacional</div>
-            </div>
-        </a>
 
-        <a href="/expedicao/romaneio" class="tile t-orange">
-            <span class="kicker">Expedicao</span>
+        <a href="/expedicao/romaneio" class="tile t-blue">
+            <span class="kicker">Logística</span>
             <i class="fas fa-truck-ramp-box"></i>
             <div>
                 <div class="label">Romaneios</div>
-                <div class="hint">Separacao de carga</div>
+                <div class="hint">Separação de carga</div>
             </div>
         </a>
 
@@ -343,11 +334,11 @@
             <i class="fas fa-file-invoice-dollar"></i>
             <div>
                 <div class="label">Faturamento</div>
-                <div class="hint">Emissao</div>
+                <div class="hint">Emissão de notas fiscais</div>
             </div>
         </a>
 
-        <a href="/financeiro/contas-receber" class="tile t-green">
+        <a href="/financeiro/contas-receber" class="tile t-red">
             <span class="kicker">Financeiro</span>
             <i class="fas fa-wallet"></i>
             <div>

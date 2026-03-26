@@ -14,7 +14,7 @@ from .routes.wms_routes import wms_bp
 
 
 def create_app(test_config=None) -> Flask:
-    app = Flask(__name__, template_folder="../templates", instance_relative_config=True)
+    app = Flask(__name__, template_folder="../templates", static_folder="../static", instance_relative_config=True)
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
