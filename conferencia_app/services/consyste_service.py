@@ -130,6 +130,36 @@ def listar_documentos_consyste(modelo: str = "nfe", q: str | None = None, campos
     return response.ok, response.status_code, _normalize_consyste_payload(payload)
 
 
+def listar_nfes_consyste_por_caixa(
+    caixa: str = "emitidos",
+    q: str | None = None,
+    campos: str | None = None,
+    timeout: int = 20,
+):
+    token = current_app.config.get("CONSYSTE_TOKEN")
+    caixa_limpa = str(caixa or "emitidos").strip().lower()
+    if caixa_limpa not in {"emitidos", "recebidos", "todos"}:
+        caixa_limpa = "emitidos"
+
+    url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/lista/{caixa_limpa}"
+    headers = {
+        "X-Consyste-Auth-Token": token,
+        "Accept": "application/json",
+    }
+    params = {}
+    if q:
+        params["q"] = str(q)
+    if campos:
+        params["campos"] = str(campos)
+
+    response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    try:
+        payload = response.json() if response.content else {}
+    except Exception:
+        payload = {"raw": response.text}
+    return response.ok, response.status_code, _normalize_consyste_payload(payload)
+
+
 def download_documento_consyste(
     modelo: str,
     formato: str = "xml",

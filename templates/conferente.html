@@ -5,71 +5,122 @@
 {% block extra_head %}
     <style>
         :root { 
-            --pending-yellow: #f1c40f; 
-            --sap-blue: #0a6ed1;
-            --sap-hover: #085caf;
-            --erp-bg: #f4f6f9;
-            --border-color: #dbe2e8;
-            --header-bg: #1e293b;
-            --success-erp: #1e7d32;
-            --danger-erp: #d92d20;
-            --warning-erp: #eaaa08;
-            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+            --pending-yellow: #2a84cf; 
+            --sap-blue: #0f62c9;
+            --sap-hover: #0b4d9f;
+            --erp-bg: #eef4f9;
+            --border-color: #d7e2ec;
+            --header-bg: #12314e;
+            --success-erp: #196f46;
+            --danger-erp: #b74040;
+            --warning-erp: #256fa9;
+            --card-shadow: 0 12px 28px rgba(26, 49, 74, 0.1);
         }
 
-        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
-        .container-erp { padding: 25px; max-width: 1400px; margin: 0 auto; }
+        body {
+            background:
+                radial-gradient(circle at top right, rgba(15, 98, 201, 0.12), transparent 24%),
+                linear-gradient(180deg, #f7fbff 0%, var(--erp-bg) 100%);
+            color: #333;
+            font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+            font-size: 13px;
+        }
+        .container-erp { padding: 24px; max-width: 1480px; margin: 0 auto; }
+        .module-shell {
+            background:
+                radial-gradient(circle at 8% 0%, rgba(15, 98, 201, 0.1), transparent 20%),
+                linear-gradient(180deg, rgba(255,255,255,0.76) 0%, rgba(240,246,252,0.78) 100%);
+            border: 1px solid rgba(164, 182, 200, 0.34);
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 26px 48px rgba(18, 43, 67, 0.1), inset 0 1px 0 rgba(255,255,255,0.82);
+        }
         
         /* Toolbar Superior */
         .erp-toolbar { 
-            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
-            margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;
-            border-radius: 12px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color);
+            background:
+                linear-gradient(145deg, rgba(16, 38, 59, 0.96), rgba(21, 75, 114, 0.92));
+            padding: 22px 24px;
+            margin-bottom: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            border-radius: 24px;
+            box-shadow: var(--card-shadow);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #f2f8ff;
         }
-        .erp-toolbar h2 { margin: 0; font-size: 18px; color: #000; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .erp-toolbar h2 {
+            margin: 0;
+            font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+            font-size: 30px;
+            color: #fff;
+            letter-spacing: -0.04em;
+            font-weight: 900;
+        }
+        .toolbar-copy {
+            margin-top: 8px;
+            color: rgba(235, 245, 255, 0.78);
+            font-size: 13px;
+            line-height: 1.7;
+            font-weight: 600;
+            max-width: 560px;
+        }
         .toolbar-actions { display: flex; align-items: center; gap: 12px; }
-        .filtro-nota { border: 1px solid #ced4da; padding: 10px 15px; border-radius: 8px; min-width: 220px; font-size: 13px; transition: all 0.2s; }
-        .filtro-nota:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+        .filtro-nota {
+            border: 1px solid rgba(201, 214, 226, 0.9);
+            padding: 12px 16px;
+            border-radius: 16px;
+            min-width: 260px;
+            font-size: 13px;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.96);
+            color: #14324d;
+            box-shadow: inset 0 1px 2px rgba(25, 45, 65, 0.04);
+        }
+        .filtro-nota:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 4px rgba(28,134,242,0.12); }
         
         /* Grid de Notas */
-        .notas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+        .notas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
         .nota-card { 
-            background: #ffffff; padding: 20px; border: 1px solid var(--border-color);
-            border-radius: 16px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02); position: relative; overflow: hidden;
+            background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(246,250,254,0.96) 100%);
+            padding: 22px; border: 1px solid var(--border-color);
+            border-radius: 24px; cursor: pointer; transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 14px 28px rgba(0,0,0,0.04); position: relative; overflow: hidden;
         }
-        .nota-card::before { content: ''; position: absolute; left: 0; top: 0; width: 4px; height: 100%; background: var(--pending-yellow); }
-        .nota-card:hover { transform: translateY(-4px); box-shadow: var(--card-shadow); border-color: var(--sap-blue); }
-        .nota-card strong { display: block; margin-top: 10px; font-size: 16px; color: var(--sap-blue); font-weight: 800; }
-        .status-label { font-size: 10px; font-weight: 800; color: var(--warning-erp); text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+        .nota-card::before { content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 5px; background: linear-gradient(90deg, var(--pending-yellow), #79bde9); }
+        .nota-card:hover { transform: translateY(-6px); box-shadow: var(--card-shadow); border-color: rgba(28,134,242,0.34); }
+        .nota-card strong { display: block; margin-top: 12px; font-size: 20px; color: #14324d; font-weight: 900; letter-spacing: -0.03em; }
+        .status-label { font-size: 10px; font-weight: 800; color: #94620f; text-transform: uppercase; display: flex; align-items: center; gap: 6px; letter-spacing: 0.08em; }
         
         /* Prioridades e Progressão */
         .priority-row { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
         .priority-pill { font-size: 10px; font-weight: 800; border-radius: 20px; padding: 3px 10px; border: 1px solid #d1d5db; background: #f3f4f6; color: #374151; }
-        .priority-pill.p0 { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
-        .priority-pill.p1 { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
-        .priority-pill.p4 { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-        .priority-pill.p5 { background: #7f1d1d; border-color: #991b1b; color: white; }
+        .priority-pill.p0 { background: #eef7ff; border-color: #c9e0f5; color: #0f62c9; }
+        .priority-pill.p1 { background: #e7f1fb; border-color: #bfd8ef; color: #145f9b; }
+        .priority-pill.p4 { background: #dcecf9; border-color: #9fc7e7; color: #0a4e83; }
+        .priority-pill.p5 { background: #12314e; border-color: #12314e; color: white; }
         .priority-age { font-size: 11px; color: #64748b; font-weight: 700; }
         .priority-track { margin-top: 8px; height: 6px; border-radius: 10px; background: #e2e8f0; overflow: hidden; }
         .priority-fill { height: 100%; width: 0%; transition: width 0.4s ease; }
-        .priority-fill.p0 { background: #10b981; }
-        .priority-fill.p5 { background: #ef4444; }
+        .priority-fill.p0 { background: #2d8ad4; }
+        .priority-fill.p5 { background: #12314e; }
 
         /* Painel de Conferência */
-        .conf-panel { background: white; border-radius: 20px; overflow: hidden; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
+        .conf-panel { background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,250,254,0.98) 100%); border-radius: 28px; overflow: hidden; box-shadow: var(--card-shadow); border: 1px solid rgba(164, 182, 200, 0.28); }
         .conf-header { 
-            background: var(--header-bg); color: white; padding: 20px 25px; 
-            display: flex; justify-content: space-between; align-items: center;
+            background: linear-gradient(145deg, rgba(16, 38, 59, 0.98), rgba(23, 79, 120, 0.92)); color: white; padding: 22px 26px; 
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
         }
-        .conf-header h3 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; font-weight: 400; }
+        .conf-header h3 { margin: 0; font-family: "Space Grotesk", "IBM Plex Sans", sans-serif; font-size: 22px; text-transform: none; letter-spacing: -0.03em; font-weight: 800; }
 
         .erp-table { width: 100%; border-collapse: collapse; }
         .erp-table th { 
             background: #f8fafc; padding: 15px; font-size: 11px; 
             text-transform: uppercase; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 800;
         }
-        .erp-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .erp-table td { padding: 14px 15px; border-bottom: 1px solid #eef3f8; vertical-align: middle; }
         .erp-table tr:hover td { background: #f8fafc; }
 
         .status-indicator { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background-color: #cbd5e1; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; }
@@ -77,21 +128,23 @@
         tr.contado { background-color: #f0fdf4 !important; } 
 
         .qtd-input { 
-            width: 110px; padding: 10px; border: 2px solid #cbd5e1; border-radius: 8px;
-            text-align: right; font-family: 'Cascadia Code', monospace; font-weight: 800; font-size: 16px; color: var(--sap-blue);
+            width: 116px; padding: 11px; border: 2px solid #d4dee8; border-radius: 12px;
+            text-align: right; font-family: 'Cascadia Code', monospace; font-weight: 800; font-size: 16px; color: var(--sap-blue); background: #fff;
         }
-        .qtd-input:focus { border-color: var(--sap-blue); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+        .qtd-input:focus { border-color: var(--sap-blue); outline: none; background: #fff; box-shadow: 0 0 0 4px rgba(28,134,242,0.12); }
 
         .btn-sap { 
-            padding: 10px 20px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
+            padding: 11px 20px; border: none; border-radius: 12px; font-size: 12px; font-weight: 800; 
             cursor: pointer; text-transform: uppercase; transition: all 0.2s;
             display: inline-flex; align-items: center; gap: 8px;
+            box-shadow: 0 12px 20px rgba(27, 49, 71, 0.08);
         }
         .btn-primary { background: var(--sap-blue); color: white; }
         .btn-success { background: var(--success-erp); color: white; }
-        .btn-danger { background: #fff; color: var(--danger-erp); border: 1px solid var(--danger-erp); }
+        .btn-danger { background: #fff; color: var(--danger-erp); border: 1px solid rgba(212,77,69,0.42); }
         .btn-warning { background: var(--warning-erp); color: white; }
         .btn-secondary { background: #e2e8f0; color: #475569; }
+        .btn-sap:hover { transform: translateY(-1px); filter: brightness(1.02); }
 
         .modal-sap { border-radius: 24px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
         .modal-head { padding: 20px 25px; background: #1e293b; color: white; }
@@ -142,6 +195,10 @@
 
         @media (max-width: 900px) {
             .container-erp { padding: 12px; }
+            .module-shell { padding: 12px; border-radius: 22px; }
+            .erp-toolbar { padding: 18px; border-radius: 20px; flex-direction: column; align-items: flex-start; }
+            .toolbar-actions { width: 100%; flex-direction: column; align-items: stretch; }
+            .filtro-nota { min-width: 100%; }
             .erp-table td::before { font-size: 9px; margin-bottom: 4px; }
             .qtd-input { font-size: 18px; padding: 12px; }
         }
@@ -150,10 +207,13 @@
 
 {% block content %}
 <div class="container-erp">
-    
+    <div class="module-shell">
     <div id="lista-view">
         <div class="erp-toolbar">
-            <h2><i class="fas fa-barcode"></i> Módulo de Recebimento</h2>
+            <div>
+                <h2><i class="fas fa-barcode"></i> Conferência Cega</h2>
+                <div class="toolbar-copy">Tela de recebimento modernizada para leitura rápida das NF-es pendentes e execução da contagem física com menos ruído visual.</div>
+            </div>
             <div class="toolbar-actions">
                 <input id="filtro-nota-pendente" class="filtro-nota" placeholder="🔍 Filtrar número da nota..." oninput="renderNotasPendentes()" />
                 <button class="btn-sap btn-primary" onclick="abrirConsultaOcorrencias()">
@@ -199,6 +259,7 @@
                 </button>
             </div>
         </div>
+    </div>
     </div>
 </div>
 

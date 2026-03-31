@@ -21,19 +21,34 @@ def _attempt_key(username: str, ip: str) -> str:
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login_page():
+    if request.method == "GET" and "username" in session:
+        return redirect(url_for("pages.home"))
+
     if request.method == "POST":
         data = login_schema.load(request.json or {})
-        username = data.get("username")
+        username = (data.get("username") or "").strip()
         password = data.get("password")
         ip = request.headers.get("X-Forwarded-For", request.remote_addr or "local")
 
         key = _attempt_key(username, ip)
         rec = _login_attempts.get(key)
         if rec and rec.get("blocked_until") and datetime.now() < rec["blocked_until"]:
-            return jsonify({"sucesso": False, "msg": "Muitas tentativas. Tente novamente em alguns minutos."}), 429
+            segundos_restantes = max(int((rec["blocked_until"] - datetime.now()).total_seconds()), 1)
+            return jsonify({
+                "sucesso": False,
+                "code": "RATE_LIMIT",
+                "msg": "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.",
+                "retry_after_seconds": segundos_restantes,
+            }), 429
 
         user = Usuario.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
+            ultimo_acesso = (
+                ActiveSession.query
+                .filter(ActiveSession.username == user.username)
+                .order_by(ActiveSession.last_activity.desc())
+                .first()
+            )
             session["username"] = user.username
             session["role"] = user.role
             session.permanent = True
@@ -51,7 +66,15 @@ def login_page():
             db.session.commit()
             _login_attempts.pop(key, None)
             redirect_to = "/"
-            return jsonify({"sucesso": True, "redirect_to": redirect_to})
+            return jsonify({
+                "sucesso": True,
+                "redirect_to": redirect_to,
+                "user": {
+                    "username": user.username,
+                    "role": user.role,
+                },
+                "previous_access_at": ultimo_acesso.last_activity.isoformat() if ultimo_acesso and ultimo_acesso.last_activity else None,
+            })
 
         max_attempts = current_app.config.get("LOGIN_MAX_ATTEMPTS", 5)
         lock_minutes = current_app.config.get("LOGIN_LOCK_MINUTES", 10)
@@ -63,9 +86,19 @@ def login_page():
             rec["count"] = 0
         _login_attempts[key] = rec
 
-        return jsonify({"sucesso": False, "msg": "Usuário ou senha incorretos"}), 401
+        tentativas_restantes = max_attempts - rec["count"] if not rec.get("blocked_until") else 0
+        return jsonify({
+            "sucesso": False,
+            "code": "INVALID_CREDENTIALS",
+            "msg": "Usuário ou senha incorretos.",
+            "attempts_left": max(tentativas_restantes, 0),
+        }), 401
 
-    return render_template("login.html")
+    return render_template(
+        "login.html",
+        login_message=request.args.get("msg") or "",
+        login_message_type=request.args.get("type") or "",
+    )
 
 
 @auth_bp.route("/logout")
@@ -78,7 +111,7 @@ def logout():
             sessao.is_active = False
             db.session.commit()
     session.clear()
-    return redirect(url_for("auth.login_page"))
+    return redirect(url_for("auth.login_page", msg="Sessão encerrada com sucesso.", type="info"))
 
 
 # Teste de logo estática

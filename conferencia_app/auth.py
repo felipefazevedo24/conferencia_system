@@ -29,6 +29,7 @@ PERMISSION_CATALOG = {
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_WMS": "WMS > Enderecamento e relatorios",
+    "PAGE_FINANCEIRO_FATURAMENTO": "Financeiro > Faturamento",
     "PAGE_FINANCEIRO_CONTAS_RECEBER": "Financeiro > Contas a Receber",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_ADMIN": "Expedicao > Controle Admin",
@@ -39,6 +40,7 @@ PERMISSION_CATALOG = {
     "PAGE_ADMIN_ACESSOS": "Administracao > Auditoria de acessos",
     "PAGE_ADMIN_WMS_ENDERECOS": "Administracao > Cadastro de enderecos WMS",
     "PAGE_ADMIN_WMS_GOVERNANCA": "Administracao > Governanca WMS",
+        "PAGE_CONSERTO": "Conserto > Central de Conserto",
 }
 
 BASE_ROLE_PERMISSIONS = {
@@ -50,6 +52,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_XML_AUDITOR",
         "PAGE_LANCAMENTO",
         "PAGE_WMS",
+        "PAGE_FINANCEIRO_FATURAMENTO",
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_EXPEDICAO_CONFERENCIA",
         "PAGE_EXPEDICAO_ROMANEIO",

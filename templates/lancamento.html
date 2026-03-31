@@ -378,7 +378,7 @@
         const card = document.getElementById('feedback-card');
         card.className = `feedback-card show ${tipo || 'info'}`;
         document.getElementById('feedback-card-title').innerText = titulo || 'Retorno do processo fiscal';
-        document.getElementById('feedback-card-message').innerText = mensagem || '';
+        document.getElementById('feedback-card-message').innerHTML = mensagem || '';
     }
 
     function ocultarFeedbackCard() {
@@ -658,16 +658,21 @@
             fecharModal();
             await carregarConcluidas();
             await carregarLancadas();
+            const conserto = data.conserto || null;
+            const possuiSugestaoConserto = conserto && Number(conserto.baixas_sugeridas || 0) > 0;
+            const textoConserto = possuiSugestaoConserto
+                ? `<br><br><a href="/conserto/confirmacao_baixa" style="color:inherit; font-weight:800; text-decoration:underline;">Abrir Central de Conserto para validar a conciliação</a><br><span style="font-size:11px;">${conserto.baixas_sugeridas} sugestão(ões) de baixa pendente(s) foram criada(s) para esta nota.</span>`
+                : '';
             if (manifestarDestinatario && data.manifestacao) {
                 exibirFeedbackCard(
                     data.manifestacao.sucesso ? 'success' : 'error',
                     data.manifestacao.sucesso ? 'Lançamento e manifestação concluídos' : 'Lançamento gravado com pendência de manifestação',
                     data.manifestacao.sucesso
-                        ? 'Lançamento gravado e confirmação da operação enviada com sucesso.'
-                        : `Lançamento gravado, mas a manifestação falhou: ${data.manifestacao.msg || 'sem detalhe'}`
+                        ? `Lançamento gravado e confirmação da operação enviada com sucesso.${textoConserto}`
+                        : `Lançamento gravado, mas a manifestação falhou: ${data.manifestacao.msg || 'sem detalhe'}${textoConserto}`
                 );
             } else {
-                exibirFeedbackCard('success', 'Lançamento gravado', 'Escrituração fiscal registrada com sucesso.');
+                exibirFeedbackCard('success', 'Lançamento gravado', `Escrituração fiscal registrada com sucesso.${textoConserto}`);
             }
         } else {
             exibirFeedbackCard('error', 'Falha no lançamento', data.msg || 'Não foi possível gravar a escrituração fiscal.');

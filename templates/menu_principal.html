@@ -1,353 +1,226 @@
 {% extends "base.html" %}
 
-{% block title %}Painel de Entrada | Columbia SYNC{% endblock %}
+{% block title %}Menu Principal | Columbia Sync{% endblock %}
 
 {% block extra_head %}
 <style>
     :root {
-        --sync-navy: #0065b3;
+        --home-bg-top: #edf4fb;
+        --home-bg-bottom: #d9e6f2;
+        --home-ink: #12314e;
+        --home-line: rgba(20, 71, 113, 0.14);
+        --home-panel: rgba(255, 255, 255, 0.74);
+        --home-shadow: 0 28px 56px rgba(16, 41, 66, 0.12);
     }
 
-    .hub-wrap {
-        max-width: 1320px;
+    .metro-home {
+        max-width: 1480px;
         margin: 0 auto;
     }
 
-    .hub-stage {
+    .metro-shell {
         position: relative;
-        background:
-            radial-gradient(circle at 88% -10%, rgba(0, 101, 179, 0.18), transparent 44%),
-            radial-gradient(circle at 8% 100%, rgba(17, 88, 149, 0.1), transparent 36%),
-            linear-gradient(180deg, #f7fbff 0%, #eef4fb 100%);
-        border: 1px solid #d9e5f1;
-        border-radius: 18px;
-        padding: 18px;
-        box-shadow: 0 20px 44px rgba(24, 47, 72, 0.12);
-    }
-
-    .hub-head {
-        background: linear-gradient(135deg, #ffffff 0%, #f2f8ff 100%);
-        border: 1px solid #d8e5f2;
-        border-bottom: 4px solid var(--sync-navy);
-        border-radius: 14px;
-        padding: 18px;
-        margin-bottom: 16px;
-        box-shadow: 0 10px 24px rgba(18, 40, 61, 0.08);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        flex-wrap: wrap;
-    }
-
-    .hub-brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .hub-logo {
-        width: 106px;
-        height: 30px;
-        background-color: var(--sync-navy);
-        -webkit-mask: url('/static/columbia_logo.png') center / contain no-repeat;
-        mask: url('/static/columbia_logo.png') center / contain no-repeat;
-        flex-shrink: 0;
-    }
-
-    .hub-brand-name {
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        font-size: 18px;
-        font-weight: 900;
-        letter-spacing: 0.4px;
-        text-transform: uppercase;
-        color: #1f3348;
-    }
-
-    .hub-brand-name .sync {
-        color: var(--sync-navy);
-    }
-
-    .hub-title {
-        margin: 0;
-        font-size: 18px;
-        color: #1f3348;
-        font-weight: 800;
-        letter-spacing: 0.2px;
-        text-transform: uppercase;
-    }
-
-    .hub-sub {
-        margin-top: 4px;
-        color: #4a6279;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .hub-note {
-        font-size: 11px;
-        color: #36516b;
-        background: #eaf3fd;
-        border: 1px solid #cfe2f5;
-        border-radius: 10px;
-        padding: 8px 10px;
-        font-weight: 700;
-    }
-
-    .tiles-grid {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(180px, 1fr));
-        gap: 12px;
-    }
-
-    .tile {
-        position: relative;
-        text-decoration: none;
-        border-radius: 12px;
-        min-height: 126px;
-        padding: 14px;
-        color: #fff;
         overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        box-shadow: 0 10px 22px rgba(15, 40, 65, 0.2);
-        transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 30px;
+        padding: 24px;
+        background:
+            radial-gradient(circle at 8% 0%, rgba(15, 98, 201, 0.16), transparent 24%),
+            radial-gradient(circle at 94% 8%, rgba(0, 101, 179, 0.12), transparent 22%),
+            linear-gradient(180deg, var(--home-bg-top) 0%, var(--home-bg-bottom) 100%);
+        border: 1px solid rgba(20, 71, 113, 0.12);
+        box-shadow: var(--home-shadow), inset 0 1px 0 rgba(255,255,255,0.75);
     }
 
-    .tile::after {
+    .metro-shell::after {
         content: "";
         position: absolute;
-        inset: 0;
-        background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 40%);
+        inset: 18px;
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,0.42);
         pointer-events: none;
     }
 
-    .tile:hover {
-        transform: translateY(-4px);
-        filter: brightness(1.03);
-        box-shadow: 0 14px 28px rgba(15, 40, 65, 0.28);
+    .metro-card {
+        border-radius: 22px;
+        background: var(--home-panel);
+        border: 1px solid var(--home-line);
+        box-shadow: 0 18px 32px rgba(23, 48, 73, 0.08);
+        backdrop-filter: blur(14px);
+        overflow: hidden;
+    }
+
+    .board-card {
+        padding: 24px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(241,246,251,0.9) 100%);
+    }
+
+    .tile-board {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
+        grid-auto-rows: 128px;
+        gap: 12px;
+    }
+
+    .metro-tile {
+        position: relative;
+        overflow: hidden;
+        border-radius: 22px;
+        padding: 16px;
+        text-decoration: none;
         color: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 18px 28px rgba(27, 49, 71, 0.16), inset 0 1px 0 rgba(255,255,255,0.14);
+        transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+        min-height: 0;
     }
 
-    .tile i {
-        font-size: 34px;
-        opacity: 0.92;
+    .metro-tile:hover {
+        transform: translateY(-5px);
+        filter: brightness(1.05);
+        color: #fff;
+        box-shadow: 0 24px 36px rgba(27, 49, 71, 0.24), inset 0 1px 0 rgba(255,255,255,0.16);
     }
 
-    .tile .kicker {
-        font-size: 10px;
-        letter-spacing: 0.7px;
-        text-transform: uppercase;
-        font-weight: 700;
-        opacity: 0.85;
+    .metro-tile::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(145deg, rgba(255,255,255,0.16), transparent 38%),
+            linear-gradient(0deg, rgba(0,0,0,0.06), transparent 38%);
+        pointer-events: none;
     }
 
-    .tile .label {
+    .metro-tile.large {
+        grid-column: span 2;
+        grid-row: span 2;
+    }
+
+    .metro-tile.wide {
+        grid-column: span 2;
+    }
+
+    .metro-tile.blue { background: linear-gradient(145deg, #1d7fce, #114f88); }
+    .metro-tile.orange { background: linear-gradient(145deg, #f29b38, #d97512); }
+    .metro-tile.gold { background: linear-gradient(145deg, #1d7fce, #114f88); }
+    .metro-tile.cyan { background: linear-gradient(145deg, #f29b38, #d97512); }
+    .metro-tile.red { background: linear-gradient(145deg, #6b7cff, #4756cc); }
+    .metro-tile.violet { background: linear-gradient(145deg, #6b7cff, #4756cc); }
+    .metro-tile.teal { background: linear-gradient(145deg, #16a1a8, #0c6c77); }
+    .metro-tile.slate { background: linear-gradient(145deg, #355d7f, #1b3c58); }
+    .metro-tile.navy { background: linear-gradient(145deg, #0f62c9, #0b4b98); }
+
+    .tile-top,
+    .tile-bottom {
+        position: relative;
+        z-index: 1;
+    }
+
+    .tile-icon {
+        font-size: 42px;
+        line-height: 1;
+        opacity: 0.98;
+    }
+
+    .metro-tile.large .tile-icon {
+        font-size: 64px;
+    }
+
+    .tile-title {
+        display: block;
         font-size: 16px;
-        font-weight: 800;
-        line-height: 1.2;
-        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+        line-height: 1.14;
+        font-weight: 900;
+        text-shadow: 0 1px 0 rgba(0,0,0,0.2);
+        max-width: 94%;
     }
 
-    .tile .hint {
-        font-size: 10px;
-        font-weight: 800;
-        opacity: 0.86;
-        margin-top: 6px;
+    .metro-tile.large .tile-title {
+        font-size: 28px;
+        max-width: 100%;
     }
 
-    .t-blue { background: linear-gradient(135deg, #1672c9, #0f62c9); }
-    .t-green { background: linear-gradient(135deg, #2e8654, #21623d); }
-    .t-cyan { background: linear-gradient(135deg, #2d82b9, #1d6c9f); }
-    .t-red { background: linear-gradient(135deg, #d84834, #be2f1d); }
-    .t-orange { background: linear-gradient(135deg, #d06d12, #b85a08); }
-    .t-warning { background: linear-gradient(135deg, #ffd700, #ffb300); }
-    .t-violet { background: linear-gradient(135deg, #5a49b8, #43379b); }
-    .t-slate { background: linear-gradient(135deg, #516276, #3a4a5f); }
-
-    @media (max-width: 1200px) {
-        .tiles-grid {
-            grid-template-columns: repeat(4, minmax(180px, 1fr));
+    @media (max-width: 1320px) {
+        .tile-board {
+            grid-template-columns: repeat(5, minmax(120px, 1fr));
         }
     }
 
-    @media (max-width: 960px) {
-        .tiles-grid {
-            grid-template-columns: repeat(3, minmax(170px, 1fr));
+    @media (max-width: 1100px) {
+        .tile-board {
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
         }
     }
 
-    @media (max-width: 700px) {
-        .hub-head {
-            align-items: flex-start;
+    @media (max-width: 760px) {
+        .metro-shell {
+            padding: 14px;
+            border-radius: 22px;
         }
 
-        .hub-brand {
-            width: 100%;
+        .metro-shell::after {
+            inset: 10px;
+            border-radius: 16px;
         }
 
-        .tiles-grid {
-            grid-template-columns: repeat(2, minmax(150px, 1fr));
+        .board-card {
+            padding: 16px;
         }
-    }
 
-    @media (max-width: 480px) {
-        .tiles-grid {
-            grid-template-columns: 1fr;
+        .tile-board {
+            grid-template-columns: repeat(2, minmax(120px, 1fr));
+            grid-auto-rows: 114px;
+        }
+
+        .metro-tile.large,
+        .metro-tile.wide {
+            grid-column: span 2;
+            grid-row: span 1;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="main-content hub-wrap">
-    <div class="hub-stage">
-    <div class="hub-head">
-        <div>
-            <div class="hub-brand">
-                <div class="hub-brand-name">
-                    <span>COLUMBIA</span>
-                    <span class="sync">SYNC</span>
-                </div>
+<div class="main-content metro-home">
+    <section class="metro-shell">
+        <section class="metro-card board-card">
+            <div class="tile-board" id="tile-board">
+                {% for module in home_modules %}
+                {% set sector_tone =
+                    'navy' if module.section == 'Compras'
+                    else 'orange' if module.section == 'LogÃ­stica'
+                    else 'teal' if module.section == 'ExpediÃ§Ã£o'
+                    else 'violet' if module.section == 'Financeiro'
+                    else 'slate' if module.section == 'AdministraÃ§Ã£o'
+                    else 'blue'
+                %}
+                {% set tile_size = 'large' if loop.index <= 2 else 'wide' if loop.index in [3, 4, 5] else 'normal' %}
+                <a
+                    href="{{ module.href }}"
+                    class="metro-tile {{ sector_tone }} {{ tile_size }}"
+                    data-module-link="1"
+                    data-module-id="{{ module.id }}"
+                    data-module-title="{{ module.title }}"
+                >
+                    <div class="tile-top">
+                        <i class="fas {{ module.icon }} tile-icon"></i>
+                    </div>
+                    <div class="tile-bottom">
+                        <span class="tile-title">{{ module.title }}</span>
+                    </div>
+                </a>
+                {% endfor %}
             </div>
-            <h2 class="hub-title">Painel de Entrada</h2>
-            <div class="hub-sub">Escolha um módulo para navegar.</div>
-        </div>
-    </div>
-
-    <div class="tiles-grid">
-        <a href="/portaria" class="tile t-warning">
-            <span class="kicker">Portaria</span>
-            <i class="fas fa-door-open"></i>
-            <div>
-                <div class="label">Portaria</div>
-                <div class="hint">Inclusão de notas fiscais para conferência</div>
-            </div>
-        </a>
-
-        <a href="/upload" class="tile t-orange">
-            <span class="kicker">Compras</span>
-            <i class="fas fa-file-import"></i>
-            <div>
-                <div class="label">Pré-Nota de Entrada</div>
-                <div class="hint">Inclusão e auditoria de notas fiscais</div>
-            </div>
-        </a>
-
-        <a href="/compras/auditor-xml" class="tile t-orange">
-            <span class="kicker">Compras</span>
-            <i class="fas fa-shield-halved"></i>
-            <div>
-                <div class="label">Auditor XML</div>
-                <div class="hint">Auditoria de notas fiscais e Ordem de Compra</div>
-            </div>
-        </a>
-
-        <a href="/lancamento" class="tile t-orange">
-            <span class="kicker">Compras</span>
-            <i class="fas fa-file-signature"></i>
-            <div>
-                <div class="label">Documento de Entrada</div>
-                <div class="hint">Lançamento de notas fiscais no GRV Software</div>
-            </div>
-        </a>
-
-        <a href="/conferencia" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-barcode"></i>
-            <div>
-                <div class="label">Conferencia Cega</div>
-                <div class="hint">Conferência dos materiais recebidos</div>
-            </div>
-        </a>
-
-        <a href="/fiscal/liberadas" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-box-open"></i>
-            <div>
-                <div class="label">NF-e Liberadas</div>
-                <div class="hint">Histórico</div>
-            </div>
-        </a>
-
-        <a href="/recebimento/etiquetas" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-tags"></i>
-            <div>
-                <div class="label">Etiquetas</div>
-                <div class="hint">Impressão de etiquetas</div>
-            </div>
-        </a>
-
-        <a href="/wms" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-warehouse"></i>
-            <div>
-                <div class="label">Logística</div>
-                <div class="hint">Endereço e estoque</div>
-            </div>
-        </a>
-
-        <a href="/admin/wms-enderecos" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-map-location-dot"></i>
-            <div>
-                <div class="label">Cadastro de Endereços Logística</div>
-                <div class="hint">Cadastro mestre</div>
-            </div>
-        </a>
-
-        <a href="/admin/wms-governanca" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-sitemap"></i>
-            <div>
-                <div class="label">Governança WMS</div>
-                <div class="hint">Painel de controle</div>
-            </div>
-        </a>
-
-        <a href="/expedicao/conferencia" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-clipboard-check"></i>
-            <div>
-                <div class="label">Conferência</div>
-                <div class="hint">Conferência dos materiais a serem enviados</div>
-            </div>
-        </a>
-
-
-        <a href="/expedicao/romaneio" class="tile t-blue">
-            <span class="kicker">Logística</span>
-            <i class="fas fa-truck-ramp-box"></i>
-            <div>
-                <div class="label">Romaneios</div>
-                <div class="hint">Separação de carga</div>
-            </div>
-        </a>
-
-        <a href="/financeiro/faturamento" class="tile t-red">
-            <span class="kicker">Financeiro</span>
-            <i class="fas fa-file-invoice-dollar"></i>
-            <div>
-                <div class="label">Faturamento</div>
-                <div class="hint">Emissão de notas fiscais</div>
-            </div>
-        </a>
-
-        <a href="/financeiro/contas-receber" class="tile t-red">
-            <span class="kicker">Financeiro</span>
-            <i class="fas fa-wallet"></i>
-            <div>
-                <div class="label">Contas a Receber</div>
-                <div class="hint">Titulos e boletos</div>
-            </div>
-        </a>
-
-    </div>
-    </div>
+        </section>
+    </section>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+</script>
 {% endblock %}

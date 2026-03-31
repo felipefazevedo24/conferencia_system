@@ -1,0 +1,913 @@
+{% extends "base.html" %}
+
+{% block title %}Central de Conserto{% endblock %}
+
+{% block extra_head %}
+<style>
+    .conserto-shell {
+        display: grid;
+        gap: 18px;
+    }
+
+    .conserto-hero {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1.3fr 0.9fr;
+    }
+
+    .conserto-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+        border: 1px solid #d7e2ec;
+        border-radius: 16px;
+        box-shadow: 0 14px 30px rgba(34, 49, 63, 0.08);
+        padding: 20px;
+    }
+
+    .conserto-summary {
+        background:
+            radial-gradient(circle at top right, rgba(15, 98, 201, 0.16), transparent 32%),
+            linear-gradient(135deg, #203040 0%, #2e4a63 100%);
+        color: #fff;
+    }
+
+    .conserto-summary h2,
+    .conserto-form-card h3,
+    .conserto-table-card h3,
+    .conserto-modal-card h3 {
+        margin: 0 0 10px;
+        font-weight: 800;
+    }
+
+    .conserto-summary p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.84);
+    }
+
+    .conserto-metrics {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 18px;
+    }
+
+    .conserto-summary-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+    }
+
+    .metric-box {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+    .metric-box strong {
+        display: block;
+        font-size: 28px;
+        line-height: 1;
+        margin-bottom: 6px;
+    }
+
+    .metric-box span {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.75);
+    }
+
+    .conserto-form-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .conserto-field {
+        display: grid;
+        gap: 6px;
+    }
+
+    .conserto-field-full {
+        grid-column: 1 / -1;
+    }
+
+    .conserto-field label {
+        font-size: 12px;
+        font-weight: 700;
+        color: #50667a;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .conserto-field input,
+    .conserto-field textarea {
+        width: 100%;
+        border: 1px solid #c9d7e4;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 14px;
+        background: #fff;
+    }
+
+    .conserto-field textarea {
+        min-height: 88px;
+        resize: vertical;
+    }
+
+    .conserto-tabs {
+        display: inline-flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 999px;
+        background: #e8f0f7;
+        border: 1px solid #d6e0ea;
+        flex-wrap: wrap;
+    }
+
+    .conserto-tab-btn {
+        border: none;
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: transparent;
+        color: #436079;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .conserto-tab-btn.active {
+        background: #0f62c9;
+        color: #fff;
+        box-shadow: 0 8px 18px rgba(15, 98, 201, 0.24);
+    }
+
+    .conserto-table-card {
+        display: none;
+    }
+
+    .conserto-table-card.active {
+        display: block;
+    }
+
+    .conserto-table-wrap {
+        overflow-x: auto;
+        margin-top: 14px;
+    }
+
+    .conserto-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 880px;
+    }
+
+    .conserto-table th {
+        text-align: left;
+        padding: 12px 14px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #698197;
+        background: #eff5fa;
+        border-bottom: 2px solid #d9e4ee;
+    }
+
+    .conserto-table td {
+        padding: 14px;
+        border-bottom: 1px solid #e7eef5;
+        vertical-align: top;
+    }
+
+    .conserto-table tr:hover {
+        background: #f8fbfe;
+    }
+
+    .conserto-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .status-open {
+        background: #fff2d8;
+        color: #9a6500;
+    }
+
+    .status-done {
+        background: #dff5e8;
+        color: #1d6c42;
+    }
+
+    .conserto-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .btn-conserto {
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 9px 14px;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+    }
+
+    .btn-conserto.primary {
+        background: #0f62c9;
+        color: #fff;
+    }
+
+    .btn-conserto.primary.inverse {
+        background: #fff;
+        color: #203040;
+        border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .btn-conserto.secondary {
+        background: #fff;
+        color: #284055;
+        border-color: #c7d4df;
+    }
+
+    .btn-conserto:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
+    .conserto-empty {
+        text-align: center;
+        color: #70879a;
+        padding: 24px 0;
+    }
+
+    .conserto-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 25, 35, 0.52);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2500;
+        padding: 20px;
+    }
+
+    .conserto-modal.open {
+        display: flex;
+    }
+
+    .conserto-modal-card {
+        width: min(560px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid #d6e0ea;
+        box-shadow: 0 26px 60px rgba(16, 37, 58, 0.22);
+        padding: 22px;
+    }
+
+    .conserto-toast {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        padding: 14px 18px;
+        border-radius: 12px;
+        color: #fff;
+        font-weight: 700;
+        display: none;
+        z-index: 2600;
+        box-shadow: 0 14px 28px rgba(22, 39, 58, 0.22);
+    }
+
+    .conserto-toast.success {
+        background: #247a47;
+    }
+
+    .conserto-toast.error {
+        background: #b63a3a;
+    }
+
+    .conserto-debug {
+        margin-top: 16px;
+        background: rgba(5, 15, 24, 0.42);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+    .conserto-debug h4 {
+        margin: 0 0 10px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .conserto-debug-log {
+        max-height: 180px;
+        overflow: auto;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        color: #d8e4ef;
+    }
+
+    @media (max-width: 980px) {
+        .conserto-hero {
+            grid-template-columns: 1fr;
+        }
+
+        .conserto-metrics,
+        .conserto-form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header-erp">
+    <h2>Central de Conserto</h2>
+</div>
+
+<div class="conserto-shell">
+    <section class="conserto-hero">
+        <article class="conserto-card conserto-summary">
+            <h2>Controle de estoque em conserto</h2>
+            <p>Sincronize NF-es de conserto por CFOP, sugira baixas automáticas por vínculo fiscal e trate manualmente os casos sem referência.</p>
+            <div class="conserto-metrics">
+                <div class="metric-box">
+                    <strong id="metric-saldos">0</strong>
+                    <span>Saldos em aberto</span>
+                </div>
+                <div class="metric-box">
+                    <strong id="metric-quantidade">0</strong>
+                    <span>Quantidade pendente</span>
+                </div>
+                <div class="metric-box">
+                    <strong id="metric-baixas">0</strong>
+                    <span>Baixas pendentes</span>
+                </div>
+            </div>
+            <div class="conserto-summary-actions">
+                <button class="btn-conserto primary inverse" id="btn-sincronizar-notas" type="button">Sincronizar notas fiscais</button>
+            </div>
+            <div class="conserto-debug">
+                <h4>Debug da sincronizacao</h4>
+                <div id="debug-sync-log" class="conserto-debug-log">A sincronizacao vai considerar apenas NF-es emitidas desde 2026-03-01.</div>
+            </div>
+        </article>
+
+        <article class="conserto-card conserto-form-card">
+            <h3>Novo saldo de remessa</h3>
+            <form id="form-criar-saldo" class="conserto-form-grid">
+                <div class="conserto-field">
+                    <label for="chave_nf_remessa">Chave NF remessa</label>
+                    <input id="chave_nf_remessa" name="chave_nf_remessa" maxlength="44" required>
+                </div>
+                <div class="conserto-field">
+                    <label for="data_emissao">Data emissao</label>
+                    <input id="data_emissao" name="data_emissao" type="date" required>
+                </div>
+                <div class="conserto-field">
+                    <label for="fornecedor_cnpj">CNPJ fornecedor</label>
+                    <input id="fornecedor_cnpj" name="fornecedor_cnpj" maxlength="14" required>
+                </div>
+                <div class="conserto-field">
+                    <label for="fornecedor_nome">Fornecedor</label>
+                    <input id="fornecedor_nome" name="fornecedor_nome" required>
+                </div>
+                <div class="conserto-field">
+                    <label for="produto_codigo">Codigo do produto</label>
+                    <input id="produto_codigo" name="produto_codigo" required>
+                </div>
+                <div class="conserto-field">
+                    <label for="quantidade">Quantidade enviada</label>
+                    <input id="quantidade" name="quantidade" type="number" step="0.01" min="0.01" required>
+                </div>
+                <div class="conserto-field conserto-field-full">
+                    <label for="produto_descricao">Descricao do produto</label>
+                    <input id="produto_descricao" name="produto_descricao" required>
+                </div>
+                <div class="conserto-field conserto-field-full">
+                    <button class="btn-conserto primary" id="btn-criar-saldo" type="submit">Cadastrar saldo</button>
+                </div>
+            </form>
+        </article>
+    </section>
+
+    <div class="conserto-tabs">
+        <button class="conserto-tab-btn" data-tab="estoque" type="button">Estoque em aberto</button>
+        <button class="conserto-tab-btn" data-tab="historico" type="button">Historico de estoque</button>
+        <button class="conserto-tab-btn" data-tab="baixa" type="button">Confirmacao de baixa</button>
+        <button class="conserto-tab-btn" data-tab="auditoria" type="button">Auditoria</button>
+    </div>
+
+    <section id="tab-estoque" class="conserto-card conserto-table-card">
+        <h3>Saldos aguardando retorno</h3>
+        <div class="conserto-table-wrap">
+            <table class="conserto-table">
+                <thead>
+                    <tr>
+                        <th>NF remessa</th>
+                        <th>Fornecedor</th>
+                        <th>Produto</th>
+                        <th>Qtd enviada</th>
+                        <th>Saldo</th>
+                        <th>Status</th>
+                        <th>Emissao</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="estoque-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="tab-baixa" class="conserto-card conserto-table-card">
+        <h3>Baixas pendentes de confirmacao</h3>
+        <div class="conserto-table-wrap">
+            <table class="conserto-table">
+                <thead>
+                    <tr>
+                        <th>NF remessa</th>
+                        <th>NF retorno</th>
+                        <th>Produto</th>
+                        <th>Qtd baixada</th>
+                        <th>Vinculo</th>
+                        <th>Sugestao</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="baixas-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="tab-historico" class="conserto-card conserto-table-card">
+        <h3>Historico completo do estoque de conserto</h3>
+        <div class="conserto-table-wrap">
+            <table class="conserto-table">
+                <thead>
+                    <tr>
+                        <th>NF remessa</th>
+                        <th>Fornecedor</th>
+                        <th>Produto</th>
+                        <th>Qtd enviada</th>
+                        <th>Qtd baixada</th>
+                        <th>Saldo atual</th>
+                        <th>Status</th>
+                        <th>Emissao</th>
+                        <th>Criado por</th>
+                    </tr>
+                </thead>
+                <tbody id="historico-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="tab-auditoria" class="conserto-card conserto-table-card">
+        <h3>Ultimas operacoes</h3>
+        <div class="conserto-table-wrap">
+            <table class="conserto-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Acao</th>
+                        <th>Referencia</th>
+                        <th>Tipo</th>
+                        <th>Usuario</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody id="auditoria-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div id="modal-vinculo" class="conserto-modal">
+    <div class="conserto-modal-card">
+        <h3>Vincular retorno</h3>
+        <form id="form-vinculo" class="conserto-form-grid">
+            <input id="modal-estoque-id" name="conserto_estoque_id" type="hidden">
+            <div class="conserto-field conserto-field-full">
+                <label for="modal-chave">Chave NF retorno</label>
+                <input id="modal-chave" name="chave_nf_retorno" maxlength="44" required>
+            </div>
+            <div class="conserto-field">
+                <label for="modal-data">Data NF retorno</label>
+                <input id="modal-data" name="data_nf_retorno" type="date" required>
+            </div>
+            <div class="conserto-field">
+                <label for="modal-quantidade">Quantidade</label>
+                <input id="modal-quantidade" name="quantidade" type="number" step="0.01" min="0.01" required>
+            </div>
+            <div class="conserto-field conserto-field-full">
+                <label for="modal-observacoes">Observacoes</label>
+                <textarea id="modal-observacoes" name="observacoes"></textarea>
+            </div>
+            <div class="conserto-field conserto-field-full conserto-actions">
+                <button class="btn-conserto secondary" type="button" id="btn-fechar-modal">Cancelar</button>
+                <button class="btn-conserto primary" type="submit" id="btn-vincular">Salvar vinculo</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast" class="conserto-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const estadoConserto = {
+        tabAtiva: {{ tab_ativa|tojson }},
+        saldos: [],
+        baixas: [],
+        historico: []
+    };
+
+    function formatarData(valor) {
+        if (!valor) return "-";
+        const data = new Date(valor);
+        if (Number.isNaN(data.getTime())) return valor;
+        return data.toLocaleDateString("pt-BR");
+    }
+
+    function formatarNumero(valor) {
+        return Number(valor || 0).toLocaleString("pt-BR", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function abreviarChave(valor) {
+        if (!valor) return "-";
+        if (valor.length <= 12) return valor;
+        return `${valor.slice(0, 8)}...${valor.slice(-4)}`;
+    }
+
+    function mostrarToast(mensagem, tipo = "success") {
+        const toast = document.getElementById("toast");
+        toast.textContent = mensagem;
+        toast.className = `conserto-toast ${tipo}`;
+        toast.style.display = "block";
+        window.clearTimeout(mostrarToast.timer);
+        mostrarToast.timer = window.setTimeout(() => {
+            toast.style.display = "none";
+        }, 3200);
+    }
+
+    function ativarTab(tab) {
+        estadoConserto.tabAtiva = tab;
+        document.querySelectorAll(".conserto-tab-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.tab === tab);
+        });
+        document.querySelectorAll(".conserto-table-card").forEach((card) => {
+            card.classList.toggle("active", card.id === `tab-${tab}`);
+        });
+    }
+
+    function atualizarMetricas() {
+        const quantidadeAberta = estadoConserto.saldos.reduce((acc, item) => acc + Number(item.quantidade_saldo || 0), 0);
+        document.getElementById("metric-saldos").textContent = formatarNumero(estadoConserto.saldos.length);
+        document.getElementById("metric-quantidade").textContent = formatarNumero(quantidadeAberta);
+        document.getElementById("metric-baixas").textContent = formatarNumero(estadoConserto.baixas.length);
+    }
+
+    function renderizarSaldos() {
+        const tbody = document.getElementById("estoque-tbody");
+        tbody.innerHTML = "";
+
+        if (!estadoConserto.saldos.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="8">Nenhum saldo em aberto.</td></tr>';
+            return;
+        }
+
+        estadoConserto.saldos.forEach((item) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
+                <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj}</small></td>
+                <td>${item.produto_codigo}<br><strong>${item.produto_descricao}</strong></td>
+                <td>${formatarNumero(item.quantidade_enviada)}</td>
+                <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
+                <td><span class="conserto-status status-open">${item.status}</span></td>
+                <td>${formatarData(item.data_emissao)}</td>
+                <td class="conserto-actions">
+                    <button class="btn-conserto secondary" type="button" onclick="abrirModalVinculo(${item.id}, ${Number(item.quantidade_saldo || 0)})">Vincular retorno</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderizarBaixas() {
+        const tbody = document.getElementById("baixas-tbody");
+        tbody.innerHTML = "";
+
+        if (!estadoConserto.baixas.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="8">Nenhuma baixa pendente.</td></tr>';
+            return;
+        }
+
+        estadoConserto.baixas.forEach((item) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
+                <td><strong>${item.numero_nf_retorno || "-"}</strong><br><small>${abreviarChave(item.chave_nf_retorno)}</small></td>
+                <td>${item.produto_codigo}<br><strong>${item.produto_descricao || ""}</strong></td>
+                <td>${formatarNumero(item.quantidade_baixada)}</td>
+                <td>${item.tipo_vinculo}</td>
+                <td>${item.observacoes || "Conciliação por referência fiscal."}</td>
+                <td><span class="conserto-status status-open">${item.status_baixa}</span></td>
+                <td class="conserto-actions">
+                    <button class="btn-conserto primary" type="button" onclick="confirmarBaixa(${item.baixa_id})">Validar conciliação</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderizarAuditoria(itens) {
+        const tbody = document.getElementById("auditoria-tbody");
+        tbody.innerHTML = "";
+
+        if (!itens.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="6">Nenhum registro de auditoria.</td></tr>';
+            return;
+        }
+
+        itens.forEach((item) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${formatarData(item.data_hora)} ${String(item.data_hora).slice(11, 16)}</td>
+                <td><strong>${item.acao}</strong></td>
+                <td>#${item.referencia_id}</td>
+                <td>${item.referencia_tipo}</td>
+                <td>${item.usuario}</td>
+                <td>${item.detalhes || "-"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderizarHistorico() {
+        const tbody = document.getElementById("historico-tbody");
+        tbody.innerHTML = "";
+
+        if (!estadoConserto.historico.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="9">Nenhum item passou pelo estoque de conserto ainda.</td></tr>';
+            return;
+        }
+
+        estadoConserto.historico.forEach((item) => {
+            const statusClass = Number(item.quantidade_saldo || 0) > 0 ? "status-open" : "status-done";
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
+                <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj || "-"}</small></td>
+                <td>${item.produto_codigo}<br><strong>${item.produto_descricao}</strong></td>
+                <td>${formatarNumero(item.quantidade_enviada)}</td>
+                <td>${formatarNumero(item.quantidade_baixada)}</td>
+                <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
+                <td><span class="conserto-status ${statusClass}">${item.status}</span></td>
+                <td>${formatarData(item.data_emissao)}</td>
+                <td>${item.usuario_criacao || "-"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function carregarSaldos() {
+        const response = await fetch("/conserto/saldos_abertos");
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Falha ao carregar saldos.");
+        }
+        estadoConserto.saldos = data;
+        renderizarSaldos();
+        atualizarMetricas();
+    }
+
+    async function carregarBaixas() {
+        const response = await fetch("/conserto/baixas_pendentes");
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Falha ao carregar baixas.");
+        }
+        estadoConserto.baixas = data;
+        renderizarBaixas();
+        atualizarMetricas();
+    }
+
+    async function carregarAuditoria() {
+        const response = await fetch("/conserto/auditoria");
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Falha ao carregar auditoria.");
+        }
+        renderizarAuditoria(data);
+    }
+
+    async function carregarHistorico() {
+        const response = await fetch("/conserto/historico_estoque");
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Falha ao carregar historico.");
+        }
+        estadoConserto.historico = data;
+        renderizarHistorico();
+    }
+
+    async function recarregarTudo() {
+        await Promise.all([carregarSaldos(), carregarBaixas(), carregarAuditoria(), carregarHistorico()]);
+    }
+
+    function abrirModalVinculo(estoqueId, saldoMaximo) {
+        document.getElementById("modal-estoque-id").value = estoqueId;
+        const quantidade = document.getElementById("modal-quantidade");
+        quantidade.value = formatarNumero(saldoMaximo).replace(".", "").replace(",", ".");
+        quantidade.max = String(saldoMaximo);
+        document.getElementById("modal-vinculo").classList.add("open");
+    }
+
+    function fecharModalVinculo() {
+        document.getElementById("form-vinculo").reset();
+        document.getElementById("modal-vinculo").classList.remove("open");
+    }
+
+    async function confirmarBaixa(baixaId) {
+        const confirmado = window.confirm("Deseja confirmar esta baixa?");
+        if (!confirmado) return;
+
+        const response = await fetch("/conserto/confirmar_baixa", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ baixa_id: baixaId })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Nao foi possivel confirmar a baixa.");
+        }
+        mostrarToast(data.msg || "Baixa confirmada com sucesso.");
+        await recarregarTudo();
+    }
+
+    async function sincronizarNotasFiscais() {
+        const btn = document.getElementById("btn-sincronizar-notas");
+        const debug = document.getElementById("debug-sync-log");
+        btn.disabled = true;
+        btn.textContent = "Sincronizando...";
+        debug.textContent = "Iniciando sincronizacao em segundo plano...\n";
+
+        try {
+            const response = await fetch("/conserto/sincronizar_notas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Nao foi possivel sincronizar as notas.");
+            }
+            const jobId = data.job_id;
+            let concluido = false;
+
+            while (!concluido) {
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+                const statusResp = await fetch(`/conserto/sincronizar_notas/${jobId}`);
+                const statusData = await statusResp.json();
+                if (!statusResp.ok) {
+                    throw new Error(statusData.error || "Falha ao consultar status da sincronizacao.");
+                }
+
+                debug.textContent = (statusData.logs || []).join("\n");
+                debug.scrollTop = debug.scrollHeight;
+
+                if (statusData.status === "completed") {
+                    const resumo = statusData.resumo || {};
+                    mostrarToast(
+                        `Sincronizacao concluida. Saldos: ${resumo.saldos_criados || 0}, baixas: ${resumo.baixas_sugeridas || 0}, sem vinculo: ${resumo.retornos_sem_vinculo || 0}.`
+                    );
+                    await recarregarTudo();
+                    concluido = true;
+                } else if (statusData.status === "failed") {
+                    throw new Error(statusData.error || "A sincronizacao falhou.");
+                }
+            }
+        } catch (error) {
+            mostrarToast(error.message, "error");
+            debug.textContent += `\nErro final: ${error.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Sincronizar notas fiscais";
+        }
+    }
+
+    document.querySelectorAll(".conserto-tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => ativarTab(btn.dataset.tab));
+    });
+
+    document.getElementById("btn-sincronizar-notas").addEventListener("click", sincronizarNotasFiscais);
+    document.getElementById("btn-fechar-modal").addEventListener("click", fecharModalVinculo);
+    document.getElementById("modal-vinculo").addEventListener("click", (event) => {
+        if (event.target.id === "modal-vinculo") {
+            fecharModalVinculo();
+        }
+    });
+
+    document.getElementById("form-criar-saldo").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const btn = document.getElementById("btn-criar-saldo");
+        btn.disabled = true;
+        btn.textContent = "Salvando...";
+
+        try {
+            const form = event.currentTarget;
+            const payload = {
+                chave_nf_remessa: form.chave_nf_remessa.value.trim(),
+                data_emissao: form.data_emissao.value,
+                fornecedor_cnpj: form.fornecedor_cnpj.value.replace(/\D/g, ""),
+                fornecedor_nome: form.fornecedor_nome.value.trim(),
+                produto_codigo: form.produto_codigo.value.trim(),
+                produto_descricao: form.produto_descricao.value.trim(),
+                quantidade: Number(form.quantidade.value)
+            };
+
+            const response = await fetch("/conserto/criar_saldo", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Nao foi possivel cadastrar o saldo.");
+            }
+
+            form.reset();
+            mostrarToast(data.msg || "Saldo cadastrado com sucesso.");
+            await recarregarTudo();
+            ativarTab("estoque");
+        } catch (error) {
+            mostrarToast(error.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Cadastrar saldo";
+        }
+    });
+
+    document.getElementById("form-vinculo").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const btn = document.getElementById("btn-vincular");
+        btn.disabled = true;
+        btn.textContent = "Salvando...";
+
+        try {
+            const form = event.currentTarget;
+            const payload = {
+                conserto_estoque_id: Number(form.conserto_estoque_id.value),
+                chave_nf_retorno: form.chave_nf_retorno.value.trim(),
+                data_nf_retorno: form.data_nf_retorno.value,
+                quantidade: Number(form.quantidade.value),
+                observacoes: form.observacoes.value.trim()
+            };
+
+            const response = await fetch("/conserto/vinculo_manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Nao foi possivel vincular o retorno.");
+            }
+
+            fecharModalVinculo();
+            mostrarToast(data.msg || "Retorno vinculado com sucesso.");
+            await recarregarTudo();
+            ativarTab("baixa");
+        } catch (error) {
+            mostrarToast(error.message, "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Salvar vinculo";
+        }
+    });
+
+    (async function initConserto() {
+        ativarTab(estadoConserto.tabAtiva || "estoque");
+        try {
+            await recarregarTudo();
+        } catch (error) {
+            mostrarToast(error.message || "Falha ao carregar a central de conserto.", "error");
+        }
+    })();
+</script>
+{% endblock %}

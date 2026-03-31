@@ -291,6 +291,28 @@ def _ensure_item_nota_columns() -> None:
         conn.close()
 
 
+def _ensure_conserto_columns() -> None:
+    conn = db.engine.connect()
+    try:
+        res_estoque = conn.execute(db.text("PRAGMA table_info('conserto_estoque')")).fetchall()
+        cols_estoque = [row[1] for row in res_estoque]
+        if res_estoque and "numero_nf_remessa" not in cols_estoque:
+            conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN numero_nf_remessa VARCHAR(20)"))
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_numero_nf_remessa ON conserto_estoque (numero_nf_remessa)"))
+            conn.commit()
+
+        res_baixa = conn.execute(db.text("PRAGMA table_info('conserto_baixa')")).fetchall()
+        cols_baixa = [row[1] for row in res_baixa]
+        if res_baixa and "numero_nf_retorno" not in cols_baixa:
+            conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN numero_nf_retorno VARCHAR(20)"))
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_baixa_numero_nf_retorno ON conserto_baixa (numero_nf_retorno)"))
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         db.create_all()
@@ -317,6 +339,11 @@ def initialize_database(app: Flask) -> None:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
+            pass
+
+        try:
+            _ensure_conserto_columns()
+        except Exception:
             pass
 
 

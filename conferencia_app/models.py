@@ -430,6 +430,49 @@ class WMSAlertaOperacional(db.Model):
     resolvido_em = db.Column(db.DateTime)
 
 
+
+class ConsertoEstoque(db.Model):
+    __tablename__ = 'conserto_estoque'
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nf_remessa = db.Column(db.String(20), index=True)
+    chave_nf_remessa = db.Column(db.String(44), nullable=False, index=True)
+    data_emissao = db.Column(db.DateTime, nullable=False)
+    fornecedor_cnpj = db.Column(db.String(14), nullable=False, index=True)
+    fornecedor_nome = db.Column(db.String(100), nullable=False)
+    produto_codigo = db.Column(db.String(50), nullable=False, index=True)
+    produto_descricao = db.Column(db.String(200), nullable=False)
+    quantidade_enviada = db.Column(db.Float, nullable=False)
+    quantidade_saldo = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(30), nullable=False, default="Em conserto", index=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    usuario_criacao = db.Column(db.String(100), nullable=False)
+
+    baixas = db.relationship('ConsertoBaixa', backref='estoque', lazy=True)
+
+class ConsertoBaixa(db.Model):
+    __tablename__ = 'conserto_baixa'
+    id = db.Column(db.Integer, primary_key=True)
+    conserto_estoque_id = db.Column(db.Integer, db.ForeignKey('conserto_estoque.id'), nullable=False)
+    numero_nf_retorno = db.Column(db.String(20), index=True)
+    chave_nf_retorno = db.Column(db.String(44), nullable=True, index=True)
+    data_nf_retorno = db.Column(db.DateTime, nullable=True)
+    quantidade_baixada = db.Column(db.Float, nullable=False)
+    tipo_vinculo = db.Column(db.String(20), nullable=False)  # automatico/manual
+    status_baixa = db.Column(db.String(30), nullable=False, default="Pendente de confirmação", index=True)
+    usuario_confirmacao = db.Column(db.String(100), nullable=True)
+    data_confirmacao = db.Column(db.DateTime, nullable=True)
+    observacoes = db.Column(db.String(500), nullable=True)
+
+class ConsertoAuditoria(db.Model):
+    __tablename__ = 'conserto_auditoria'
+    id = db.Column(db.Integer, primary_key=True)
+    acao = db.Column(db.String(50), nullable=False)
+    referencia_id = db.Column(db.Integer, nullable=False)
+    referencia_tipo = db.Column(db.String(30), nullable=False)  # estoque/baixa
+    usuario = db.Column(db.String(100), nullable=False)
+    data_hora = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    detalhes = db.Column(db.String(1000), nullable=True)
+
 class DepositoWMS(db.Model):
     """Depósitos fixos para armazenagem: DEP 01, 02, 03, CLIENTE, TERCEIROS"""
     id = db.Column(db.Integer, primary_key=True)

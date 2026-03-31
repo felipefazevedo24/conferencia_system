@@ -9,6 +9,7 @@ from .error_handlers import register_error_handlers
 from .extensions import db, migrate
 from .routes.api_routes import api_bp
 from .routes.auth_routes import auth_bp
+from .routes.conserto_routes import conserto_bp
 from .routes.page_routes import page_bp
 from .routes.wms_routes import wms_bp
 
@@ -26,6 +27,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(page_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(wms_bp)
+    app.register_blueprint(conserto_bp)
 
     register_error_handlers(app)
 

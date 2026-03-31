@@ -17,7 +17,8 @@ def register_error_handlers(app):
     def handle_unauthorized(err):
         if request.path.startswith("/api") or request.path == "/validar":
             return jsonify({"error": "Não autenticado"}), 401
-        return render_template("login.html"), 401
+        message = getattr(err, "description", "") or "Sua sessão expirou. Faça login novamente para continuar."
+        return render_template("login.html", login_message=message, login_message_type="warning"), 401
 
     @app.errorhandler(403)
     def handle_forbidden(err):

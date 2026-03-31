@@ -6,48 +6,59 @@
 <style>
     .cr-wrap { max-width: 1200px; margin: 0 auto; }
     .cr-header {
-        background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%);
+        background:
+            radial-gradient(circle at top right, rgba(107, 124, 255, 0.16), transparent 28%),
+            linear-gradient(135deg, #ffffff 0%, #f6f8ff 100%);
         border: 1px solid #dbe4ec;
-        border-bottom: 3px solid #0f62c9;
-        border-radius: 12px;
-        padding: 16px 18px;
-        margin-bottom: 16px;
+        border-bottom: 3px solid #6b7cff;
+        border-radius: 18px;
+        padding: 18px 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 14px 30px rgba(25, 45, 82, 0.08);
     }
     .cr-title { margin: 0; font-size: 18px; font-weight: 800; color: #22313f; text-transform: uppercase; }
-    .cr-sub { margin: 4px 0 0; color: #556575; font-size: 12px; font-weight: 600; }
+    .cr-sub { margin: 6px 0 0; color: #556575; font-size: 12px; font-weight: 600; }
     .cr-card {
-        background: #fff;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
         border: 1px solid #dbe4ec;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 8px 20px rgba(18, 38, 58, 0.06);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 12px 26px rgba(18, 38, 58, 0.08);
     }
     .cr-row { display: grid; grid-template-columns: 1fr 1fr 160px auto; gap: 10px; margin-bottom: 12px; }
     .cr-field label { display: block; font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
     .cr-field input {
         width: 100%;
         border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 8px 10px;
+        border-radius: 12px;
+        padding: 10px 12px;
         font-size: 12px;
+        background: #fbfdff;
+    }
+    .cr-field input:focus {
+        outline: none;
+        border-color: #95a5ff;
+        box-shadow: 0 0 0 4px rgba(107, 124, 255, 0.12);
+        background: #fff;
     }
     .cr-actions { display: flex; gap: 8px; align-items: flex-end; }
     .btn-cr {
         border: 1px solid #9fb3c7;
-        border-radius: 8px;
-        background: #fff;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
         color: #1f3347;
         font-size: 11px;
         font-weight: 800;
-        padding: 8px 12px;
+        padding: 9px 13px;
         text-transform: uppercase;
         cursor: pointer;
+        box-shadow: 0 6px 14px rgba(31, 51, 71, 0.07);
     }
-    .btn-cr.primary { background: #0f62c9; border-color: #0f62c9; color: #fff; }
+    .btn-cr.primary { background: linear-gradient(180deg, #7b8bff 0%, #5a67e8 100%); border-color: #5a67e8; color: #fff; }
     .cr-msg { font-size: 12px; font-weight: 700; margin-bottom: 10px; }
     .cr-ok { color: #166534; }
     .cr-err { color: #b91c1c; }
-    .cr-table-wrap { overflow: auto; border: 1px solid #dbe4ec; border-radius: 10px; }
+    .cr-table-wrap { overflow: auto; border: 1px solid #dbe4ec; border-radius: 14px; }
     .cr-table {
         width: 100%;
         border-collapse: collapse;
@@ -61,7 +72,7 @@
         vertical-align: top;
     }
     .cr-table th {
-        background: #f8fafc;
+        background: linear-gradient(180deg, #f9fbff 0%, #eef2ff 100%);
         text-transform: uppercase;
         font-size: 10px;
         color: #475569;
@@ -75,8 +86,8 @@
         font-weight: 800;
         text-transform: uppercase;
     }
-    .pill.ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-    .pill.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .pill.ok { background: #eef2ff; color: #4251be; border: 1px solid #cfd6ff; }
+    .pill.warn { background: #fff6e5; color: #a46518; border: 1px solid #f4dab0; }
     .mono { font-family: Consolas, monospace; font-size: 11px; }
 
     @media (max-width: 980px) {

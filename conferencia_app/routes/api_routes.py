@@ -113,6 +113,7 @@ from ..schemas.api_schemas import (
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
+from ..services.conserto_service import ConsertoService
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -4826,6 +4827,15 @@ def confirmar_lancamento():
     )
     db.session.commit()
 
+    conciliacao_conserto = None
+    try:
+        conciliacao_conserto = ConsertoService.processar_retorno_no_lancamento(
+            numero_nota=numero_nota,
+            usuario=session["username"],
+        )
+    except Exception:
+        db.session.rollback()
+
     manifestacao_result = None
     if manifestar_destinatario:
         manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
@@ -4857,6 +4867,7 @@ def confirmar_lancamento():
     return jsonify(
         {
             "sucesso": True,
+            "conserto": conciliacao_conserto,
             "manifestacao": manifestacao_result,
             "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
             "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
