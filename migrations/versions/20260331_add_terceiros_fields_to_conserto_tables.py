@@ -17,8 +17,9 @@ depends_on = None
 
 def upgrade():
     bind = op.get_bind()
-    estoque_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('conserto_estoque')")).fetchall()}
-    baixa_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('conserto_baixa')")).fetchall()}
+    inspector = sa.inspect(bind)
+    estoque_cols = {column["name"] for column in inspector.get_columns("conserto_estoque")} if inspector.has_table("conserto_estoque") else set()
+    baixa_cols = {column["name"] for column in inspector.get_columns("conserto_baixa")} if inspector.has_table("conserto_baixa") else set()
 
     if "tipo_controle" not in estoque_cols:
         op.add_column(
@@ -41,8 +42,9 @@ def upgrade():
 
 def downgrade():
     bind = op.get_bind()
-    estoque_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('conserto_estoque')")).fetchall()}
-    baixa_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('conserto_baixa')")).fetchall()}
+    inspector = sa.inspect(bind)
+    estoque_cols = {column["name"] for column in inspector.get_columns("conserto_estoque")} if inspector.has_table("conserto_estoque") else set()
+    baixa_cols = {column["name"] for column in inspector.get_columns("conserto_baixa")} if inspector.has_table("conserto_baixa") else set()
 
     if "cfop_retorno" in baixa_cols:
         op.drop_column("conserto_baixa", "cfop_retorno")

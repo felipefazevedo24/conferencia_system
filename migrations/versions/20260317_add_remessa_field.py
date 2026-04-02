@@ -18,7 +18,8 @@ depends_on = None
 
 def upgrade():
     bind = op.get_bind()
-    existing_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('item_nota')")).fetchall()}
+    inspector = sa.inspect(bind)
+    existing_cols = {column["name"] for column in inspector.get_columns("item_nota")} if inspector.has_table("item_nota") else set()
     if "remessa" not in existing_cols:
         op.add_column(
             "item_nota",
@@ -29,6 +30,7 @@ def upgrade():
 
 def downgrade():
     bind = op.get_bind()
-    existing_cols = {row[1] for row in bind.execute(sa.text("PRAGMA table_info('item_nota')")).fetchall()}
+    inspector = sa.inspect(bind)
+    existing_cols = {column["name"] for column in inspector.get_columns("item_nota")} if inspector.has_table("item_nota") else set()
     if "remessa" in existing_cols:
         op.drop_column("item_nota", "remessa")

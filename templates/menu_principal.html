@@ -1,220 +1,716 @@
 {% extends "base.html" %}
 
 {% block title %}Menu Principal | Columbia Sync{% endblock %}
+{% block shell_title %}Menu principal{% endblock %}
 
 {% block extra_head %}
 <style>
-    :root {
-        --home-bg-top: #edf4fb;
-        --home-bg-bottom: #d9e6f2;
-        --home-ink: #12314e;
-        --home-line: rgba(20, 71, 113, 0.14);
-        --home-panel: rgba(255, 255, 255, 0.74);
-        --home-shadow: 0 28px 56px rgba(16, 41, 66, 0.12);
-    }
-
-    .metro-home {
-        max-width: 1480px;
+    .home-shell {
+        max-width: 1540px;
         margin: 0 auto;
+        display: grid;
+        gap: 20px;
     }
 
-    .metro-shell {
+    .home-shell a {
+        text-decoration: none;
+    }
+
+    .home-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+        gap: 18px;
+    }
+
+    .home-hero-panel,
+    .home-side-panel,
+    .home-highlight,
+    .section-shell,
+    .module-card,
+    .recent-shell,
+    .recent-item {
+        border: 1px solid rgba(209, 221, 233, 0.95);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        box-shadow: 0 18px 34px rgba(16, 37, 58, 0.08);
+    }
+
+    .home-hero-panel,
+    .home-side-panel,
+    .section-shell,
+    .recent-shell {
+        border-radius: 28px;
+    }
+
+    .home-hero-panel {
         position: relative;
         overflow: hidden;
-        border-radius: 30px;
-        padding: 24px;
+        padding: 28px;
         background:
-            radial-gradient(circle at 8% 0%, rgba(15, 98, 201, 0.16), transparent 24%),
-            radial-gradient(circle at 94% 8%, rgba(0, 101, 179, 0.12), transparent 22%),
-            linear-gradient(180deg, var(--home-bg-top) 0%, var(--home-bg-bottom) 100%);
-        border: 1px solid rgba(20, 71, 113, 0.12);
-        box-shadow: var(--home-shadow), inset 0 1px 0 rgba(255,255,255,0.75);
+            radial-gradient(circle at 92% 16%, rgba(28, 134, 242, 0.14), transparent 22%),
+            linear-gradient(135deg, #ffffff 0%, #f4f9ff 100%);
     }
 
-    .metro-shell::after {
+    .home-hero-panel::after {
         content: "";
         position: absolute;
-        inset: 18px;
-        border-radius: 24px;
-        border: 1px solid rgba(255,255,255,0.42);
-        pointer-events: none;
+        inset: 0 auto 0 0;
+        width: 5px;
+        background: linear-gradient(180deg, var(--color-primary-500), var(--color-brand-800));
     }
 
-    .metro-card {
-        border-radius: 22px;
-        background: var(--home-panel);
-        border: 1px solid var(--home-line);
-        box-shadow: 0 18px 32px rgba(23, 48, 73, 0.08);
-        backdrop-filter: blur(14px);
-        overflow: hidden;
+    .hero-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(28, 134, 242, 0.08);
+        border: 1px solid rgba(28, 134, 242, 0.12);
+        color: var(--color-primary-600);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
     }
 
-    .board-card {
-        padding: 24px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(241,246,251,0.9) 100%);
+    .hero-title {
+        margin: 16px 0 0;
+        color: var(--color-brand-900);
+        font-family: var(--font-display);
+        font-size: clamp(34px, 4vw, 52px);
+        line-height: 0.96;
+        letter-spacing: -0.06em;
     }
 
-    .tile-board {
+    .hero-copy {
+        margin: 14px 0 0;
+        max-width: 760px;
+        color: var(--color-text-muted);
+        font-size: 14px;
+        line-height: 1.75;
+    }
+
+    .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .hero-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(209, 221, 233, 0.95);
+        background: #ffffff;
+        color: var(--color-brand-900);
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .home-search-wrap {
+        margin-top: 22px;
         display: grid;
-        grid-template-columns: repeat(6, minmax(120px, 1fr));
-        grid-auto-rows: 128px;
+        gap: 10px;
+    }
+
+    .home-search-label {
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .home-search {
+        width: 100%;
+        min-height: 56px;
+        padding: 0 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(195, 209, 222, 0.96);
+        background: #ffffff;
+        color: var(--color-brand-900);
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.92);
+    }
+
+    .home-search::placeholder {
+        color: #7f90a3;
+    }
+
+    .home-search-help {
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .home-side-panel {
+        padding: 22px;
+        display: grid;
+        gap: 18px;
+    }
+
+    .side-block {
+        display: grid;
         gap: 12px;
     }
 
-    .metro-tile {
-        position: relative;
-        overflow: hidden;
-        border-radius: 22px;
-        padding: 16px;
-        text-decoration: none;
-        color: #fff;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        border: 1px solid rgba(255,255,255,0.2);
-        box-shadow: 0 18px 28px rgba(27, 49, 71, 0.16), inset 0 1px 0 rgba(255,255,255,0.14);
-        transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
-        min-height: 0;
+    .side-block-label {
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
     }
 
-    .metro-tile:hover {
-        transform: translateY(-5px);
-        filter: brightness(1.05);
-        color: #fff;
-        box-shadow: 0 24px 36px rgba(27, 49, 71, 0.24), inset 0 1px 0 rgba(255,255,255,0.16);
-    }
-
-    .metro-tile::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background:
-            linear-gradient(145deg, rgba(255,255,255,0.16), transparent 38%),
-            linear-gradient(0deg, rgba(0,0,0,0.06), transparent 38%);
-        pointer-events: none;
-    }
-
-    .metro-tile.large {
-        grid-column: span 2;
-        grid-row: span 2;
-    }
-
-    .metro-tile.wide {
-        grid-column: span 2;
-    }
-
-    .metro-tile.blue { background: linear-gradient(145deg, #1d7fce, #114f88); }
-    .metro-tile.orange { background: linear-gradient(145deg, #f29b38, #d97512); }
-    .metro-tile.gold { background: linear-gradient(145deg, #1d7fce, #114f88); }
-    .metro-tile.cyan { background: linear-gradient(145deg, #f29b38, #d97512); }
-    .metro-tile.red { background: linear-gradient(145deg, #6b7cff, #4756cc); }
-    .metro-tile.violet { background: linear-gradient(145deg, #6b7cff, #4756cc); }
-    .metro-tile.teal { background: linear-gradient(145deg, #16a1a8, #0c6c77); }
-    .metro-tile.slate { background: linear-gradient(145deg, #355d7f, #1b3c58); }
-    .metro-tile.navy { background: linear-gradient(145deg, #0f62c9, #0b4b98); }
-
-    .tile-top,
-    .tile-bottom {
-        position: relative;
-        z-index: 1;
-    }
-
-    .tile-icon {
-        font-size: 42px;
-        line-height: 1;
-        opacity: 0.98;
-    }
-
-    .metro-tile.large .tile-icon {
-        font-size: 64px;
-    }
-
-    .tile-title {
-        display: block;
-        font-size: 16px;
-        line-height: 1.14;
-        font-weight: 900;
-        text-shadow: 0 1px 0 rgba(0,0,0,0.2);
-        max-width: 94%;
-    }
-
-    .metro-tile.large .tile-title {
+    .side-title {
+        margin: 0;
+        color: var(--color-brand-900);
+        font-family: var(--font-display);
         font-size: 28px;
-        max-width: 100%;
+        line-height: 1;
+        letter-spacing: -0.05em;
     }
 
-    @media (max-width: 1320px) {
-        .tile-board {
-            grid-template-columns: repeat(5, minmax(120px, 1fr));
+    .side-copy {
+        color: var(--color-text-muted);
+        font-size: 13px;
+        line-height: 1.7;
+    }
+
+    .priority-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .priority-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid rgba(209, 221, 233, 0.95);
+        background: #ffffff;
+        color: var(--color-brand-900);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .priority-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(15, 98, 201, 0.18);
+        box-shadow: 0 14px 28px rgba(16, 37, 58, 0.08);
+        color: var(--color-brand-900);
+    }
+
+    .priority-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(28, 134, 242, 0.14), rgba(15, 98, 201, 0.2));
+        color: var(--color-primary-600);
+        flex-shrink: 0;
+    }
+
+    .priority-item strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.4;
+    }
+
+    .priority-item span {
+        display: block;
+        margin-top: 4px;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        line-height: 1.55;
+    }
+
+    .home-highlights {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .home-highlight {
+        border-radius: 22px;
+        padding: 18px;
+    }
+
+    .home-highlight span {
+        display: block;
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .home-highlight strong {
+        display: block;
+        margin-top: 10px;
+        color: var(--color-brand-900);
+        font-family: var(--font-display);
+        font-size: 36px;
+        line-height: 1;
+        letter-spacing: -0.05em;
+    }
+
+    .home-highlight p {
+        margin: 10px 0 0;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .home-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 18px;
+        align-items: start;
+    }
+
+    .sections-stack {
+        display: grid;
+        gap: 18px;
+    }
+
+    .section-shell {
+        padding: 22px;
+    }
+
+    .section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .section-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(28, 134, 242, 0.12), rgba(15, 98, 201, 0.18));
+        color: var(--color-primary-600);
+        flex-shrink: 0;
+    }
+
+    .section-title strong {
+        display: block;
+        color: var(--color-brand-900);
+        font-family: var(--font-display);
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+    }
+
+    .section-title span {
+        display: block;
+        margin-top: 6px;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .section-count {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: #f5f9fd;
+        border: 1px solid rgba(209, 221, 233, 0.95);
+        color: var(--color-text-muted);
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .modules-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .module-card {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+        border-radius: 22px;
+        color: var(--color-brand-900);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .module-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(15, 98, 201, 0.18);
+        box-shadow: 0 18px 34px rgba(16, 37, 58, 0.12);
+        color: var(--color-brand-900);
+    }
+
+    .module-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .module-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(28, 134, 242, 0.14), rgba(15, 98, 201, 0.2));
+        color: var(--color-primary-600);
+        flex-shrink: 0;
+    }
+
+    .module-kpi {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: #f5f9fd;
+        border: 1px solid rgba(209, 221, 233, 0.95);
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .module-title {
+        display: grid;
+        gap: 6px;
+    }
+
+    .module-title small {
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .module-title strong {
+        color: var(--color-brand-900);
+        font-size: 18px;
+        line-height: 1.2;
+        font-weight: 800;
+    }
+
+    .module-title p {
+        margin: 0;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.65;
+    }
+
+    .module-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .module-path {
+        color: var(--color-text-soft);
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .module-open {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, #1f77dc 0%, var(--color-primary-600) 100%);
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .recent-shell {
+        padding: 22px;
+        display: grid;
+        gap: 14px;
+        position: sticky;
+        top: 20px;
+    }
+
+    .recent-head {
+        display: grid;
+        gap: 6px;
+    }
+
+    .recent-head strong {
+        color: var(--color-brand-900);
+        font-family: var(--font-display);
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+    }
+
+    .recent-head span {
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .recent-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .recent-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 18px;
+        color: var(--color-brand-900);
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .recent-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(15, 98, 201, 0.18);
+        box-shadow: 0 14px 28px rgba(16, 37, 58, 0.08);
+        color: var(--color-brand-900);
+    }
+
+    .recent-item i {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: #f5f9fd;
+        color: var(--color-primary-600);
+        flex-shrink: 0;
+    }
+
+    .recent-item strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+
+    .recent-item span {
+        display: block;
+        margin-top: 3px;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    .recent-empty {
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px dashed rgba(195, 209, 222, 0.96);
+        background: #f8fbff;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.6;
+        text-align: center;
+    }
+
+    .home-empty {
+        display: none;
+        padding: 28px;
+        border-radius: 24px;
+        border: 1px dashed rgba(195, 209, 222, 0.96);
+        background: #f8fbff;
+        color: var(--color-text-muted);
+        font-size: 13px;
+        text-align: center;
+    }
+
+    .home-empty.visible {
+        display: block;
+    }
+
+    @media (max-width: 1260px) {
+        .home-hero,
+        .home-main {
+            grid-template-columns: 1fr;
+        }
+
+        .recent-shell {
+            position: static;
         }
     }
 
-    @media (max-width: 1100px) {
-        .tile-board {
-            grid-template-columns: repeat(4, minmax(120px, 1fr));
-        }
-    }
-
-    @media (max-width: 760px) {
-        .metro-shell {
-            padding: 14px;
-            border-radius: 22px;
+    @media (max-width: 900px) {
+        .home-highlights,
+        .modules-grid {
+            grid-template-columns: 1fr;
         }
 
-        .metro-shell::after {
-            inset: 10px;
-            border-radius: 16px;
+        .home-hero-panel,
+        .home-side-panel,
+        .section-shell,
+        .recent-shell {
+            padding: 18px;
+            border-radius: 24px;
         }
 
-        .board-card {
-            padding: 16px;
-        }
-
-        .tile-board {
-            grid-template-columns: repeat(2, minmax(120px, 1fr));
-            grid-auto-rows: 114px;
-        }
-
-        .metro-tile.large,
-        .metro-tile.wide {
-            grid-column: span 2;
-            grid-row: span 1;
+        .section-head,
+        .module-foot {
+            display: grid;
+            grid-template-columns: 1fr;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="main-content metro-home">
-    <section class="metro-shell">
-        <section class="metro-card board-card">
-            <div class="tile-board" id="tile-board">
-                {% for module in home_modules %}
-                {% set sector_tone =
-                    'navy' if module.section == 'Compras'
-                    else 'orange' if module.section == 'LogÃ­stica'
-                    else 'teal' if module.section == 'ExpediÃ§Ã£o'
-                    else 'violet' if module.section == 'Financeiro'
-                    else 'slate' if module.section == 'AdministraÃ§Ã£o'
-                    else 'blue'
-                %}
-                {% set tile_size = 'large' if loop.index <= 2 else 'wide' if loop.index in [3, 4, 5] else 'normal' %}
-                <a
-                    href="{{ module.href }}"
-                    class="metro-tile {{ sector_tone }} {{ tile_size }}"
-                    data-module-link="1"
-                    data-module-id="{{ module.id }}"
-                    data-module-title="{{ module.title }}"
-                >
-                    <div class="tile-top">
-                        <i class="fas {{ module.icon }} tile-icon"></i>
+<div class="main-content">
+    <section class="home-shell">
+        <section class="home-hero">
+            <div class="home-hero-panel">
+                <span class="hero-kicker"><i class="fas fa-compass"></i> Columbia Sync</span>
+                <h1 class="hero-title">Navegue pelo sistema sem ruído.</h1>
+                <p class="hero-copy">
+                    O menu principal volta a ser a sua central de trabalho: módulos organizados, acesso rápido ao que importa
+                    e uma leitura limpa para entrar em qualquer área do sistema sem parecer outro dashboard.
+                </p>
+
+                <div class="hero-meta">
+                    <span class="hero-pill"><i class="fas fa-user"></i> {{ user_context.username }}</span>
+                    <span class="hero-pill"><i class="fas fa-shield-halved"></i> {{ user_context.role }}</span>
+                    <span class="hero-pill"><i class="fas fa-clock"></i> Último acesso {{ user_context.last_seen }}</span>
+                </div>
+
+                <div class="home-search-wrap">
+                    <label class="home-search-label" for="home-module-search">Buscar módulo</label>
+                    <input
+                        id="home-module-search"
+                        class="home-search"
+                        type="text"
+                        placeholder="Ex.: conferência, WMS, auditor, etiquetas..."
+                    >
+                    <div class="home-search-help">
+                        Pesquise pelo nome do módulo, área ou palavra-chave. O menu filtra as opções sem virar painel de métricas.
                     </div>
-                    <div class="tile-bottom">
-                        <span class="tile-title">{{ module.title }}</span>
+                </div>
+            </div>
+
+            <aside class="home-side-panel">
+                <div class="side-block">
+                    <span class="side-block-label">Próximos passos</span>
+                    <h2 class="side-title">Comece por aqui</h2>
+                    <div class="side-copy">
+                        Atalhos operacionais para tirar a fila da frente, sem poluir a navegação principal.
                     </div>
-                </a>
+                </div>
+
+                <div class="priority-list">
+                    {% for action in priority_actions %}
+                    <a href="{{ action.href }}" class="priority-item">
+                        <div class="priority-icon"><i class="fas {{ action.icon }}"></i></div>
+                        <div>
+                            <strong>{{ action.title }}</strong>
+                            <span>{{ action.text }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </aside>
+        </section>
+
+        <section class="home-highlights">
+            {% for highlight in home_highlights %}
+            <article class="home-highlight">
+                <span>{{ highlight.label }}</span>
+                <strong>{{ highlight.value }}</strong>
+                <p>{{ highlight.caption }}</p>
+            </article>
+            {% endfor %}
+        </section>
+
+        <section class="home-main">
+            <div class="sections-stack">
+                <div id="home-empty-state" class="home-empty">
+                    Nenhum módulo encontrado para esse filtro. Tente buscar pelo nome da área ou por outro termo.
+                </div>
+
+                {% for section in home_sections %}
+                <section class="section-shell home-section" data-section-name="{{ section.name|lower }}">
+                    <div class="section-head">
+                        <div class="section-title">
+                            <div class="section-icon"><i class="fas {{ section.icon }}"></i></div>
+                            <div>
+                                <strong>{{ section.name }}</strong>
+                                <span>{{ section.description }}</span>
+                            </div>
+                        </div>
+                        <span class="section-count">{{ section.modules|length }} módulo(s)</span>
+                    </div>
+
+                    <div class="modules-grid">
+                        {% for module in section.modules %}
+                        <a
+                            href="{{ module.href }}"
+                            class="module-card home-module-card"
+                            data-search="{{ module.search_blob|lower }}"
+                            data-section="{{ section.name|lower }}"
+                        >
+                            <div class="module-top">
+                                <div class="module-icon"><i class="fas {{ module.icon }}"></i></div>
+                                <span class="module-kpi">{{ module.metric_label }}</span>
+                            </div>
+
+                            <div class="module-title">
+                                <small>{{ module.subtitle }}</small>
+                                <strong>{{ module.title }}</strong>
+                                <p>{{ module.description }}</p>
+                            </div>
+
+                            <div class="module-foot">
+                                <span class="module-path">{{ module.href_short }}</span>
+                                <span class="module-open">Abrir <i class="fas fa-arrow-right"></i></span>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </section>
                 {% endfor %}
             </div>
+
+            <aside class="recent-shell">
+                <div class="recent-head">
+                    <strong>Continuar</strong>
+                    <span>Seus últimos acessos aparecem aqui para retomar o trabalho sem caçar módulo de novo.</span>
+                </div>
+
+                <div id="home-recent-list" class="recent-list">
+                    <div class="recent-empty">Os acessos recentes vão aparecer aqui conforme você navegar pelo sistema.</div>
+                </div>
+            </aside>
         </section>
     </section>
 </div>
@@ -222,5 +718,63 @@
 
 {% block extra_js %}
 <script>
+    (function () {
+        const searchInput = document.getElementById("home-module-search");
+        const cards = Array.from(document.querySelectorAll(".home-module-card"));
+        const sections = Array.from(document.querySelectorAll(".home-section"));
+        const emptyState = document.getElementById("home-empty-state");
+        const recentList = document.getElementById("home-recent-list");
+        const RECENTS_STORAGE_KEY = "columbia_sync_home_recents";
+
+        function filterModules() {
+            const term = (searchInput?.value || "").trim().toLowerCase();
+            let visibleCards = 0;
+
+            cards.forEach((card) => {
+                const haystack = card.dataset.search || "";
+                const visible = !term || haystack.includes(term);
+                card.style.display = visible ? "" : "none";
+                if (visible) visibleCards += 1;
+            });
+
+            sections.forEach((section) => {
+                const hasVisibleCard = Array.from(section.querySelectorAll(".home-module-card"))
+                    .some((card) => card.style.display !== "none");
+                section.style.display = hasVisibleCard ? "" : "none";
+            });
+
+            emptyState.classList.toggle("visible", visibleCards === 0);
+        }
+
+        function renderRecents() {
+            if (!recentList) return;
+
+            let recentItems = [];
+            try {
+                recentItems = JSON.parse(localStorage.getItem(RECENTS_STORAGE_KEY) || "[]");
+            } catch (_) {
+                recentItems = [];
+            }
+
+            if (!recentItems.length) {
+                recentList.innerHTML = '<div class="recent-empty">Os acessos recentes vão aparecer aqui conforme você navegar pelo sistema.</div>';
+                return;
+            }
+
+            recentList.innerHTML = recentItems.slice(0, 6).map((item) => `
+                <a href="${item.href}" class="recent-item">
+                    <i class="fas ${item.icon || "fa-window-maximize"}"></i>
+                    <div>
+                        <strong>${item.title || "Último acesso"}</strong>
+                        <span>${item.href || "/"}</span>
+                    </div>
+                </a>
+            `).join("");
+        }
+
+        searchInput?.addEventListener("input", filterModules);
+        filterModules();
+        renderRecents();
+    })();
 </script>
 {% endblock %}

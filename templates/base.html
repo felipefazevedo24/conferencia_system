@@ -3,854 +3,310 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0065b3">
-    <title>{% block title %}ERP Columbia Machine{% endblock %}</title>
+    <meta name="theme-color" content="#0f62c9">
+    <title>{% block title %}Columbia Sync{% endblock %}</title>
     <link rel="manifest" href="/static/manifest.webmanifest">
-    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="/static/css/ui_erp.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        :root { 
-            --sap-blue: #0f62c9;
-            --brand-navy: #0065b3;
-            --brand-deep: #12314e;
-            --brand-soft: #eaf3fb;
-            --protheus-gray: #22313f;
-            --sidebar-bg: #13283d;
-            --sidebar-hover: #1b3954;
-            --erp-bg: #edf3f8;
-            --text-main: #22313f;
-            --border-color: #d2dce6;
-            --header-bg: #2d445a;
-            --success-erp: #247a47;
-            --danger-erp: #b63a3a;
-            --warning-erp: #b07012;
-        }
-
-        body {
-            font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
-            background:
-                radial-gradient(circle at top right, rgba(15, 98, 201, 0.10), transparent 28%),
-                linear-gradient(180deg, #f4f7fb 0%, var(--erp-bg) 100%);
-            color: var(--text-main);
-            margin: 0;
-            overflow: hidden;
-        }
-
-        #wrapper {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Sidebar Estilo ERP Corporativo */
-        #sidebar-wrapper { 
-            min-width: 240px; 
-            max-width: 240px; 
-            background: linear-gradient(180deg, #12263a 0%, #17324a 100%);
-            display: flex; 
-            flex-direction: column;
-            transition: all 0.3s;
-            border-right: 1px solid rgba(10,25,40,0.18);
-            box-shadow: 14px 0 32px rgba(16, 37, 58, 0.12);
-            overflow: hidden;
-            position: relative;
-            z-index: 1040;
-        }
-
-        .sidebar-heading { 
-            padding: 22px 18px; 
-            font-size: 14px; 
-            font-weight: 800; 
-            color: #ffffff; 
-            text-transform: uppercase; 
-            letter-spacing: 1px;
-            background: rgba(255,255,255,0.03);
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .brand-logo-mask {
-            height: 24px;
-            width: 92px;
-            background-color: var(--brand-navy);
-            -webkit-mask: url('/static/columbia_logo.png') center / contain no-repeat;
-            mask: url('/static/columbia_logo.png') center / contain no-repeat;
-            flex-shrink: 0;
-        }
-
-        .brand-logo-mask.top {
-            height: 22px;
-            width: 84px;
-        }
-
-        .list-group { width: 100%; border-radius: 0; }
-        .list-group-item {
-            border: none;
-            padding: 12px 18px;
-            background-color: transparent;
-            color: #d8e4ef;
-            font-size: 13px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transition: 0.2s ease;
-            cursor: pointer;
-            border-radius: 12px;
-            margin: 2px 10px;
-        }
-
-        .list-group-item i { width: 20px; text-align: center; font-size: 16px; }
-
-        .list-group-item:hover {
-            background-color: rgba(255,255,255,0.08);
-            color: #ffffff;
-        }
-
-        .list-group-item.active {
-            background: linear-gradient(135deg, #156fd0, #0f5fb8);
-            color: white;
-            box-shadow: 0 10px 18px rgba(15, 98, 201, 0.24), inset 0 0 0 1px rgba(255,255,255,0.08);
-        }
-
-        /* Submenus */
-        .submenu .list-group-item {
-            padding-left: 42px;
-            background-color: rgba(0,0,0,0.08);
-        }
-
-        /* Top Navbar */
-        #page-content-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-        .top-nav {
-            background: rgba(255,255,255,0.94);
-            backdrop-filter: blur(12px);
-            min-height: 62px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            border-bottom: 1px solid var(--border-color);
-            box-shadow: 0 10px 26px rgba(29, 52, 77, 0.08);
-        }
-
-        .nav-left { display: flex; align-items: center; gap: 15px; }
-        .nav-right { display: flex; align-items: center; gap: 20px; font-size: 12px; }
-
-        .top-shortcuts {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 10px 16px;
-            border-bottom: 1px solid var(--border-color);
-            background: linear-gradient(180deg, #f7fbff 0%, #eef5fb 100%);
-            overflow: visible;
-            white-space: normal;
-            position: relative;
-            z-index: 1030;
-        }
-
-        .shortcut-link,
-        .shortcut-group-toggle {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 7px 12px;
-            border: 1px solid #d1dce7;
-            border-radius: 999px;
-            background: #fff;
-            color: var(--brand-deep);
-            text-decoration: none;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.92);
-        }
-
-        .shortcut-link:hover,
-        .shortcut-group-toggle:hover {
-            color: var(--brand-navy);
-            background: var(--brand-soft);
-            border-color: rgba(0, 101, 179, 0.22);
-        }
-
-        .shortcut-link.active {
-            background: #0f62c9;
-            border-color: #0f62c9;
-            color: #fff;
-        }
-
-        .shortcut-link.home {
-            background: linear-gradient(135deg, #12314e, #0065b3);
-            border-color: #0b528f;
-            color: #fff;
-        }
-
-        .shortcut-group-toggle {
-            background: #ffffff;
-        }
-
-        .shortcut-group-toggle.active {
-            background: #0f62c9;
-            border-color: #0f62c9;
-            color: #fff;
-        }
-
-        .shortcut-dropdown {
-            border: 1px solid #d3deea;
-            border-radius: 10px;
-            padding: 6px;
-            box-shadow: 0 12px 26px rgba(23, 45, 68, 0.16);
-            z-index: 2050;
-        }
-
-        .shortcut-dropdown .dropdown-item {
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #2c4962;
-            padding: 8px 10px;
-        }
-
-        .shortcut-dropdown .dropdown-item i {
-            width: 16px;
-            margin-right: 6px;
-            text-align: center;
-        }
-
-        .shortcut-dropdown .dropdown-item.active,
-        .shortcut-dropdown .dropdown-item:active {
-            background: #e8f1fb;
-            color: #0f62c9;
-        }
-
-        #menu-toggle {
-            background: none;
-            border: none;
-            color: var(--protheus-gray);
-            font-size: 20px;
-            cursor: pointer;
-        }
-
-        .top-brand {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 7px 14px;
-            border: 1px solid #d7e1ea;
-            border-radius: 999px;
-            background: linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
-            color: var(--brand-navy);
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.92);
-        }
-
-        .top-brand-label {
-            line-height: 1;
-            white-space: nowrap;
-        }
-
-        .user-profile { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--protheus-gray); padding: 6px 10px; border-radius: 999px; background: #f5f9fc; border: 1px solid #d7e3ee; }
-        .user-profile i { color: var(--sap-blue); }
-
-        .btn-logout {
-            color: var(--brand-navy);
-            text-decoration: none;
-            font-weight: 800;
-            padding: 8px 12px;
-            border: 1px solid #cfe0f0;
-            border-radius: 999px;
-            background: #f3f8fd;
-            transition: 0.2s;
-        }
-        .btn-logout:hover { border-color: var(--brand-navy); background: #eaf3fb; }
-
-        /* Container do Conteúdo */
-        .content-body { flex: 1; overflow-y: auto; padding: 22px; }
-
-        .main-content { width: 100%; }
-        .table-container { overflow-x: auto; }
-        .hidden { display: none !important; }
-
-        .content-body .card,
-        .content-body .table-responsive,
-        .content-body .accordion-item,
-        .content-body .modal-content,
-        .content-body .dropdown-menu {
-            border-radius: 18px;
-            border: 1px solid #d9e3ec;
-            box-shadow: 0 18px 34px rgba(19, 45, 71, 0.08);
-        }
-
-        .content-body .btn,
-        .content-body .btn-sap {
-            border-radius: 12px;
-        }
-
-        .content-body .form-control,
-        .content-body .form-select,
-        .content-body textarea,
-        .content-body select,
-        .content-body input[type="text"],
-        .content-body input[type="number"],
-        .content-body input[type="date"],
-        .content-body input[type="email"],
-        .content-body input[type="password"] {
-            border-radius: 12px;
-            border-color: #c7d4e0;
-        }
-
-        .content-body .form-control:focus,
-        .content-body .form-select:focus,
-        .content-body textarea:focus,
-        .content-body select:focus,
-        .content-body input:focus {
-            border-color: #7fb0e4;
-            box-shadow: 0 0 0 4px rgba(15, 98, 201, 0.10);
-        }
-
-        .content-body .table th {
-            background: linear-gradient(180deg, #f8fbfd 0%, #eef3f7 100%);
-            color: #4a5f73;
-            text-transform: uppercase;
-            font-size: 10px;
-            letter-spacing: 0.4px;
-        }
-
-        .content-body .table tbody tr:hover td {
-            background: #f5faff;
-        }
-
-        .page-header-erp {
-            background: linear-gradient(135deg, #ffffff 0%, #f4f8fc 100%);
-            padding: 16px 20px;
-            border: 1px solid #dbe4ec;
-            border-bottom: 3px solid var(--sap-blue);
-            border-radius: 14px;
-            margin-bottom: 18px;
-            box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08);
-        }
-
-        .page-header-erp h2 {
-            margin: 0;
-            font-size: 17px;
-            color: var(--protheus-gray);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .btn-sap {
-            border: 1px solid #aebdca;
-            border-radius: 10px;
-            padding: 8px 14px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            cursor: pointer;
-            background: linear-gradient(180deg, #ffffff 0%, #edf2f7 100%);
-            color: var(--brand-deep);
-            text-decoration: none;
-            box-shadow: 0 4px 10px rgba(42, 65, 89, 0.07);
-        }
-
-        .btn-sap:hover { filter: brightness(1.02); transform: translateY(-1px); }
-
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.45);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Toggled State */
-        #wrapper.toggled #sidebar-wrapper {
-            margin-left: -240px;
-            box-shadow: none;
-            border-right-color: transparent;
-        }
-
-        @media (max-width: 768px) {
-            body { overflow-x: hidden; overflow-y: auto; }
-            #wrapper { width: 100%; min-height: 100vh; height: auto; }
-            #sidebar-wrapper { margin-left: -240px; position: fixed; z-index: 2500; height: 100vh; }
-            #wrapper.toggled #sidebar-wrapper { margin-left: -240px; }
-            #wrapper:not(.toggled) #sidebar-wrapper { margin-left: 0; }
-            #page-content-wrapper { width: 100%; overflow: visible; }
-            .top-nav { padding: 0 10px; gap: 8px; }
-            .nav-right { gap: 10px; }
-            .nav-left span { display: none; }
-        .top-brand { display: none; }
-            .content-body { padding: 10px; overflow-x: hidden; }
-        }
-    </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+<div id="wrapper">
+    <div id="shell-backdrop"></div>
 
-<div id="wrapper" class="toggled">
-    <div id="sidebar-wrapper">
+    <aside id="sidebar-wrapper">
         <div class="sidebar-heading">
-            <div class="brand-logo-mask top"></div>
+            <a href="/" class="sidebar-brand">
+                <div class="brand-logo-mask"></div>
+                <div class="sidebar-brand-copy">
+                    <span>Sistema unificado</span>
+                    <strong>Columbia Sync</strong>
+                </div>
+            </a>
+            <div class="sidebar-context">
+                <div class="sidebar-context-label">Perfil atual</div>
+                <div class="sidebar-context-role">
+                    <i class="fas fa-layer-group"></i>
+                    <span>{{ session.get("role", "Operacao") }}</span>
+                </div>
+            </div>
         </div>
-        <div class="list-group list-group-flush" id="accordionSidebar">
-            {% if can_access('PAGE_PORTARIA') and not can_access('PAGE_CONFERENCIA') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
-                    <span><i class="fas fa-box-open"></i> RECEBIMENTO</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_PORTARIA') %}
-                    <a href="/portaria" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-import"></i> Inclusão XML
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_FISCAL_LIBERADAS') %}
-                    <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
-                        <i class="fas fa-box-open"></i> NF-e Liberadas
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ETIQUETAS') %}
-                    <a href="/recebimento/etiquetas" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tag"></i> Etiquetas
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_CONSERTO') %}
-                    <a href="/conserto" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tools"></i> Estoque em Terceiros
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% else %}
-            
-            {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseCompras" role="button" aria-expanded="true">
-                    <span><i class="fas fa-file-invoice-dollar"></i> COMPRAS</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse show submenu" id="collapseCompras" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_UPLOAD') %}
-                    <a href="/upload" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-import"></i> Pré-Nota de entrada
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_XML_AUDITOR') %}
-                    <a href="/compras/auditor-xml" class="list-group-item list-group-item-action">
-                        <i class="fas fa-shield-alt"></i> Auditor XML
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_LANCAMENTO') %}
-                    <a href="/lancamento" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-invoice-dollar"></i> Documento de entrada
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
 
-            {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseRecebimento" role="button" aria-expanded="true">
-                    <span><i class="fas fa-box-open"></i> RECEBIMENTO</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
+        <div class="sidebar-scroll">
+            <div class="list-group list-group-flush" id="accordionSidebar">
+                <a href="/" class="list-group-item list-group-item-action sidebar-home-link">
+                    <span class="nav-group-title"><i class="fas fa-house"></i><span>Menu principal</span></span>
                 </a>
-                <div class="collapse show submenu" id="collapseRecebimento" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_CONFERENCIA') %}
-                    <a href="/conferencia" class="list-group-item list-group-item-action">
-                        <i class="fas fa-barcode"></i> Conferência Cega
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_FISCAL_LIBERADAS') %}
-                    <a href="/fiscal/liberadas" class="list-group-item list-group-item-action">
-                        <i class="fas fa-box-open"></i> NF-e Liberadas
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ETIQUETAS') %}
-                    <a href="/recebimento/etiquetas" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tag"></i> Etiquetas
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_CONSERTO') %}
-                    <a href="/conserto" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tools"></i> Estoque de Terceiros
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
 
-            {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseExpedicao" role="button" aria-expanded="false">
-                    <span><i class="fas fa-truck-loading"></i> EXPEDIÇÃO</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse submenu" id="collapseExpedicao" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}
-                    <a href="/expedicao/conferencia" class="list-group-item list-group-item-action">
-                        <i class="fas fa-clipboard-check"></i> Conferência
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_EXPEDICAO_ADMIN') %}
-                    <a href="/expedicao/admin" class="list-group-item list-group-item-action">
-                        <i class="fas fa-user-shield"></i> Controle Admin
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}
-                    <a href="/expedicao/romaneio" class="list-group-item list-group-item-action">
-                        <i class="fas fa-receipt"></i> Romaneios
-                    </a>
-                    {% endif %}
+                {% if can_access('PAGE_PORTARIA') and not can_access('PAGE_CONFERENCIA') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-recebimento" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-box-open"></i><span>Recebimento</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel open" id="menu-recebimento">
+                        {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusao XML</a>{% endif %}
+                        {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
+                        {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
+                        {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
+                    </div>
                 </div>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseWMS" role="button" aria-expanded="false">
-                    <span><i class="fas fa-warehouse"></i> WMS</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse submenu" id="collapseWMS" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_WMS') %}
-                    <a href="/wms" class="list-group-item list-group-item-action">
-                        <i class="fas fa-map-marker-alt"></i> Endereçamento
-                    </a>
-                    <a href="/wms#relatorio-estoque" class="list-group-item list-group-item-action">
-                        <i class="fas fa-chart-bar"></i> Relatório de Estoque
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}
-                    <a href="/admin/wms-enderecos" class="list-group-item list-group-item-action">
-                        <i class="fas fa-map-signs"></i> Cadastro de Endereços WMS
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-                    <a href="/admin/wms-governanca" class="list-group-item list-group-item-action">
-                        <i class="fas fa-sliders-h"></i> Governança WMS
-                    </a>
-                    {% endif %}
+                {% else %}
+                {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-compras" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-file-invoice-dollar"></i><span>Compras</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel open" id="menu-compras">
+                        {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Pre-nota de entrada</a>{% endif %}
+                        {% if can_access('PAGE_XML_AUDITOR') %}<a href="/compras/auditor-xml" class="list-group-item list-group-item-action"><i class="fas fa-shield-alt"></i> Auditor XML</a>{% endif %}
+                        {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Documento de entrada</a>{% endif %}
+                    </div>
                 </div>
-            </div>
-            {% endif %}
+                {% endif %}
 
-            {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
-            <div class="menu-item">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                   data-bs-toggle="collapse" href="#collapseFinanceiro" role="button" aria-expanded="false">
-                    <span><i class="fas fa-coins"></i> FINANCEIRO</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse submenu" id="collapseFinanceiro" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}
-                    <a href="/financeiro/faturamento" class="list-group-item list-group-item-action">
-                        <i class="fas fa-file-invoice-dollar"></i> Faturamento
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
-                    <a href="/financeiro/contas-receber" class="list-group-item list-group-item-action">
-                        <i class="fas fa-hand-holding-usd"></i> Contas a Receber
-                    </a>
-                    {% endif %}
+                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-recebimento" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-box-open"></i><span>Recebimento</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel open" id="menu-recebimento">
+                        {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
+                        {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
+                        {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
+                        {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
+                    </div>
                 </div>
-            </div>
-            {% endif %}
+                {% endif %}
 
-            {% endif %}
-
-            {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
-            <div class="menu-item" style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
-                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-                   data-bs-toggle="collapse" href="#collapseAdministracao" role="button" aria-expanded="false">
-                    <span><i class="fas fa-user-shield"></i> ADMINISTRAÇÃO</span>
-                    <i class="fas fa-chevron-down fa-xs"></i>
-                </a>
-                <div class="collapse submenu" id="collapseAdministracao" data-bs-parent="#accordionSidebar">
-                    {% if can_access('PAGE_ADMIN_DASHBOARD') %}
-                    <a href="/admin" class="list-group-item list-group-item-action">
-                        <i class="fas fa-chart-line"></i> Painel de Controle
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_USUARIOS') %}
-                    <a href="/admin/usuarios" class="list-group-item list-group-item-action">
-                        <i class="fas fa-users-cog"></i> Gestão de Acessos
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_HISTORICO') %}
-                    <a href="/historico" class="list-group-item list-group-item-action">
-                        <i class="fas fa-clipboard-list"></i> Logs e Auditoria
-                    </a>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_ACESSOS') %}
-                    <a href="/admin/acessos" class="list-group-item list-group-item-action">
-                        <i class="fas fa-user-clock"></i> Auditoria de Acessos
-                    </a>
-                    {% endif %}
+                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-expedicao" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-truck-loading"></i><span>Expedicao</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-expedicao">
+                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Conferencia</a>{% endif %}
+                        {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
+                        {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
+                    </div>
                 </div>
+                {% endif %}
+
+                {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-wms" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-warehouse"></i><span>WMS</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-wms">
+                        {% if can_access('PAGE_WMS') %}
+                        <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Enderecamento</a>
+                        <a href="/wms#relatorio-estoque" class="list-group-item list-group-item-action"><i class="fas fa-chart-bar"></i> Relatorio de estoque</a>
+                        {% endif %}
+                        {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de enderecos</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governanca WMS</a>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-financeiro" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-coins"></i><span>Financeiro</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-financeiro">
+                        {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}<a href="/financeiro/faturamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Faturamento</a>{% endif %}
+                        {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}<a href="/financeiro/contas-receber" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-usd"></i> Contas a receber</a>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administracao</span></span>
+                        <i class="fas fa-chevron-down nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-administracao">
+                        {% if can_access('PAGE_ADMIN_DASHBOARD') %}<a href="/admin" class="list-group-item list-group-item-action"><i class="fas fa-chart-line"></i> Dashboard</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestao de acessos</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_HISTORICO') %}<a href="/historico" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Logs e auditoria</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_ACESSOS') %}<a href="/admin/acessos" class="list-group-item list-group-item-action"><i class="fas fa-user-clock"></i> Auditoria de acessos</a>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
-    </div>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-user">
+                <span>Sessao atual</span>
+                <strong>{{ user }}</strong>
+            </div>
+            <a href="javascript:void(0)" onclick="confirmarLogout()" class="sidebar-footer-link">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Encerrar sessao</span>
+            </a>
+        </div>
+    </aside>
 
     <div id="page-content-wrapper">
         <nav class="top-nav">
             <div class="nav-left">
-                <button id="menu-toggle"><i class="fas fa-bars"></i></button>
-                <span class="top-brand">
-                    <div class="brand-logo-mask top"></div>
-                    <span class="top-brand-label">Columbia Sync</span>
-                </span>
+                <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
+                <div class="top-route">
+                    <span>Columbia Sync</span>
+                    <strong>{% block shell_title %}Painel{% endblock %}</strong>
+                    <small>{% block shell_subtitle %}Um unico shell para navegar todo o sistema.{% endblock %}</small>
+                </div>
             </div>
             <div class="nav-right">
-                <div class="user-profile">
-                    <i class="fas fa-user-circle"></i>
-                    <span>{{ user|upper }}</span>
-                </div>
-                <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout">
-                    <i class="fas fa-sign-out-alt"></i> SAIR
-                </a>
+                <div class="top-status-pill"><i class="fas fa-sparkles"></i><span>{{ session.get("role", "Operacao") }}</span></div>
+                <div class="user-profile"><i class="fas fa-user-circle"></i><span>{{ user|upper }}</span></div>
+                <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
         </nav>
 
-        <div class="top-shortcuts">
-            <a href="/" class="shortcut-link home"><i class="fas fa-house"></i> Menu</a>
-
-            {% if can_access('PAGE_CONSERTO') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-tools"></i> Estoque
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    <li><a class="dropdown-item shortcut-item" href="/conserto/estoque_aberto"><i class="fas fa-tools"></i> Estoque em Terceiros</a></li>
-                    <li><a class="dropdown-item shortcut-item" href="/conserto/confirmacao_baixa"><i class="fas fa-check-double"></i> Confirmação de Baixa</a></li>
-                    <li><a class="dropdown-item shortcut-item" href="/conserto/auditoria_tela"><i class="fas fa-search"></i> Auditoria</a></li>
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-file-invoice-dollar"></i> Compras
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_UPLOAD') %}
-                    <li><a class="dropdown-item shortcut-item" href="/upload"><i class="fas fa-file-import"></i> Pré-Nota</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_XML_AUDITOR') %}
-                    <li><a class="dropdown-item shortcut-item" href="/compras/auditor-xml"><i class="fas fa-shield-alt"></i> Auditor XML</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_LANCAMENTO') %}
-                    <li><a class="dropdown-item shortcut-item" href="/lancamento"><i class="fas fa-file-signature"></i> Documento de Entrada</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_PORTARIA') or can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-box-open"></i> Recebimento
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_PORTARIA') %}
-                    <li><a class="dropdown-item shortcut-item" href="/portaria"><i class="fas fa-door-open"></i> Portaria</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_CONFERENCIA') %}
-                    <li><a class="dropdown-item shortcut-item" href="/conferencia"><i class="fas fa-barcode"></i> Conferência Cega</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_FISCAL_LIBERADAS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/fiscal/liberadas"><i class="fas fa-box-open"></i> NF-e Liberadas</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ETIQUETAS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/recebimento/etiquetas"><i class="fas fa-tags"></i> Etiquetas</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-truck-loading"></i> Expedição
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}
-                    <li><a class="dropdown-item shortcut-item" href="/expedicao/conferencia"><i class="fas fa-clipboard-check"></i> Conferência</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_EXPEDICAO_ADMIN') %}
-                    <li><a class="dropdown-item shortcut-item" href="/expedicao/admin"><i class="fas fa-user-shield"></i> Controle Admin</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}
-                    <li><a class="dropdown-item shortcut-item" href="/expedicao/romaneio"><i class="fas fa-receipt"></i> Romaneios</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-warehouse"></i> WMS
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_WMS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/wms"><i class="fas fa-map-marker-alt"></i> Endereçamento</a></li>
-                    <li><a class="dropdown-item shortcut-item" href="/wms#relatorio-estoque"><i class="fas fa-chart-bar"></i> Relatório de Estoque</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Cadastro de Endereços WMS</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-                    <li><a class="dropdown-item shortcut-item" href="/admin/wms-governanca"><i class="fas fa-sliders-h"></i> Governança WMS</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-coins"></i> Financeiro
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}
-                    <li><a class="dropdown-item shortcut-item" href="/financeiro/faturamento"><i class="fas fa-file-invoice-dollar"></i> Faturamento</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
-                    <li><a class="dropdown-item shortcut-item" href="/financeiro/contas-receber"><i class="fas fa-wallet"></i> Contas a Receber</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
-            <div class="dropdown shortcut-group">
-                <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-user-shield"></i> Administração
-                </button>
-                <ul class="dropdown-menu shortcut-dropdown">
-                    {% if can_access('PAGE_ADMIN_DASHBOARD') %}
-                    <li><a class="dropdown-item shortcut-item" href="/admin"><i class="fas fa-chart-line"></i> Painel de Controle</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_USUARIOS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/admin/usuarios"><i class="fas fa-users-cog"></i> Gestão de Acessos</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_HISTORICO') %}
-                    <li><a class="dropdown-item shortcut-item" href="/historico"><i class="fas fa-clipboard-list"></i> Logs e Auditoria</a></li>
-                    {% endif %}
-                    {% if can_access('PAGE_ADMIN_ACESSOS') %}
-                    <li><a class="dropdown-item shortcut-item" href="/admin/acessos"><i class="fas fa-user-clock"></i> Auditoria de Acessos</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="content-body">
-            {% block content %}{% endblock %}
-        </div>
+        <main class="content-body">{% block content %}{% endblock %}</main>
+        <footer class="app-footer">
+            <span><strong>Columbia Sync</strong></span>
+            <span>Navegacao unificada para toda a operacao.</span>
+        </footer>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const RECENTS_KEY = 'columbia_sync_home_recents';
+const RECENTS_KEY = "columbia_sync_home_recents";
+const wrapper = document.getElementById("wrapper");
+const menuToggle = document.getElementById("menu-toggle");
+const shellBackdrop = document.getElementById("shell-backdrop");
 
-    // Toggle Menu
-    document.getElementById("menu-toggle").addEventListener("click", function(e) {
-        e.preventDefault();
-        document.getElementById("wrapper").classList.toggle("toggled");
+function setShellCollapsed(collapsed) {
+    if (!wrapper || !shellBackdrop) return;
+    wrapper.classList.toggle("toggled", collapsed);
+    shellBackdrop.classList.toggle("active", window.innerWidth < 992 && !collapsed);
+}
+
+function confirmarLogout() {
+    if (confirm("Deseja encerrar a sessao no Columbia Sync?")) {
+        window.location.href = "/logout";
+    }
+}
+
+function trackRecentLink(link, currentPath) {
+    if (!link || !currentPath || currentPath === "/") return;
+
+    const title = link.textContent.replace(/\s+/g, " ").trim() || document.title;
+    const iconEl = link.querySelector("i");
+    const iconClass = iconEl ? Array.from(iconEl.classList).find(cls => cls.startsWith("fa-")) || "fa-window-maximize" : "fa-window-maximize";
+
+    try {
+        const current = JSON.parse(localStorage.getItem(RECENTS_KEY) || "[]").filter(item => item && item.href !== currentPath);
+        current.unshift({ id: currentPath, title, href: currentPath, icon: iconClass });
+        localStorage.setItem(RECENTS_KEY, JSON.stringify(current.slice(0, 6)));
+    } catch (_) {}
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    const currentPath = window.location.pathname;
+    const allLinks = Array.from(document.querySelectorAll("#accordionSidebar a.list-group-item[href]"));
+    const menuButtons = Array.from(document.querySelectorAll(".menu-toggle"));
+
+    if (window.innerWidth < 992) setShellCollapsed(true);
+
+    menuButtons.forEach(button => {
+        const target = document.getElementById(button.dataset.shellTarget);
+        if (!target) return;
+        button.classList.toggle("active", target.classList.contains("open"));
+        button.setAttribute("aria-expanded", target.classList.contains("open") ? "true" : "false");
     });
 
-    // Logout Corporativo
-    function confirmarLogout() {
-        if(confirm('Deseja encerrar a sessão no ERP Columbia?')) {
-            window.location.href = '/logout';
-        }
+    if (menuToggle && wrapper) {
+        menuToggle.addEventListener("click", function (e) {
+            e.preventDefault();
+            setShellCollapsed(!wrapper.classList.contains("toggled"));
+        });
     }
 
-    // Marca o link ativo no menu baseado na URL atual e abre a aba correspondente
-    document.addEventListener("DOMContentLoaded", function() {
-        const currentPath = window.location.pathname;
-        const menuItems = document.querySelectorAll('.list-group-item');
-        const shortcutItems = document.querySelectorAll('.shortcut-link, .shortcut-item');
-        menuItems.forEach(item => {
-            if(item.getAttribute('href') === currentPath) {
-                item.classList.add('active');
-                // Se for um subitem, garante que o pai esteja expandido
-                const parentCollapse = item.closest('.collapse');
-                if (parentCollapse) {
-                    const bsCollapse = new bootstrap.Collapse(parentCollapse, { toggle: false });
-                    bsCollapse.show();
-                }
-            }
+    if (shellBackdrop) {
+        shellBackdrop.addEventListener("click", function () {
+            setShellCollapsed(true);
         });
+    }
 
-        shortcutItems.forEach(item => {
-            if(item.getAttribute('href') === currentPath) {
-                item.classList.add('active');
-                const parentDropdown = item.closest('.shortcut-group');
-                if (parentDropdown) {
-                    const toggle = parentDropdown.querySelector('.shortcut-group-toggle');
-                    if (toggle) toggle.classList.add('active');
-                }
-            }
-        });
+    menuButtons.forEach(button => {
+        const target = document.getElementById(button.dataset.shellTarget);
+        if (!target) return;
 
-        const recentCandidate =
-            document.querySelector('.shortcut-item.active') ||
-            document.querySelector('.list-group-item.active') ||
-            document.querySelector('.shortcut-link.active');
-
-        if (recentCandidate && currentPath !== '/') {
-            const title = recentCandidate.textContent.replace(/\s+/g, ' ').trim();
-            const iconEl = recentCandidate.querySelector('i');
-            const iconClass = iconEl ? Array.from(iconEl.classList).find(cls => cls.startsWith('fa-')) || 'fa-window-maximize' : 'fa-window-maximize';
-
-            try {
-                const current = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]')
-                    .filter(item => item && item.href !== currentPath);
-                current.unshift({
-                    id: currentPath,
-                    title: title || document.title,
-                    subtitle: 'Último acesso pelo menu lateral.',
-                    href: currentPath,
-                    icon: iconClass
+        button.addEventListener("click", function () {
+            const shouldOpen = !target.classList.contains("open");
+            if (window.innerWidth < 992) {
+                menuButtons.forEach(otherButton => {
+                    const otherTarget = document.getElementById(otherButton.dataset.shellTarget);
+                    if (!otherTarget || otherButton === button) return;
+                    otherButton.classList.remove("active");
+                    otherButton.setAttribute("aria-expanded", "false");
+                    otherTarget.classList.remove("open");
                 });
-                localStorage.setItem(RECENTS_KEY, JSON.stringify(current.slice(0, 6)));
-            } catch (_) {}
+            }
+
+            button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+            button.classList.toggle("active", shouldOpen);
+            target.classList.toggle("open", shouldOpen);
+        });
+    });
+
+    let recentCandidate = null;
+
+    allLinks.forEach(link => {
+        const href = link.getAttribute("href");
+        const normalizedHref = href ? href.split("#")[0] : "";
+        if (!href) return;
+
+        const isCurrent = href === currentPath || normalizedHref === currentPath;
+        if (!isCurrent) return;
+
+        link.classList.add("active");
+        recentCandidate = recentCandidate || link;
+
+        const parentPanel = link.closest(".submenu-panel");
+        if (parentPanel) {
+            parentPanel.classList.add("open");
+            const parentButton = document.querySelector(`.menu-toggle[data-shell-target="${parentPanel.id}"]`);
+            if (parentButton) {
+                parentButton.classList.add("active");
+                parentButton.setAttribute("aria-expanded", "true");
+            }
         }
     });
 
-    if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-            navigator.serviceWorker.register("/static/sw.js?v=2").catch(() => {});
-        });
+    if (!recentCandidate) {
+        recentCandidate = document.querySelector("#accordionSidebar a.list-group-item.active");
     }
+
+    trackRecentLink(recentCandidate, currentPath);
+});
+
+window.addEventListener("resize", function () {
+    if (window.innerWidth >= 992 && shellBackdrop) shellBackdrop.classList.remove("active");
+});
+
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/static/sw.js?v=2").catch(() => {});
+    });
+}
 </script>
 {% block extra_js %}{% endblock %}
 </body>

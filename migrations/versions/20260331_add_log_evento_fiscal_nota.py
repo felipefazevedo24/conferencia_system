@@ -17,7 +17,7 @@ depends_on = None
 
 def upgrade():
     bind = op.get_bind()
-    tabelas = {row[0] for row in bind.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+    tabelas = set(sa.inspect(bind).get_table_names())
     if "log_evento_fiscal_nota" in tabelas:
         return
 
@@ -42,7 +42,7 @@ def upgrade():
 
 def downgrade():
     bind = op.get_bind()
-    tabelas = {row[0] for row in bind.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+    tabelas = set(sa.inspect(bind).get_table_names())
     if "log_evento_fiscal_nota" not in tabelas:
         return
 

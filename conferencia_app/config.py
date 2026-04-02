@@ -6,11 +6,24 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _normalize_database_url(raw_url: str) -> str:
+    url = str(raw_url or "").strip()
+    if not url:
+        return ""
+    if url.startswith("mysql://"):
+        return url.replace("mysql://", "mysql+pymysql://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "fam_2026_sistema_total")
-    _db_path = Path(os.environ.get("DB_PATH", BASE_DIR / "database.db"))
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", f"sqlite:///{_db_path}")
+    _db_path = Path(os.environ.get("DB_PATH", BASE_DIR / "database.db")).expanduser()
+    _database_url = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
+    SQLALCHEMY_DATABASE_URI = _database_url or f"sqlite:///{_db_path.as_posix()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {} if SQLALCHEMY_DATABASE_URI.startswith("sqlite:") else {"pool_pre_ping": True}
 
     CONSYSTE_TOKEN = os.environ.get("CONSYSTE_TOKEN", "T-PsbZoTuzx1CAj1yYgz")
     CONSYSTE_API_BASE = "https://portal.consyste.com.br/api/v1"

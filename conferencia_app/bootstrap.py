@@ -1,15 +1,63 @@
 from flask import Flask
+from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
 from .models import Usuario, DepositoWMS
 
 
+def _has_table(table_name: str) -> bool:
+    return inspect(db.engine).has_table(table_name)
+
+
+def _get_column_names(table_name: str) -> set[str]:
+    if not _has_table(table_name):
+        return set()
+    return {column["name"] for column in inspect(db.engine).get_columns(table_name)}
+
+
+def _get_index_names(table_name: str) -> set[str]:
+    if not _has_table(table_name):
+        return set()
+    return {index["name"] for index in inspect(db.engine).get_indexes(table_name)}
+
+
+def _get_column_details(table_name: str, column_name: str) -> dict | None:
+    if not _has_table(table_name):
+        return None
+    for column in inspect(db.engine).get_columns(table_name):
+        if column["name"] == column_name:
+            return column
+    return None
+
+
+def _create_index_if_missing(conn, table_name: str, index_name: str, ddl: str) -> None:
+    if index_name in _get_index_names(table_name):
+        return
+    conn.execute(db.text(ddl))
+    conn.commit()
+
+
+def _ensure_usuario_password_capacity() -> None:
+    column = _get_column_details("usuario", "password")
+    if not column:
+        return
+
+    col_type = column.get("type")
+    current_length = getattr(col_type, "length", None)
+    if current_length is not None and current_length >= 255:
+        return
+
+    if db.engine.dialect.name == "mysql":
+        with db.engine.connect() as conn:
+            conn.execute(db.text("ALTER TABLE usuario MODIFY COLUMN password VARCHAR(255) NOT NULL"))
+            conn.commit()
+
+
 def _ensure_item_nota_columns() -> None:
     conn = db.engine.connect()
     try:
-        res = conn.execute(db.text("PRAGMA table_info('item_nota')")).fetchall()
-        cols = [row[1] for row in res]
+        cols = _get_column_names("item_nota")
 
         if "numero_lancamento" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN numero_lancamento VARCHAR"))
@@ -108,8 +156,7 @@ def _ensure_item_nota_columns() -> None:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN auditor_data DATETIME"))
             conn.commit()
 
-        res_log_div = conn.execute(db.text("PRAGMA table_info('log_divergencia')")).fetchall()
-        cols_log_div = [row[1] for row in res_log_div]
+        cols_log_div = _get_column_names("log_divergencia")
         if "motivo_tipo" not in cols_log_div:
             conn.execute(db.text("ALTER TABLE log_divergencia ADD COLUMN motivo_tipo VARCHAR(80)"))
             conn.commit()
@@ -123,8 +170,7 @@ def _ensure_item_nota_columns() -> None:
             conn.execute(db.text("ALTER TABLE log_divergencia ADD COLUMN tentativa_numero INTEGER DEFAULT 1"))
             conn.commit()
 
-        res_lock = conn.execute(db.text("PRAGMA table_info('conferencia_lock')")).fetchall()
-        cols_lock = [row[1] for row in res_lock]
+        cols_lock = _get_column_names("conferencia_lock")
         if "heartbeat_at" not in cols_lock:
             conn.execute(db.text("ALTER TABLE conferencia_lock ADD COLUMN heartbeat_at DATETIME"))
             conn.execute(db.text("UPDATE conferencia_lock SET heartbeat_at = lock_until WHERE heartbeat_at IS NULL"))
@@ -240,12 +286,36 @@ def _ensure_item_nota_columns() -> None:
             )
         )
         conn.commit()
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_numero_nota ON log_evento_fiscal_nota (numero_nota)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_evento ON log_evento_fiscal_nota (evento)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_etapa ON log_evento_fiscal_nota (etapa)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_status ON log_evento_fiscal_nota (status)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_data ON log_evento_fiscal_nota (data)"))
-        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "log_evento_fiscal_nota",
+            "ix_log_evento_fiscal_nota_numero_nota",
+            "CREATE INDEX ix_log_evento_fiscal_nota_numero_nota ON log_evento_fiscal_nota (numero_nota)",
+        )
+        _create_index_if_missing(
+            conn,
+            "log_evento_fiscal_nota",
+            "ix_log_evento_fiscal_nota_evento",
+            "CREATE INDEX ix_log_evento_fiscal_nota_evento ON log_evento_fiscal_nota (evento)",
+        )
+        _create_index_if_missing(
+            conn,
+            "log_evento_fiscal_nota",
+            "ix_log_evento_fiscal_nota_etapa",
+            "CREATE INDEX ix_log_evento_fiscal_nota_etapa ON log_evento_fiscal_nota (etapa)",
+        )
+        _create_index_if_missing(
+            conn,
+            "log_evento_fiscal_nota",
+            "ix_log_evento_fiscal_nota_status",
+            "CREATE INDEX ix_log_evento_fiscal_nota_status ON log_evento_fiscal_nota (status)",
+        )
+        _create_index_if_missing(
+            conn,
+            "log_evento_fiscal_nota",
+            "ix_log_evento_fiscal_nota_data",
+            "CREATE INDEX ix_log_evento_fiscal_nota_data ON log_evento_fiscal_nota (data)",
+        )
 
         conn.execute(
             db.text(
@@ -263,12 +333,12 @@ def _ensure_item_nota_columns() -> None:
             )
         )
         conn.commit()
-        conn.execute(
-            db.text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ux_permissao_scope_key ON permissao_acesso (scope_type, scope_id, permission_key)"
-            )
+        _create_index_if_missing(
+            conn,
+            "permissao_acesso",
+            "ux_permissao_scope_key",
+            "CREATE UNIQUE INDEX ux_permissao_scope_key ON permissao_acesso (scope_type, scope_id, permission_key)",
         )
-        conn.commit()
 
         conn.execute(
             db.text(
@@ -291,8 +361,7 @@ def _ensure_item_nota_columns() -> None:
         )
         conn.commit()
 
-        res_fat = conn.execute(db.text("PRAGMA table_info('expedicao_faturamento')")).fetchall()
-        cols_fat = [row[1] for row in res_fat]
+        cols_fat = _get_column_names("expedicao_faturamento")
         if "transporte_tipo" not in cols_fat:
             conn.execute(db.text("ALTER TABLE expedicao_faturamento ADD COLUMN transporte_tipo VARCHAR(20) DEFAULT 'Proprio'"))
             conn.commit()
@@ -318,55 +387,81 @@ def _ensure_item_nota_columns() -> None:
 def _ensure_conserto_columns() -> None:
     conn = db.engine.connect()
     try:
-        res_estoque = conn.execute(db.text("PRAGMA table_info('conserto_estoque')")).fetchall()
-        cols_estoque = [row[1] for row in res_estoque]
-        if res_estoque and "tipo_controle" not in cols_estoque:
+        cols_estoque = _get_column_names("conserto_estoque")
+        if cols_estoque and "tipo_controle" not in cols_estoque:
             conn.execute(
                 db.text(
                     "ALTER TABLE conserto_estoque ADD COLUMN tipo_controle VARCHAR(50) NOT NULL DEFAULT 'Meu em poder de terceiros'"
                 )
             )
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_tipo_controle ON conserto_estoque (tipo_controle)"))
-            conn.commit()
-        if res_estoque and "tipo_operacao" not in cols_estoque:
+            _create_index_if_missing(
+                conn,
+                "conserto_estoque",
+                "ix_conserto_estoque_tipo_controle",
+                "CREATE INDEX ix_conserto_estoque_tipo_controle ON conserto_estoque (tipo_controle)",
+            )
+        if cols_estoque and "tipo_operacao" not in cols_estoque:
             conn.execute(
                 db.text(
                     "ALTER TABLE conserto_estoque ADD COLUMN tipo_operacao VARCHAR(30) NOT NULL DEFAULT 'Conserto'"
                 )
             )
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_tipo_operacao ON conserto_estoque (tipo_operacao)"))
-            conn.commit()
-        if res_estoque and "cfop_remessa" not in cols_estoque:
+            _create_index_if_missing(
+                conn,
+                "conserto_estoque",
+                "ix_conserto_estoque_tipo_operacao",
+                "CREATE INDEX ix_conserto_estoque_tipo_operacao ON conserto_estoque (tipo_operacao)",
+            )
+        if cols_estoque and "cfop_remessa" not in cols_estoque:
             conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN cfop_remessa VARCHAR(4)"))
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_cfop_remessa ON conserto_estoque (cfop_remessa)"))
-            conn.commit()
-        if res_estoque and "numero_nf_remessa" not in cols_estoque:
+            _create_index_if_missing(
+                conn,
+                "conserto_estoque",
+                "ix_conserto_estoque_cfop_remessa",
+                "CREATE INDEX ix_conserto_estoque_cfop_remessa ON conserto_estoque (cfop_remessa)",
+            )
+        if cols_estoque and "numero_nf_remessa" not in cols_estoque:
             conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN numero_nf_remessa VARCHAR(20)"))
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_numero_nf_remessa ON conserto_estoque (numero_nf_remessa)"))
-            conn.commit()
+            _create_index_if_missing(
+                conn,
+                "conserto_estoque",
+                "ix_conserto_estoque_numero_nf_remessa",
+                "CREATE INDEX ix_conserto_estoque_numero_nf_remessa ON conserto_estoque (numero_nf_remessa)",
+            )
 
-        res_baixa = conn.execute(db.text("PRAGMA table_info('conserto_baixa')")).fetchall()
-        cols_baixa = [row[1] for row in res_baixa]
-        if res_baixa and "cfop_retorno" not in cols_baixa:
+        cols_baixa = _get_column_names("conserto_baixa")
+        if cols_baixa and "cfop_retorno" not in cols_baixa:
             conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN cfop_retorno VARCHAR(4)"))
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_baixa_cfop_retorno ON conserto_baixa (cfop_retorno)"))
-            conn.commit()
-        if res_baixa and "numero_nf_retorno" not in cols_baixa:
+            _create_index_if_missing(
+                conn,
+                "conserto_baixa",
+                "ix_conserto_baixa_cfop_retorno",
+                "CREATE INDEX ix_conserto_baixa_cfop_retorno ON conserto_baixa (cfop_retorno)",
+            )
+        if cols_baixa and "numero_nf_retorno" not in cols_baixa:
             conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN numero_nf_retorno VARCHAR(20)"))
             conn.commit()
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_baixa_numero_nf_retorno ON conserto_baixa (numero_nf_retorno)"))
-            conn.commit()
+            _create_index_if_missing(
+                conn,
+                "conserto_baixa",
+                "ix_conserto_baixa_numero_nf_retorno",
+                "CREATE INDEX ix_conserto_baixa_numero_nf_retorno ON conserto_baixa (numero_nf_retorno)",
+            )
     finally:
         conn.close()
 
 
 def initialize_database(app: Flask) -> None:
     with app.app_context():
+        try:
+            _ensure_usuario_password_capacity()
+        except Exception:
+            pass
         db.create_all()
         
         # Criar tabelas WMS se não existirem
@@ -452,12 +547,13 @@ def _ensure_wms_tables() -> None:
             )
         )
         conn.commit()
-        
-        # Create indexes for deposito_wms
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_deposito_wms_codigo ON deposito_wms (codigo)"
-        ))
-        conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "deposito_wms",
+            "ix_deposito_wms_codigo",
+            "CREATE INDEX ix_deposito_wms_codigo ON deposito_wms (codigo)",
+        )
 
         # Tabela localizacao_armazem
         conn.execute(
@@ -480,15 +576,15 @@ def _ensure_wms_tables() -> None:
             )
         )
         conn.commit()
-        
-        # Create indexes for localizacao_armazem
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_localizacao_armazem_codigo ON localizacao_armazem (codigo)"
-        ))
-        conn.commit()
 
-        res_loc = conn.execute(db.text("PRAGMA table_info('localizacao_armazem')")).fetchall()
-        cols_loc = [row[1] for row in res_loc]
+        _create_index_if_missing(
+            conn,
+            "localizacao_armazem",
+            "ix_localizacao_armazem_codigo",
+            "CREATE INDEX ix_localizacao_armazem_codigo ON localizacao_armazem (codigo)",
+        )
+
+        cols_loc = _get_column_names("localizacao_armazem")
         if "rua" not in cols_loc:
             conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN rua VARCHAR(30)"))
             conn.commit()
@@ -503,8 +599,13 @@ def _ensure_wms_tables() -> None:
             conn.commit()
         if "deposito_id" not in cols_loc:
             conn.execute(db.text("ALTER TABLE localizacao_armazem ADD COLUMN deposito_id INTEGER"))
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_localizacao_armazem_deposito_id ON localizacao_armazem (deposito_id)"))
             conn.commit()
+            _create_index_if_missing(
+                conn,
+                "localizacao_armazem",
+                "ix_localizacao_armazem_deposito_id",
+                "CREATE INDEX ix_localizacao_armazem_deposito_id ON localizacao_armazem (deposito_id)",
+            )
         
         # Tabela item_wms
         conn.execute(
@@ -535,24 +636,33 @@ def _ensure_wms_tables() -> None:
             )
         )
         conn.commit()
-        
-        # Create indexes for item_wms
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_item_wms_numero_nota ON item_wms (numero_nota)"
-        ))
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_item_wms_codigo_item ON item_wms (codigo_item)"
-        ))
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_item_wms_localizacao_id ON item_wms (localizacao_id)"
-        ))
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_item_wms_status ON item_wms (status)"
-        ))
-        conn.commit()
 
-        res_item_wms = conn.execute(db.text("PRAGMA table_info('item_wms')")).fetchall()
-        cols_item_wms = [row[1] for row in res_item_wms]
+        _create_index_if_missing(
+            conn,
+            "item_wms",
+            "ix_item_wms_numero_nota",
+            "CREATE INDEX ix_item_wms_numero_nota ON item_wms (numero_nota)",
+        )
+        _create_index_if_missing(
+            conn,
+            "item_wms",
+            "ix_item_wms_codigo_item",
+            "CREATE INDEX ix_item_wms_codigo_item ON item_wms (codigo_item)",
+        )
+        _create_index_if_missing(
+            conn,
+            "item_wms",
+            "ix_item_wms_localizacao_id",
+            "CREATE INDEX ix_item_wms_localizacao_id ON item_wms (localizacao_id)",
+        )
+        _create_index_if_missing(
+            conn,
+            "item_wms",
+            "ix_item_wms_status",
+            "CREATE INDEX ix_item_wms_status ON item_wms (status)",
+        )
+
+        cols_item_wms = _get_column_names("item_wms")
         if "codigo_grv" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN codigo_grv VARCHAR(80)"))
             conn.commit()
@@ -564,12 +674,22 @@ def _ensure_wms_tables() -> None:
             conn.commit()
         if "deposito_id" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN deposito_id INTEGER"))
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_item_wms_deposito_id ON item_wms (deposito_id)"))
             conn.commit()
+            _create_index_if_missing(
+                conn,
+                "item_wms",
+                "ix_item_wms_deposito_id",
+                "CREATE INDEX ix_item_wms_deposito_id ON item_wms (deposito_id)",
+            )
         if "origem_estoque_inicial" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN origem_estoque_inicial BOOLEAN NOT NULL DEFAULT 0"))
-            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_item_wms_origem_estoque_inicial ON item_wms (origem_estoque_inicial)"))
             conn.commit()
+            _create_index_if_missing(
+                conn,
+                "item_wms",
+                "ix_item_wms_origem_estoque_inicial",
+                "CREATE INDEX ix_item_wms_origem_estoque_inicial ON item_wms (origem_estoque_inicial)",
+            )
         
         # Tabela movimentacao_wms
         conn.execute(
@@ -594,15 +714,19 @@ def _ensure_wms_tables() -> None:
             )
         )
         conn.commit()
-        
-        # Create indexes for movimentacao_wms
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_movimentacao_wms_item_wms_id ON movimentacao_wms (item_wms_id)"
-        ))
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_movimentacao_wms_numero_nota ON movimentacao_wms (numero_nota)"
-        ))
-        conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "movimentacao_wms",
+            "ix_movimentacao_wms_item_wms_id",
+            "CREATE INDEX ix_movimentacao_wms_item_wms_id ON movimentacao_wms (item_wms_id)",
+        )
+        _create_index_if_missing(
+            conn,
+            "movimentacao_wms",
+            "ix_movimentacao_wms_numero_nota",
+            "CREATE INDEX ix_movimentacao_wms_numero_nota ON movimentacao_wms (numero_nota)",
+        )
         
         # Tabela estoque_wms
         conn.execute(
@@ -622,18 +746,21 @@ def _ensure_wms_tables() -> None:
             )
         )
         conn.commit()
-        
-        # Create indexes for estoque_wms
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_estoque_wms_codigo_item ON estoque_wms (codigo_item)"
-        ))
-        conn.execute(db.text(
-            "CREATE INDEX IF NOT EXISTS ix_estoque_wms_localizacao_id ON estoque_wms (localizacao_id)"
-        ))
-        conn.commit()
 
-        res_estoque_wms = conn.execute(db.text("PRAGMA table_info('estoque_wms')")).fetchall()
-        cols_estoque_wms = [row[1] for row in res_estoque_wms]
+        _create_index_if_missing(
+            conn,
+            "estoque_wms",
+            "ix_estoque_wms_codigo_item",
+            "CREATE INDEX ix_estoque_wms_codigo_item ON estoque_wms (codigo_item)",
+        )
+        _create_index_if_missing(
+            conn,
+            "estoque_wms",
+            "ix_estoque_wms_localizacao_id",
+            "CREATE INDEX ix_estoque_wms_localizacao_id ON estoque_wms (localizacao_id)",
+        )
+
+        cols_estoque_wms = _get_column_names("estoque_wms")
         if "qtd_bloqueada" not in cols_estoque_wms:
             conn.execute(db.text("ALTER TABLE estoque_wms ADD COLUMN qtd_bloqueada FLOAT NOT NULL DEFAULT 0.0"))
             conn.commit()
@@ -658,9 +785,18 @@ def _ensure_wms_tables() -> None:
                 """
             )
         )
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_integracao_status ON wms_integracao_evento (status)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_integracao_referencia ON wms_integracao_evento (referencia)"))
-        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "wms_integracao_evento",
+            "ix_wms_integracao_status",
+            "CREATE INDEX ix_wms_integracao_status ON wms_integracao_evento (status)",
+        )
+        _create_index_if_missing(
+            conn,
+            "wms_integracao_evento",
+            "ix_wms_integracao_referencia",
+            "CREATE INDEX ix_wms_integracao_referencia ON wms_integracao_evento (referencia)",
+        )
 
         conn.execute(
             db.text(
@@ -682,8 +818,12 @@ def _ensure_wms_tables() -> None:
                 """
             )
         )
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_sku_mestre_codigo_erp ON wms_sku_mestre (codigo_erp)"))
-        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "wms_sku_mestre",
+            "ix_wms_sku_mestre_codigo_erp",
+            "CREATE INDEX ix_wms_sku_mestre_codigo_erp ON wms_sku_mestre (codigo_erp)",
+        )
 
         conn.execute(
             db.text(
@@ -720,9 +860,18 @@ def _ensure_wms_tables() -> None:
                 """
             )
         )
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_reconciliacao_nota ON wms_reconciliacao_divergencia (numero_nota)"))
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_reconciliacao_status ON wms_reconciliacao_divergencia (status)"))
-        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "wms_reconciliacao_divergencia",
+            "ix_wms_reconciliacao_nota",
+            "CREATE INDEX ix_wms_reconciliacao_nota ON wms_reconciliacao_divergencia (numero_nota)",
+        )
+        _create_index_if_missing(
+            conn,
+            "wms_reconciliacao_divergencia",
+            "ix_wms_reconciliacao_status",
+            "CREATE INDEX ix_wms_reconciliacao_status ON wms_reconciliacao_divergencia (status)",
+        )
 
         conn.execute(
             db.text(
@@ -740,8 +889,12 @@ def _ensure_wms_tables() -> None:
                 """
             )
         )
-        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_wms_alerta_status ON wms_alerta_operacional (status)"))
-        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "wms_alerta_operacional",
+            "ix_wms_alerta_status",
+            "CREATE INDEX ix_wms_alerta_status ON wms_alerta_operacional (status)",
+        )
 
     finally:
         conn.close()

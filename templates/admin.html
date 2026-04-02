@@ -529,13 +529,6 @@
 
 {% block content %}
 <div class="main-content">
-    
-    <div class="stats-header">
-        <div class="stat-badge">
-            <i class="fas fa-cloud-download-alt"></i>
-            <div class="stat-info"><span>Web Service</span><b>Consyst-e Online</b></div>
-        </div>
-    </div>
 
     <div class="page-header-erp">
         <i class="fas fa-microchip"></i>
@@ -545,198 +538,7 @@
     <section class="page-session">
         <div class="page-session-head">
             <div>
-                <span class="page-session-kicker"><i class="fas fa-chart-pie"></i> Dashboard</span>
-                <h3 class="page-session-title">Visao executiva no topo</h3>
-                <p class="page-session-subtitle">Os graficos e indicadores ficam concentrados aqui em cima, separados por sessoes para leitura mais rapida do processo, risco, produtividade e governanca.</p>
-            </div>
-        </div>
-        <div class="page-session-divider"></div>
-
-        <div class="mgmt-toolbar">
-            <div>
-                <h3 class="mgmt-title">Cockpit Executivo de Operacoes</h3>
-                <p class="mgmt-subtitle">
-                    Consolide recebimento, fiscal, WMS, expedicao e governanca em uma unica visao de prioridade, risco e produtividade.
-                </p>
-            </div>
-            <div class="mgmt-toolbar-actions">
-                <select id="mgmt-period" class="mgmt-select" aria-label="Janela do painel gerencial" onchange="carregarPainelGerencial(true)">
-                    <option value="7">Ultimos 7 dias</option>
-                    <option value="15">Ultimos 15 dias</option>
-                    <option value="30" selected>Ultimos 30 dias</option>
-                    <option value="60">Ultimos 60 dias</option>
-                </select>
-                <button class="btn-sap btn-primary-sap" type="button" onclick="carregarPainelGerencial(true)">
-                    <i class="fas fa-chart-line"></i> Atualizar Cockpit
-                </button>
-                <span id="mgmt-last-update" class="mgmt-last-update">Aguardando carga inicial...</span>
-            </div>
-        </div>
-
-        <div id="mgmt-alert" class="mgmt-alert info"></div>
-
-        <div id="mgmt-kpis" class="mgmt-kpi-grid">
-            <div class="mgmt-kpi-card">
-                <span class="mgmt-kpi-label">Notas lancadas</span>
-                <span class="mgmt-kpi-value">--</span>
-                <span class="mgmt-kpi-foot">Carregando indicadores do processo fiscal.</span>
-            </div>
-            <div class="mgmt-kpi-card">
-                <span class="mgmt-kpi-label">Fila de excecao</span>
-                <span class="mgmt-kpi-value">--</span>
-                <span class="mgmt-kpi-foot">Mapeando notas em risco e pendencias criticas.</span>
-            </div>
-            <div class="mgmt-kpi-card">
-                <span class="mgmt-kpi-label">WMS pendente</span>
-                <span class="mgmt-kpi-value">--</span>
-                <span class="mgmt-kpi-foot">Buscando saldo sem endereco e alertas operacionais.</span>
-            </div>
-            <div class="mgmt-kpi-card">
-                <span class="mgmt-kpi-label">Expedicao aberta</span>
-                <span class="mgmt-kpi-value">--</span>
-                <span class="mgmt-kpi-foot">Consolidando expedicao e atividade administrativa.</span>
-            </div>
-        </div>
-    </section>
-
-    <section class="page-session">
-        <div class="page-session-head">
-            <div>
-                <span class="page-session-kicker"><i class="fas fa-project-diagram"></i> Sessao 1</span>
-                <h3 class="page-session-title">Processo e fila de excecoes</h3>
-                <p class="page-session-subtitle">Leitura consolidada do fluxo de recebimento, produtividade do time e mapa das etapas mais sensiveis.</p>
-            </div>
-        </div>
-        <div class="page-session-divider"></div>
-
-        <div class="mgmt-grid">
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Consolidado Geral</div>
-                        <h3 class="mgmt-card-title">Processamento, Manifestacao e WMS</h3>
-                    </div>
-                    <span id="mgmt-global-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-consolidado-geral">
-                    <div class="mgmt-empty">Carregando totais consolidados...</div>
-                </div>
-            </section>
-
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Produtividade do Time</div>
-                        <h3 class="mgmt-card-title">Processado por Usuario</h3>
-                    </div>
-                    <span id="mgmt-users-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-usuarios">
-                    <div class="mgmt-empty">Carregando resumo por usuario...</div>
-                </div>
-            </section>
-        </div>
-
-        <div class="mgmt-grid">
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Recebimento e Documento de Entrada</div>
-                        <h3 class="mgmt-card-title">Mapa do Processo e Fila de Excecao</h3>
-                    </div>
-                    <span id="mgmt-process-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-processo" class="mgmt-chart-wrap">
-                    <div class="mgmt-empty">Carregando fluxo operacional...</div>
-                </div>
-            </section>
-
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Risco e Prioridade</div>
-                        <h3 class="mgmt-card-title">Termometro Gerencial</h3>
-                    </div>
-                    <span id="mgmt-risk-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-risco-resumo" class="mgmt-mini-grid">
-                    <div class="mgmt-mini-card">
-                        <label>Pendencias criticas</label>
-                        <strong>--</strong>
-                        <span>Levantando SLA do processo.</span>
-                    </div>
-                    <div class="mgmt-mini-card">
-                        <label>Notas em risco</label>
-                        <strong>--</strong>
-                        <span>Calculando filas proximas do limite.</span>
-                    </div>
-                </div>
-                <div id="mgmt-risco-lista" class="mgmt-list" style="margin-top:14px;">
-                    <div class="mgmt-empty">Carregando riscos e alertas...</div>
-                </div>
-                <div id="mgmt-insights" class="mgmt-insights" style="margin-top:14px;">
-                    <div class="mgmt-insight">O painel executivo vai destacar gargalos, tendencias e sinais de atencao automaticamente.</div>
-                </div>
-            </section>
-        </div>
-    </section>
-
-    <section class="page-session">
-        <div class="page-session-head">
-            <div>
-                <span class="page-session-kicker"><i class="fas fa-shield-alt"></i> Sessao 2</span>
-                <h3 class="page-session-title">Governanca, WMS e saida</h3>
-                <p class="page-session-subtitle">Separacao visual para os paines de estoque, fiscal, expedicao e controles administrativos na mesma pagina.</p>
-            </div>
-        </div>
-        <div class="page-session-divider"></div>
-
-        <div class="mgmt-grid triple">
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Operacao de Estoque</div>
-                        <h3 class="mgmt-card-title">Snapshot WMS</h3>
-                    </div>
-                    <span id="mgmt-wms-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-wms">
-                    <div class="mgmt-empty">Carregando dados de WMS...</div>
-                </div>
-            </section>
-
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Fiscal, Faturamento e Expedicao</div>
-                        <h3 class="mgmt-card-title">Performance e Saida</h3>
-                    </div>
-                    <span id="mgmt-flow-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-fiscal-expedicao">
-                    <div class="mgmt-empty">Carregando performance fiscal e expedicao...</div>
-                </div>
-            </section>
-
-            <section class="mgmt-card">
-                <div class="mgmt-card-head">
-                    <div>
-                        <div class="mgmt-card-kicker">Governanca e Aprovacoes</div>
-                        <h3 class="mgmt-card-title">Controles Administrativos</h3>
-                    </div>
-                    <span id="mgmt-gov-badge" class="mgmt-badge gray">Aguardando dados</span>
-                </div>
-                <div id="mgmt-governanca">
-                    <div class="mgmt-empty">Carregando visoes gerenciais e aprovacoes...</div>
-                </div>
-            </section>
-        </div>
-    </section>
-
-    <section class="page-session">
-        <div class="page-session-head">
-            <div>
-                <span class="page-session-kicker"><i class="fas fa-inbox"></i> Sessao 3</span>
+                <span class="page-session-kicker"><i class="fas fa-inbox"></i> Operacao</span>
                 <h3 class="page-session-title">Captura operacional da pre-nota</h3>
                 <p class="page-session-subtitle">Os recursos operacionais continuam na mesma pagina, mas separados em blocos para ficar mais claro onde importar e processar documentos.</p>
             </div>
@@ -1853,6 +1655,9 @@
     }
 
     async function carregarPainelGerencial(refreshDependencias = false) {
+        if (!document.getElementById('mgmt-period')) {
+            return;
+        }
         const periodInput = document.getElementById('mgmt-period');
         const dias = Number(periodInput?.value || 30);
         const lastUpdateEl = document.getElementById('mgmt-last-update');

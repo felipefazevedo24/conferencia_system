@@ -7,3 +7,4 @@ marshmallow
 pytest
 waitress
 openpyxl
+PyMySQL

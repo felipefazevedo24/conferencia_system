@@ -12,6 +12,7 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+dist/
 
 # Local database and runtime files
 database.db
