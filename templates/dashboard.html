@@ -52,6 +52,79 @@
         .kpi-value { font-size: 32px; font-weight: 800; color: #1e293b; margin-top: 8px; display: block; }
 
         /* Gráficos */
+        .overview-shell { margin-bottom: 25px; }
+        .overview-toolbar {
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            margin-bottom: 16px;
+        }
+        .overview-heading { font-size: 16px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: .6px; }
+        .overview-subheading { font-size: 12px; color: #64748b; font-weight: 600; margin-top: 4px; }
+        .overview-toolbar-actions { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; }
+        .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 18px; }
+        .overview-card {
+            background: #ffffff; border: 1px solid var(--border-color); border-radius: 16px;
+            box-shadow: var(--card-shadow); padding: 18px; position: relative; overflow: hidden;
+        }
+        .overview-card::before { content: ""; position: absolute; top: 0; left: 0; width: 5px; height: 100%; background: var(--sap-blue); }
+        .overview-card.warning::before { background: var(--warning-erp); }
+        .overview-card.success::before { background: var(--success-erp); }
+        .overview-card.danger::before { background: var(--danger-erp); }
+        .overview-card.process::before { background: var(--sap-blue); }
+        .overview-card .kpi-value { font-size: 28px; }
+        .overview-foot { margin-top: 8px; font-size: 11px; color: #64748b; font-weight: 600; }
+        .overview-panels { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .overview-panel {
+            background: #ffffff; border: 1px solid var(--border-color); border-radius: 16px;
+            box-shadow: var(--card-shadow); padding: 20px;
+        }
+        .overview-mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .overview-mini-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
+        .overview-mini-card .label { display: block; font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+        .overview-mini-card .value { display: block; font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 6px; }
+        .overview-mini-card .meta { display: block; margin-top: 6px; font-size: 11px; color: #64748b; }
+        .overview-section-title {
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;
+            margin: 16px 0 10px;
+        }
+        .overview-badge {
+            display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px;
+            border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 800;
+        }
+        .overview-list { display: flex; flex-direction: column; gap: 10px; }
+        .overview-item {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 11px 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc;
+        }
+        .overview-item-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .overview-item-title { font-size: 12px; font-weight: 800; color: #0f172a; }
+        .overview-item-sub { font-size: 11px; color: #64748b; }
+        .overview-item-metric { text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; }
+        .overview-table-wrap { overflow: auto; }
+        .overview-table { width: 100%; border-collapse: collapse; min-width: 920px; }
+        .overview-table th {
+            text-align: left; padding: 12px 10px; font-size: 10px; text-transform: uppercase;
+            color: #64748b; border-bottom: 1px solid #e2e8f0; background: #f8fafc; position: sticky; top: 0;
+        }
+        .overview-table td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #0f172a; vertical-align: top; }
+        .overview-table tbody tr:hover { background: #f8fafc; }
+        .overview-table tfoot td { font-weight: 800; background: #eff6ff; }
+        .overview-muted { display: block; margin-top: 4px; font-size: 11px; color: #64748b; }
+        .overview-empty {
+            border: 1px dashed #cbd5e1; border-radius: 12px; padding: 18px;
+            font-size: 12px; font-weight: 600; color: #64748b; text-align: center; background: #f8fafc;
+        }
+
+        @media (max-width: 1100px) {
+            .overview-panels { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .welcome-toolbar, .overview-toolbar { flex-direction: column; align-items: flex-start; }
+            .main-content { padding: 18px; }
+            .overview-grid, .kpi-grid, .process-grid, .process-kpi, .menu-grid, .ops-grid, .charts-container { grid-template-columns: 1fr; }
+        }
+
         .charts-container { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 25px; }
         .chart-box { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; height: 350px; box-shadow: var(--card-shadow); }
         .chart-title { font-size: 12px; font-weight: 800; color: var(--protheus-gray); text-transform: uppercase; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px; }
@@ -112,6 +185,58 @@
             <option value="recebimento">Operação: Recebimento</option>
             <option value="expedicao">Operação: Expedição</option>
         </select>
+    </div>
+
+    <div id="overview-shell" class="overview-shell">
+        <div class="section-header">Visao Geral Consolidada</div>
+        <div class="overview-toolbar">
+            <div>
+                <div class="overview-heading">Consolidador Gerencial da Operacao</div>
+                <div class="overview-subheading">Recebimento, fiscal, manifestacao, WMS e expedicao reunidos no dashboard principal</div>
+            </div>
+            <div class="overview-toolbar-actions">
+                <label for="overview-period">Periodo</label>
+                <select id="overview-period" class="op-filter">
+                    <option value="7">7 dias</option>
+                    <option value="30" selected>30 dias</option>
+                    <option value="90">90 dias</option>
+                    <option value="180">180 dias</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="overview-grid">
+            <div class="overview-card process"><span class="kpi-label">Notas Importadas</span><div class="kpi-value" id="ov-importadas">0</div><div class="overview-foot" id="ov-importadas-foot">Carga total no periodo</div></div>
+            <div class="overview-card warning"><span class="kpi-label">NF Conferidas</span><div class="kpi-value" id="ov-conferidas">0</div><div class="overview-foot" id="ov-conferidas-foot">Conferencia operacional</div></div>
+            <div class="overview-card success"><span class="kpi-label">Notas Lancadas</span><div class="kpi-value" id="ov-lancadas">0</div><div class="overview-foot" id="ov-lancadas-foot">Documento de entrada concluido</div></div>
+            <div class="overview-card process"><span class="kpi-label">Manifestacao OK</span><div class="kpi-value" id="ov-manifest-ok">0</div><div class="overview-foot" id="ov-manifest-ok-foot">Retorno positivo do destinatario</div></div>
+            <div class="overview-card danger"><span class="kpi-label">Manifestacao Pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando acao</div></div>
+            <div class="overview-card danger"><span class="kpi-label">Divergencias</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrencias no periodo</div></div>
+            <div class="overview-card success"><span class="kpi-label">Enderecamentos WMS</span><div class="kpi-value" id="ov-wms-end">0</div><div class="overview-foot" id="ov-wms-end-foot">Armazenagens realizadas</div></div>
+            <div class="overview-card process"><span class="kpi-label">Movimentacoes WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazem</div></div>
+        </div>
+
+        <div class="overview-panels">
+            <div class="overview-panel">
+                <div class="chart-title">Consolidado Operacional <span class="overview-badge" id="overview-geral-badge">Atualizando</span></div>
+                <div id="overview-geral" class="overview-list">
+                    <div class="overview-empty">Carregando consolidado geral...</div>
+                </div>
+            </div>
+            <div class="overview-panel">
+                <div class="chart-title">WMS Geral <span class="overview-badge" id="overview-wms-badge">Atualizando</span></div>
+                <div id="overview-wms" class="overview-list">
+                    <div class="overview-empty">Carregando indicadores do WMS...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="overview-panel">
+            <div class="chart-title">Processado por Usuario <span class="overview-badge" id="overview-users-badge">Atualizando</span></div>
+            <div id="overview-usuarios" class="overview-table-wrap">
+                <div class="overview-empty">Carregando produtividade por usuario...</div>
+            </div>
+        </div>
     </div>
 
     <div id="painel-recebimento">
@@ -227,6 +352,357 @@
     // --- RESTAURAÇÃO INTEGRAL DA LÓGICA (700+ LINHAS ORIGINAIS) ---
     let donutChart, barChart, expDonutChart, expBarChart;
     let operacaoAtual = 'recebimento';
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatarNumero(valor, casas = 0) {
+        const numero = Number(valor || 0);
+        if (!Number.isFinite(numero)) {
+            return (0).toLocaleString('pt-BR', {
+                minimumFractionDigits: casas,
+                maximumFractionDigits: casas
+            });
+        }
+        return numero.toLocaleString('pt-BR', {
+            minimumFractionDigits: casas,
+            maximumFractionDigits: casas
+        });
+    }
+
+    async function fetchJsonSafe(url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                if (response.status === 403 || response.status === 404) return null;
+                throw new Error(`Falha ao consultar ${url}`);
+            }
+            return await response.json();
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function renderOverviewKpis(consolidado, wmsCockpit) {
+        const totais = consolidado?.totais || {};
+        const manifestacao = consolidado?.manifestacao || {};
+        const wms = consolidado?.wms || {};
+        const wmsCards = wmsCockpit?.cards || {};
+
+        document.getElementById('ov-importadas').innerText = formatarNumero(totais.notas_importadas || 0);
+        document.getElementById('ov-conferidas').innerText = formatarNumero(totais.notas_conferidas || 0);
+        document.getElementById('ov-lancadas').innerText = formatarNumero(totais.notas_lancadas || 0);
+        document.getElementById('ov-manifest-ok').innerText = formatarNumero(manifestacao.sucesso || 0);
+        document.getElementById('ov-manifest-pendente').innerText = formatarNumero(manifestacao.pendentes || 0);
+        document.getElementById('ov-divergencias').innerText = formatarNumero(totais.divergencias_periodo || 0);
+        document.getElementById('ov-wms-end').innerText = formatarNumero(wms.enderecamentos_periodo || 0);
+        document.getElementById('ov-wms-mov').innerText = formatarNumero(wms.movimentacoes_periodo || 0);
+
+        document.getElementById('ov-importadas-foot').innerText = `${formatarNumero(totais.usuarios_ativos || 0)} usuarios ativos no periodo`;
+        document.getElementById('ov-conferidas-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} notas com divergencia`;
+        document.getElementById('ov-lancadas-foot').innerText = `${formatarNumero(manifestacao.pendentes || 0)} aguardando manifestacao`;
+        document.getElementById('ov-manifest-ok-foot').innerText = `${formatarNumero(manifestacao.falha || 0)} falhas registradas`;
+        document.getElementById('ov-manifest-pendente-foot').innerText = `${formatarNumero(totais.notas_lancadas || 0)} notas lancadas no total`;
+        document.getElementById('ov-divergencias-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} NFs impactadas`;
+        document.getElementById('ov-wms-end-foot').innerText = `${formatarNumero(wmsCards.pendentes_enderecamento || 0)} pendencias de endereco abertas`;
+        document.getElementById('ov-wms-mov-foot').innerText = `${formatarNumero(wmsCards.movimentacoes_24h || 0)} movimentacoes nas ultimas 24h`;
+    }
+
+    function renderOverviewGeral(consolidado, expedicao) {
+        const container = document.getElementById('overview-geral');
+        const badge = document.getElementById('overview-geral-badge');
+        if (!container) return;
+
+        if (!consolidado) {
+            container.innerHTML = '<div class="overview-empty">Nao foi possivel carregar o consolidado geral agora.</div>';
+            if (badge) badge.innerText = 'Indisponivel';
+            return;
+        }
+
+        const totais = consolidado.totais || {};
+        const manifestacao = consolidado.manifestacao || {};
+        const conferencia = consolidado.conferencia || {};
+        const tipos = Array.isArray(manifestacao.tipos) ? manifestacao.tipos.slice(0, 4) : [];
+        const topConferencia = Array.isArray(conferencia.por_usuario) ? conferencia.por_usuario.slice(0, 5) : [];
+        const expedicaoResumo = expedicao || {};
+
+        const miniCards = [
+            {
+                label: 'Usuarios Ativos',
+                value: formatarNumero(totais.usuarios_ativos || 0),
+                meta: 'Pessoas com movimentacao registrada'
+            },
+            {
+                label: 'Notas com Divergencia',
+                value: formatarNumero(totais.notas_com_divergencia || 0),
+                meta: `${formatarNumero(totais.divergencias_periodo || 0)} ocorrencias no periodo`
+            },
+            {
+                label: 'Manifestacao Falha',
+                value: formatarNumero(manifestacao.falha || 0),
+                meta: `${formatarNumero(manifestacao.pendentes || 0)} pendentes`
+            },
+            {
+                label: 'Expedicao Aberta',
+                value: formatarNumero(expedicaoResumo.abertas || 0),
+                meta: `${formatarNumero(expedicaoResumo.pendente_decisao || 0)} aguardando decisao`
+            }
+        ];
+
+        const tiposHtml = tipos.length
+            ? tipos.map((item) => `
+                <div class="overview-item">
+                    <div class="overview-item-main">
+                        <span class="overview-item-title">${escapeHtml(item.manifestacao || 'Manifestacao')}</span>
+                        <span class="overview-item-sub">Sucesso ${formatarNumero(item.sucesso || 0)} | Falha ${formatarNumero(item.falha || 0)}</span>
+                    </div>
+                    <div class="overview-item-metric">${formatarNumero((item.sucesso || 0) + (item.falha || 0))}</div>
+                </div>
+            `).join('')
+            : '<div class="overview-empty">Nenhuma manifestacao encontrada no periodo selecionado.</div>';
+
+        const conferenciaHtml = topConferencia.length
+            ? topConferencia.map((item) => `
+                <div class="overview-item">
+                    <div class="overview-item-main">
+                        <span class="overview-item-title">${escapeHtml(item.usuario || 'Sem usuario')}</span>
+                        <span class="overview-item-sub">NF conferidas ${formatarNumero(item.notas_conferidas || 0)} | Lancadas ${formatarNumero(item.notas_lancadas || 0)}</span>
+                    </div>
+                    <div class="overview-item-metric">${formatarNumero((item.notas_conferidas || 0) + (item.notas_lancadas || 0))}</div>
+                </div>
+            `).join('')
+            : '<div class="overview-empty">Sem produtividade de conferencia para exibir.</div>';
+
+        container.innerHTML = `
+            <div class="overview-mini-grid">
+                ${miniCards.map((card) => `
+                    <div class="overview-mini-card">
+                        <span class="label">${escapeHtml(card.label)}</span>
+                        <span class="value">${card.value}</span>
+                        <span class="meta">${escapeHtml(card.meta)}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="overview-section-title">
+                <span>Manifestacao de Destinatario</span>
+                <span class="overview-badge">${formatarNumero(manifestacao.sucesso || 0)} sucesso</span>
+            </div>
+            <div class="overview-list">${tiposHtml}</div>
+
+            <div class="overview-section-title">
+                <span>NF Conferida e Lancamento</span>
+                <span class="overview-badge">${formatarNumero(conferencia.notas_conferidas || 0)} conferidas</span>
+            </div>
+            <div class="overview-list">${conferenciaHtml}</div>
+        `;
+
+        if (badge) badge.innerText = `${formatarNumero(consolidado.periodo_dias || 30)} dias`;
+    }
+
+    function renderOverviewWms(consolidado, wmsCockpit) {
+        const container = document.getElementById('overview-wms');
+        const badge = document.getElementById('overview-wms-badge');
+        if (!container) return;
+
+        const wms = consolidado?.wms || {};
+        const cards = wmsCockpit?.cards || {};
+        const prioridades = wmsCockpit?.prioridades || {};
+        const notasPendentes = Array.isArray(wmsCockpit?.notas_pendentes) ? wmsCockpit.notas_pendentes.slice(0, 4) : [];
+        const movimentacoes = Array.isArray(wmsCockpit?.movimentacoes_recentes) ? wmsCockpit.movimentacoes_recentes.slice(0, 4) : [];
+
+        if (!consolidado && !wmsCockpit) {
+            container.innerHTML = '<div class="overview-empty">Nao foi possivel carregar o resumo do WMS agora.</div>';
+            if (badge) badge.innerText = 'Indisponivel';
+            return;
+        }
+
+        const miniCards = [
+            {
+                label: 'Itens Ativos',
+                value: formatarNumero(wms.itens_ativos || 0),
+                meta: `${formatarNumero(wms.saldo_total || 0, 2)} em saldo total`
+            },
+            {
+                label: 'Sem Endereco',
+                value: formatarNumero(wms.itens_sem_endereco || 0),
+                meta: `${formatarNumero(wms.notas_sem_endereco || 0)} notas pendentes`
+            },
+            {
+                label: 'Integracao Pendente',
+                value: formatarNumero(wms.integracoes_pendentes || 0),
+                meta: `${formatarNumero(wms.integracoes_falha || 0)} falhas abertas`
+            },
+            {
+                label: 'Alertas WMS',
+                value: formatarNumero(cards.alertas_abertos || 0),
+                meta: `${formatarNumero(cards.divergencias_abertas || 0)} divergencias abertas`
+            }
+        ];
+
+        const prioridadeEntries = Object.entries(prioridades)
+            .sort((a, b) => {
+                const ordem = { Critica: 0, Alta: 1, Media: 2, Baixa: 3 };
+                return (ordem[a[0]] ?? 9) - (ordem[b[0]] ?? 9);
+            });
+
+        const prioridadesHtml = prioridadeEntries.length
+            ? prioridadeEntries.map(([prioridade, quantidade]) => `
+                <div class="overview-item">
+                    <div class="overview-item-main">
+                        <span class="overview-item-title">${escapeHtml(prioridade)}</span>
+                        <span class="overview-item-sub">Fila de enderecamento classificada automaticamente</span>
+                    </div>
+                    <div class="overview-item-metric">${formatarNumero(quantidade || 0)}</div>
+                </div>
+            `).join('')
+            : '<div class="overview-empty">Sem prioridades WMS para exibir.</div>';
+
+        const notasHtml = notasPendentes.length
+            ? notasPendentes.map((item) => `
+                <div class="overview-item">
+                    <div class="overview-item-main">
+                        <span class="overview-item-title">NF ${escapeHtml(item.numero_nota || '-')}</span>
+                        <span class="overview-item-sub">${formatarNumero(item.linhas || 0)} itens | ${formatarNumero(item.qtd_total || 0, 2)} em saldo pendente</span>
+                    </div>
+                    <div class="overview-item-metric">${formatarNumero(item.linhas || 0)}</div>
+                </div>
+            `).join('')
+            : '<div class="overview-empty">Nenhuma NF pendente de enderecamento.</div>';
+
+        const movimentacoesHtml = movimentacoes.length
+            ? movimentacoes.map((item) => `
+                <div class="overview-item">
+                    <div class="overview-item-main">
+                        <span class="overview-item-title">${escapeHtml(item.tipo_movimentacao || 'Movimentacao')}</span>
+                        <span class="overview-item-sub">NF ${escapeHtml(item.numero_nota || '-')} | ${escapeHtml(item.usuario || 'Sem usuario')}</span>
+                    </div>
+                    <div class="overview-item-metric">${formatarNumero(item.qtd_movimentada || 0, 2)}</div>
+                </div>
+            `).join('')
+            : '<div class="overview-empty">Sem movimentacoes recentes registradas.</div>';
+
+        container.innerHTML = `
+            <div class="overview-mini-grid">
+                ${miniCards.map((card) => `
+                    <div class="overview-mini-card">
+                        <span class="label">${escapeHtml(card.label)}</span>
+                        <span class="value">${card.value}</span>
+                        <span class="meta">${escapeHtml(card.meta)}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="overview-section-title">
+                <span>Prioridades da Fila</span>
+                <span class="overview-badge">${formatarNumero(cards.pendentes_enderecamento || 0)} pendencias</span>
+            </div>
+            <div class="overview-list">${prioridadesHtml}</div>
+
+            <div class="overview-section-title">
+                <span>Notas Pendentes</span>
+                <span class="overview-badge">${formatarNumero(wms.movimentacoes_periodo || 0)} mov. no periodo</span>
+            </div>
+            <div class="overview-list">${notasHtml}</div>
+
+            <div class="overview-section-title">
+                <span>Ultimas Movimentacoes</span>
+                <span class="overview-badge">${formatarNumero(cards.movimentacoes_24h || 0)} em 24h</span>
+            </div>
+            <div class="overview-list">${movimentacoesHtml}</div>
+        `;
+
+        if (badge) badge.innerText = `${formatarNumero(cards.pendentes_enderecamento || 0)} pendencias`;
+    }
+
+    function renderOverviewUsuarios(consolidado) {
+        const container = document.getElementById('overview-usuarios');
+        const badge = document.getElementById('overview-users-badge');
+        if (!container) return;
+
+        const usuarios = Array.isArray(consolidado?.por_usuario) ? consolidado.por_usuario : [];
+        const totais = consolidado?.totais || {};
+
+        if (!usuarios.length) {
+            container.innerHTML = '<div class="overview-empty">Nenhuma produtividade por usuario encontrada no periodo selecionado.</div>';
+            if (badge) badge.innerText = '0 ativos';
+            return;
+        }
+
+        const totalProcessado = usuarios.reduce((acc, item) => acc + Number(item.total_processado || 0), 0);
+        const linhas = usuarios.map((item) => `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(item.usuario || 'Sem usuario')}</strong>
+                    <span class="overview-muted">Qtd mov.: ${formatarNumero(item.qtd_movimentada_wms || 0, 2)} | Armz.: ${formatarNumero(item.qtd_armazenada_wms || 0, 2)}</span>
+                </td>
+                <td>${formatarNumero(item.notas_importadas || 0)}</td>
+                <td>${formatarNumero(item.notas_conferidas || 0)}</td>
+                <td>${formatarNumero(item.notas_lancadas || 0)}</td>
+                <td>
+                    ${formatarNumero(item.manifestacoes_sucesso || 0)}
+                    <span class="overview-muted">Falha: ${formatarNumero(item.manifestacoes_falha || 0)}</span>
+                </td>
+                <td>${formatarNumero(item.enderecamentos_wms || 0)}</td>
+                <td>${formatarNumero(item.movimentacoes_wms || 0)}</td>
+                <td><strong>${formatarNumero(item.total_processado || 0)}</strong></td>
+            </tr>
+        `).join('');
+
+        container.innerHTML = `
+            <table class="overview-table">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Importadas</th>
+                        <th>Conferidas</th>
+                        <th>Lancadas</th>
+                        <th>Manifestacao</th>
+                        <th>End. WMS</th>
+                        <th>Mov. WMS</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>${linhas}</tbody>
+                <tfoot>
+                    <tr>
+                        <td>Total Geral</td>
+                        <td>${formatarNumero(totais.notas_importadas || 0)}</td>
+                        <td>${formatarNumero(totais.notas_conferidas || 0)}</td>
+                        <td>${formatarNumero(totais.notas_lancadas || 0)}</td>
+                        <td>${formatarNumero((totais.manifestacoes_sucesso || 0) + (totais.manifestacoes_falha || 0))}</td>
+                        <td>${formatarNumero(totais.enderecamentos_wms || 0)}</td>
+                        <td>${formatarNumero(totais.movimentacoes_wms || 0)}</td>
+                        <td>${formatarNumero(totalProcessado || 0)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+
+        if (badge) badge.innerText = `${formatarNumero(totais.usuarios_ativos || usuarios.length)} ativos`;
+    }
+
+    async function carregarVisaoGeralConsolidada() {
+        const periodoSelecionado = document.getElementById('overview-period');
+        const dias = Number(periodoSelecionado?.value || 30);
+
+        const [consolidado, wmsCockpit, expedicao] = await Promise.all([
+            fetchJsonSafe(`/api/admin/dashboard_consolidado?dias=${dias}`),
+            fetchJsonSafe('/api/wms/cockpit'),
+            fetchJsonSafe('/api/expedicao/dashboard'),
+        ]);
+
+        renderOverviewKpis(consolidado, wmsCockpit);
+        renderOverviewGeral(consolidado, expedicao);
+        renderOverviewWms(consolidado, wmsCockpit);
+        renderOverviewUsuarios(consolidado);
+    }
 
     function inicializarGraficos() {
         const ctxDonut = document.getElementById('chartDonut').getContext('2d');
@@ -385,12 +861,17 @@
             operacaoAtual = e.target.value;
             aplicarFiltroOperacao();
         });
+        document.getElementById('overview-period').addEventListener('change', () => {
+            carregarVisaoGeralConsolidada();
+        });
         inicializarGraficos();
+        carregarVisaoGeralConsolidada();
         atualizarStats();
         carregarSla();
         carregarPainelProcesso();
         carregarExpedicaoDashboard();
         aplicarFiltroOperacao();
+        setInterval(carregarVisaoGeralConsolidada, 30000);
         setInterval(atualizarStats, 15000);
         setInterval(carregarSla, 20000);
         setInterval(carregarPainelProcesso, 30000);

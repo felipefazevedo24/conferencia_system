@@ -84,11 +84,13 @@ from ..models import (
     BoletoContaReceber,
     LogAcessoAdministrativo,
     LogDivergencia,
+    LogEventoFiscalNota,
     LogExclusaoNota,
     LogEstornoLancamento,
     LogManifestacaoDestinatario,
     LogReversaoConferencia,
     LogTentativaConferencia,
+    MovimentacaoWMS,
     PermissaoAcesso,
     SolicitacaoDevolucaoRecebimento,
     Usuario,
@@ -142,6 +144,15 @@ CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
 CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL = {"5124", "5125", "6124", "6125"}
 CNPJ_COLUMBIA_MACHINE = "30482274000125"
+MOTIVOS_ESTORNO_PADRAO = [
+    "Erro de classificacao fiscal",
+    "Codigo ERP incorreto",
+    "Documento lancado em duplicidade",
+    "Divergencia de fornecedor ou cadastro",
+    "Falha de integracao fiscal",
+    "Ajuste solicitado pela controladoria",
+]
+DECISOES_AUDITOR_BLOQUEIO = {"XML Recusado"}
 
 
 def _normalize_external_payload(payload):
@@ -150,6 +161,549 @@ def _normalize_external_payload(payload):
     if payload is None:
         return {}
     return {"raw": str(payload)[:1000]}
+
+
+def _normalize_status_text(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
+def _status_matches(value: str, target: str) -> bool:
+    texto = _normalize_status_text(value)
+    alvo = str(target or "").strip().lower()
+
+    if alvo == "concluido":
+        return "conclu" in texto and "do" in texto
+    if alvo == "lancado":
+        return "lan" in texto and "ado" in texto
+    if alvo == "pendente":
+        return "pend" in texto
+    if alvo == "devolvido":
+        return "devolv" in texto
+    if alvo == "bloqueado":
+        return "bloq" in texto
+    return alvo in texto
+
+
+def _payload_json_text(payload) -> str | None:
+    if payload is None:
+        return None
+    try:
+        return json.dumps(payload, ensure_ascii=False, default=str)[:4000]
+    except Exception:
+        return json.dumps({"raw": str(payload)[:1000]}, ensure_ascii=False)
+
+
+def _registrar_evento_fiscal_nota(
+    numero_nota: str,
+    evento: str,
+    usuario: str,
+    etapa: str | None = None,
+    status: str | None = None,
+    detalhe: str | None = None,
+    payload: dict | None = None,
+    commit: bool = False,
+):
+    numero_nota = str(numero_nota or "").strip()
+    usuario = str(usuario or "").strip() or "sistema"
+    if not numero_nota:
+        return None
+
+    registro = LogEventoFiscalNota(
+        numero_nota=numero_nota,
+        evento=str(evento or "").strip()[:60] or "EventoFiscal",
+        etapa=str(etapa or "").strip()[:30] or None,
+        status=str(status or "").strip()[:20] or None,
+        detalhe=str(detalhe or "").strip()[:1000] or None,
+        payload_json=_payload_json_text(payload),
+        usuario=usuario,
+    )
+    db.session.add(registro)
+    if commit:
+        db.session.commit()
+    return registro
+
+
+def _ultimo_log_manifestacao(numero_nota: str, manifestacao: str | None = None):
+    query = LogManifestacaoDestinatario.query.filter_by(numero_nota=str(numero_nota or "").strip())
+    if manifestacao:
+        query = query.filter_by(manifestacao=manifestacao)
+    return query.order_by(LogManifestacaoDestinatario.data.desc(), LogManifestacaoDestinatario.id.desc()).first()
+
+
+def _ultimo_estorno_lancamento(numero_nota: str):
+    return (
+        LogEstornoLancamento.query.filter_by(numero_nota=str(numero_nota or "").strip())
+        .order_by(LogEstornoLancamento.data_estorno.desc(), LogEstornoLancamento.id.desc())
+        .first()
+    )
+
+
+def _motivo_estorno_composto(motivo_padrao: str, complemento: str, motivo_livre: str) -> str:
+    padrao = str(motivo_padrao or "").strip()
+    detalhe = str(complemento or "").strip()
+    livre = str(motivo_livre or "").strip()
+
+    if padrao and detalhe:
+        return f"{padrao}: {detalhe}"[:500]
+    if padrao and livre and livre.lower() != padrao.lower():
+        return f"{padrao}: {livre}"[:500]
+    return (livre or padrao)[:500]
+
+
+def _fase_documento_entrada(itens, numero_nota: str):
+    if not itens:
+        return {"atual": "Indefinida", "workflow": [], "bloqueada": False}
+
+    importado = min((i.data_importacao for i in itens if i.data_importacao), default=None)
+    auditado = max((i.auditor_data for i in itens if i.auditor_data), default=None)
+    conferido = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
+    lancado = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
+    manifestado = _ultimo_log_manifestacao(numero_nota, manifestacao="confirmada")
+    estornado = _ultimo_estorno_lancamento(numero_nota)
+    recusado = any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens)
+
+    atual = "Indefinida"
+    bloqueada = False
+    if estornado and (not lancado or (estornado.data_estorno and estornado.data_estorno >= lancado)):
+        atual = "Estornada"
+    elif recusado:
+        atual = "Bloqueada"
+        bloqueada = True
+    elif manifestado and manifestado.status == "Sucesso":
+        atual = "Manifestada"
+    elif lancado:
+        atual = "Lançada"
+    elif conferido or any(_status_matches(i.status, "concluido") for i in itens):
+        atual = "Liberada"
+    elif auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens):
+        atual = "Auditada"
+    elif importado:
+        atual = "Importada"
+
+    ordem = ["Importada", "Auditada", "Liberada", "Lançada", "Manifestada"]
+    progresso = {
+        "Importada": bool(importado),
+        "Auditada": bool(auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens)),
+        "Liberada": bool(conferido or any(_status_matches(i.status, "concluido") for i in itens)),
+        "Lançada": bool(lancado),
+        "Manifestada": bool(manifestado and manifestado.status == "Sucesso"),
+    }
+    indice_atual = ordem.index(atual) if atual in ordem else -1
+    workflow = []
+    for idx, nome in enumerate(ordem):
+        estado = "done" if progresso[nome] and idx < indice_atual else "pending"
+        if atual == nome:
+            estado = "current"
+        elif progresso[nome]:
+            estado = "done"
+        workflow.append({"nome": nome, "estado": estado})
+
+    if bloqueada:
+        workflow.append({"nome": "Bloqueada", "estado": "current"})
+    elif atual == "Estornada":
+        workflow.append({"nome": "Estornada", "estado": "current"})
+
+    return {"atual": atual, "workflow": workflow, "bloqueada": bloqueada}
+
+
+def _pendencias_documento_entrada(numero_nota: str, itens):
+    if not itens:
+        return []
+
+    pendencias = []
+    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
+    if resumo_divergencia["divergencia"] == "Sim":
+        pendencias.append(
+            {
+                "tipo": "Divergencia",
+                "severidade": "alta",
+                "titulo": "Divergencia de conferencia ativa",
+                "descricao": resumo_divergencia["detalhe_divergencia"] or "A NF possui divergencias operacionais pendentes.",
+            }
+        )
+
+    if any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens):
+        pendencias.append(
+            {
+                "tipo": "BloqueioFiscal",
+                "severidade": "alta",
+                "titulo": "Documento bloqueado pela auditoria XML",
+                "descricao": next((str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()), "A decisao fiscal recusou a liberacao deste documento."),
+            }
+        )
+
+    pedidos = _coletar_pedidos_nota(itens)
+    material_cliente = bool(itens[0].material_cliente)
+    remessa = bool(itens[0].remessa)
+    if not pedidos and not material_cliente and not remessa:
+        pendencias.append(
+            {
+                "tipo": "PedidoCompra",
+                "severidade": "media",
+                "titulo": "Pedido de compra nao vinculado",
+                "descricao": "A NF segue sem pedido de compra associado no fluxo fiscal.",
+            }
+        )
+
+    if material_cliente:
+        pendencias.append(
+            {
+                "tipo": "MaterialCliente",
+                "severidade": "info",
+                "titulo": "Documento marcado como material de cliente",
+                "descricao": "Fluxo fiscal especial habilitado para material de cliente.",
+            }
+        )
+
+    if remessa:
+        pendencias.append(
+            {
+                "tipo": "Remessa",
+                "severidade": "info",
+                "titulo": "Documento marcado como remessa",
+                "descricao": "As regras de codigo material e escrituração especial estao ativas.",
+            }
+        )
+
+    manifestacao = _ultimo_log_manifestacao(numero_nota)
+    if manifestacao and manifestacao.status == "Falha":
+        pendencias.append(
+            {
+                "tipo": "Manifestacao",
+                "severidade": "media",
+                "titulo": "Ultima manifestacao falhou",
+                "descricao": manifestacao.detalhe or "A SEFAZ retornou falha na ultima tentativa de manifestacao.",
+            }
+        )
+
+    estorno = _ultimo_estorno_lancamento(numero_nota)
+    if estorno:
+        pendencias.append(
+            {
+                "tipo": "Estorno",
+                "severidade": "media",
+                "titulo": "Existe historico de estorno",
+                "descricao": estorno.motivo or "Este documento ja passou por estorno fiscal.",
+            }
+        )
+
+    return pendencias
+
+
+def _resumo_documento_entrada(numero_nota: str, itens):
+    numero_nota = str(numero_nota or "").strip()
+    if not itens:
+        return {}
+
+    workflow = _fase_documento_entrada(itens, numero_nota)
+    pendencias = _pendencias_documento_entrada(numero_nota, itens)
+    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
+    manifestacao = _ultimo_log_manifestacao(numero_nota)
+    pedidos = _coletar_pedidos_nota(itens)
+    importado_em = min((item.data_importacao for item in itens if item.data_importacao), default=None)
+    fim_conferencia = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
+    data_lancamento = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
+
+    return {
+        "numero": numero_nota,
+        "fornecedor": itens[0].fornecedor or "---",
+        "status_atual": itens[0].status or "---",
+        "etapa_atual": workflow["atual"],
+        "workflow": workflow["workflow"],
+        "bloqueada": workflow["bloqueada"],
+        "pendencias": pendencias,
+        "motivo_pendencia": pendencias[0]["descricao"] if pendencias else "",
+        "divergencia_status": resumo_divergencia["divergencia_status"],
+        "divergencia_detalhe": resumo_divergencia["detalhe_divergencia"],
+        "pedido_compra": pedidos or "---",
+        "sem_pedido_vinculado": not bool(pedidos),
+        "material_cliente": bool(itens[0].material_cliente),
+        "remessa": bool(itens[0].remessa),
+        "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+        "exige_codigo_material_remessa": bool(itens[0].remessa) and _remessa_exige_codigo_material(itens),
+        "data_importacao": importado_em.strftime("%d/%m/%Y %H:%M") if importado_em else "---",
+        "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M") if fim_conferencia else "---",
+        "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M") if data_lancamento else "---",
+        "conferido_por": next((item.usuario_conferencia for item in itens if item.usuario_conferencia), "---"),
+        "lancado_por": next((item.usuario_lancamento for item in itens if item.usuario_lancamento), "---"),
+        "manifestacao": (
+            {
+                "status": manifestacao.status,
+                "detalhe": manifestacao.detalhe,
+                "tipo": manifestacao.manifestacao,
+                "data": manifestacao.data.strftime("%d/%m/%Y %H:%M") if manifestacao.data else "---",
+            }
+            if manifestacao
+            else None
+        ),
+    }
+
+
+def _coletar_timeline_documento_entrada(numero_nota: str, itens=None):
+    numero_nota = str(numero_nota or "").strip()
+    itens = itens or ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    eventos = []
+
+    if itens:
+        primeiro_import = min((i.data_importacao for i in itens if i.data_importacao), default=None)
+        usuario_importacao = next((i.usuario_importacao for i in itens if i.usuario_importacao), "---")
+        if primeiro_import:
+            eventos.append(
+                {
+                    "data": primeiro_import,
+                    "tipo": "Importacao",
+                    "descricao": f"Documento importado por {usuario_importacao or '---'}.",
+                }
+            )
+
+        auditor_data = max((i.auditor_data for i in itens if i.auditor_data), default=None)
+        auditor_usuario = next((i.auditor_usuario for i in itens if i.auditor_usuario), "---")
+        auditor_decisao = next((str(i.auditor_decisao or "").strip() for i in itens if str(i.auditor_decisao or "").strip()), "")
+        auditor_justificativa = next((str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()), "")
+        if auditor_data:
+            descricao_auditoria = f"Auditoria XML registrada por {auditor_usuario or '---'}."
+            if auditor_decisao:
+                descricao_auditoria += f" Decisao: {auditor_decisao}."
+            if auditor_justificativa:
+                descricao_auditoria += f" Justificativa: {auditor_justificativa}."
+            eventos.append({"data": auditor_data, "tipo": "Auditoria XML", "descricao": descricao_auditoria})
+
+        inicio_conferencia = min((i.inicio_conferencia for i in itens if i.inicio_conferencia), default=None)
+        if inicio_conferencia:
+            eventos.append(
+                {
+                    "data": inicio_conferencia,
+                    "tipo": "Conferencia",
+                    "descricao": "Inicio da conferencia logistica.",
+                }
+            )
+
+        fim_conferencia = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
+        usuario_conferencia = next((i.usuario_conferencia for i in itens if i.usuario_conferencia), "---")
+        if fim_conferencia:
+            eventos.append(
+                {
+                    "data": fim_conferencia,
+                    "tipo": "Conferencia",
+                    "descricao": f"Conferencia finalizada por {usuario_conferencia or '---'}.",
+                }
+            )
+
+        data_lancamento = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
+        usuario_lancamento = next((i.usuario_lancamento for i in itens if i.usuario_lancamento), "---")
+        numero_lancamento = next((str(i.numero_lancamento or "").strip() for i in itens if str(i.numero_lancamento or "").strip()), "")
+        if data_lancamento:
+            eventos.append(
+                {
+                    "data": data_lancamento,
+                    "tipo": "Lancamento",
+                    "descricao": f"Lancamento fiscal gravado por {usuario_lancamento or '---'} ({numero_lancamento or '---'}).",
+                }
+            )
+
+    for log in LogDivergencia.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data_erro,
+                "tipo": "Divergencia",
+                "descricao": f"{log.item_descricao} - usuario {log.usuario_erro or '---'}.",
+            }
+        )
+
+    for log in LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data_reversao,
+                "tipo": "Estorno Conferencia",
+                "descricao": f"{log.usuario_reversao or '---'}: {log.motivo or 'Sem motivo informado'}.",
+            }
+        )
+
+    for log in LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data_estorno,
+                "tipo": "Estorno Lancamento",
+                "descricao": f"{log.usuario_estorno or '---'}: {log.motivo or 'Sem motivo informado'}.",
+            }
+        )
+
+    for log in LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data,
+                "tipo": f"Manifestacao {str(log.manifestacao or '').strip() or 'Fiscal'}",
+                "descricao": f"{log.usuario or '---'}: {log.status or 'Sem status'} - {log.detalhe or 'Sem detalhe'}.",
+            }
+        )
+
+    for log in LogEventoFiscalNota.query.filter_by(numero_nota=numero_nota).all():
+        detalhes = [str(log.evento or "").strip()]
+        if log.etapa:
+            detalhes.append(f"etapa {log.etapa}")
+        if log.status:
+            detalhes.append(f"status {log.status}")
+        if log.detalhe:
+            detalhes.append(log.detalhe)
+        eventos.append(
+            {
+                "data": log.data,
+                "tipo": "Governanca Fiscal",
+                "descricao": " | ".join([parte for parte in detalhes if parte]),
+            }
+        )
+
+    for log in LogExclusaoNota.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data_exclusao,
+                "tipo": "Exclusao",
+                "descricao": f"{log.usuario_exclusao or '---'}: {log.motivo or 'Sem motivo informado'}.",
+            }
+        )
+
+    eventos = [evento for evento in eventos if evento.get("data")]
+    eventos.sort(key=lambda evento: evento["data"])
+    return eventos
+
+
+def _serializar_timeline_documento_entrada(numero_nota: str, itens=None):
+    return [
+        {
+            "data": evento["data"].strftime("%d/%m/%Y %H:%M"),
+            "tipo": evento["tipo"],
+            "descricao": evento["descricao"],
+        }
+        for evento in _coletar_timeline_documento_entrada(numero_nota, itens=itens)
+    ]
+
+
+def _build_documento_entrada_kpis(periodo_dias: int = 30):
+    periodo_dias = max(1, min(int(periodo_dias or 30), 365))
+    limite = datetime.now() - timedelta(days=periodo_dias)
+    notas_map = {}
+
+    for item in ItemNota.query.order_by(ItemNota.numero_nota.asc(), ItemNota.id.asc()).all():
+        numero_nota = str(item.numero_nota or "").strip()
+        if not numero_nota:
+            continue
+        notas_map.setdefault(numero_nota, []).append(item)
+
+    total_notas = 0
+    notas_lancadas = 0
+    notas_com_divergencia = 0
+    notas_falha_manifestacao = 0
+    notas_sem_intervencao = 0
+    horas_importacao_lancamento = []
+    horas_importacao_conferencia = []
+    horas_conferencia_lancamento = []
+    horas_lancamento_manifestacao = []
+    fornecedores_retrabalho = {}
+    usuarios = {}
+
+    for numero_nota, itens in notas_map.items():
+        resumo = _resumo_documento_entrada(numero_nota, itens)
+        timeline = _coletar_timeline_documento_entrada(numero_nota, itens=itens)
+        ultima_data = max((evento["data"] for evento in timeline if evento.get("data")), default=None)
+        if limite and ultima_data and ultima_data < limite:
+            continue
+
+        total_notas += 1
+        fornecedor = str(itens[0].fornecedor or "---").strip() or "---"
+        importado_em = min((item.data_importacao for item in itens if item.data_importacao), default=None)
+        conferido_em = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
+        lancado_em = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
+        log_manifest_ok = _ultimo_log_manifestacao(numero_nota, manifestacao="confirmada")
+        manifestado_em = log_manifest_ok.data if log_manifest_ok and log_manifest_ok.status == "Sucesso" else None
+        possui_divergencia = resumo.get("divergencia_status") == "Com divergencia"
+        possui_falha_manifestacao = any(
+            (str(log.status or "").strip() == "Falha")
+            for log in LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota).all()
+        )
+        possui_recusa_auditoria = any(
+            str(item.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for item in itens
+        )
+        possui_estorno = _ultimo_estorno_lancamento(numero_nota) is not None
+
+        if lancado_em:
+            notas_lancadas += 1
+        if possui_divergencia:
+            notas_com_divergencia += 1
+        if possui_falha_manifestacao:
+            notas_falha_manifestacao += 1
+
+        if lancado_em and not any([possui_divergencia, possui_falha_manifestacao, possui_recusa_auditoria, possui_estorno]):
+            notas_sem_intervencao += 1
+
+        if importado_em and lancado_em:
+            horas_importacao_lancamento.append((lancado_em - importado_em).total_seconds() / 3600)
+        if importado_em and conferido_em:
+            horas_importacao_conferencia.append((conferido_em - importado_em).total_seconds() / 3600)
+        if conferido_em and lancado_em:
+            horas_conferencia_lancamento.append((lancado_em - conferido_em).total_seconds() / 3600)
+        if lancado_em and manifestado_em:
+            horas_lancamento_manifestacao.append((manifestado_em - lancado_em).total_seconds() / 3600)
+
+        ocorrencias_retrabalho = int(possui_divergencia) + int(possui_falha_manifestacao) + int(possui_estorno) + int(possui_recusa_auditoria)
+        if ocorrencias_retrabalho:
+            fornecedores_retrabalho[fornecedor] = fornecedores_retrabalho.get(fornecedor, 0) + ocorrencias_retrabalho
+
+        usuario_lancamento = next((item.usuario_lancamento for item in itens if item.usuario_lancamento), None)
+        if usuario_lancamento and lancado_em:
+            bloco = usuarios.setdefault(
+                usuario_lancamento,
+                {"usuario": usuario_lancamento, "notas_lancadas": 0, "soma_horas_ate_lancamento": 0.0, "notas_com_divergencia": 0},
+            )
+            bloco["notas_lancadas"] += 1
+            bloco["notas_com_divergencia"] += int(possui_divergencia)
+            if importado_em:
+                bloco["soma_horas_ate_lancamento"] += (lancado_em - importado_em).total_seconds() / 3600
+
+    def _media(valores):
+        return round(sum(valores) / len(valores), 2) if valores else 0.0
+
+    produtividade_usuarios = []
+    for bloco in usuarios.values():
+        notas_usuario = max(int(bloco["notas_lancadas"] or 0), 1)
+        produtividade_usuarios.append(
+            {
+                "usuario": bloco["usuario"],
+                "notas_lancadas": bloco["notas_lancadas"],
+                "tempo_medio_horas": round(float(bloco["soma_horas_ate_lancamento"]) / notas_usuario, 2),
+                "notas_com_divergencia": bloco["notas_com_divergencia"],
+            }
+        )
+
+    produtividade_usuarios.sort(key=lambda item: (-item["notas_lancadas"], item["tempo_medio_horas"], item["usuario"]))
+
+    top_fornecedores_retrabalho = [
+        {"fornecedor": fornecedor, "ocorrencias": ocorrencias}
+        for fornecedor, ocorrencias in sorted(
+            fornecedores_retrabalho.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:5]
+    ]
+
+    percentual_divergencia = round((notas_com_divergencia / total_notas) * 100, 1) if total_notas else 0.0
+    percentual_falha_manifestacao = round((notas_falha_manifestacao / notas_lancadas) * 100, 1) if notas_lancadas else 0.0
+    percentual_sem_intervencao = round((notas_sem_intervencao / notas_lancadas) * 100, 1) if notas_lancadas else 0.0
+
+    return {
+        "periodo_dias": periodo_dias,
+        "total_notas": total_notas,
+        "notas_lancadas": notas_lancadas,
+        "tempo_medio_importacao_lancamento_horas": _media(horas_importacao_lancamento),
+        "percentual_sem_intervencao_manual": percentual_sem_intervencao,
+        "percentual_com_divergencia": percentual_divergencia,
+        "percentual_falha_manifestacao": percentual_falha_manifestacao,
+        "tempos_etapas": {
+            "importacao_para_conferencia_horas": _media(horas_importacao_conferencia),
+            "conferencia_para_lancamento_horas": _media(horas_conferencia_lancamento),
+            "lancamento_para_manifestacao_horas": _media(horas_lancamento_manifestacao),
+        },
+        "top_fornecedores_retrabalho": top_fornecedores_retrabalho,
+        "produtividade_usuarios": produtividade_usuarios[:5],
+    }
 
 
 def _consyste_token_configurado_corretamente() -> bool:
@@ -859,7 +1413,129 @@ def _fetch_consyste_document_bytes(chave_acesso, tipo_documento):
     return resp, tipo
 
 
-def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
+def _manifestar_destinatario_legacy(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
+    numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
+    if not numero_resolvido or not itens:
+        return {"sucesso": False, "msg": "NF não encontrada para manifestação.", "status_code": 404}
+
+    log_idempotente = _ultimo_log_manifestacao(numero_resolvido, manifestacao=manifestacao)
+    if log_idempotente and log_idempotente.status == "Sucesso":
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="ManifestacaoIdempotente",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Ignorado",
+            detalhe=f"{descricao_evento} já registrada com sucesso anteriormente.",
+            payload={"manifestacao": manifestacao},
+            commit=True,
+        )
+        return {
+            "sucesso": True,
+            "msg": f"{descricao_evento} já registrada com sucesso anteriormente.",
+            "status_code": 200,
+            "payload": {},
+            "idempotente": True,
+        }
+
+    if not chave_resolvida:
+        detalhe = "NF sem chave de acesso cadastrada para manifestação do destinatário."
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=None,
+                manifestacao=manifestacao,
+                status="Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao},
+        )
+        db.session.commit()
+        return {"sucesso": False, "msg": detalhe, "status_code": 400}
+
+    try:
+        ok, status_code, payload = manifestar_destinatario_consyste(
+            chave_resolvida,
+            manifestacao=manifestacao,
+            justificativa=justificativa,
+        )
+        payload = _normalize_external_payload(payload)
+        detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ."
+        if ok:
+            protocolo_raw = (
+                (payload or {}).get("nProt")
+                or (payload or {}).get("protocolo")
+                or (payload or {}).get("numero_protocolo")
+                or (payload or {}).get("protocol")
+            )
+            if protocolo_raw:
+                detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ. Protocolo: {str(protocolo_raw)[:60]}"
+        else:
+            detalhe = (
+                (payload or {}).get("error")
+                or (payload or {}).get("motivo")
+                or f"Falha ao enviar {descricao_evento.lower()}."
+            )[:500]
+
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=chave_resolvida,
+                manifestacao=manifestacao,
+                status="Sucesso" if ok else "Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Sucesso" if ok else "Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao, "payload": payload},
+        )
+        db.session.commit()
+        return {
+            "sucesso": ok,
+            "msg": detalhe,
+            "status_code": status_code,
+            "payload": payload,
+        }
+    except Exception as exc:
+        detalhe = str(exc)[:500]
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=chave_resolvida,
+                manifestacao=manifestacao,
+                status="Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao},
+        )
+        db.session.commit()
+        return {"sucesso": False, "msg": detalhe, "status_code": 500}
+
     numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
     if not numero_resolvido or not itens:
         return {"sucesso": False, "msg": "NF não encontrada para manifestação.", "status_code": 404}
@@ -4721,9 +5397,154 @@ def resetar_nota_admin():
     return jsonify({"sucesso": False, "msg": "Nota não encontrada"}), 404
 
 
+def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
+    numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
+    if not numero_resolvido or not itens:
+        return {"sucesso": False, "msg": "NF nÃ£o encontrada para manifestaÃ§Ã£o.", "status_code": 404}
+
+    log_idempotente = _ultimo_log_manifestacao(numero_resolvido, manifestacao=manifestacao)
+    if log_idempotente and log_idempotente.status == "Sucesso":
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="ManifestacaoIdempotente",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Ignorado",
+            detalhe=f"{descricao_evento} jÃ¡ registrada com sucesso anteriormente.",
+            payload={"manifestacao": manifestacao},
+            commit=True,
+        )
+        return {
+            "sucesso": True,
+            "msg": f"{descricao_evento} jÃ¡ registrada com sucesso anteriormente.",
+            "status_code": 200,
+            "payload": {},
+            "idempotente": True,
+        }
+
+    if not chave_resolvida:
+        detalhe = "NF sem chave de acesso cadastrada para manifestaÃ§Ã£o do destinatÃ¡rio."
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=None,
+                manifestacao=manifestacao,
+                status="Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao},
+        )
+        db.session.commit()
+        return {"sucesso": False, "msg": detalhe, "status_code": 400}
+
+    try:
+        ok, status_code, payload = manifestar_destinatario_consyste(
+            chave_resolvida,
+            manifestacao=manifestacao,
+            justificativa=justificativa,
+        )
+        payload = _normalize_external_payload(payload)
+        detalhe = f"{descricao_evento} enviada com sucesso Ã  SEFAZ."
+        if ok:
+            protocolo_raw = (
+                (payload or {}).get("nProt")
+                or (payload or {}).get("protocolo")
+                or (payload or {}).get("numero_protocolo")
+                or (payload or {}).get("protocol")
+            )
+            if protocolo_raw:
+                detalhe = f"{descricao_evento} enviada com sucesso Ã  SEFAZ. Protocolo: {str(protocolo_raw)[:60]}"
+        else:
+            detalhe = (
+                (payload or {}).get("error")
+                or (payload or {}).get("motivo")
+                or f"Falha ao enviar {descricao_evento.lower()}."
+            )[:500]
+
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=chave_resolvida,
+                manifestacao=manifestacao,
+                status="Sucesso" if ok else "Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Sucesso" if ok else "Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao, "payload": payload},
+        )
+        db.session.commit()
+        return {
+            "sucesso": ok,
+            "msg": detalhe,
+            "status_code": status_code,
+            "payload": payload,
+        }
+    except Exception as exc:
+        detalhe = str(exc)[:500]
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota=numero_resolvido,
+                chave_acesso=chave_resolvida,
+                manifestacao=manifestacao,
+                status="Falha",
+                detalhe=detalhe,
+                usuario=usuario,
+            )
+        )
+        _registrar_evento_fiscal_nota(
+            numero_resolvido,
+            evento="Manifestacao",
+            usuario=usuario,
+            etapa="Manifestacao",
+            status="Falha",
+            detalhe=detalhe,
+            payload={"manifestacao": manifestacao},
+        )
+        db.session.commit()
+        return {"sucesso": False, "msg": detalhe, "status_code": 500}
+
+
 @api_bp.route("/api/concluidas")
 @roles_required("Fiscal", "Admin")
 def listar_concluidas():
+    notas_db = (
+        db.session.query(ItemNota.numero_nota)
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.fim_conferencia).desc(), ItemNota.numero_nota.desc())
+        .all()
+    )
+    lista = []
+
+    for nota in notas_db:
+        numero_nota = str(nota[0] or "").strip()
+        itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+        itens_concluidos = [item for item in itens_nota if _status_matches(item.status, "concluido")]
+        if not itens_concluidos:
+            continue
+        resumo = _resumo_documento_entrada(numero_nota, itens_nota)
+        resumo["codigo_erp"] = next((item.numero_lancamento for item in itens_nota if item.numero_lancamento), "")
+        resumo["usuario"] = next((item.usuario_lancamento for item in itens_nota if item.usuario_lancamento), "")
+        lista.append(resumo)
+
+    return jsonify(lista)
+
     notas_db = (
         db.session.query(
             ItemNota.numero_nota,
@@ -4761,6 +5582,185 @@ def listar_concluidas():
 @api_bp.route("/api/confirmar_lancamento", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def confirmar_lancamento():
+    payload = confirmar_schema.load(request.json or {})
+    numero_nota = str(payload.get("nota") or "").strip()
+    codigo = str(payload.get("codigo") or "").strip()
+    codigo_material = str(payload.get("codigo_material") or "").strip()
+    codigos_materiais_payload = payload.get("codigos_materiais") or []
+    manifestar_destinatario = bool(payload.get("manifestar_destinatario", True))
+    idempotency_key = str(payload.get("idempotency_key") or "").strip()
+
+    itens_lancados = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").all()
+    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    itens_lancados = [item for item in itens_nota if _status_matches(item.status, "lancado")]
+    if itens_lancados:
+        codigo_existente = next(
+            (str(item.numero_lancamento or "").strip() for item in itens_lancados if str(item.numero_lancamento or "").strip()),
+            "",
+        )
+        if codigo_existente == codigo:
+            return jsonify(
+                {
+                    "sucesso": True,
+                    "idempotente": True,
+                    "msg": "Lançamento fiscal já registrado anteriormente para esta NF.",
+                    "resumo": _resumo_documento_entrada(numero_nota, itens_lancados),
+                }
+            )
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": f"NF já lançada com o identificador {codigo_existente or '---'}.",
+                }
+            ),
+            409,
+        )
+
+    itens_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
+    itens_concluidos = [item for item in itens_nota if _status_matches(item.status, "concluido")]
+    if not itens_concluidos:
+        return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
+
+    eh_material_cliente = bool(itens_concluidos[0].material_cliente)
+    eh_remessa = bool(itens_concluidos[0].remessa)
+    remessa_exige_codigo_material = eh_remessa and _remessa_exige_codigo_material(itens_concluidos)
+
+    if remessa_exige_codigo_material:
+        codigos_por_item = {}
+        for entrada in codigos_materiais_payload:
+            item_id = entrada.get("item_id")
+            codigo_item = str(entrada.get("codigo_material") or "").strip()
+            if not isinstance(item_id, int):
+                continue
+            if not codigo_item:
+                continue
+            codigos_por_item[item_id] = codigo_item[:50]
+
+        itens_sem_codigo = [item.id for item in itens_concluidos if not codigos_por_item.get(item.id)]
+        if itens_sem_codigo:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": "Para NF de remessa de industrialização, informe o código do material para cada item do XML no lançamento.",
+                    }
+                ),
+                400,
+            )
+
+        for item in itens_concluidos:
+            item.codigo = codigos_por_item.get(item.id)
+        db.session.commit()
+    elif eh_material_cliente:
+        if not codigo_material:
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": "Para NF de material de cliente, informe o código do material.",
+                    }
+                ),
+                400,
+            )
+        for item in itens_concluidos:
+            item.codigo = codigo_material[:50]
+        db.session.commit()
+
+    timestamp_lancamento = datetime.now()
+    for item in itens_concluidos:
+        item.status = "Lançado"
+        item.usuario_lancamento = session["username"]
+        item.data_lancamento = timestamp_lancamento
+        item.numero_lancamento = codigo
+    ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").update(
+        {
+            "status": "Lançado",
+            "usuario_lancamento": session["username"],
+            "data_lancamento": timestamp_lancamento,
+            "numero_lancamento": codigo,
+        }
+    )
+    _registrar_evento_fiscal_nota(
+        numero_nota,
+        evento="LancamentoFiscal",
+        usuario=session["username"],
+        etapa="Lancamento",
+        status="Sucesso",
+        detalhe=f"Lançamento fiscal gravado com código ERP {codigo or '---'}.",
+        payload={
+            "codigo": codigo,
+            "manifestar_destinatario": manifestar_destinatario,
+            "idempotency_key": idempotency_key or None,
+            "material_cliente": eh_material_cliente,
+            "remessa": eh_remessa,
+        },
+    )
+    db.session.commit()
+
+    conciliacao_conserto = None
+    try:
+        conciliacao_conserto = ConsertoService.processar_retorno_no_lancamento(
+            numero_nota=numero_nota,
+            usuario=session["username"],
+        )
+    except Exception:
+        db.session.rollback()
+
+    manifestacao_result = None
+    if manifestar_destinatario:
+        manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
+        if not manifestacao_result.get("sucesso"):
+            ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
+                {
+                    "status": "Concluído",
+                    "usuario_lancamento": None,
+                    "data_lancamento": None,
+                    "numero_lancamento": None,
+                }
+            )
+            _registrar_evento_fiscal_nota(
+                numero_nota,
+                evento="LancamentoFiscal",
+                usuario=session["username"],
+                etapa="Lancamento",
+                status="Revertido",
+                detalhe=manifestacao_result.get("msg") or "Falha ao manifestar destinatário após lançamento.",
+                payload={"codigo": codigo, "motivo": "falha_manifestacao"},
+            )
+            db.session.commit()
+            return (
+                jsonify(
+                    {
+                        "sucesso": False,
+                        "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
+                        "manifestacao": manifestacao_result,
+                    }
+                ),
+                manifestacao_result.get("status_code") or 502,
+            )
+
+    evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
+    processamento = _processar_evento_integracao_wms(evento) if evento else {"sucesso": False, "erro": "evento_nao_criado"}
+    itens_atualizados = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+
+    return jsonify(
+        {
+            "sucesso": True,
+            "idempotente": False,
+            "conserto": conciliacao_conserto,
+            "manifestacao": manifestacao_result,
+            "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
+            "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
+            "fila_integracao": {
+                "evento_id": evento.id if evento else None,
+                "status": evento.status if evento else "NaoCriado",
+                "novo_evento": bool(criado),
+            },
+            "resumo": _resumo_documento_entrada(numero_nota, itens_atualizados),
+        }
+    )
+
     payload = confirmar_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
     codigo = payload.get("codigo")
@@ -4889,6 +5889,33 @@ def manifestar_destinatario_fiscal():
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
     possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
+    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
+    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
+    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
+    if not possui_lancamento:
+        return jsonify({"sucesso": False, "msg": "A confirmação da operação só pode ser enviada para NF lançada."}), 409
+
+    resultado = _manifestar_confirmacao_operacao(numero_nota, session["username"])
+    status_http = 200 if resultado.get("sucesso") else (resultado.get("status_code") or 500)
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    return (
+        jsonify(
+            {
+                "sucesso": bool(resultado.get("sucesso")),
+                "msg": resultado.get("msg"),
+                "idempotente": bool(resultado.get("idempotente")),
+                "resumo": _resumo_documento_entrada(numero_nota, itens),
+            }
+        ),
+        status_http,
+    )
+
+    payload = manifestar_destinatario_schema.load(request.json or {})
+    numero_nota = str(payload.get("nota") or "").strip()
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+
+    possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "A confirmação da operação só pode ser enviada para NF lançada."}), 409
 
@@ -4910,6 +5937,77 @@ def processar_fila_integracao_wms():
 @api_bp.route("/api/fiscal/estornar_lancamento", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def estornar_lancamento_fiscal():
+    payload = estorno_lancamento_schema.load(request.json or {})
+    numero_nota = str(payload.get("nota") or "").strip()
+    motivo = _motivo_estorno_composto(
+        payload.get("motivo_padrao"),
+        payload.get("complemento"),
+        payload.get("motivo"),
+    )
+    usuario = session["username"]
+
+    possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
+    if not possui_lancamento:
+        return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
+
+    possui_enderecamento_wms = (
+        ItemWMS.query.filter(
+            ItemWMS.numero_nota == numero_nota,
+            ItemWMS.ativo == True,
+            ItemWMS.localizacao_id.isnot(None),
+        ).first()
+        is not None
+    )
+    if possui_enderecamento_wms:
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": "Não é permitido estornar lançamento fiscal de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
+                }
+            ),
+            409,
+        )
+
+    ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
+        {
+            "status": "Concluído",
+            "numero_lancamento": None,
+            "usuario_lancamento": None,
+            "data_lancamento": None,
+        }
+    )
+    for item in ItemNota.query.filter_by(numero_nota=numero_nota).all():
+        if _status_matches(item.status, "lancado"):
+            item.status = "Concluído"
+            item.numero_lancamento = None
+            item.usuario_lancamento = None
+            item.data_lancamento = None
+
+    db.session.add(
+        LogEstornoLancamento(
+            numero_nota=numero_nota,
+            usuario_estorno=usuario,
+            motivo=motivo,
+        )
+    )
+    _registrar_evento_fiscal_nota(
+        numero_nota,
+        evento="EstornoLancamento",
+        usuario=usuario,
+        etapa="Lancamento",
+        status="Estornado",
+        detalhe=motivo,
+        payload={
+            "motivo_padrao": payload.get("motivo_padrao"),
+            "complemento": payload.get("complemento"),
+        },
+    )
+    db.session.commit()
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    return jsonify({"sucesso": True, "motivo": motivo, "resumo": _resumo_documento_entrada(numero_nota, itens)})
+
     payload = estorno_lancamento_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
     motivo = payload.get("motivo")
@@ -4960,6 +6058,34 @@ def estornar_lancamento_fiscal():
 @api_bp.route("/api/notas_lancadas")
 @roles_required("Fiscal", "Admin")
 def listar_lancadas():
+    notas = (
+        db.session.query(ItemNota.numero_nota)
+        .filter_by(status="Lançado")
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.data_lancamento).desc(), ItemNota.numero_nota.desc())
+        .all()
+    )
+    notas = (
+        db.session.query(ItemNota.numero_nota)
+        .group_by(ItemNota.numero_nota)
+        .order_by(func.max(ItemNota.data_lancamento).desc(), ItemNota.numero_nota.desc())
+        .all()
+    )
+    resposta = []
+    for nota in notas:
+        numero_nota = str(nota[0] or "").strip()
+        itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+        if not any(_status_matches(item.status, "lancado") for item in itens):
+            continue
+        resposta.append(
+            {
+                **_resumo_documento_entrada(numero_nota, itens),
+                "codigo_erp": next((item.numero_lancamento for item in itens if item.numero_lancamento), ""),
+                "usuario": next((item.usuario_lancamento for item in itens if item.usuario_lancamento), ""),
+            }
+        )
+    return jsonify(resposta)
+
     notas = (
         db.session.query(
             ItemNota.numero_nota,
@@ -5136,6 +6262,89 @@ def imprimir_etiqueta():
 @api_bp.route("/api/detalhes_nf/<numero>")
 @roles_required("Fiscal", "Admin")
 def detalhes_nf(numero):
+    numero = str(numero or "").strip()
+    itens = ItemNota.query.filter_by(numero_nota=numero).order_by(ItemNota.id.asc()).all()
+    if itens:
+        pedido = _coletar_pedidos_nota(itens)
+        material_cliente = bool(itens[0].material_cliente)
+        remessa = bool(itens[0].remessa)
+        if pedido and not material_cliente and not remessa:
+            try:
+                _sincronizar_codigo_interno_por_pedido(numero, pedido)
+            except Exception:
+                db.session.rollback()
+            itens = ItemNota.query.filter_by(numero_nota=numero).order_by(ItemNota.id.asc()).all()
+
+    if not itens:
+        return jsonify({"erro": "Nota não encontrada"}), 404
+
+    resumo = _resumo_documento_entrada(numero, itens)
+    ultimo_estorno = _ultimo_estorno_lancamento(numero)
+    ultimo_evento = (
+        LogEventoFiscalNota.query.filter_by(numero_nota=numero)
+        .order_by(LogEventoFiscalNota.data.desc(), LogEventoFiscalNota.id.desc())
+        .first()
+    )
+    return jsonify(
+        {
+            "numero": numero,
+            "fornecedor": itens[0].fornecedor,
+            "valor_total": itens[0].valor_total or "N/A",
+            "impostos": itens[0].valor_imposto or "N/A",
+            "status_atual": resumo.get("status_atual") or "---",
+            "etapa_atual": resumo.get("etapa_atual") or "---",
+            "workflow": resumo.get("workflow") or [],
+            "pendencias": resumo.get("pendencias") or [],
+            "pedido_compra": resumo.get("pedido_compra") or "---",
+            "material_cliente": bool(itens[0].material_cliente),
+            "remessa": bool(itens[0].remessa),
+            "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+            "conferido_por": resumo.get("conferido_por") or "---",
+            "data_importacao": resumo.get("data_importacao") or "---",
+            "data_conferencia": resumo.get("data_conferencia") or "---",
+            "lancado_por": resumo.get("lancado_por") or "---",
+            "data_lancamento": resumo.get("data_lancamento") or "---",
+            "manifestacao": resumo.get("manifestacao"),
+            "documentos_disponiveis": any(str(i.chave_acesso or "").strip() for i in itens),
+            "motivos_estorno_padrao": MOTIVOS_ESTORNO_PADRAO,
+            "ultimo_estorno": (
+                {
+                    "motivo": ultimo_estorno.motivo or "---",
+                    "usuario": ultimo_estorno.usuario_estorno or "---",
+                    "data": ultimo_estorno.data_estorno.strftime("%d/%m/%Y %H:%M") if ultimo_estorno.data_estorno else "---",
+                }
+                if ultimo_estorno
+                else None
+            ),
+            "ultimo_evento_fiscal": (
+                {
+                    "evento": ultimo_evento.evento,
+                    "etapa": ultimo_evento.etapa,
+                    "status": ultimo_evento.status,
+                    "detalhe": ultimo_evento.detalhe,
+                    "usuario": ultimo_evento.usuario,
+                    "data": ultimo_evento.data.strftime("%d/%m/%Y %H:%M") if ultimo_evento.data else "---",
+                }
+                if ultimo_evento
+                else None
+            ),
+            "timeline": _serializar_timeline_documento_entrada(numero, itens=itens),
+            "itens": [
+                {
+                    "id": i.id,
+                    "codigo": i.codigo,
+                    "desc": i.descricao,
+                    "descricao": i.descricao,
+                    "qtd": i.qtd_real,
+                    "unidade": i.unidade_comercial or "UN",
+                    "cfop": i.cfop or "---",
+                    "pedido_compra": i.pedido_compra or "---",
+                }
+                for i in itens
+            ],
+        }
+    )
+
     itens = ItemNota.query.filter_by(numero_nota=numero).all()
     if itens:
         pedido = _coletar_pedidos_nota(itens)
@@ -5293,6 +6502,13 @@ def detalhes_nota_liberada_lancamento(numero):
     )
 
 
+@api_bp.route("/api/fiscal/documento_entrada/kpis")
+@roles_required("Fiscal", "Admin")
+def documento_entrada_kpis():
+    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=1, max_value=365)
+    return jsonify(_build_documento_entrada_kpis(periodo_dias))
+
+
 @api_bp.route("/api/historico_completo")
 @roles_required("Admin")
 def api_historico():
@@ -5318,8 +6534,10 @@ def api_estornos_historico():
 
 
 @api_bp.route("/api/timeline/<nota>")
-@roles_required("Admin")
+@roles_required("Fiscal", "Admin")
 def timeline_nota(nota):
+    return jsonify(_serializar_timeline_documento_entrada(nota))
+
     itens = ItemNota.query.filter_by(numero_nota=nota).all()
     eventos = []
     if itens:
@@ -5973,3 +7191,281 @@ def resumo_acessos_admin():
             "top_rotas": [{"rota": r, "qtd": qtd} for r, qtd in top_rotas_raw],
         }
     )
+
+
+def _build_upload_dashboard_consolidado(periodo_dias: int = 30):
+    agora = datetime.now()
+    corte = agora - timedelta(days=periodo_dias)
+    usuarios: dict[str, dict] = {}
+
+    def _ensure_usuario(usuario: str | None):
+        nome = str(usuario or "").strip()
+        if not nome:
+            return None
+        return usuarios.setdefault(
+            nome,
+            {
+                "usuario": nome,
+                "notas_importadas": 0,
+                "notas_conferidas": 0,
+                "notas_lancadas": 0,
+                "manifestacoes_sucesso": 0,
+                "manifestacoes_falha": 0,
+                "enderecamentos_wms": 0,
+                "movimentacoes_wms": 0,
+                "qtd_movimentada_wms": 0.0,
+                "qtd_armazenada_wms": 0.0,
+                "total_processado": 0,
+            },
+        )
+
+    importacoes = (
+        db.session.query(ItemNota.usuario_importacao, ItemNota.numero_nota)
+        .filter(ItemNota.usuario_importacao.isnot(None), ItemNota.data_importacao >= corte)
+        .group_by(ItemNota.usuario_importacao, ItemNota.numero_nota)
+        .all()
+    )
+    for usuario, numero_nota in importacoes:
+        bloco = _ensure_usuario(usuario)
+        if bloco and str(numero_nota or "").strip():
+            bloco["notas_importadas"] += 1
+
+    conferencias = (
+        db.session.query(ItemNota.usuario_conferencia, ItemNota.numero_nota)
+        .filter(ItemNota.usuario_conferencia.isnot(None), ItemNota.fim_conferencia >= corte)
+        .group_by(ItemNota.usuario_conferencia, ItemNota.numero_nota)
+        .all()
+    )
+    for usuario, numero_nota in conferencias:
+        bloco = _ensure_usuario(usuario)
+        if bloco and str(numero_nota or "").strip():
+            bloco["notas_conferidas"] += 1
+
+    lancamentos = (
+        db.session.query(ItemNota.usuario_lancamento, ItemNota.numero_nota)
+        .filter(ItemNota.usuario_lancamento.isnot(None), ItemNota.data_lancamento >= corte)
+        .group_by(ItemNota.usuario_lancamento, ItemNota.numero_nota)
+        .all()
+    )
+    for usuario, numero_nota in lancamentos:
+        bloco = _ensure_usuario(usuario)
+        if bloco and str(numero_nota or "").strip():
+            bloco["notas_lancadas"] += 1
+
+    manifest_logs = (
+        LogManifestacaoDestinatario.query.filter(LogManifestacaoDestinatario.data >= corte)
+        .order_by(LogManifestacaoDestinatario.data.asc(), LogManifestacaoDestinatario.id.asc())
+        .all()
+    )
+    manifestacoes_usuario_nota: dict[tuple[str, str], dict] = {}
+    manifestacao_nota_mais_recente: dict[str, dict] = {}
+    for log in manifest_logs:
+        numero_nota = str(log.numero_nota or "").strip()
+        usuario = str(log.usuario or "").strip()
+        status = str(log.status or "").strip() or "Falha"
+        tipo = str(log.manifestacao or "").strip() or "confirmada"
+        if numero_nota:
+            manifestacao_nota_mais_recente[numero_nota] = {
+                "status": status,
+                "manifestacao": tipo,
+                "usuario": usuario,
+            }
+        if not numero_nota or not usuario:
+            continue
+        bloco = manifestacoes_usuario_nota.setdefault(
+            (usuario, numero_nota),
+            {"sucesso": False, "falha": False},
+        )
+        if status.lower() == "sucesso":
+            bloco["sucesso"] = True
+        else:
+            bloco["falha"] = True
+
+    for (usuario, _numero_nota), status_info in manifestacoes_usuario_nota.items():
+        bloco = _ensure_usuario(usuario)
+        if not bloco:
+            continue
+        if status_info["sucesso"]:
+            bloco["manifestacoes_sucesso"] += 1
+        elif status_info["falha"]:
+            bloco["manifestacoes_falha"] += 1
+
+    enderecamentos_wms = (
+        db.session.query(
+            ItemWMS.usuario_armazenamento,
+            func.count(ItemWMS.id),
+            func.coalesce(func.sum(ItemWMS.qtd_recebida), 0.0),
+        )
+        .filter(ItemWMS.usuario_armazenamento.isnot(None), ItemWMS.data_armazenamento >= corte)
+        .group_by(ItemWMS.usuario_armazenamento)
+        .all()
+    )
+    for usuario, quantidade, saldo in enderecamentos_wms:
+        bloco = _ensure_usuario(usuario)
+        if not bloco:
+            continue
+        bloco["enderecamentos_wms"] += int(quantidade or 0)
+        bloco["qtd_armazenada_wms"] += float(saldo or 0.0)
+
+    movimentacoes_wms = (
+        db.session.query(
+            MovimentacaoWMS.usuario,
+            func.count(MovimentacaoWMS.id),
+            func.coalesce(func.sum(MovimentacaoWMS.qtd_movimentada), 0.0),
+        )
+        .filter(MovimentacaoWMS.data_movimentacao >= corte)
+        .group_by(MovimentacaoWMS.usuario)
+        .all()
+    )
+    for usuario, quantidade, saldo in movimentacoes_wms:
+        bloco = _ensure_usuario(usuario)
+        if not bloco:
+            continue
+        bloco["movimentacoes_wms"] += int(quantidade or 0)
+        bloco["qtd_movimentada_wms"] += float(saldo or 0.0)
+
+    for bloco in usuarios.values():
+        bloco["total_processado"] = (
+            int(bloco["notas_importadas"])
+            + int(bloco["notas_conferidas"])
+            + int(bloco["notas_lancadas"])
+            + int(bloco["manifestacoes_sucesso"])
+            + int(bloco["manifestacoes_falha"])
+            + int(bloco["enderecamentos_wms"])
+            + int(bloco["movimentacoes_wms"])
+        )
+
+    usuarios_ordenados = sorted(
+        usuarios.values(),
+        key=lambda item: (
+            -int(item["total_processado"]),
+            -int(item["notas_conferidas"]),
+            -int(item["movimentacoes_wms"]),
+            item["usuario"],
+        ),
+    )
+
+    divergencias_periodo = LogDivergencia.query.filter(LogDivergencia.data_erro >= corte).all()
+    notas_com_divergencia = {str(log.numero_nota or "").strip() for log in divergencias_periodo if str(log.numero_nota or "").strip()}
+
+    notas_importadas = {str(numero_nota or "").strip() for _usuario, numero_nota in importacoes if str(numero_nota or "").strip()}
+    notas_conferidas = {str(numero_nota or "").strip() for _usuario, numero_nota in conferencias if str(numero_nota or "").strip()}
+    notas_lancadas = {str(numero_nota or "").strip() for _usuario, numero_nota in lancamentos if str(numero_nota or "").strip()}
+
+    manifestacoes_tipo = {}
+    manifestacoes_sucesso = 0
+    manifestacoes_falha = 0
+    for registro in manifestacao_nota_mais_recente.values():
+        tipo = registro["manifestacao"]
+        bloco = manifestacoes_tipo.setdefault(tipo, {"manifestacao": tipo, "sucesso": 0, "falha": 0})
+        if str(registro["status"]).lower() == "sucesso":
+            bloco["sucesso"] += 1
+            manifestacoes_sucesso += 1
+        else:
+            bloco["falha"] += 1
+            manifestacoes_falha += 1
+
+    itens_wms_ativos = ItemWMS.query.filter_by(ativo=True).count()
+    itens_wms_sem_endereco = ItemWMS.query.filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None)).count()
+    notas_wms_sem_endereco = (
+        db.session.query(func.count(func.distinct(ItemWMS.numero_nota)))
+        .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None))
+        .scalar()
+        or 0
+    )
+    saldo_wms_total = (
+        db.session.query(func.coalesce(func.sum(ItemWMS.qtd_atual), 0.0))
+        .filter(ItemWMS.ativo == True)
+        .scalar()
+        or 0.0
+    )
+    wms_integracoes_pendentes = (
+        WMSIntegracaoEvento.query.filter(WMSIntegracaoEvento.status.in_(["Pendente", "Processando"])).count()
+    )
+    wms_integracoes_falha = (
+        WMSIntegracaoEvento.query.filter(WMSIntegracaoEvento.status.in_(["Falha", "DeadLetter"])).count()
+    )
+    operadores_wms = [
+        {
+            "usuario": item["usuario"],
+            "enderecamentos_wms": int(item["enderecamentos_wms"]),
+            "movimentacoes_wms": int(item["movimentacoes_wms"]),
+            "qtd_movimentada_wms": round(float(item["qtd_movimentada_wms"]), 2),
+            "qtd_armazenada_wms": round(float(item["qtd_armazenada_wms"]), 2),
+        }
+        for item in usuarios_ordenados
+        if int(item["enderecamentos_wms"]) or int(item["movimentacoes_wms"])
+    ][:8]
+
+    return {
+        "periodo_dias": periodo_dias,
+        "totais": {
+            "notas_importadas": len(notas_importadas),
+            "notas_conferidas": len(notas_conferidas),
+            "notas_lancadas": len(notas_lancadas),
+            "manifestacoes_sucesso": manifestacoes_sucesso,
+            "manifestacoes_falha": manifestacoes_falha,
+            "manifestacoes_pendentes": max(len(notas_lancadas) - manifestacoes_sucesso, 0),
+            "divergencias_periodo": len(divergencias_periodo),
+            "notas_com_divergencia": len(notas_com_divergencia),
+            "enderecamentos_wms": sum(int(item["enderecamentos_wms"]) for item in usuarios_ordenados),
+            "movimentacoes_wms": sum(int(item["movimentacoes_wms"]) for item in usuarios_ordenados),
+            "usuarios_ativos": len([item for item in usuarios_ordenados if int(item["total_processado"]) > 0]),
+        },
+        "manifestacao": {
+            "sucesso": manifestacoes_sucesso,
+            "falha": manifestacoes_falha,
+            "pendentes": max(len(notas_lancadas) - manifestacoes_sucesso, 0),
+            "tipos": sorted(
+                manifestacoes_tipo.values(),
+                key=lambda item: (-(int(item["sucesso"]) + int(item["falha"])), item["manifestacao"]),
+            ),
+        },
+        "conferencia": {
+            "notas_conferidas": len(notas_conferidas),
+            "divergencias": len(divergencias_periodo),
+            "notas_com_divergencia": len(notas_com_divergencia),
+            "por_usuario": [
+                {
+                    "usuario": item["usuario"],
+                    "notas_conferidas": int(item["notas_conferidas"]),
+                    "notas_lancadas": int(item["notas_lancadas"]),
+                }
+                for item in usuarios_ordenados
+                if int(item["notas_conferidas"]) or int(item["notas_lancadas"])
+            ][:8],
+        },
+        "wms": {
+            "itens_ativos": int(itens_wms_ativos),
+            "itens_sem_endereco": int(itens_wms_sem_endereco),
+            "notas_sem_endereco": int(notas_wms_sem_endereco),
+            "saldo_total": round(float(saldo_wms_total), 2),
+            "integracoes_pendentes": int(wms_integracoes_pendentes),
+            "integracoes_falha": int(wms_integracoes_falha),
+            "enderecamentos_periodo": sum(int(item["enderecamentos_wms"]) for item in usuarios_ordenados),
+            "movimentacoes_periodo": sum(int(item["movimentacoes_wms"]) for item in usuarios_ordenados),
+            "top_operadores": operadores_wms,
+        },
+        "por_usuario": [
+            {
+                **item,
+                "qtd_movimentada_wms": round(float(item["qtd_movimentada_wms"]), 2),
+                "qtd_armazenada_wms": round(float(item["qtd_armazenada_wms"]), 2),
+            }
+            for item in usuarios_ordenados
+        ],
+    }
+
+
+@api_bp.route("/api/upload/dashboard_consolidado")
+@permission_required("PAGE_UPLOAD")
+def upload_dashboard_consolidado():
+    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
+    return jsonify(_build_upload_dashboard_consolidado(periodo_dias))
+
+
+@api_bp.route("/api/admin/dashboard_consolidado")
+@permission_required("PAGE_ADMIN_DASHBOARD")
+def admin_dashboard_consolidado():
+    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
+    return jsonify(_build_upload_dashboard_consolidado(periodo_dias))

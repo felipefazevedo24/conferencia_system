@@ -1,8 +1,9 @@
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import ItemNota, ItemWMS, WMSIntegracaoEvento
+from conferencia_app.models import DepositoWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSIntegracaoEvento
 
 
 def build_test_app(tmp_path):
@@ -314,3 +315,80 @@ def test_transferencia_com_deposito_e_endereco_destino(tmp_path):
         assert atualizado.deposito_id == dep_ch['id']
         assert atualizado.localizacao_id == loc_destino.get_json()['id']
         assert atualizado.status == 'Armazenado'
+
+
+def test_wms_cockpit_operacional_e_pendencia_priorizada(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        deposito_al = DepositoWMS.query.filter_by(codigo='AL').first()
+        assert deposito_al is not None
+
+        localizacao = LocalizacaoArmazem(
+            codigo='AL-01-01-01',
+            deposito_id=deposito_al.id,
+            rua='01',
+            predio='01',
+            nivel='01',
+            apartamento='',
+            corredor='C1',
+            prateleira='P1',
+            posicao='1',
+            capacidade_maxima=100.0,
+            capacidade_atual=92.0,
+            ativo=True,
+        )
+        db.session.add(localizacao)
+        db.session.add(
+            ItemNota(
+                numero_nota='WMS500',
+                fornecedor='Fornecedor Cockpit',
+                codigo='SKU-500',
+                descricao='Item critico',
+                qtd_real=60.0,
+                status='Lançado',
+            )
+        )
+        item = ItemWMS(
+            numero_nota='WMS500',
+            codigo_item='SKU-500',
+            descricao='Item critico',
+            qtd_recebida=60.0,
+            qtd_atual=60.0,
+            status='Pendente Enderecamento',
+            deposito_id=deposito_al.id,
+            origem_estoque_inicial=True,
+            ativo=True,
+            data_criacao=datetime.now() - timedelta(hours=30),
+        )
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item.id,
+                numero_nota='WMS500',
+                tipo_movimentacao='Recebimento',
+                qtd_movimentada=12.0,
+                usuario='admin',
+                data_movimentacao=datetime.now() - timedelta(hours=1),
+            )
+        )
+        db.session.commit()
+
+    pendentes = client.get('/api/wms/pendentes-enderecamento?nota=WMS500')
+    assert pendentes.status_code == 200
+    payload = pendentes.get_json()
+    assert len(payload) == 1
+    assert payload[0]['prioridade_operacional'] == 'Critica'
+    assert payload[0]['idade_horas'] >= 29
+    assert payload[0]['deposito_codigo'] == 'AL'
+
+    cockpit = client.get('/api/wms/cockpit')
+    assert cockpit.status_code == 200
+    dados = cockpit.get_json()
+    assert dados['cards']['pendentes_enderecamento'] >= 1
+    assert dados['cards']['movimentacoes_24h'] >= 1
+    assert dados['prioridades']['Critica'] >= 1
+    assert any(n['numero_nota'] == 'WMS500' for n in dados['notas_pendentes'])

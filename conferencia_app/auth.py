@@ -40,7 +40,7 @@ PERMISSION_CATALOG = {
     "PAGE_ADMIN_ACESSOS": "Administracao > Auditoria de acessos",
     "PAGE_ADMIN_WMS_ENDERECOS": "Administracao > Cadastro de enderecos WMS",
     "PAGE_ADMIN_WMS_GOVERNANCA": "Administracao > Governanca WMS",
-        "PAGE_CONSERTO": "Conserto > Central de Conserto",
+        "PAGE_CONSERTO": "Estoque > Meu em poder de terceiros",
 }
 
 BASE_ROLE_PERMISSIONS = {

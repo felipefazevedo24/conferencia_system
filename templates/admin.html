@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Central de Integração | ERP FAM{% endblock %}
+{% block title %}Pre-Nota | Captura de Documentos{% endblock %}
 
 {% block extra_head %}
     <style>
@@ -187,6 +187,343 @@
             border-color: #0a6ed1;
             box-shadow: 0 8px 18px rgba(10, 110, 209, 0.25);
         }
+
+        .mgmt-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin-bottom: 18px;
+            box-shadow: var(--card-shadow);
+        }
+        .mgmt-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 800;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .mgmt-subtitle {
+            margin: 5px 0 0;
+            font-size: 12px;
+            color: #556b82;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+        .mgmt-toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .mgmt-select {
+            min-width: 120px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            font-size: 12px;
+            font-weight: 700;
+            background: #fff;
+            color: #334155;
+        }
+        .mgmt-last-update {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+        }
+        .mgmt-alert {
+            display: none;
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid transparent;
+            background: #fff;
+            box-shadow: var(--card-shadow);
+        }
+        .mgmt-alert.show { display: block; }
+        .mgmt-alert.info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+        .mgmt-alert.error { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+        .mgmt-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .mgmt-kpi-card {
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: var(--card-shadow);
+        }
+        .mgmt-kpi-label {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #64748b;
+            font-weight: 800;
+        }
+        .mgmt-kpi-value {
+            display: block;
+            margin-top: 10px;
+            font-size: 26px;
+            line-height: 1;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .mgmt-kpi-foot {
+            display: block;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .mgmt-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+        .mgmt-grid.triple {
+            grid-template-columns: 1.05fr 0.95fr 0.9fr;
+        }
+        .mgmt-card {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            padding: 20px;
+        }
+        .mgmt-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .mgmt-card-title {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 800;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .mgmt-card-kicker {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+        }
+        .mgmt-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .mgmt-badge.blue { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .mgmt-badge.green { background: #ecfdf5; color: #166534; border: 1px solid #bbf7d0; }
+        .mgmt-badge.orange { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+        .mgmt-badge.red { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+        .mgmt-badge.gray { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+        .mgmt-list {
+            display: grid;
+            gap: 10px;
+        }
+        .mgmt-list-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+        .mgmt-list-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .mgmt-list-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+        .mgmt-list-text {
+            font-size: 11px;
+            color: #64748b;
+            line-height: 1.5;
+            font-weight: 700;
+        }
+        .mgmt-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .mgmt-mini-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+        .mgmt-mini-card label {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 800;
+            margin-bottom: 5px;
+            letter-spacing: 0.6px;
+        }
+        .mgmt-mini-card strong {
+            font-size: 18px;
+            color: #0f172a;
+            font-weight: 800;
+        }
+        .mgmt-mini-card span {
+            display: block;
+            margin-top: 5px;
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .mgmt-table-shell {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+        .mgmt-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .mgmt-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8fafc;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: #64748b;
+            font-weight: 800;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .mgmt-table td {
+            padding: 12px;
+            font-size: 11px;
+            color: #1e293b;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: top;
+            font-weight: 700;
+        }
+        .mgmt-table tr:last-child td { border-bottom: none; }
+        .mgmt-empty {
+            padding: 24px;
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: 700;
+        }
+        .mgmt-chart-wrap {
+            position: relative;
+            min-height: 280px;
+        }
+        .mgmt-insights {
+            display: grid;
+            gap: 10px;
+        }
+        .mgmt-insight {
+            border-left: 4px solid var(--sap-blue);
+            background: #f8fbff;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #334155;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+        .mgmt-insight.warn { border-left-color: var(--warning-erp); background: #fff9eb; }
+        .mgmt-insight.danger { border-left-color: var(--danger-erp); background: #fff4f4; }
+        .mgmt-insight.success { border-left-color: var(--success-erp); background: #f2fbf5; }
+        .page-session {
+            margin-bottom: 24px;
+        }
+        .page-session-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .page-session-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #0a6ed1;
+        }
+        .page-session-title {
+            margin: 4px 0 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .page-session-subtitle {
+            margin: 6px 0 0;
+            max-width: 780px;
+            font-size: 12px;
+            line-height: 1.6;
+            font-weight: 600;
+            color: #64748b;
+        }
+        .page-session-divider {
+            height: 1px;
+            margin: 0 0 16px;
+            background: linear-gradient(90deg, rgba(10, 110, 209, 0.22), rgba(203, 213, 225, 0.32));
+        }
+        @media (max-width: 1180px) {
+            .mgmt-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .mgmt-grid, .mgmt-grid.triple { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 760px) {
+            .mgmt-kpi-grid,
+            .mgmt-mini-grid,
+            .stats-header,
+            .upload-grid {
+                grid-template-columns: 1fr;
+            }
+            .mgmt-toolbar {
+                align-items: flex-start;
+            }
+            .mgmt-toolbar-actions {
+                width: 100%;
+            }
+            .mgmt-select {
+                width: 100%;
+            }
+        }
     </style>
 {% endblock %}
 
@@ -202,8 +539,209 @@
 
     <div class="page-header-erp">
         <i class="fas fa-microchip"></i>
-        <h2>Engine de Captura e Processamento de Documentos</h2>
+        <h2>Pre-Nota e Tratativas Administrativas</h2>
     </div>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-chart-pie"></i> Dashboard</span>
+                <h3 class="page-session-title">Visao executiva no topo</h3>
+                <p class="page-session-subtitle">Os graficos e indicadores ficam concentrados aqui em cima, separados por sessoes para leitura mais rapida do processo, risco, produtividade e governanca.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
+
+        <div class="mgmt-toolbar">
+            <div>
+                <h3 class="mgmt-title">Cockpit Executivo de Operacoes</h3>
+                <p class="mgmt-subtitle">
+                    Consolide recebimento, fiscal, WMS, expedicao e governanca em uma unica visao de prioridade, risco e produtividade.
+                </p>
+            </div>
+            <div class="mgmt-toolbar-actions">
+                <select id="mgmt-period" class="mgmt-select" aria-label="Janela do painel gerencial" onchange="carregarPainelGerencial(true)">
+                    <option value="7">Ultimos 7 dias</option>
+                    <option value="15">Ultimos 15 dias</option>
+                    <option value="30" selected>Ultimos 30 dias</option>
+                    <option value="60">Ultimos 60 dias</option>
+                </select>
+                <button class="btn-sap btn-primary-sap" type="button" onclick="carregarPainelGerencial(true)">
+                    <i class="fas fa-chart-line"></i> Atualizar Cockpit
+                </button>
+                <span id="mgmt-last-update" class="mgmt-last-update">Aguardando carga inicial...</span>
+            </div>
+        </div>
+
+        <div id="mgmt-alert" class="mgmt-alert info"></div>
+
+        <div id="mgmt-kpis" class="mgmt-kpi-grid">
+            <div class="mgmt-kpi-card">
+                <span class="mgmt-kpi-label">Notas lancadas</span>
+                <span class="mgmt-kpi-value">--</span>
+                <span class="mgmt-kpi-foot">Carregando indicadores do processo fiscal.</span>
+            </div>
+            <div class="mgmt-kpi-card">
+                <span class="mgmt-kpi-label">Fila de excecao</span>
+                <span class="mgmt-kpi-value">--</span>
+                <span class="mgmt-kpi-foot">Mapeando notas em risco e pendencias criticas.</span>
+            </div>
+            <div class="mgmt-kpi-card">
+                <span class="mgmt-kpi-label">WMS pendente</span>
+                <span class="mgmt-kpi-value">--</span>
+                <span class="mgmt-kpi-foot">Buscando saldo sem endereco e alertas operacionais.</span>
+            </div>
+            <div class="mgmt-kpi-card">
+                <span class="mgmt-kpi-label">Expedicao aberta</span>
+                <span class="mgmt-kpi-value">--</span>
+                <span class="mgmt-kpi-foot">Consolidando expedicao e atividade administrativa.</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-project-diagram"></i> Sessao 1</span>
+                <h3 class="page-session-title">Processo e fila de excecoes</h3>
+                <p class="page-session-subtitle">Leitura consolidada do fluxo de recebimento, produtividade do time e mapa das etapas mais sensiveis.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
+
+        <div class="mgmt-grid">
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Consolidado Geral</div>
+                        <h3 class="mgmt-card-title">Processamento, Manifestacao e WMS</h3>
+                    </div>
+                    <span id="mgmt-global-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-consolidado-geral">
+                    <div class="mgmt-empty">Carregando totais consolidados...</div>
+                </div>
+            </section>
+
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Produtividade do Time</div>
+                        <h3 class="mgmt-card-title">Processado por Usuario</h3>
+                    </div>
+                    <span id="mgmt-users-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-usuarios">
+                    <div class="mgmt-empty">Carregando resumo por usuario...</div>
+                </div>
+            </section>
+        </div>
+
+        <div class="mgmt-grid">
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Recebimento e Documento de Entrada</div>
+                        <h3 class="mgmt-card-title">Mapa do Processo e Fila de Excecao</h3>
+                    </div>
+                    <span id="mgmt-process-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-processo" class="mgmt-chart-wrap">
+                    <div class="mgmt-empty">Carregando fluxo operacional...</div>
+                </div>
+            </section>
+
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Risco e Prioridade</div>
+                        <h3 class="mgmt-card-title">Termometro Gerencial</h3>
+                    </div>
+                    <span id="mgmt-risk-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-risco-resumo" class="mgmt-mini-grid">
+                    <div class="mgmt-mini-card">
+                        <label>Pendencias criticas</label>
+                        <strong>--</strong>
+                        <span>Levantando SLA do processo.</span>
+                    </div>
+                    <div class="mgmt-mini-card">
+                        <label>Notas em risco</label>
+                        <strong>--</strong>
+                        <span>Calculando filas proximas do limite.</span>
+                    </div>
+                </div>
+                <div id="mgmt-risco-lista" class="mgmt-list" style="margin-top:14px;">
+                    <div class="mgmt-empty">Carregando riscos e alertas...</div>
+                </div>
+                <div id="mgmt-insights" class="mgmt-insights" style="margin-top:14px;">
+                    <div class="mgmt-insight">O painel executivo vai destacar gargalos, tendencias e sinais de atencao automaticamente.</div>
+                </div>
+            </section>
+        </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-shield-alt"></i> Sessao 2</span>
+                <h3 class="page-session-title">Governanca, WMS e saida</h3>
+                <p class="page-session-subtitle">Separacao visual para os paines de estoque, fiscal, expedicao e controles administrativos na mesma pagina.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
+
+        <div class="mgmt-grid triple">
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Operacao de Estoque</div>
+                        <h3 class="mgmt-card-title">Snapshot WMS</h3>
+                    </div>
+                    <span id="mgmt-wms-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-wms">
+                    <div class="mgmt-empty">Carregando dados de WMS...</div>
+                </div>
+            </section>
+
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Fiscal, Faturamento e Expedicao</div>
+                        <h3 class="mgmt-card-title">Performance e Saida</h3>
+                    </div>
+                    <span id="mgmt-flow-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-fiscal-expedicao">
+                    <div class="mgmt-empty">Carregando performance fiscal e expedicao...</div>
+                </div>
+            </section>
+
+            <section class="mgmt-card">
+                <div class="mgmt-card-head">
+                    <div>
+                        <div class="mgmt-card-kicker">Governanca e Aprovacoes</div>
+                        <h3 class="mgmt-card-title">Controles Administrativos</h3>
+                    </div>
+                    <span id="mgmt-gov-badge" class="mgmt-badge gray">Aguardando dados</span>
+                </div>
+                <div id="mgmt-governanca">
+                    <div class="mgmt-empty">Carregando visoes gerenciais e aprovacoes...</div>
+                </div>
+            </section>
+        </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-inbox"></i> Sessao 3</span>
+                <h3 class="page-session-title">Captura operacional da pre-nota</h3>
+                <p class="page-session-subtitle">Os recursos operacionais continuam na mesma pagina, mas separados em blocos para ficar mais claro onde importar e processar documentos.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
 
     <div class="upload-grid">
         <div class="card-sap">
@@ -236,7 +774,7 @@
         </div>
 
         <div class="card-sap">
-            <h3><i class="fas fa-file-upload"></i> Repositório Local</h3>
+            <h3><i class="fas fa-file-upload"></i> Repositorio Local de XML</h3>
             <div class="file-drop-area" id="drop-area">
                 <i class="fas fa-file-code" style="font-size: 40px; color: var(--sap-blue); opacity: 0.5;"></i>
                 <span class="file-msg" id="file-name">Deposite os arquivos XML ou clique para explorar</span>
@@ -248,6 +786,17 @@
             <div id="status"></div>
         </div>
     </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-link"></i> Sessao 4</span>
+                <h3 class="page-session-title">Integracao com auditor XML</h3>
+                <p class="page-session-subtitle">Bloco dedicado para acompanhar notas aguardando liberacao e abrir o auditor integrado sem sair da mesma pagina.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
 
     <div class="card-sap" style="margin-top:25px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -276,6 +825,17 @@
             </table>
         </div>
     </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-undo-alt"></i> Sessao 5</span>
+                <h3 class="page-session-title">Solicitacoes de devolucao total</h3>
+                <p class="page-session-subtitle">Aprovacoes administrativas separadas para o time decidir rapido o que deve voltar integralmente.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
 
     <div class="card-sap" style="margin-top:25px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -302,6 +862,17 @@
             </table>
         </div>
     </div>
+    </section>
+
+    <section class="page-session">
+        <div class="page-session-head">
+            <div>
+                <span class="page-session-kicker"><i class="fas fa-trash-alt"></i> Sessao 6</span>
+                <h3 class="page-session-title">Zona de exclusao de pendencias</h3>
+                <p class="page-session-subtitle">Area isolada para saneamento manual, mantendo a acao critica separada do restante do fluxo.</p>
+            </div>
+        </div>
+        <div class="page-session-divider"></div>
 
     <div class="card-sap card-danger" style="margin-top:25px;">
         <h3><i class="fas fa-eraser"></i> Zona de Exclusão de Pendências</h3>
@@ -346,6 +917,7 @@
             </table>
         </div>
     </div>
+    </section>
     
     <a href="/admin" class="voltar-link"><i class="fas fa-arrow-left"></i> Painel de Controle Principal</a>
 </div>
@@ -397,6 +969,11 @@
 <script>
     const statusBox = document.getElementById('consyste-status');
     let documentosModal = [];
+    const mgmtState = {
+        pendentesExclusao: [],
+        solicitacoesDevolucao: [],
+        aguardandoLiberacao: [],
+    };
 
     function selecionarModeloConsyste(modelo, buttonEl) {
         const inputModelo = document.getElementById('consyste-modelo');
@@ -421,6 +998,941 @@
         if (contentType.includes('application/json')) return await res.json();
         const raw = await res.text();
         return { error: raw ? raw.slice(0, 200) : `HTTP ${res.status}` };
+    }
+
+    async function safeFetchJson(url) {
+        try {
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            const data = await parseResponseSafe(res);
+            return {
+                ok: res.ok,
+                status: res.status,
+                data,
+                error: data?.error || data?.msg || `HTTP ${res.status}`,
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                status: 0,
+                data: null,
+                error: 'Falha de comunicacao com o servidor.',
+            };
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatNumber(value, decimals = 0) {
+        const num = Number(value ?? 0);
+        if (!Number.isFinite(num)) return '--';
+        return num.toLocaleString('pt-BR', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+    }
+
+    function formatPercent(value, decimals = 1) {
+        const num = Number(value ?? 0);
+        if (!Number.isFinite(num)) return '--';
+        return `${formatNumber(num, decimals)}%`;
+    }
+
+    function formatHours(value) {
+        const num = Number(value ?? 0);
+        if (!Number.isFinite(num)) return '--';
+        if (num < 24) return `${formatNumber(num, num % 1 ? 1 : 0)}h`;
+        const dias = Math.floor(num / 24);
+        const horas = Math.round(num % 24);
+        return `${dias}d ${horas}h`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '---';
+        const raw = String(value);
+        if (raw.includes('/')) return escapeHtml(raw);
+        const dt = new Date(raw);
+        if (Number.isNaN(dt.getTime())) return escapeHtml(raw);
+        return dt.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    }
+
+    function renderMgmtEmpty(message) {
+        return `<div class="mgmt-empty">${escapeHtml(message)}</div>`;
+    }
+
+    function setMgmtBadge(elementId, label, tone = 'gray') {
+        const badge = document.getElementById(elementId);
+        if (!badge) return;
+        badge.className = `mgmt-badge ${tone}`;
+        badge.textContent = label;
+    }
+
+    function showMgmtAlert(message = '', type = 'info') {
+        const alertBox = document.getElementById('mgmt-alert');
+        if (!alertBox) return;
+        if (!message) {
+            alertBox.className = 'mgmt-alert info';
+            alertBox.textContent = '';
+            return;
+        }
+        alertBox.className = `mgmt-alert ${type} show`;
+        alertBox.textContent = message;
+    }
+
+    function toneFromScore(score) {
+        const num = Number(score ?? 0);
+        if (num >= 55) return 'red';
+        if (num >= 20) return 'orange';
+        if (num > 0) return 'blue';
+        return 'green';
+    }
+
+    function toneFromPercentValue(value) {
+        const num = Number(value ?? 0);
+        if (num >= 90) return 'red';
+        if (num >= 75) return 'orange';
+        return 'green';
+    }
+
+    function renderMgmtKpis(payload = {}) {
+        const processo = payload.processo || {};
+        const sla = payload.sla || {};
+        const fiscal = payload.fiscal || {};
+        const consolidado = payload.consolidado || {};
+        const totais = consolidado.totais || {};
+        const wms = payload.wms || {};
+        const expedicao = payload.expedicao || {};
+        const acessos = payload.acessos || {};
+        const aguardando = Array.isArray(payload.aguardandoLiberacao) ? payload.aguardandoLiberacao : [];
+        const devolucoes = Array.isArray(payload.solicitacoesDevolucao) ? payload.solicitacoesDevolucao : [];
+
+        const cards = [
+            {
+                label: 'Notas importadas',
+                value: formatNumber(totais.notas_importadas ?? 0),
+                foot: `Janela ${consolidado.periodo_dias || processo.janela_dias || fiscal.periodo_dias || '--'} dias`,
+            },
+            {
+                label: 'NF conferidas',
+                value: formatNumber(totais.notas_conferidas ?? 0),
+                foot: `${formatNumber(totais.notas_com_divergencia ?? 0)} com divergencia no periodo`,
+            },
+            {
+                label: 'Notas lancadas',
+                value: formatNumber(totais.notas_lancadas ?? processo.kpis?.notas_lancadas_periodo ?? fiscal.notas_lancadas ?? 0),
+                foot: `${formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? fiscal.percentual_sem_intervencao_manual ?? 0)} sem intervencao`,
+            },
+            {
+                label: 'Manifestacao OK',
+                value: formatNumber(totais.manifestacoes_sucesso ?? 0),
+                foot: `${formatNumber(totais.manifestacoes_pendentes ?? 0)} pendente(s) de manifestacao`,
+            },
+            {
+                label: 'Fila de excecao',
+                value: formatNumber(processo.kpis?.fila_excecao_total ?? 0),
+                foot: `${formatNumber(sla.resumo?.notas_em_risco ?? 0)} nota(s) em risco de SLA`,
+            },
+            {
+                label: 'Pendencias criticas',
+                value: formatNumber((sla.resumo?.pendentes_criticos ?? 0) + (sla.resumo?.fiscal_criticos ?? 0)),
+                foot: `${formatNumber(totais.manifestacoes_falha ?? 0)} falha(s) de manifestacao e ${formatNumber(totais.divergencias_periodo ?? 0)} divergencia(s)`,
+            },
+            {
+                label: 'WMS pendente',
+                value: formatNumber(wms.cards?.pendentes_enderecamento ?? consolidado.wms?.itens_sem_endereco ?? 0),
+                foot: `${formatNumber(consolidado.wms?.movimentacoes_periodo ?? 0)} movimentacao(oes) WMS no periodo`,
+            },
+            {
+                label: 'Governanca ativa',
+                value: formatNumber(acessos.total_24h ?? 0),
+                foot: `${formatNumber(aguardando.length)} aguardando liberacao e ${formatNumber(devolucoes.length)} devolucao(oes)`,
+            },
+        ];
+
+        const el = document.getElementById('mgmt-kpis');
+        if (!el) return;
+        el.innerHTML = cards.map((card) => `
+            <div class="mgmt-kpi-card">
+                <span class="mgmt-kpi-label">${escapeHtml(card.label)}</span>
+                <span class="mgmt-kpi-value">${escapeHtml(card.value)}</span>
+                <span class="mgmt-kpi-foot">${escapeHtml(card.foot)}</span>
+            </div>
+        `).join('');
+    }
+
+    function renderMgmtConsolidado(consolidado) {
+        const el = document.getElementById('mgmt-consolidado-geral');
+        if (!el) return;
+        if (!consolidado || !consolidado.totais) {
+            setMgmtBadge('mgmt-global-badge', 'Sem consolidado', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar os totais gerais do painel.');
+            return;
+        }
+
+        const totais = consolidado.totais || {};
+        const manifestacao = consolidado.manifestacao || {};
+        const conferencia = consolidado.conferencia || {};
+        const wms = consolidado.wms || {};
+        const indicadores = [
+            { label: 'Notas importadas', value: formatNumber(totais.notas_importadas ?? 0), foot: 'Entradas capturadas no periodo' },
+            { label: 'NF conferidas', value: formatNumber(totais.notas_conferidas ?? 0), foot: `${formatNumber(conferencia.notas_com_divergencia ?? 0)} com divergencia` },
+            { label: 'Notas lancadas', value: formatNumber(totais.notas_lancadas ?? 0), foot: 'Notas concluidas no fiscal' },
+            { label: 'Manifestacao OK', value: formatNumber(manifestacao.sucesso ?? 0), foot: `${formatNumber(manifestacao.pendentes ?? 0)} ainda pendente(s)` },
+            { label: 'Manifestacao falha', value: formatNumber(manifestacao.falha ?? 0), foot: 'Ultimo status com erro no periodo' },
+            { label: 'Enderecamentos WMS', value: formatNumber(wms.enderecamentos_periodo ?? 0), foot: `${formatNumber(wms.movimentacoes_periodo ?? 0)} movimentacao(oes)` },
+            { label: 'Itens ativos WMS', value: formatNumber(wms.itens_ativos ?? 0), foot: `${formatNumber(wms.itens_sem_endereco ?? 0)} sem endereco` },
+            { label: 'Usuarios ativos', value: formatNumber(totais.usuarios_ativos ?? 0), foot: 'Usuarios com producao registrada' },
+        ];
+
+        const manifestacoesTipos = Array.isArray(manifestacao.tipos) ? manifestacao.tipos : [];
+        const topConferencia = Array.isArray(conferencia.por_usuario) ? conferencia.por_usuario : [];
+        const wmsOperadores = Array.isArray(wms.top_operadores) ? wms.top_operadores : [];
+
+        setMgmtBadge(
+            'mgmt-global-badge',
+            `${formatNumber(totais.usuarios_ativos ?? 0)} usuario(s) ativos`,
+            (totais.manifestacoes_falha ?? 0) > 0 || (totais.divergencias_periodo ?? 0) > 0 ? 'orange' : 'green'
+        );
+
+        el.innerHTML = `
+            <div class="mgmt-mini-grid">
+                ${indicadores.map((item) => `
+                    <div class="mgmt-mini-card">
+                        <label>${escapeHtml(item.label)}</label>
+                        <strong>${escapeHtml(item.value)}</strong>
+                        <span>${escapeHtml(item.foot)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Manifestacao do destinatario</div>
+            <div class="mgmt-list">
+                ${manifestacoesTipos.length ? manifestacoesTipos.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.manifestacao || 'confirmada')}</span>
+                            <span class="mgmt-badge ${Number(item.falha || 0) > 0 ? 'orange' : 'green'}">${escapeHtml(formatNumber((item.sucesso || 0) + (item.falha || 0)))} NF(s)</span>
+                        </div>
+                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.sucesso || 0))} sucesso(s) e ${escapeHtml(formatNumber(item.falha || 0))} falha(s) considerando o ultimo status por NF.</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Sem manifestacoes registradas no periodo.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Conferencia e operadores do WMS</div>
+            <div class="mgmt-list">
+                ${(topConferencia.length || wmsOperadores.length) ? `
+                    ${topConferencia.length ? topConferencia.slice(0, 3).map((item) => `
+                        <div class="mgmt-list-item">
+                            <div class="mgmt-list-head">
+                                <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
+                                <span class="mgmt-badge blue">${escapeHtml(formatNumber(item.notas_conferidas || 0))} conferida(s)</span>
+                            </div>
+                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.notas_lancadas || 0))} nota(s) lancada(s) apos conferencia.</div>
+                        </div>
+                    `).join('') : ''}
+                    ${wmsOperadores.length ? wmsOperadores.slice(0, 3).map((item) => `
+                        <div class="mgmt-list-item">
+                            <div class="mgmt-list-head">
+                                <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
+                                <span class="mgmt-badge ${Number(item.movimentacoes_wms || 0) > 0 ? 'green' : 'gray'}">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} acao(oes)</span>
+                            </div>
+                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentacao(oes), ${escapeHtml(formatNumber(item.qtd_movimentada_wms || 0, 2))} movimentada(s).</div>
+                        </div>
+                    `).join('') : ''}
+                ` : renderMgmtEmpty('Sem producao por usuario disponivel para conferencia ou WMS.')}
+            </div>
+        `;
+    }
+
+    function renderMgmtUsuarios(consolidado) {
+        const el = document.getElementById('mgmt-usuarios');
+        if (!el) return;
+        const usuarios = Array.isArray(consolidado?.por_usuario) ? consolidado.por_usuario : [];
+        if (!usuarios.length) {
+            setMgmtBadge('mgmt-users-badge', 'Sem usuarios ativos', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nenhuma produtividade por usuario encontrada no periodo.');
+            return;
+        }
+
+        setMgmtBadge(
+            'mgmt-users-badge',
+            `${formatNumber(usuarios.length)} usuario(s)`,
+            usuarios.length >= 5 ? 'blue' : 'green'
+        );
+
+        el.innerHTML = `
+            <div class="mgmt-table-shell">
+                <table class="mgmt-table">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Import</th>
+                            <th>Conf</th>
+                            <th>Lanc</th>
+                            <th>Manifest</th>
+                            <th>WMS</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${usuarios.slice(0, 10).map((item) => `
+                            <tr>
+                                <td>
+                                    <div style="font-size:12px; font-weight:800;">${escapeHtml(item.usuario || '---')}</div>
+                                    <div style="font-size:10px; color:#64748b;">${escapeHtml(formatNumber(item.qtd_armazenada_wms || 0, 2))} armazenada(s) | ${escapeHtml(formatNumber(item.qtd_movimentada_wms || 0, 2))} movimentada(s)</div>
+                                </td>
+                                <td>${escapeHtml(formatNumber(item.notas_importadas || 0))}</td>
+                                <td>${escapeHtml(formatNumber(item.notas_conferidas || 0))}</td>
+                                <td>${escapeHtml(formatNumber(item.notas_lancadas || 0))}</td>
+                                <td>
+                                    <div>${escapeHtml(formatNumber(item.manifestacoes_sucesso || 0))} ok</div>
+                                    <div style="font-size:10px; color:#64748b;">${escapeHtml(formatNumber(item.manifestacoes_falha || 0))} falha</div>
+                                </td>
+                                <td>
+                                    <div>${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} end.</div>
+                                    <div style="font-size:10px; color:#64748b;">${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} mov.</div>
+                                </td>
+                                <td><span class="mgmt-badge ${Number(item.total_processado || 0) >= 10 ? 'green' : 'blue'}">${escapeHtml(formatNumber(item.total_processado || 0))}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderMgmtProcesso(processo) {
+        const el = document.getElementById('mgmt-processo');
+        if (!el) return;
+        if (!processo || !processo.etapas) {
+            setMgmtBadge('mgmt-process-badge', 'Sem visao do processo', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar o mapa do processo agora.');
+            return;
+        }
+
+        const stages = [
+            { key: 'pre_nota', label: 'Pre-nota', color: '#1d4ed8' },
+            { key: 'auditoria_pendente', label: 'Auditoria pendente', color: '#ea580c' },
+            { key: 'conferencia', label: 'Conferencia', color: '#0f766e' },
+            { key: 'documento_entrada', label: 'Documento de entrada', color: '#7c3aed' },
+            { key: 'finalizado', label: 'Finalizado', color: '#166534' },
+            { key: 'outros', label: 'Outros', color: '#64748b' },
+        ];
+        const total = stages.reduce((acc, stage) => acc + Number(processo.etapas?.[stage.key] ?? 0), 0);
+        const fila = Array.isArray(processo.fila_excecao) ? processo.fila_excecao : [];
+        const filaTotal = Number(processo.kpis?.fila_excecao_total ?? fila.length);
+
+        setMgmtBadge(
+            'mgmt-process-badge',
+            filaTotal ? `${formatNumber(filaTotal)} em excecao` : 'Fluxo estavel',
+            filaTotal ? (filaTotal > 8 ? 'red' : 'orange') : 'green'
+        );
+
+        const stagesHtml = stages.map((stage) => {
+            const value = Number(processo.etapas?.[stage.key] ?? 0);
+            const width = total > 0 && value > 0 ? Math.max((value / total) * 100, 6) : 0;
+            return `
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                        <span class="mgmt-list-title">${escapeHtml(stage.label)}</span>
+                        <span class="mgmt-list-text">${formatNumber(value)} nota(s)</span>
+                    </div>
+                    <div style="height:10px; border-radius:999px; overflow:hidden; background:#e2e8f0;">
+                        <div style="height:100%; width:${width}%; background:${stage.color}; border-radius:999px;"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const filaHtml = fila.length ? `
+            <div class="mgmt-table-shell" style="margin-top:16px;">
+                <table class="mgmt-table">
+                    <thead>
+                        <tr>
+                            <th>Nota</th>
+                            <th>Etapa</th>
+                            <th>Horas</th>
+                            <th>Motivos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${fila.slice(0, 6).map((item) => `
+                            <tr>
+                                <td>
+                                    <div style="font-size:12px; font-weight:800;">${escapeHtml(item.nota || '---')}</div>
+                                    <div style="font-size:10px; color:#64748b;">${escapeHtml(item.fornecedor || '---')}</div>
+                                </td>
+                                <td>
+                                    <div>${escapeHtml(item.etapa || item.status || '---')}</div>
+                                    <div style="margin-top:6px;"><span class="mgmt-badge ${toneFromScore(item.score)}">Score ${escapeHtml(formatNumber(item.score || 0))}</span></div>
+                                </td>
+                                <td>${escapeHtml(formatHours(item.horas_em_fila || 0))}</td>
+                                <td style="line-height:1.5;">${escapeHtml((item.motivos || []).join(' | ') || 'Sem motivo informado')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : renderMgmtEmpty('Nenhuma nota na fila de excecao dentro da janela selecionada.');
+
+        el.innerHTML = `
+            <div>
+                ${stagesHtml}
+                <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px;">
+                    <span class="mgmt-badge blue">Janela ${escapeHtml(formatNumber(processo.janela_dias || 0))} dias</span>
+                    <span class="mgmt-badge green">${escapeHtml(formatNumber(processo.kpis?.notas_lancadas_sem_divergencia ?? 0))} sem divergencia</span>
+                    <span class="mgmt-badge orange">${escapeHtml(formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? 0))} sem intervencao</span>
+                </div>
+                <div class="mgmt-card-kicker" style="margin-top:18px;">Fila priorizada por score operacional</div>
+                ${filaHtml}
+            </div>
+        `;
+    }
+
+    function renderMgmtRisco(sla) {
+        const resumoEl = document.getElementById('mgmt-risco-resumo');
+        const listaEl = document.getElementById('mgmt-risco-lista');
+        if (!resumoEl || !listaEl) return;
+        if (!sla || !sla.resumo) {
+            setMgmtBadge('mgmt-risk-badge', 'Sem SLA consolidado', 'gray');
+            resumoEl.innerHTML = renderMgmtEmpty('Nao foi possivel carregar os indicadores de SLA.');
+            listaEl.innerHTML = renderMgmtEmpty('Sem lista de risco disponivel.');
+            return;
+        }
+
+        const resumo = sla.resumo || {};
+        const criticos = Number(resumo.pendentes_criticos ?? 0) + Number(resumo.fiscal_criticos ?? 0);
+        setMgmtBadge(
+            'mgmt-risk-badge',
+            criticos ? `${formatNumber(criticos)} critico(s)` : 'Sob controle',
+            criticos ? 'red' : (Number(resumo.notas_em_risco ?? 0) ? 'orange' : 'green')
+        );
+
+        const riskCards = [
+            {
+                label: 'Pendencias criticas',
+                value: formatNumber(resumo.pendentes_criticos ?? 0),
+                foot: `Limite de conferencia: ${formatNumber(resumo.pendente_horas ?? 0)}h`,
+            },
+            {
+                label: 'Fiscal critico',
+                value: formatNumber(resumo.fiscal_criticos ?? 0),
+                foot: `Limite do fiscal: ${formatNumber(resumo.fiscal_horas ?? 0)}h`,
+            },
+            {
+                label: 'Notas em risco',
+                value: formatNumber(resumo.notas_em_risco ?? 0),
+                foot: 'Atencao preventiva antes do estouro de SLA',
+            },
+            {
+                label: 'Fornecedores criticos',
+                value: formatNumber((sla.fornecedores_criticos || []).length),
+                foot: 'Ranking por recorrencia de retrabalho',
+            },
+        ];
+        resumoEl.innerHTML = riskCards.map((card) => `
+            <div class="mgmt-mini-card">
+                <label>${escapeHtml(card.label)}</label>
+                <strong>${escapeHtml(card.value)}</strong>
+                <span>${escapeHtml(card.foot)}</span>
+            </div>
+        `).join('');
+
+        const risks = [
+            ...(Array.isArray(sla.pendentes) ? sla.pendentes.slice(0, 3).map((item) => ({
+                titulo: `NF ${item.nota || '---'}`,
+                detalhe: `${item.fornecedor || '---'} parada ha ${formatHours(item.horas || 0)} em conferencia`,
+                tone: 'red',
+            })) : []),
+            ...(Array.isArray(sla.fiscal) ? sla.fiscal.slice(0, 3).map((item) => ({
+                titulo: `NF ${item.nota || '---'}`,
+                detalhe: `${item.fornecedor || '---'} ha ${formatHours(item.horas || 0)} aguardando fiscal`,
+                tone: 'orange',
+            })) : []),
+            ...(Array.isArray(sla.em_risco) ? sla.em_risco.slice(0, 3).map((item) => ({
+                titulo: `NF ${item.nota || '---'}`,
+                detalhe: `${item.fornecedor || '---'} com ${formatHours(item.horas || 0)} na fase ${item.fase || '---'}`,
+                tone: 'blue',
+            })) : []),
+        ];
+
+        listaEl.innerHTML = risks.length ? risks.map((item) => `
+            <div class="mgmt-list-item">
+                <div class="mgmt-list-head">
+                    <span class="mgmt-list-title">${escapeHtml(item.titulo)}</span>
+                    <span class="mgmt-badge ${item.tone}">${escapeHtml(item.tone === 'red' ? 'Critico' : item.tone === 'orange' ? 'Atencao' : 'Monitorar')}</span>
+                </div>
+                <div class="mgmt-list-text">${escapeHtml(item.detalhe)}</div>
+            </div>
+        `).join('') : renderMgmtEmpty('Nenhuma nota critica ou em risco no momento.');
+    }
+
+    function renderMgmtInsights(payload = {}) {
+        const el = document.getElementById('mgmt-insights');
+        if (!el) return;
+
+        const consolidado = payload.consolidado || {};
+        const sla = payload.sla || {};
+        const wms = payload.wms || {};
+        const fiscal = payload.fiscal || {};
+        const expedicao = payload.expedicao || {};
+        const processo = payload.processo || {};
+        const aguardando = Array.isArray(payload.aguardandoLiberacao) ? payload.aguardandoLiberacao : [];
+        const devolucoes = Array.isArray(payload.solicitacoesDevolucao) ? payload.solicitacoesDevolucao : [];
+
+        const insights = [];
+        const fornecedorCritico = Array.isArray(sla.fornecedores_criticos) ? sla.fornecedores_criticos[0] : null;
+        if (fornecedorCritico) {
+            insights.push({
+                tone: 'warn',
+                text: `${fornecedorCritico.fornecedor || 'Fornecedor'} lidera o retrabalho recente com ${formatNumber(fornecedorCritico.divergencias || 0)} divergencia(s) em ${formatNumber(fornecedorCritico.notas_impactadas || 0)} nota(s).`,
+            });
+        }
+
+        const depositoCritico = Array.isArray(wms.ocupacao_por_deposito)
+            ? [...wms.ocupacao_por_deposito].sort((a, b) => Number(b.ocupacao_percentual || 0) - Number(a.ocupacao_percentual || 0))[0]
+            : null;
+        if (depositoCritico && Number(depositoCritico.ocupacao_percentual || 0) >= 90) {
+            insights.push({
+                tone: 'danger',
+                text: `Deposito ${depositoCritico.deposito_codigo || depositoCritico.deposito_nome || '---'} esta com ${formatPercent(depositoCritico.ocupacao_percentual || 0, 0)} de ocupacao e exige acao no slotting.`,
+            });
+        }
+
+        if (Number(expedicao.itens_divergentes ?? 0) > 0) {
+            insights.push({
+                tone: 'warn',
+                text: `Expedicao possui ${formatNumber(expedicao.itens_divergentes || 0)} item(ns) divergente(s) e ${formatNumber(expedicao.pendente_decisao || 0)} conferencia(s) aguardando decisao.`,
+            });
+        }
+
+        if (Number(fiscal.percentual_sem_intervencao_manual ?? 0) >= 80 && Number(processo.kpis?.fila_excecao_total ?? 0) <= 5) {
+            insights.push({
+                tone: 'success',
+                text: `Documento de entrada com ${formatPercent(fiscal.percentual_sem_intervencao_manual || 0)} de lancamento sem intervencao manual e fila de excecao sob controle.`,
+            });
+        }
+
+        if (aguardando.length > 0) {
+            insights.push({
+                tone: aguardando.length >= 5 ? 'danger' : 'warn',
+                text: `${formatNumber(aguardando.length)} NF(s) seguem aguardando liberacao no auditor e precisam de destravamento para o fluxo avancar.`,
+            });
+        }
+
+        if (devolucoes.length > 0) {
+            insights.push({
+                tone: 'warn',
+                text: `${formatNumber(devolucoes.length)} solicitacao(oes) de devolucao total aguardam decisao administrativa.`,
+            });
+        }
+
+        if (Number(consolidado.totais?.manifestacoes_falha ?? 0) > 0) {
+            insights.push({
+                tone: 'danger',
+                text: `${formatNumber(consolidado.totais?.manifestacoes_falha ?? 0)} NF(s) ficaram com manifestacao falha no periodo e merecem reprocesso.`,
+            });
+        }
+
+        const topUsuario = Array.isArray(consolidado.por_usuario) ? consolidado.por_usuario[0] : null;
+        if (topUsuario && Number(topUsuario.total_processado || 0) > 0) {
+            insights.push({
+                tone: 'success',
+                text: `${topUsuario.usuario || 'Usuario'} lidera o processamento do periodo com ${formatNumber(topUsuario.total_processado || 0)} acao(oes) consolidadas.`,
+            });
+        }
+
+        if (!insights.length) {
+            insights.push({
+                tone: 'success',
+                text: 'Sem gargalos relevantes detectados na leitura consolidada do cockpit neste momento.',
+            });
+        }
+
+        el.innerHTML = insights.slice(0, 5).map((insight) => `
+            <div class="mgmt-insight ${escapeHtml(insight.tone)}">${escapeHtml(insight.text)}</div>
+        `).join('');
+    }
+
+    function renderMgmtWms(wms, wmsResumo = {}) {
+        const el = document.getElementById('mgmt-wms');
+        if (!el) return;
+        if (!wms || !wms.cards) {
+            setMgmtBadge('mgmt-wms-badge', 'Sem visao WMS', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar o cockpit de WMS.');
+            return;
+        }
+
+        const cards = wms.cards || {};
+        const pendencias = Number(cards.pendentes_enderecamento ?? 0);
+        const alertas = Number(cards.alertas_abertos ?? 0) + Number(cards.divergencias_abertas ?? 0);
+        setMgmtBadge(
+            'mgmt-wms-badge',
+            alertas ? `${formatNumber(alertas)} alerta(s)` : 'Operacao estavel',
+            alertas ? 'red' : (pendencias ? 'orange' : 'green')
+        );
+
+        const prioridades = wms.prioridades || {};
+        const ocupacao = Array.isArray(wms.ocupacao_por_deposito) ? wms.ocupacao_por_deposito : [];
+        const notas = Array.isArray(wms.notas_pendentes) ? wms.notas_pendentes : [];
+        const operadores = Array.isArray(wmsResumo.top_operadores) ? wmsResumo.top_operadores : [];
+
+        const priorityText = `Critica ${formatNumber(prioridades.Critica ?? 0)} | Alta ${formatNumber(prioridades.Alta ?? 0)} | Media ${formatNumber(prioridades.Media ?? 0)} | Baixa ${formatNumber(prioridades.Baixa ?? 0)}`;
+
+        el.innerHTML = `
+            <div class="mgmt-mini-grid">
+                <div class="mgmt-mini-card">
+                    <label>Pendentes de endereco</label>
+                    <strong>${escapeHtml(formatNumber(cards.pendentes_enderecamento ?? 0))}</strong>
+                    <span>${escapeHtml(priorityText)}</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Itens enderecados</label>
+                    <strong>${escapeHtml(formatNumber(cards.itens_enderecados ?? 0))}</strong>
+                    <span>Saldo enderecado: ${escapeHtml(formatNumber(cards.saldo_enderecado ?? 0, 2))}</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Movimentacoes 24h</label>
+                    <strong>${escapeHtml(formatNumber(cards.movimentacoes_24h ?? 0))}</strong>
+                    <span>Idade media pendente: ${escapeHtml(formatHours(cards.idade_media_pendente_horas ?? 0))}</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Alertas e divergencias</label>
+                    <strong>${escapeHtml(formatNumber(alertas))}</strong>
+                    <span>${escapeHtml(formatNumber(cards.alertas_abertos ?? 0))} alertas e ${escapeHtml(formatNumber(cards.divergencias_abertas ?? 0))} divergencias</span>
+                </div>
+            </div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Capacidade por deposito</div>
+            <div class="mgmt-list">
+                ${ocupacao.length ? ocupacao.slice(0, 4).map((dep) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(dep.deposito_codigo || dep.deposito_nome || '---')}</span>
+                            <span class="mgmt-badge ${toneFromPercentValue(dep.ocupacao_percentual)}">${escapeHtml(formatPercent(dep.ocupacao_percentual || 0, 0))}</span>
+                        </div>
+                        <div class="mgmt-list-text">Ocupado ${escapeHtml(formatNumber(dep.capacidade_ocupada || 0, 2))} / ${escapeHtml(formatNumber(dep.capacidade_total || 0, 2))} com ${escapeHtml(formatNumber(dep.localizacoes_criticas || 0))} localizacao(oes) critica(s).</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Nenhum deposito ativo encontrado.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Notas aguardando enderecamento</div>
+            <div class="mgmt-list">
+                ${notas.length ? notas.slice(0, 4).map((nota) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">NF ${escapeHtml(nota.numero_nota || '---')}</span>
+                            <span class="mgmt-badge blue">${escapeHtml(formatNumber(nota.linhas || 0))} linha(s)</span>
+                        </div>
+                        <div class="mgmt-list-text">Saldo ${escapeHtml(formatNumber(nota.qtd_total || 0, 2))} | Ultima entrada ${formatDateTime(nota.ultima_entrada)}</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Nenhuma nota aguardando enderecamento no momento.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Operadores e integracoes do WMS</div>
+            <div class="mgmt-list">
+                <div class="mgmt-list-item">
+                    <div class="mgmt-list-head">
+                        <span class="mgmt-list-title">Integracao WMS</span>
+                        <span class="mgmt-badge ${Number(wmsResumo.integracoes_falha || 0) > 0 ? 'red' : 'blue'}">${escapeHtml(formatNumber(wmsResumo.integracoes_pendentes || 0))} pendente(s)</span>
+                    </div>
+                    <div class="mgmt-list-text">${escapeHtml(formatNumber(wmsResumo.integracoes_falha || 0))} falha(s), ${escapeHtml(formatNumber(wmsResumo.itens_ativos || 0))} item(ns) ativo(s), ${escapeHtml(formatNumber(wmsResumo.notas_sem_endereco || 0))} NF(s) sem endereco.</div>
+                </div>
+                ${operadores.length ? operadores.slice(0, 3).map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
+                            <span class="mgmt-badge green">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} acao(oes)</span>
+                        </div>
+                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentacao(oes), saldo ${escapeHtml(formatNumber(item.qtd_armazenada_wms || 0, 2))}.</div>
+                    </div>
+                `).join('') : ''}
+            </div>
+        `;
+    }
+
+    function renderMgmtFiscalExpedicao(fiscal, expedicao, consolidado = null) {
+        const el = document.getElementById('mgmt-fiscal-expedicao');
+        if (!el) return;
+        if (!fiscal && !expedicao) {
+            setMgmtBadge('mgmt-flow-badge', 'Sem performance consolidada', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar fiscal e expedicao.');
+            return;
+        }
+
+        const divergencias = Number(fiscal?.percentual_com_divergencia ?? 0);
+        const pendenteDecisao = Number(expedicao?.pendente_decisao ?? 0);
+        setMgmtBadge(
+            'mgmt-flow-badge',
+            divergencias > 15 || pendenteDecisao > 0 ? 'Atencao na saida' : 'Performance estavel',
+            divergencias > 15 ? 'red' : ((divergencias > 0 || pendenteDecisao > 0) ? 'orange' : 'green')
+        );
+
+        const fornecedores = Array.isArray(fiscal?.top_fornecedores_retrabalho) ? fiscal.top_fornecedores_retrabalho : [];
+        const clientes = Array.isArray(expedicao?.top_clientes) ? expedicao.top_clientes : [];
+        const produtividade = Array.isArray(fiscal?.produtividade_usuarios) ? fiscal.produtividade_usuarios : [];
+        const manifestacao = consolidado?.manifestacao || {};
+        const conferencia = consolidado?.conferencia || {};
+
+        el.innerHTML = `
+            <div class="mgmt-mini-grid">
+                <div class="mgmt-mini-card">
+                    <label>Total de notas</label>
+                    <strong>${escapeHtml(formatNumber(fiscal?.total_notas ?? 0))}</strong>
+                    <span>${escapeHtml(formatNumber(fiscal?.notas_lancadas ?? 0))} lancadas no periodo</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Lead time fiscal</label>
+                    <strong>${escapeHtml(formatHours(fiscal?.tempo_medio_importacao_lancamento_horas ?? 0))}</strong>
+                    <span>Importacao ate lancamento</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Manifestacao</label>
+                    <strong>${escapeHtml(formatNumber(manifestacao.sucesso ?? 0))}</strong>
+                    <span>${escapeHtml(formatNumber(manifestacao.pendentes ?? 0))} pendente(s) | ${escapeHtml(formatNumber(manifestacao.falha ?? 0))} falha(s)</span>
+                </div>
+                <div class="mgmt-mini-card">
+                    <label>Expedicoes abertas</label>
+                    <strong>${escapeHtml(formatNumber(expedicao?.abertas ?? 0))}</strong>
+                    <span>${escapeHtml(formatNumber(expedicao?.itens_divergentes ?? 0))} item(ns) divergente(s) | ${escapeHtml(formatNumber(conferencia.notas_conferidas ?? 0))} NF conferida(s)</span>
+                </div>
+            </div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Fornecedores com mais retrabalho</div>
+            <div class="mgmt-list">
+                ${fornecedores.length ? fornecedores.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.fornecedor || '---')}</span>
+                            <span class="mgmt-badge orange">${escapeHtml(formatNumber(item.ocorrencias || 0))} ocorrencia(s)</span>
+                        </div>
+                        <div class="mgmt-list-text">Ranking fiscal por divergencia, falha de manifestacao, estorno ou recusa.</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Nenhum fornecedor com retrabalho relevante no periodo.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Clientes com maior volume faturado</div>
+            <div class="mgmt-list">
+                ${clientes.length ? clientes.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.cliente || '---')}</span>
+                            <span class="mgmt-badge blue">${escapeHtml(formatNumber(item.qtd_faturada || 0))}</span>
+                        </div>
+                        <div class="mgmt-list-text">Volume faturado consolidado na expedicao.</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Sem clientes com volume faturado para exibir.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Produtividade do time fiscal</div>
+            <div class="mgmt-list">
+                ${produtividade.length ? produtividade.slice(0, 4).map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
+                            <span class="mgmt-badge green">${escapeHtml(formatNumber(item.notas_lancadas || 0))} nota(s)</span>
+                        </div>
+                        <div class="mgmt-list-text">Tempo medio ${escapeHtml(formatHours(item.tempo_medio_horas || 0))} | ${escapeHtml(formatNumber(item.notas_com_divergencia || 0))} com divergencia</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Sem produtividade fiscal disponivel para o periodo.')}
+            </div>
+        `;
+    }
+
+    function renderMgmtGovernanca(acessos, aguardandoLiberacao, solicitacoesDevolucao, pendentesExclusao) {
+        const el = document.getElementById('mgmt-governanca');
+        if (!el) return;
+
+        const aguardando = Array.isArray(aguardandoLiberacao) ? aguardandoLiberacao : [];
+        const devolucoes = Array.isArray(solicitacoesDevolucao) ? solicitacoesDevolucao : [];
+        const pendentes = Array.isArray(pendentesExclusao) ? pendentesExclusao : [];
+        const totalPendencias = aguardando.length + devolucoes.length + pendentes.length;
+
+        setMgmtBadge(
+            'mgmt-gov-badge',
+            totalPendencias ? `${formatNumber(totalPendencias)} pendencia(s)` : 'Sem fila administrativa',
+            totalPendencias ? (totalPendencias >= 8 ? 'red' : 'orange') : 'green'
+        );
+
+        const topUsuarios = Array.isArray(acessos?.top_usuarios) ? acessos.top_usuarios : [];
+        const topRotas = Array.isArray(acessos?.top_rotas) ? acessos.top_rotas : [];
+        const cards = [
+            {
+                label: 'Aguardando liberacao',
+                value: formatNumber(aguardando.length),
+                foot: 'Notas presas na integracao pre-nota x auditor',
+            },
+            {
+                label: 'Devolucoes pendentes',
+                value: formatNumber(devolucoes.length),
+                foot: 'Solicitacoes aguardando aprovacao administrativa',
+            },
+            {
+                label: 'Fila de exclusao',
+                value: formatNumber(pendentes.length),
+                foot: 'Pendencias ainda nao saneadas ou removidas',
+            },
+            {
+                label: 'Acessos administrativos',
+                value: formatNumber(acessos?.total_24h ?? 0),
+                foot: `${formatNumber(acessos?.total_7d ?? 0)} acessos nos ultimos 7 dias`,
+            },
+        ];
+        const pendenciasConsolidadas = [
+            ...aguardando.slice(0, 2).map((item) => ({
+                titulo: `NF ${item.numero || '---'}`,
+                detalhe: `${item.fornecedor || '---'} aguardando liberacao no auditor`,
+                badge: 'Liberacao',
+                tone: 'orange',
+            })),
+            ...devolucoes.slice(0, 2).map((item) => ({
+                titulo: `NF ${item.numero || '---'}`,
+                detalhe: `${item.fornecedor || '---'} solicitada por ${item.solicitante || '---'}`,
+                badge: 'Devolucao',
+                tone: 'red',
+            })),
+            ...pendentes.slice(0, 2).map((item) => ({
+                titulo: `NF ${item.numero || '---'}`,
+                detalhe: `${item.fornecedor || '---'} pronta para saneamento ou exclusao`,
+                badge: 'Pendencia',
+                tone: 'gray',
+            })),
+        ];
+
+        el.innerHTML = `
+            <div class="mgmt-mini-grid">
+                ${cards.map((card) => `
+                    <div class="mgmt-mini-card">
+                        <label>${escapeHtml(card.label)}</label>
+                        <strong>${escapeHtml(card.value)}</strong>
+                        <span>${escapeHtml(card.foot)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Usuarios mais ativos</div>
+            <div class="mgmt-list">
+                ${topUsuarios.length ? topUsuarios.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
+                            <span class="mgmt-badge blue">${escapeHtml(formatNumber(item.qtd || 0))} acesso(s)</span>
+                        </div>
+                        <div class="mgmt-list-text">Atividade registrada na camada administrativa na ultima semana.</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Sem dados de acesso administrativo para o periodo.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Rotas mais acessadas</div>
+            <div class="mgmt-list">
+                ${topRotas.length ? topRotas.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.rota || '---')}</span>
+                            <span class="mgmt-badge gray">${escapeHtml(formatNumber(item.qtd || 0))}</span>
+                        </div>
+                        <div class="mgmt-list-text">Indicador de concentracao de uso na operacao administrativa.</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Sem rotas administrativas registradas recentemente.')}
+            </div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Pendencias para destravar</div>
+            <div class="mgmt-list">
+                ${pendenciasConsolidadas.length ? pendenciasConsolidadas.map((item) => `
+                    <div class="mgmt-list-item">
+                        <div class="mgmt-list-head">
+                            <span class="mgmt-list-title">${escapeHtml(item.titulo)}</span>
+                            <span class="mgmt-badge ${item.tone}">${escapeHtml(item.badge)}</span>
+                        </div>
+                        <div class="mgmt-list-text">${escapeHtml(item.detalhe)}</div>
+                    </div>
+                `).join('') : renderMgmtEmpty('Nenhuma pendencia administrativa relevante no momento.')}
+            </div>
+        `;
+    }
+
+    async function carregarPainelGerencial(refreshDependencias = false) {
+        const periodInput = document.getElementById('mgmt-period');
+        const dias = Number(periodInput?.value || 30);
+        const lastUpdateEl = document.getElementById('mgmt-last-update');
+        if (lastUpdateEl) lastUpdateEl.textContent = 'Atualizando cockpit...';
+
+        if (refreshDependencias || (!mgmtState.pendentesExclusao.length && !mgmtState.solicitacoesDevolucao.length && !mgmtState.aguardandoLiberacao.length)) {
+            const [pendentes, devolucoes, aguardando] = await Promise.all([
+                carregarPendentesParaExclusao(),
+                carregarSolicitacoesDevolucao(),
+                carregarIntegracaoAuditorPreNota(),
+            ]);
+            mgmtState.pendentesExclusao = Array.isArray(pendentes) ? pendentes : [];
+            mgmtState.solicitacoesDevolucao = Array.isArray(devolucoes) ? devolucoes : [];
+            mgmtState.aguardandoLiberacao = Array.isArray(aguardando) ? aguardando : [];
+        }
+
+        const [consolidadoRes, processoRes, slaRes, fiscalRes, wmsRes, expedicaoRes, acessosRes] = await Promise.all([
+            safeFetchJson(`/api/upload/dashboard_consolidado?dias=${encodeURIComponent(dias)}`),
+            safeFetchJson(`/api/processo/recebimento_painel?dias=${encodeURIComponent(dias)}&limite_fila=8`),
+            safeFetchJson('/api/sla_dashboard'),
+            safeFetchJson(`/api/fiscal/documento_entrada/kpis?dias=${encodeURIComponent(Math.max(dias, 14))}`),
+            safeFetchJson('/api/wms/cockpit'),
+            safeFetchJson('/api/expedicao/dashboard'),
+            safeFetchJson('/api/admin/acessos/resumo'),
+        ]);
+
+        const consolidado = consolidadoRes.ok ? consolidadoRes.data : null;
+        const processo = processoRes.ok ? processoRes.data : null;
+        const sla = slaRes.ok ? slaRes.data : null;
+        const fiscal = fiscalRes.ok ? fiscalRes.data : null;
+        const wms = wmsRes.ok ? wmsRes.data : null;
+        const expedicao = expedicaoRes.ok ? expedicaoRes.data : null;
+        const acessos = acessosRes.ok ? acessosRes.data : null;
+
+        renderMgmtKpis({
+            consolidado,
+            processo,
+            sla,
+            fiscal,
+            wms,
+            expedicao,
+            acessos,
+            aguardandoLiberacao: mgmtState.aguardandoLiberacao,
+            solicitacoesDevolucao: mgmtState.solicitacoesDevolucao,
+        });
+        renderMgmtConsolidado(consolidado);
+        renderMgmtUsuarios(consolidado);
+        renderMgmtProcesso(processo);
+        renderMgmtRisco(sla);
+        renderMgmtInsights({
+            consolidado,
+            processo,
+            sla,
+            fiscal,
+            wms,
+            expedicao,
+            aguardandoLiberacao: mgmtState.aguardandoLiberacao,
+            solicitacoesDevolucao: mgmtState.solicitacoesDevolucao,
+        });
+        renderMgmtWms(wms, consolidado?.wms || {});
+        renderMgmtFiscalExpedicao(fiscal, expedicao, consolidado);
+        renderMgmtGovernanca(acessos, mgmtState.aguardandoLiberacao, mgmtState.solicitacoesDevolucao, mgmtState.pendentesExclusao);
+
+        const falhas = [consolidadoRes, processoRes, slaRes, fiscalRes, wmsRes, expedicaoRes, acessosRes].filter((result) => !result.ok);
+        if (falhas.length === 7) {
+            showMgmtAlert('Nenhuma fonte gerencial respondeu agora. O cockpit sera preenchido novamente na proxima atualizacao.', 'error');
+        } else if (falhas.length > 0) {
+            const bloqueadas = falhas.filter((item) => item.status === 403).length;
+            const indisponiveis = falhas.length - bloqueadas;
+            const partes = [];
+            if (bloqueadas) partes.push(`${bloqueadas} sem permissao`);
+            if (indisponiveis) partes.push(`${indisponiveis} indisponivel(is)`);
+            showMgmtAlert(`Cockpit carregado parcialmente: ${partes.join(' e ')}.`, 'info');
+        } else {
+            showMgmtAlert('');
+        }
+
+        if (lastUpdateEl) {
+            lastUpdateEl.textContent = `Atualizado em ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+        }
     }
 
     // 1. IMPORTAÇÃO POR CHAVE
@@ -584,6 +2096,7 @@
             document.getElementById('nf-excluir-confirmacao').value = '';
             document.getElementById('nf-excluir-motivo').value = '';
             await carregarPendentesParaExclusao();
+            await carregarPainelGerencial();
         } else {
             showStatus(data.msg || 'Erro na deleção', 'error');
         }
@@ -593,11 +2106,16 @@
 
     async function carregarPendentesParaExclusao() {
         const tbody = document.getElementById('lista-pendentes-excluir');
-        const res = await fetch('/api/pendentes');
-        const lista = await res.json();
-        if (!Array.isArray(lista) || lista.length === 0) {
+        const result = await safeFetchJson('/api/pendentes');
+        const lista = result.ok && Array.isArray(result.data) ? result.data : [];
+        mgmtState.pendentesExclusao = lista;
+        if (!result.ok) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:15px; color:#999">${escapeHtml(result.status === 403 ? 'Sem permissao para listar pendencias.' : 'Falha ao carregar pendencias.')}</td></tr>`;
+            return [];
+        }
+        if (!lista.length) {
             tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:15px; color:#999">Nenhuma nota na fila.</td></tr>';
-            return;
+            return [];
         }
         tbody.innerHTML = lista.map(n => `
             <tr>
@@ -608,6 +2126,7 @@
                 </td>
             </tr>
         `).join('');
+        return lista;
     }
 
     function prepararExclusaoNf(numero) {
@@ -638,9 +2157,14 @@
 
     async function carregarSolicitacoesDevolucao() {
         const tbody = document.getElementById('lista-solicitacoes-devolucao');
-        const res = await fetch('/api/admin/recebimento/solicitacoes_devolucao');
-        const lista = await res.json();
-        if (!Array.isArray(lista) || lista.length === 0) {
+        const result = await safeFetchJson('/api/admin/recebimento/solicitacoes_devolucao');
+        const lista = result.ok && Array.isArray(result.data) ? result.data : [];
+        mgmtState.solicitacoesDevolucao = lista;
+        if (!result.ok) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar solicitacoes.' : 'Nao foi possivel carregar as solicitacoes.')}</td></tr>`;
+            return [];
+        }
+        if (lista.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">Nenhuma solicitação pendente.</td></tr>';
             return;
         }
@@ -657,6 +2181,7 @@
                 </td>
             </tr>
         `).join('');
+        return lista;
     }
 
     async function aprovarSolicitacaoDevolucao(solicitacaoId, numeroNota) {
@@ -674,6 +2199,7 @@
         showStatus(data.msg || `NF ${numeroNota} aprovada para devolução.`);
         await carregarSolicitacoesDevolucao();
         await carregarPendentesParaExclusao();
+        await carregarPainelGerencial();
     }
 
     function badgeAuditoria(st) {
@@ -690,10 +2216,16 @@
 
     async function carregarIntegracaoAuditorPreNota() {
         const tbody = document.getElementById('lista-integracao-auditor-prenota');
-        const res = await fetch('/api/notas_aguardando_liberacao');
-        const lista = await res.json();
+        const result = await safeFetchJson('/api/notas_aguardando_liberacao');
+        const lista = result.ok && Array.isArray(result.data) ? result.data : [];
+        mgmtState.aguardandoLiberacao = lista;
 
-        if (!Array.isArray(lista) || !lista.length) {
+        if (!result.ok) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar a integracao.' : 'Nao foi possivel carregar as NFs aguardando liberacao.')}</td></tr>`;
+            return [];
+        }
+
+        if (!lista.length) {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Nenhuma NF em Aguardando Liberação.</td></tr>';
             return;
         }
@@ -709,6 +2241,7 @@
                 </td>
             </tr>
         `).join('');
+        return lista;
     }
 
     function abrirAuditorIntegrado(numeroNota = '') {
@@ -729,9 +2262,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-        await carregarPendentesParaExclusao();
-        await carregarSolicitacoesDevolucao();
-        await carregarIntegracaoAuditorPreNota();
+        await carregarPainelGerencial(true);
     });
 </script>
 {% endblock %}

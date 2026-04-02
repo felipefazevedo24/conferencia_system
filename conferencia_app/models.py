@@ -159,6 +159,18 @@ class LogManifestacaoDestinatario(db.Model):
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
+class LogEventoFiscalNota(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), index=True, nullable=False)
+    evento = db.Column(db.String(60), nullable=False, index=True)
+    etapa = db.Column(db.String(30), index=True)
+    status = db.Column(db.String(20), index=True)
+    detalhe = db.Column(db.String(1000))
+    payload_json = db.Column(db.Text)
+    usuario = db.Column(db.String(100), nullable=False)
+    data = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class BoletoContaReceber(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), nullable=False, unique=True, index=True)
@@ -434,6 +446,9 @@ class WMSAlertaOperacional(db.Model):
 class ConsertoEstoque(db.Model):
     __tablename__ = 'conserto_estoque'
     id = db.Column(db.Integer, primary_key=True)
+    tipo_controle = db.Column(db.String(50), nullable=False, default="Meu em poder de terceiros", index=True)
+    tipo_operacao = db.Column(db.String(30), nullable=False, default="Conserto", index=True)
+    cfop_remessa = db.Column(db.String(4), nullable=True, index=True)
     numero_nf_remessa = db.Column(db.String(20), index=True)
     chave_nf_remessa = db.Column(db.String(44), nullable=False, index=True)
     data_emissao = db.Column(db.DateTime, nullable=False)
@@ -453,6 +468,7 @@ class ConsertoBaixa(db.Model):
     __tablename__ = 'conserto_baixa'
     id = db.Column(db.Integer, primary_key=True)
     conserto_estoque_id = db.Column(db.Integer, db.ForeignKey('conserto_estoque.id'), nullable=False)
+    cfop_retorno = db.Column(db.String(4), nullable=True, index=True)
     numero_nf_retorno = db.Column(db.String(20), index=True)
     chave_nf_retorno = db.Column(db.String(44), nullable=True, index=True)
     data_nf_retorno = db.Column(db.DateTime, nullable=True)

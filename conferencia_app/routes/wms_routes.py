@@ -690,9 +690,14 @@ def listar_pendentes_enderecamento():
     numero_nota = (request.args.get('nota') or '').strip() or None
     codigo_item = (request.args.get('codigo_item') or '').strip() or None
     pendentes = WMSService.listar_pendentes_enderecamento(numero_nota=numero_nota, codigo_item=codigo_item)
+    prioridade_ordem = {'Critica': 0, 'Alta': 1, 'Media': 2, 'Baixa': 3}
 
     # Cache local para evitar consultas repetidas da mesma NF+codigo.
     cache_pedido_compra = {}
+    cache_depositos = {
+        deposito.id: deposito
+        for deposito in DepositoWMS.query.filter_by(ativo=True).all()
+    }
 
     def _pedido_compra_sugerido(item):
         if item.ordem_compra:
@@ -714,8 +719,12 @@ def listar_pendentes_enderecamento():
         cache_pedido_compra[chave] = sugestao
         return sugestao
 
-    return jsonify([
-        {
+    payload = []
+    for item in pendentes:
+        analise = WMSService.analisar_pendencia_enderecamento(item)
+        deposito = cache_depositos.get(item.deposito_id)
+        payload.append(
+            {
             'id': item.id,
             'numero_nota': item.numero_nota,
             'codigo_item': item.codigo_item,
@@ -723,13 +732,34 @@ def listar_pendentes_enderecamento():
             'qtd_atual': item.qtd_atual,
             'status': item.status,
             'deposito_id': item.deposito_id,
+            'deposito_codigo': deposito.codigo if deposito else None,
+            'deposito_nome': deposito.nome if deposito else None,
             'localizacao_id': item.localizacao_id,
             'ordem_servico_sugerida': item.ordem_servico,
             'ordem_compra_sugerida': _pedido_compra_sugerido(item),
+            'prioridade_operacional': analise['prioridade'],
+            'idade_horas': analise['idade_horas'],
+            'ordem_vinculada': analise['ordem_vinculada'],
             'data_criacao': item.data_criacao.isoformat() if item.data_criacao else None,
         }
-        for item in pendentes
-    ]), 200
+        )
+
+    payload.sort(
+        key=lambda item: (
+            prioridade_ordem.get(item.get('prioridade_operacional'), 99),
+            -float(item.get('idade_horas') or 0),
+            str(item.get('numero_nota') or ''),
+            str(item.get('codigo_item') or ''),
+        )
+    )
+
+    return jsonify(payload), 200
+
+
+@wms_bp.route('/cockpit', methods=['GET'])
+@requer_wms_operacao
+def obter_cockpit_wms():
+    return jsonify(WMSService.obter_cockpit_operacional()), 200
 
 
 @wms_bp.route('/estoque-inicial', methods=['POST'])

@@ -434,7 +434,7 @@
                     {% endif %}
                     {% if can_access('PAGE_CONSERTO') %}
                     <a href="/conserto" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tools"></i> Estoque de Conserto
+                        <i class="fas fa-tools"></i> Estoque em Terceiros
                     </a>
                     {% endif %}
                 </div>
@@ -493,7 +493,7 @@
                     {% endif %}
                     {% if can_access('PAGE_CONSERTO') %}
                     <a href="/conserto" class="list-group-item list-group-item-action">
-                        <i class="fas fa-tools"></i> Estoque de Conserto
+                        <i class="fas fa-tools"></i> Estoque de Terceiros
                     </a>
                     {% endif %}
                 </div>
@@ -625,9 +625,6 @@
                 </span>
             </div>
             <div class="nav-right">
-                <a href="/" class="btn-sap" style="padding: 6px 10px;">
-                    <i class="fas fa-house"></i> Menu Principal
-                </a>
                 <div class="user-profile">
                     <i class="fas fa-user-circle"></i>
                     <span>{{ user|upper }}</span>
@@ -644,10 +641,10 @@
             {% if can_access('PAGE_CONSERTO') %}
             <div class="dropdown shortcut-group">
                 <button class="shortcut-group-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-tools"></i> Conserto
+                    <i class="fas fa-tools"></i> Estoque
                 </button>
                 <ul class="dropdown-menu shortcut-dropdown">
-                    <li><a class="dropdown-item shortcut-item" href="/conserto/estoque_aberto"><i class="fas fa-tools"></i> Estoque de Conserto</a></li>
+                    <li><a class="dropdown-item shortcut-item" href="/conserto/estoque_aberto"><i class="fas fa-tools"></i> Estoque em Terceiros</a></li>
                     <li><a class="dropdown-item shortcut-item" href="/conserto/confirmacao_baixa"><i class="fas fa-check-double"></i> Confirmação de Baixa</a></li>
                     <li><a class="dropdown-item shortcut-item" href="/conserto/auditoria_tela"><i class="fas fa-search"></i> Auditoria</a></li>
                 </ul>

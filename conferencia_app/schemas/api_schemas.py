@@ -68,15 +68,19 @@ class ConfirmarLancamentoSchema(Schema):
     codigo_material = fields.Str(required=False, load_default="", validate=validate.Length(max=50))
     codigos_materiais = fields.List(fields.Nested(CodigoMaterialItemSchema), required=False, load_default=[])
     manifestar_destinatario = fields.Bool(required=False, load_default=True)
+    idempotency_key = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
 
 
 class ManifestarDestinatarioSchema(Schema):
     nota = fields.Raw(required=True)
+    idempotency_key = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
 
 
 class EstornoLancamentoSchema(Schema):
     nota = fields.Raw(required=True)
     motivo = fields.Str(required=True, validate=validate.Length(min=3, max=500))
+    motivo_padrao = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
+    complemento = fields.Str(required=False, load_default="", validate=validate.Length(max=300))
 
 
 class NotaSchema(Schema):

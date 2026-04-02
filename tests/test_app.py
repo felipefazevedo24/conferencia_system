@@ -1,9 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import BoletoContaReceber, ItemNota, LogDivergencia, LogEstornoLancamento, LogManifestacaoDestinatario, SolicitacaoDevolucaoRecebimento
+from conferencia_app.models import (
+    BoletoContaReceber,
+    ItemNota,
+    LogDivergencia,
+    LogEstornoLancamento,
+    LogEventoFiscalNota,
+    LogManifestacaoDestinatario,
+    SolicitacaoDevolucaoRecebimento,
+)
 from conferencia_app.services.xml_service import process_xml_and_store
 from werkzeug.security import generate_password_hash
 
@@ -492,6 +500,186 @@ def test_reenvio_manifestacao_exige_nf_lancada(tmp_path):
 
     response = client.post("/api/fiscal/manifestar_destinatario", json={"nota": "2001"})
     assert response.status_code == 409
+
+
+def test_confirmar_lancamento_idempotente_quando_nf_ja_lancada_com_mesmo_codigo(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="2006",
+                fornecedor="Fornecedor Idempotente",
+                codigo="IDEMP-01",
+                descricao="Item idempotente",
+                qtd_real=1.0,
+                status="Lançado",
+                numero_lancamento="ERP-2006",
+                usuario_lancamento="admin",
+                data_lancamento=datetime.now(),
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/confirmar_lancamento",
+        json={"nota": "2006", "codigo": "ERP-2006", "manifestar_destinatario": False},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+    assert data["idempotente"] is True
+
+
+def test_reenvio_manifestacao_retorna_idempotente_quando_ja_sucesso(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="2007",
+                fornecedor="Fornecedor Manifestacao Idempotente",
+                codigo="IDEMP-MANI",
+                descricao="Item manifestado",
+                qtd_real=1.0,
+                status="Lançado",
+                numero_lancamento="ERP-2007",
+                usuario_lancamento="admin",
+                data_lancamento=datetime.now(),
+                chave_acesso="20072007200720072007200720072007200720072007",
+            )
+        )
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota="2007",
+                chave_acesso="20072007200720072007200720072007200720072007",
+                manifestacao="confirmada",
+                status="Sucesso",
+                detalhe="Confirmacao ja enviada anteriormente.",
+                usuario="admin",
+            )
+        )
+        db.session.commit()
+
+    response = client.post("/api/fiscal/manifestar_destinatario", json={"nota": "2007"})
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+    assert data["idempotente"] is True
+
+    with app.app_context():
+        log = (
+            LogEventoFiscalNota.query.filter_by(numero_nota="2007", evento="ManifestacaoIdempotente")
+            .order_by(LogEventoFiscalNota.id.desc())
+            .first()
+        )
+        assert log is not None
+
+
+def test_documento_entrada_kpis_e_timeline_trazem_governanca(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    agora = datetime.now()
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3000",
+                fornecedor="Fornecedor KPI",
+                codigo="SKU-3000",
+                descricao="Item KPI",
+                qtd_real=2.0,
+                status="Lançado",
+                usuario_importacao="fiscal_import",
+                data_importacao=agora - timedelta(days=2),
+                usuario_conferencia="conferente_1",
+                inicio_conferencia=agora - timedelta(days=2, hours=-2),
+                fim_conferencia=agora - timedelta(days=1, hours=10),
+                usuario_lancamento="admin",
+                data_lancamento=agora - timedelta(days=1),
+                numero_lancamento="ERP-3000",
+                chave_acesso="30003000300030003000300030003000300030003000",
+                auditor_status="Auditado",
+                auditor_decisao="Aprovado",
+                auditor_usuario="fiscal_admin",
+                auditor_data=agora - timedelta(days=1, hours=12),
+            )
+        )
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota="3000",
+                chave_acesso="30003000300030003000300030003000300030003000",
+                manifestacao="confirmada",
+                status="Sucesso",
+                detalhe="Manifestacao transmitida.",
+                usuario="admin",
+                data=agora - timedelta(hours=20),
+            )
+        )
+        db.session.add(
+            LogEventoFiscalNota(
+                numero_nota="3000",
+                evento="LancamentoFiscal",
+                etapa="Lancamento",
+                status="Sucesso",
+                detalhe="Lancamento registrado no cockpit fiscal.",
+                usuario="admin",
+                data=agora - timedelta(days=1),
+            )
+        )
+        db.session.commit()
+
+    response_kpi = client.get("/api/fiscal/documento_entrada/kpis?dias=30")
+    assert response_kpi.status_code == 200
+    data_kpi = response_kpi.get_json()
+    assert data_kpi["total_notas"] >= 1
+    assert data_kpi["notas_lancadas"] >= 1
+    assert data_kpi["tempo_medio_importacao_lancamento_horas"] > 0
+    assert any(item["usuario"] == "admin" for item in data_kpi["produtividade_usuarios"])
+
+    response_timeline = client.get("/api/timeline/3000")
+    assert response_timeline.status_code == 200
+    timeline = response_timeline.get_json()
+    assert any(item["tipo"] == "Governanca Fiscal" for item in timeline)
+
+
+def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3010",
+                fornecedor="Fornecedor Detalhe",
+                codigo="SKU-3010",
+                descricao="Item detalhe",
+                qtd_real=1.0,
+                status="Concluído",
+                pedido_compra="450001",
+                data_importacao=datetime.now() - timedelta(hours=12),
+                fim_conferencia=datetime.now() - timedelta(hours=2),
+                usuario_conferencia="operador_1",
+                remessa=True,
+                cfop="5124",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/detalhes_nf/3010")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["numero"] == "3010"
+    assert isinstance(data["workflow"], list)
+    assert isinstance(data["pendencias"], list)
+    assert len(data["motivos_estorno_padrao"]) >= 1
+    assert isinstance(data["timeline"], list)
 
 
 def test_download_documento_por_numero_da_nf(tmp_path):

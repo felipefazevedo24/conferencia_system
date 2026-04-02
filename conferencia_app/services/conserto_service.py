@@ -10,8 +10,27 @@ from .consyste_service import download_documento_consyste, listar_nfes_consyste_
 
 
 class ConsertoService:
-    CFOPS_REMESSA = {"5915", "6915"}
-    CFOPS_RETORNO = {"5916", "6916"}
+    TIPO_CONTROLE_PADRAO = "Meu em poder de terceiros"
+    MAPA_OPERACOES = {
+        "Conserto": {
+            "remessa": {"5915", "6915"},
+            "retorno": {"5916", "6916"},
+        },
+        "Industrializacao": {
+            "remessa": {"5901", "6901"},
+            "retorno": {"5902", "6902"},
+        },
+    }
+    CFOPS_REMESSA = {
+        cfop
+        for configuracao in MAPA_OPERACOES.values()
+        for cfop in configuracao["remessa"]
+    }
+    CFOPS_RETORNO = {
+        cfop
+        for configuracao in MAPA_OPERACOES.values()
+        for cfop in configuracao["retorno"]
+    }
     XML_NS = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
     CNPJ_EMPRESA_PADRAO = "30482274000125"
 
@@ -54,7 +73,7 @@ class ConsertoService:
     def _obter_estoque(conserto_estoque_id):
         estoque = db.session.get(ConsertoEstoque, conserto_estoque_id)
         if not estoque:
-            raise ValueError("Saldo de conserto nao encontrado.")
+            raise ValueError("Saldo de estoque nao encontrado.")
         return estoque
 
     @staticmethod
@@ -67,6 +86,7 @@ class ConsertoService:
             ConsertoEstoque.query.filter(ConsertoEstoque.quantidade_saldo >= quantidade)
             .filter(ConsertoEstoque.produto_codigo == codigo_item)
             .filter(ConsertoEstoque.fornecedor_cnpj == (retorno.get("fornecedor_cnpj") or ""))
+            .filter(ConsertoEstoque.tipo_operacao == (retorno.get("tipo_operacao") or "Conserto"))
             .order_by(ConsertoEstoque.data_emissao.asc(), ConsertoEstoque.id.asc())
         )
 
@@ -94,6 +114,23 @@ class ConsertoService:
         if tipo_fluxo == "remessa":
             return cnpj_emitente == cnpj_empresa and cnpj_destinatario != cnpj_empresa
         return False
+
+    @staticmethod
+    def _tipo_operacao_por_cfop(cfop):
+        cfop = ConsertoService._normalizar_texto(cfop)[:4]
+        for tipo_operacao, configuracao in ConsertoService.MAPA_OPERACOES.items():
+            if cfop in configuracao["remessa"] or cfop in configuracao["retorno"]:
+                return tipo_operacao
+        return None
+
+    @staticmethod
+    def _cfops_por_fluxo(tipo_fluxo):
+        indice = "remessa" if tipo_fluxo == "remessa" else "retorno"
+        return {
+            cfop
+            for configuracao in ConsertoService.MAPA_OPERACOES.values()
+            for cfop in configuracao[indice]
+        }
 
     @staticmethod
     def _agrupar_itens_retorno_item_nota(numero_nota=None, status=None):
@@ -127,7 +164,9 @@ class ConsertoService:
                     "data_emissao": item.data_importacao or datetime.now(),
                     "fornecedor_nome": ConsertoService._normalizar_texto(item.fornecedor) or "Fornecedor nao informado",
                     "fornecedor_cnpj": ConsertoService._normalizar_texto(item.cnpj_emitente),
-                    "itens": defaultdict(lambda: {"descricao": "", "quantidade": 0.0}),
+                    "tipo_controle": ConsertoService.TIPO_CONTROLE_PADRAO,
+                    "tipo_operacao": ConsertoService._tipo_operacao_por_cfop(item.cfop) or "Conserto",
+                    "itens": defaultdict(lambda: {"descricao": "", "quantidade": 0.0, "cfop_retorno": ""}),
                 },
             )
 
@@ -138,6 +177,7 @@ class ConsertoService:
             item_grupo = grupo["itens"][codigo]
             item_grupo["descricao"] = ConsertoService._normalizar_texto(item.descricao) or item_grupo["descricao"] or codigo
             item_grupo["quantidade"] += float(item.qtd_real or 0)
+            item_grupo["cfop_retorno"] = ConsertoService._normalizar_texto(item.cfop)[:4] or item_grupo["cfop_retorno"]
 
         return grupos
 
@@ -163,6 +203,7 @@ class ConsertoService:
                         ConsertoEstoque.query.filter_by(
                             chave_nf_remessa=chave_origem,
                             produto_codigo=codigo,
+                            tipo_operacao=retorno.get("tipo_operacao") or "Conserto",
                         )
                         .order_by(ConsertoEstoque.id.desc())
                         .first()
@@ -208,6 +249,7 @@ class ConsertoService:
                     chave_nf_retorno=retorno["chave_acesso"],
                     data_nf_retorno=retorno["data_emissao"],
                     quantidade=quantidade,
+                    cfop_retorno=dados_item.get("cfop_retorno"),
                     usuario=usuario,
                 )
                 if motivo_sugestao and motivo_sugestao != "referencia_xml":
@@ -361,6 +403,35 @@ class ConsertoService:
         return list(unicos.values())
 
     @staticmethod
+    def _listar_documentos_recebidos_por_numero(numero_nota):
+        numero_nota = ConsertoService._normalizar_texto(numero_nota)
+        if not numero_nota:
+            return []
+
+        documentos = []
+        for caixa in ("recebidos", "todos"):
+            try:
+                ok, status_code, payload = listar_nfes_consyste_por_caixa(
+                    caixa=caixa,
+                    q=f"numero:{numero_nota}",
+                    campos="id,chave,emitido_em,numero,emit_nome,dest_nome",
+                    timeout=20,
+                )
+                if not ok or status_code != 200 or not isinstance(payload, dict):
+                    continue
+                for doc in payload.get("documentos", []) or []:
+                    if ConsertoService._normalizar_texto(doc.get("numero")) == numero_nota:
+                        documentos.append(doc)
+            except Exception:
+                continue
+        unicos = {}
+        for doc in documentos:
+            chave = ConsertoService._normalizar_texto(doc.get("chave"))
+            if chave:
+                unicos[chave] = doc
+        return list(unicos.values())
+
+    @staticmethod
     def criar_saldo_remessa(
         chave_nf_remessa,
         data_emissao,
@@ -371,6 +442,9 @@ class ConsertoService:
         quantidade,
         usuario,
         numero_nf_remessa=None,
+        tipo_operacao=None,
+        tipo_controle=None,
+        cfop_remessa=None,
     ):
         chave_nf_remessa = ConsertoService._normalizar_texto(chave_nf_remessa)
         numero_nf_remessa = ConsertoService._normalizar_texto(numero_nf_remessa) or None
@@ -380,6 +454,9 @@ class ConsertoService:
         produto_descricao = ConsertoService._normalizar_texto(produto_descricao)
         usuario = ConsertoService._normalizar_texto(usuario) or "sistema"
         quantidade = ConsertoService._normalizar_quantidade(quantidade)
+        cfop_remessa = ConsertoService._normalizar_texto(cfop_remessa)[:4] or None
+        tipo_operacao = ConsertoService._normalizar_texto(tipo_operacao) or ConsertoService._tipo_operacao_por_cfop(cfop_remessa) or "Conserto"
+        tipo_controle = ConsertoService._normalizar_texto(tipo_controle) or ConsertoService.TIPO_CONTROLE_PADRAO
 
         if not chave_nf_remessa:
             raise ValueError("Informe a chave da NF de remessa.")
@@ -403,6 +480,9 @@ class ConsertoService:
 
         try:
             saldo = ConsertoEstoque(
+                tipo_controle=tipo_controle,
+                tipo_operacao=tipo_operacao,
+                cfop_remessa=cfop_remessa,
                 numero_nf_remessa=numero_nf_remessa,
                 chave_nf_remessa=chave_nf_remessa,
                 data_emissao=data_emissao,
@@ -412,7 +492,7 @@ class ConsertoService:
                 produto_descricao=produto_descricao,
                 quantidade_enviada=quantidade,
                 quantidade_saldo=quantidade,
-                status="Em conserto",
+                status="Pendente de retorno",
                 usuario_criacao=usuario,
             )
             db.session.add(saldo)
@@ -422,7 +502,10 @@ class ConsertoService:
                 saldo.id,
                 "estoque",
                 usuario,
-                f"Saldo criado para remessa {numero_nf_remessa or chave_nf_remessa}, produto {produto_codigo}, qtd {quantidade}",
+                (
+                    f"Saldo criado para {tipo_controle} / {tipo_operacao}, remessa {numero_nf_remessa or chave_nf_remessa}, "
+                    f"CFOP {cfop_remessa or '-'}, produto {produto_codigo}, qtd {quantidade}"
+                ),
                 commit=False,
             )
             db.session.commit()
@@ -439,12 +522,14 @@ class ConsertoService:
         quantidade,
         usuario,
         numero_nf_retorno=None,
+        cfop_retorno=None,
     ):
         estoque = ConsertoService._obter_estoque(conserto_estoque_id)
         quantidade = ConsertoService._normalizar_quantidade(quantidade)
         usuario = ConsertoService._normalizar_texto(usuario) or "sistema"
         chave_nf_retorno = ConsertoService._normalizar_texto(chave_nf_retorno) or None
         numero_nf_retorno = ConsertoService._normalizar_texto(numero_nf_retorno) or None
+        cfop_retorno = ConsertoService._normalizar_texto(cfop_retorno)[:4] or None
 
         if quantidade > estoque.quantidade_saldo:
             raise ValueError("A quantidade sugerida nao pode ser maior que o saldo em aberto.")
@@ -460,6 +545,7 @@ class ConsertoService:
         try:
             baixa = ConsertoBaixa(
                 conserto_estoque_id=conserto_estoque_id,
+                cfop_retorno=cfop_retorno,
                 numero_nf_retorno=numero_nf_retorno,
                 chave_nf_retorno=chave_nf_retorno,
                 data_nf_retorno=data_nf_retorno,
@@ -474,7 +560,10 @@ class ConsertoService:
                 baixa.id,
                 "baixa",
                 usuario,
-                f"Sugestao automatica de baixa para retorno {numero_nf_retorno or baixa.chave_nf_retorno or 'sem chave'}, qtd {quantidade}",
+                (
+                    f"Sugestao automatica de baixa para retorno {numero_nf_retorno or baixa.chave_nf_retorno or 'sem chave'}, "
+                    f"CFOP {cfop_retorno or '-'}, qtd {quantidade}"
+                ),
                 commit=False,
             )
             db.session.commit()
@@ -484,12 +573,23 @@ class ConsertoService:
             raise
 
     @staticmethod
-    def vinculo_manual(conserto_estoque_id, chave_nf_retorno, data_nf_retorno, quantidade, usuario, observacoes=None):
+    def vinculo_manual(
+        conserto_estoque_id,
+        chave_nf_retorno,
+        data_nf_retorno,
+        quantidade,
+        usuario,
+        observacoes=None,
+        cfop_retorno=None,
+        numero_nf_retorno=None,
+    ):
         estoque = ConsertoService._obter_estoque(conserto_estoque_id)
         chave_nf_retorno = ConsertoService._normalizar_texto(chave_nf_retorno)
         usuario = ConsertoService._normalizar_texto(usuario) or "sistema"
         observacoes = ConsertoService._normalizar_texto(observacoes) or None
         quantidade = ConsertoService._normalizar_quantidade(quantidade)
+        cfop_retorno = ConsertoService._normalizar_texto(cfop_retorno)[:4] or None
+        numero_nf_retorno = ConsertoService._normalizar_texto(numero_nf_retorno) or None
 
         if not chave_nf_retorno:
             raise ValueError("Informe a chave da NF de retorno.")
@@ -501,6 +601,8 @@ class ConsertoService:
         try:
             baixa = ConsertoBaixa(
                 conserto_estoque_id=conserto_estoque_id,
+                cfop_retorno=cfop_retorno,
+                numero_nf_retorno=numero_nf_retorno,
                 chave_nf_retorno=chave_nf_retorno,
                 data_nf_retorno=data_nf_retorno,
                 quantidade_baixada=quantidade,
@@ -515,7 +617,7 @@ class ConsertoService:
                 baixa.id,
                 "baixa",
                 usuario,
-                f"Vinculo manual para retorno {chave_nf_retorno}, qtd {quantidade}",
+                f"Vinculo manual para retorno {numero_nf_retorno or chave_nf_retorno}, CFOP {cfop_retorno or '-'}, qtd {quantidade}",
                 commit=False,
             )
             db.session.commit()
@@ -544,7 +646,7 @@ class ConsertoService:
                 float(estoque.quantidade_saldo or 0) - float(baixa.quantidade_baixada or 0),
                 0,
             )
-            estoque.status = "Conserto finalizado" if estoque.quantidade_saldo == 0 else "Em conserto"
+            estoque.status = "Retorno concluido" if estoque.quantidade_saldo == 0 else "Pendente de retorno"
             baixa.status_baixa = "Confirmado"
             baixa.usuario_confirmacao = usuario
             baixa.data_confirmacao = datetime.now()
@@ -617,7 +719,7 @@ class ConsertoService:
                 for cfop in item["cfops"]
             )
             if not possui_cfop_remessa:
-                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: sem CFOP 5915/6915.")
+                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: sem CFOP de remessa para terceiro (5915/6915/5901/6901).")
                 continue
 
             resumo["remessas_emitidas_consyste"] += 1
@@ -626,6 +728,9 @@ class ConsertoService:
                 if not any(cfop in ConsertoService.CFOPS_REMESSA for cfop in dados_item["cfops"]):
                     continue
 
+                cfop_remessa = next((cfop for cfop in sorted(dados_item["cfops"]) if cfop in ConsertoService.CFOPS_REMESSA), None)
+                tipo_operacao = ConsertoService._tipo_operacao_por_cfop(cfop_remessa) or "Conserto"
+
                 existente = ConsertoEstoque.query.filter_by(
                     chave_nf_remessa=nota["chave_acesso"],
                     produto_codigo=codigo,
@@ -633,9 +738,17 @@ class ConsertoService:
                 if existente:
                     if not existente.numero_nf_remessa and nota["numero_nota"]:
                         existente.numero_nf_remessa = nota["numero_nota"]
-                        db.session.commit()
+                    if not existente.tipo_operacao:
+                        existente.tipo_operacao = tipo_operacao
+                    if not existente.tipo_controle:
+                        existente.tipo_controle = ConsertoService.TIPO_CONTROLE_PADRAO
+                    if not existente.cfop_remessa and cfop_remessa:
+                        existente.cfop_remessa = cfop_remessa
+                    if not existente.status:
+                        existente.status = "Pendente de retorno"
+                    db.session.commit()
                     resumo["saldos_existentes"] += 1
-                    log(f"Saldo ja existente para NF {nota['numero_nota']} item {codigo}.")
+                    log(f"Saldo ja existente para NF {nota['numero_nota']} item {codigo} ({tipo_operacao}).")
                     continue
 
                 try:
@@ -648,13 +761,22 @@ class ConsertoService:
                         produto_codigo=codigo,
                         produto_descricao=dados_item["descricao"] or codigo,
                         quantidade=dados_item["quantidade"],
+                        tipo_operacao=tipo_operacao,
+                        tipo_controle=ConsertoService.TIPO_CONTROLE_PADRAO,
+                        cfop_remessa=cfop_remessa,
                         usuario=usuario,
                     )
                     resumo["saldos_criados"] += 1
-                    log(f"Saldo criado para NF {nota['numero_nota']} item {codigo} qtd {dados_item['quantidade']}.")
+                    log(
+                        f"Saldo criado para NF {nota['numero_nota']} item {codigo} qtd {dados_item['quantidade']} "
+                        f"em {tipo_operacao}."
+                    )
                 except ValueError:
                     resumo["saldos_existentes"] += 1
                     log(f"Saldo duplicado ignorado para NF {nota['numero_nota']} item {codigo}.")
+
+        retornos = ConsertoService._agrupar_itens_retorno_item_nota(status=["Concluído", "Concluido", "Lançado", "Lancado"])
+        ConsertoService._processar_retornos(retornos, usuario, resumo, debug_callback=debug_callback)
 
         ConsertoService.registrar_auditoria(
             "sincronizar_notas",
@@ -664,7 +786,8 @@ class ConsertoService:
             (
                 f"Sincronizacao concluida. "
                 f"Remessas emitidas lidas na Consyste: {resumo['remessas_emitidas_consyste']}, "
-                f"saldos criados: {resumo['saldos_criados']}."
+                f"saldos criados: {resumo['saldos_criados']}, "
+                f"baixas sugeridas: {resumo['baixas_sugeridas']}."
             ),
         )
         log("Sincronizacao finalizada.")
@@ -694,6 +817,99 @@ class ConsertoService:
             return []
 
     @staticmethod
+    def consultar_retorno_manual_por_numero(numero_nf_retorno, conserto_estoque_id):
+        numero_nf_retorno = ConsertoService._normalizar_texto(numero_nf_retorno)
+        estoque = ConsertoService._obter_estoque(conserto_estoque_id)
+
+        if not numero_nf_retorno:
+            raise ValueError("Informe o numero da NF de retorno.")
+
+        itens_local = (
+            ItemNota.query.filter(ItemNota.numero_nota == numero_nf_retorno)
+            .filter(ItemNota.cfop.in_(list(ConsertoService.CFOPS_RETORNO)))
+            .order_by(ItemNota.id.asc())
+            .all()
+        )
+
+        nota = None
+        if itens_local:
+            grupos = ConsertoService._agrupar_itens_retorno_item_nota(numero_nota=numero_nf_retorno)
+            if grupos:
+                nota = next(iter(grupos.values()))
+        else:
+            documentos = ConsertoService._listar_documentos_recebidos_por_numero(numero_nf_retorno)
+            for doc in documentos:
+                chave = ConsertoService._normalizar_texto(doc.get("chave"))
+                if not chave:
+                    continue
+                ok, status_code, payload = download_documento_consyste(
+                    modelo="nfe",
+                    formato="xml",
+                    chave=chave,
+                    timeout=20,
+                )
+                if not ok or status_code != 200 or not payload:
+                    continue
+                nota_xml = ConsertoService._parse_xml_nfe(payload)
+                if not ConsertoService._papel_documento_valido(
+                    type("Doc", (), {"cnpj_emitente": nota_xml["emit_cnpj"], "cnpj_destinatario": nota_xml["dest_cnpj"]})(),
+                    "retorno",
+                ):
+                    continue
+                if not any(cfop in ConsertoService.CFOPS_RETORNO for item in nota_xml["itens"].values() for cfop in item["cfops"]):
+                    continue
+
+                nota = {
+                    "numero_nota": nota_xml["numero_nota"],
+                    "chave_acesso": nota_xml["chave_acesso"],
+                    "data_emissao": nota_xml["data_emissao"],
+                    "fornecedor_nome": nota_xml["emit_nome"] or "Fornecedor nao informado",
+                    "fornecedor_cnpj": nota_xml["emit_cnpj"],
+                    "tipo_operacao": ConsertoService._tipo_operacao_por_cfop(
+                        next(
+                            (
+                                cfop
+                                for item in nota_xml["itens"].values()
+                                for cfop in sorted(item["cfops"])
+                                if cfop in ConsertoService.CFOPS_RETORNO
+                            ),
+                            "",
+                        )
+                    ) or "Conserto",
+                    "itens": {
+                        codigo: {
+                            "descricao": dados["descricao"],
+                            "quantidade": float(dados["quantidade"] or 0),
+                            "cfop_retorno": next((cfop for cfop in sorted(dados["cfops"]) if cfop in ConsertoService.CFOPS_RETORNO), ""),
+                        }
+                        for codigo, dados in nota_xml["itens"].items()
+                    },
+                }
+                break
+
+        if not nota:
+            raise ValueError("NF de retorno nao encontrada para consulta automatica.")
+
+        if (nota.get("tipo_operacao") or "Conserto") != (estoque.tipo_operacao or "Conserto"):
+            raise ValueError("A NF informada pertence a uma operacao diferente do saldo selecionado.")
+
+        item = (nota.get("itens") or {}).get(estoque.produto_codigo)
+        if not item:
+            raise ValueError("A NF informada nao possui o item correspondente ao saldo selecionado.")
+
+        return {
+            "numero_nf_retorno": nota.get("numero_nota") or numero_nf_retorno,
+            "chave_nf_retorno": nota.get("chave_acesso") or "",
+            "data_nf_retorno": nota["data_emissao"].isoformat() if nota.get("data_emissao") else None,
+            "cfop_retorno": item.get("cfop_retorno") or "",
+            "quantidade": float(item.get("quantidade") or 0),
+            "fornecedor_nome": nota.get("fornecedor_nome") or "",
+            "fornecedor_cnpj": nota.get("fornecedor_cnpj") or "",
+            "produto_codigo": estoque.produto_codigo,
+            "produto_descricao": estoque.produto_descricao,
+        }
+
+    @staticmethod
     def listar_historico_estoque():
         registros = (
             ConsertoEstoque.query.order_by(ConsertoEstoque.data_emissao.desc(), ConsertoEstoque.id.desc()).all()
@@ -701,6 +917,9 @@ class ConsertoService:
         return [
             {
                 "id": estoque.id,
+                "tipo_controle": estoque.tipo_controle or ConsertoService.TIPO_CONTROLE_PADRAO,
+                "tipo_operacao": estoque.tipo_operacao or "Conserto",
+                "cfop_remessa": estoque.cfop_remessa,
                 "numero_nf_remessa": estoque.numero_nf_remessa,
                 "chave_nf_remessa": estoque.chave_nf_remessa,
                 "data_emissao": estoque.data_emissao.isoformat() if estoque.data_emissao else None,
@@ -719,6 +938,41 @@ class ConsertoService:
             }
             for estoque in registros
         ]
+
+    @staticmethod
+    def montar_relatorio_estoque():
+        historico = ConsertoService.listar_historico_estoque()
+        baixas_pendentes = ConsertoBaixa.query.filter(
+            ConsertoBaixa.status_baixa.in_(["Pendente de confirmacao", "Pendente de confirmaÃ§Ã£o"])
+        ).all()
+
+        por_operacao = defaultdict(lambda: {"registros": 0, "saldo": 0.0, "enviado": 0.0, "baixado": 0.0})
+        for item in historico:
+            grupo = por_operacao[item["tipo_operacao"]]
+            grupo["registros"] += 1
+            grupo["saldo"] += float(item["quantidade_saldo"] or 0)
+            grupo["enviado"] += float(item["quantidade_enviada"] or 0)
+            grupo["baixado"] += float(item["quantidade_baixada"] or 0)
+
+        return {
+            "cards": {
+                "registros_abertos": sum(1 for item in historico if float(item["quantidade_saldo"] or 0) > 0),
+                "quantidade_em_terceiros": sum(float(item["quantidade_saldo"] or 0) for item in historico),
+                "baixas_pendentes": len(baixas_pendentes),
+                "total_movimentado": sum(float(item["quantidade_enviada"] or 0) for item in historico),
+            },
+            "grupos_operacao": [
+                {
+                    "tipo_operacao": tipo_operacao,
+                    "registros": dados["registros"],
+                    "quantidade_enviada": dados["enviado"],
+                    "quantidade_baixada": dados["baixado"],
+                    "quantidade_saldo": dados["saldo"],
+                }
+                for tipo_operacao, dados in sorted(por_operacao.items())
+            ],
+            "historico": historico,
+        }
 
     @staticmethod
     def registrar_auditoria(acao, referencia_id, referencia_tipo, usuario, detalhes=None, commit=True):

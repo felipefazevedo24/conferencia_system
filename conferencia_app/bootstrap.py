@@ -222,6 +222,30 @@ def _ensure_item_nota_columns() -> None:
             )
         )
         conn.commit()
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS log_evento_fiscal_nota (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(20) NOT NULL,
+                    evento VARCHAR(60) NOT NULL,
+                    etapa VARCHAR(30),
+                    status VARCHAR(20),
+                    detalhe VARCHAR(1000),
+                    payload_json TEXT,
+                    usuario VARCHAR(100) NOT NULL,
+                    data DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        conn.commit()
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_numero_nota ON log_evento_fiscal_nota (numero_nota)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_evento ON log_evento_fiscal_nota (evento)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_etapa ON log_evento_fiscal_nota (etapa)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_status ON log_evento_fiscal_nota (status)"))
+        conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_log_evento_fiscal_nota_data ON log_evento_fiscal_nota (data)"))
+        conn.commit()
 
         conn.execute(
             db.text(
@@ -296,6 +320,29 @@ def _ensure_conserto_columns() -> None:
     try:
         res_estoque = conn.execute(db.text("PRAGMA table_info('conserto_estoque')")).fetchall()
         cols_estoque = [row[1] for row in res_estoque]
+        if res_estoque and "tipo_controle" not in cols_estoque:
+            conn.execute(
+                db.text(
+                    "ALTER TABLE conserto_estoque ADD COLUMN tipo_controle VARCHAR(50) NOT NULL DEFAULT 'Meu em poder de terceiros'"
+                )
+            )
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_tipo_controle ON conserto_estoque (tipo_controle)"))
+            conn.commit()
+        if res_estoque and "tipo_operacao" not in cols_estoque:
+            conn.execute(
+                db.text(
+                    "ALTER TABLE conserto_estoque ADD COLUMN tipo_operacao VARCHAR(30) NOT NULL DEFAULT 'Conserto'"
+                )
+            )
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_tipo_operacao ON conserto_estoque (tipo_operacao)"))
+            conn.commit()
+        if res_estoque and "cfop_remessa" not in cols_estoque:
+            conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN cfop_remessa VARCHAR(4)"))
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_estoque_cfop_remessa ON conserto_estoque (cfop_remessa)"))
+            conn.commit()
         if res_estoque and "numero_nf_remessa" not in cols_estoque:
             conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN numero_nf_remessa VARCHAR(20)"))
             conn.commit()
@@ -304,6 +351,11 @@ def _ensure_conserto_columns() -> None:
 
         res_baixa = conn.execute(db.text("PRAGMA table_info('conserto_baixa')")).fetchall()
         cols_baixa = [row[1] for row in res_baixa]
+        if res_baixa and "cfop_retorno" not in cols_baixa:
+            conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN cfop_retorno VARCHAR(4)"))
+            conn.commit()
+            conn.execute(db.text("CREATE INDEX IF NOT EXISTS ix_conserto_baixa_cfop_retorno ON conserto_baixa (cfop_retorno)"))
+            conn.commit()
         if res_baixa and "numero_nf_retorno" not in cols_baixa:
             conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN numero_nf_retorno VARCHAR(20)"))
             conn.commit()

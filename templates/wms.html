@@ -135,11 +135,296 @@
     .assist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .assist-muted { color: #64748b; font-size: 11px; margin: 0; }
 
-    @media (max-width: 720px) {
-        .assist-grid { grid-template-columns: 1fr; }
+    .cockpit-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #123868 58%, #0a6ed1 100%);
+        color: #f8fafc;
+        border: none;
+        overflow: hidden;
+        position: relative;
+    }
+    .cockpit-hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -120px -120px auto;
+        width: 260px;
+        height: 260px;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 72%);
+    }
+    .cockpit-hero-body {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+    }
+    .cockpit-hero h2 {
+        margin: 0 0 8px 0;
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+    }
+    .cockpit-hero p {
+        margin: 0;
+        max-width: 760px;
+        color: rgba(248, 250, 252, 0.9);
+    }
+    .shortcut-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+    .shortcut-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+    }
+    .shortcut-chip kbd {
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: rgba(15, 23, 42, 0.38);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        font-family: inherit;
+        font-size: 10px;
+    }
+    .cockpit-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+    .metric-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #dbe2e8;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--card-shadow);
+    }
+    .metric-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .metric-value {
+        margin-top: 12px;
+        font-size: 28px;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1;
+    }
+    .metric-foot {
+        margin-top: 10px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .metric-trend {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #075985;
+        font-size: 10px;
+        font-weight: 800;
+    }
+    .cockpit-panels {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1fr;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+    .mini-title {
+        margin: 0 0 12px 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #334155;
+        letter-spacing: 0.4px;
+        font-weight: 800;
+    }
+    .priority-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .priority-card {
+        border: 1px solid #dbe2e8;
+        border-radius: 14px;
+        padding: 14px;
+        background: #fff;
+    }
+    .priority-card strong {
+        display: block;
+        font-size: 26px;
+        margin-top: 8px;
+        color: #0f172a;
+    }
+    .priority-card span {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .priority-card.critica { background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%); border-color: #fecdd3; }
+    .priority-card.alta { background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); border-color: #fed7aa; }
+    .priority-card.media { background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%); border-color: #fde68a; }
+    .priority-card.baixa { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); border-color: #bfdbfe; }
+    .occupancy-row {
+        display: grid;
+        grid-template-columns: 84px 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #eef2f7;
+    }
+    .occupancy-row:last-child { border-bottom: none; }
+    .occupancy-label strong { display: block; color: #0f172a; }
+    .occupancy-label span { color: #64748b; font-size: 11px; }
+    .progress-track {
+        height: 10px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #1bb8ff 0%, #0a6ed1 100%);
+    }
+    .progress-fill.warn {
+        background: linear-gradient(90deg, #f59e0b 0%, #ea580c 100%);
+    }
+    .progress-fill.crit {
+        background: linear-gradient(90deg, #fb7185 0%, #e11d48 100%);
+    }
+    .cockpit-stack {
+        display: grid;
+        gap: 14px;
+    }
+    .cockpit-list {
+        display: grid;
+        gap: 10px;
+    }
+    .cockpit-item {
+        padding: 12px 14px;
+        border: 1px solid #dbe2e8;
+        border-radius: 12px;
+        background: #fff;
+    }
+    .cockpit-item-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .cockpit-item-sub {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: #64748b;
+        font-size: 11px;
+    }
+    .priority-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 84px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        border: 1px solid transparent;
+    }
+    .priority-pill.critica { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+    .priority-pill.alta { background: #fff7ed; color: #c2410c; border-color: #fdba74; }
+    .priority-pill.media { background: #fffbeb; color: #a16207; border-color: #fde68a; }
+    .priority-pill.baixa { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .section-meta {
+        margin-top: -4px;
+        margin-bottom: 14px;
+        color: #64748b;
+        font-size: 11px;
+    }
+    .table-wrap.tall { max-height: 330px; overflow-y: auto; }
+    .pending-filters {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 180px auto;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .empty-inline {
+        color: #94a3b8;
+        text-align: center;
+        padding: 18px;
+        font-size: 12px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+    .toast-stack {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 7000;
+        display: grid;
+        gap: 10px;
+    }
+    .toast-msg {
+        min-width: 240px;
+        max-width: 360px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        animation: toast-in 0.18s ease;
+    }
+    .toast-msg.ok { background: linear-gradient(135deg, #166534, #22c55e); }
+    .toast-msg.err { background: linear-gradient(135deg, #991b1b, #ef4444); }
+    .toast-msg.info { background: linear-gradient(135deg, #1e3a8a, #0ea5e9); }
+    @keyframes toast-in {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    @media (max-width: 1100px) { .sap-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) {
+        .assist-grid { grid-template-columns: 1fr; }
+        .pending-filters { grid-template-columns: 1fr; }
+        .priority-grid { grid-template-columns: 1fr; }
+        .cockpit-hero-body { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (max-width: 1300px) {
+        .cockpit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .cockpit-panels { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 1100px) {
+        .sap-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 780px) {
+        .cockpit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 </style>
 {% endblock %}
 
@@ -172,6 +457,106 @@
         <span class="pill" style="background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe;">Categoria WMS | Gestão (Admin)</span>
         {% endif %}
     </div>
+</section>
+
+<section class="sap-card cockpit-hero">
+    <div class="cockpit-hero-body">
+        <div>
+            <h2>Centro de comando logistico</h2>
+            <p>Visual operacional unico para atacar pendencias, monitorar capacidade, acompanhar entradas do fiscal e agir rapido no enderecamento.</p>
+        </div>
+        <div class="shortcut-strip">
+            <div class="shortcut-chip"><kbd>/</kbd> Buscar NF</div>
+            <div class="shortcut-chip"><kbd>M</kbd> Consultar material</div>
+            <div class="shortcut-chip"><kbd>A</kbd> Assistente</div>
+            <div class="shortcut-chip"><kbd>R</kbd> Atualizar</div>
+        </div>
+    </div>
+</section>
+
+<section class="cockpit-grid">
+    <div class="metric-card">
+        <div class="metric-label"><span>Pendentes</span><span class="metric-trend" id="cockpitPendentesTag">Fila ativa</span></div>
+        <div class="metric-value" id="cockpitPendentes">0</div>
+        <div class="metric-foot">Itens aguardando endereco no WMS</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label"><span>Enderecados</span><span class="metric-trend">Base WMS</span></div>
+        <div class="metric-value" id="cockpitEnderecados">0</div>
+        <div class="metric-foot">Linhas com endereco confirmado</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label"><span>Saldo</span><span class="metric-trend">Disponivel</span></div>
+        <div class="metric-value" id="cockpitSaldo">0</div>
+        <div class="metric-foot">Quantidade total enderecada</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label"><span>Idade media</span><span class="metric-trend">SLA</span></div>
+        <div class="metric-value" id="cockpitIdadeMedia">0h</div>
+        <div class="metric-foot">Tempo medio das pendencias</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label"><span>Mov. 24h</span><span class="metric-trend">Rastreio</span></div>
+        <div class="metric-value" id="cockpitMov24h">0</div>
+        <div class="metric-foot">Movimentacoes registradas no ultimo dia</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label"><span>Risco</span><span class="metric-trend" id="cockpitRiscoTag">Estavel</span></div>
+        <div class="metric-value" id="cockpitAlertas">0</div>
+        <div class="metric-foot">Alertas abertos | Divergencias: <span id="cockpitDivergencias">0</span></div>
+    </div>
+</section>
+
+<section class="cockpit-panels">
+    <section class="sap-card" style="margin-bottom:0;">
+        <h2 class="sap-card-title"><i class="fas fa-bolt"></i> Prioridade operacional</h2>
+        <p class="section-meta">Fila classificada por criticidade, idade e itens com OS ou OC vinculada.</p>
+        <div class="priority-grid">
+            <div class="priority-card critica">
+                <span>Critica</span>
+                <strong id="prioridadeCritica">0</strong>
+            </div>
+            <div class="priority-card alta">
+                <span>Alta</span>
+                <strong id="prioridadeAlta">0</strong>
+            </div>
+            <div class="priority-card media">
+                <span>Media</span>
+                <strong id="prioridadeMedia">0</strong>
+            </div>
+            <div class="priority-card baixa">
+                <span>Baixa</span>
+                <strong id="prioridadeBaixa">0</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="sap-card" style="margin-bottom:0;">
+        <h2 class="sap-card-title"><i class="fas fa-warehouse"></i> Capacidade por deposito</h2>
+        <p class="section-meta">Visao rapida de ocupacao e pontos com risco de saturacao.</p>
+        <div id="cockpitDepositos" class="cockpit-stack">
+            <div class="empty-inline">Carregando ocupacao...</div>
+        </div>
+    </section>
+
+    <section class="sap-card" style="margin-bottom:0;">
+        <h2 class="sap-card-title"><i class="fas fa-layer-group"></i> Maiores pendencias</h2>
+        <p class="section-meta">Top materiais e notas que merecem priorizacao imediata.</p>
+        <div class="cockpit-stack">
+            <div>
+                <p class="mini-title">Materiais</p>
+                <div id="cockpitTopPendentes" class="cockpit-list">
+                    <div class="empty-inline">Carregando materiais...</div>
+                </div>
+            </div>
+            <div>
+                <p class="mini-title">Notas</p>
+                <div id="cockpitNotasPendentes" class="cockpit-list">
+                    <div class="empty-inline">Carregando notas...</div>
+                </div>
+            </div>
+        </div>
+    </section>
 </section>
 
 <div id="assistBackdrop" class="assist-backdrop" onclick="fecharAssistenteEndereco()"></div>
@@ -217,11 +602,20 @@
 <div class="sap-grid">
     <section class="sap-card">
         <h2 class="sap-card-title"><i class="fas fa-clock"></i> Pendentes de Endereçamento</h2>
-        <div class="sap-row">
+        <p class="section-meta">Filtro operacional para atacar a fila por NF, material e prioridade.</p>
+        <div class="pending-filters">
             <input id="filtroNotaPendente" class="sap-input" placeholder="Filtrar por Nota Fiscal..." />
+            <input id="filtroSkuPendente" class="sap-input" placeholder="Filtrar por codigo do material..." />
+            <select id="filtroPrioridadePendente" class="sap-select">
+                <option value="Todas">Todas as prioridades</option>
+                <option value="Critica">Critica</option>
+                <option value="Alta">Alta</option>
+                <option value="Media">Media</option>
+                <option value="Baixa">Baixa</option>
+            </select>
             <button class="sap-btn primary" onclick="carregarPendentesEnderecamento()">Pesquisar</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap tall">
             <table class="sap-table">
                 <thead>
                     <tr>
@@ -229,12 +623,14 @@
                         <th>Produto</th>
                         <th>Descrição</th>
                         <th>Qtd</th>
-                        <th>Status</th>
+                        <th>Prioridade</th>
+                        <th>Aguardando</th>
+                        <th>Vinculo</th>
                         <th style="text-align:center;">Ação</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyPendentes">
-                    <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">Aguardando consulta...</td></tr>
+                    <tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-muted);">Aguardando consulta...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -281,6 +677,14 @@
                     </thead>
                     <tbody id="tbodyLocResumo"></tbody>
                 </table>
+            </div>
+        </section>
+
+        <section class="sap-card">
+            <h2 class="sap-card-title"><i class="fas fa-history"></i> Ultimas movimentacoes</h2>
+            <p class="section-meta">Rastreabilidade operacional das ultimas movimentacoes registradas.</p>
+            <div id="cockpitMovimentacoes" class="cockpit-list">
+                <div class="empty-inline">Carregando movimentacoes...</div>
             </div>
         </section>
     </div>
@@ -461,6 +865,8 @@
     </div>
 </div>
 
+<div id="toastStack" class="toast-stack"></div>
+
 <script>
 // --- LÓGICA JAVASCRIPT PRESERVADA INTEGRALMENTE ---
 const IS_ADMIN_WMS = document.getElementById('wmsPageRoot')?.dataset?.isAdmin === '1';
@@ -469,6 +875,7 @@ let cachePendentes = [];
 let itemSelecionado = null;
 let itemAssistenteSelecionado = null;
 let cacheDepositosTransfer = [];
+let cacheCockpit = null;
 
 function formatarData(iso) {
     if (!iso) return '-';
@@ -481,6 +888,200 @@ async function fetchJson(url, options = {}) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.erro || data.msg || 'Falha na requisicao');
     return data;
+}
+
+function toast(msg, tipo = 'info') {
+    const stack = document.getElementById('toastStack');
+    if (!stack) {
+        alert(msg);
+        return;
+    }
+    const el = document.createElement('div');
+    el.className = `toast-msg ${tipo}`;
+    el.textContent = msg;
+    stack.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-6px)';
+        setTimeout(() => el.remove(), 180);
+    }, 2600);
+}
+
+function formatarNumero(valor, casas = 0) {
+    return Number(valor || 0).toLocaleString('pt-BR', {
+        minimumFractionDigits: casas,
+        maximumFractionDigits: casas,
+    });
+}
+
+function classePrioridade(prioridade) {
+    const chave = String(prioridade || '').trim().toLowerCase();
+    return ['critica', 'alta', 'media', 'baixa'].includes(chave) ? chave : 'baixa';
+}
+
+function resumoVinculo(item) {
+    if (item.ordem_servico_sugerida) return `OS ${item.ordem_servico_sugerida}`;
+    if (item.ordem_compra_sugerida) return `OC ${item.ordem_compra_sugerida}`;
+    return item.ordem_vinculada ? 'Com vinculo' : 'Sem OS/OC';
+}
+
+function renderListaCockpit(containerId, items, renderItem, emptyMessage) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    if (!items.length) {
+        container.innerHTML = `<div class="empty-inline">${emptyMessage}</div>`;
+        return;
+    }
+    items.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'cockpit-item';
+        el.innerHTML = renderItem(item);
+        container.appendChild(el);
+    });
+}
+
+function renderCockpit(data) {
+    cacheCockpit = data || {};
+    const cards = cacheCockpit.cards || {};
+    const prioridades = cacheCockpit.prioridades || {};
+    const alertas = Number(cards.alertas_abertos || 0);
+    const divergencias = Number(cards.divergencias_abertas || 0);
+    const pendentes = Number(cards.pendentes_enderecamento || 0);
+
+    document.getElementById('cockpitPendentes').textContent = formatarNumero(cards.pendentes_enderecamento || 0);
+    document.getElementById('cockpitEnderecados').textContent = formatarNumero(cards.itens_enderecados || 0);
+    document.getElementById('cockpitSaldo').textContent = formatarNumero(cards.saldo_enderecado || 0, 2);
+    document.getElementById('cockpitIdadeMedia').textContent = `${formatarNumero(cards.idade_media_pendente_horas || 0, 1)}h`;
+    document.getElementById('cockpitMov24h').textContent = formatarNumero(cards.movimentacoes_24h || 0);
+    document.getElementById('cockpitAlertas').textContent = formatarNumero(alertas);
+    document.getElementById('cockpitDivergencias').textContent = formatarNumero(divergencias);
+    document.getElementById('prioridadeCritica').textContent = formatarNumero(prioridades.Critica || 0);
+    document.getElementById('prioridadeAlta').textContent = formatarNumero(prioridades.Alta || 0);
+    document.getElementById('prioridadeMedia').textContent = formatarNumero(prioridades.Media || 0);
+    document.getElementById('prioridadeBaixa').textContent = formatarNumero(prioridades.Baixa || 0);
+
+    const tagPendencia = document.getElementById('cockpitPendentesTag');
+    if (tagPendencia) {
+        tagPendencia.textContent = pendentes >= 20 ? 'Fila critica' : pendentes >= 8 ? 'Fila alta' : 'Fila sob controle';
+    }
+    const tagRisco = document.getElementById('cockpitRiscoTag');
+    if (tagRisco) {
+        tagRisco.textContent = alertas > 0 || divergencias > 0 ? 'Atencao' : 'Estavel';
+    }
+
+    renderListaCockpit(
+        'cockpitDepositos',
+        cacheCockpit.ocupacao_por_deposito || [],
+        (dep) => {
+            const ocupacao = Number(dep.ocupacao_percentual || 0);
+            const fillClass = ocupacao >= 90 ? 'crit' : ocupacao >= 75 ? 'warn' : '';
+            return `
+                <div class="occupancy-row">
+                    <div class="occupancy-label">
+                        <strong>${dep.deposito_codigo || '-'}</strong>
+                        <span>${dep.deposito_nome || 'Sem nome'}</span>
+                    </div>
+                    <div>
+                        <div class="progress-track"><div class="progress-fill ${fillClass}" style="width:${Math.min(ocupacao, 100)}%"></div></div>
+                        <div class="cockpit-item-sub" style="margin-top:6px;">
+                            <span>${formatarNumero(dep.capacidade_ocupada || 0, 2)} de ${formatarNumero(dep.capacidade_total || 0, 2)}</span>
+                            <span>${formatarNumero(dep.localizacoes_criticas || 0)} locais criticos</span>
+                        </div>
+                    </div>
+                    <strong>${formatarNumero(ocupacao, 1)}%</strong>
+                </div>
+            `;
+        },
+        'Sem ocupacao para exibir.'
+    );
+
+    renderListaCockpit(
+        'cockpitTopPendentes',
+        cacheCockpit.top_pendentes || [],
+        (item) => `
+            <div class="cockpit-item-head">
+                <span>${item.codigo_item || '-'}</span>
+                <span>${formatarNumero(item.qtd_total || 0, 2)}</span>
+            </div>
+            <div class="cockpit-item-sub">
+                <span>${item.descricao || 'Sem descricao'}</span>
+                <span>${formatarNumero(item.linhas || 0)} linhas</span>
+            </div>
+        `,
+        'Sem materiais pendentes.'
+    );
+
+    renderListaCockpit(
+        'cockpitNotasPendentes',
+        cacheCockpit.notas_pendentes || [],
+        (item) => `
+            <div class="cockpit-item-head">
+                <span>NF ${item.numero_nota || '-'}</span>
+                <span>${formatarNumero(item.qtd_total || 0, 2)}</span>
+            </div>
+            <div class="cockpit-item-sub">
+                <span>${formatarNumero(item.linhas || 0)} linhas</span>
+                <span>Ultima entrada: ${formatarData(item.ultima_entrada)}</span>
+            </div>
+        `,
+        'Sem notas pendentes.'
+    );
+
+    renderListaCockpit(
+        'cockpitMovimentacoes',
+        cacheCockpit.movimentacoes_recentes || [],
+        (mov) => `
+            <div class="cockpit-item-head">
+                <span>${mov.tipo_movimentacao || 'Movimentacao'}</span>
+                <span>${formatarNumero(mov.qtd_movimentada || 0, 2)}</span>
+            </div>
+            <div class="cockpit-item-sub">
+                <span>NF ${mov.numero_nota || '-'}</span>
+                <span>${mov.usuario || 'Sistema'}</span>
+                <span>${formatarData(mov.data_movimentacao)}</span>
+            </div>
+        `,
+        'Sem movimentacoes recentes.'
+    );
+}
+
+async function carregarCockpitWms() {
+    try {
+        const data = await fetchJson('/api/wms/cockpit');
+        renderCockpit(data);
+    } catch (err) {
+        renderCockpit({});
+        console.error(err.message);
+    }
+}
+
+function instalarAtalhosWms() {
+    document.addEventListener('keydown', (event) => {
+        const alvo = event.target;
+        const digitando = alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT' || alvo.isContentEditable);
+        if (digitando && event.key !== 'Escape') return;
+
+        if (event.key === '/') {
+            event.preventDefault();
+            document.getElementById('filtroNotaPendente')?.focus();
+            return;
+        }
+        if (event.key.toLowerCase() === 'm') {
+            event.preventDefault();
+            document.getElementById('inputSkuRelatorio')?.focus();
+            return;
+        }
+        if (event.key.toLowerCase() === 'a') {
+            event.preventDefault();
+            abrirAssistenteEndereco();
+            return;
+        }
+        if (event.key.toLowerCase() === 'r') {
+            event.preventDefault();
+            refreshAll();
+        }
+    }, { passive: false });
 }
 
 function renderLocalizacoesResumo() {
@@ -516,32 +1117,46 @@ async function carregarLocalizacoes() {
 
 async function carregarPendentesEnderecamento() {
     const filtroNota = document.getElementById('filtroNotaPendente').value.trim();
-    const query = filtroNota ? `?nota=${encodeURIComponent(filtroNota)}` : '';
+    const filtroSku = document.getElementById('filtroSkuPendente')?.value.trim() || '';
+    const filtroPrioridade = document.getElementById('filtroPrioridadePendente')?.value || 'Todas';
+    const queryParams = new URLSearchParams();
+    if (filtroNota) queryParams.set('nota', filtroNota);
+    if (filtroSku) queryParams.set('codigo_item', filtroSku);
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
     const tbody = document.getElementById('tbodyPendentes');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Carregando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Carregando...</td></tr>';
 
     try {
         const itens = await fetchJson(`/api/wms/pendentes-enderecamento${query}`);
         cachePendentes = Array.isArray(itens) ? itens : [];
         renderAssistentePendentes();
+        const itensVisiveis = filtroPrioridade === 'Todas'
+            ? cachePendentes
+            : cachePendentes.filter((item) => String(item.prioridade_operacional || '').toLowerCase() === filtroPrioridade.toLowerCase());
         tbody.innerHTML = '';
-        if (!itens.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum item pendente.</td></tr>';
+        if (!itensVisiveis.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Nenhum item pendente para esse filtro.</td></tr>';
             return;
         }
-        itens.forEach((item) => {
+        itensVisiveis.forEach((item) => {
             const nf = String(item.numero_nota || '').replace(/'/g, "\\'");
             const codigoMaterial = String(item.codigo_item || '').replace(/'/g, "\\'");
             const osSug = String(item.ordem_servico_sugerida || '').replace(/'/g, "\\'");
             const ocSug = String(item.ordem_compra_sugerida || '').replace(/'/g, "\\'");
             const depositoId = Number(item.deposito_id || 0);
+            const prioridade = item.prioridade_operacional || 'Baixa';
+            const prioridadeCss = classePrioridade(prioridade);
+            const aguardando = `${formatarNumero(item.idade_horas || 0, 1)}h`;
+            const depositoTexto = item.deposito_codigo ? ` | Dep ${item.deposito_codigo}` : '';
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><strong>${item.numero_nota}</strong></td>
                 <td style="color:var(--sap-blue); font-weight:700;">${item.codigo_item}</td>
-                <td>${item.descricao || '-'}</td>
+                <td>${item.descricao || '-'}<div class="cockpit-item-sub" style="margin-top:4px;">${item.deposito_nome || 'Deposito indefinido'}${depositoTexto}</div></td>
                 <td style="font-weight:700;">${Number(item.qtd_atual || 0).toFixed(2)}</td>
-                <td><span class="pill">${item.status || 'Pendente'}</span></td>
+                <td><span class="priority-pill ${prioridadeCss}">${prioridade}</span></td>
+                <td>${aguardando}</td>
+                <td>${resumoVinculo(item)}</td>
                 <td style="text-align:center;"><button class="sap-btn primary" style="padding:6px 10px; font-size:10px;" onclick="abrirModalEndereco(${item.id}, '${nf}', '${codigoMaterial}', ${depositoId}, '${osSug}', '${ocSug}')">Enderecar</button></td>
             `;
             tbody.appendChild(tr);
@@ -549,7 +1164,7 @@ async function carregarPendentesEnderecamento() {
     } catch (err) {
         cachePendentes = [];
         renderAssistentePendentes();
-        tbody.innerHTML = `<tr><td colspan="6">Erro: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8">Erro: ${err.message}</td></tr>`;
     }
 }
 
@@ -591,6 +1206,7 @@ function renderAssistentePendentes() {
     lista.forEach((item) => {
         const el = document.createElement('div');
         const ativo = itemAssistenteSelecionado && Number(itemAssistenteSelecionado.id) === Number(item.id);
+        const prioridade = item.prioridade_operacional || 'Baixa';
         el.className = `assist-item${ativo ? ' active' : ''}`;
         el.innerHTML = `
             <div class="assist-item-top">
@@ -599,6 +1215,12 @@ function renderAssistentePendentes() {
             </div>
             <div class="assist-item-sub"><strong>${item.codigo_item || '-'}</strong> | ${item.descricao || 'Sem descrição'}</div>
         `;
+        el.insertAdjacentHTML('beforeend', `
+            <div class="assist-item-sub" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                <span class="priority-pill ${classePrioridade(prioridade)}">${prioridade}</span>
+                <span>${formatarNumero(item.idade_horas || 0, 1)}h aguardando</span>
+            </div>
+        `);
         el.addEventListener('click', () => selecionarItemAssistente(item.id));
         container.appendChild(el);
     });
@@ -626,7 +1248,7 @@ function selecionarItemAssistente(itemId) {
     const item = (cachePendentes || []).find((x) => Number(x.id) === Number(itemId));
     if (!item) return;
     itemAssistenteSelecionado = item;
-    document.getElementById('assistItemSelecionadoInfo').textContent = `NF ${item.numero_nota} | Material ${item.codigo_item} | Qtd ${Number(item.qtd_atual || 0).toFixed(2)}`;
+    document.getElementById('assistItemSelecionadoInfo').textContent = `NF ${item.numero_nota} | Material ${item.codigo_item} | Qtd ${Number(item.qtd_atual || 0).toFixed(2)} | ${item.prioridade_operacional || 'Baixa'}`;
     document.getElementById('assistOrdemCompra').value = item.ordem_compra_sugerida || '';
     preencherLocalizacoesAssistente(item.deposito_id);
     renderAssistentePendentes();
@@ -667,6 +1289,7 @@ async function confirmarAssistenteEnderecamento() {
         document.getElementById('assistLocalizacao').innerHTML = '<option value="">Selecione o endereço</option>';
 
         await carregarPendentesEnderecamento();
+        await carregarCockpitWms();
         await buscarEstoquePorSkuSilencioso(codigoSelecionado);
     } catch (err) {
         alert(err.message);
@@ -742,6 +1365,7 @@ async function confirmarEnderecamento() {
         });
         fecharModalEndereco();
         await carregarPendentesEnderecamento();
+        await carregarCockpitWms();
         await buscarEstoquePorSkuSilencioso(codigoSelecionado);
     } catch (err) { alert(err.message); }
 }
@@ -861,18 +1485,21 @@ async function resolverAlerta(alertaId) {
     try {
         await fetchJson(`/api/wms/alertas/${alertaId}/resolver`, { method: 'POST' });
         await carregarGovernancaWms();
+        await carregarCockpitWms();
+        toast('Alerta resolvido com sucesso.', 'ok');
     } catch (err) {
-        alert(err.message);
+        toast(err.message, 'err');
     }
 }
 
 async function executarReconciliacao() {
     try {
         const resultado = await fetchJson('/api/wms/governanca/reconciliar', { method: 'POST' });
-        alert(`Reconciliacao concluida. Analisadas: ${resultado.resultado.analisadas}, novas divergencias: ${resultado.resultado.novas_divergencias}.`);
+        toast(`Reconciliacao concluida. Analisadas: ${resultado.resultado.analisadas}, novas divergencias: ${resultado.resultado.novas_divergencias}.`, 'ok');
         await carregarGovernancaWms();
+        await carregarCockpitWms();
     } catch (err) {
-        alert(err.message);
+        toast(err.message, 'err');
     }
 }
 
@@ -885,10 +1512,11 @@ async function processarFilaIntegracao() {
             body: JSON.stringify(payload),
         });
         const res = retorno.resultado || {};
-        alert(`Fila processada. Sucesso: ${res.sucesso || 0}, falha: ${res.falha || 0}.`);
+        toast(`Fila processada. Sucesso: ${res.sucesso || 0}, falha: ${res.falha || 0}.`, 'ok');
         await carregarGovernancaWms();
+        await carregarCockpitWms();
     } catch (err) {
-        alert(err.message);
+        toast(err.message, 'err');
     }
 }
 
@@ -1039,14 +1667,25 @@ if (document.getElementById('selectDepositoDestino')) {
     document.getElementById('selectDepositoDestino').addEventListener('change', atualizarLocalizacoesDestinoTransferencia);
 }
 document.getElementById('assistFiltro').addEventListener('input', renderAssistentePendentes);
+document.getElementById('filtroPrioridadePendente')?.addEventListener('change', carregarPendentesEnderecamento);
+document.getElementById('filtroNotaPendente')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') carregarPendentesEnderecamento();
+});
+document.getElementById('filtroSkuPendente')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') carregarPendentesEnderecamento();
+});
 
 async function refreshAll() {
     await carregarLocalizacoes();
+    await carregarCockpitWms();
     await carregarPendentesEnderecamento();
     await carregarGovernancaWms();
 }
 
-document.addEventListener('DOMContentLoaded', refreshAll);
+document.addEventListener('DOMContentLoaded', () => {
+    instalarAtalhosWms();
+    refreshAll();
+});
 </script>
 </div>
 {% endblock %}

@@ -2,7 +2,7 @@
 Serviço WMS - Warehouse Management System
 Gerencia localização, estoque e movimentação de itens no armazém
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import current_app
 from sqlalchemy import func
 from ..extensions import db
@@ -1199,5 +1199,153 @@ class WMSService:
                     'criado_em': d.criado_em.isoformat() if d.criado_em else None,
                 }
                 for d in divergencias_abertas
+            ],
+        }
+
+    @staticmethod
+    def analisar_pendencia_enderecamento(item):
+        data_criacao = getattr(item, 'data_criacao', None)
+        idade_horas = 0.0
+        if data_criacao:
+            idade_horas = max((datetime.now() - data_criacao).total_seconds() / 3600, 0.0)
+
+        ordem_vinculada = bool(getattr(item, 'ordem_servico', None) or getattr(item, 'ordem_compra', None))
+        if idade_horas >= 24 or float(getattr(item, 'qtd_atual', 0) or 0) >= 50:
+            prioridade = 'Critica'
+        elif idade_horas >= 8 or ordem_vinculada:
+            prioridade = 'Alta'
+        elif idade_horas >= 2:
+            prioridade = 'Media'
+        else:
+            prioridade = 'Baixa'
+
+        return {
+            'idade_horas': round(idade_horas, 2),
+            'prioridade': prioridade,
+            'ordem_vinculada': ordem_vinculada,
+        }
+
+    @staticmethod
+    def obter_cockpit_operacional():
+        WMSService.garantir_parametros_operacionais()
+        WMSService.gerar_alertas_operacionais()
+
+        pendentes = ItemWMS.query.filter_by(ativo=True, localizacao_id=None).all()
+        enderecados = ItemWMS.query.filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.isnot(None)).all()
+        alertas_abertos = WMSAlertaOperacional.query.filter_by(status='Aberto').count()
+        divergencias_abertas = WMSReconciliacaoDivergencia.query.filter_by(status='Aberta').count()
+
+        prioridade_contagem = {'Critica': 0, 'Alta': 0, 'Media': 0, 'Baixa': 0}
+        for item in pendentes:
+            prioridade = WMSService.analisar_pendencia_enderecamento(item)['prioridade']
+            prioridade_contagem[prioridade] = prioridade_contagem.get(prioridade, 0) + 1
+
+        depositos = DepositoWMS.query.filter_by(ativo=True).order_by(DepositoWMS.codigo.asc()).all()
+        ocupacao_por_deposito = []
+        for deposito in depositos:
+            localizacoes = LocalizacaoArmazem.query.filter_by(deposito_id=deposito.id, ativo=True).all()
+            capacidade_total = sum(float(loc.capacidade_maxima or 0) for loc in localizacoes)
+            capacidade_ocupada = sum(float(loc.capacidade_atual or 0) for loc in localizacoes)
+            percentual = round((capacidade_ocupada / capacidade_total) * 100, 2) if capacidade_total > 0 else 0.0
+            locais_criticos = sum(
+                1
+                for loc in localizacoes
+                if float(loc.capacidade_maxima or 0) > 0
+                and ((float(loc.capacidade_atual or 0) / float(loc.capacidade_maxima or 1)) * 100) >= 90
+            )
+            ocupacao_por_deposito.append(
+                {
+                    'deposito_id': deposito.id,
+                    'deposito_codigo': deposito.codigo,
+                    'deposito_nome': deposito.nome,
+                    'capacidade_total': round(capacidade_total, 2),
+                    'capacidade_ocupada': round(capacidade_ocupada, 2),
+                    'ocupacao_percentual': percentual,
+                    'localizacoes_criticas': locais_criticos,
+                }
+            )
+
+        movimentacoes_recentes = (
+            MovimentacaoWMS.query.order_by(MovimentacaoWMS.data_movimentacao.desc(), MovimentacaoWMS.id.desc()).limit(8).all()
+        )
+
+        top_pendentes = (
+            db.session.query(
+                ItemWMS.codigo_item,
+                func.max(ItemWMS.descricao).label('descricao'),
+                func.sum(ItemWMS.qtd_atual).label('qtd_total'),
+                func.count(ItemWMS.id).label('linhas'),
+            )
+            .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None))
+            .group_by(ItemWMS.codigo_item)
+            .order_by(func.sum(ItemWMS.qtd_atual).desc(), ItemWMS.codigo_item.asc())
+            .limit(8)
+            .all()
+        )
+
+        notas_pendentes = (
+            db.session.query(
+                ItemWMS.numero_nota,
+                func.count(ItemWMS.id).label('linhas'),
+                func.sum(ItemWMS.qtd_atual).label('qtd_total'),
+                func.max(ItemWMS.data_criacao).label('ultima_entrada'),
+            )
+            .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None))
+            .group_by(ItemWMS.numero_nota)
+            .order_by(func.max(ItemWMS.data_criacao).desc(), ItemWMS.numero_nota.desc())
+            .limit(8)
+            .all()
+        )
+
+        movimentacoes_24h = MovimentacaoWMS.query.filter(
+            MovimentacaoWMS.data_movimentacao >= datetime.now() - timedelta(hours=24)
+        ).count()
+
+        disponibilidade_total = sum(float(item.qtd_atual or 0) for item in enderecados)
+        idade_media = round(
+            (sum(WMSService.analisar_pendencia_enderecamento(item)['idade_horas'] for item in pendentes) / len(pendentes)),
+            2,
+        ) if pendentes else 0.0
+
+        return {
+            'cards': {
+                'pendentes_enderecamento': len(pendentes),
+                'itens_enderecados': len(enderecados),
+                'saldo_enderecado': round(disponibilidade_total, 2),
+                'idade_media_pendente_horas': idade_media,
+                'movimentacoes_24h': movimentacoes_24h,
+                'alertas_abertos': alertas_abertos,
+                'divergencias_abertas': divergencias_abertas,
+            },
+            'prioridades': prioridade_contagem,
+            'ocupacao_por_deposito': ocupacao_por_deposito,
+            'movimentacoes_recentes': [
+                {
+                    'id': m.id,
+                    'numero_nota': m.numero_nota,
+                    'tipo_movimentacao': m.tipo_movimentacao,
+                    'qtd_movimentada': float(m.qtd_movimentada or 0),
+                    'usuario': m.usuario,
+                    'data_movimentacao': m.data_movimentacao.isoformat() if m.data_movimentacao else None,
+                }
+                for m in movimentacoes_recentes
+            ],
+            'top_pendentes': [
+                {
+                    'codigo_item': row.codigo_item,
+                    'descricao': row.descricao,
+                    'qtd_total': float(row.qtd_total or 0),
+                    'linhas': int(row.linhas or 0),
+                }
+                for row in top_pendentes
+            ],
+            'notas_pendentes': [
+                {
+                    'numero_nota': row.numero_nota,
+                    'linhas': int(row.linhas or 0),
+                    'qtd_total': float(row.qtd_total or 0),
+                    'ultima_entrada': row.ultima_entrada.isoformat() if row.ultima_entrada else None,
+                }
+                for row in notas_pendentes
             ],
         }

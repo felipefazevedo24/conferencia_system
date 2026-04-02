@@ -97,6 +97,10 @@ def baixas_pendentes():
     pendentes = [
         {
             "baixa_id": baixa.id,
+            "tipo_controle": estoque.tipo_controle or ConsertoService.TIPO_CONTROLE_PADRAO,
+            "tipo_operacao": estoque.tipo_operacao or "Conserto",
+            "cfop_remessa": estoque.cfop_remessa,
+            "cfop_retorno": baixa.cfop_retorno,
             "chave_nf_remessa": estoque.chave_nf_remessa,
             "numero_nf_remessa": estoque.numero_nf_remessa or mapa_numeros.get(estoque.chave_nf_remessa, ""),
             "chave_nf_retorno": baixa.chave_nf_retorno,
@@ -125,6 +129,9 @@ def saldos_abertos():
     result = [
         {
             "id": saldo.id,
+            "tipo_controle": saldo.tipo_controle or ConsertoService.TIPO_CONTROLE_PADRAO,
+            "tipo_operacao": saldo.tipo_operacao or "Conserto",
+            "cfop_remessa": saldo.cfop_remessa,
             "chave_nf_remessa": saldo.chave_nf_remessa,
             "numero_nf_remessa": saldo.numero_nf_remessa or mapa_numeros.get(saldo.chave_nf_remessa, ""),
             "fornecedor_cnpj": saldo.fornecedor_cnpj,
@@ -152,6 +159,12 @@ def historico_estoque():
         payload["numero_nf_remessa"] = item.get("numero_nf_remessa") or mapa_numeros.get(item["chave_nf_remessa"], "")
         result.append(payload)
     return jsonify(result)
+
+
+@conserto_bp.route("/conserto/relatorio_estoque", methods=["GET"])
+@permission_required("PAGE_CONSERTO")
+def relatorio_estoque():
+    return jsonify(ConsertoService.montar_relatorio_estoque())
 
 
 @conserto_bp.route("/conserto/sincronizar_notas", methods=["POST"])
@@ -210,6 +223,9 @@ def criar_saldo():
             produto_codigo=data["produto_codigo"],
             produto_descricao=data["produto_descricao"],
             quantidade=data["quantidade"],
+            tipo_operacao=data.get("tipo_operacao"),
+            tipo_controle=data.get("tipo_controle"),
+            cfop_remessa=data.get("cfop_remessa"),
             usuario=session.get("username", "sistema"),
         )
         return jsonify({"id": saldo.id, "msg": "Saldo criado com sucesso"}), 201
@@ -232,8 +248,27 @@ def vinculo_manual():
             quantidade=data["quantidade"],
             usuario=session.get("username", "sistema"),
             observacoes=data.get("observacoes"),
+            cfop_retorno=data.get("cfop_retorno"),
+            numero_nf_retorno=data.get("numero_nf_retorno"),
         )
         return jsonify({"id": baixa.id, "msg": "Vinculo manual registrado"}), 200
+    except (KeyError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+
+
+@conserto_bp.route("/conserto/consultar_retorno_manual", methods=["POST"])
+@permission_required("PAGE_CONSERTO")
+def consultar_retorno_manual():
+    data = request.get_json(silent=True) or {}
+    try:
+        payload = ConsertoService.consultar_retorno_manual_por_numero(
+            numero_nf_retorno=data["numero_nf_retorno"],
+            conserto_estoque_id=data["conserto_estoque_id"],
+        )
+        return jsonify(payload), 200
     except (KeyError, ValueError) as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
