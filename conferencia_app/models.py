@@ -299,6 +299,37 @@ class ExpedicaoEstorno(db.Model):
     data = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
+class ExpedicaoConferenciaSimples(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    orcamento = db.Column(db.String(80), nullable=False, index=True)
+    conferente = db.Column(db.String(100), nullable=False, index=True)
+    data_conferencia = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    numero_nf = db.Column(db.String(40), index=True)
+    nome_cliente = db.Column(db.String(160))
+    cliente_origem = db.Column(db.String(20), nullable=False, default="Manual")
+    consyste_document_id = db.Column(db.String(120), index=True)
+    transportadora = db.Column(db.String(160))
+    placa = db.Column(db.String(20))
+    status = db.Column(db.String(30), nullable=False, default="Pendente de expedição", index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    expedido_at = db.Column(db.DateTime)
+    expedido_by = db.Column(db.String(100))
+
+
+class ExpedicaoConferenciaSimplesFoto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conferencia_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_conferencia_simples.id"),
+        nullable=False,
+        index=True,
+    )
+    file_name = db.Column(db.String(260), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
 # ============================================================================
 # MODELOS WMS - WAREHOUSE MANAGEMENT SYSTEM
 # ============================================================================

@@ -1,9 +1,16 @@
 {
-  "name": "Conferencia System",
-  "short_name": "Conferencia",
+  "name": "Columbia Sync",
+  "short_name": "Columbia Sync",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ebeef2",
   "theme_color": "#0a6ed1",
-  "icons": []
+  "icons": [
+    {
+      "src": "/static/favicon16x16.png?v=20260402-2",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }

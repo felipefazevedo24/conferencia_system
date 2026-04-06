@@ -6,12 +6,15 @@
     <meta name="theme-color" content="#0f62c9">
     <title>{% block title %}Columbia Sync{% endblock %}</title>
     <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="apple-touch-icon" href="/static/favicon16x16.png?v=20260402-2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/ui_erp.css">
+    <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260402-1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
@@ -32,7 +35,7 @@
                 <div class="sidebar-context-label">Perfil atual</div>
                 <div class="sidebar-context-role">
                     <i class="fas fa-layer-group"></i>
-                    <span>{{ session.get("role", "Operacao") }}</span>
+                    <span>{{ session.get("role", "Operação") }}</span>
                 </div>
             </div>
         </div>
@@ -50,7 +53,7 @@
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel open" id="menu-recebimento">
-                        {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusao XML</a>{% endif %}
+                        {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusão XML</a>{% endif %}
                         {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
                         {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
                         {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
@@ -64,7 +67,7 @@
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel open" id="menu-compras">
-                        {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Pre-nota de entrada</a>{% endif %}
+                        {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Pré-nota de entrada</a>{% endif %}
                         {% if can_access('PAGE_XML_AUDITOR') %}<a href="/compras/auditor-xml" class="list-group-item list-group-item-action"><i class="fas fa-shield-alt"></i> Auditor XML</a>{% endif %}
                         {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Documento de entrada</a>{% endif %}
                     </div>
@@ -78,7 +81,7 @@
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel open" id="menu-recebimento">
-                        {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
+                        {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferência cega</a>{% endif %}
                         {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
                         {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
                         {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
@@ -89,11 +92,11 @@
                 {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-expedicao" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-truck-loading"></i><span>Expedicao</span></span>
+                        <span class="nav-group-title"><i class="fas fa-truck-loading"></i><span>Expedição</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-expedicao">
-                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Conferencia</a>{% endif %}
+                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Conferência</a>{% endif %}
                         {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
                         {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
                     </div>
@@ -108,11 +111,11 @@
                     </button>
                     <div class="submenu-panel" id="menu-wms">
                         {% if can_access('PAGE_WMS') %}
-                        <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Enderecamento</a>
-                        <a href="/wms#relatorio-estoque" class="list-group-item list-group-item-action"><i class="fas fa-chart-bar"></i> Relatorio de estoque</a>
+                        <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
+                        <a href="/wms#relatorio-estoque" class="list-group-item list-group-item-action"><i class="fas fa-chart-bar"></i> Relatório de estoque</a>
                         {% endif %}
-                        {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de enderecos</a>{% endif %}
-                        {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governanca WMS</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governança WMS</a>{% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -134,12 +137,12 @@
                 {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administracao</span></span>
+                        <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administração</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-administracao">
                         {% if can_access('PAGE_ADMIN_DASHBOARD') %}<a href="/admin" class="list-group-item list-group-item-action"><i class="fas fa-chart-line"></i> Dashboard</a>{% endif %}
-                        {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestao de acessos</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestão de acessos</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_HISTORICO') %}<a href="/historico" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Logs e auditoria</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_ACESSOS') %}<a href="/admin/acessos" class="list-group-item list-group-item-action"><i class="fas fa-user-clock"></i> Auditoria de acessos</a>{% endif %}
                     </div>
@@ -150,12 +153,12 @@
 
         <div class="sidebar-footer">
             <div class="sidebar-user">
-                <span>Sessao atual</span>
+                <span>Sessão atual</span>
                 <strong>{{ user }}</strong>
             </div>
             <a href="javascript:void(0)" onclick="confirmarLogout()" class="sidebar-footer-link">
                 <i class="fas fa-sign-out-alt"></i>
-                <span>Encerrar sessao</span>
+                <span>Encerrar sessão</span>
             </a>
         </div>
     </aside>
@@ -167,11 +170,11 @@
                 <div class="top-route">
                     <span>Columbia Sync</span>
                     <strong>{% block shell_title %}Painel{% endblock %}</strong>
-                    <small>{% block shell_subtitle %}Um unico shell para navegar todo o sistema.{% endblock %}</small>
+                    <small>{% block shell_subtitle %}{% endblock %}</small>
                 </div>
             </div>
             <div class="nav-right">
-                <div class="top-status-pill"><i class="fas fa-sparkles"></i><span>{{ session.get("role", "Operacao") }}</span></div>
+                <div class="top-status-pill"><i class="fas fa-sparkles"></i><span>{{ session.get("role", "Operação") }}</span></div>
                 <div class="user-profile"><i class="fas fa-user-circle"></i><span>{{ user|upper }}</span></div>
                 <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
@@ -180,7 +183,7 @@
         <main class="content-body">{% block content %}{% endblock %}</main>
         <footer class="app-footer">
             <span><strong>Columbia Sync</strong></span>
-            <span>Navegacao unificada para toda a operacao.</span>
+            <span>Navegação unificada para toda a operação.</span>
         </footer>
     </div>
 </div>
@@ -199,7 +202,7 @@ function setShellCollapsed(collapsed) {
 }
 
 function confirmarLogout() {
-    if (confirm("Deseja encerrar a sessao no Columbia Sync?")) {
+    if (confirm("Deseja encerrar a sessão no Columbia Sync?")) {
         window.location.href = "/logout";
     }
 }
@@ -304,7 +307,7 @@ window.addEventListener("resize", function () {
 
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/static/sw.js?v=2").catch(() => {});
+        navigator.serviceWorker.register("/static/sw.js?v=3").catch(() => {});
     });
 }
 </script>

@@ -2,7 +2,7 @@
 
 {% block title %}Dashboard{% endblock %}
 {% block shell_title %}Dashboard{% endblock %}
-{% block shell_subtitle %}Visao gerencial com a mesma linguagem visual do Columbia Sync.{% endblock %}
+{% block shell_subtitle %}Visão gerencial com a mesma linguagem visual do Columbia Sync.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -103,8 +103,8 @@
             </div>
             <div class="dashboard-toolbar">
                 <select id="op-selector" class="op-filter">
-                    <option value="recebimento">Operacao: Recebimento</option>
-                    <option value="expedicao">Operacao: Expedicao</option>
+                    <option value="recebimento">Operação: Recebimento</option>
+                    <option value="expedicao">Operação: Expedição</option>
                 </select>
             </div>
         </section>
@@ -113,11 +113,11 @@
             <div class="section-header">Visao geral consolidada</div>
             <div class="overview-toolbar">
                 <div>
-                    <div class="overview-heading">Resumo gerencial da operacao</div>
-                    <div class="overview-subheading">Recebimento, fiscal, manifestacao, WMS e expedicao reunidos em uma leitura mais clara.</div>
+                    <div class="overview-heading">Resumo gerencial da operação</div>
+                    <div class="overview-subheading">Recebimento, fiscal, manifestação, WMS e expedição reunidos em uma leitura mais clara.</div>
                 </div>
                 <div class="overview-toolbar-actions">
-                    <label for="overview-period">Periodo</label>
+                    <label for="overview-period">Período</label>
                     <select id="overview-period" class="op-filter">
                         <option value="7">7 dias</option>
                         <option value="30" selected>30 dias</option>
@@ -128,12 +128,12 @@
             </div>
 
             <div class="overview-grid">
-                <div class="overview-card process"><span class="kpi-label">Notas importadas</span><div class="kpi-value" id="ov-importadas">0</div><div class="overview-foot" id="ov-importadas-foot">Carga total no periodo</div></div>
-                <div class="overview-card warning"><span class="kpi-label">NF conferidas</span><div class="kpi-value" id="ov-conferidas">0</div><div class="overview-foot" id="ov-conferidas-foot">Conferencia operacional</div></div>
-                <div class="overview-card success"><span class="kpi-label">Notas lancadas</span><div class="kpi-value" id="ov-lancadas">0</div><div class="overview-foot" id="ov-lancadas-foot">Documento concluido</div></div>
-                <div class="overview-card process"><span class="kpi-label">Manifestacao OK</span><div class="kpi-value" id="ov-manifest-ok">0</div><div class="overview-foot" id="ov-manifest-ok-foot">Retorno positivo do destinatario</div></div>
-                <div class="overview-card danger"><span class="kpi-label">Manifestacao pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando acao</div></div>
-                <div class="overview-card danger"><span class="kpi-label">Divergencias</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrencias no periodo</div></div>
+                <div class="overview-card process"><span class="kpi-label">Notas importadas</span><div class="kpi-value" id="ov-importadas">0</div><div class="overview-foot" id="ov-importadas-foot">Carga total no período</div></div>
+                <div class="overview-card warning"><span class="kpi-label">NF conferidas</span><div class="kpi-value" id="ov-conferidas">0</div><div class="overview-foot" id="ov-conferidas-foot">Conferência operacional</div></div>
+                <div class="overview-card success"><span class="kpi-label">Notas lançadas</span><div class="kpi-value" id="ov-lancadas">0</div><div class="overview-foot" id="ov-lancadas-foot">Documento concluído</div></div>
+                <div class="overview-card process"><span class="kpi-label">Manifestação OK</span><div class="kpi-value" id="ov-manifest-ok">0</div><div class="overview-foot" id="ov-manifest-ok-foot">Retorno positivo do destinatário</div></div>
+                <div class="overview-card danger"><span class="kpi-label">Manifestação pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando ação</div></div>
+                <div class="overview-card danger"><span class="kpi-label">Divergências</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrências no período</div></div>
                 <div class="overview-card success"><span class="kpi-label">Enderecamentos WMS</span><div class="kpi-value" id="ov-wms-end">0</div><div class="overview-foot" id="ov-wms-end-foot">Armazenagens realizadas</div></div>
                 <div class="overview-card process"><span class="kpi-label">Movimentacoes WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazem</div></div>
             </div>
@@ -154,9 +154,9 @@
             </div>
 
             <div class="overview-panel">
-                <div class="chart-title">Processado por usuario <span class="overview-badge" id="overview-users-badge">Atualizando</span></div>
+                <div class="chart-title">Processado por usuário <span class="overview-badge" id="overview-users-badge">Atualizando</span></div>
                 <div id="overview-usuarios" class="overview-table-wrap">
-                    <div class="overview-empty">Carregando produtividade por usuario...</div>
+                    <div class="overview-empty">Carregando produtividade por usuário...</div>
                 </div>
             </div>
         </section>
@@ -179,14 +179,14 @@
                 <div class="process-grid">
                     <div class="process-mini"><span class="label">Pre-nota</span><span class="value" id="proc-pre-nota">0</span></div>
                     <div class="process-mini"><span class="label">Auditoria pendente</span><span class="value" id="proc-auditoria">0</span></div>
-                    <div class="process-mini"><span class="label">Conferencia</span><span class="value" id="proc-conferencia">0</span></div>
+                    <div class="process-mini"><span class="label">Conferência</span><span class="value" id="proc-conferencia">0</span></div>
                     <div class="process-mini"><span class="label">Documento</span><span class="value" id="proc-documento">0</span></div>
                     <div class="process-mini"><span class="label">Finalizado</span><span class="value" id="proc-finalizado">0</span></div>
                 </div>
 
                 <div class="process-kpi">
-                    <div class="process-kpi-item" id="proc-kpi-lancadas">Lancadas no periodo: 0</div>
-                    <div class="process-kpi-item" id="proc-kpi-sem-div">Lancadas sem divergencia: 0</div>
+                    <div class="process-kpi-item" id="proc-kpi-lancadas">Lançadas no período: 0</div>
+                    <div class="process-kpi-item" id="proc-kpi-sem-div">Lançadas sem divergência: 0</div>
                     <div class="process-kpi-item" id="proc-kpi-taxa">Taxa sem intervencao: 0%</div>
                     <div class="process-kpi-item" id="proc-kpi-fila">Fila de excecao: 0</div>
                 </div>
@@ -199,16 +199,16 @@
         </section>
 
         <section id="painel-expedicao" class="dashboard-section" style="display:none;">
-            <div class="section-header">Indicadores de expedicao</div>
+            <div class="section-header">Indicadores de expedição</div>
             <div class="kpi-grid">
                 <div class="kpi-card warning"><div class="kpi-label">Abertas</div><div class="kpi-value" id="exp-abertas">0</div></div>
-                <div class="kpi-card danger"><div class="kpi-label">Pend. decisao</div><div class="kpi-value" id="exp-pendencia">0</div></div>
+                <div class="kpi-card danger"><div class="kpi-label">Pend. decisão</div><div class="kpi-value" id="exp-pendencia">0</div></div>
                 <div class="kpi-card success"><div class="kpi-label">Fechadas</div><div class="kpi-value" id="exp-fechadas">0</div></div>
                 <div class="kpi-card process"><div class="kpi-label">Itens divergentes</div><div class="kpi-value" id="exp-divergentes">0</div></div>
             </div>
             <div class="charts-container">
-                <div class="chart-box"><div class="chart-title">Status da expedicao</div><canvas id="chartExpDonut"></canvas></div>
-                <div class="chart-box"><div class="chart-title">Volume da expedicao</div><canvas id="chartExpBars"></canvas></div>
+                <div class="chart-box"><div class="chart-title">Status da expedição</div><canvas id="chartExpDonut"></canvas></div>
+                <div class="chart-box"><div class="chart-title">Volume da expedição</div><canvas id="chartExpBars"></canvas></div>
             </div>
         </section>
 
@@ -216,12 +216,12 @@
             <div class="section-header">Atalhos do sistema</div>
             <div class="menu-grid">
                 <a href="/" class="btn-module"><i class="fas fa-house"></i><span>Menu principal</span></a>
-                {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="btn-module"><i class="fas fa-file-import"></i><span>Importacao XML</span></a>{% endif %}
-                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="btn-module"><i class="fas fa-barcode"></i><span>Conferencia cega</span></a>{% endif %}
-                {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="btn-module"><i class="fas fa-file-invoice"></i><span>Lancamento fiscal</span></a>{% endif %}
+                {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="btn-module"><i class="fas fa-file-import"></i><span>Importação XML</span></a>{% endif %}
+                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="btn-module"><i class="fas fa-barcode"></i><span>Conferência cega</span></a>{% endif %}
+                {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="btn-module"><i class="fas fa-file-invoice"></i><span>Lançamento fiscal</span></a>{% endif %}
                 {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="btn-module"><i class="fas fa-box-open"></i><span>NFs liberadas</span></a>{% endif %}
                 {% if can_access('PAGE_ADMIN_HISTORICO') %}<a href="/historico" class="btn-module"><i class="fas fa-clipboard-list"></i><span>Auditoria e logs</span></a>{% endif %}
-                {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="btn-module"><i class="fas fa-user-shield"></i><span>Usuarios</span></a>{% endif %}
+                {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="btn-module"><i class="fas fa-user-shield"></i><span>Usuários</span></a>{% endif %}
                 {% if can_access('PAGE_ADMIN_ACESSOS') %}<a href="/admin/acessos" class="btn-module"><i class="fas fa-user-clock"></i><span>Acessos admin</span></a>{% endif %}
             </div>
         </section>
@@ -235,7 +235,7 @@
                         <div id="sla-pendentes" class="ops-list"></div>
                     </div>
                     <div class="sla-block">
-                        <div class="sla-label">Concluidas aguardando fiscal</div>
+                        <div class="sla-label">Concluídas aguardando fiscal</div>
                         <div id="sla-fiscal" class="ops-list"></div>
                     </div>
                 </div>
@@ -267,7 +267,7 @@
 
         <div class="footer-status">
             <span>Columbia Sync</span>
-            <span>Database em producao</span>
+            <span>Database em produção</span>
             <span id="last-update">Sincronizando...</span>
         </div>
     </section>
@@ -330,14 +330,14 @@
         document.getElementById('ov-wms-end').innerText = formatarNumero(wms.enderecamentos_periodo || 0);
         document.getElementById('ov-wms-mov').innerText = formatarNumero(wms.movimentacoes_periodo || 0);
 
-        document.getElementById('ov-importadas-foot').innerText = `${formatarNumero(totais.usuarios_ativos || 0)} usuarios ativos no periodo`;
-        document.getElementById('ov-conferidas-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} notas com divergencia`;
-        document.getElementById('ov-lancadas-foot').innerText = `${formatarNumero(manifestacao.pendentes || 0)} aguardando manifestacao`;
+        document.getElementById('ov-importadas-foot').innerText = `${formatarNumero(totais.usuarios_ativos || 0)} usuários ativos no período`;
+        document.getElementById('ov-conferidas-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} notas com divergência`;
+        document.getElementById('ov-lancadas-foot').innerText = `${formatarNumero(manifestacao.pendentes || 0)} aguardando manifestação`;
         document.getElementById('ov-manifest-ok-foot').innerText = `${formatarNumero(manifestacao.falha || 0)} falhas registradas`;
-        document.getElementById('ov-manifest-pendente-foot').innerText = `${formatarNumero(totais.notas_lancadas || 0)} notas lancadas no total`;
+        document.getElementById('ov-manifest-pendente-foot').innerText = `${formatarNumero(totais.notas_lancadas || 0)} notas lançadas no total`;
         document.getElementById('ov-divergencias-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} NFs impactadas`;
-        document.getElementById('ov-wms-end-foot').innerText = `${formatarNumero(wmsCards.pendentes_enderecamento || 0)} pendencias de endereco abertas`;
-        document.getElementById('ov-wms-mov-foot').innerText = `${formatarNumero(wmsCards.movimentacoes_24h || 0)} movimentacoes nas ultimas 24h`;
+        document.getElementById('ov-wms-end-foot').innerText = `${formatarNumero(wmsCards.pendentes_enderecamento || 0)} pendências de endereço abertas`;
+        document.getElementById('ov-wms-mov-foot').innerText = `${formatarNumero(wmsCards.movimentacoes_24h || 0)} movimentações nas últimas 24h`;
     }
 
     function renderOverviewGeral(consolidado, expedicao) {
@@ -346,8 +346,8 @@
         if (!container) return;
 
         if (!consolidado) {
-            container.innerHTML = '<div class="overview-empty">Nao foi possivel carregar o consolidado geral agora.</div>';
-            if (badge) badge.innerText = 'Indisponivel';
+            container.innerHTML = '<div class="overview-empty">Não foi possível carregar o consolidado geral agora.</div>';
+            if (badge) badge.innerText = 'Indisponível';
             return;
         }
 
@@ -360,24 +360,24 @@
 
         const miniCards = [
             {
-                label: 'Usuarios Ativos',
+                label: 'Usuários Ativos',
                 value: formatarNumero(totais.usuarios_ativos || 0),
-                meta: 'Pessoas com movimentacao registrada'
+                meta: 'Pessoas com movimentação registrada'
             },
             {
-                label: 'Notas com Divergencia',
+                label: 'Notas com Divergência',
                 value: formatarNumero(totais.notas_com_divergencia || 0),
-                meta: `${formatarNumero(totais.divergencias_periodo || 0)} ocorrencias no periodo`
+                meta: `${formatarNumero(totais.divergencias_periodo || 0)} ocorrências no período`
             },
             {
-                label: 'Manifestacao Falha',
+                label: 'Manifestação Falha',
                 value: formatarNumero(manifestacao.falha || 0),
                 meta: `${formatarNumero(manifestacao.pendentes || 0)} pendentes`
             },
             {
-                label: 'Expedicao Aberta',
+                label: 'Expedição Aberta',
                 value: formatarNumero(expedicaoResumo.abertas || 0),
-                meta: `${formatarNumero(expedicaoResumo.pendente_decisao || 0)} aguardando decisao`
+                meta: `${formatarNumero(expedicaoResumo.pendente_decisao || 0)} aguardando decisão`
             }
         ];
 
@@ -385,25 +385,25 @@
             ? tipos.map((item) => `
                 <div class="overview-item">
                     <div class="overview-item-main">
-                        <span class="overview-item-title">${escapeHtml(item.manifestacao || 'Manifestacao')}</span>
+                        <span class="overview-item-title">${escapeHtml(item.manifestacao || 'Manifestação')}</span>
                         <span class="overview-item-sub">Sucesso ${formatarNumero(item.sucesso || 0)} | Falha ${formatarNumero(item.falha || 0)}</span>
                     </div>
                     <div class="overview-item-metric">${formatarNumero((item.sucesso || 0) + (item.falha || 0))}</div>
                 </div>
             `).join('')
-            : '<div class="overview-empty">Nenhuma manifestacao encontrada no periodo selecionado.</div>';
+            : '<div class="overview-empty">Nenhuma manifestação encontrada no período selecionado.</div>';
 
         const conferenciaHtml = topConferencia.length
             ? topConferencia.map((item) => `
                 <div class="overview-item">
                     <div class="overview-item-main">
-                        <span class="overview-item-title">${escapeHtml(item.usuario || 'Sem usuario')}</span>
-                        <span class="overview-item-sub">NF conferidas ${formatarNumero(item.notas_conferidas || 0)} | Lancadas ${formatarNumero(item.notas_lancadas || 0)}</span>
+                        <span class="overview-item-title">${escapeHtml(item.usuario || 'Sem usuário')}</span>
+                        <span class="overview-item-sub">NF conferidas ${formatarNumero(item.notas_conferidas || 0)} | Lançadas ${formatarNumero(item.notas_lancadas || 0)}</span>
                     </div>
                     <div class="overview-item-metric">${formatarNumero((item.notas_conferidas || 0) + (item.notas_lancadas || 0))}</div>
                 </div>
             `).join('')
-            : '<div class="overview-empty">Sem produtividade de conferencia para exibir.</div>';
+            : '<div class="overview-empty">Sem produtividade de conferência para exibir.</div>';
 
         container.innerHTML = `
             <div class="overview-mini-grid">
@@ -417,13 +417,13 @@
             </div>
 
             <div class="overview-section-title">
-                <span>Manifestacao de Destinatario</span>
+                <span>Manifestação de Destinatário</span>
                 <span class="overview-badge">${formatarNumero(manifestacao.sucesso || 0)} sucesso</span>
             </div>
             <div class="overview-list">${tiposHtml}</div>
 
             <div class="overview-section-title">
-                <span>NF Conferida e Lancamento</span>
+                <span>NF Conferida e Lançamento</span>
                 <span class="overview-badge">${formatarNumero(conferencia.notas_conferidas || 0)} conferidas</span>
             </div>
             <div class="overview-list">${conferenciaHtml}</div>
@@ -444,8 +444,8 @@
         const movimentacoes = Array.isArray(wmsCockpit?.movimentacoes_recentes) ? wmsCockpit.movimentacoes_recentes.slice(0, 4) : [];
 
         if (!consolidado && !wmsCockpit) {
-            container.innerHTML = '<div class="overview-empty">Nao foi possivel carregar o resumo do WMS agora.</div>';
-            if (badge) badge.innerText = 'Indisponivel';
+            container.innerHTML = '<div class="overview-empty">Não foi possível carregar o resumo do WMS agora.</div>';
+            if (badge) badge.innerText = 'Indisponível';
             return;
         }
 
@@ -456,19 +456,19 @@
                 meta: `${formatarNumero(wms.saldo_total || 0, 2)} em saldo total`
             },
             {
-                label: 'Sem Endereco',
+                label: 'Sem Endereço',
                 value: formatarNumero(wms.itens_sem_endereco || 0),
                 meta: `${formatarNumero(wms.notas_sem_endereco || 0)} notas pendentes`
             },
             {
-                label: 'Integracao Pendente',
+                label: 'Integração Pendente',
                 value: formatarNumero(wms.integracoes_pendentes || 0),
                 meta: `${formatarNumero(wms.integracoes_falha || 0)} falhas abertas`
             },
             {
                 label: 'Alertas WMS',
                 value: formatarNumero(cards.alertas_abertos || 0),
-                meta: `${formatarNumero(cards.divergencias_abertas || 0)} divergencias abertas`
+                meta: `${formatarNumero(cards.divergencias_abertas || 0)} divergências abertas`
             }
         ];
 
@@ -483,7 +483,7 @@
                 <div class="overview-item">
                     <div class="overview-item-main">
                         <span class="overview-item-title">${escapeHtml(prioridade)}</span>
-                        <span class="overview-item-sub">Fila de enderecamento classificada automaticamente</span>
+                        <span class="overview-item-sub">Fila de endereçamento classificada automaticamente</span>
                     </div>
                     <div class="overview-item-metric">${formatarNumero(quantidade || 0)}</div>
                 </div>
@@ -500,19 +500,19 @@
                     <div class="overview-item-metric">${formatarNumero(item.linhas || 0)}</div>
                 </div>
             `).join('')
-            : '<div class="overview-empty">Nenhuma NF pendente de enderecamento.</div>';
+            : '<div class="overview-empty">Nenhuma NF pendente de endereçamento.</div>';
 
         const movimentacoesHtml = movimentacoes.length
             ? movimentacoes.map((item) => `
                 <div class="overview-item">
                     <div class="overview-item-main">
-                        <span class="overview-item-title">${escapeHtml(item.tipo_movimentacao || 'Movimentacao')}</span>
-                        <span class="overview-item-sub">NF ${escapeHtml(item.numero_nota || '-')} | ${escapeHtml(item.usuario || 'Sem usuario')}</span>
+                        <span class="overview-item-title">${escapeHtml(item.tipo_movimentacao || 'Movimentação')}</span>
+                        <span class="overview-item-sub">NF ${escapeHtml(item.numero_nota || '-')} | ${escapeHtml(item.usuario || 'Sem usuário')}</span>
                     </div>
                     <div class="overview-item-metric">${formatarNumero(item.qtd_movimentada || 0, 2)}</div>
                 </div>
             `).join('')
-            : '<div class="overview-empty">Sem movimentacoes recentes registradas.</div>';
+            : '<div class="overview-empty">Sem movimentações recentes registradas.</div>';
 
         container.innerHTML = `
             <div class="overview-mini-grid">
@@ -527,24 +527,24 @@
 
             <div class="overview-section-title">
                 <span>Prioridades da Fila</span>
-                <span class="overview-badge">${formatarNumero(cards.pendentes_enderecamento || 0)} pendencias</span>
+                <span class="overview-badge">${formatarNumero(cards.pendentes_enderecamento || 0)} pendências</span>
             </div>
             <div class="overview-list">${prioridadesHtml}</div>
 
             <div class="overview-section-title">
                 <span>Notas Pendentes</span>
-                <span class="overview-badge">${formatarNumero(wms.movimentacoes_periodo || 0)} mov. no periodo</span>
+                <span class="overview-badge">${formatarNumero(wms.movimentacoes_periodo || 0)} mov. no período</span>
             </div>
             <div class="overview-list">${notasHtml}</div>
 
             <div class="overview-section-title">
-                <span>Ultimas Movimentacoes</span>
+                <span>Últimas Movimentações</span>
                 <span class="overview-badge">${formatarNumero(cards.movimentacoes_24h || 0)} em 24h</span>
             </div>
             <div class="overview-list">${movimentacoesHtml}</div>
         `;
 
-        if (badge) badge.innerText = `${formatarNumero(cards.pendentes_enderecamento || 0)} pendencias`;
+        if (badge) badge.innerText = `${formatarNumero(cards.pendentes_enderecamento || 0)} pendências`;
     }
 
     function renderOverviewUsuarios(consolidado) {
@@ -556,7 +556,7 @@
         const totais = consolidado?.totais || {};
 
         if (!usuarios.length) {
-            container.innerHTML = '<div class="overview-empty">Nenhuma produtividade por usuario encontrada no periodo selecionado.</div>';
+            container.innerHTML = '<div class="overview-empty">Nenhuma produtividade por usuário encontrada no período selecionado.</div>';
             if (badge) badge.innerText = '0 ativos';
             return;
         }
@@ -565,7 +565,7 @@
         const linhas = usuarios.map((item) => `
             <tr>
                 <td>
-                    <strong>${escapeHtml(item.usuario || 'Sem usuario')}</strong>
+                    <strong>${escapeHtml(item.usuario || 'Sem usuário')}</strong>
                     <span class="overview-muted">Qtd mov.: ${formatarNumero(item.qtd_movimentada_wms || 0, 2)} | Armz.: ${formatarNumero(item.qtd_armazenada_wms || 0, 2)}</span>
                 </td>
                 <td>${formatarNumero(item.notas_importadas || 0)}</td>
@@ -589,7 +589,7 @@
                         <th>Importadas</th>
                         <th>Conferidas</th>
                         <th>Lancadas</th>
-                        <th>Manifestacao</th>
+                        <th>Manifestação</th>
                         <th>End. WMS</th>
                         <th>Mov. WMS</th>
                         <th>Total</th>

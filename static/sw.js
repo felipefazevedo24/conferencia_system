@@ -1,4 +1,4 @@
-const CACHE_NAME = "conferencia-system-v2";
+const CACHE_NAME = "conferencia-system-v3";
 const CORE_ASSETS = [
   "/static/manifest.webmanifest"
 ];

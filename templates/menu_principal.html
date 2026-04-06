@@ -590,58 +590,6 @@
 {% block content %}
 <div class="main-content">
     <section class="home-shell">
-        <section class="home-hero">
-            <div class="home-hero-panel">
-                <span class="hero-kicker"><i class="fas fa-compass"></i> Columbia Sync</span>
-                <h1 class="hero-title">Navegue pelo sistema sem ruído.</h1>
-                <p class="hero-copy">
-                    O menu principal volta a ser a sua central de trabalho: módulos organizados, acesso rápido ao que importa
-                    e uma leitura limpa para entrar em qualquer área do sistema sem parecer outro dashboard.
-                </p>
-
-                <div class="hero-meta">
-                    <span class="hero-pill"><i class="fas fa-user"></i> {{ user_context.username }}</span>
-                    <span class="hero-pill"><i class="fas fa-shield-halved"></i> {{ user_context.role }}</span>
-                    <span class="hero-pill"><i class="fas fa-clock"></i> Último acesso {{ user_context.last_seen }}</span>
-                </div>
-
-                <div class="home-search-wrap">
-                    <label class="home-search-label" for="home-module-search">Buscar módulo</label>
-                    <input
-                        id="home-module-search"
-                        class="home-search"
-                        type="text"
-                        placeholder="Ex.: conferência, WMS, auditor, etiquetas..."
-                    >
-                    <div class="home-search-help">
-                        Pesquise pelo nome do módulo, área ou palavra-chave. O menu filtra as opções sem virar painel de métricas.
-                    </div>
-                </div>
-            </div>
-
-            <aside class="home-side-panel">
-                <div class="side-block">
-                    <span class="side-block-label">Próximos passos</span>
-                    <h2 class="side-title">Comece por aqui</h2>
-                    <div class="side-copy">
-                        Atalhos operacionais para tirar a fila da frente, sem poluir a navegação principal.
-                    </div>
-                </div>
-
-                <div class="priority-list">
-                    {% for action in priority_actions %}
-                    <a href="{{ action.href }}" class="priority-item">
-                        <div class="priority-icon"><i class="fas {{ action.icon }}"></i></div>
-                        <div>
-                            <strong>{{ action.title }}</strong>
-                            <span>{{ action.text }}</span>
-                        </div>
-                    </a>
-                    {% endfor %}
-                </div>
-            </aside>
-        </section>
-
         <section class="home-highlights">
             {% for highlight in home_highlights %}
             <article class="home-highlight">

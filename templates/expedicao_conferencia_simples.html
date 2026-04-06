@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+
+{% block title %}Expedição - Conferência{% endblock %}
+{% block shell_title %}Expedição{% endblock %}
+
+{% block extra_head %}
+<style>
+    .exp-page { max-width: 1400px; margin: 0 auto; display: grid; gap: 22px; }
+    .exp-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; align-items: start; }
+    .exp-card { border-radius: 24px; border: 1px solid rgba(204, 217, 229, 0.96); background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(247,251,255,0.98) 100%); box-shadow: 0 18px 34px rgba(16, 37, 58, 0.08); overflow: hidden; }
+    .exp-head { padding: 22px 24px 18px; border-bottom: 1px solid rgba(221, 231, 240, 0.95); display: grid; gap: 6px; }
+    .exp-head span { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
+    .exp-head h2 { margin: 0; font-size: 24px; line-height: 1; letter-spacing: -0.04em; color: var(--color-brand-900); }
+    .exp-head p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--color-text-muted); }
+    .exp-body { padding: 24px; }
+    .exp-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .exp-field { display: grid; gap: 8px; }
+    .exp-field.full { grid-column: 1 / -1; }
+    .exp-field.hidden { display: none; }
+    .exp-field label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-brand-800); }
+    .exp-field input, .exp-toolbar input, .exp-toolbar select { min-height: 50px; border-radius: 16px; border: 1px solid rgba(191, 205, 219, 0.96); padding: 0 16px; background: #fff; color: var(--color-brand-900); font-size: 14px; }
+    .exp-field input:focus, .exp-toolbar input:focus, .exp-toolbar select:focus { outline: none; border-color: rgba(15, 98, 201, 0.55); box-shadow: 0 0 0 4px rgba(15, 98, 201, 0.12); }
+    .exp-field input[readonly] { background: #f4f8fc; color: var(--color-text-muted); }
+    .exp-inline { display: flex; gap: 10px; align-items: center; }
+    .exp-inline input { flex: 1; }
+    .exp-btn, .exp-btn-secondary { min-height: 48px; border-radius: 16px; padding: 0 18px; border: none; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+    .exp-btn { background: linear-gradient(180deg, #1f77dc 0%, #0f62c9 100%); color: #fff; box-shadow: 0 14px 24px rgba(15, 98, 201, 0.22); }
+    .exp-btn-secondary { background: linear-gradient(180deg, #ffffff 0%, #edf3f8 100%); color: var(--color-brand-900); border: 1px solid rgba(191, 205, 219, 0.96); }
+    .exp-btn:disabled, .exp-btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+    .exp-subtle { min-height: 20px; font-size: 12px; color: var(--color-text-muted); }
+    .exp-subtle.success { color: #0c8a58; }
+    .exp-subtle.warning { color: #ad6d00; }
+    .exp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .exp-pill { padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(205, 217, 229, 0.96); background: rgba(255,255,255,0.94); }
+    .exp-pill span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
+    .exp-pill strong { display: block; margin-top: 8px; font-size: 15px; color: var(--color-brand-900); }
+    .exp-upload { min-height: 140px; border: 1px dashed rgba(160, 184, 206, 0.96); border-radius: 22px; background: rgba(255,255,255,0.72); padding: 18px; display: grid; place-items: center; text-align: center; color: var(--color-text-muted); }
+    .exp-upload input { width: 100%; border: none; padding: 0; background: transparent; min-height: auto; }
+    .exp-upload-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .exp-file-input-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+    .exp-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 14px; }
+    .exp-preview-card, .exp-photo { overflow: hidden; border-radius: 18px; border: 1px solid rgba(204, 217, 229, 0.96); background: #fff; }
+    .exp-preview-card img, .exp-photo img { width: 100%; height: 94px; object-fit: cover; display: block; background: #eef4f9; }
+    .exp-preview-card span, .exp-photo span { display: block; padding: 10px; font-size: 11px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; }
+    .exp-steps { display: grid; gap: 12px; }
+    .exp-step { padding: 16px 18px; border-radius: 18px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.92); }
+    .exp-step strong { display: block; margin-bottom: 6px; font-size: 14px; color: var(--color-brand-900); }
+    .exp-step p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--color-text-muted); }
+    .exp-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .exp-summary-card { padding: 18px; border-radius: 22px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.92); }
+    .exp-summary-card span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
+    .exp-summary-card strong { display: block; margin-top: 10px; font-size: 34px; line-height: 1; color: var(--color-brand-900); }
+    .exp-toolbar { display: grid; grid-template-columns: 1fr 220px; gap: 14px; margin-bottom: 18px; }
+    .exp-list { display: grid; gap: 16px; }
+    .exp-record { padding: 20px; border-radius: 22px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.94); display: grid; gap: 16px; }
+    .exp-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .exp-record-title { display: grid; gap: 6px; }
+    .exp-record-title strong { font-size: 22px; line-height: 1; color: var(--color-brand-900); }
+    .exp-record-title span, .exp-caption { font-size: 12px; color: var(--color-text-muted); }
+    .exp-status { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .exp-status.pending { background: #fff5de; border: 1px solid #f6d99b; color: #9b6400; }
+    .exp-status.done { background: #e8f8f1; border: 1px solid #bce6d4; color: #0c8a58; }
+    .exp-record-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .exp-record-field { padding: 14px 16px; border-radius: 18px; background: #f7fbff; border: 1px solid rgba(224, 233, 242, 0.96); }
+    .exp-record-field span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
+    .exp-record-field strong { display: block; margin-top: 8px; font-size: 14px; color: var(--color-brand-900); word-break: break-word; }
+    .exp-record-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .exp-toast { position: fixed; right: 24px; bottom: 24px; min-width: 260px; max-width: 420px; padding: 14px 16px; border-radius: 18px; color: #fff; background: rgba(8, 21, 35, 0.95); box-shadow: 0 18px 34px rgba(7, 18, 31, 0.28); opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity .18s ease, transform .18s ease; z-index: 80; }
+    .exp-toast.show { opacity: 1; transform: translateY(0); }
+    .exp-toast.success { background: rgba(12, 138, 88, 0.96); }
+    .exp-toast.error { background: rgba(176, 42, 55, 0.96); }
+    @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } .exp-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar, .exp-record-grid { grid-template-columns: 1fr; } .exp-record-head, .exp-record-actions { display: grid; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="exp-page">
+    <section class="page-header-erp">
+        <div>
+            <span class="eyebrow">Conferência de expedição</span>
+            <h1>Conferência Cega - Expedição</h1>
+            <p>Abra a conferência, anexe as fotos, consulte a NF na Consyste quando ela já existir e depois marque a saída como <strong>Expedido</strong> no histórico.</p>
+        </div>
+    </section>
+
+    <section class="exp-grid">
+        <section class="exp-card">
+            <div class="exp-head">
+                <span>Nova conferência</span>
+                <h2>Abertura rápida</h2>
+                <p>O conferente e a data são registrados automaticamente pelo sistema.</p>
+            </div>
+            <div class="exp-body">
+                <div class="exp-meta">
+                    <div class="exp-pill"><span>Conferente logado</span><strong>{{ user }}</strong></div>
+                    <div class="exp-pill"><span>Status inicial</span><strong>Pendente de expedição</strong></div>
+                </div>
+
+                <form id="expedicao-form">
+                    <div class="exp-form-grid">
+                        <div class="exp-field">
+                            <label for="orcamento">Orçamento *</label>
+                            <input id="orcamento" name="orcamento" type="text" placeholder="Informe o número do orçamento" required>
+                        </div>
+
+                        <div class="exp-field">
+                            <label for="numero_nf">Nº nota fiscal</label>
+                            <div class="exp-inline">
+                                <input id="numero_nf" name="numero_nf" type="text" inputmode="numeric" placeholder="Se já existir na Consyste">
+                                <button class="exp-btn-secondary" type="button" id="btn-consultar-nf">Consultar NF</button>
+                            </div>
+                            <div id="nf-feedback" class="exp-subtle"></div>
+                        </div>
+
+                        <div class="exp-field full hidden" id="nome-cliente-wrapper">
+                            <label for="nome_cliente">Nome do cliente</label>
+                            <input id="nome_cliente" name="nome_cliente" type="text" placeholder="Preencha manualmente se a NF ainda não estiver disponível">
+                        </div>
+
+                        <div class="exp-field">
+                            <label for="transportadora">Transportadora</label>
+                            <input id="transportadora" name="transportadora" type="text" placeholder="Opcional">
+                        </div>
+
+                        <div class="exp-field">
+                            <label for="placa">Placa</label>
+                            <input id="placa" name="placa" type="text" placeholder="Opcional">
+                        </div>
+
+                        <div class="exp-field full">
+                            <label for="fotos">Foto da conferência *</label>
+                            <div class="exp-upload">
+                                <div>
+                                    <strong>Tire a foto na hora ou escolha da galeria</strong>
+                                    <p style="margin:8px 0 14px;">No celular, o botão de câmera abre a câmera. No desktop, você ainda pode escolher imagens do computador.</p>
+                                    <div class="exp-upload-actions">
+                                        <button class="exp-btn" type="button" id="btn-abrir-camera">Tirar foto agora</button>
+                                        <button class="exp-btn-secondary" type="button" id="btn-escolher-fotos">Escolher fotos</button>
+                                    </div>
+                                    <input id="fotos-camera" class="exp-file-input-hidden" type="file" accept="image/*" capture="environment">
+                                    <input id="fotos-galeria" class="exp-file-input-hidden" type="file" accept="image/*" multiple>
+                                </div>
+                            </div>
+                            <div id="fotos-feedback" class="exp-subtle">Nenhuma foto selecionada ainda.</div>
+                            <div id="fotos-preview" class="exp-preview-grid"></div>
+                        </div>
+                    </div>
+
+                    <div class="exp-actions">
+                        <button class="exp-btn-secondary" type="reset" id="btn-limpar-form">Limpar</button>
+                        <button class="exp-btn" type="submit" id="btn-salvar-conferencia">Salvar conferência</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section class="exp-card">
+            <div class="exp-head">
+                <span>Fluxo</span>
+                <h2>Como funciona</h2>
+                <p>Só o essencial para a equipe operar sem desviar para outro painel.</p>
+            </div>
+            <div class="exp-body">
+                <div class="exp-steps">
+                    <div class="exp-step"><strong>1. Informe o orçamento</strong><p>Esse é o identificador principal da conferência.</p></div>
+                    <div class="exp-step"><strong>2. Consulte a NF</strong><p>Se ela já existir na Consyste, o cliente vem preenchido. Se ainda não existir, o campo do cliente abre para digitação manual.</p></div>
+                    <div class="exp-step"><strong>3. Anexe as fotos</strong><p>Pelo menos uma imagem é obrigatória para salvar a conferência.</p></div>
+                    <div class="exp-step"><strong>4. Marque como expedido depois</strong><p>Quando a saída acontecer, atualize o status no histórico.</p></div>
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <section class="exp-card">
+        <div class="exp-head">
+            <span>Histórico</span>
+            <h2>Conferências registradas</h2>
+            <p>Filtre por orçamento, NF, cliente, placa ou conferente e altere o status quando a expedição sair.</p>
+        </div>
+        <div class="exp-body">
+            <div class="exp-summary">
+                <div class="exp-summary-card"><span>Total</span><strong id="resumo-total">0</strong></div>
+                <div class="exp-summary-card"><span>Pendentes</span><strong id="resumo-pendentes">0</strong></div>
+                <div class="exp-summary-card"><span>Expedidos</span><strong id="resumo-expedidos">0</strong></div>
+            </div>
+
+            <div class="exp-toolbar">
+                <input id="busca-historico" type="search" placeholder="Buscar por orçamento, cliente, NF, placa ou conferente">
+                <select id="filtro-status">
+                    <option value="">Todos os status</option>
+                    <option value="Pendente de expedição">Pendente de expedição</option>
+                    <option value="Expedido">Expedido</option>
+                </select>
+            </div>
+
+            <div id="historico-lista" class="exp-list">
+                <div class="empty-state"><strong>Carregando conferências...</strong><span>Em instantes o histórico aparece aqui.</span></div>
+            </div>
+        </div>
+    </section>
+</section>
+
+<div id="expedicao-toast" class="exp-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const form = document.getElementById("expedicao-form");
+const nfInput = document.getElementById("numero_nf");
+const nfFeedback = document.getElementById("nf-feedback");
+const nomeClienteWrapper = document.getElementById("nome-cliente-wrapper");
+const nomeClienteInput = document.getElementById("nome_cliente");
+const fotosCameraInput = document.getElementById("fotos-camera");
+const fotosGaleriaInput = document.getElementById("fotos-galeria");
+const fotosPreview = document.getElementById("fotos-preview");
+const fotosFeedback = document.getElementById("fotos-feedback");
+const historicoLista = document.getElementById("historico-lista");
+const buscaHistorico = document.getElementById("busca-historico");
+const filtroStatus = document.getElementById("filtro-status");
+const btnConsultarNf = document.getElementById("btn-consultar-nf");
+const btnAbrirCamera = document.getElementById("btn-abrir-camera");
+const btnEscolherFotos = document.getElementById("btn-escolher-fotos");
+const btnSalvar = document.getElementById("btn-salvar-conferencia");
+const toastEl = document.getElementById("expedicao-toast");
+const isAdmin = {{ "true" if is_admin else "false" }};
+let toastTimer = null;
+let fotosSelecionadas = [];
+
+function showToast(message, type = "success") {
+    toastEl.textContent = message;
+    toastEl.className = `exp-toast ${type} show`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3200);
+}
+
+function debounce(fn, wait = 250) {
+    let timer = null;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), wait);
+    };
+}
+
+function resetNfState() {
+    nfFeedback.textContent = "";
+    nfFeedback.className = "exp-subtle";
+    nomeClienteWrapper.classList.add("hidden");
+    nomeClienteInput.required = false;
+    nomeClienteInput.readOnly = false;
+    nomeClienteInput.value = "";
+}
+
+function syncFotoFeedback() {
+    if (!fotosSelecionadas.length) {
+        fotosFeedback.textContent = "Nenhuma foto selecionada ainda.";
+        return;
+    }
+    fotosFeedback.textContent = `${fotosSelecionadas.length} foto(s) pronta(s) para upload.`;
+}
+
+function addFotos(files) {
+    const novasFotos = Array.from(files || []);
+    if (!novasFotos.length) return;
+    fotosSelecionadas = fotosSelecionadas.concat(novasFotos);
+    updateFotoPreview();
+}
+
+async function consultarNf() {
+    const numero = nfInput.value.trim();
+    if (!numero) {
+        resetNfState();
+        return;
+    }
+    nfFeedback.textContent = "Consultando a Consyste...";
+    btnConsultarNf.disabled = true;
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/consultar-nf?numero_nf=${encodeURIComponent(numero)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível consultar a nota fiscal.");
+        nfFeedback.textContent = data.warning || (data.encontrada ? `NF encontrada. Cliente: ${data.nome_cliente || "sem razão social retornada"}.` : "");
+        nfFeedback.className = `exp-subtle ${data.encontrada ? "success" : (data.warning ? "warning" : "")}`;
+        if (data.encontrada && data.nome_cliente) {
+            nomeClienteWrapper.classList.remove("hidden");
+            nomeClienteInput.readOnly = true;
+            nomeClienteInput.required = false;
+            nomeClienteInput.value = data.nome_cliente;
+        } else if (data.manual_required) {
+            nomeClienteWrapper.classList.remove("hidden");
+            nomeClienteInput.readOnly = false;
+            nomeClienteInput.required = true;
+            if (!data.encontrada) nomeClienteInput.focus();
+        } else {
+            resetNfState();
+        }
+    } catch (error) {
+        nfFeedback.textContent = error.message;
+        nfFeedback.className = "exp-subtle warning";
+        nomeClienteWrapper.classList.remove("hidden");
+        nomeClienteInput.readOnly = false;
+        nomeClienteInput.required = true;
+    } finally {
+        btnConsultarNf.disabled = false;
+    }
+}
+
+function updateFotoPreview() {
+    fotosPreview.innerHTML = "";
+    if (!fotosSelecionadas.length) {
+        syncFotoFeedback();
+        return;
+    }
+    syncFotoFeedback();
+    fotosSelecionadas.forEach(file => {
+        const url = URL.createObjectURL(file);
+        const card = document.createElement("div");
+        card.className = "exp-preview-card";
+        card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
+        fotosPreview.appendChild(card);
+    });
+}
+
+function renderHistorico(data) {
+    document.getElementById("resumo-total").textContent = data?.resumo?.total || 0;
+    document.getElementById("resumo-pendentes").textContent = data?.resumo?.pendentes || 0;
+    document.getElementById("resumo-expedidos").textContent = data?.resumo?.expedidos || 0;
+    const registros = data?.registros || [];
+    if (!registros.length) {
+        historicoLista.innerHTML = `<div class="empty-state"><strong>Nenhuma conferência encontrada.</strong><span>Abra a primeira conferência acima ou ajuste os filtros.</span></div>`;
+        return;
+    }
+    historicoLista.innerHTML = registros.map(registro => {
+        const pending = registro.status_slug === "pendente_expedicao";
+        const badgeClass = pending ? "pending" : "done";
+        const fotosHtml = (registro.fotos || []).length
+            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `<a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>`).join("")}</div>`
+            : `<div class="exp-caption">Sem fotos anexadas.</div>`;
+        return `
+            <article class="exp-record">
+                <div class="exp-record-head">
+                    <div class="exp-record-title">
+                        <strong>Orçamento ${registro.orcamento}</strong>
+                        <span>${registro.data_conferencia} · Conferente ${registro.conferente}</span>
+                    </div>
+                    <span class="exp-status ${badgeClass}">${registro.status}</span>
+                </div>
+                <div class="exp-record-grid">
+                    <div class="exp-record-field"><span>NF</span><strong>${registro.numero_nf || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Cliente</span><strong>${registro.nome_cliente || "Não informado"}</strong></div>
+                    <div class="exp-record-field"><span>Transportadora</span><strong>${registro.transportadora || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Placa</span><strong>${registro.placa || "Não informada"}</strong></div>
+                </div>
+                ${fotosHtml}
+                <div class="exp-record-actions">
+                    <div class="exp-caption">${registro.expedido_at ? `Atualizado para expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}.` : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`}</div>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="${pending ? "exp-btn" : "exp-btn-secondary"}" data-action="status" data-id="${registro.id}" data-status-slug="${pending ? "expedido" : "pendente_expedicao"}" data-status-label="${pending ? "Expedido" : "Pendente de expedição"}">${pending ? "Alterar status para expedido" : "Alterar status para pendente"}</button>
+                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Excluir conferência</button>` : ""}
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join("");
+}
+
+async function loadHistorico() {
+    const params = new URLSearchParams();
+    if (buscaHistorico.value.trim()) params.set("q", buscaHistorico.value.trim());
+    if (filtroStatus.value) params.set("status", filtroStatus.value);
+    historicoLista.innerHTML = `<div class="empty-state"><strong>Atualizando histórico...</strong><span>Buscando as conferências registradas.</span></div>`;
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível carregar o histórico.");
+        renderHistorico(data);
+    } catch (error) {
+        historicoLista.innerHTML = `<div class="empty-state"><strong>Não foi possível carregar o histórico.</strong><span>${error.message}</span></div>`;
+    }
+}
+
+async function atualizarStatus(id, statusSlug, statusLabel) {
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${id}/status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status_slug: statusSlug }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível atualizar o status.");
+        showToast(`Conferência atualizada para ${statusLabel}.`);
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+async function excluirConferencia(id, orcamento) {
+    const confirmado = window.confirm(`Deseja excluir a conferência do orçamento ${orcamento}? Essa ação não poderá ser desfeita.`);
+    if (!confirmado) return;
+
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${id}`, {
+            method: "DELETE",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível excluir a conferência.");
+        showToast(`Conferência do orçamento ${orcamento} excluída com sucesso.`);
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!fotosSelecionadas.length) {
+        showToast("Inclua pelo menos uma foto da conferência.", "error");
+        return;
+    }
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = "Salvando...";
+    try {
+        const formData = new FormData(form);
+        fotosSelecionadas.forEach(file => formData.append("fotos", file));
+        const response = await fetch("/api/expedicao/conferencia-simples", { method: "POST", body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível salvar a conferência.");
+        showToast("Conferência criada com sucesso.");
+        form.reset();
+        resetNfState();
+        fotosSelecionadas = [];
+        fotosPreview.innerHTML = "";
+        syncFotoFeedback();
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    } finally {
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = "Salvar conferência";
+    }
+});
+
+document.getElementById("btn-limpar-form").addEventListener("click", () => {
+    resetNfState();
+    fotosSelecionadas = [];
+    fotosCameraInput.value = "";
+    fotosGaleriaInput.value = "";
+    fotosPreview.innerHTML = "";
+    syncFotoFeedback();
+});
+btnConsultarNf.addEventListener("click", consultarNf);
+nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
+btnAbrirCamera.addEventListener("click", () => fotosCameraInput.click());
+btnEscolherFotos.addEventListener("click", () => fotosGaleriaInput.click());
+fotosCameraInput.addEventListener("change", event => {
+    addFotos(event.target.files);
+    event.target.value = "";
+});
+fotosGaleriaInput.addEventListener("change", event => {
+    addFotos(event.target.files);
+    event.target.value = "";
+});
+buscaHistorico.addEventListener("input", debounce(loadHistorico, 250));
+filtroStatus.addEventListener("change", loadHistorico);
+historicoLista.addEventListener("click", event => {
+    const button = event.target.closest("[data-action='status']");
+    if (button) {
+        atualizarStatus(button.dataset.id, button.dataset.statusSlug, button.dataset.statusLabel);
+        return;
+    }
+
+    const deleteButton = event.target.closest("[data-action='delete']");
+    if (deleteButton) {
+        excluirConferencia(deleteButton.dataset.id, deleteButton.dataset.orcamento);
+    }
+});
+document.addEventListener("DOMContentLoaded", loadHistorico);
+</script>
+{% endblock %}

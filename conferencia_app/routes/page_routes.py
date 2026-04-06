@@ -11,6 +11,7 @@ from ..models import (
     ConsertoBaixa,
     ConsertoEstoque,
     ExpedicaoConferencia,
+    ExpedicaoConferenciaSimples,
     ItemNota,
     ItemWMS,
 )
@@ -28,7 +29,7 @@ HOME_MODULES = [
         "href": "/portaria",
         "icon": "fa-door-open",
         "permission": "PAGE_PORTARIA",
-        "section": "Recebimento",
+        "section": "Logística",
         "tone": "gold",
         "priority": 100,
         "keywords": ["xml", "portaria", "entrada", "recebimento"],
@@ -84,7 +85,7 @@ HOME_MODULES = [
         "href": "/conferencia",
         "icon": "fa-barcode",
         "permission": "PAGE_CONFERENCIA",
-        "section": "Recebimento",
+        "section": "Logística",
         "tone": "blue",
         "priority": 92,
         "keywords": ["conferencia", "cego", "recebimento", "nota"],
@@ -100,7 +101,7 @@ HOME_MODULES = [
         "tone": "blue",
         "tone": "blue",
         "permission": "PAGE_FISCAL_LIBERADAS",
-        "section": "Recebimento",
+        "section": "Logística",
         "tone": "blue",
         "priority": 84,
         "keywords": ["historico", "liberadas", "nfe", "fiscal"],
@@ -114,7 +115,7 @@ HOME_MODULES = [
         "href": "/recebimento/etiquetas",
         "icon": "fa-tags",
         "permission": "PAGE_ETIQUETAS",
-        "section": "Recebimento",
+        "section": "Logística",
         "tone": "teal",
         "priority": 76,
         "keywords": ["etiqueta", "impressao", "recebimento"],
@@ -128,7 +129,7 @@ HOME_MODULES = [
         "href": "/conserto",
         "icon": "fa-screwdriver-wrench",
         "permission": "PAGE_CONSERTO",
-        "section": "Recebimento",
+        "section": "Logística",
         "tone": "violet",
         "priority": 90,
         "keywords": ["conserto", "retorno", "estoque", "baixa"],
@@ -184,7 +185,7 @@ HOME_MODULES = [
         "href": "/expedicao/conferencia",
         "icon": "fa-clipboard-check",
         "permission": "PAGE_EXPEDICAO_CONFERENCIA",
-        "section": "Expedição",
+        "section": "Logística",
         "tone": "slate",
         "priority": 86,
         "keywords": ["expedicao", "saida", "conferencia", "embarque"],
@@ -198,7 +199,7 @@ HOME_MODULES = [
         "href": "/expedicao/admin",
         "icon": "fa-user-shield",
         "permission": "PAGE_EXPEDICAO_ADMIN",
-        "section": "Expedição",
+        "section": "Logística",
         "tone": "slate",
         "priority": 70,
         "keywords": ["expedicao", "admin", "controle", "saida"],
@@ -212,7 +213,7 @@ HOME_MODULES = [
         "href": "/expedicao/romaneio",
         "icon": "fa-truck-ramp-box",
         "permission": "PAGE_EXPEDICAO_ROMANEIO",
-        "section": "Expedição",
+        "section": "Logística",
         "tone": "slate",
         "priority": 74,
         "keywords": ["romaneio", "carga", "expedicao", "separacao"],
@@ -308,23 +309,14 @@ HOME_MODULES = [
 
 
 SECTION_META = {
-    "Recebimento": {
-        "description": "Entrada de NF, triagem física e fluxo de conferência.",
-        "icon": "fa-box-open",
-    },
     "Compras": {
         "description": "Validação fiscal, auditoria e lançamento de documentos.",
         "icon": "fa-file-invoice-dollar",
     },
     "Logística": {
-        "description": "Estoque físico, endereçamento e governança do armazém.",
+        "description": "Recebimento, expedição, estoque físico, endereçamento e governança do armazém.",
         "icon": "fa-warehouse",
         "tone": "orange",
-    },
-    "Expedição": {
-        "description": "Conferência de saída, romaneios e controle operacional.",
-        "icon": "fa-truck-loading",
-        "tone": "teal",
     },
     "Financeiro": {
         "description": "Emissão, títulos e acompanhamento de recebíveis.",
@@ -397,6 +389,10 @@ def _build_home_metrics() -> dict:
         metrics["expedicao_aberta"] = (
             ExpedicaoConferencia.query
             .filter(ExpedicaoConferencia.status.in_(["Aberta", "PendenteDecisao"]))
+            .count()
+        ) + (
+            ExpedicaoConferenciaSimples.query
+            .filter(ExpedicaoConferenciaSimples.status == "Pendente de expedição")
             .count()
         )
         metrics["boletos_gerados"] = BoletoContaReceber.query.filter_by(status="Gerado").count()
@@ -675,7 +671,12 @@ def wms_governanca_admin_page():
 @page_bp.route("/expedicao/conferencia")
 @permission_required("PAGE_EXPEDICAO_CONFERENCIA")
 def expedicao_conferencia_page():
-    return render_template("expedicao_conferencia.html", user=session["username"])
+    return render_template(
+        "expedicao_conferencia_simples.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
 
 
 @page_bp.route("/expedicao/admin")

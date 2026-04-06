@@ -30,6 +30,10 @@ class Config:
     CONSYSTE_CONSULTA = "https://portal.consyste.com.br/app/nfe/lista/recebidos/o/emitido_em/desc"
     EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "30482274000125")
     EXPEDICAO_REPORTS_DIR = os.environ.get("EXPEDICAO_REPORTS_DIR", r"Z:\PUBLICO\SNData\eReports")
+    EXPEDICAO_CONFERENCIA_FOTOS_DIR = os.environ.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID = os.environ.get("EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID", "1Kc5JBmmPlQGF8lwT4xU0dnnFijk9tYiu")
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE", "")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
