@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import sqlite3
 from unittest.mock import Mock, patch
 
 from conferencia_app import create_app
@@ -1580,6 +1581,81 @@ def test_api_expedicao_conferencia_abre_relatorio_e_valida_cego(tmp_path):
     assert validacao_div.status_code == 409
     validacao_div_data = validacao_div.get_json()
     assert validacao_div_data.get("bloqueio_quantidade") is True
+
+
+def test_bootstrap_corrige_schema_legado_expedicao_conferencia_simples(tmp_path):
+    db_path = tmp_path / "legacy_expedicao.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE expedicao_conferencia_simples (
+            id INTEGER PRIMARY KEY,
+            orcamento VARCHAR(80) NOT NULL,
+            conferente VARCHAR(100) NOT NULL,
+            data_conferencia DATETIME NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO expedicao_conferencia_simples (id, orcamento, conferente, data_conferencia)
+        VALUES (1, 'ORC-1001', 'felipe', '2026-04-06 09:00:00')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
+        }
+    )
+    client = app.test_client()
+    login_admin(client)
+
+    response = client.get("/api/expedicao/conferencia-simples")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["resumo"]["total"] == 1
+    assert data["registros"][0]["orcamento"] == "ORC-1001"
+    assert data["registros"][0]["status_slug"] == "pendente_expedicao"
+    assert data["registros"][0]["estorno_pendente"] is None
+
+    conn = sqlite3.connect(db_path)
+    cols_conf = {row[1] for row in conn.execute("PRAGMA table_info(expedicao_conferencia_simples)")}
+    cols_foto = {row[1] for row in conn.execute("PRAGMA table_info(expedicao_conferencia_simples_foto)")}
+    cols_estorno = {row[1] for row in conn.execute("PRAGMA table_info(expedicao_conferencia_simples_estorno)")}
+    conn.close()
+
+    assert {
+        "numero_nf",
+        "nome_cliente",
+        "cliente_origem",
+        "nf_origem",
+        "consyste_document_id",
+        "consyste_chave",
+        "transportadora",
+        "placa",
+        "motorista",
+        "status",
+        "created_at",
+        "updated_at",
+        "expedido_at",
+        "expedido_by",
+    }.issubset(cols_conf)
+    assert {"conferencia_id", "file_name", "file_path", "created_at"}.issubset(cols_foto)
+    assert {
+        "conferencia_id",
+        "solicitante",
+        "motivo",
+        "status",
+        "admin_usuario",
+        "admin_observacao",
+        "resolvido_at",
+        "created_at",
+    }.issubset(cols_estorno)
 
 
 def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):

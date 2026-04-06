@@ -456,6 +456,128 @@ def _ensure_conserto_columns() -> None:
         conn.close()
 
 
+def _ensure_expedicao_conferencia_simples_schema() -> None:
+    conn = db.engine.connect()
+    try:
+        for table_name in (
+            "expedicao_conferencia_simples",
+            "expedicao_conferencia_simples_foto",
+            "expedicao_conferencia_simples_estorno",
+        ):
+            table = db.metadata.tables.get(table_name)
+            if table is not None:
+                table.create(bind=conn, checkfirst=True)
+
+        cols_conf = _get_column_names("expedicao_conferencia_simples")
+        missing_conf_columns = [
+            ("numero_nf", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_nf VARCHAR(40)"),
+            ("nome_cliente", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN nome_cliente VARCHAR(160)"),
+            (
+                "cliente_origem",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN cliente_origem VARCHAR(20) NOT NULL DEFAULT 'Manual'",
+            ),
+            (
+                "nf_origem",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN nf_origem VARCHAR(20) NOT NULL DEFAULT 'Manual'",
+            ),
+            (
+                "consyste_document_id",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN consyste_document_id VARCHAR(120)",
+            ),
+            ("consyste_chave", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN consyste_chave VARCHAR(50)"),
+            ("transportadora", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN transportadora VARCHAR(160)"),
+            ("placa", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN placa VARCHAR(20)"),
+            ("motorista", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN motorista VARCHAR(160)"),
+            (
+                "status",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'Pendente de expedicao'",
+            ),
+            ("created_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN created_at DATETIME"),
+            ("updated_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN updated_at DATETIME"),
+            ("expedido_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN expedido_at DATETIME"),
+            ("expedido_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN expedido_by VARCHAR(100)"),
+        ]
+        for column_name, ddl in missing_conf_columns:
+            if column_name not in cols_conf:
+                conn.execute(db.text(ddl))
+                conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples",
+            "ix_expedicao_conferencia_simples_numero_nf",
+            "CREATE INDEX ix_expedicao_conferencia_simples_numero_nf ON expedicao_conferencia_simples (numero_nf)",
+        )
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples",
+            "ix_expedicao_conferencia_simples_consyste_document_id",
+            "CREATE INDEX ix_expedicao_conferencia_simples_consyste_document_id ON expedicao_conferencia_simples (consyste_document_id)",
+        )
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples",
+            "ix_expedicao_conferencia_simples_consyste_chave",
+            "CREATE INDEX ix_expedicao_conferencia_simples_consyste_chave ON expedicao_conferencia_simples (consyste_chave)",
+        )
+
+        cols_foto = _get_column_names("expedicao_conferencia_simples_foto")
+        missing_foto_columns = [
+            (
+                "conferencia_id",
+                "ALTER TABLE expedicao_conferencia_simples_foto ADD COLUMN conferencia_id INTEGER",
+            ),
+            ("file_name", "ALTER TABLE expedicao_conferencia_simples_foto ADD COLUMN file_name VARCHAR(260)"),
+            ("file_path", "ALTER TABLE expedicao_conferencia_simples_foto ADD COLUMN file_path VARCHAR(500)"),
+            ("created_at", "ALTER TABLE expedicao_conferencia_simples_foto ADD COLUMN created_at DATETIME"),
+        ]
+        for column_name, ddl in missing_foto_columns:
+            if column_name not in cols_foto:
+                conn.execute(db.text(ddl))
+                conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples_foto",
+            "ix_expedicao_conferencia_simples_foto_conferencia_id",
+            "CREATE INDEX ix_expedicao_conferencia_simples_foto_conferencia_id ON expedicao_conferencia_simples_foto (conferencia_id)",
+        )
+
+        cols_estorno = _get_column_names("expedicao_conferencia_simples_estorno")
+        missing_estorno_columns = [
+            (
+                "conferencia_id",
+                "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN conferencia_id INTEGER",
+            ),
+            ("solicitante", "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN solicitante VARCHAR(100)"),
+            ("motivo", "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN motivo VARCHAR(500)"),
+            (
+                "status",
+                "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'Pendente'",
+            ),
+            ("admin_usuario", "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN admin_usuario VARCHAR(100)"),
+            (
+                "admin_observacao",
+                "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN admin_observacao VARCHAR(500)",
+            ),
+            ("resolvido_at", "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN resolvido_at DATETIME"),
+            ("created_at", "ALTER TABLE expedicao_conferencia_simples_estorno ADD COLUMN created_at DATETIME"),
+        ]
+        for column_name, ddl in missing_estorno_columns:
+            if column_name not in cols_estorno:
+                conn.execute(db.text(ddl))
+                conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples_estorno",
+            "ix_expedicao_conferencia_simples_estorno_conferencia_id",
+            "CREATE INDEX ix_expedicao_conferencia_simples_estorno_conferencia_id ON expedicao_conferencia_simples_estorno (conferencia_id)",
+        )
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         try:
@@ -490,6 +612,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_conserto_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_conferencia_simples_schema()
         except Exception:
             pass
 
