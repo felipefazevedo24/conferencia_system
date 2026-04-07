@@ -363,6 +363,128 @@
         color: #64748b;
         font-size: 11px;
     }
+    .flow-panel {
+        background: linear-gradient(180deg, #fcfdff 0%, #f3f8ff 100%);
+        border-color: #d7e7ff;
+    }
+    .flow-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    .flow-band {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+    }
+    .flow-stage {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid #dbe7f5;
+        background: rgba(255, 255, 255, 0.9);
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .flow-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+    }
+    .flow-dot.fiscal { background: #0ea5e9; box-shadow: 0 0 0 5px rgba(14, 165, 233, 0.12); }
+    .flow-dot.fila { background: #f59e0b; box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.12); }
+    .flow-dot.operacao { background: #22c55e; box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.12); }
+    .flow-dot.auditoria { background: #8b5cf6; box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.12); }
+    .flow-summary {
+        display: grid;
+        grid-template-columns: 1.25fr repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+    }
+    .flow-stat {
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid #dbe2e8;
+        background: #fff;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+    }
+    .flow-stat strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 26px;
+        line-height: 1;
+        color: #0f172a;
+    }
+    .flow-stat span {
+        display: block;
+        color: #64748b;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        font-weight: 800;
+    }
+    .flow-stat.flow-main {
+        background: linear-gradient(140deg, #0f172a, #123868 62%, #0a6ed1 100%);
+        color: #f8fafc;
+        border: none;
+    }
+    .flow-stat.flow-main span,
+    .flow-stat.flow-main strong,
+    .flow-stat.flow-main small {
+        color: #f8fafc;
+    }
+    .flow-stat small {
+        display: block;
+        margin-top: 10px;
+        color: #475569;
+        font-size: 11px;
+    }
+    .insight-panel {
+        margin-top: 14px;
+        padding: 16px;
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #f9fbff 0%, #eef5ff 100%);
+    }
+    .insight-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .insight-card {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid #d6e4f5;
+    }
+    .insight-card span {
+        display: block;
+        color: #64748b;
+        font-size: 10px;
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+    }
+    .insight-card strong {
+        display: block;
+        margin-top: 8px;
+        color: #0f172a;
+        font-size: 22px;
+        line-height: 1.1;
+    }
+    .insight-caption {
+        margin-top: 12px;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.5;
+    }
     .table-wrap.tall { max-height: 330px; overflow-y: auto; }
     .pending-filters {
         display: grid;
@@ -411,6 +533,9 @@
         .pending-filters { grid-template-columns: 1fr; }
         .priority-grid { grid-template-columns: 1fr; }
         .cockpit-hero-body { flex-direction: column; align-items: flex-start; }
+        .flow-band,
+        .flow-summary,
+        .insight-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 1300px) {
@@ -426,6 +551,7 @@
         .cockpit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -434,9 +560,14 @@
 <div class="page-header-erp">
     <div>
         <h1><i class="fas fa-boxes"></i> WMS | Cockpit Operacional</h1>
-        <p class="sap-subtitle">Gestão unificada de endereçamento e auditoria de estoque em tempo real.</p>
+        <p class="sap-subtitle">Operação diária, fila fiscal e rastreabilidade do estoque em uma leitura única.</p>
     </div>
-    <a class="sap-btn" href="/admin/wms-enderecos"><i class="fas fa-cog"></i> Configurar Endereços</a>
+    <div class="sap-row" style="margin:0;">
+        <a class="sap-btn" href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Endereços</a>
+        {% if is_admin_wms %}
+        <a class="sap-btn" href="/admin/wms-governanca"><i class="fas fa-shield-alt"></i> Governança</a>
+        {% endif %}
+    </div>
 </div>
 
 <div class="sap-toolbar">
@@ -459,11 +590,65 @@
     </div>
 </section>
 
+<section class="sap-card flow-panel" style="margin-bottom:14px;">
+    <div class="flow-header">
+        <div>
+            <h2 class="sap-card-title" style="margin-bottom:4px;"><i class="fas fa-link"></i> Fluxo Fiscal -> WMS</h2>
+            <p class="section-meta" style="margin:0;">Tudo o que nasce no fiscal precisa chegar aqui com prioridade, fila e resposta operacional clara.</p>
+        </div>
+        <div class="sap-row" style="margin:0;">
+            {% if is_admin_wms %}
+            <button class="sap-btn primary" onclick="processarFilaIntegracao()"><i class="fas fa-tasks"></i> Processar Fila Fiscal</button>
+            <button class="sap-btn" onclick="executarReconciliacao()"><i class="fas fa-balance-scale"></i> Reconciliar ERP x WMS</button>
+            <a class="sap-btn" href="/admin/wms-governanca"><i class="fas fa-arrow-right"></i> Abrir Governança</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="flow-band">
+        <div class="flow-stage"><span class="flow-dot fiscal"></span>Fiscal valida e lança a NF</div>
+        <div class="flow-stage"><span class="flow-dot fila"></span>Fila técnica traduz a nota para o WMS</div>
+        <div class="flow-stage"><span class="flow-dot operacao"></span>Operação endereça, transfere e rastreia</div>
+        <div class="flow-stage"><span class="flow-dot auditoria"></span>Governança monitora, reconcilia e corrige</div>
+    </div>
+    <div class="flow-summary">
+        <div class="flow-stat flow-main">
+            <span id="fluxoFiscalStatusBadge">Fluxo carregando</span>
+            <strong id="fluxoEventosFila">0</strong>
+            <small id="fluxoFiscalUltimoEvento">Último evento: aguardando leitura da fila.</small>
+        </div>
+        <div class="flow-stat">
+            <span>Notas na esteira</span>
+            <strong id="fluxoNotasFila">0</strong>
+            <small>Notas liberadas pelo fiscal e ainda aguardando ação física.</small>
+        </div>
+        <div class="flow-stat">
+            <span>Fila técnica</span>
+            <strong id="fluxoFilaPendente">0</strong>
+            <small>Eventos ainda não concluídos pela integração interna.</small>
+        </div>
+        <div class="flow-stat">
+            <span>Sucesso 24h</span>
+            <strong id="fluxoSucessoDia">0</strong>
+            <small>Eventos que passaram com retorno bom no último dia.</small>
+        </div>
+        <div class="flow-stat">
+            <span>Falhas abertas</span>
+            <strong id="fluxoFalhasAbertas">0</strong>
+            <small>Pontos que pedem tratamento imediato de governança.</small>
+        </div>
+    </div>
+    <div class="sap-row" style="margin-top:12px; margin-bottom:0; flex-wrap:wrap;">
+        <span class="pill" id="fluxoFiscalFilaBadge" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe;">Fila técnica: -</span>
+        <span class="pill" id="fluxoFiscalFalhaBadge" style="background:#fee2e2; color:#991b1b; border-color:#fecaca;">Falhas abertas: -</span>
+        <span class="pill" id="fluxoFiscalSucessoBadge" style="background:#dcfce7; color:#166534; border-color:#86efac;">Sucesso 24h: -</span>
+    </div>
+</section>
+
 <section class="sap-card cockpit-hero">
     <div class="cockpit-hero-body">
         <div>
-            <h2>Centro de comando logistico</h2>
-            <p>Visual operacional unico para atacar pendencias, monitorar capacidade, acompanhar entradas do fiscal e agir rapido no enderecamento.</p>
+            <h2>Centro de comando logístico</h2>
+            <p>Visual operacional único para atacar pendências, monitorar capacidade, acompanhar entradas do fiscal e agir rápido no endereçamento.</p>
         </div>
         <div class="shortcut-strip">
             <div class="shortcut-chip"><kbd>/</kbd> Buscar NF</div>
@@ -533,15 +718,15 @@
 
     <section class="sap-card" style="margin-bottom:0;">
         <h2 class="sap-card-title"><i class="fas fa-warehouse"></i> Capacidade por deposito</h2>
-        <p class="section-meta">Visao rapida de ocupacao e pontos com risco de saturacao.</p>
+        <p class="section-meta">Visão rápida de ocupação e pontos com risco de saturação.</p>
         <div id="cockpitDepositos" class="cockpit-stack">
-            <div class="empty-inline">Carregando ocupacao...</div>
+            <div class="empty-inline">Carregando ocupação...</div>
         </div>
     </section>
 
     <section class="sap-card" style="margin-bottom:0;">
         <h2 class="sap-card-title"><i class="fas fa-layer-group"></i> Maiores pendencias</h2>
-        <p class="section-meta">Top materiais e notas que merecem priorizacao imediata.</p>
+        <p class="section-meta">Top materiais e notas que merecem priorização imediata.</p>
         <div class="cockpit-stack">
             <div>
                 <p class="mini-title">Materiais</p>
@@ -660,6 +845,13 @@
                 </table>
             </div>
             <p class="muted" id="resumoRelatorio" style="font-weight: 800; color: var(--sap-blue); margin-top: 15px;"></p>
+            <div class="insight-panel">
+                <div class="sap-row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <strong style="color:#0f172a;"><i class="fas fa-wave-square"></i> Leitura operacional do material</strong>
+                    <span class="pill" id="materialInsightBadge" style="background:#e0f2fe; color:#075985; border-color:#7dd3fc;">Aguardando consulta</span>
+                </div>
+                <div id="materialInsightBody" class="muted">Consulte um material para enxergar cobertura local, concentração e status operacional do saldo.</div>
+            </div>
         </section>
 
         <section class="sap-card">
@@ -907,6 +1099,57 @@ function toast(msg, tipo = 'info') {
     }, 2600);
 }
 
+function setBadgeText(id, text, palette = 'neutral') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const styles = {
+        neutral: ['#e2e8f0', '#334155', '#cbd5e1'],
+        ok: ['#dcfce7', '#166534', '#86efac'],
+        warn: ['#fef3c7', '#92400e', '#fcd34d'],
+        err: ['#fee2e2', '#991b1b', '#fecaca'],
+        info: ['#e0f2fe', '#075985', '#7dd3fc'],
+    };
+    const [bg, color, border] = styles[palette] || styles.neutral;
+    el.textContent = text;
+    el.style.background = bg;
+    el.style.color = color;
+    el.style.borderColor = border;
+}
+
+function renderFluxoFiscalResumo(integracaoFiscal, cards = {}) {
+    const status = integracaoFiscal || {};
+    const filaPendente = Number(status.fila_pendente ?? cards.integracoes_pendentes ?? 0);
+    const falhasAbertas = Number(status.falhas_abertas ?? cards.integracoes_falha ?? 0);
+    const sucesso24h = Number(status.sucesso_24h ?? cards.integracoes_sucesso_24h ?? 0);
+    const notasFila = Number(cards.notas_pendentes_fila || 0);
+    const ultimoEvento = status.ultimo_evento || null;
+
+    const estadoFluxo = falhasAbertas > 0
+        ? { label: 'Fluxo com atenção', palette: 'warn' }
+        : filaPendente > 0
+            ? { label: 'Fluxo em andamento', palette: 'info' }
+            : { label: 'Fluxo estabilizado', palette: 'ok' };
+
+    setBadgeText('fluxoFiscalStatusBadge', estadoFluxo.label, estadoFluxo.palette);
+    setBadgeText('fluxoFiscalFilaBadge', `Fila técnica: ${formatarNumero(filaPendente)}`, filaPendente > 0 ? 'info' : 'neutral');
+    setBadgeText('fluxoFiscalFalhaBadge', `Falhas abertas: ${formatarNumero(falhasAbertas)}`, falhasAbertas > 0 ? 'err' : 'ok');
+    setBadgeText('fluxoFiscalSucessoBadge', `Sucesso 24h: ${formatarNumero(sucesso24h)}`, sucesso24h > 0 ? 'ok' : 'neutral');
+
+    document.getElementById('fluxoEventosFila').textContent = formatarNumero(filaPendente);
+    document.getElementById('fluxoNotasFila').textContent = formatarNumero(notasFila);
+    document.getElementById('fluxoFilaPendente').textContent = formatarNumero(filaPendente);
+    document.getElementById('fluxoSucessoDia').textContent = formatarNumero(sucesso24h);
+    document.getElementById('fluxoFalhasAbertas').textContent = formatarNumero(falhasAbertas);
+
+    const ultimoEventoEl = document.getElementById('fluxoFiscalUltimoEvento');
+    if (!ultimoEventoEl) return;
+    if (!ultimoEvento) {
+        ultimoEventoEl.textContent = 'Último evento: sem registros recentes da esteira fiscal.';
+        return;
+    }
+    ultimoEventoEl.textContent = `Último evento: ${ultimoEvento.tipo_evento || 'Evento'} | ${ultimoEvento.referencia || '-'} | ${ultimoEvento.status || '-'} | ${formatarData(ultimoEvento.criado_em)}`;
+}
+
 function formatarNumero(valor, casas = 0) {
     return Number(valor || 0).toLocaleString('pt-BR', {
         minimumFractionDigits: casas,
@@ -945,6 +1188,7 @@ function renderCockpit(data) {
     cacheCockpit = data || {};
     const cards = cacheCockpit.cards || {};
     const prioridades = cacheCockpit.prioridades || {};
+    renderFluxoFiscalResumo(cacheCockpit.integracao_fiscal || {}, cards);
     const alertas = Number(cards.alertas_abertos || 0);
     const divergencias = Number(cards.divergencias_abertas || 0);
     const pendentes = Number(cards.pendentes_enderecamento || 0);
@@ -967,7 +1211,7 @@ function renderCockpit(data) {
     }
     const tagRisco = document.getElementById('cockpitRiscoTag');
     if (tagRisco) {
-        tagRisco.textContent = alertas > 0 || divergencias > 0 ? 'Atencao' : 'Estavel';
+        tagRisco.textContent = alertas > 0 || divergencias > 0 ? 'Atenção' : 'Estável';
     }
 
     renderListaCockpit(
@@ -993,7 +1237,7 @@ function renderCockpit(data) {
                 </div>
             `;
         },
-        'Sem ocupacao para exibir.'
+        'Sem ocupação para exibir.'
     );
 
     renderListaCockpit(
@@ -1088,7 +1332,7 @@ function renderLocalizacoesResumo() {
     const tbody = document.getElementById('tbodyLocResumo');
     tbody.innerHTML = '';
     if (!cacheLocalizacoes.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma localizacao.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma localização.</td></tr>';
         return;
     }
     cacheLocalizacoes.slice(0, 30).forEach((loc) => {
@@ -1308,7 +1552,7 @@ async function abrirModalEndereco(itemId, nf, codigoMaterial, depositoId = 0, or
     await carregarLocalizacoes();
 
     const select = document.getElementById('modalLocalizacao');
-    select.innerHTML = '<option value="">Selecione a localizacao...</option>';
+    select.innerHTML = '<option value="">Selecione a localização...</option>';
 
     const locaisFiltrados = cacheLocalizacoes.filter((loc) => {
         if (!depositoId) return true;
@@ -1380,11 +1624,16 @@ async function buscarEstoquePorSku() {
     const sku = document.getElementById('inputSkuRelatorio').value.trim();
     const tbody = document.getElementById('tbodyRelatorioSku');
     const resumo = document.getElementById('resumoRelatorio');
+    const insightBody = document.getElementById('materialInsightBody');
     tbody.innerHTML = '';
     resumo.textContent = '';
+    if (insightBody) insightBody.innerHTML = 'Lendo consolidado operacional do material...';
+    setBadgeText('materialInsightBadge', 'Consultando', 'info');
 
     if (!sku) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Informe um código de material.</td></tr>';
+        if (insightBody) insightBody.innerHTML = 'Consulte um material para enxergar cobertura local, concentração e status operacional do saldo.';
+        setBadgeText('materialInsightBadge', 'Aguardando consulta', 'neutral');
         return;
     }
 
@@ -1393,7 +1642,6 @@ async function buscarEstoquePorSku() {
         const linhas = data.skus || [];
         if (!linhas.length) {
             tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Sem estoque para o material ${sku}.</td></tr>`;
-            return;
         }
         linhas.forEach((linha) => {
             const tr = document.createElement('tr');
@@ -1406,7 +1654,64 @@ async function buscarEstoquePorSku() {
             tbody.appendChild(tr);
         });
         resumo.innerHTML = `<i class="fas fa-calculator"></i> Total: ${Number(data.qtd_total || 0).toFixed(2)} | Disponível: ${Number(data.qtd_disponivel || 0).toFixed(2)}`;
-    } catch (err) { tbody.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`; }
+        const enderecosAtivos = linhas.length;
+        const maiorConcentracao = linhas.reduce((maior, linha) => {
+            if (!maior) return linha;
+            return Number(linha.qtd_total || 0) > Number(maior.qtd_total || 0) ? linha : maior;
+        }, null);
+        const ultimaAtualizacao = linhas.reduce((maisRecente, linha) => {
+            if (!linha.data_atualizacao) return maisRecente;
+            const atual = new Date(linha.data_atualizacao).getTime();
+            if (!Number.isFinite(atual)) return maisRecente;
+            return !maisRecente || atual > maisRecente ? atual : maisRecente;
+        }, null);
+
+        if (!linhas.length) {
+            if (insightBody) {
+                insightBody.innerHTML = `
+                    <div class="empty-inline" style="padding:14px;">
+                        Sem saldo local para este material. Se a nota já foi lançada, vale conferir a fila fiscal e a lista de pendentes de endereçamento.
+                    </div>
+                `;
+            }
+            setBadgeText('materialInsightBadge', 'Sem saldo local', 'warn');
+            return;
+        }
+
+        if (insightBody) {
+            insightBody.innerHTML = `
+                <div class="insight-grid">
+                    <div class="insight-card">
+                        <span>Endereços ativos</span>
+                        <strong>${formatarNumero(enderecosAtivos)}</strong>
+                    </div>
+                    <div class="insight-card">
+                        <span>Saldo disponivel</span>
+                        <strong>${formatarNumero(data.qtd_disponivel || 0, 2)}</strong>
+                    </div>
+                    <div class="insight-card">
+                        <span>Maior concentração</span>
+                        <strong>${maiorConcentracao?.localizacao_codigo || '-'}</strong>
+                    </div>
+                </div>
+                <div class="insight-caption">
+                    Maior concentração em <strong>${maiorConcentracao?.localizacao_codigo || '-'}</strong> com <strong>${formatarNumero(maiorConcentracao?.qtd_total || 0, 2)}</strong>.
+                    Última atualização operacional em <strong>${formatarData(ultimaAtualizacao ? new Date(ultimaAtualizacao).toISOString() : null)}</strong>.
+                </div>
+            `;
+        }
+
+        const saldoDisponivel = Number(data.qtd_disponivel || 0);
+        setBadgeText(
+            'materialInsightBadge',
+            saldoDisponivel > 0 ? `${formatarNumero(enderecosAtivos)} endereços com saldo` : 'Saldo sem disponibilidade',
+            saldoDisponivel > 0 ? 'ok' : 'warn'
+        );
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`;
+        if (insightBody) insightBody.innerHTML = `<span style="color:#b91c1c;">${err.message}</span>`;
+        setBadgeText('materialInsightBadge', 'Erro na consulta', 'err');
+    }
 }
 
 async function carregarGovernancaWms() {
@@ -1495,7 +1800,7 @@ async function resolverAlerta(alertaId) {
 async function executarReconciliacao() {
     try {
         const resultado = await fetchJson('/api/wms/governanca/reconciliar', { method: 'POST' });
-        toast(`Reconciliacao concluida. Analisadas: ${resultado.resultado.analisadas}, novas divergencias: ${resultado.resultado.novas_divergencias}.`, 'ok');
+        toast(`Reconciliação concluída. Analisadas: ${resultado.resultado.analisadas}, novas divergências: ${resultado.resultado.novas_divergencias}.`, 'ok');
         await carregarGovernancaWms();
         await carregarCockpitWms();
     } catch (err) {

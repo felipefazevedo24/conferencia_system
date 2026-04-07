@@ -252,6 +252,119 @@ def test_fiscal_estorna_lancamento_e_volta_para_concluido(tmp_path):
         assert item.numero_lancamento is None
 
 
+def test_api_diferencia_estorno_de_lancamento_e_conferencia(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3000",
+                fornecedor="Fornecedor Z",
+                codigo="XYZ",
+                descricao="Item teste 3",
+                qtd_real=1.0,
+                status="Concluído",
+            )
+        )
+        db.session.add(
+            LogEstornoLancamento(
+                numero_nota="3000",
+                usuario_estorno="admin",
+                motivo="Ajuste fiscal de cadastro",
+            )
+        )
+        db.session.add(
+            LogEstornoLancamento(
+                numero_nota="3000",
+                usuario_estorno="admin",
+                motivo="[ESTORNO CONFERÊNCIA] Contagem divergente",
+            )
+        )
+        db.session.commit()
+
+    response_estornos = client.get("/api/estornos_historico", query_string={"nota": "3000"})
+    assert response_estornos.status_code == 200
+    eventos = response_estornos.get_json()
+    assert [evento["tipo"] for evento in eventos[:2]] == [
+        "Estorno de conferência",
+        "Estorno de lançamento",
+    ]
+    assert eventos[0]["motivo"] == "Contagem divergente"
+    assert eventos[1]["motivo"] == "Ajuste fiscal de cadastro"
+
+    response_detalhe = client.get("/api/detalhes_nf/3000")
+    assert response_detalhe.status_code == 200
+    detalhe = response_detalhe.get_json()
+    assert detalhe["ultimo_estorno"]["tipo"] == "Estorno de conferência"
+    assert detalhe["ultimo_estorno"]["motivo"] == "Contagem divergente"
+
+
+def test_listas_documento_entrada_retorna_resumo_leve_por_status(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3100",
+                fornecedor="Fornecedor Conferido",
+                codigo="CF1",
+                descricao="Item conferido",
+                qtd_real=1.0,
+                status="Concluído",
+                remessa=True,
+                cfop="5124",
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="3101",
+                fornecedor="Fornecedor Lancado",
+                codigo="LC1",
+                descricao="Item lancado",
+                qtd_real=1.0,
+                status="Lançado",
+                numero_lancamento="ERP-3101",
+                usuario_lancamento="admin",
+            )
+        )
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota="3101",
+                manifestacao="confirmada",
+                status="Falha",
+                detalhe="SEFAZ indisponivel",
+                usuario="admin",
+            )
+        )
+        db.session.add(
+            LogEstornoLancamento(
+                numero_nota="3100",
+                usuario_estorno="admin",
+                motivo="Ajuste fiscal",
+            )
+        )
+        db.session.commit()
+
+    response_concluidas = client.get("/api/concluidas")
+    assert response_concluidas.status_code == 200
+    concluidas = {item["numero"]: item for item in response_concluidas.get_json()}
+    assert concluidas["3100"]["status_atual"] == "Concluído"
+    assert concluidas["3100"]["etapa_atual"] == "Estornada"
+    assert concluidas["3100"]["exige_codigo_material_remessa"] is True
+
+    response_lancadas = client.get("/api/notas_lancadas")
+    assert response_lancadas.status_code == 200
+    lancadas = {item["numero"]: item for item in response_lancadas.get_json()}
+    assert lancadas["3101"]["status_atual"] == "Lançado"
+    assert lancadas["3101"]["etapa_atual"] == "Lançada"
+    assert lancadas["3101"]["codigo_erp"] == "ERP-3101"
+    assert lancadas["3101"]["manifestacao"]["status"] == "Falha"
+
+
 def test_confirmar_lancamento_envia_manifestacao_do_destinatario(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

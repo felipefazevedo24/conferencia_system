@@ -112,12 +112,96 @@
         font-size: 12px;
         font-weight: 800;
     }
+    .map-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #123868 58%, #0a6ed1 100%);
+        color: #f8fafc;
+        border: none;
+        overflow: hidden;
+        position: relative;
+    }
+    .map-hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -80px -100px auto;
+        width: 220px;
+        height: 220px;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 72%);
+    }
+    .map-hero h3 {
+        color: #fff;
+        border-bottom-color: rgba(255, 255, 255, 0.14);
+        position: relative;
+        z-index: 1;
+    }
+    .map-hero-copy,
+    .map-hero-actions,
+    .map-stats,
+    .map-signals {
+        position: relative;
+        z-index: 1;
+    }
+    .map-hero-copy p {
+        margin: 0;
+        max-width: 860px;
+        color: rgba(248, 250, 252, 0.88);
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .map-stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+    }
+    .map-stat {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        backdrop-filter: blur(6px);
+    }
+    .map-stat span {
+        display: block;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        font-weight: 800;
+        color: rgba(248, 250, 252, 0.78);
+    }
+    .map-stat strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 28px;
+        line-height: 1;
+        color: #fff;
+    }
+    .map-signals {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+    .signal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 800;
+    }
 
     @media (max-width: 1100px) {
         .grid { grid-template-columns: 1fr; }
         .assist-steps { grid-template-columns: 1fr; }
+        .map-stats { grid-template-columns: 1fr 1fr; }
     }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -125,13 +209,47 @@
     <div class="page-header-erp">
         <div>
             <h1><i class="fas fa-cogs"></i> WMS | Endereços</h1>
-            <p class="subtitle">Cadastro e consulta de endereços de forma simples e rápida.</p>
+            <p class="subtitle">Mapa físico do armazém com padronização, sequência e leitura operacional clara.</p>
         </div>
         <div class="toolbar">
             <button class="btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <a class="btn" href="/admin/wms-governanca"><i class="fas fa-shield-alt"></i> Governança</a>
             <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit</a>
         </div>
     </div>
+
+    <section class="card map-hero" style="margin-bottom: 18px;">
+        <h3><i class="fas fa-map"></i> Mapa Físico do Armazém</h3>
+        <div class="row map-hero-copy" style="justify-content:space-between; align-items:flex-start; margin-bottom:0;">
+            <p>Esta tela passa a ser o centro de criação, padronização e leitura do endereçamento. Tudo que entra pelo fiscal e vira tarefa no WMS depende de um mapa limpo, rápido de ler e confiável para a operação.</p>
+            <div class="map-hero-actions">
+                <a class="btn" href="/admin/wms-governanca" style="background:rgba(255,255,255,0.12); color:#fff; border-color:rgba(255,255,255,0.18);"><i class="fas fa-arrow-right"></i> Ver Fluxo Fiscal</a>
+            </div>
+        </div>
+        <div class="map-stats">
+            <div class="map-stat">
+                <span>Endereços ativos</span>
+                <strong id="mapTotalEnderecos">0</strong>
+            </div>
+            <div class="map-stat">
+                <span>Depósitos cobertos</span>
+                <strong id="mapTotalDepositos">0</strong>
+            </div>
+            <div class="map-stat">
+                <span>Ruas mapeadas</span>
+                <strong id="mapTotalRuas">0</strong>
+            </div>
+            <div class="map-stat">
+                <span>Níveis ativos</span>
+                <strong id="mapTotalNiveis">0</strong>
+            </div>
+        </div>
+        <div class="map-signals">
+            <span id="mapStatusBadge" class="signal-chip">Mapa carregando</span>
+            <span id="mapDepositosInfo" class="signal-chip">Depósitos: -</span>
+            <span id="mapCoberturaInfo" class="signal-chip">Cobertura: -</span>
+        </div>
+    </section>
 
     <!-- Cadastro Rápido -->
     <section class="card" style="margin-bottom: 18px;">
@@ -337,6 +455,8 @@ async function gerarSequenciaAssistida() {
     } catch (err) {
         showFeedback(`Falha ao gerar sequência: ${err.message}`, true);
     }
+}
+
 function showFeedback(msg, isError = false) {
     const el = document.getElementById('feedbackMsg');
     if (!el) return;
@@ -346,7 +466,6 @@ function showFeedback(msg, isError = false) {
     el.style.color = isError ? '#b91c1c' : '#0369a1';
     el.style.borderColor = isError ? '#fecaca' : '#bae6fd';
     setTimeout(() => { el.style.display = 'none'; }, 4000);
-}
 }
 
 function preencherSelect(selectEl, options, defaultLabel, valueField = 'value', textField = 'label') {
@@ -377,6 +496,40 @@ async function fetchJson(url, options = {}) {
     return data;
 }
 
+function atualizarResumoMapaOperacional() {
+    const totalEnderecos = cacheLocalizacoesAdmin.length;
+    const depositos = [...new Set(cacheLocalizacoesAdmin.map((loc) => String(loc.deposito_codigo || '').trim()).filter(Boolean))];
+    const ruas = [...new Set(cacheLocalizacoesAdmin.map((loc) => String(loc.rua || '').trim()).filter(Boolean))];
+    const niveis = [...new Set(cacheLocalizacoesAdmin.map((loc) => String(loc.nivel || '').trim()).filter(Boolean))];
+
+    const statusBadge = document.getElementById('mapStatusBadge');
+    const depositosInfo = document.getElementById('mapDepositosInfo');
+    const coberturaInfo = document.getElementById('mapCoberturaInfo');
+
+    document.getElementById('mapTotalEnderecos').textContent = String(totalEnderecos);
+    document.getElementById('mapTotalDepositos').textContent = String(depositos.length);
+    document.getElementById('mapTotalRuas').textContent = String(ruas.length);
+    document.getElementById('mapTotalNiveis').textContent = String(niveis.length);
+
+    if (statusBadge) {
+        statusBadge.textContent = totalEnderecos ? 'Mapa pronto para operação' : 'Mapa em construção';
+    }
+    if (depositosInfo) {
+        depositosInfo.textContent = `Depósitos: ${depositos.length ? depositos.join(', ') : '-'}`;
+    }
+    if (coberturaInfo) {
+        coberturaInfo.textContent = `Cobertura: ${ruas.length} ruas | ${niveis.length} níveis`;
+    }
+}
+
+function filtrarEnderecos() {
+    const termo = String(document.getElementById('filtroEndereco')?.value || '').trim().toLowerCase();
+    document.querySelectorAll('#tbodyLocalizacoes tr').forEach((linha) => {
+        const texto = String(linha.textContent || '').toLowerCase();
+        linha.style.display = !termo || texto.includes(termo) ? '' : 'none';
+    });
+}
+
 async function listarLocalizacoes() {
     const tbody = document.getElementById('tbodyLocalizacoes');
     try {
@@ -385,6 +538,7 @@ async function listarLocalizacoes() {
         tbody.innerHTML = '';
         if (!cacheLocalizacoesAdmin.length) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhum endereço cadastrado.</td></tr>';
+            atualizarResumoMapaOperacional();
             atualizarOpcoesEnderecoEstoqueInicial();
             return;
         }
@@ -404,11 +558,14 @@ async function listarLocalizacoes() {
             `;
             tbody.appendChild(tr);
         });
+        atualizarResumoMapaOperacional();
+        filtrarEnderecos();
         atualizarDatalistsAssistente();
         atualizarPreviewAssistenteEndereco();
         atualizarOpcoesEnderecoEstoqueInicial();
     } catch (err) {
         cacheLocalizacoesAdmin = [];
+        atualizarResumoMapaOperacional();
         atualizarDatalistsAssistente();
         atualizarPreviewAssistenteEndereco();
         atualizarOpcoesEnderecoEstoqueInicial();

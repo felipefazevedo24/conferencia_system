@@ -16,6 +16,7 @@ from ..models import (
     WMSReconciliacaoDivergencia,
     WMSAlertaOperacional,
     DepositoWMS,
+    WMSIntegracaoEvento,
 )
 
 
@@ -1300,6 +1301,22 @@ class WMSService:
         movimentacoes_24h = MovimentacaoWMS.query.filter(
             MovimentacaoWMS.data_movimentacao >= datetime.now() - timedelta(hours=24)
         ).count()
+        integracoes_pendentes = WMSIntegracaoEvento.query.filter(
+            WMSIntegracaoEvento.status.in_(['Pendente', 'Processando', 'Falha'])
+        ).count()
+        integracoes_falha = WMSIntegracaoEvento.query.filter(
+            WMSIntegracaoEvento.status.in_(['Falha', 'DeadLetter'])
+        ).count()
+        integracoes_sucesso_24h = WMSIntegracaoEvento.query.filter(
+            WMSIntegracaoEvento.status == 'Sucesso',
+            WMSIntegracaoEvento.processado_em.isnot(None),
+            WMSIntegracaoEvento.processado_em >= datetime.now() - timedelta(hours=24),
+        ).count()
+        ultimo_evento = (
+            WMSIntegracaoEvento.query
+            .order_by(WMSIntegracaoEvento.criado_em.desc(), WMSIntegracaoEvento.id.desc())
+            .first()
+        )
 
         disponibilidade_total = sum(float(item.qtd_atual or 0) for item in enderecados)
         idade_media = round(
@@ -1316,6 +1333,22 @@ class WMSService:
                 'movimentacoes_24h': movimentacoes_24h,
                 'alertas_abertos': alertas_abertos,
                 'divergencias_abertas': divergencias_abertas,
+                'integracoes_pendentes': integracoes_pendentes,
+                'integracoes_falha': integracoes_falha,
+                'integracoes_sucesso_24h': integracoes_sucesso_24h,
+                'notas_pendentes_fila': len(notas_pendentes),
+            },
+            'integracao_fiscal': {
+                'fila_pendente': integracoes_pendentes,
+                'falhas_abertas': integracoes_falha,
+                'sucesso_24h': integracoes_sucesso_24h,
+                'ultimo_evento': {
+                    'id': ultimo_evento.id,
+                    'tipo_evento': ultimo_evento.tipo_evento,
+                    'referencia': ultimo_evento.referencia,
+                    'status': ultimo_evento.status,
+                    'criado_em': ultimo_evento.criado_em.isoformat() if ultimo_evento and ultimo_evento.criado_em else None,
+                } if ultimo_evento else None,
             },
             'prioridades': prioridade_contagem,
             'ocupacao_por_deposito': ocupacao_por_deposito,

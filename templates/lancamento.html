@@ -992,13 +992,13 @@
             <span class="doc-kicker"><i class="fas fa-file-invoice"></i> Documento de Entrada</span>
             <h1 class="doc-title">Cockpit fiscal para escrituracao, auditoria e trilha do documento.</h1>
             <p class="doc-subtitle">
-                Painel unico para operar notas conferidas e lancadas com visao de etapa, pendencias visiveis, historico completo e acoes criticas protegidas por idempotencia.
+                Painel único para operar notas conferidas e lançadas com visão de etapa, pendências visíveis, histórico completo e ações críticas protegidas por idempotencia.
             </p>
             <div class="doc-shortcuts">
                 <span class="doc-shortcut-pill"><kbd>F2</kbd> Buscar NF</span>
-                <span class="doc-shortcut-pill"><kbd>F4</kbd> Lancar selecionada</span>
-                <span class="doc-shortcut-pill"><kbd>F6</kbd> Reenviar manifestacao</span>
-                <span class="doc-shortcut-pill"><kbd>F8</kbd> Estornar lancamento</span>
+                <span class="doc-shortcut-pill"><kbd>F4</kbd> Lançar selecionada</span>
+                <span class="doc-shortcut-pill"><kbd>F6</kbd> Reenviar manifestação</span>
+                <span class="doc-shortcut-pill"><kbd>F8</kbd> Estornar lançamento</span>
                 <span class="doc-shortcut-pill"><kbd>R</kbd> Atualizar painel</span>
             </div>
         </div>
@@ -1006,7 +1006,7 @@
             <div class="doc-hero-summary">
                 <span class="doc-hero-summary-label">Leitura operacional</span>
                 <strong class="doc-hero-summary-value" id="hero-count">--</strong>
-                <span class="doc-hero-summary-text" id="hero-text">Carregando visao fiscal do periodo...</span>
+                <span class="doc-hero-summary-text" id="hero-text">Carregando visão fiscal do período...</span>
             </div>
             <button class="doc-btn doc-btn-primary" type="button" onclick="window.location.href='/fiscal/liberadas'">
                 <i class="fas fa-clipboard-list"></i> Consultar notas liberadas
@@ -1042,7 +1042,7 @@
     <section class="doc-toolbar">
         <div class="doc-tabs">
             <button id="tab-pendentes" class="doc-tab active" type="button" onclick="switchTab('pendentes')">Conferidas</button>
-            <button id="tab-lancadas" class="doc-tab" type="button" onclick="switchTab('lancadas')">Lancadas</button>
+            <button id="tab-lancadas" class="doc-tab" type="button" onclick="switchTab('lancadas')">Lançadas</button>
         </div>
         <div class="doc-filter-row">
             <input id="filtro-nf" class="doc-input" placeholder="Buscar por numero da NF" autocomplete="off" oninput="renderizarLista()">
@@ -1052,7 +1052,7 @@
                 <option value="Importada">Importada</option>
                 <option value="Auditada">Auditada</option>
                 <option value="Liberada">Liberada</option>
-                <option value="Lançada">Lancada</option>
+                <option value="Lançada">Lançada</option>
                 <option value="Manifestada">Manifestada</option>
                 <option value="Bloqueada">Bloqueada</option>
                 <option value="Estornada">Estornada</option>
@@ -1080,24 +1080,24 @@
                     <span class="doc-detail-sub" id="detail-sub">Selecione um documento na fila para abrir o cockpit detalhado.</span>
                 </div>
                 <div class="doc-detail-actions">
-                    <button id="btn-action-lancar" class="doc-btn doc-btn-primary" type="button" onclick="abrirModalLancamento()" disabled>
-                        <i class="fas fa-book"></i> Lancar
-                    </button>
-                    <button id="btn-action-manifestar" class="doc-btn doc-btn-success" type="button" onclick="reenviarManifestacaoSelecionada()" disabled>
-                        <i class="fas fa-paper-plane"></i> Manifestar
-                    </button>
-                    <button id="btn-action-estornar" class="doc-btn doc-btn-warning" type="button" onclick="abrirModalEstorno()" disabled>
-                        <i class="fas fa-rotate-left"></i> Estornar
-                    </button>
-                    <button id="btn-action-xml" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('xml')" disabled>
-                        <i class="fas fa-file-code"></i> XML
-                    </button>
-                    <button id="btn-action-pdf" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('pdf')" disabled>
-                        <i class="fas fa-file-pdf"></i> PDF
-                    </button>
-                </div>
+    <button id="btn-action-lancar" class="doc-btn doc-btn-primary" type="button" onclick="abrirModalLancamento()" disabled>
+        <i class="fas fa-book"></i> Lançar
+    </button>
+    <button id="btn-action-manifestar" class="doc-btn doc-btn-success" type="button" onclick="reenviarManifestacaoSelecionada()" disabled>
+        <i class="fas fa-paper-plane"></i> Manifestar
+    </button>
+    <button id="btn-action-estornar" class="doc-btn doc-btn-warning" type="button" onclick="abrirModalEstorno()" disabled>
+        <i class="fas fa-rotate-left"></i> Estornar
+    </button>
+    <button id="btn-action-xml" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('xml')" disabled>
+        <i class="fas fa-file-code"></i> XML
+    </button>
+    <button id="btn-action-pdf" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('pdf')" disabled>
+        <i class="fas fa-file-pdf"></i> PDF
+    </button>
+</div>
             </div>
-            <div id="detail-empty" class="doc-detail-empty">Escolha uma nota para ver etapa, pendencias, itens, timeline e governanca fiscal.</div>
+            <div id="detail-empty" class="doc-detail-empty">Escolha uma nota para ver etapa, pendências, itens, timeline e governança fiscal.</div>
             <div id="detail-body" class="doc-detail-body hidden"></div>
         </section>
     </section>
@@ -1106,34 +1106,34 @@
 <div id="modal-lancamento" class="doc-modal-overlay">
     <div class="doc-modal">
         <div class="doc-modal-head">
-            <h3>Efetivar lancamento fiscal</h3>
+            <h3>Efetivar lançamento fiscal</h3>
             <button class="doc-modal-close" type="button" onclick="fecharModalLancamento()">&times;</button>
         </div>
         <div class="doc-modal-body">
             <div class="doc-form-help" id="lancamento-resumo">Nenhuma NF selecionada.</div>
             <div class="doc-form-block">
-                <label class="doc-form-label" for="input-codigo-erp">Codigo do ERP</label>
+                <label class="doc-form-label" for="input-codigo-erp">Código do ERP</label>
                 <input id="input-codigo-erp" class="doc-input" placeholder="Ex: LANC-2026-001">
             </div>
             <div id="tipo-documento-box" class="doc-form-help hidden"></div>
             <div id="alerta-pendencia-box" class="doc-form-help hidden"></div>
             <div id="codigo-material-wrap" class="doc-form-block hidden">
-                <label class="doc-form-label" for="input-codigo-material">Codigo do material</label>
-                <input id="input-codigo-material" class="doc-input" placeholder="Obrigatorio para material de cliente">
+                <label class="doc-form-label" for="input-codigo-material">Código do material</label>
+                <input id="input-codigo-material" class="doc-input" placeholder="Obrigatório para material de cliente">
             </div>
             <div id="codigo-itens-wrap" class="doc-form-block hidden">
-                <label class="doc-form-label">Codigo do material por item XML</label>
+                <label class="doc-form-label">Código do material por item XML</label>
                 <div id="codigo-itens-lista" class="doc-item-code-list"></div>
             </div>
             <label class="doc-inline-check">
                 <input id="input-manifestar-destinatario" type="checkbox" checked>
-                <span>Enviar confirmacao da operacao para SEFAZ apos gravar o lancamento.</span>
+                <span>Enviar confirmação da operação para SEFAZ após gravar o lançamento.</span>
             </label>
         </div>
         <div class="doc-modal-foot">
             <button class="doc-btn doc-btn-secondary" type="button" onclick="fecharModalLancamento()">Cancelar</button>
             <button class="doc-btn doc-btn-primary" type="button" onclick="enviarDadosLancamento()">
-                <i class="fas fa-save"></i> Gravar lancamento
+                <i class="fas fa-save"></i> Gravar lançamento
             </button>
         </div>
     </div>
@@ -1142,21 +1142,20 @@
 <div id="modal-estorno" class="doc-modal-overlay">
     <div class="doc-modal small">
         <div class="doc-modal-head">
-            <h3>Estorno de lancamento fiscal</h3>
+            <h3>Estorno de lançamento fiscal</h3>
             <button class="doc-modal-close" type="button" onclick="fecharModalEstorno()">&times;</button>
         </div>
         <div class="doc-modal-body">
             <div class="doc-form-help" id="estorno-resumo">Nenhuma NF selecionada.</div>
             <div class="doc-form-block">
-                <label class="doc-form-label" for="estorno-motivo-padrao">Motivo padrao</label>
+                <label class="doc-form-label" for="estorno-motivo-padrao">Motivo padrão</label>
                 <select id="estorno-motivo-padrao" class="doc-select"></select>
             </div>
             <div class="doc-form-block">
-                <label class="doc-form-label" for="estorno-complemento">Complemento</label>
-                <input id="estorno-complemento" class="doc-input" placeholder="Detalhe do erro, numero de chamado ou ajuste">
+                <input id="estorno-complemento" class="doc-input" placeholder="Detalhe do erro, número de chamado ou ajuste">
             </div>
             <div class="doc-form-block">
-                <label class="doc-form-label" for="estorno-motivo">Observacao do estorno</label>
+                <label class="doc-form-label" for="estorno-motivo">Observação do estorno</label>
                 <textarea id="estorno-motivo" class="doc-textarea" rows="4" placeholder="Descreva o contexto operacional e fiscal do estorno."></textarea>
             </div>
             <div id="estorno-feedback" class="doc-estorno-feedback"></div>
@@ -1179,6 +1178,10 @@
     let notaSelecionada = null;
     let detalhesSelecionados = null;
     const detalhesCache = new Map();
+    let notasLancadasCarregadas = false;
+    let kpisCarregados = false;
+    let carregandoLancadasPromise = null;
+    let carregandoKpisPromise = null;
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -1212,6 +1215,62 @@
         return [...notasPendentes, ...notasLancadas].find((item) => String(item.numero) === String(numero)) || null;
     }
 
+    function atualizarCabecalhoDetalheCarregando(numero) {
+        document.getElementById('detail-number').innerText = numero ? `NF ${numero}` : 'Nenhuma NF selecionada';
+        document.getElementById('detail-sub').innerText = numero
+            ? 'Carregando dados detalhados do documento...'
+            : 'Selecione um documento na fila para abrir o cockpit detalhado.';
+        const empty = document.getElementById('detail-empty');
+        const body = document.getElementById('detail-body');
+        empty.innerText = numero
+            ? 'Buscando etapa, pend\u00eancias, itens e timeline desta NF.'
+            : 'Escolha uma nota para ver etapa, pend\u00eancias, itens, timeline e governan\u00e7a fiscal.';
+        empty.classList.remove('hidden');
+        body.classList.add('hidden');
+    }
+
+    function normalizarTextoUi(texto) {
+        const bruto = String(texto ?? '');
+        if (!bruto) return '';
+        if (!/[\u00C3\u00C2]/.test(bruto)) return bruto;
+        try {
+            const bytes = Uint8Array.from([...bruto].map((char) => char.charCodeAt(0) & 0xff));
+            const corrigido = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+            return corrigido || bruto;
+        } catch (error) {
+            return bruto;
+        }
+    }
+
+    function textoSemAcento(texto) {
+        return normalizarTextoUi(texto)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+    }
+
+    function normalizarStatusDocumento(texto) {
+        const valor = textoSemAcento(texto);
+        if (valor.includes('lancad')) return 'Lançado';
+        if (valor.includes('conclu')) return 'Concluído';
+        if (valor.includes('pend')) return 'Pendente';
+        if (valor.includes('devolv')) return 'Devolvido';
+        if (valor.includes('bloq')) return 'Bloqueado';
+        return normalizarTextoUi(texto) || '---';
+    }
+
+    function normalizarEtapaDocumento(texto) {
+        const valor = textoSemAcento(texto);
+        if (valor.includes('lancad')) return 'Lançada';
+        if (valor.includes('liberad')) return 'Liberada';
+        if (valor.includes('importad')) return 'Importada';
+        if (valor.includes('auditad')) return 'Auditada';
+        if (valor.includes('manifest')) return 'Manifestada';
+        if (valor.includes('estorn')) return 'Estornada';
+        if (valor.includes('bloq')) return 'Bloqueada';
+        return normalizarTextoUi(texto) || '---';
+    }
+
     function filtrarLista() {
         const nf = (document.getElementById('filtro-nf').value || '').trim().toLowerCase();
         const fornecedor = (document.getElementById('filtro-fornecedor').value || '').trim().toLowerCase();
@@ -1219,8 +1278,9 @@
 
         return getListaBase().filter((item) => {
             const matchNf = !nf || String(item.numero || '').toLowerCase().includes(nf);
-            const matchFornecedor = !fornecedor || String(item.fornecedor || '').toLowerCase().includes(fornecedor);
-            const matchEtapa = !etapa || String(item.etapa_atual || '').trim() === etapa;
+            const matchFornecedor = !fornecedor || normalizarTextoUi(item.fornecedor || '').toLowerCase().includes(fornecedor);
+            const etapaAtual = normalizarEtapaDocumento(item.etapa_atual || item.status_atual || '');
+            const matchEtapa = !etapa || etapaAtual === etapa;
             return matchNf && matchFornecedor && matchEtapa;
         });
     }
@@ -1233,28 +1293,25 @@
     }
 
     function badgeClassByStage(etapa) {
-        const ref = String(etapa || '').toLowerCase();
+        const ref = textoSemAcento(etapa || '');
         if (ref.includes('manifest')) return 'success';
-        if (ref.includes('lan')) return 'primary';
+        if (ref.includes('lanc')) return 'primary';
         if (ref.includes('bloq') || ref.includes('estor')) return 'danger';
         if (ref.includes('audit')) return 'warning';
         return 'neutral';
     }
 
     function atualizarResumoHero(kpis) {
-        document.getElementById('hero-count').innerText = `${kpis.notas_lancadas || 0}`;
-        document.getElementById('hero-text').innerText = `Notas lancadas nos ultimos ${kpis.periodo_dias || 30} dias. Tempo medio importacao->lancamento: ${kpis.tempo_medio_importacao_lancamento_horas || 0}h.`;
+        document.getElementById('hero-text').innerText = `Notas lançadas nos últimos ${kpis.periodo_dias || 30} dias. Tempo médio importação→lançamento: ${kpis.tempo_medio_importacao_lancamento_horas || 0}h.`;
     }
 
     function renderizarKpis(kpis) {
         const grid = document.getElementById('kpi-grid');
         const cards = [
-            { label: 'Total no periodo', value: kpis.total_notas || 0, foot: `${kpis.periodo_dias || 30} dias analisados` },
-            { label: 'Notas lancadas', value: kpis.notas_lancadas || 0, foot: 'Fluxo fiscal efetivado' },
-            { label: 'Imp -> Lanc', value: `${kpis.tempo_medio_importacao_lancamento_horas || 0}h`, foot: 'Tempo medio total' },
-            { label: '% sem intervencao', value: `${kpis.percentual_sem_intervencao_manual || 0}%`, foot: 'Fluxo limpo ate o lancamento' },
-            { label: '% com divergencia', value: `${kpis.percentual_com_divergencia || 0}%`, foot: 'Notas com retrabalho logistico' },
-            { label: '% falha manifestacao', value: `${kpis.percentual_falha_manifestacao || 0}%`, foot: 'Falhas sobre notas lancadas' },
+            { label: 'Notas lançadas', value: kpis.notas_lancadas || 0, foot: 'Fluxo fiscal efetivado' },
+            { label: 'Imp → Lanç', value: `${kpis.tempo_medio_importacao_lancamento_horas || 0}h`, foot: 'Tempo médio total' },
+            { label: '% sem intervenção', value: `${kpis.percentual_sem_intervencao_manual || 0}%`, foot: 'Fluxo limpo até o lançamento' },
+            { label: '% falha manifestação', value: `${kpis.percentual_falha_manifestacao || 0}%`, foot: 'Falhas sobre notas lançadas' },
         ];
 
         grid.innerHTML = cards.map((card) => `
@@ -1268,28 +1325,27 @@
         document.getElementById('top-fornecedores').innerHTML = (kpis.top_fornecedores_retrabalho || []).length
             ? kpis.top_fornecedores_retrabalho.map((item) => `
                 <div class="doc-mini-row">
-                    <span>${escapeHtml(item.fornecedor)}</span>
-                    <span>${escapeHtml(item.ocorrencias)} ocorrencias</span>
+                    <span>${escapeHtml(normalizarTextoUi(item.fornecedor))}</span>
+                    <span>${escapeHtml(item.ocorrencias)} ocorrências</span>
                 </div>
             `).join('')
-            : '<div class="doc-mini-row"><span>Nenhum retrabalho no periodo.</span><span>OK</span></div>';
+            : '<div class="doc-mini-row"><span>Nenhum retrabalho no período.</span><span>OK</span></div>';
 
         document.getElementById('top-usuarios').innerHTML = (kpis.produtividade_usuarios || []).length
             ? kpis.produtividade_usuarios.map((item) => `
                 <div class="doc-mini-row">
-                    <span>${escapeHtml(item.usuario)}</span>
-                    <span>${escapeHtml(item.notas_lancadas)} notas | ${escapeHtml(item.tempo_medio_horas)}h media</span>
+                    <span>${escapeHtml(item.notas_lancadas)} notas | ${escapeHtml(item.tempo_medio_horas)}h média</span>
                 </div>
             `).join('')
-            : '<div class="doc-mini-row"><span>Sem produtividade fiscal no periodo.</span><span>--</span></div>';
+            : '<div class="doc-mini-row"><span>Sem produtividade fiscal no período.</span><span>--</span></div>';
 
         atualizarResumoHero(kpis);
     }
 
     function renderizarLista() {
-        const lista = filtrarLista();
         const container = document.getElementById('doc-list');
-        document.getElementById('list-title').innerText = abaAtual === 'pendentes' ? 'Fila fiscal conferida' : 'Livro fiscal lancado';
+        const lista = filtrarLista();
+        document.getElementById('list-title').innerText = abaAtual === 'pendentes' ? 'Fila fiscal conferida' : 'Livro fiscal lançado';
         document.getElementById('list-count').innerText = String(lista.length);
 
         if (!lista.length) {
@@ -1299,30 +1355,34 @@
             renderizarDetalhe(null);
             return;
         }
-
         container.innerHTML = lista.map((item) => {
             const badgePendencia = Array.isArray(item.pendencias) && item.pendencias.length
                 ? item.pendencias.slice(0, 2).map((pendencia) => `
-                    <span class="doc-badge ${badgeClassBySeverity(pendencia.severidade)}">${escapeHtml(pendencia.tipo || pendencia.titulo)}</span>
+                    <span class="doc-badge ${badgeClassBySeverity(pendencia.severidade)}">${escapeHtml(normalizarTextoUi(pendencia.tipo || pendencia.titulo))}</span>
                 `).join('')
-                : '<span class="doc-badge success">Sem pendencias</span>';
-            const manifestacao = item.manifestacao ? `${item.manifestacao.status || 'Sem status'}${item.manifestacao.data ? ` • ${item.manifestacao.data}` : ''}` : 'Nao enviada';
+                : '';
+            const manifestacao = item.manifestacao
+                ? `${normalizarTextoUi(item.manifestacao.status || 'Sem status')}${item.manifestacao.data ? ` • ${normalizarTextoUi(item.manifestacao.data)}` : ''}`
+                : 'Não enviada';
+            const etapaAtual = normalizarEtapaDocumento(item.etapa_atual || item.status_atual || 'Sem etapa');
+            const fornecedor = normalizarTextoUi(item.fornecedor || 'Fornecedor não informado');
+            const divergencia = normalizarTextoUi(item.divergencia_status || '');
+            const motivoPendencia = normalizarTextoUi(item.motivo_pendencia || '');
             return `
                 <article class="doc-note-card ${String(item.numero) === String(notaSelecionada) ? 'selected' : ''}" onclick="selecionarNota('${escapeHtml(item.numero)}')">
                     <div class="doc-note-head">
-                        <span class="doc-note-number">NF ${escapeHtml(item.numero)}</span>
-                        <span class="doc-badge ${badgeClassByStage(item.etapa_atual)}">${escapeHtml(item.etapa_atual || 'Sem etapa')}</span>
+                        <span class="doc-badge ${badgeClassByStage(etapaAtual)}">${escapeHtml(etapaAtual)}</span>
                     </div>
-                    <div class="doc-note-supplier">${escapeHtml(item.fornecedor || 'Fornecedor nao informado')}</div>
+                    <div class="doc-note-supplier">${escapeHtml(fornecedor)}</div>
                     <div class="doc-badges">
                         ${badgePendencia}
-                        ${item.divergencia_status ? `<span class="doc-badge ${String(item.divergencia_status).toLowerCase().includes('diverg') ? 'warning' : 'neutral'}">${escapeHtml(item.divergencia_status)}</span>` : ''}
+                        ${divergencia ? `<span class="doc-badge ${textoSemAcento(divergencia).includes('diverg') ? 'warning' : 'neutral'}">${escapeHtml(divergencia)}</span>` : ''}
                         ${item.remessa ? '<span class="doc-badge neutral">Remessa</span>' : ''}
                         ${item.material_cliente ? '<span class="doc-badge neutral">Material cliente</span>' : ''}
                     </div>
-                    ${item.motivo_pendencia ? `<div class="doc-note-pendency">${escapeHtml(item.motivo_pendencia)}</div>` : ''}
+                    ${motivoPendencia ? `<div class="doc-note-pendency">${escapeHtml(motivoPendencia)}</div>` : ''}
                     <div class="doc-note-foot">
-                        <span class="doc-badge neutral">${escapeHtml(item.data_lancamento || item.data_conferencia || item.data_importacao || 'Sem data')}</span>
+                        <span class="doc-badge neutral">${escapeHtml(normalizarTextoUi(item.data_lancamento || item.data_conferencia || item.data_importacao || 'Sem data'))}</span>
                         <span class="doc-badge ${item.manifestacao && item.manifestacao.status === 'Sucesso' ? 'success' : 'neutral'}">${escapeHtml(manifestacao)}</span>
                     </div>
                 </article>
@@ -1345,8 +1405,7 @@
         const resposta = await fetch(`/api/detalhes_nf/${encodeURIComponent(chave)}`);
         if (!resposta.ok) {
             detalhesSelecionados = null;
-            renderizarDetalhe(null);
-            throw new Error('Nao foi possivel carregar os detalhes da NF.');
+            throw new Error('Não foi possível carregar os detalhes da NF.');
         }
 
         const dados = await resposta.json();
@@ -1357,12 +1416,21 @@
     }
 
     function atualizarBotoesDetalhe(dados) {
-        const etapa = String(dados?.etapa_atual || '');
-        const status = String(dados?.status_atual || '');
-        const documentosDisponiveis = Boolean(dados?.documentos_disponiveis);
+        if (!dados) {
+            document.getElementById('btn-action-lancar').disabled = true;
+            document.getElementById('btn-action-manifestar').disabled = true;
+            document.getElementById('btn-action-estornar').disabled = true;
+            document.getElementById('btn-action-xml').disabled = true;
+            document.getElementById('btn-action-pdf').disabled = true;
+            return;
+        }
+
+        const etapa = normalizarEtapaDocumento(dados.etapa_atual || '');
+        const status = normalizarStatusDocumento(dados.status_atual || '');
+        const documentosDisponiveis = Boolean(dados.documentos_disponiveis);
         const podeLancar = status === 'Concluído' || etapa === 'Liberada';
         const podeManifestar = status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada';
-        const podeEstornar = status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada';
+        const podeEstornar = podeLancar || podeManifestar;
 
         document.getElementById('btn-action-lancar').disabled = !podeLancar;
         document.getElementById('btn-action-manifestar').disabled = !podeManifestar;
@@ -1373,38 +1441,13 @@
 
     function obterMetaWorkflow(nomeEtapa) {
         const mapa = {
-            'Importada': {
-                label: '1. Entrada XML',
-                caption: 'Documento importado e pronto para validacao.',
-            },
-            'Auditada': {
-                label: '2. Auditoria XML',
-                caption: 'Regras fiscais checadas antes da liberacao.',
-            },
-            'Liberada': {
-                label: '3. Conferencia',
-                caption: 'Nota liberada para seguir ao lancamento.',
-            },
-            'Lançada': {
-                label: '4. Lancamento fiscal',
-                caption: 'Escrituracao concluida no ERP.',
-            },
-            'LanÃ§ada': {
-                label: '4. Lancamento fiscal',
-                caption: 'Escrituracao concluida no ERP.',
-            },
-            'Manifestada': {
-                label: '5. Manifestacao',
-                caption: 'Evento fiscal devolvido ao emissor.',
-            },
-            'Bloqueada': {
-                label: 'Bloqueio',
-                caption: 'Existe uma tratativa obrigatoria antes do fluxo seguir.',
-            },
-            'Estornada': {
-                label: 'Estorno',
-                caption: 'Lancamento revertido apos processamento.',
-            },
+            Importada: { label: '1. Entrada XML', caption: 'Documento importado e pronto para validação.' },
+            Auditada: { label: '2. Auditoria XML', caption: 'Regras fiscais checadas antes da liberação.' },
+            Liberada: { label: '3. Conferência', caption: 'Nota liberada para seguir ao lançamento.' },
+            Lançada: { label: '4. Lançamento fiscal', caption: 'Escrituração concluída no ERP.' },
+            Manifestada: { label: '5. Manifestação', caption: 'Evento fiscal devolvido ao emissor.' },
+            Bloqueada: { label: 'Bloqueio', caption: 'Existe uma tratativa obrigatória antes do fluxo seguir.' },
+            Estornada: { label: 'Estorno', caption: 'Lançamento revertido após processamento.' },
         };
 
         return mapa[String(nomeEtapa || '').trim()] || {
@@ -1428,26 +1471,27 @@
         }
 
         const base = obterRegistro(dados.numero) || {};
+        const fornecedor = normalizarTextoUi(dados.fornecedor || 'Fornecedor não informado');
+        const etapaAtual = normalizarEtapaDocumento(dados.etapa_atual || dados.status_atual || 'Sem etapa');
+        const statusAtual = normalizarStatusDocumento(dados.status_atual || base.status_atual || '---');
         document.getElementById('detail-number').innerText = `NF ${dados.numero}`;
-        document.getElementById('detail-sub').innerText = `${dados.fornecedor || 'Fornecedor nao informado'} • ${dados.etapa_atual || dados.status_atual || 'Sem etapa'} • Pedido ${dados.pedido_compra || '---'}`;
-
-        document.getElementById('detail-sub').innerText = `${dados.fornecedor || 'Fornecedor nao informado'} • Fluxo ${dados.etapa_atual || dados.status_atual || 'Sem etapa'} • Pedido ${dados.pedido_compra || '---'}`;
+        document.getElementById('detail-sub').innerText = `${fornecedor} • Fluxo ${etapaAtual} • Pedido ${dados.pedido_compra || '---'}`;
 
         const pendencias = Array.isArray(dados.pendencias) && dados.pendencias.length
             ? dados.pendencias.map((item) => `
                 <div class="doc-pendency-item severidade-${escapeHtml(item.severidade || 'info')}">
-                    <span class="doc-pendency-title">${escapeHtml(item.titulo || item.tipo || 'Pendencia')}</span>
-                    <div class="doc-pendency-text">${escapeHtml(item.descricao || 'Sem descricao registrada.')}</div>
+                    <span class="doc-pendency-title">${escapeHtml(normalizarTextoUi(item.titulo || item.tipo || 'Pendência'))}</span>
+                    <div class="doc-pendency-text">${escapeHtml(normalizarTextoUi(item.descricao || 'Sem descrição registrada.'))}</div>
                 </div>
             `).join('')
-            : '<div class="doc-pendency-item"><span class="doc-pendency-title">Sem pendencias</span><div class="doc-pendency-text">Este documento esta sem pendencias abertas na trilha fiscal.</div></div>';
+            : '<div class="doc-pendency-item"><span class="doc-pendency-title">Sem pendências</span><div class="doc-pendency-text">Este documento está sem pendências abertas na trilha fiscal.</div></div>';
 
         const workflowCards = (dados.workflow || []).map((etapa) => {
             const meta = obterMetaWorkflow(etapa.nome);
             return `
                 <div class="doc-step ${escapeHtml(etapa.estado || 'pending')}">
                     <span class="doc-step-label">${escapeHtml(meta.label)}</span>
-                    <span class="doc-step-status">${escapeHtml(etapa.nome || '---')}</span>
+                    <span class="doc-step-status">${escapeHtml(normalizarEtapaDocumento(etapa.nome || '---'))}</span>
                     <span class="doc-step-caption">${escapeHtml(meta.caption)}</span>
                 </div>
             `;
@@ -1456,7 +1500,7 @@
         const itens = (dados.itens || []).map((item) => `
             <tr>
                 <td>${escapeHtml(item.codigo || '---')}</td>
-                <td>${escapeHtml(item.descricao || item.desc || 'Sem descricao')}</td>
+                <td>${escapeHtml(normalizarTextoUi(item.descricao || item.desc || 'Sem descrição'))}</td>
                 <td>${escapeHtml(item.qtd ?? '---')}</td>
                 <td>${escapeHtml(item.unidade || 'UN')}</td>
                 <td>${escapeHtml(item.cfop || '---')}</td>
@@ -1464,38 +1508,38 @@
             </tr>
         `).join('');
 
-        const timeline = (dados.timeline || []).length
+        const timeline = Array.isArray(dados.timeline) && dados.timeline.length
             ? dados.timeline.map((evento) => `
                 <div class="doc-timeline-item">
-                    <div class="doc-timeline-meta">
-                        <span>${escapeHtml(evento.data || '---')}</span>
-                        <span>${escapeHtml(evento.tipo || 'Evento')}</span>
+                    <div class="doc-timeline-head">
+                        <span>${escapeHtml(normalizarTextoUi(evento.data || '---'))}</span>
+                        <span>${escapeHtml(normalizarTextoUi(evento.tipo || 'Evento'))}</span>
                     </div>
-                    <div class="doc-timeline-text">${escapeHtml(evento.descricao || 'Sem descricao')}</div>
+                    <div class="doc-timeline-text">${escapeHtml(normalizarTextoUi(evento.descricao || 'Sem descrição'))}</div>
                 </div>
             `).join('')
-            : '<div class="doc-timeline-item"><div class="doc-timeline-text">Ainda nao ha eventos cronologicos registrados para esta NF.</div></div>';
+            : '<div class="doc-timeline-item"><div class="doc-timeline-text">Ainda não há eventos cronológicos registrados para esta NF.</div></div>';
 
         const ultimaGovernanca = dados.ultimo_evento_fiscal
-            ? `${dados.ultimo_evento_fiscal.evento || 'Evento'} • ${dados.ultimo_evento_fiscal.status || 'Sem status'} • ${dados.ultimo_evento_fiscal.data || '---'}`
+            ? `${normalizarTextoUi(dados.ultimo_evento_fiscal.evento || 'Evento')} • ${normalizarTextoUi(dados.ultimo_evento_fiscal.status || 'Sem status')} • ${normalizarTextoUi(dados.ultimo_evento_fiscal.data || '---')}`
             : 'Sem evento fiscal adicional';
 
         const manifestacao = dados.manifestacao
-            ? `${dados.manifestacao.status || 'Sem status'} • ${dados.manifestacao.data || '---'}`
-            : 'Nao enviada';
+            ? `${normalizarTextoUi(dados.manifestacao.status || 'Sem status')} • ${normalizarTextoUi(dados.manifestacao.data || '---')}`
+            : 'Não enviada';
 
         const estorno = dados.ultimo_estorno
-            ? `${dados.ultimo_estorno.motivo || 'Sem motivo'} • ${dados.ultimo_estorno.data || '---'}`
+            ? `${normalizarTextoUi(dados.ultimo_estorno.tipo || 'Estorno')}: ${normalizarTextoUi(dados.ultimo_estorno.motivo || 'Sem motivo')} • ${normalizarTextoUi(dados.ultimo_estorno.data || '---')}`
             : 'Sem estorno registrado';
 
         body.innerHTML = `
             <section class="doc-card">
                 <h3>Resumo executivo</h3>
                 <div class="doc-summary-grid">
-                    <div class="doc-summary-item"><label>Etapa atual</label><strong>${escapeHtml(dados.etapa_atual || '---')}</strong></div>
-                    <div class="doc-summary-item"><label>Status operacional</label><strong>${escapeHtml(dados.status_atual || base.status_atual || '---')}</strong></div>
-                    <div class="doc-summary-item"><label>Manifestacao</label><strong>${escapeHtml(manifestacao)}</strong></div>
-                    <div class="doc-summary-item"><label>Ultimo evento fiscal</label><strong>${escapeHtml(ultimaGovernanca)}</strong></div>
+                    <div class="doc-summary-item"><label>Etapa atual</label><strong>${escapeHtml(etapaAtual)}</strong></div>
+                    <div class="doc-summary-item"><label>Status operacional</label><strong>${escapeHtml(statusAtual)}</strong></div>
+                    <div class="doc-summary-item"><label>Manifestação</label><strong>${escapeHtml(manifestacao)}</strong></div>
+                    <div class="doc-summary-item"><label>Último evento fiscal</label><strong>${escapeHtml(ultimaGovernanca)}</strong></div>
                 </div>
             </section>
             <section class="doc-card">
@@ -1504,22 +1548,21 @@
             </section>
             <section class="doc-two-col">
                 <div class="doc-card">
-                    <h3>Pendencias e excecoes</h3>
+                    <h3>Pendências e exceções</h3>
                     <div class="doc-pendency-list">${pendencias}</div>
                 </div>
                 <div class="doc-card">
-                    <h3>Governanca e dados chave</h3>
+                    <h3>Governança e dados-chave</h3>
                     <div class="doc-summary-grid">
                         <div class="doc-summary-item"><label>Pedido de compra</label><strong>${escapeHtml(dados.pedido_compra || '---')}</strong></div>
-                        <div class="doc-summary-item"><label>Importacao</label><strong>${escapeHtml(dados.data_importacao || '---')}</strong></div>
-                        <div class="doc-summary-item"><label>Conferencia</label><strong>${escapeHtml(dados.data_conferencia || '---')}</strong></div>
-                        <div class="doc-summary-item"><label>Lancamento</label><strong>${escapeHtml(dados.data_lancamento || '---')}</strong></div>
-                        <div class="doc-summary-item"><label>Conferido por</label><strong>${escapeHtml(dados.conferido_por || '---')}</strong></div>
-                        <div class="doc-summary-item"><label>Lancado por</label><strong>${escapeHtml(dados.lancado_por || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Importação</label><strong>${escapeHtml(normalizarTextoUi(dados.data_importacao || '---'))}</strong></div>
+                        <div class="doc-summary-item"><label>Conferência</label><strong>${escapeHtml(normalizarTextoUi(dados.data_conferencia || '---'))}</strong></div>
+                        <div class="doc-summary-item"><label>Lançamento</label><strong>${escapeHtml(normalizarTextoUi(dados.data_lancamento || '---'))}</strong></div>
+                        <div class="doc-summary-item"><label>Conferido por</label><strong>${escapeHtml(normalizarTextoUi(dados.conferido_por || '---'))}</strong></div>
+                        <div class="doc-summary-item"><label>Lançado por</label><strong>${escapeHtml(normalizarTextoUi(dados.lancado_por || '---'))}</strong></div>
                         <div class="doc-summary-item"><label>Valor total</label><strong>${escapeHtml(dados.valor_total || 'N/A')}</strong></div>
                         <div class="doc-summary-item"><label>Impostos</label><strong>${escapeHtml(dados.impostos || 'N/A')}</strong></div>
-                        <div class="doc-summary-item"><label>Ultimo estorno</label><strong>${escapeHtml(estorno)}</strong></div>
-                        <div class="doc-summary-item"><label>Flags</label><strong>${escapeHtml([dados.material_cliente ? 'Material cliente' : '', dados.remessa ? 'Remessa' : '', dados.sem_conferencia_logistica ? 'Sem conferencia logistica' : ''].filter(Boolean).join(' | ') || 'Fluxo padrao')}</strong></div>
+                        <div class="doc-summary-item"><label>Último estorno</label><strong>${escapeHtml(estorno)}</strong></div>
                     </div>
                 </div>
             </section>
@@ -1528,14 +1571,14 @@
                 <div class="doc-table-wrap">
                     <table class="doc-table">
                         <thead>
-                            <tr><th>Codigo</th><th>Descricao</th><th>Qtd</th><th>UN</th><th>CFOP</th><th>Pedido</th></tr>
+                            <tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>UN</th><th>CFOP</th><th>Pedido</th></tr>
                         </thead>
                         <tbody>${itens || '<tr><td colspan="6">Sem itens registrados.</td></tr>'}</tbody>
                     </table>
                 </div>
             </section>
             <section class="doc-card">
-                <h3>Timeline do documento</h3>
+                <h3>Timeline da NF</h3>
                 <div class="doc-timeline-list">${timeline}</div>
             </section>
         `;
@@ -1548,17 +1591,31 @@
     async function selecionarNota(numero) {
         notaSelecionada = String(numero || '');
         renderizarLista();
+        detalhesSelecionados = null;
+        atualizarCabecalhoDetalheCarregando(notaSelecionada);
+        const registroSelecionado = obterRegistro(notaSelecionada);
+        if (registroSelecionado) {
+            atualizarBotoesDetalhe({ ...registroSelecionado, documentos_disponiveis: false });
+        }
         try {
             await carregarDetalhes(notaSelecionada);
         } catch (erro) {
-            exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Nao foi possivel carregar o painel detalhado.'));
+            exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Não foi possível carregar o painel detalhado.'));
         }
     }
 
-    function switchTab(tab) {
+    async function switchTab(tab) {
         abaAtual = tab;
         document.getElementById('tab-pendentes').classList.toggle('active', tab === 'pendentes');
         document.getElementById('tab-lancadas').classList.toggle('active', tab === 'lancadas');
+        if (tab === 'lancadas' && !notasLancadasCarregadas) {
+            try {
+                await carregarNotasLancadas();
+            } catch (erro) {
+                exibirFeedback('error', 'Fila de lançadas indisponível', escapeHtml(erro.message || 'Não foi possível carregar as notas lançadas agora.'));
+                return;
+            }
+        }
         renderizarLista();
     }
 
@@ -1569,24 +1626,70 @@
         renderizarLista();
     }
 
+    async function carregarNotasLancadas(forcar = false) {
+        if (!forcar && notasLancadasCarregadas) return notasLancadas;
+        if (!forcar && carregandoLancadasPromise) return carregandoLancadasPromise;
+
+        carregandoLancadasPromise = (async () => {
+            const resposta = await fetch('/api/notas_lancadas');
+            if (!resposta.ok) {
+                throw new Error('Não foi possível carregar as notas lançadas.');
+            }
+            notasLancadas = await resposta.json();
+            notasLancadasCarregadas = true;
+            if (abaAtual === 'lancadas') {
+                renderizarLista();
+            }
+            return notasLancadas;
+        })();
+
+        try {
+            return await carregandoLancadasPromise;
+        } finally {
+            carregandoLancadasPromise = null;
+        }
+    }
+
+    async function carregarKpisDocumentoEntrada(forcar = false) {
+        if (!forcar && kpisCarregados) return null;
+        if (!forcar && carregandoKpisPromise) return carregandoKpisPromise;
+
+        carregandoKpisPromise = (async () => {
+            const resposta = await fetch('/api/fiscal/documento_entrada/kpis');
+            if (!resposta.ok) {
+                throw new Error('Não foi possível carregar os indicadores do documento de entrada.');
+            }
+            const dados = await resposta.json();
+            renderizarKpis(dados);
+            kpisCarregados = true;
+            return dados;
+        })();
+
+        try {
+            return await carregandoKpisPromise;
+        } finally {
+            carregandoKpisPromise = null;
+        }
+    }
+
     async function carregarPainel(forcarDetalhes = false) {
         try {
-            const [resPendentes, resLancadas, resKpis] = await Promise.all([
-                fetch('/api/concluidas'),
-                fetch('/api/notas_lancadas'),
-                fetch('/api/fiscal/documento_entrada/kpis'),
-            ]);
+            const resPendentes = await fetch('/api/concluidas');
+            if (!resPendentes.ok) {
+                throw new Error('Não foi possível carregar o cockpit fiscal agora.');
+            }
 
             notasPendentes = await resPendentes.json();
-            notasLancadas = await resLancadas.json();
-            renderizarKpis(await resKpis.json());
             renderizarLista();
 
-            if (notaSelecionada) {
+            if (forcarDetalhes && notaSelecionada) {
                 await carregarDetalhes(notaSelecionada, forcarDetalhes);
             }
+
+            carregarKpisDocumentoEntrada(forcarDetalhes).catch(() => {});
+            carregarNotasLancadas(forcarDetalhes || abaAtual === 'lancadas').catch(() => {});
         } catch (erro) {
-            exibirFeedback('error', 'Painel indisponivel', 'Nao foi possivel carregar o cockpit fiscal agora. Tente novamente em instantes.');
+            exibirFeedback('error', 'Painel indisponível', escapeHtml(erro.message || 'Não foi possível carregar o cockpit fiscal agora. Tente novamente em instantes.'));
         }
     }
 
@@ -1602,36 +1705,42 @@
     function renderizarCamposCodigoPorItem(itens) {
         const container = document.getElementById('codigo-itens-lista');
         if (!itens.length) {
-            container.innerHTML = '<div class="doc-form-help">Nao foi possivel carregar os itens XML desta nota.</div>';
+            container.innerHTML = '<div class="doc-form-help">Não foi possível carregar os itens XML desta nota.</div>';
             return;
         }
 
         container.innerHTML = itens.map((item, indice) => `
             <div class="doc-item-code-card">
                 <div>
-                    <div class="doc-item-code-title">Item ${indice + 1}: ${escapeHtml(item.descricao || item.desc || 'Sem descricao')}</div>
+                    <div class="doc-item-code-title">Item ${indice + 1}: ${escapeHtml(normalizarTextoUi(item.descricao || item.desc || 'Sem descrição'))}</div>
                     <div class="doc-item-code-sub">Qtd ${escapeHtml(item.qtd ?? '---')} • CFOP ${escapeHtml(item.cfop || '---')}</div>
                 </div>
-                <input class="doc-input item-material-code" data-item-id="${escapeHtml(item.id || '')}" value="${escapeHtml(item.codigo || '')}" placeholder="Codigo do material">
+                <input class="doc-input item-material-code" data-item-id="${escapeHtml(item.id || '')}" value="${escapeHtml(item.codigo || '')}" placeholder="Código do material">
             </div>
         `).join('');
     }
 
-    function abrirModalLancamento() {
-        if (!detalhesSelecionados) return;
+    async function abrirModalLancamento() {
+        if (!notaSelecionada) return;
+        if (!detalhesSelecionados || String(detalhesSelecionados.numero) !== String(notaSelecionada)) {
+            try {
+                await carregarDetalhes(notaSelecionada);
+            } catch (erro) {
+                exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Não foi possível carregar os detalhes da NF.'));
+                return;
+            }
+        }
 
         const registro = obterRegistro(detalhesSelecionados.numero) || {};
-        document.getElementById('input-codigo-erp').value = '';
-        document.getElementById('input-codigo-material').value = '';
-        document.getElementById('input-manifestar-destinatario').checked = true;
-        document.getElementById('lancamento-resumo').innerText = `NF ${detalhesSelecionados.numero} • ${detalhesSelecionados.fornecedor || 'Fornecedor nao informado'} • Etapa ${detalhesSelecionados.etapa_atual || detalhesSelecionados.status_atual || '---'}`;
-
-        document.getElementById('lancamento-resumo').innerText = `NF ${detalhesSelecionados.numero} • ${detalhesSelecionados.fornecedor || 'Fornecedor nao informado'} • Fluxo atual: ${detalhesSelecionados.etapa_atual || detalhesSelecionados.status_atual || '---'}`;
-
         const tipoBox = document.getElementById('tipo-documento-box');
         const alertaBox = document.getElementById('alerta-pendencia-box');
         const codigoMaterialWrap = document.getElementById('codigo-material-wrap');
         const codigoItensWrap = document.getElementById('codigo-itens-wrap');
+
+        document.getElementById('input-codigo-erp').value = '';
+        document.getElementById('input-codigo-material').value = '';
+        document.getElementById('input-manifestar-destinatario').checked = true;
+        document.getElementById('lancamento-resumo').innerText = `NF ${detalhesSelecionados.numero} • ${normalizarTextoUi(detalhesSelecionados.fornecedor || 'Fornecedor não informado')} • Fluxo atual: ${normalizarEtapaDocumento(detalhesSelecionados.etapa_atual || detalhesSelecionados.status_atual || '---')}`;
 
         tipoBox.classList.add('hidden');
         alertaBox.classList.add('hidden');
@@ -1640,17 +1749,17 @@
 
         if (registro.motivo_pendencia) {
             alertaBox.classList.remove('hidden');
-            alertaBox.innerText = `Atencao: ${registro.motivo_pendencia}`;
+            alertaBox.innerText = `Atenção: ${normalizarTextoUi(registro.motivo_pendencia)}`;
         }
 
         if (registro.exige_codigo_material_remessa) {
             tipoBox.classList.remove('hidden');
-            tipoBox.innerText = 'NF de remessa: vincule o codigo do material por item XML neste lancamento.';
+            tipoBox.innerText = 'NF de remessa: vincule o código do material por item XML neste lançamento.';
             codigoItensWrap.classList.remove('hidden');
             renderizarCamposCodigoPorItem(detalhesSelecionados.itens || []);
         } else if (registro.material_cliente) {
             tipoBox.classList.remove('hidden');
-            tipoBox.innerText = 'Material de cliente: informe tambem o codigo interno do material.';
+            tipoBox.innerText = 'Material de cliente: informe também o código interno do material.';
             codigoMaterialWrap.classList.remove('hidden');
         }
 
@@ -1661,13 +1770,13 @@
     async function enviarDadosLancamento() {
         if (!detalhesSelecionados) return;
 
+        const registro = obterRegistro(detalhesSelecionados.numero) || {};
         const codigo = (document.getElementById('input-codigo-erp').value || '').trim();
         if (!codigo) {
-            exibirFeedback('error', 'Lancamento nao realizado', 'O codigo do ERP e obrigatorio para gravar a escrituracao.');
+            exibirFeedback('error', 'Lançamento não realizado', 'O código do ERP é obrigatório para gravar a escrituração.');
             return;
         }
 
-        const registro = obterRegistro(detalhesSelecionados.numero) || {};
         const codigoMaterial = (document.getElementById('input-codigo-material').value || '').trim();
         let codigosMateriais = [];
 
@@ -1677,14 +1786,14 @@
                 codigo_material: (input.value || '').trim(),
             }));
             const possuiVazio = codigosMateriais.some((item) => !item.item_id || !item.codigo_material);
-            if (!codigosMateriais.length || possuiVazio) {
-                exibirFeedback('error', 'Lancamento nao realizado', 'Informe o codigo do material para cada item XML da remessa.');
+            if (possuiVazio) {
+                exibirFeedback('error', 'Lançamento não realizado', 'Informe o código do material para cada item XML da remessa.');
                 return;
             }
         }
 
         if (registro.material_cliente && !codigoMaterial) {
-            exibirFeedback('error', 'Lancamento nao realizado', 'Para material de cliente, informe o codigo do material.');
+            exibirFeedback('error', 'Lançamento não realizado', 'Para material de cliente, informe o código do material.');
             return;
         }
 
@@ -1703,7 +1812,7 @@
         const dados = await resposta.json();
 
         if (!resposta.ok || !dados.sucesso) {
-            exibirFeedback('error', 'Falha no lancamento', escapeHtml(dados.msg || 'Nao foi possivel gravar a escrituracao fiscal.'));
+            exibirFeedback('error', 'Falha no lançamento', escapeHtml(dados.msg || 'Não foi possível gravar a escrituração fiscal.'));
             return;
         }
 
@@ -1711,13 +1820,13 @@
         detalhesCache.delete(String(detalhesSelecionados.numero));
         await carregarPainel(true);
 
-        const textoConserto = dados.conserto && Number(dados.conserto.baixas_sugeridas || 0) > 0
-            ? `<br><br><a href="/conserto/confirmacao_baixa" style="color:inherit; font-weight:800; text-decoration:underline;">Abrir central de conserto</a> para validar ${dados.conserto.baixas_sugeridas} sugestao(oes) de baixa.`
+        const textoConserto = dados.conserto?.baixas_sugeridas
+            ? `<br><br><a href="/conserto/confirmacao_baixa" style="color:inherit; font-weight:800; text-decoration:underline;">Abrir central de conserto</a> para validar ${dados.conserto.baixas_sugeridas} sugestão(ões) de baixa.`
             : '';
         exibirFeedback(
             'success',
-            dados.idempotente ? 'Lancamento ja existente' : 'Lancamento gravado',
-            `${escapeHtml(dados.msg || 'Escrituracao fiscal registrada com sucesso.')} ${textoConserto}`
+            dados.idempotente ? 'Lançamento já existente' : 'Lançamento gravado',
+            `${escapeHtml(dados.msg || 'Escrituração fiscal registrada com sucesso.')} ${textoConserto}`
         );
     }
 
@@ -1727,50 +1836,89 @@
         select.innerHTML = motivos.map((motivo, indice) => `<option value="${escapeHtml(motivo)}" ${indice === 0 ? 'selected' : ''}>${escapeHtml(motivo)}</option>`).join('');
     }
 
+    function montarMotivoEstorno() {
+        const motivoPadrao = (document.getElementById('estorno-motivo-padrao').value || '').trim();
+        const complemento = (document.getElementById('estorno-complemento').value || '').trim();
+        const motivoLivre = (document.getElementById('estorno-motivo').value || '').trim();
+
+        let texto = motivoLivre || motivoPadrao;
+        if (motivoPadrao && complemento) {
+            texto = `${motivoPadrao}: ${complemento}`;
+        } else if (motivoPadrao && motivoLivre && motivoLivre.toLowerCase() !== motivoPadrao.toLowerCase()) {
+            texto = `${motivoPadrao}: ${motivoLivre}`;
+        }
+
+        return {
+            motivoPadrao,
+            complemento,
+            motivoLivre,
+            texto: (texto || '').trim(),
+        };
+    }
+
     function abrirModalEstorno() {
         if (!detalhesSelecionados) return;
 
-        document.getElementById('estorno-resumo').innerText = `NF ${detalhesSelecionados.numero} • ${detalhesSelecionados.fornecedor || 'Fornecedor nao informado'} • Ultimo lancamento ${detalhesSelecionados.data_lancamento || '---'}`;
+        popularMotivosEstorno(detalhesSelecionados.motivos_estorno_padrao || []);
+        const status = normalizarStatusDocumento(detalhesSelecionados.status_atual || '');
+        const etapa = normalizarEtapaDocumento(detalhesSelecionados.etapa_atual || '');
+        const ehConferencia = (status === 'Concluído' || etapa === 'Liberada') && status !== 'Lançado' && etapa !== 'Lançada' && etapa !== 'Manifestada';
+        window._estornoTipo = ehConferencia ? 'conferencia' : 'lancamento';
+
+        document.querySelector('#modal-estorno h3').textContent = ehConferencia ? 'Estorno de conferência' : 'Estorno de lançamento fiscal';
+        document.getElementById('estorno-resumo').innerText = ehConferencia
+            ? `NF ${detalhesSelecionados.numero} • ${normalizarTextoUi(detalhesSelecionados.fornecedor || 'Fornecedor não informado')} • Conferida em ${detalhesSelecionados.data_conferencia || '---'}`
+            : `NF ${detalhesSelecionados.numero} • ${normalizarTextoUi(detalhesSelecionados.fornecedor || 'Fornecedor não informado')} • Último lançamento ${detalhesSelecionados.data_lancamento || '---'}`;
         document.getElementById('estorno-complemento').value = '';
         document.getElementById('estorno-motivo').value = '';
         document.getElementById('estorno-feedback').innerText = '';
-        popularMotivosEstorno(detalhesSelecionados.motivos_estorno_padrao || []);
         document.getElementById('modal-estorno').style.display = 'flex';
     }
 
     async function confirmarEstornoLancamento() {
         if (!detalhesSelecionados) return;
 
-        const motivo = (document.getElementById('estorno-motivo').value || '').trim();
-        if (motivo.length < 3) {
-            document.getElementById('estorno-feedback').innerText = 'Descreva a observacao do estorno com pelo menos 3 caracteres.';
+        const botao = document.getElementById('btn-confirmar-estorno');
+        const dadosMotivo = montarMotivoEstorno();
+        if (dadosMotivo.texto.length < 3) {
+            document.getElementById('estorno-feedback').innerText = 'Descreva a observação do estorno com pelo menos 3 caracteres.';
             return;
         }
 
-        const botao = document.getElementById('btn-confirmar-estorno');
+        const ehConferencia = window._estornoTipo === 'conferencia';
         botao.disabled = true;
-        const resposta = await fetch('/api/fiscal/estornar_lancamento', {
+
+        const resposta = await fetch(ehConferencia ? '/api/fiscal/estornar_conferencia' : '/api/fiscal/estornar_lancamento', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                nota: detalhesSelecionados.numero,
-                motivo,
-                motivo_padrao: document.getElementById('estorno-motivo-padrao').value,
-                complemento: document.getElementById('estorno-complemento').value,
-            }),
+            body: JSON.stringify(
+                ehConferencia
+                    ? {
+                        nota: detalhesSelecionados.numero,
+                        motivo: dadosMotivo.texto,
+                    }
+                    : {
+                        nota: detalhesSelecionados.numero,
+                        motivo: dadosMotivo.motivoLivre || dadosMotivo.texto,
+                        motivo_padrao: dadosMotivo.motivoPadrao,
+                        complemento: dadosMotivo.complemento,
+                    }
+            ),
         });
         const dados = await resposta.json();
         botao.disabled = false;
 
         if (!resposta.ok || !dados.sucesso) {
-            document.getElementById('estorno-feedback').innerText = dados.msg || 'Falha ao estornar o lancamento.';
+            document.getElementById('estorno-feedback').innerText = dados.msg || 'Falha ao estornar o lançamento.';
             return;
         }
 
         fecharModalEstorno();
         detalhesCache.delete(String(detalhesSelecionados.numero));
         await carregarPainel(true);
-        exibirFeedback('success', 'Lancamento estornado', escapeHtml(dados.motivo || 'Estorno fiscal realizado com sucesso.'));
+        const msgTipo = ehConferencia ? 'Conferência estornada' : 'Lançamento estornado';
+        const msgDetalhe = ehConferencia ? 'NF voltou para Pendente. Pode ser reconferida.' : 'Estorno fiscal realizado com sucesso.';
+        exibirFeedback('success', msgTipo, escapeHtml(dados.motivo || msgDetalhe));
     }
 
     async function reenviarManifestacaoSelecionada() {
@@ -1789,12 +1937,16 @@
         });
         const dados = await resposta.json();
         if (!resposta.ok || !dados.sucesso) {
-            exibirFeedback('error', 'Falha na manifestacao', escapeHtml(dados.msg || 'Nao foi possivel enviar a confirmacao da operacao.'));
+            exibirFeedback('error', 'Falha na manifestação', escapeHtml(dados.msg || 'Não foi possível enviar a confirmação da operação.'));
             return;
         }
         detalhesCache.delete(String(numero));
         await carregarPainel(true);
-        exibirFeedback(dados.idempotente ? 'info' : 'success', dados.idempotente ? 'Manifestacao ja existente' : 'Manifestacao enviada', escapeHtml(dados.msg || 'Confirmacao da operacao enviada com sucesso.'));
+        exibirFeedback(
+            dados.idempotente ? 'info' : 'success',
+            dados.idempotente ? 'Manifestação já existente' : 'Manifestação enviada',
+            escapeHtml(dados.msg || 'Confirmação da operação enviada com sucesso.')
+        );
     }
 
     function baixarDocumentoSelecionado(tipo) {

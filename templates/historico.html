@@ -66,6 +66,9 @@
         .tag-concluido { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
         .tag-lancado { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
         .tag-excluida { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .tag-ajuste { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
+        .tag-estorno-lancamento { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .tag-estorno-conferencia { background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; }
 
         /* Divergência Link */
         .div-sim { 
@@ -347,7 +350,7 @@
             corpo.innerHTML = eventos.map(e => `
                 <tr>
                     <td style="font-weight:700;">${e.data_fmt}</td>
-                    <td><span class="status-badge tag-excluida">${e.tipo}</span></td>
+                    <td><span class="status-badge ${classeTipoEvento(e.tipo, e.tipo_slug)}">${e.tipo}</span></td>
                     <td style="font-weight:700;">${e.usuario}</td>
                     <td style="font-size:11px;">${e.motivo}</td>
                 </tr>
@@ -378,6 +381,12 @@
     function fecharModal() { document.getElementById('modal-divergencia').style.display = 'none'; }
     function fecharModalEstornos() { document.getElementById('modal-estornos').style.display = 'none'; }
     function fecharModalTimeline() { document.getElementById('modal-timeline').style.display = 'none'; }
+
+    function classeTipoEvento(tipo, tipoSlug) {
+        if (tipoSlug === 'estorno_conferencia') return 'tag-estorno-conferencia';
+        if (tipoSlug === 'estorno_lancamento') return 'tag-estorno-lancamento';
+        return 'tag-ajuste';
+    }
 
     document.addEventListener('DOMContentLoaded', carregar);
 </script>

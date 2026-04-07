@@ -96,6 +96,76 @@
     .param-desc { font-size: 11px; color: var(--text-muted); }
 
     .param-input { width: 160px; }
+    .flow-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1f3b63 55%, #0a6ed1 100%);
+        color: #f8fafc;
+        border: none;
+        overflow: hidden;
+        position: relative;
+    }
+    .flow-hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -100px -100px auto;
+        width: 260px;
+        height: 260px;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 72%);
+    }
+    .flow-hero h3 {
+        color: #fff;
+        border-bottom-color: rgba(255,255,255,0.14);
+        position: relative;
+        z-index: 1;
+    }
+    .flow-copy,
+    .flow-status-line,
+    .flow-grid {
+        position: relative;
+        z-index: 1;
+    }
+    .flow-copy {
+        margin-top: -4px;
+        color: rgba(248, 250, 252, 0.88);
+        font-size: 13px;
+        line-height: 1.55;
+        max-width: 900px;
+    }
+    .flow-status-line {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 14px 0;
+    }
+    .flow-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+    .flow-metric {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        backdrop-filter: blur(6px);
+    }
+    .flow-metric span {
+        display: block;
+        color: rgba(248, 250, 252, 0.78);
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .flow-metric strong {
+        display: block;
+        margin-top: 8px;
+        color: #fff;
+        font-size: 28px;
+        line-height: 1;
+    }
 
     #toast {
         position: fixed; bottom: 30px; right: 30px; z-index: 9999;
@@ -105,8 +175,9 @@
     }
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-    @media (max-width: 1100px) { .grid-two { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) { .grid-two { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } .flow-grid { grid-template-columns: 1fr 1fr; } }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -115,12 +186,58 @@
     <div class="page-header-erp">
         <div>
             <h1><i class="fas fa-sliders-h"></i> WMS | Governança Operacional</h1>
-            <p class="subtitle">Configuração de parâmetros operacionais e cadastro mestre de SKUs.</p>
+            <p class="subtitle">Parâmetros, fila fiscal, reconciliação e cadastro mestre em uma visão de controle única.</p>
         </div>
         <div class="toolbar">
             <button class="btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <button class="btn" onclick="processarFilaFiscal()"><i class="fas fa-tasks"></i> Processar Fila Fiscal</button>
+            <button class="btn" onclick="executarReconciliacao()"><i class="fas fa-balance-scale"></i> Reconciliar ERP x WMS</button>
             <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit WMS</a>
             <a class="btn" href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Endereços</a>
+        </div>
+    </div>
+
+    <div class="card flow-hero">
+        <h3><i class="fas fa-link"></i> Fluxo Fiscal -> WMS</h3>
+        <p class="flow-copy">Aqui você acompanha o que o fiscal liberou, o que a fila interna ainda precisa processar e o que já virou ação operacional no armazém. A ideia é transformar governança em leitura de negócio, não em tela técnica.</p>
+        <div class="flow-grid">
+            <div class="flow-metric">
+                <span>Fila técnica</span>
+                <strong id="fluxoFilaPendente">0</strong>
+            </div>
+            <div class="flow-metric">
+                <span>Falhas abertas</span>
+                <strong id="fluxoFalhasAbertas">0</strong>
+            </div>
+            <div class="flow-metric">
+                <span>Sucesso 24h</span>
+                <strong id="fluxoSucesso24h">0</strong>
+            </div>
+            <div class="flow-metric">
+                <span>Pendentes de endereço</span>
+                <strong id="fluxoPendentesEndereco">0</strong>
+            </div>
+        </div>
+        <div class="flow-status-line">
+            <span id="fluxoStatusBadge" class="badge badge-fifo">Fluxo carregando...</span>
+            <span id="fluxoResumo" class="param-desc" style="color:rgba(248,250,252,0.84);">Aguardando leitura da esteira fiscal.</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Evento</th>
+                        <th>Referência</th>
+                        <th>Status</th>
+                        <th>Tentativas</th>
+                        <th>Criado em</th>
+                        <th>Processado em</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyFluxoFiscal">
+                    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Carregando fila da integração fiscal...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -264,6 +381,112 @@ function showToast(msg, tipo = 'ok') {
     el.style.background = tipo === 'ok' ? '#0a8a45' : tipo === 'warn' ? '#e8820c' : '#d92d20';
     el.style.display = 'block';
     setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+function classeStatusFila(status) {
+    const chave = String(status || '').trim().toLowerCase();
+    if (chave === 'sucesso') return 'badge-a';
+    if (chave === 'falha' || chave === 'deadletter') return 'badge-b';
+    if (chave === 'processando') return 'badge-fefo';
+    return 'badge-c';
+}
+
+function formatarData(valor) {
+    if (!valor) return '-';
+    const data = new Date(valor);
+    return Number.isNaN(data.getTime()) ? '-' : data.toLocaleString('pt-BR');
+}
+
+function renderFluxoFiscal(data) {
+    const badge = document.getElementById('fluxoStatusBadge');
+    const resumo = document.getElementById('fluxoResumo');
+    const tbody = document.getElementById('tbodyFluxoFiscal');
+    if (!badge || !resumo || !tbody) return;
+
+    const kpis = data?.kpis || {};
+    const fila = Array.isArray(data?.fila_integracao) ? data.fila_integracao : [];
+    const pendentes = fila.filter((item) => ['Pendente', 'Processando', 'Falha'].includes(item.status)).length;
+    const falhas = fila.filter((item) => ['Falha', 'DeadLetter'].includes(item.status)).length;
+    const sucesso24h = fila.filter((item) => {
+        if (item.status !== 'Sucesso' || !item.processado_em) return false;
+        const processado = new Date(item.processado_em).getTime();
+        return Number.isFinite(processado) && processado >= (Date.now() - (24 * 60 * 60 * 1000));
+    }).length;
+    const ultimoEvento = fila[0] || null;
+
+    document.getElementById('fluxoFilaPendente').textContent = String(pendentes);
+    document.getElementById('fluxoFalhasAbertas').textContent = String(falhas);
+    document.getElementById('fluxoSucesso24h').textContent = String(sucesso24h);
+    document.getElementById('fluxoPendentesEndereco').textContent = String(kpis.pendentes_enderecamento || 0);
+
+    if (falhas > 0) {
+        badge.className = 'badge badge-b';
+        badge.textContent = 'Fluxo com atenção';
+    } else if (pendentes > 0) {
+        badge.className = 'badge badge-fifo';
+        badge.textContent = 'Fluxo em andamento';
+    } else {
+        badge.className = 'badge badge-a';
+        badge.textContent = 'Fluxo estabilizado';
+    }
+
+    resumo.textContent = ultimoEvento
+        ? `Último evento: ${ultimoEvento.tipo_evento || '-'} | ${ultimoEvento.referencia || '-'} | ${ultimoEvento.status || '-'} | ${formatarData(ultimoEvento.criado_em)}`
+        : 'Ainda não há eventos recentes na esteira fiscal.';
+
+    tbody.innerHTML = '';
+    if (!fila.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Sem eventos na fila fiscal.</td></tr>';
+        return;
+    }
+
+    fila.forEach((item) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${item.tipo_evento || '-'}</strong></td>
+            <td>${item.referencia || '-'}</td>
+            <td><span class="badge ${classeStatusFila(item.status)}">${item.status || '-'}</span></td>
+            <td>${item.tentativas || 0}</td>
+            <td>${formatarData(item.criado_em)}</td>
+            <td>${formatarData(item.processado_em)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function carregarFluxoFiscal() {
+    try {
+        const data = await fetchJson('/api/wms/governanca');
+        renderFluxoFiscal(data);
+    } catch (e) {
+        showToast(`Erro ao carregar fluxo fiscal: ${e.message}`, 'err');
+    }
+}
+
+async function processarFilaFiscal() {
+    try {
+        const res = await fetchJson('/api/wms/integracao/processar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limite: 50 })
+        });
+        const resultado = res.resultado || {};
+        showToast(`Fila processada. Sucesso: ${resultado.sucesso || 0} | Falha: ${resultado.falha || 0}.`);
+        await carregarFluxoFiscal();
+    } catch (e) {
+        showToast(`Erro: ${e.message}`, 'err');
+    }
+}
+
+async function executarReconciliacao() {
+    try {
+        const res = await fetchJson('/api/wms/governanca/reconciliar', { method: 'POST' });
+        const resultado = res.resultado || {};
+        showToast(`Reconciliação concluída. Novas divergências: ${resultado.novas_divergencias || 0}.`);
+        await carregarFluxoFiscal();
+    } catch (e) {
+        showToast(`Erro: ${e.message}`, 'err');
+    }
 }
 
 // ─── Parâmetros Operacionais ─────────────────────────────────────────────────
@@ -452,6 +675,7 @@ async function salvarSku() {
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 function refreshAll() {
+    carregarFluxoFiscal();
     carregarParametros();
     pesquisarSku();
 }

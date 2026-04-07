@@ -14,15 +14,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260402-1">
+    <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260407-ux1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+<a class="skip-link" href="#main-content">Ir para o conteudo</a>
 <div id="wrapper">
     <div id="shell-backdrop"></div>
 
-    <aside id="sidebar-wrapper">
+    <aside id="sidebar-wrapper" aria-label="Navegacao principal">
         <div class="sidebar-heading">
             <a href="/" class="sidebar-brand">
                 <div class="brand-logo-mask"></div>
@@ -164,7 +165,7 @@
     </aside>
 
     <div id="page-content-wrapper">
-        <nav class="top-nav">
+        <nav class="top-nav" aria-label="Barra superior">
             <div class="nav-left">
                 <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
                 <div class="top-route">
@@ -180,7 +181,7 @@
             </div>
         </nav>
 
-        <main class="content-body">{% block content %}{% endblock %}</main>
+        <main id="main-content" class="content-body" tabindex="-1">{% block content %}{% endblock %}</main>
         <footer class="app-footer">
             <span><strong>Columbia Sync</strong></span>
             <span>Navegação unificada para toda a operação.</span>
@@ -219,6 +220,44 @@ function trackRecentLink(link, currentPath) {
         current.unshift({ id: currentPath, title, href: currentPath, icon: iconClass });
         localStorage.setItem(RECENTS_KEY, JSON.stringify(current.slice(0, 6)));
     } catch (_) {}
+}
+
+function normalizeShellText(value) {
+    return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function clampShellText(value, maxLength = 140) {
+    const normalized = normalizeShellText(value);
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function hydrateShellCopy() {
+    const mainContent = document.getElementById("main-content");
+    const shellTitle = document.querySelector(".top-route strong");
+    const shellSubtitle = document.querySelector(".top-route small");
+    if (!mainContent || !shellTitle) return;
+
+    const hero = mainContent.querySelector(".page-header-erp, [data-page-hero], .home-hero-panel, .dashboard-hero, .error-card");
+    const heading = hero?.querySelector("h1, h2, h3") || mainContent.querySelector("h1, h2, h3");
+    const summary =
+        hero?.querySelector("p, .hero-copy, .page-lead, .dashboard-hero-copy p, .side-copy") ||
+        mainContent.querySelector("p, .hero-copy, .page-lead");
+
+    if (normalizeShellText(shellTitle.textContent) === "Painel" && heading) {
+        shellTitle.textContent = normalizeShellText(heading.textContent);
+    }
+
+    if (shellSubtitle && !normalizeShellText(shellSubtitle.textContent) && summary) {
+        shellSubtitle.textContent = clampShellText(summary.textContent, 150);
+    }
+
+    document.querySelectorAll(".page-header-erp").forEach(header => {
+        const actionCandidate = header.lastElementChild;
+        if (!actionCandidate || actionCandidate === header.firstElementChild) return;
+        if (!actionCandidate.querySelector("button, a, .btn, .btn-sap")) return;
+        actionCandidate.classList.add("page-header-actions");
+    });
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -281,6 +320,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!isCurrent) return;
 
         link.classList.add("active");
+        link.setAttribute("aria-current", "page");
         recentCandidate = recentCandidate || link;
 
         const parentPanel = link.closest(".submenu-panel");
@@ -299,6 +339,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     trackRecentLink(recentCandidate, currentPath);
+    hydrateShellCopy();
 });
 
 window.addEventListener("resize", function () {

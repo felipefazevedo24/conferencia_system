@@ -19,10 +19,17 @@ from ..models import (
     WMSIntegracaoEvento,
     DepositoWMS,
 )
-from ..services import WMSService
+from ..services import InventreeService, WMSService
 
 
 wms_bp = Blueprint('wms_api', __name__, url_prefix='/api/wms')
+
+
+def _processar_evento_integracao_imediato(evento):
+    if not evento:
+        return None
+    from .api_routes import _processar_evento_integracao_wms
+    return _processar_evento_integracao_wms(evento)
 
 
 def requer_admin(f):
@@ -74,6 +81,7 @@ def listar_localizacoes():
         LocalizacaoArmazem.codigo,
     ).all()
     
+    vinculos = InventreeService.mapear_vinculos('localizacao', [loc.id for loc, _ in localizacoes])
     resultado = [
         {
             'id': loc.id,
@@ -85,6 +93,7 @@ def listar_localizacoes():
             'predio': loc.predio,
             'nivel': loc.nivel,
             'apartamento': loc.apartamento,
+            'inventree_location_id': vinculos.get(str(loc.id)).inventree_id if vinculos.get(str(loc.id)) else None,
         }
         for loc, dep in localizacoes
     ]
@@ -124,6 +133,14 @@ def criar_localizacao():
     if not localizacao:
         return jsonify({'erro': 'Localização já existe'}), 409
     
+    sync_inventree = None
+    if InventreeService.is_enabled():
+        try:
+            remote_id = InventreeService._ensure_localizacao(localizacao.id)
+            sync_inventree = {'sucesso': True, 'inventree_location_id': remote_id}
+        except Exception as exc:
+            sync_inventree = {'sucesso': False, 'erro': str(exc)}
+
     return jsonify({
         'id': localizacao.id,
         'codigo': localizacao.codigo,
@@ -132,6 +149,7 @@ def criar_localizacao():
         'predio': localizacao.predio,
         'nivel': localizacao.nivel,
         'apartamento': localizacao.apartamento,
+        'integracao_inventree': sync_inventree,
         'mensagem': 'Localização criada com sucesso'
     }), 201
 
@@ -307,6 +325,7 @@ def criar_localizacoes_em_lote():
     total = 0
     criadas = 0
     ignoradas = 0
+    sync_inventree = None
 
     for coluna in range(coluna_inicio, coluna_fim + 1):
         for nivel in range(nivel_inicio, nivel_fim + 1):
@@ -323,12 +342,19 @@ def criar_localizacoes_em_lote():
             else:
                 ignoradas += 1
 
+    if InventreeService.is_enabled() and criadas:
+        try:
+            sync_inventree = InventreeService.sincronizar_estrutura_local()
+        except Exception as exc:
+            sync_inventree = {'sucesso': False, 'erro': str(exc)}
+
     return jsonify(
         {
             'sucesso': True,
             'total_processado': total,
             'criadas': criadas,
             'ignoradas': ignoradas,
+            'integracao_inventree': sync_inventree,
             'mensagem': f'Lote finalizado: {criadas} criadas, {ignoradas} já existentes/ignoradas.',
         }
     ), 200
@@ -591,15 +617,22 @@ def movimentar_item():
 def obter_estoque_sku(codigo_item):
     """Obtém saldo consolidado de um SKU em todas as localizações"""
     estoques = WMSService.obter_estoque_por_sku(codigo_item)
-    
-    if not estoques:
-        return jsonify({'mensagem': 'SKU sem estoque registrado', 'skus': []}), 200
-    
+    inventree = None
+    if InventreeService.is_enabled():
+        try:
+            inventree = InventreeService.obter_estoque_remoto_por_sku(codigo_item)
+        except Exception as exc:
+            inventree = {'sucesso': False, 'erro': str(exc)}
+
+    if not estoques and not (inventree and inventree.get('itens')):
+        return jsonify({'mensagem': 'SKU sem estoque registrado', 'skus': [], 'inventree': inventree}), 200
+
     return jsonify({
         'codigo_item': codigo_item,
         'skus': estoques,
         'qtd_total': sum(e['qtd_total'] for e in estoques),
-        'qtd_disponivel': sum(e['qtd_disponivel'] for e in estoques)
+        'qtd_disponivel': sum(e['qtd_disponivel'] for e in estoques),
+        'inventree': inventree,
     }), 200
 
 
@@ -759,7 +792,9 @@ def listar_pendentes_enderecamento():
 @wms_bp.route('/cockpit', methods=['GET'])
 @requer_wms_operacao
 def obter_cockpit_wms():
-    return jsonify(WMSService.obter_cockpit_operacional()), 200
+    payload = WMSService.obter_cockpit_operacional()
+    payload['inventree'] = InventreeService.resumo_operacional_remoto()
+    return jsonify(payload), 200
 
 
 @wms_bp.route('/estoque-inicial', methods=['POST'])
@@ -896,12 +931,37 @@ def enderecar_item_manual():
     if not item:
         return jsonify({'erro': 'Nao foi possivel enderecar item (item invalido, ja enderecado ou sem capacidade).'}), 400
 
+    movimentacao = (
+        MovimentacaoWMS.query
+        .filter_by(
+            item_wms_id=item.id,
+            tipo_movimentacao='Armazenamento',
+            localizacao_destino_id=item.localizacao_id,
+        )
+        .order_by(MovimentacaoWMS.id.desc())
+        .first()
+    )
+    evento, evento_criado = InventreeService.enfileirar_evento(
+        InventreeService.EVENTO_ENDERECO_MANUAL,
+        str(item.id),
+        {
+            'item_wms_id': item.id,
+            'localizacao_id': item.localizacao_id,
+            'usuario': usuario,
+            'movimentacao_id': movimentacao.id if movimentacao else None,
+        },
+        origem='WMS',
+        idempotency_key=f"enderecamento:{movimentacao.id if movimentacao else item.id}",
+    )
+    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+
     return jsonify(
         {
             'sucesso': True,
             'item_wms_id': item.id,
             'localizacao_id': item.localizacao_id,
             'mensagem': 'Item enderecado com sucesso.',
+            'integracao_inventree': processamento,
         }
     ), 200
 
@@ -943,13 +1003,41 @@ def estornar_enderecamento_admin():
     if not item:
         return jsonify({'erro': 'Não foi possível estornar este endereçamento.'}), 400
 
-    return jsonify({'sucesso': True, 'mensagem': 'Endereçamento estornado com sucesso.'}), 200
+    movimentacao = (
+        MovimentacaoWMS.query
+        .filter_by(
+            item_wms_id=item.id,
+            tipo_movimentacao='EstornoEnderecamento',
+        )
+        .order_by(MovimentacaoWMS.id.desc())
+        .first()
+    )
+    evento, evento_criado = InventreeService.enfileirar_evento(
+        InventreeService.EVENTO_ESTORNO_ENDERECO,
+        str(item.id),
+        {
+            'item_wms_id': item.id,
+            'usuario': usuario,
+            'movimentacao_id': movimentacao.id if movimentacao else None,
+            'motivo': motivo or None,
+        },
+        origem='WMS',
+        idempotency_key=f"estorno_enderecamento:{movimentacao.id if movimentacao else item.id}",
+    )
+    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+
+    return jsonify({
+        'sucesso': True,
+        'mensagem': 'Endereçamento estornado com sucesso.',
+        'integracao_inventree': processamento,
+    }), 200
 
 
 @wms_bp.route('/governanca', methods=['GET'])
 @requer_wms_operacao
 def obter_governanca_wms():
     painel = WMSService.obter_painel_governanca()
+    painel['inventree'] = InventreeService.resumo_operacional_remoto()
     fila = WMSIntegracaoEvento.query.order_by(WMSIntegracaoEvento.criado_em.desc()).limit(20).all()
     painel['fila_integracao'] = [
         {
@@ -1106,6 +1194,7 @@ def listar_itens_armazenados():
         )
     
     itens = query.order_by(ItemWMS.data_criacao.desc()).limit(50).all()
+    vinculos = InventreeService.mapear_vinculos('item_wms', [item.id for item in itens])
     
     resultado = []
     for item in itens:
@@ -1131,6 +1220,7 @@ def listar_itens_armazenados():
             'localizacao_id': item.localizacao_id,
             'localizacao_codigo': localizacao_codigo,
             'status': item.status,
+            'inventree_stock_item_id': vinculos.get(str(item.id)).inventree_id if vinculos.get(str(item.id)) else None,
         })
     
     return jsonify(resultado), 200
@@ -1184,7 +1274,32 @@ def transferir_item_entre_depositos():
     
     if not resultado.get('sucesso'):
         return jsonify({'erro': resultado.get('erro')}), 400
-    
+
+    movimentacao = (
+        MovimentacaoWMS.query
+        .filter_by(
+            item_wms_id=item_wms_id,
+            tipo_movimentacao='Transferencia Deposito',
+        )
+        .order_by(MovimentacaoWMS.id.desc())
+        .first()
+    )
+    evento, evento_criado = InventreeService.enfileirar_evento(
+        InventreeService.EVENTO_TRANSFERENCIA_DEPOSITO,
+        str(item_wms_id),
+        {
+            'item_wms_id': item_wms_id,
+            'deposito_destino_id': deposito_destino_id,
+            'localizacao_destino_id': localizacao_destino_id,
+            'usuario': usuario,
+            'movimentacao_id': movimentacao.id if movimentacao else None,
+            'motivo': motivo or None,
+        },
+        origem='WMS',
+        idempotency_key=f"transferencia_deposito:{movimentacao.id if movimentacao else item_wms_id}",
+    )
+    resultado['integracao_inventree'] = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+
     return jsonify(resultado), 200
 
 
@@ -1204,6 +1319,43 @@ def listar_depositos():
         }
         for d in depositos
     ]), 200
+
+
+@wms_bp.route('/inventree/status', methods=['GET'])
+@requer_admin
+def inventree_status_admin():
+    return jsonify(InventreeService.status()), 200
+
+
+@wms_bp.route('/inventree/sincronizar-estrutura', methods=['POST'])
+@requer_admin
+def inventree_sincronizar_estrutura_admin():
+    try:
+        return jsonify(InventreeService.sincronizar_estrutura_local()), 200
+    except Exception as exc:
+        return jsonify({'sucesso': False, 'erro': str(exc)}), 502
+
+
+@wms_bp.route('/inventree/sincronizar-nota', methods=['POST'])
+@requer_admin
+def inventree_sincronizar_nota_admin():
+    data = request.get_json() or {}
+    numero_nota = (data.get('numero_nota') or '').strip()
+    usuario = session.get('username', 'Sistema')
+    if not numero_nota:
+        return jsonify({'erro': 'numero_nota e obrigatorio'}), 400
+    try:
+        evento, evento_criado = InventreeService.enfileirar_evento(
+            InventreeService.EVENTO_NOTA_LANCADA,
+            numero_nota,
+            {'numero_nota': numero_nota, 'usuario': usuario},
+            origem='WMS',
+            idempotency_key=f"nota_lancada:{numero_nota}",
+        )
+        processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+        return jsonify({'sucesso': True, 'evento_id': evento.id if evento else None, 'resultado': processamento}), 200
+    except Exception as exc:
+        return jsonify({'sucesso': False, 'erro': str(exc)}), 502
 
 
 def registrar_rotas_wms(app):

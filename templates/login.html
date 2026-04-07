@@ -3,623 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f62c9">
     <title>Acesso | Columbia Sync</title>
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="apple-touch-icon" href="/static/favicon16x16.png?v=20260402-2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --ink-950: #081523;
-            --ink-900: #0f2235;
-            --ink-800: #16324d;
-            --ink-700: #23486d;
-            --sky-500: #1c86f2;
-            --sky-300: #7dc4ff;
-            --mint-500: #11a36c;
-            --amber-500: #f4b340;
-            --danger-500: #e05a54;
-            --line: rgba(129, 163, 197, 0.28);
-            --text-main: #16324d;
-            --text-soft: #60758d;
-            --shadow-strong: 0 28px 80px rgba(6, 18, 31, 0.34);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html, body {
-            margin: 0;
-            min-height: 100%;
-        }
-
-        body {
-            font-family: "IBM Plex Sans", sans-serif;
-            color: var(--text-main);
-            background:
-                radial-gradient(circle at 14% 18%, rgba(125, 196, 255, 0.26), transparent 28%),
-                radial-gradient(circle at 84% 20%, rgba(17, 163, 108, 0.12), transparent 24%),
-                radial-gradient(circle at 50% 110%, rgba(255, 255, 255, 0.08), transparent 22%),
-                linear-gradient(135deg, #07111d 0%, #0c1d30 42%, #14365c 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 28px;
-            overflow-x: hidden;
-        }
-
-        .auth-shell {
-            width: min(1220px, 100%);
-            min-height: min(760px, calc(100vh - 56px));
-            display: grid;
-            grid-template-columns: minmax(430px, 0.92fr) minmax(380px, 1.08fr);
-            background: rgba(6, 19, 33, 0.78);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 28px;
-            overflow: hidden;
-            box-shadow: var(--shadow-strong);
-            position: relative;
-            isolation: isolate;
-        }
-
-        .auth-shell::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background:
-                linear-gradient(130deg, rgba(255,255,255,0.04), transparent 44%),
-                linear-gradient(310deg, rgba(125, 196, 255, 0.08), transparent 38%);
-            pointer-events: none;
-            z-index: -1;
-        }
-
-        .login-panel {
-            order: 1;
-            background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,250,255,0.96) 100%);
-            padding: 42px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .login-card {
-            width: min(430px, 100%);
-        }
-
-        .login-brand {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 6px 0;
-            color: var(--ink-900);
-        }
-
-        .brand-logo {
-            width: 104px;
-            height: 28px;
-            background: linear-gradient(90deg, #0f2235, #1c86f2);
-            -webkit-mask: url('/static/columbia_logo.png') center / contain no-repeat;
-            mask: url('/static/columbia_logo.png') center / contain no-repeat;
-            flex-shrink: 0;
-        }
-
-        .login-brand-text {
-            display: inline-flex;
-            align-items: baseline;
-            gap: 6px;
-            font-family: "Space Grotesk", sans-serif;
-            font-size: 15px;
-            font-weight: 900;
-            letter-spacing: -0.02em;
-            text-transform: uppercase;
-        }
-
-        .login-brand-text .sync {
-            color: var(--sky-500);
-        }
-
-        .card-title {
-            margin: 18px 0 10px;
-            font-family: "Space Grotesk", sans-serif;
-            font-size: clamp(28px, 3vw, 40px);
-            line-height: 1;
-            letter-spacing: -0.05em;
-            color: var(--ink-900);
-        }
-
-        .card-copy {
-            margin: 0 0 26px;
-            font-size: 14px;
-            line-height: 1.8;
-            color: var(--text-soft);
-        }
-
-        .feedback {
-            display: none;
-            margin-bottom: 18px;
-            padding: 14px 16px;
-            border-radius: 16px;
-            font-size: 13px;
-            line-height: 1.6;
-            font-weight: 600;
-            border: 1px solid transparent;
-        }
-
-        .feedback.show {
-            display: block;
-            animation: fadeUp 0.24s ease;
-        }
-
-        .feedback.info {
-            background: rgba(28, 134, 242, 0.08);
-            color: #1f5f9d;
-            border-color: rgba(28, 134, 242, 0.18);
-        }
-
-        .feedback.success {
-            background: rgba(17, 163, 108, 0.08);
-            color: #0d7a4f;
-            border-color: rgba(17, 163, 108, 0.18);
-        }
-
-        .feedback.warning {
-            background: rgba(244, 179, 64, 0.14);
-            color: #94620f;
-            border-color: rgba(244, 179, 64, 0.24);
-        }
-
-        .feedback.error {
-            background: rgba(224, 90, 84, 0.09);
-            color: #a13f3b;
-            border-color: rgba(224, 90, 84, 0.2);
-        }
-
-        .feedback small {
-            display: block;
-            margin-top: 6px;
-            font-size: 12px;
-            opacity: 0.92;
-        }
-
-        .field {
-            margin-bottom: 16px;
-        }
-
-        .field label {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            color: var(--ink-800);
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-
-        .field-note {
-            font-size: 11px;
-            color: var(--text-soft);
-            text-transform: none;
-            letter-spacing: 0;
-        }
-
-        .input-shell {
-            position: relative;
-        }
-
-        .input-shell input {
-            width: 100%;
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            padding: 16px 18px;
-            background: rgba(255,255,255,0.92);
-            color: var(--ink-900);
-            font-size: 15px;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-        }
-
-        .input-shell input:focus {
-            border-color: rgba(28, 134, 242, 0.48);
-            box-shadow: 0 0 0 4px rgba(28, 134, 242, 0.12);
-            transform: translateY(-1px);
-        }
-
-        .input-shell.has-action input {
-            padding-right: 76px;
-        }
-
-        .field-action {
-            position: absolute;
-            top: 50%;
-            right: 12px;
-            transform: translateY(-50%);
-            border: none;
-            background: transparent;
-            color: var(--ink-700);
-            cursor: pointer;
-            min-width: 54px;
-            height: 36px;
-            border-radius: 999px;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.06em;
-            padding: 0 10px;
-        }
-
-        .field-action:hover {
-            background: rgba(15, 34, 53, 0.06);
-        }
-
-        .field-meta {
-            min-height: 18px;
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--text-soft);
-        }
-
-        .field-meta.warning {
-            color: #9a6610;
-            font-weight: 700;
-        }
-
-        .toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin: 10px 0 6px;
-            flex-wrap: wrap;
-        }
-
-        .remember {
-            display: inline-flex;
-            align-items: center;
-            gap: 9px;
-            font-size: 13px;
-            color: var(--ink-700);
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .remember input {
-            width: 16px;
-            height: 16px;
-            accent-color: var(--sky-500);
-        }
-
-        .login-button {
-            width: 100%;
-            margin-top: 14px;
-            border: none;
-            border-radius: 18px;
-            padding: 16px 20px;
-            background: linear-gradient(135deg, #0d77dc 0%, #1650c4 52%, #0f345f 100%);
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            cursor: pointer;
-            box-shadow: 0 18px 30px rgba(16, 65, 134, 0.26);
-            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-        }
-
-        .login-button:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.04);
-        }
-
-        .login-button:disabled {
-            cursor: wait;
-            transform: none;
-            filter: saturate(0.8);
-            opacity: 0.86;
-        }
-
-        .button-content {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.28);
-            border-top-color: #ffffff;
-            animation: spin 0.8s linear infinite;
-            display: none;
-        }
-
-        .login-button.loading .spinner {
-            display: inline-block;
-        }
-
-        .support-grid {
-            margin-top: 22px;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-        }
-
-        .support-card {
-            border: 1px solid rgba(129, 163, 197, 0.24);
-            border-radius: 16px;
-            background: rgba(255,255,255,0.72);
-            padding: 14px;
-        }
-
-        .support-card strong {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 13px;
-            color: var(--ink-800);
-        }
-
-        .support-card p {
-            margin: 0;
-            font-size: 12px;
-            line-height: 1.55;
-            color: var(--text-soft);
-        }
-
-        .footnote {
-            margin-top: 20px;
-            font-size: 12px;
-            color: var(--text-soft);
-            line-height: 1.7;
-        }
-
-        .footnote strong {
-            color: var(--ink-800);
-        }
-
-        .brand-panel {
-            order: 2;
-            position: relative;
-            overflow: hidden;
-            background: #07111d;
-        }
-
-        .showcase-video {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .brand-panel::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 255, 255, 0.02);
-            pointer-events: none;
-        }
-
-        .shake {
-            animation: shake 0.28s ease;
-        }
-
-        @keyframes fadeUp {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-6px); }
-            75% { transform: translateX(6px); }
-        }
-
-        @media (max-width: 980px) {
-            .auth-shell {
-                grid-template-columns: 1fr;
-                min-height: auto;
-            }
-
-            .brand-panel {
-                min-height: 320px;
-            }
-        }
-
-        @media (max-width: 640px) {
-            body {
-                padding: 14px;
-            }
-
-            .login-panel {
-                padding: 24px;
-            }
-
-            .support-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .toolbar {
-                align-items: flex-start;
-            }
-
-            .brand-panel {
-                min-height: 240px;
-            }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260407-ux1">
+    <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260407-1">
 </head>
-<body>
-    <div class="auth-shell">
-        <section class="login-panel">
-            <div class="login-card">
-                <div class="login-brand">
-                    <div class="brand-logo"></div>
-                    <div class="login-brand-text">
-                        <span>Columbia</span>
-                        <span class="sync">SYNC</span>
-                    </div>
-                </div>
+<body class="auth-page">
+    <a class="skip-link" href="#login-card">Ir para o login</a>
 
-                <h2 class="card-title">Bem-vindo de volta!</h2>
-                <p class="card-copy">
-                    Use seu usuário para entrar no sistema.
-                </p>
-
-                <div id="feedback" class="feedback {% if login_message_type %}{{ login_message_type }} show{% endif %}">
-                    {% if login_message %}
-                        {{ login_message }}
-                    {% endif %}
-                </div>
-
-                <form id="login-form" novalidate>
-                    <div class="field">
-                        <label for="user">
-                            <span>Usuário</span>
-                            <span class="field-note">Seu login interno</span>
-                        </label>
-                        <div class="input-shell">
-                            <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuário">
+    <main class="auth-page-shell">
+        <div class="auth-shell">
+            <section class="login-panel" aria-label="Acesso ao sistema">
+                <div id="login-card" class="login-card">
+                    <a href="/" class="login-brand" aria-label="Columbia Sync">
+                        <div class="brand-logo" aria-hidden="true"></div>
+                        <div class="login-brand-text">
+                            <span>Columbia</span>
+                            <span class="sync">SYNC</span>
                         </div>
-                        <div class="field-meta" id="user-meta"></div>
+                    </a>
+
+                    <h1 class="card-title">Seja bem-vindo de volta!</h1>
+                    <p class="card-copy">
+                        Use seu usuário para entrar no sistema.
+                    </p>
+
+                    <div
+                        id="feedback"
+                        class="feedback {% if login_message_type %}{{ login_message_type }} show{% endif %}"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        {% if login_message %}
+                            {{ login_message }}
+                        {% endif %}
                     </div>
 
-                    <div class="field">
-                        <label for="pass">
-                            <span>Senha</span>
-                            <span class="field-note">Insira sua senha</span>
-                        </label>
-                        <div class="input-shell has-action">
-                            <input type="password" id="pass" name="pass" autocomplete="current-password" placeholder="Digite sua senha">
-                            <button type="button" class="field-action" id="toggle-pass" aria-label="Mostrar senha">
-                                <span id="toggle-pass-icon">VER</span>
-                            </button>
+                    <form id="login-form" novalidate>
+                        <div class="field">
+                            <label for="user">
+                                <span>Usuario</span>
+                                <span class="field-note">Seu login interno</span>
+                            </label>
+                            <div class="input-shell">
+                                <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuario">
+                            </div>
+                            <div class="field-meta" id="user-meta"></div>
                         </div>
-                        <div class="field-meta" id="pass-meta"></div>
+
+                        <div class="field">
+                            <label for="pass">
+                                <span>Senha</span>
+                                <span class="field-note">Insira sua senha</span>
+                            </label>
+                            <div class="input-shell has-action">
+                                <input type="password" id="pass" name="pass" autocomplete="current-password" placeholder="Digite sua senha">
+                                <button type="button" class="field-action" id="toggle-pass" aria-label="Mostrar senha">
+                                    <span id="toggle-pass-icon">VER</span>
+                                </button>
+                            </div>
+                            <div class="field-meta" id="pass-meta"></div>
+                        </div>
+
+                        <div class="toolbar">
+                            <label class="remember">
+                                <input type="checkbox" id="remember-user">
+                                <span>Lembrar meu usuario neste navegador</span>
+                            </label>
+                            <span class="field-note" id="caps-lock-hint"></span>
+                        </div>
+
+                        <button type="submit" class="login-button" id="login-button">
+                            <span class="button-content">
+                                <span class="spinner" aria-hidden="true"></span>
+                                <span class="button-text">Acessar o painel</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <div class="footnote">
+                        <strong>Segurança:</strong> se você esqueceu sua senha, fale com um administrador do sistema.
                     </div>
-
-                    <div class="toolbar">
-                        <label class="remember">
-                            <input type="checkbox" id="remember-user">
-                            <span>Lembrar meu usuário neste navegador</span>
-                        </label>
-                        <span class="field-note" id="caps-lock-hint"></span>
-                    </div>
-
-                    <button type="submit" class="login-button" id="login-button">
-                        <span class="button-content">
-                            <span class="spinner" aria-hidden="true"></span>
-                            <span class="button-text">Acessar o painel</span>
-                        </span>
-                    </button>
-                </form>
-
-                <div class="footnote">
-                    <strong>Segurança:</strong> se você esqueceu sua senha, contate um administrador do sistema.
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section class="brand-panel">
-            <video class="showcase-video" autoplay muted loop playsinline preload="auto">
-                <source src="/static/Home-Page-Hero-Video.mp4" type="video/mp4">
-            </video>
-        </section>
-    </div>
+            <section class="brand-panel" aria-label="Contexto visual do sistema">
+                <video class="showcase-video" autoplay muted loop playsinline preload="auto">
+                    <source src="/static/Home-Page-Hero-Video.mp4" type="video/mp4">
+                </video>
+            </section>
+        </div>
+    </main>
 
     <script>
-        const STORAGE_USER_KEY = 'columbia_sync_login_user';
-        const STORAGE_REMEMBER_KEY = 'columbia_sync_login_remember';
-        const userInput = document.getElementById('user');
-        const passInput = document.getElementById('pass');
-        const rememberCheckbox = document.getElementById('remember-user');
-        const loginButton = document.getElementById('login-button');
-        const loginForm = document.getElementById('login-form');
-        const feedback = document.getElementById('feedback');
-        const userMeta = document.getElementById('user-meta');
-        const passMeta = document.getElementById('pass-meta');
-        const capsLockHint = document.getElementById('caps-lock-hint');
-        const togglePassButton = document.getElementById('toggle-pass');
-        const togglePassIcon = document.getElementById('toggle-pass-icon');
+        const STORAGE_USER_KEY = "columbia_sync_login_user";
+        const STORAGE_REMEMBER_KEY = "columbia_sync_login_remember";
+        const userInput = document.getElementById("user");
+        const passInput = document.getElementById("pass");
+        const rememberCheckbox = document.getElementById("remember-user");
+        const loginButton = document.getElementById("login-button");
+        const loginForm = document.getElementById("login-form");
+        const feedback = document.getElementById("feedback");
+        const userMeta = document.getElementById("user-meta");
+        const passMeta = document.getElementById("pass-meta");
+        const capsLockHint = document.getElementById("caps-lock-hint");
+        const togglePassButton = document.getElementById("toggle-pass");
+        const togglePassIcon = document.getElementById("toggle-pass-icon");
 
-        function showFeedback(type, message, detail = '') {
+        function setFieldWarning(input, metaTarget, message) {
+            input.setAttribute("aria-invalid", "true");
+            metaTarget.textContent = message;
+            metaTarget.className = "field-meta warning";
+        }
+
+        function clearFieldMeta() {
+            userInput.removeAttribute("aria-invalid");
+            passInput.removeAttribute("aria-invalid");
+            userMeta.textContent = "";
+            userMeta.className = "field-meta";
+            passMeta.textContent = "";
+            passMeta.className = "field-meta";
+        }
+
+        function showFeedback(type, message, detail = "") {
             feedback.className = `feedback ${type} show`;
             feedback.innerHTML = detail ? `${message}<small>${detail}</small>` : message;
         }
 
-        function clearFieldMeta() {
-            userMeta.textContent = '';
-            userMeta.className = 'field-meta';
-            passMeta.textContent = '';
-            passMeta.className = 'field-meta';
-        }
-
         function setLoading(isLoading) {
             loginButton.disabled = isLoading;
-            loginButton.classList.toggle('loading', isLoading);
+            loginButton.classList.toggle("loading", isLoading);
         }
 
         function pulseError() {
-            const card = document.querySelector('.login-card');
-            card.classList.remove('shake');
+            const card = document.querySelector(".login-card");
+            card.classList.remove("shake");
             void card.offsetWidth;
-            card.classList.add('shake');
+            card.classList.add("shake");
         }
 
         function saveRememberedUser() {
             if (rememberCheckbox.checked) {
-                localStorage.setItem(STORAGE_REMEMBER_KEY, '1');
+                localStorage.setItem(STORAGE_REMEMBER_KEY, "1");
                 localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim());
                 return;
             }
+
             localStorage.removeItem(STORAGE_REMEMBER_KEY);
             localStorage.removeItem(STORAGE_USER_KEY);
         }
 
         function hydrateRememberedUser() {
-            const shouldRemember = localStorage.getItem(STORAGE_REMEMBER_KEY) === '1';
-            const rememberedUser = localStorage.getItem(STORAGE_USER_KEY) || '';
+            const shouldRemember = localStorage.getItem(STORAGE_REMEMBER_KEY) === "1";
+            const rememberedUser = localStorage.getItem(STORAGE_USER_KEY) || "";
             rememberCheckbox.checked = shouldRemember;
+
             if (shouldRemember && rememberedUser) {
                 userInput.value = rememberedUser;
                 passInput.focus();
-            } else {
-                userInput.focus();
+                return;
             }
+
+            userInput.focus();
         }
 
         function updateCapsLockState(event) {
-            const capsOn = event.getModifierState && event.getModifierState('CapsLock');
-            capsLockHint.textContent = capsOn ? 'Caps Lock ligado' : '';
-            passMeta.textContent = capsOn ? 'Atenção: sua senha pode estar sendo digitada em maiúsculas.' : passMeta.textContent;
-            passMeta.className = capsOn ? 'field-meta warning' : 'field-meta';
+            const capsOn = event.getModifierState && event.getModifierState("CapsLock");
+            capsLockHint.textContent = capsOn ? "Caps Lock ligado" : "";
+
+            if (!capsOn && passMeta.className === "field-meta warning" && passMeta.textContent.includes("maiusculas")) {
+                passMeta.textContent = "";
+                passMeta.className = "field-meta";
+            }
+
+            if (capsOn) {
+                passMeta.textContent = "Atencao: sua senha pode estar sendo digitada em maiusculas.";
+                passMeta.className = "field-meta warning";
+            }
         }
 
-        togglePassButton.addEventListener('click', () => {
-            const showing = passInput.type === 'text';
-            passInput.type = showing ? 'password' : 'text';
-            togglePassIcon.textContent = showing ? 'VER' : 'OCULTAR';
-            togglePassButton.setAttribute('aria-label', showing ? 'Mostrar senha' : 'Ocultar senha');
+        togglePassButton.addEventListener("click", () => {
+            const showing = passInput.type === "text";
+            passInput.type = showing ? "password" : "text";
+            togglePassIcon.textContent = showing ? "VER" : "OCULTAR";
+            togglePassButton.setAttribute("aria-label", showing ? "Mostrar senha" : "Ocultar senha");
             passInput.focus();
         });
 
-        passInput.addEventListener('keyup', updateCapsLockState);
-        passInput.addEventListener('keydown', updateCapsLockState);
+        passInput.addEventListener("keyup", updateCapsLockState);
+        passInput.addEventListener("keydown", updateCapsLockState);
 
-        loginForm.addEventListener('submit', async (event) => {
+        loginForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             clearFieldMeta();
 
@@ -628,41 +210,43 @@
 
             if (!username || !password) {
                 if (!username) {
-                    userMeta.textContent = 'Informe seu usuário para continuar.';
-                    userMeta.className = 'field-meta warning';
+                    setFieldWarning(userInput, userMeta, "Informe seu usuario para continuar.");
                 }
+
                 if (!password) {
-                    passMeta.textContent = 'Informe sua senha para continuar.';
-                    passMeta.className = 'field-meta warning';
+                    setFieldWarning(passInput, passMeta, "Informe sua senha para continuar.");
                 }
-                showFeedback('warning', 'Preencha usuário e senha para acessar o sistema.');
+
+                showFeedback("warning", "Preencha usuario e senha para acessar o sistema.");
                 pulseError();
                 return;
             }
 
             setLoading(true);
             saveRememberedUser();
-            showFeedback('info', 'Validando seu acesso...', 'Conectando com o ambiente operacional.');
+            showFeedback("info", "Validando seu acesso...", "Conectando com o ambiente operacional.");
 
             try {
-                const response = await fetch('/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password })
                 });
 
                 const data = await response.json();
 
                 if (data.sucesso) {
-                    const role = data.user?.role ? `Perfil ${data.user.role}` : 'Acesso autorizado';
-                    let detail = 'Redirecionando você para o menu principal.';
+                    const role = data.user?.role ? `Perfil ${data.user.role}` : "Acesso autorizado";
+                    let detail = "Redirecionando voce para o menu principal.";
+
                     if (data.previous_access_at) {
-                        detail = `Último acesso registrado em ${new Date(data.previous_access_at).toLocaleString('pt-BR')}.`;
+                        detail = `Ultimo acesso registrado em ${new Date(data.previous_access_at).toLocaleString("pt-BR")}.`;
                     }
-                    showFeedback('success', 'Login realizado com sucesso.', `${role}. ${detail}`);
+
+                    showFeedback("success", "Login realizado com sucesso.", `${role}. ${detail}`);
                     saveRememberedUser();
                     setTimeout(() => {
-                        window.location.href = data.redirect_to || '/';
+                        window.location.href = data.redirect_to || "/";
                     }, 420);
                     return;
                 }
@@ -672,24 +256,37 @@
                         ? `Tente novamente em aproximadamente ${Math.ceil(Number(data.retry_after_seconds) / 60)} minuto(s).`
                         : Number.isFinite(Number(data.attempts_left))
                             ? `Tentativas restantes antes do bloqueio: ${Number(data.attempts_left)}.`
-                            : 'Revise seus dados e tente novamente.';
+                            : "Revise seus dados e tente novamente.";
 
-                passInput.value = '';
+                passInput.value = "";
                 passInput.focus();
-                showFeedback(data.code === 'RATE_LIMIT' ? 'warning' : 'error', data.msg || 'Não foi possível autenticar.', detail);
+                passInput.setAttribute("aria-invalid", "true");
+                showFeedback(data.code === "RATE_LIMIT" ? "warning" : "error", data.msg || "Nao foi possivel autenticar.", detail);
                 pulseError();
             } catch (error) {
-                showFeedback('error', 'Falha de comunicação com o sistema.', 'Verifique sua conexão ou tente novamente em alguns instantes.');
+                showFeedback("error", "Falha de comunicacao com o sistema.", "Verifique sua conexao ou tente novamente em alguns instantes.");
                 pulseError();
             } finally {
                 setLoading(false);
             }
         });
 
-        rememberCheckbox.addEventListener('change', saveRememberedUser);
-        userInput.addEventListener('input', () => {
+        rememberCheckbox.addEventListener("change", saveRememberedUser);
+        userInput.addEventListener("input", () => {
+            userInput.removeAttribute("aria-invalid");
+            userMeta.textContent = "";
+            userMeta.className = "field-meta";
+
             if (rememberCheckbox.checked) {
                 localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim());
+            }
+        });
+
+        passInput.addEventListener("input", () => {
+            passInput.removeAttribute("aria-invalid");
+            if (passMeta.className === "field-meta warning" && !passMeta.textContent.includes("maiusculas")) {
+                passMeta.textContent = "";
+                passMeta.className = "field-meta";
             }
         });
 

@@ -943,7 +943,7 @@ class ConsertoService:
     def montar_relatorio_estoque():
         historico = ConsertoService.listar_historico_estoque()
         baixas_pendentes = ConsertoBaixa.query.filter(
-            ConsertoBaixa.status_baixa.in_(["Pendente de confirmacao", "Pendente de confirmaÃ§Ã£o"])
+            ConsertoBaixa.status_baixa.in_(["Pendente de confirmacao", "Pendente de confirmação"])
         ).all()
 
         por_operacao = defaultdict(lambda: {"registros": 0, "saldo": 0.0, "enviado": 0.0, "baixado": 0.0})

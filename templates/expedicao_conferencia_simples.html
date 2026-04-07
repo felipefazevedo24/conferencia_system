@@ -72,6 +72,38 @@
     .exp-toast.error { background: rgba(176, 42, 55, 0.96); }
     @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } .exp-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar, .exp-record-grid { grid-template-columns: 1fr; } .exp-record-head, .exp-record-actions { display: grid; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } }
+
+    /* ===== ROMANEIO PRINT ===== */
+    .romaneio-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.5); align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px; }
+    .romaneio-overlay.show { display:flex; }
+    .romaneio-sheet { background:#fff; width:100%; max-width:800px; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.2); overflow:hidden; }
+    .romaneio-toolbar { display:flex; gap:10px; justify-content:flex-end; padding:14px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+    .romaneio-toolbar button { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+    .romaneio-content { padding:32px; }
+    .romaneio-header { text-align:center; margin-bottom:24px; padding-bottom:18px; border-bottom:2px solid #1e293b; }
+    .romaneio-header h2 { margin:0 0 4px; font-size:22px; color:#1e293b; letter-spacing:-0.02em; }
+    .romaneio-header p { margin:0; font-size:13px; color:#64748b; }
+    .romaneio-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; margin-bottom:20px; }
+    .romaneio-cell { padding:10px 14px; border-bottom:1px solid #e2e8f0; }
+    .romaneio-cell:nth-child(odd) { border-right:1px solid #e2e8f0; }
+    .romaneio-cell label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:3px; }
+    .romaneio-cell span { font-size:14px; color:#1e293b; font-weight:500; }
+    .romaneio-cell.full { grid-column:1/-1; border-right:none; }
+    .romaneio-fotos { margin-top:20px; }
+    .romaneio-fotos h3 { font-size:14px; color:#1e293b; margin:0 0 12px; }
+    .romaneio-fotos-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
+    .romaneio-fotos-grid img { width:100%; height:110px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; }
+    .romaneio-footer { margin-top:28px; padding-top:18px; border-top:2px solid #1e293b; display:grid; grid-template-columns:1fr 1fr; gap:40px; }
+    .romaneio-footer div { text-align:center; }
+    .romaneio-footer .sig-line { border-top:1px solid #94a3b8; margin-top:40px; padding-top:6px; font-size:12px; color:#64748b; }
+    @media print {
+        body * { visibility:hidden !important; }
+        .romaneio-overlay, .romaneio-overlay * { visibility:visible !important; }
+        .romaneio-overlay { position:absolute; inset:0; background:#fff; padding:0; display:flex !important; }
+        .romaneio-toolbar { display:none !important; }
+        .romaneio-sheet { box-shadow:none; border-radius:0; max-width:100%; }
+        .romaneio-fotos-grid img { height:90px; }
+    }
 </style>
 {% endblock %}
 
@@ -81,15 +113,37 @@
         <div>
             <span class="eyebrow">Conferência de expedição</span>
             <h1>Conferência Cega - Expedição</h1>
-            <p>Abra a conferência, anexe as fotos, consulte a NF na Consyste quando ela já existir e depois marque a saída como <strong>Expedido</strong> no histórico.</p>
+            <p>As NFs que você emitiu aparecem automaticamente abaixo. O conferente adiciona as fotos e marca como expedido. Também é possível incluir conferências manualmente.</p>
         </div>
     </section>
+
+    <!-- BUSCA RÁPIDA DE NF -->
+    <section class="exp-card" id="busca-nf-section">
+        <div class="exp-head">
+            <div>
+                <h2 style="margin:0;">🔍 Buscar NF</h2>
+                <p style="margin:2px 0 0;font-size:12px;color:#888;">Digite o número da NF para iniciar a conferência automaticamente</p>
+            </div>
+        </div>
+        <div class="exp-body">
+            <div style="display:flex;gap:10px;align-items:flex-end;">
+                <div class="exp-field" style="flex:1;margin:0;">
+                    <label for="busca-nf-input">Número da NF</label>
+                    <input id="busca-nf-input" type="text" placeholder="Ex: 10500" style="font-size:16px;padding:10px 14px;" inputmode="numeric">
+                </div>
+                <button class="exp-btn" type="button" id="btn-buscar-nf" style="min-height:44px;padding:0 24px;font-size:14px;">Buscar</button>
+            </div>
+            <div id="busca-nf-resultado" style="margin-top:12px;display:none;"></div>
+        </div>
+    </section>
+
+
 
     <section class="exp-grid">
         <section class="exp-card">
             <div class="exp-head">
                 <span>Nova conferência</span>
-                <h2>Abertura rápida</h2>
+                <h2>Inclusão manual</h2>
                 <p>O conferente e a data são registrados automaticamente pelo sistema.</p>
             </div>
             <div class="exp-body">
@@ -129,6 +183,11 @@
                             <input id="placa" name="placa" type="text" placeholder="Opcional">
                         </div>
 
+                        <div class="exp-field">
+                            <label for="motorista">Motorista</label>
+                            <input id="motorista" name="motorista" type="text" placeholder="Opcional">
+                        </div>
+
                         <div class="exp-field full">
                             <label for="fotos">Foto da conferência *</label>
                             <div class="exp-upload">
@@ -164,10 +223,10 @@
             </div>
             <div class="exp-body">
                 <div class="exp-steps">
-                    <div class="exp-step"><strong>1. Informe o orçamento</strong><p>Esse é o identificador principal da conferência.</p></div>
-                    <div class="exp-step"><strong>2. Consulte a NF</strong><p>Se ela já existir na Consyste, o cliente vem preenchido. Se ainda não existir, o campo do cliente abre para digitação manual.</p></div>
-                    <div class="exp-step"><strong>3. Anexe as fotos</strong><p>Pelo menos uma imagem é obrigatória para salvar a conferência.</p></div>
-                    <div class="exp-step"><strong>4. Marque como expedido depois</strong><p>Quando a saída acontecer, atualize o status no histórico.</p></div>
+                    <div class="exp-step"><strong>1. NFs emitidas aparecem automaticamente</strong><p>As notas que você emitiu chegam da Consyste com status Pendente.</p></div>
+                    <div class="exp-step"><strong>2. Conferente adiciona fotos</strong><p>Clique em "Completar conferência" no histórico e anexe as fotos da carga.</p></div>
+                    <div class="exp-step"><strong>3. Corrija dados se necessário</strong><p>Se a NF foi digitada antes do Consyste, o sistema mantém a NF do conferente. Dados como razão social podem ser corrigidos.</p></div>
+                    <div class="exp-step"><strong>4. Marque como expedido</strong><p>Quando a saída acontecer, atualize o status no histórico.</p></div>
                 </div>
             </div>
         </section>
@@ -184,6 +243,7 @@
                 <div class="exp-summary-card"><span>Total</span><strong id="resumo-total">0</strong></div>
                 <div class="exp-summary-card"><span>Pendentes</span><strong id="resumo-pendentes">0</strong></div>
                 <div class="exp-summary-card"><span>Expedidos</span><strong id="resumo-expedidos">0</strong></div>
+                <div class="exp-summary-card" style="border-left:3px solid #f59e0b;"><span>Aguardando estorno</span><strong id="resumo-aguardando">0</strong></div>
             </div>
 
             <div class="exp-toolbar">
@@ -192,6 +252,7 @@
                     <option value="">Todos os status</option>
                     <option value="Pendente de expedição">Pendente de expedição</option>
                     <option value="Expedido">Expedido</option>
+                    <option value="Aguardando estorno">Aguardando estorno</option>
                 </select>
             </div>
 
@@ -202,6 +263,36 @@
     </section>
 </section>
 
+<!-- Modal estorno -->
+<div id="modal-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.18);">
+        <h3 style="margin:0 0 6px;font-size:17px;color:#1e293b;">Solicitar estorno de expedição</h3>
+        <p id="modal-estorno-info" style="margin:0 0 16px;font-size:13px;color:#64748b;">A solicitação será enviada para o administrador aprovar.</p>
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Motivo do estorno *</label>
+        <textarea id="modal-estorno-motivo" rows="3" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:14px;resize:vertical;" placeholder="Descreva o motivo do estorno..."></textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" onclick="fecharModalEstorno()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
+            <button type="button" id="btn-confirmar-estorno" onclick="confirmarEstorno()" style="padding:8px 18px;border:none;border-radius:8px;background:#ef4444;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Solicitar estorno</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal admin aprovar/rejeitar estorno -->
+<div id="modal-admin-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.18);">
+        <h3 style="margin:0 0 6px;font-size:17px;color:#1e293b;">Autorizar estorno?</h3>
+        <p id="modal-admin-estorno-info" style="margin:0 0 16px;font-size:13px;color:#64748b;"></p>
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Observação (opcional)</label>
+        <textarea id="modal-admin-estorno-obs" rows="2" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:14px;resize:vertical;" placeholder="Observação do admin..."></textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" onclick="fecharModalAdminEstorno()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
+            <button type="button" id="btn-rejeitar-estorno" onclick="decidirEstorno('rejeitar')" style="padding:8px 18px;border:1px solid #ef4444;border-radius:8px;background:#fff;color:#ef4444;cursor:pointer;font-size:14px;font-weight:600;">Rejeitar</button>
+            <button type="button" id="btn-aprovar-estorno" onclick="decidirEstorno('aprovar')" style="padding:8px 18px;border:none;border-radius:8px;background:#16a34a;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aprovar</button>
+        </div>
+    </div>
+</div>
+
+<div id="romaneio-overlay" class="romaneio-overlay"></div>
 <div id="expedicao-toast" class="exp-toast"></div>
 {% endblock %}
 
@@ -322,9 +413,11 @@ function updateFotoPreview() {
 }
 
 function renderHistorico(data) {
+    cacheRegistros(data);
     document.getElementById("resumo-total").textContent = data?.resumo?.total || 0;
     document.getElementById("resumo-pendentes").textContent = data?.resumo?.pendentes || 0;
     document.getElementById("resumo-expedidos").textContent = data?.resumo?.expedidos || 0;
+    document.getElementById("resumo-aguardando").textContent = data?.resumo?.aguardando_estorno || 0;
     const registros = data?.registros || [];
     if (!registros.length) {
         historicoLista.innerHTML = `<div class="empty-state"><strong>Nenhuma conferência encontrada.</strong><span>Abra a primeira conferência acima ou ajuste os filtros.</span></div>`;
@@ -332,7 +425,8 @@ function renderHistorico(data) {
     }
     historicoLista.innerHTML = registros.map(registro => {
         const pending = registro.status_slug === "pendente_expedicao";
-        const badgeClass = pending ? "pending" : "done";
+        const aguardando = registro.status_slug === "aguardando_estorno";
+        const badgeClass = pending ? "pending" : (aguardando ? "pending" : "done");
         const fotosHtml = (registro.fotos || []).length
             ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `<a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>`).join("")}</div>`
             : `<div class="exp-caption">Sem fotos anexadas.</div>`;
@@ -350,13 +444,20 @@ function renderHistorico(data) {
                     <div class="exp-record-field"><span>Cliente</span><strong>${registro.nome_cliente || "Não informado"}</strong></div>
                     <div class="exp-record-field"><span>Transportadora</span><strong>${registro.transportadora || "Não informada"}</strong></div>
                     <div class="exp-record-field"><span>Placa</span><strong>${registro.placa || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Motorista</span><strong>${registro.motorista || "Não informado"}</strong></div>
+                    <div class="exp-record-field"><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
                 </div>
                 ${fotosHtml}
                 <div class="exp-record-actions">
-                    <div class="exp-caption">${registro.expedido_at ? `Atualizado para expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}.` : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`}</div>
+                    <div class="exp-caption">${registro.expedido_at ? `Atualizado para expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}.` : (aguardando ? `Estorno solicitado por ${registro.estorno_pendente?.solicitante || "---"} em ${registro.estorno_pendente?.data || "---"}: ${registro.estorno_pendente?.motivo || ""}` : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`)}</div>
                     <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                        <button class="${pending ? "exp-btn" : "exp-btn-secondary"}" data-action="status" data-id="${registro.id}" data-status-slug="${pending ? "expedido" : "pendente_expedicao"}" data-status-label="${pending ? "Expedido" : "Pendente de expedição"}">${pending ? "Alterar status para expedido" : "Alterar status para pendente"}</button>
-                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Excluir conferência</button>` : ""}
+                        ${pending ? `<button class="exp-btn" data-action="completar" data-id="${registro.id}" data-orcamento="${registro.orcamento}" data-nf="${registro.numero_nf}" data-cliente="${registro.nome_cliente}" data-transportadora="${registro.transportadora || ''}" data-placa="${registro.placa || ''}" data-motorista="${registro.motorista || ''}" data-has-fotos="${(registro.fotos || []).length ? '1' : ''}" data-was-expedido="${registro.expedido_at ? '1' : ''}">${(registro.fotos || []).length ? 'Editar conferência' : 'Completar conferência'}</button>` : ""}
+                        ${aguardando ? "" : (pending ? `<button class="exp-btn" data-action="status" data-id="${registro.id}" data-status-slug="expedido" data-status-label="Expedido">Marcar expedido</button>` : "")}
+                        ${(!pending && !aguardando) ? (isAdmin ? `<button class="exp-btn-secondary" data-action="status" data-id="${registro.id}" data-status-slug="pendente_expedicao" data-status-label="Pendente de expedição">Voltar para pendente</button>` : `<button class="exp-btn-secondary" style="border-color:#ef4444;color:#ef4444;" data-action="solicitar-estorno" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Solicitar estorno</button>`) : ""}
+                        ${aguardando && isAdmin && registro.estorno_pendente ? `<button class="exp-btn" style="background:#16a34a;" data-action="admin-estorno" data-estorno-id="${registro.estorno_pendente.id}" data-orcamento="${registro.orcamento}" data-motivo="${registro.estorno_pendente.motivo}" data-solicitante="${registro.estorno_pendente.solicitante}">Aprovar / Rejeitar estorno</button>` : ""}
+                        ${aguardando && !isAdmin ? `<span style="font-size:13px;color:#f59e0b;font-weight:600;">&#9200; Aguardando aprovação do administrador</span>` : ""}
+                        <button class="exp-btn-secondary" data-action="romaneio" data-id="${registro.id}">Romaneio</button>
+                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Excluir</button>` : ""}
                     </div>
                 </div>
             </article>
@@ -388,7 +489,11 @@ async function atualizarStatus(id, statusSlug, statusLabel) {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Não foi possível atualizar o status.");
-        showToast(`Conferência atualizada para ${statusLabel}.`);
+        if (data.aguardando_admin) {
+            showToast("Solicitação de estorno enviada. Aguarde aprovação do admin.");
+        } else {
+            showToast(`Conferência atualizada para ${statusLabel}.`);
+        }
         loadHistorico();
     } catch (error) {
         showToast(error.message, "error");
@@ -470,11 +575,408 @@ historicoLista.addEventListener("click", event => {
         return;
     }
 
+    const romaneioButton = event.target.closest("[data-action='romaneio']");
+    if (romaneioButton) {
+        abrirRomaneio(romaneioButton.dataset.id);
+        return;
+    }
+
     const deleteButton = event.target.closest("[data-action='delete']");
     if (deleteButton) {
         excluirConferencia(deleteButton.dataset.id, deleteButton.dataset.orcamento);
+        return;
+    }
+
+    const estornoButton = event.target.closest("[data-action='solicitar-estorno']");
+    if (estornoButton) {
+        abrirModalEstorno(estornoButton.dataset.id, estornoButton.dataset.orcamento);
+        return;
+    }
+
+    const adminEstornoButton = event.target.closest("[data-action='admin-estorno']");
+    if (adminEstornoButton) {
+        abrirModalAdminEstorno(
+            adminEstornoButton.dataset.estornoId,
+            adminEstornoButton.dataset.orcamento,
+            adminEstornoButton.dataset.motivo,
+            adminEstornoButton.dataset.solicitante,
+        );
+        return;
+    }
+
+    const completarButton = event.target.closest("[data-action='completar']");
+    if (completarButton) {
+        abrirCompletarConferencia(
+            completarButton.dataset.id,
+            completarButton.dataset.orcamento,
+            completarButton.dataset.nf,
+            completarButton.dataset.cliente,
+            completarButton.dataset.transportadora,
+            completarButton.dataset.placa,
+            completarButton.dataset.motorista,
+            completarButton.dataset.hasFotos,
+            completarButton.dataset.wasExpedido,
+        );
     }
 });
-document.addEventListener("DOMContentLoaded", loadHistorico);
+
+/* ========== ESTORNO ========== */
+let estornoConferenciaId = null;
+let adminEstornoId = null;
+
+function abrirModalEstorno(id, orcamento) {
+    estornoConferenciaId = id;
+    document.getElementById("modal-estorno-info").textContent = `Orçamento ${orcamento || id}. A solicitação será enviada para o administrador aprovar.`;
+    document.getElementById("modal-estorno-motivo").value = "";
+    document.getElementById("modal-estorno").style.display = "flex";
+}
+
+function fecharModalEstorno() {
+    document.getElementById("modal-estorno").style.display = "none";
+    estornoConferenciaId = null;
+}
+
+async function confirmarEstorno() {
+    const motivo = document.getElementById("modal-estorno-motivo").value.trim();
+    if (!motivo) {
+        showToast("Informe o motivo do estorno.", "error");
+        return;
+    }
+    const btn = document.getElementById("btn-confirmar-estorno");
+    btn.disabled = true;
+    btn.textContent = "Enviando...";
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${estornoConferenciaId}/status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status_slug: "pendente_expedicao", motivo }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível solicitar o estorno.");
+        if (data.aguardando_admin) {
+            showToast("Solicitação de estorno enviada. Aguarde aprovação do administrador.");
+        } else {
+            showToast("Estorno realizado com sucesso.");
+        }
+        fecharModalEstorno();
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Solicitar estorno";
+    }
+}
+
+function abrirModalAdminEstorno(estornoId, orcamento, motivo, solicitante) {
+    adminEstornoId = estornoId;
+    document.getElementById("modal-admin-estorno-info").innerHTML = `<strong>Orçamento:</strong> ${orcamento || "---"}<br><strong>Solicitante:</strong> ${solicitante || "---"}<br><strong>Motivo:</strong> ${motivo || "---"}`;
+    document.getElementById("modal-admin-estorno-obs").value = "";
+    document.getElementById("modal-admin-estorno").style.display = "flex";
+}
+
+function fecharModalAdminEstorno() {
+    document.getElementById("modal-admin-estorno").style.display = "none";
+    adminEstornoId = null;
+}
+
+async function decidirEstorno(acao) {
+    const observacao = document.getElementById("modal-admin-estorno-obs").value.trim();
+    const btnA = document.getElementById("btn-aprovar-estorno");
+    const btnR = document.getElementById("btn-rejeitar-estorno");
+    btnA.disabled = true;
+    btnR.disabled = true;
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/estorno/${adminEstornoId}/${acao}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ observacao }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Falha ao processar estorno.");
+        showToast(acao === "aprovar" ? "Estorno aprovado. Conferência voltou para pendente." : "Estorno rejeitado. Conferência permanece expedida.");
+        fecharModalAdminEstorno();
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    } finally {
+        btnA.disabled = false;
+        btnR.disabled = false;
+    }
+}
+
+/* ========== BUSCA RÁPIDA DE NF ========== */
+const buscaNfInput = document.getElementById("busca-nf-input");
+const btnBuscarNf = document.getElementById("btn-buscar-nf");
+const buscaNfResultado = document.getElementById("busca-nf-resultado");
+
+async function buscarNfRapida() {
+    const numero = (buscaNfInput.value || "").replace(/\D/g, "").trim();
+    if (!numero) {
+        buscaNfInput.focus();
+        return;
+    }
+    btnBuscarNf.disabled = true;
+    btnBuscarNf.textContent = "Buscando...";
+    buscaNfResultado.style.display = "block";
+    buscaNfResultado.innerHTML = `<div style="padding:10px;color:#64748b;">Buscando NF ${numero} na Consyste...</div>`;
+
+    try {
+        const response = await fetch("/api/expedicao/conferencia-simples/buscar-nf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ numero_nf: numero }),
+        });
+        const data = await response.json();
+
+        if (data.error) {
+            buscaNfResultado.innerHTML = `<div class="empty-state" style="padding:12px;"><strong style="color:#ef4444;">${data.error}</strong></div>`;
+            return;
+        }
+
+        if (data.ja_existe) {
+            buscaNfResultado.innerHTML = `
+                <div style="padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #f59e0b;">
+                    <strong style="color:#b45309;">⚠ NF ${numero} já possui conferência</strong>
+                    <p style="margin:6px 0 0;font-size:13px;color:#78350f;">ID: ${data.conferencia_id} — Status: ${data.status || "---"}</p>
+                </div>`;
+            return;
+        }
+
+        if (data.encontrada && data.conferencia_criada) {
+            buscaNfResultado.innerHTML = `
+                <div style="padding:12px;background:#d1fae5;border-radius:8px;border:1px solid #10b981;">
+                    <strong style="color:#065f46;">✅ Conferência criada para NF ${numero}</strong>
+                    <p style="margin:6px 0 0;font-size:13px;color:#064e3b;">Status: Pendente de expedição. Acesse o histórico abaixo para completar.</p>
+                </div>`;
+            buscaNfInput.value = "";
+            loadHistorico();
+            return;
+        }
+
+        if (!data.encontrada) {
+            /* NF não encontrada - oferecer opções */
+            buscaNfResultado.innerHTML = `
+                <div style="padding:14px;background:#fef2f2;border-radius:8px;border:1px solid #ef4444;">
+                    <strong style="color:#991b1b;">NF ${numero} não encontrada na Consyste</strong>
+                    <p style="margin:8px 0 12px;font-size:13px;color:#7f1d1d;">O que deseja fazer?</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="exp-btn" onclick="incluirManualComNf('${numero}')" style="background:#2563eb;">Incluir manualmente</button>
+                        <button class="exp-btn-secondary" onclick="corrigirNumeroNf()" style="min-height:36px;">Corrigir número</button>
+                    </div>
+                </div>`;
+            return;
+        }
+    } catch (error) {
+        buscaNfResultado.innerHTML = `<div class="empty-state" style="padding:12px;"><strong style="color:#ef4444;">Erro: ${error.message}</strong></div>`;
+    } finally {
+        btnBuscarNf.disabled = false;
+        btnBuscarNf.textContent = "Buscar";
+    }
+}
+
+function incluirManualComNf(numero) {
+    /* Preenche o formulário manual e rola até ele */
+    const nfField = document.getElementById("numero_nf");
+    if (nfField) nfField.value = numero;
+    buscaNfResultado.style.display = "none";
+    buscaNfInput.value = "";
+    const form = document.getElementById("expedicao-form");
+    if (form) form.scrollIntoView({ behavior: "smooth", block: "center" });
+    const orcField = document.getElementById("orcamento");
+    if (orcField) orcField.focus();
+    showToast(`NF ${numero} preenchida no formulário. Complete os dados e salve.`);
+}
+
+function corrigirNumeroNf() {
+    buscaNfResultado.style.display = "none";
+    buscaNfInput.value = "";
+    buscaNfInput.focus();
+}
+
+btnBuscarNf.addEventListener("click", buscarNfRapida);
+buscaNfInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); buscarNfRapida(); }
+});
+
+
+
+/* ========== ROMANEIO ========== */
+let romaneioRegistros = [];
+
+function cacheRegistros(data) {
+    romaneioRegistros = data?.registros || [];
+}
+
+function abrirRomaneio(id) {
+    const reg = romaneioRegistros.find(r => String(r.id) === String(id));
+    if (!reg) { showToast("Conferência não encontrada.", "error"); return; }
+    const overlay = document.getElementById("romaneio-overlay");
+    const fotosHtml = (reg.fotos || []).length
+        ? `<div class="romaneio-fotos"><h3>Fotos da conferência</h3><div class="romaneio-fotos-grid">${reg.fotos.map(f => `<img src="${f.url}" alt="${f.nome}">`).join("")}</div></div>`
+        : "";
+    overlay.innerHTML = `
+        <div class="romaneio-sheet">
+            <div class="romaneio-toolbar">
+                <button onclick="window.print()" style="background:#0f62c9;color:#fff;border:none;">Imprimir</button>
+                <button onclick="document.getElementById('romaneio-overlay').classList.remove('show')" style="background:#fff;border:1px solid #d1d5db;color:#374151;">Fechar</button>
+            </div>
+            <div class="romaneio-content">
+                <div class="romaneio-header">
+                    <h2>Romaneio de Expedição</h2>
+                    <p>Conferência #${reg.id} · ${reg.data_conferencia || "---"}</p>
+                </div>
+                <div class="romaneio-grid">
+                    <div class="romaneio-cell"><label>Orçamento</label><span>${reg.orcamento || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Nota Fiscal</label><span>${reg.numero_nf || "Não informada"}</span></div>
+                    <div class="romaneio-cell full"><label>Cliente</label><span>${reg.nome_cliente || "Não informado"}</span></div>
+                    <div class="romaneio-cell"><label>Transportadora</label><span>${reg.transportadora || "Não informada"}</span></div>
+                    <div class="romaneio-cell"><label>Placa</label><span>${reg.placa || "Não informada"}</span></div>
+                    <div class="romaneio-cell"><label>Motorista</label><span>${reg.motorista || "Não informado"}</span></div>
+                    <div class="romaneio-cell"><label>Conferente</label><span>${reg.conferente || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Status</label><span>${reg.status || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Origem NF</label><span>${reg.nf_origem || "Manual"}</span></div>
+                    ${reg.expedido_at ? `<div class="romaneio-cell"><label>Expedido em</label><span>${reg.expedido_at}</span></div><div class="romaneio-cell"><label>Expedido por</label><span>${reg.expedido_by || "---"}</span></div>` : `<div class="romaneio-cell"><label>Origem cliente</label><span>${reg.cliente_origem || "Manual"}</span></div>`}
+                    ${reg.consyste_chave ? `<div class="romaneio-cell full"><label>Chave de acesso</label><span style="font-size:12px;word-break:break-all;">${reg.consyste_chave}</span></div>` : ""}
+                </div>
+                ${fotosHtml}
+                <div class="romaneio-footer">
+                    <div><div class="sig-line">Conferente</div></div>
+                    <div><div class="sig-line">Motorista / Transportadora</div></div>
+                </div>
+            </div>
+        </div>
+    `;
+    overlay.classList.add("show");
+    overlay.addEventListener("click", function handler(e) {
+        if (e.target === overlay) { overlay.classList.remove("show"); overlay.removeEventListener("click", handler); }
+    });
+}
+
+/* ========== COMPLETAR CONFERÊNCIA (modal inline) ========== */
+let completarConferenciaId = null;
+
+function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, placa, motorista, hasFotos, wasExpedido) {
+    completarConferenciaId = id;
+    const isEditing = !!hasFotos;
+    const wasExp = !!wasExpedido;
+    const tituloForm = isEditing ? 'Editar conferência' : 'Completar conferência';
+    const fotoLabel = isEditing ? 'Fotos adicionais (opcional)' : 'Fotos da conferência *';
+    const html = `
+        <article class="exp-record" id="completar-form-wrapper" style="border:2px solid rgba(15,98,201,0.4);background:rgba(247,251,255,0.98);">
+            <div class="exp-record-head">
+                <div class="exp-record-title">
+                    <strong>${tituloForm} #${id}</strong>
+                    <span>NF ${nf || "Não informada"} · ${cliente || "Cliente não informado"}</span>
+                </div>
+            </div>
+            <form id="completar-form">
+                <div class="exp-form-grid">
+                    <div class="exp-field">
+                        <label for="compl-orcamento">Orçamento${wasExp ? ' (não editável)' : ''}</label>
+                        <input id="compl-orcamento" name="orcamento" type="text" value="${orcamento || ""}" placeholder="Número do orçamento" ${wasExp ? 'readonly' : ''}>
+                    </div>
+                    <div class="exp-field">
+                        <label for="compl-nf">Nº NF${wasExp ? ' (não editável)' : ' (corrigir se necessário)'}</label>
+                        <input id="compl-nf" name="numero_nf" type="text" value="${nf || ""}" placeholder="Manter ou corrigir" ${wasExp ? 'readonly' : ''}>
+                    </div>
+                    <div class="exp-field">
+                        <label for="compl-cliente">Nome do cliente</label>
+                        <input id="compl-cliente" name="nome_cliente" type="text" value="${cliente || ""}" placeholder="Corrigir razão social se precisar">
+                    </div>
+                    <div class="exp-field">
+                        <label for="compl-transportadora">Transportadora</label>
+                        <input id="compl-transportadora" name="transportadora" type="text" value="${transportadora || ""}" placeholder="Opcional">
+                    </div>
+                    <div class="exp-field">
+                        <label for="compl-placa">Placa</label>
+                        <input id="compl-placa" name="placa" type="text" value="${placa || ""}" placeholder="Opcional">
+                    </div>
+                    <div class="exp-field">
+                        <label for="compl-motorista">Motorista</label>
+                        <input id="compl-motorista" name="motorista" type="text" value="${motorista || ""}" placeholder="Opcional">
+                    </div>
+                    <div class="exp-field full">
+                        <label>${fotoLabel}</label>
+                        <div class="exp-upload" style="min-height:100px;">
+                            <div>
+                                <strong>Tire a foto ou escolha da galeria</strong>
+                                <div class="exp-upload-actions" style="margin-top:10px;">
+                                    <button class="exp-btn" type="button" id="compl-btn-camera">Tirar foto</button>
+                                    <button class="exp-btn-secondary" type="button" id="compl-btn-galeria">Escolher fotos</button>
+                                </div>
+                                <input id="compl-fotos-camera" class="exp-file-input-hidden" type="file" accept="image/*" capture="environment">
+                                <input id="compl-fotos-galeria" class="exp-file-input-hidden" type="file" accept="image/*" multiple>
+                            </div>
+                        </div>
+                        <div id="compl-fotos-feedback" class="exp-subtle">Nenhuma foto selecionada.</div>
+                        <div id="compl-fotos-preview" class="exp-preview-grid"></div>
+                    </div>
+                </div>
+                <div class="exp-actions" style="margin-top:14px;">
+                    <button class="exp-btn-secondary" type="button" id="compl-cancelar">Cancelar</button>
+                    <button class="exp-btn" type="submit" id="compl-salvar">Salvar conferência</button>
+                </div>
+            </form>
+        </article>
+    `;
+    // Insert at top of historico list
+    const wrapper = document.createElement("div");
+    wrapper.id = "completar-overlay";
+    wrapper.innerHTML = html;
+    historicoLista.prepend(wrapper);
+
+    // Wire up the completar form
+    let complFotos = [];
+    const complForm = document.getElementById("completar-form");
+    const complCamera = document.getElementById("compl-fotos-camera");
+    const complGaleria = document.getElementById("compl-fotos-galeria");
+    const complPreview = document.getElementById("compl-fotos-preview");
+    const complFeedback = document.getElementById("compl-fotos-feedback");
+
+    function updateComplPreview() {
+        complPreview.innerHTML = "";
+        complFeedback.textContent = complFotos.length ? `${complFotos.length} foto(s) pronta(s).` : "Nenhuma foto selecionada.";
+        complFotos.forEach(file => {
+            const url = URL.createObjectURL(file);
+            const card = document.createElement("div");
+            card.className = "exp-preview-card";
+            card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
+            complPreview.appendChild(card);
+        });
+    }
+
+    document.getElementById("compl-btn-camera").addEventListener("click", () => complCamera.click());
+    document.getElementById("compl-btn-galeria").addEventListener("click", () => complGaleria.click());
+    complCamera.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
+    complGaleria.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
+    document.getElementById("compl-cancelar").addEventListener("click", () => { document.getElementById("completar-overlay")?.remove(); });
+
+    complForm.addEventListener("submit", async e => {
+        e.preventDefault();
+        if (!complFotos.length && !isEditing) { showToast("Inclua pelo menos uma foto.", "error"); return; }
+        const btn = document.getElementById("compl-salvar");
+        btn.disabled = true; btn.textContent = "Salvando...";
+        try {
+            const fd = new FormData(complForm);
+            complFotos.forEach(f => fd.append("fotos", f));
+            const resp = await fetch(`/api/expedicao/conferencia-simples/${completarConferenciaId}/completar`, { method: "POST", body: fd });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || "Erro ao completar.");
+            showToast("Conferência completada com sucesso.");
+            document.getElementById("completar-overlay")?.remove();
+            loadHistorico();
+        } catch (err) {
+            showToast(err.message, "error");
+        } finally {
+            btn.disabled = false; btn.textContent = "Salvar conferência";
+        }
+    });
+
+    // Scroll to the form
+    document.getElementById("completar-form-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.addEventListener("DOMContentLoaded", () => { loadHistorico(); });
 </script>
 {% endblock %}

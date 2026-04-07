@@ -307,9 +307,12 @@ class ExpedicaoConferenciaSimples(db.Model):
     numero_nf = db.Column(db.String(40), index=True)
     nome_cliente = db.Column(db.String(160))
     cliente_origem = db.Column(db.String(20), nullable=False, default="Manual")
+    nf_origem = db.Column(db.String(20), nullable=False, default="Manual")  # Manual | Consyste (quem preencheu a NF)
     consyste_document_id = db.Column(db.String(120), index=True)
+    consyste_chave = db.Column(db.String(50), index=True)
     transportadora = db.Column(db.String(160))
     placa = db.Column(db.String(20))
+    motorista = db.Column(db.String(160))
     status = db.Column(db.String(30), nullable=False, default="Pendente de expedição", index=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
@@ -327,6 +330,23 @@ class ExpedicaoConferenciaSimplesFoto(db.Model):
     )
     file_name = db.Column(db.String(260), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ExpedicaoConferenciaSimplesEstorno(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conferencia_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_conferencia_simples.id"),
+        nullable=False,
+        index=True,
+    )
+    solicitante = db.Column(db.String(100), nullable=False)
+    motivo = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(30), nullable=False, default="Pendente")  # Pendente | Aprovado | Rejeitado
+    admin_usuario = db.Column(db.String(100))
+    admin_observacao = db.Column(db.String(500))
+    resolvido_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
@@ -418,6 +438,21 @@ class WMSIntegracaoEvento(db.Model):
     ultima_erro = db.Column(db.String(500))
     processado_em = db.Column(db.DateTime)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class WMSInventreeVinculo(db.Model):
+    """Mapa entre entidades locais do WMS e registros remotos do InvenTree."""
+    id = db.Column(db.Integer, primary_key=True)
+    entidade_tipo = db.Column(db.String(40), nullable=False, index=True)  # sku|item_wms|localizacao|deposito
+    entidade_chave = db.Column(db.String(120), nullable=False, index=True)
+    inventree_tipo = db.Column(db.String(40), nullable=False, index=True)  # part|stock_item|location
+    inventree_id = db.Column(db.Integer, nullable=False, index=True)
+    inventree_codigo = db.Column(db.String(120), index=True)
+    inventree_path = db.Column(db.String(300))
+    metadata_json = db.Column(db.Text)
+    sincronizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    __table_args__ = (db.UniqueConstraint("entidade_tipo", "entidade_chave", name="_wms_inventree_vinculo_uc"),)
 
 
 class WMSSkuMestre(db.Model):
