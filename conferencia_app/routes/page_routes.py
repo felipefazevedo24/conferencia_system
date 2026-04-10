@@ -7,6 +7,7 @@ from ..auth import get_effective_permissions, login_required, permission_require
 from ..extensions import db
 from ..models import (
     ActiveSession,
+    AgendamentoSolicitacao,
     BoletoContaReceber,
     ConsertoBaixa,
     ConsertoEstoque,
@@ -178,17 +179,45 @@ HOME_MODULES = [
         "metric_key": "wms_pendente",
     },
     {
+        "id": "agendamento_solicitacao",
+        "title": "Solicitar Coleta ou Entrega",
+        "subtitle": "Abertura rapida",
+        "description": "Abra uma demanda em poucos passos e acompanhe o andamento sem entrar no planner da logistica.",
+        "href": "/logistica/solicitar-transporte",
+        "icon": "fa-file-circle-plus",
+        "permission": "PAGE_LOGISTICA_SOLICITACAO",
+        "section": "Logistica",
+        "tone": "slate",
+        "priority": 88,
+        "keywords": ["solicitacao", "coleta", "entrega", "pedido", "transporte"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
+        "id": "agendamento_veiculos",
+        "title": "Gestao de Rotas",
+        "subtitle": "Planner logistico",
+        "description": "Gerencie o Kanban da logistica, aloque motorista e veiculo, acompanhe agenda e cadastros.",
+        "href": "/logistica/agendamento-veiculos",
+        "icon": "fa-truck-fast",
+        "permission": "PAGE_LOGISTICA_AGENDAMENTO",
+        "section": "LogÃ­stica",
+        "tone": "slate",
+        "priority": 87,
+        "keywords": ["agendamento", "kanban", "veiculo", "coleta", "entrega"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
         "id": "expedicao_conferencia",
-        "title": "Conferência de Expedição",
+        "title": "Registro de Expedição",
         "subtitle": "Saída",
-        "description": "Valide itens antes do embarque e reduza falhas no despacho.",
+        "description": "Registre a saída, vincule a NF e mantenha a expedição rastreável.",
         "href": "/expedicao/conferencia",
         "icon": "fa-clipboard-check",
         "permission": "PAGE_EXPEDICAO_CONFERENCIA",
         "section": "Logística",
         "tone": "slate",
         "priority": 86,
-        "keywords": ["expedicao", "saida", "conferencia", "embarque"],
+        "keywords": ["expedicao", "saida", "registro", "embarque"],
         "metric_key": "expedicao_aberta",
     },
     {
@@ -347,6 +376,7 @@ def _build_home_metrics() -> dict:
         "conserto_aberto": 0,
         "conserto_pendente": 0,
         "wms_pendente": 0,
+        "agendamento_ativo": 0,
         "expedicao_aberta": 0,
         "boletos_gerados": 0,
         "sessoes_ativas": 0,
@@ -386,6 +416,11 @@ def _build_home_metrics() -> dict:
             .count()
         )
         metrics["wms_pendente"] = ItemWMS.query.filter_by(status="Pendente Enderecamento", ativo=True).count()
+        metrics["agendamento_ativo"] = (
+            AgendamentoSolicitacao.query
+            .filter(AgendamentoSolicitacao.status.notin_(["Concluida", "Cancelada"]))
+            .count()
+        )
         metrics["expedicao_aberta"] = (
             ExpedicaoConferencia.query
             .filter(ExpedicaoConferencia.status.in_(["Aberta", "PendenteDecisao"]))
@@ -465,6 +500,7 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
         "historico": _fmt_metric(value, "sessão ativa", "sessões ativas"),
         "auditoria_acessos": _fmt_metric(value, "sessão ativa", "sessões ativas"),
     }
+    mapping["agendamento_veiculos"] = _fmt_metric(value, "roteiro ativo", "roteiros ativos")
     return mapping.get(module_id, _fmt_metric(value, "item", "itens"))
 
 
@@ -668,11 +704,39 @@ def wms_governanca_admin_page():
     return render_template("admin_wms_governanca.html", user=session["username"])
 
 
+@page_bp.route("/wms/estoque")
+@permission_required("PAGE_WMS")
+def wms_estoque_tempo_real_page():
+    return render_template("estoque_tempo_real.html", user=session["username"])
+
+
 @page_bp.route("/expedicao/conferencia")
 @permission_required("PAGE_EXPEDICAO_CONFERENCIA")
 def expedicao_conferencia_page():
     return render_template(
         "expedicao_conferencia_simples.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
+@page_bp.route("/logistica/solicitar-transporte")
+@permission_required("PAGE_LOGISTICA_SOLICITACAO")
+def solicitar_transporte_page():
+    return render_template(
+        "agendamento_solicitacao.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
+@page_bp.route("/logistica/agendamento-veiculos")
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def agendamento_veiculos_page():
+    return render_template(
+        "agendamento_veiculos.html",
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",

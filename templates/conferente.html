@@ -114,6 +114,46 @@
             display: flex; justify-content: space-between; align-items: center; gap: 16px;
         }
         .conf-header h3 { margin: 0; font-family: "Space Grotesk", "IBM Plex Sans", sans-serif; font-size: 22px; text-transform: none; letter-spacing: -0.03em; font-weight: 800; }
+        .conf-progress {
+            padding: 14px 26px 18px;
+            border-bottom: 1px solid #edf2f7;
+            background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+        }
+        .conf-progress-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            font-weight: 800;
+        }
+        .conf-progress-count {
+            color: #0f62c9;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0;
+        }
+        .conf-progress-track {
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #dbe7f3;
+            border: 1px solid #cfdeeb;
+        }
+        .conf-progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            transition: width 0.25s ease;
+            background: linear-gradient(90deg, #0f62c9 0%, #1c86f2 100%);
+        }
+        .conf-progress-fill.done {
+            background: linear-gradient(90deg, #196f46 0%, #1f9d62 100%);
+        }
 
         .erp-table { width: 100%; border-collapse: collapse; }
         .erp-table th { 
@@ -234,6 +274,16 @@
                 <button class="btn-sap btn-danger" onclick="abrirModalDevolucao()">
                     <i class="fas fa-undo-alt"></i> Recusar Mercadoria
                 </button>
+            </div>
+
+            <div class="conf-progress">
+                <div class="conf-progress-head">
+                    <span>Progresso da contagem</span>
+                    <span class="conf-progress-count" id="conf-progress-count">0 / 0</span>
+                </div>
+                <div class="conf-progress-track">
+                    <div class="conf-progress-fill" id="conf-progress-fill"></div>
+                </div>
             </div>
 
             <div style="overflow-x: auto;">
@@ -643,6 +693,23 @@
                 </td>
             </tr>
         `).join('');
+
+        atualizarProgressoConferencia();
+    }
+
+    function atualizarProgressoConferencia() {
+        const inputs = Array.from(document.querySelectorAll('.qtd-input'));
+        const total = inputs.length;
+        const preenchidos = inputs.filter((input) => String(input.value || '').trim() !== '').length;
+        const percentual = total > 0 ? Math.round((preenchidos / total) * 100) : 0;
+
+        const countEl = document.getElementById('conf-progress-count');
+        const fillEl = document.getElementById('conf-progress-fill');
+        if (!countEl || !fillEl) return;
+
+        countEl.innerText = `${preenchidos} / ${total}`;
+        fillEl.style.width = `${percentual}%`;
+        fillEl.classList.toggle('done', total > 0 && preenchidos === total);
     }
 
     async function validar() {
@@ -795,6 +862,7 @@
         }
         const inputs = document.querySelectorAll('.qtd-input');
         document.getElementById('btn-finalizar').disabled = Array.from(inputs).some(i => i.value === "");
+        atualizarProgressoConferencia();
     }
 
     function abrirModalDevolucao() {

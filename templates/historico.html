@@ -146,6 +146,16 @@
                 </select>
             </div>
             <div class="filter-group">
+                <span class="filter-label">Divergência</span>
+                <select id="filtro-divergencia" class="filtro-curto" onchange="carregar()">
+                    <option value="">Todas</option>
+                    <option value="Sim">Com divergência</option>
+                    <option value="Não">Sem divergência</option>
+                    <option value="Ativa">Divergência ativa</option>
+                    <option value="Resolvida">Divergência resolvida</option>
+                </select>
+            </div>
+            <div class="filter-group">
                 <span class="filter-label">De:</span>
                 <input id="filtro-data-ini" type="date" class="filtro-curto" onchange="carregar()" />
             </div>
@@ -243,12 +253,14 @@
         const fornecedor = document.getElementById('filtro-fornecedor')?.value?.trim();
         const conferente = document.getElementById('filtro-conferente')?.value?.trim();
         const status = document.getElementById('filtro-status')?.value;
+        const divergencia = document.getElementById('filtro-divergencia')?.value;
         const dataIni = document.getElementById('filtro-data-ini')?.value;
         const dataFim = document.getElementById('filtro-data-fim')?.value;
         if (nota) params.set('nota', nota);
         if (fornecedor) params.set('fornecedor', fornecedor);
         if (conferente) params.set('conferente', conferente);
         if (status) params.set('status', status);
+        if (divergencia) params.set('divergencia', divergencia);
         if (dataIni) params.set('data_ini', dataIni);
         if (dataFim) params.set('data_fim', dataFim);
         return params.toString();

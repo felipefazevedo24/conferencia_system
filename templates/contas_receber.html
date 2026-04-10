@@ -90,6 +90,33 @@
     .pill.warn { background: #fff6e5; color: #a46518; border: 1px solid #f4dab0; }
     .mono { font-family: Consolas, monospace; font-size: 11px; }
 
+    /* Modal boleto */
+    .modal-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+        background: #fff;
+        border-radius: 18px;
+        padding: 24px;
+        width: 420px;
+        max-width: 95vw;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+    }
+    .modal-box h3 { margin: 0 0 16px; font-size: 16px; font-weight: 800; color: #22313f; }
+    .modal-box label { display: block; font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+    .modal-box input {
+        width: 100%; border: 1px solid #cbd5e1; border-radius: 12px;
+        padding: 10px 12px; font-size: 13px; background: #fbfdff; margin-bottom: 12px;
+    }
+    .modal-box input:focus { outline: none; border-color: #95a5ff; box-shadow: 0 0 0 4px rgba(107,124,255,0.12); background: #fff; }
+    .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
     @media (max-width: 980px) {
         .cr-row { grid-template-columns: 1fr; }
     }
@@ -144,6 +171,26 @@
         </div>
     </div>
 </div>
+<!-- Modal gerar boleto -->
+<div class="modal-overlay" id="modalBoleto">
+    <div class="modal-box">
+        <h3><i class="fas fa-barcode"></i> Gerar Boleto</h3>
+        <p style="font-size:12px;color:#556575;margin-bottom:14px;">Informe os dados do pagador para que ele possa consultar o boleto na página pública.</p>
+        <input type="hidden" id="modal-nota" />
+        <div>
+            <label for="modal-cpf-cnpj">CPF ou CNPJ do Pagador *</label>
+            <input type="text" id="modal-cpf-cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" inputmode="numeric" />
+        </div>
+        <div>
+            <label for="modal-nome">Nome / Razão Social do Pagador</label>
+            <input type="text" id="modal-nome" placeholder="Ex: Empresa XYZ Ltda" maxlength="200" />
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cr" onclick="fecharModal()">Cancelar</button>
+            <button class="btn-cr primary" onclick="confirmarGerarBoleto()">Gerar Boleto</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -185,7 +232,7 @@
             const badge = item.boleto_gerado
                 ? '<span class="pill ok">Gerado</span>'
                 : '<span class="pill warn">Pendente</span>';
-            const banco = boleto ? boleto.banco : 'BOFA - Bank of America';
+            const banco = boleto ? boleto.banco : 'Banco do Brasil';
             const detalhesBoleto = boleto
                 ? `<div class="mono">Nosso numero: ${boleto.nosso_numero}</div><div class="mono">Linha: ${boleto.linha_digitavel}</div>`
                 : '<div class="mono">-</div>';
@@ -225,20 +272,61 @@
         }
     }
 
-    async function gerarBoleto(numeroNota) {
+    function gerarBoleto(numeroNota) {
         if (!numeroNota) return;
+        document.getElementById('modal-nota').value = numeroNota;
+        document.getElementById('modal-cpf-cnpj').value = '';
+        document.getElementById('modal-nome').value = '';
+        document.getElementById('modalBoleto').classList.add('show');
+        document.getElementById('modal-cpf-cnpj').focus();
+    }
+
+    function fecharModal() {
+        document.getElementById('modalBoleto').classList.remove('show');
+    }
+
+    // Mascara CPF/CNPJ no modal
+    document.getElementById('modal-cpf-cnpj').addEventListener('input', function() {
+        let v = this.value.replace(/\D/g, '');
+        if (v.length <= 11) {
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+            v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        } else {
+            v = v.substring(0, 14);
+            v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+            v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+            v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+            v = v.replace(/(\d{4})(\d)/, '$1-$2');
+        }
+        this.value = v;
+    });
+
+    async function confirmarGerarBoleto() {
+        const nota = document.getElementById('modal-nota').value;
+        const cpfCnpjRaw = document.getElementById('modal-cpf-cnpj').value;
+        const cpfCnpj = cpfCnpjRaw.replace(/\D/g, '');
+        const nome = document.getElementById('modal-nome').value.trim();
+
+        if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
+            setMsg('Informe um CPF (11 digitos) ou CNPJ (14 digitos) valido.', false);
+            return;
+        }
+
+        fecharModal();
+
         try {
             const res = await fetch('/api/financeiro/contas-receber/gerar-boleto', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: numeroNota }),
+                body: JSON.stringify({ nota, cpf_cnpj: cpfCnpjRaw, nome_pagador: nome }),
             });
             const data = await parseApiResponse(res);
             if (!res.ok || !data.sucesso) {
                 setMsg(data.error || `Falha ao gerar boleto (HTTP ${res.status}).`, false);
                 return;
             }
-            setMsg(data.ja_existia ? `Boleto da NF ${numeroNota} ja existia.` : `Boleto da NF ${numeroNota} gerado com sucesso.`, true);
+            setMsg(data.ja_existia ? `Boleto da NF ${nota} ja existia.` : `Boleto da NF ${nota} gerado com sucesso!`, true);
             await carregarContasReceber();
         } catch (err) {
             setMsg('Erro ao gerar boleto: ' + err.message, false);

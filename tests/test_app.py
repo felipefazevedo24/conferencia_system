@@ -1,11 +1,16 @@
+import io
 from datetime import datetime, timedelta
 import sqlite3
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
 from conferencia_app.models import (
     BoletoContaReceber,
+    ExpedicaoConferenciaSimples,
+    ExpedicaoConferenciaSimplesEstorno,
+    ExpedicaoConferenciaSimplesFoto,
     ItemNota,
     LogDivergencia,
     LogEstornoLancamento,
@@ -944,19 +949,30 @@ def test_api_financeiro_gerar_boleto_e_mostrar_na_lista(tmp_path):
                 pagamento_xml=True,
                 tipo_pagamento_xml="15",
                 valor_pagamento_xml=500.00,
+                vencimento_pagamento_xml=datetime(2026, 4, 30),
             )
         )
         db.session.commit()
 
-    gera = client.post("/api/financeiro/contas-receber/gerar-boleto", json={"nota": "CR200"})
+    gera = client.post(
+        "/api/financeiro/contas-receber/gerar-boleto",
+        json={
+            "nota": "CR200",
+            "cpf_cnpj": "12.345.678/0001-99",
+            "nome_pagador": "Cliente BB",
+        },
+    )
     assert gera.status_code == 200
     payload = gera.get_json()
     assert payload["sucesso"] is True
-    assert payload["boleto"]["banco"] == "BOFA - Bank of America"
+    assert payload["boleto"]["banco"] == "Banco do Brasil"
 
     with app.app_context():
         boleto = BoletoContaReceber.query.filter_by(numero_nota="CR200").first()
         assert boleto is not None
+        assert boleto.cpf_cnpj_pagador == "12345678000199"
+        assert boleto.nome_pagador == "Cliente BB"
+        assert boleto.vencimento.strftime("%d/%m/%Y") == "30/04/2026"
 
     lista = client.get("/api/financeiro/contas-receber/notas")
     assert lista.status_code == 200
@@ -964,6 +980,51 @@ def test_api_financeiro_gerar_boleto_e_mostrar_na_lista(tmp_path):
     item = next((x for x in data["itens"] if x["numero_nota"] == "CR200"), None)
     assert item is not None
     assert item["boleto_gerado"] is True
+
+def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="CR210",
+                fornecedor="Fornecedor portal",
+                codigo="CR-4",
+                descricao="Item portal cliente",
+                qtd_real=1.0,
+                status="LanÃ§ado",
+                pagamento_xml=True,
+                tipo_pagamento_xml="15",
+                valor_pagamento_xml=321.45,
+                vencimento_pagamento_xml=datetime(2026, 5, 5),
+            )
+        )
+        db.session.commit()
+
+    gera = client.post(
+        "/api/financeiro/contas-receber/gerar-boleto",
+        json={
+            "nota": "CR210",
+            "cpf_cnpj": "123.456.789-01",
+            "nome_pagador": "Cliente Portal",
+        },
+    )
+    assert gera.status_code == 200
+
+    consulta = client.post(
+        "/api/boletos/consultar",
+        json={"modo": "cpf_cnpj", "cpf_cnpj": "12345678901"},
+    )
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["total"] == 1
+    assert payload["fonte"] == "local"
+    assert payload["boletos"][0]["banco"] == "Banco do Brasil"
+    assert payload["boletos"][0]["cpf_cnpj_pagador"] == "12345678901"
+    assert payload["boletos"][0]["nome_pagador"] == "Cliente Portal"
 
 
 def test_api_consyste_emissao_solicitar_bloqueada_para_admin(tmp_path):
@@ -1743,6 +1804,9 @@ def test_bootstrap_corrige_schema_legado_expedicao_conferencia_simples(tmp_path)
     conn.close()
 
     assert {
+        "tipo_referencia",
+        "numero_os",
+        "ordem_compra",
         "numero_nf",
         "nome_cliente",
         "cliente_origem",
@@ -1769,6 +1833,175 @@ def test_bootstrap_corrige_schema_legado_expedicao_conferencia_simples(tmp_path)
         "resolvido_at",
         "created_at",
     }.issubset(cols_estorno)
+
+
+def test_cria_registro_expedicao_com_ordem_de_compra_e_cliente_manual(tmp_path):
+    fotos_dir = tmp_path / "expedicao_fotos"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+            "EXPEDICAO_CONFERENCIA_FOTOS_DIR": str(fotos_dir),
+        }
+    )
+    client = app.test_client()
+    login_admin(client)
+
+    with patch(
+        "conferencia_app.routes.api_routes._consultar_nf_emitida_exp_conferencia",
+        return_value={"encontrada": False},
+    ):
+        response = client.post(
+            "/api/expedicao/conferencia-simples",
+            data={
+                "tipo_referencia": "OrdemCompra",
+                "ordem_compra": "OC-9001",
+                "numero_nf": "12345",
+                "nome_cliente": "Fornecedor Manual",
+                "transportadora": "Trans XPTO",
+                "placa": "abc1234",
+                "motorista": "Joao",
+                "fotos": (io.BytesIO(b"fake-image"), "foto.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["registro"]["tipo_referencia"] == "OrdemCompra"
+    assert data["registro"]["ordem_compra"] == "OC-9001"
+    assert data["registro"]["orcamento"] == ""
+    assert data["registro"]["numero_nf"] == "12345"
+    assert data["registro"]["nome_cliente"] == "Fornecedor Manual"
+    assert data["registro"]["cliente_origem"] == "Manual"
+    assert len(data["registro"]["fotos"]) == 1
+
+    with app.app_context():
+        registro = ExpedicaoConferenciaSimples.query.one()
+        assert registro.tipo_referencia == "OrdemCompra"
+        assert registro.ordem_compra == "OC-9001"
+        assert registro.orcamento == ""
+        assert registro.numero_os is None
+        assert registro.nome_cliente == "Fornecedor Manual"
+
+
+def test_completa_registro_expedicao_com_orcamento_e_os(tmp_path):
+    fotos_dir = tmp_path / "expedicao_fotos"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+            "EXPEDICAO_CONFERENCIA_FOTOS_DIR": str(fotos_dir),
+        }
+    )
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        agora = datetime.now()
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="",
+            tipo_referencia="Orcamento",
+            conferente="admin",
+            data_conferencia=agora,
+            status="Pendente de expedição",
+            created_at=agora,
+            updated_at=agora,
+        )
+        db.session.add(registro)
+        db.session.commit()
+        registro_id = registro.id
+
+    with patch(
+        "conferencia_app.routes.api_routes._consultar_nf_emitida_exp_conferencia",
+        return_value={"encontrada": False},
+    ):
+        response = client.post(
+            f"/api/expedicao/conferencia-simples/{registro_id}/completar",
+            data={
+                "tipo_referencia": "Orcamento",
+                "orcamento": "ORC-7788",
+                "numero_os": "OS-991",
+                "numero_nf": "99887",
+                "nome_cliente": "Cliente Manual",
+                "transportadora": "Transportadora Azul",
+                "placa": "def5678",
+                "motorista": "Maria",
+                "fotos": (io.BytesIO(b"fake-image-2"), "saida.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["registro"]["tipo_referencia"] == "Orcamento"
+    assert data["registro"]["orcamento"] == "ORC-7788"
+    assert data["registro"]["numero_os"] == "OS-991"
+    assert data["registro"]["ordem_compra"] == ""
+    assert data["registro"]["numero_nf"] == "99887"
+    assert data["registro"]["nome_cliente"] == "Cliente Manual"
+    assert len(data["registro"]["fotos"]) == 1
+
+    with app.app_context():
+        registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+        assert registro.orcamento == "ORC-7788"
+        assert registro.numero_os == "OS-991"
+        assert registro.ordem_compra is None
+        assert registro.nome_cliente == "Cliente Manual"
+        assert registro.placa == "DEF5678"
+
+
+def test_excluir_registro_expedicao_remove_vinculos_mesmo_com_foto_perdida(tmp_path):
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+        }
+    )
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        agora = datetime.now()
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="ORC-404",
+            tipo_referencia="Orcamento",
+            conferente="admin",
+            data_conferencia=agora,
+            status="Aguardando estorno",
+            created_at=agora,
+            updated_at=agora,
+        )
+        db.session.add(registro)
+        db.session.flush()
+
+        db.session.add(
+            ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id,
+                file_name="foto-perdida.jpg",
+                file_path=str((tmp_path / "arquivo_nao_existe.jpg").resolve()),
+            )
+        )
+        db.session.add(
+            ExpedicaoConferenciaSimplesEstorno(
+                conferencia_id=registro.id,
+                solicitante="admin",
+                motivo="teste",
+                status="Pendente",
+            )
+        )
+        db.session.commit()
+        registro_id = registro.id
+
+    response = client.delete(f"/api/expedicao/conferencia-simples/{registro_id}")
+
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+
+    with app.app_context():
+        assert ExpedicaoConferenciaSimples.query.get(registro_id) is None
+        assert ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro_id).count() == 0
+        assert ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=registro_id).count() == 0
 
 
 def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):

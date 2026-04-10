@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitar Coleta ou Entrega | Columbia Sync{% endblock %}
+{% block shell_title %}Solicitar Coleta ou Entrega{% endblock %}
+{% block shell_subtitle %}Pagina simples para abrir demandas e acompanhar seu status.{% endblock %}
+
+{% block extra_head %}
+<style>
+.rq-shell{max-width:1420px;margin:0 auto;display:grid;gap:18px}.rq-panel{border:1px solid rgba(18,40,58,.12);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#f5f8fb 100%);box-shadow:0 16px 32px rgba(18,40,58,.08)}.rq-pad{padding:22px;display:grid;gap:16px}.rq-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}.rq-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(30px,4vw,46px);line-height:.95;letter-spacing:-.05em}.rq-copy{margin:0;color:#667e92;font-size:13px;line-height:1.7;max-width:760px}.rq-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}.rq-form .form-control,.rq-form .form-select{min-height:46px;border-radius:14px}.rq-state,.rq-mini,.rq-card{border:1px solid rgba(18,40,58,.1);border-radius:18px;background:#fff}.rq-state{padding:12px 14px;background:rgba(15,98,201,.05);border-style:dashed;color:#667e92;font-size:12px}.rq-state.error{background:rgba(176,56,56,.07);color:#9f2f2f}.rq-mini{padding:14px}.rq-mini span{display:block;color:#667e92;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.rq-mini strong{display:block;margin-top:8px;color:#12283a;font-size:14px;line-height:1.5}.rq-items{width:100%;border-collapse:separate;border-spacing:0}.rq-items th,.rq-items td{padding:8px 6px;border-bottom:1px solid rgba(18,40,58,.08);vertical-align:top}.rq-items th{color:#667e92;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.rq-items input{width:100%;min-height:40px;border:1px solid rgba(18,40,58,.14);border-radius:12px;padding:0 10px}.rq-list{display:grid;gap:10px}.rq-card{padding:14px;box-shadow:0 10px 20px rgba(18,40,58,.05)}.rq-card h3{margin:8px 0 0;color:#12283a;font-size:14px;font-weight:800;line-height:1.45}.rq-card p{margin:6px 0 0;color:#667e92;font-size:12px;line-height:1.6}.rq-badges{display:flex;gap:6px;flex-wrap:wrap}.rq-badge{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.b-blue{background:rgba(15,98,201,.1);color:#0f62c9}.b-gold{background:rgba(207,148,22,.12);color:#8b6208}.b-green{background:rgba(26,135,84,.12);color:#19784b}.b-red{background:rgba(176,56,56,.12);color:#9f2f2f}.b-slate{background:rgba(18,40,58,.08);color:#12283a}.rq-empty{padding:18px;border:1px dashed rgba(18,40,58,.16);border-radius:16px;text-align:center;color:#667e92;background:rgba(255,255,255,.72)}@media (max-width:980px){.rq-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rq-shell">
+    <section class="rq-panel rq-pad">
+        <div class="rq-top">
+            <div>
+                <h1 class="rq-title">Abra a demanda sem entrar no planner.</h1>
+                <p class="rq-copy">Use esta pagina para pedir coleta ou entrega. A logistica recebe no quadro de pendencias, faz a alocacao e voce acompanha o andamento aqui mesmo.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a class="btn btn-outline-primary" href="/logistica/agendamento-veiculos"><i class="fas fa-truck-fast"></i> Ir para gestao de rotas</a>{% endif %}
+                <button class="btn btn-primary" type="button" onclick="loadMinhasSolicitacoes()"><i class="fas fa-rotate"></i> Atualizar status</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="rq-grid">
+        <section class="rq-panel rq-pad">
+            <div><h2 class="panel-title">Nova solicitacao</h2><p class="rq-copy">Consulte a OC no Google Sheets ou a NF no Consyste e envie a demanda para a logistica.</p></div>
+            <form id="solicitacaoForm" class="rq-form">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Tipo</label><select id="tipoSolicitacao" class="form-select"><option value="COLETA">COLETA</option><option value="ENTREGA">ENTREGA</option></select></div>
+                    <div class="col-md-6"><label class="form-label">Prioridade</label><select id="prioridadeSolicitacao" class="form-select"><option value="Media">Media</option><option value="Alta">Alta</option><option value="Critica">Critica</option><option value="Baixa">Baixa</option></select></div>
+                    <div class="col-md-7"><label class="form-label" id="documentoLabel">Ordem de Compra (OC)</label><div class="input-group"><input id="documentoInput" class="form-control" placeholder="Digite a OC"><button class="btn btn-outline-primary" type="button" onclick="consultarDocumento()"><i class="fas fa-search"></i></button></div></div>
+                    <div class="col-md-5"><label class="form-label">Prazo</label><input id="prazoLimite" type="datetime-local" class="form-control"></div>
+                    <div class="col-12"><div id="lookupState" class="rq-state">Busque o documento para puxar parceiro e itens automaticamente.</div></div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6"><div class="rq-mini"><span>Parceiro</span><strong id="parceiroNome">Aguardando consulta</strong><small id="parceiroDocumento"></small></div></div>
+                    <div class="col-md-6"><div class="rq-mini"><span>Contato</span><strong id="parceiroContato">Sem contato</strong><small id="parceiroTelefone"></small></div></div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Nome manual do parceiro</label><input id="parceiroNomeManual" class="form-control"></div>
+                    <div class="col-md-6"><label class="form-label">Documento</label><input id="parceiroDocumentoManual" class="form-control"></div>
+                    <div class="col-md-6"><label class="form-label">Contato</label><input id="parceiroContatoManual" class="form-control"></div>
+                    <div class="col-md-6"><label class="form-label">Telefone</label><input id="parceiroTelefoneManual" class="form-control"></div>
+                    <div class="col-md-8"><label class="form-label">Endereco</label><input id="logradouroManual" class="form-control"></div>
+                    <div class="col-md-4"><label class="form-label">Numero</label><input id="numeroManual" class="form-control"></div>
+                    <div class="col-md-4"><label class="form-label">Bairro</label><input id="bairroManual" class="form-control"></div>
+                    <div class="col-md-4"><label class="form-label">Cidade</label><input id="cidadeManual" class="form-control"></div>
+                    <div class="col-md-2"><label class="form-label">UF</label><input id="ufManual" maxlength="2" class="form-control"></div>
+                    <div class="col-md-2"><label class="form-label">CEP</label><input id="cepManual" class="form-control"></div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div><h3 class="h5 m-0">Itens</h3><p class="rq-copy">Confirme o que veio da consulta ou adicione manualmente.</p></div>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="addItemRow()"><i class="fas fa-plus"></i> Item</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="rq-items">
+                        <thead><tr><th>Descricao</th><th>Qtd</th><th>Unidade</th><th>Volumes</th><th>Obs.</th><th></th></tr></thead>
+                        <tbody id="itemsBody"></tbody>
+                    </table>
+                </div>
+
+                <div><label class="form-label">Observacoes do solicitante</label><textarea id="observacoesSolicitante" class="form-control" rows="3"></textarea></div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para a logistica</button>
+                    <button class="btn btn-outline-secondary" type="button" onclick="resetFormState()">Limpar</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="rq-panel rq-pad">
+            <div><h2 class="panel-title">Minhas solicitacoes</h2><p class="rq-copy">Acompanhe status, horario previsto, motorista e o link da rota quando a logistica fizer a alocacao.</p></div>
+            <div id="myState" class="rq-state">Carregando solicitacoes...</div>
+            <div id="myList" class="rq-list"></div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const state={lookup:null};const badge=(t,v)=>t==='status'?({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[v]||'b-slate'):({Critica:'b-red',Alta:'b-gold',Media:'b-blue',Baixa:'b-slate'}[v]||'b-slate');
+const solicitacaoForm=document.getElementById('solicitacaoForm');const tipoSolicitacao=document.getElementById('tipoSolicitacao');const prioridadeSolicitacao=document.getElementById('prioridadeSolicitacao');const documentoLabel=document.getElementById('documentoLabel');const documentoInput=document.getElementById('documentoInput');const prazoLimite=document.getElementById('prazoLimite');const lookupState=document.getElementById('lookupState');const parceiroNome=document.getElementById('parceiroNome');const parceiroDocumento=document.getElementById('parceiroDocumento');const parceiroContato=document.getElementById('parceiroContato');const parceiroTelefone=document.getElementById('parceiroTelefone');const parceiroNomeManual=document.getElementById('parceiroNomeManual');const parceiroDocumentoManual=document.getElementById('parceiroDocumentoManual');const parceiroContatoManual=document.getElementById('parceiroContatoManual');const parceiroTelefoneManual=document.getElementById('parceiroTelefoneManual');const logradouroManual=document.getElementById('logradouroManual');const numeroManual=document.getElementById('numeroManual');const bairroManual=document.getElementById('bairroManual');const cidadeManual=document.getElementById('cidadeManual');const ufManual=document.getElementById('ufManual');const cepManual=document.getElementById('cepManual');const itemsBody=document.getElementById('itemsBody');const observacoesSolicitante=document.getElementById('observacoesSolicitante');const myState=document.getElementById('myState');const myList=document.getElementById('myList');
+const km=v=>Number.isFinite(Number(v))?`${Number(v).toFixed(1)} km`:'';const setLookup=(m,e=false)=>{lookupState.textContent=m;lookupState.classList.toggle('error',!!e);};const setMine=(m,e=false)=>{myState.textContent=m;myState.classList.toggle('error',!!e);};
+function addItemRow(item={}){const tr=document.createElement('tr');tr.innerHTML=`<td><input class="item-desc" value="${item.descricao||''}"></td><td><input class="item-qtd" value="${item.quantidade??''}"></td><td><input class="item-und" value="${item.unidade||''}"></td><td><input class="item-vol" value="${item.volumes??''}"></td><td><input class="item-obs" value="${item.observacoes||''}"></td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>`;itemsBody.appendChild(tr);}
+function resetLookup(){state.lookup=null;parceiroNome.textContent='Aguardando consulta';parceiroDocumento.textContent='';parceiroContato.textContent='Sem contato';parceiroTelefone.textContent='';itemsBody.innerHTML='';addItemRow();setLookup('Busque o documento para puxar parceiro e itens automaticamente.');}
+function updateDocumentoLabel(){const tipo=tipoSolicitacao.value;documentoLabel.textContent=tipo==='COLETA'?'Ordem de Compra (OC)':'Nota Fiscal (NF)';documentoInput.placeholder=tipo==='COLETA'?'Digite a OC':'Digite a NF';resetLookup();}
+function resetFormState(){solicitacaoForm.reset();tipoSolicitacao.value='COLETA';prioridadeSolicitacao.value='Media';updateDocumentoLabel();}
+function collectPartner(){return{nome:parceiroNomeManual.value.trim(),razao_social:parceiroNomeManual.value.trim(),cnpj_cpf:parceiroDocumentoManual.value.trim(),contato:parceiroContatoManual.value.trim(),telefone:parceiroTelefoneManual.value.trim(),logradouro:logradouroManual.value.trim(),numero:numeroManual.value.trim(),bairro:bairroManual.value.trim(),cidade:cidadeManual.value.trim(),uf:ufManual.value.trim(),cep:cepManual.value.trim(),observacoes:state.lookup?.warning||''};}
+function collectItems(){return[...document.querySelectorAll('#itemsBody tr')].map(row=>({descricao:row.querySelector('.item-desc').value.trim(),quantidade:row.querySelector('.item-qtd').value.trim(),unidade:row.querySelector('.item-und').value.trim(),volumes:row.querySelector('.item-vol').value.trim(),observacoes:row.querySelector('.item-obs').value.trim()}));}
+async function consultarDocumento(){const tipo=tipoSolicitacao.value;const documento=documentoInput.value.trim();if(!documento)return setLookup('Informe o documento para consultar.',true);const url=tipo==='COLETA'?`/api/logistica/agendamento-veiculos/referencia/oc/${encodeURIComponent(documento)}`:`/api/logistica/agendamento-veiculos/referencia/nf/${encodeURIComponent(documento)}`;setLookup('Consultando documento...');const r=await fetch(url);const d=await r.json();if(!r.ok)return setLookup(d.error||'Documento nao localizado.',true);state.lookup=d;const p=d.fornecedor||d.cliente||{};parceiroNome.textContent=p.nome||p.razao_social||'Sem nome';parceiroDocumento.textContent=p.cnpj_cpf||'';parceiroContato.textContent=p.contato||'Sem contato';parceiroTelefone.textContent=p.telefone||'';parceiroNomeManual.value=p.nome||p.razao_social||'';parceiroDocumentoManual.value=p.cnpj_cpf||'';parceiroContatoManual.value=p.contato||'';parceiroTelefoneManual.value=p.telefone||'';logradouroManual.value=p.logradouro||'';numeroManual.value=p.numero||'';bairroManual.value=p.bairro||'';cidadeManual.value=p.cidade||'';ufManual.value=p.uf||'';cepManual.value=p.cep||'';itemsBody.innerHTML='';(d.itens||[]).forEach(addItemRow);if(!d.itens?.length)addItemRow();setLookup(`${d.warning||'Documento localizado e campos preenchidos.'}${d.fonte?.label?` Fonte: ${d.fonte.label}.`:''}`);}
+async function loadMinhasSolicitacoes(){setMine('Atualizando suas solicitacoes...');const r=await fetch('/api/logistica/agendamento-veiculos/minhas-solicitacoes');const d=await r.json();if(!r.ok)return setMine(d.error||'Falha ao carregar solicitacoes.',true);setMine('Solicitacoes sincronizadas.');myList.innerHTML=d.rows?.length?d.rows.map(s=>`<article class="rq-card"><div class="rq-badges"><span class="rq-badge b-blue">${s.tipo_label}</span><span class="rq-badge ${badge('priority',s.prioridade)}">${s.prioridade_label}</span><span class="rq-badge ${badge('status',s.status)}">${s.status_label}</span></div><h3>${s.parceiro_nome||'Sem parceiro'} · ${s.documento_tipo} ${s.documento_numero||'---'}</h3><p>${s.endereco_formatado||'Endereco nao informado'}</p><p>Criada em ${s.criado_em}</p><p>${s.data_hora_saida_prevista_label?`Saida prevista: ${s.data_hora_saida_prevista_label}`:'Aguardando alocacao'}${s.veiculo?.nome?` · ${s.veiculo.nome}`:''}${s.motorista?.nome?` · ${s.motorista.nome}`:''}</p>${s.km_estimado?`<p><strong>${km(s.km_estimado)}</strong>${s.km_estimado_retorno?` · ${km(s.km_estimado_retorno)} ida e volta`:''}</p>`:''}${s.waze_url?`<p><a href="${s.waze_url}" target="_blank" rel="noopener">Abrir rota no Waze</a></p>`:''}</article>`).join(''):'<div class="rq-empty">Voce ainda nao abriu solicitacoes.</div>';}
+solicitacaoForm.addEventListener('submit',async e=>{e.preventDefault();const tipo=tipoSolicitacao.value;const payload={tipo,prioridade:prioridadeSolicitacao.value,prazo_limite:prazoLimite.value||'',numero_oc:tipo==='COLETA'?documentoInput.value.trim():'',numero_nf:tipo==='ENTREGA'?documentoInput.value.trim():'',parceiro:collectPartner(),itens:collectItems(),observacoes_solicitante:observacoesSolicitante.value.trim()};const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)return setLookup(d.error||'Falha ao salvar solicitacao.',true);resetFormState();setLookup('Solicitacao enviada para a logistica.');await loadMinhasSolicitacoes();});
+tipoSolicitacao.addEventListener('change',updateDocumentoLabel);resetFormState();loadMinhasSolicitacoes();
+</script>
+{% endblock %}

@@ -90,14 +90,16 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
+                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-expedicao" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-truck-loading"></i><span>Expedição</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-expedicao">
-                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Conferência</a>{% endif %}
+                        {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<a href="/logistica/solicitar-transporte" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-plus"></i> Solicitar coleta/entrega</a>{% endif %}
+                        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a href="/logistica/agendamento-veiculos" class="list-group-item list-group-item-action"><i class="fas fa-truck-fast"></i> Gestao de rotas</a>{% endif %}
+                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
                         {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
                         {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
                     </div>

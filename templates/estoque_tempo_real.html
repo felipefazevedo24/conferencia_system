@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+
+{% block title %}WMS | Estoque em Tempo Real | ERP FAM{% endblock %}
+
+{% block extra_head %}
+<style>
+    :root {
+        --sap-blue: #0a6ed1;
+        --sap-hover: #085caf;
+        --erp-bg: #f4f6f9;
+        --border-color: #dbe2e8;
+        --text-main: #1a293b;
+        --text-muted: #64748b;
+        --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
+        --danger-erp: #d92d20;
+        --success-erp: #0a8a45;
+        --warning-erp: #e8820c;
+    }
+
+    body { background-color: var(--erp-bg); color: var(--text-main); font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+
+    .admin-wrapper { padding: 25px; max-width: 1800px; margin: 0 auto; }
+
+    .page-header-erp {
+        background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
+        margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
+        display: flex; justify-content: space-between; align-items: center;
+        color: #000000; border: 1px solid var(--border-color);
+    }
+    .page-header-erp h1 { margin: 0; font-size: 18px; text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+    .page-header-erp i { color: var(--sap-blue); }
+    .subtitle { margin: 4px 0 0 0; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .btn {
+        border: 1px solid #cbd5e1; background: #fff; color: #475569;
+        border-radius: 8px; padding: 10px 16px; font-size: 12px; font-weight: 700;
+        cursor: pointer; text-decoration: none; transition: all 0.2s;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+    .btn.primary { border-color: var(--sap-blue); background: var(--sap-blue); color: #fff; }
+    .btn.primary:hover { background: var(--sap-hover); transform: translateY(-1px); }
+    .btn.success { border-color: var(--success-erp); background: var(--success-erp); color: #fff; }
+    .btn.danger { border-color: var(--danger-erp); background: var(--danger-erp); color: #fff; }
+    .btn.warning { border-color: var(--warning-erp); background: var(--warning-erp); color: #fff; }
+    .btn.sm { padding: 6px 12px; font-size: 11px; }
+
+    .card {
+        background: #fff; border: 1px solid var(--border-color);
+        border-radius: 16px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px;
+    }
+    .card h3 {
+        margin: 0 0 15px 0; font-size: 13px; color: var(--sap-blue);
+        font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+        display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;
+    }
+
+    .input {
+        border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 13px;
+        font-size: 13px; background: #fff; transition: all 0.2s; box-sizing: border-box;
+    }
+    .input:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+        background: #f8fafc; padding: 11px 12px; font-size: 11px;
+        text-transform: uppercase; color: #64748b; text-align: left; font-weight: 800;
+        border-bottom: 2px solid #edf2f7; position: sticky; top: 0; z-index: 10;
+    }
+    td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f0f7ff; }
+
+    .badge {
+        display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 700;
+    }
+    .badge-a { background: #dcfce7; color: #166534; }
+    .badge-b { background: #fef9c3; color: #854d0e; }
+    .badge-c { background: #f1f5f9; color: #475569; }
+
+    /* KPIs */
+    .kpi-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px; margin-bottom: 20px;
+    }
+    .kpi-card {
+        background: #fff; border: 1px solid var(--border-color); border-radius: 14px;
+        padding: 18px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .kpi-card .kpi-value {
+        font-size: 32px; font-weight: 800; color: var(--sap-blue); line-height: 1;
+    }
+    .kpi-card .kpi-label {
+        font-size: 11px; font-weight: 700; color: var(--text-muted);
+        text-transform: uppercase; margin-top: 6px; letter-spacing: 0.3px;
+    }
+
+    /* Layout visual do armazém */
+    .layout-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 8px; margin-bottom: 20px;
+    }
+    .layout-cell {
+        border: 2px solid var(--border-color); border-radius: 10px; padding: 10px;
+        text-align: center; cursor: pointer; transition: all 0.2s; min-height: 70px;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .layout-cell:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .layout-cell.vazio { background: #f8fafc; border-color: #e2e8f0; }
+    .layout-cell.baixo { background: #dcfce7; border-color: #86efac; }
+    .layout-cell.medio { background: #fef9c3; border-color: #fde047; }
+    .layout-cell.alto { background: #fee2e2; border-color: #fca5a5; }
+    .layout-cell .cell-code { font-size: 11px; font-weight: 800; color: var(--text-main); }
+    .layout-cell .cell-qty { font-size: 18px; font-weight: 800; color: var(--sap-blue); margin-top: 2px; }
+    .layout-cell .cell-skus { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+
+    .filter-bar {
+        display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;
+    }
+
+    .view-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+    .view-tab {
+        padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700;
+        cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #475569;
+        transition: all 0.2s;
+    }
+    .view-tab.active { background: var(--sap-blue); color: #fff; border-color: var(--sap-blue); }
+    .view-tab:hover:not(.active) { background: #f8fafc; }
+
+    #toast {
+        position: fixed; bottom: 30px; right: 30px; z-index: 9999;
+        background: #1a293b; color: #fff; padding: 14px 22px; border-radius: 12px;
+        font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        display: none; animation: fadeInUp 0.3s ease;
+    }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 900px) {
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        .layout-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-wrapper">
+
+    <div class="page-header-erp">
+        <div>
+            <h1><i class="fas fa-cubes"></i> Estoque em Tempo Real</h1>
+            <p class="subtitle">Visão consolidada do estoque por localização — layout do armazém e posição de materiais.</p>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary" onclick="carregarEstoque()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit WMS</a>
+            <a class="btn" href="/admin/wms-governanca"><i class="fas fa-sliders-h"></i> Governança</a>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiTotalSkus">0</div>
+            <div class="kpi-label">SKUs em estoque</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiTotalLocalizacoes">0</div>
+            <div class="kpi-label">Localizações ocupadas</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiQtdTotal">0</div>
+            <div class="kpi-label">Qtd total em estoque</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiQtdDisponivel">0</div>
+            <div class="kpi-label">Qtd disponível</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiQtdSeparada" style="color:var(--warning-erp);">0</div>
+            <div class="kpi-label">Qtd reservada</div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card">
+        <div class="filter-bar">
+            <input id="filtroEstoque" class="input" placeholder="Buscar por código do item ou localização..."
+                   style="flex:1; min-width:250px;" onkeydown="if(event.key==='Enter') carregarEstoque()" />
+            <select id="filtroDeposito" class="input" style="min-width:160px;" onchange="carregarEstoque()">
+                <option value="">Todos os depósitos</option>
+            </select>
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+                <input type="checkbox" id="filtroComSaldo" checked onchange="carregarEstoque()" />
+                Apenas com saldo
+            </label>
+            <button class="btn primary sm" onclick="carregarEstoque()"><i class="fas fa-search"></i> Buscar</button>
+        </div>
+
+        <!-- Abas de visualização -->
+        <div class="view-tabs">
+            <div class="view-tab active" onclick="trocarView('layout')" id="tabLayout"><i class="fas fa-th"></i> Layout Visual</div>
+            <div class="view-tab" onclick="trocarView('tabela')" id="tabTabela"><i class="fas fa-list"></i> Tabela Detalhada</div>
+        </div>
+
+        <!-- View: Layout visual -->
+        <div id="viewLayout">
+            <div class="layout-grid" id="layoutGrid">
+                <div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);">
+                    <i class="fas fa-boxes" style="font-size:48px; opacity:0.3;"></i>
+                    <p>Carregando estoque...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Tabela detalhada -->
+        <div id="viewTabela" style="display:none;">
+            <div class="table-wrap" style="max-height:600px; overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Localização</th>
+                            <th>Depósito</th>
+                            <th>Código Item</th>
+                            <th>UN</th>
+                            <th>Curva</th>
+                            <th style="text-align:right;">Qtd Total</th>
+                            <th style="text-align:right;">Reservada</th>
+                            <th style="text-align:right;">Bloqueada</th>
+                            <th style="text-align:right;">Disponível</th>
+                            <th>Atualização</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyEstoque">
+                        <tr><td colspan="10" style="text-align:center; color:var(--text-muted);">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detalhes da localização selecionada -->
+    <div class="card" id="detalheLocalizacao" style="display:none;">
+        <h3><i class="fas fa-map-pin"></i> <span id="detalheLocTitulo">Detalhes da Localização</span></h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código Item</th>
+                        <th>UN</th>
+                        <th>Curva</th>
+                        <th style="text-align:right;">Qtd Total</th>
+                        <th style="text-align:right;">Reservada</th>
+                        <th style="text-align:right;">Disponível</th>
+                        <th>Última Atualização</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDetalheLoc"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+let dadosEstoque = [];
+
+async function fetchJson(url, options = {}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.erro || data.msg || 'Falha na requisição');
+    return data;
+}
+
+function showToast(msg, tipo = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = tipo === 'ok' ? '#0a8a45' : tipo === 'warn' ? '#e8820c' : '#d92d20';
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+function formatarData(valor) {
+    if (!valor) return '—';
+    const d = new Date(valor);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR');
+}
+
+function formatarNumero(n) {
+    if (n == null) return '0';
+    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
+
+function curvaBadge(curva) {
+    if (!curva) return '';
+    const cls = curva === 'A' ? 'badge-a' : curva === 'B' ? 'badge-b' : 'badge-c';
+    return `<span class="badge ${cls}">${curva}</span>`;
+}
+
+function classeOcupacao(qtdTotal) {
+    if (!qtdTotal || qtdTotal <= 0) return 'vazio';
+    if (qtdTotal <= 10) return 'baixo';
+    if (qtdTotal <= 100) return 'medio';
+    return 'alto';
+}
+
+// ─── Carregar depositos ──────────────────────────────────────────────────────
+
+async function carregarDepositos() {
+    try {
+        const lista = await fetchJson('/api/wms/depositos');
+        const sel = document.getElementById('filtroDeposito');
+        lista.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.codigo;
+            opt.textContent = d.nome || d.codigo;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* silent */ }
+}
+
+// ─── Carregar estoque ────────────────────────────────────────────────────────
+
+async function carregarEstoque() {
+    const filtro = (document.getElementById('filtroEstoque').value || '').trim();
+    const deposito = document.getElementById('filtroDeposito').value;
+    const comSaldo = document.getElementById('filtroComSaldo').checked ? '1' : '0';
+
+    const params = new URLSearchParams();
+    if (filtro) params.set('filtro', filtro);
+    if (deposito) params.set('deposito', deposito);
+    params.set('com_saldo', comSaldo);
+
+    try {
+        const data = await fetchJson('/api/wms/estoque-tempo-real?' + params.toString());
+        dadosEstoque = data.itens || [];
+
+        // KPIs
+        const skusUnicos = new Set(dadosEstoque.map(i => i.codigo_item));
+        const qtdTotal = dadosEstoque.reduce((s, i) => s + (i.qtd_total || 0), 0);
+        const qtdDisp = dadosEstoque.reduce((s, i) => s + (i.qtd_disponivel || 0), 0);
+        const qtdSep = dadosEstoque.reduce((s, i) => s + (i.qtd_separada || 0), 0);
+        document.getElementById('kpiTotalSkus').textContent = formatarNumero(skusUnicos.size);
+        document.getElementById('kpiTotalLocalizacoes').textContent = formatarNumero(data.total_localizacoes_com_saldo || 0);
+        document.getElementById('kpiQtdTotal').textContent = formatarNumero(qtdTotal);
+        document.getElementById('kpiQtdDisponivel').textContent = formatarNumero(qtdDisp);
+        document.getElementById('kpiQtdSeparada').textContent = formatarNumero(qtdSep);
+
+        renderLayout(data.resumo_por_localizacao || {});
+        renderTabela(dadosEstoque);
+    } catch (e) {
+        showToast('Erro ao carregar estoque: ' + e.message, 'err');
+    }
+}
+
+// ─── View: Layout visual ─────────────────────────────────────────────────────
+
+function renderLayout(resumo) {
+    const grid = document.getElementById('layoutGrid');
+    const keys = Object.keys(resumo).sort();
+
+    if (!keys.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);"><i class="fas fa-inbox" style="font-size:48px; opacity:0.3;"></i><p>Nenhuma posição com saldo encontrada.</p></div>';
+        return;
+    }
+
+    grid.innerHTML = '';
+    keys.forEach(codigo => {
+        const info = resumo[codigo];
+        const cls = classeOcupacao(info.qtd_total);
+        const cell = document.createElement('div');
+        cell.className = 'layout-cell ' + cls;
+        cell.title = `${codigo}\n${info.skus} SKU(s) · ${formatarNumero(info.qtd_total)} un`;
+        cell.onclick = () => mostrarDetalheLocalizacao(codigo);
+        cell.innerHTML = `
+            <div class="cell-code">${codigo}</div>
+            <div class="cell-qty">${formatarNumero(info.qtd_total)}</div>
+            <div class="cell-skus">${info.skus} SKU(s)</div>
+        `;
+        grid.appendChild(cell);
+    });
+}
+
+function mostrarDetalheLocalizacao(codigo) {
+    const itensLoc = dadosEstoque.filter(i => i.localizacao_codigo === codigo);
+    const card = document.getElementById('detalheLocalizacao');
+    document.getElementById('detalheLocTitulo').textContent = 'Localização: ' + codigo;
+    const tbody = document.getElementById('tbodyDetalheLoc');
+    tbody.innerHTML = '';
+
+    if (!itensLoc.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Sem itens nesta localização.</td></tr>';
+        card.style.display = 'block';
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+
+    itensLoc.forEach(i => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong style="color:var(--sap-blue)">${i.codigo_item}</strong></td>
+            <td>${i.unidade || 'UN'}</td>
+            <td>${curvaBadge(i.curva_abc)}</td>
+            <td style="text-align:right; font-weight:700;">${formatarNumero(i.qtd_total)}</td>
+            <td style="text-align:right; color:var(--warning-erp);">${formatarNumero(i.qtd_separada)}</td>
+            <td style="text-align:right; color:var(--success-erp); font-weight:700;">${formatarNumero(i.qtd_disponivel)}</td>
+            <td style="font-size:11px;">${formatarData(i.data_atualizacao)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ─── View: Tabela ────────────────────────────────────────────────────────────
+
+function renderTabela(itens) {
+    const tbody = document.getElementById('tbodyEstoque');
+    tbody.innerHTML = '';
+
+    if (!itens.length) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--text-muted);">Nenhum registro de estoque encontrado.</td></tr>';
+        return;
+    }
+
+    itens.forEach(i => {
+        const tr = document.createElement('tr');
+        const alerta = (i.estoque_minimo && i.qtd_disponivel < i.estoque_minimo)
+            ? ' style="background:#fff5f5;"' : '';
+        tr.setAttribute('style', alerta ? 'background:#fff5f5;' : '');
+        tr.innerHTML = `
+            <td><strong style="color:var(--sap-blue); cursor:pointer;" onclick="mostrarDetalheLocalizacao('${i.localizacao_codigo}')">${i.localizacao_codigo}</strong></td>
+            <td style="font-size:11px;">${i.deposito_nome || i.deposito_codigo || '—'}</td>
+            <td><strong>${i.codigo_item}</strong></td>
+            <td>${i.unidade || 'UN'}</td>
+            <td>${curvaBadge(i.curva_abc)}</td>
+            <td style="text-align:right; font-weight:700;">${formatarNumero(i.qtd_total)}</td>
+            <td style="text-align:right; color:var(--warning-erp);">${formatarNumero(i.qtd_separada)}</td>
+            <td style="text-align:right; color:var(--danger-erp);">${formatarNumero(i.qtd_bloqueada)}</td>
+            <td style="text-align:right; color:var(--success-erp); font-weight:700;">${formatarNumero(i.qtd_disponivel)}</td>
+            <td style="font-size:11px;">${formatarData(i.data_atualizacao)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// ─── Troca de views ──────────────────────────────────────────────────────────
+
+function trocarView(view) {
+    document.getElementById('viewLayout').style.display = view === 'layout' ? '' : 'none';
+    document.getElementById('viewTabela').style.display = view === 'tabela' ? '' : 'none';
+    document.getElementById('tabLayout').className = 'view-tab' + (view === 'layout' ? ' active' : '');
+    document.getElementById('tabTabela').className = 'view-tab' + (view === 'tabela' ? ' active' : '');
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    carregarDepositos();
+    carregarEstoque();
+});
+</script>
+{% endblock %}

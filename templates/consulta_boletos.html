@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f62c9">
+    <title>Consulta de Boletos | Columbia Sync</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #f0f4f8;
+            --card-bg: #ffffff;
+            --primary: #1a56db;
+            --primary-dark: #1041a3;
+            --primary-light: #e8effc;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #059669;
+            --success-bg: #ecfdf5;
+            --warning: #d97706;
+            --warning-bg: #fffbeb;
+            --danger: #dc2626;
+            --danger-bg: #fef2f2;
+            --shadow: 0 4px 24px rgba(0,0,0,0.06);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+            --radius: 16px;
+            --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-display: 'Space Grotesk', var(--font);
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1a56db 0%, #0f3d91 100%);
+            color: #fff;
+            padding: 24px 0;
+            text-align: center;
+        }
+        .header-inner {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .header .brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .header .brand-name {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .header .brand-name .sync { color: #93c5fd; }
+        .header h1 {
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .header p {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+
+        /* Main */
+        .main {
+            flex: 1;
+            max-width: 800px;
+            width: 100%;
+            margin: -32px auto 40px;
+            padding: 0 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Search Card */
+        .search-card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+        .search-card h2 {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .search-card h2 i { color: var(--primary); }
+
+        .search-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        .search-form .field { flex: 1; }
+        .search-form label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .search-form input {
+            width: 100%;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 16px;
+            font-family: var(--font);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fafbfc;
+        }
+        .search-form input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(26,86,219,0.12);
+            background: #fff;
+        }
+        .search-form input::placeholder { color: #94a3b8; }
+
+        .btn-search {
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #1a56db 0%, #1041a3 100%);
+            color: #fff;
+            font-family: var(--font-display);
+            font-size: 14px;
+            font-weight: 800;
+            padding: 12px 24px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 4px 12px rgba(26,86,219,0.3);
+        }
+        .btn-search:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(26,86,219,0.4);
+        }
+        .btn-search:active { transform: translateY(0); }
+        .btn-search:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-search i { margin-right: 4px; }
+
+        /* Feedback */
+        .feedback {
+            display: none;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 14px;
+        }
+        .feedback.show { display: flex; align-items: center; gap: 8px; }
+        .feedback.error { background: var(--danger-bg); color: var(--danger); }
+        .feedback.info { background: var(--primary-light); color: var(--primary-dark); }
+        .feedback.warning { background: var(--warning-bg); color: var(--warning); }
+
+        /* Results */
+        .results-section { display: none; }
+        .results-section.show { display: block; }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .results-header h3 {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .results-count {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: #f1f5f9;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        /* Boleto Card */
+        .boleto-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .boleto-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .boleto-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .boleto-id {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .boleto-id small {
+            font-weight: 500;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-gerado { background: var(--primary-light); color: var(--primary); }
+        .status-pago { background: var(--success-bg); color: var(--success); }
+        .status-vencido { background: var(--danger-bg); color: var(--danger); }
+        .status-pendente { background: var(--warning-bg); color: var(--warning); }
+
+        .boleto-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .boleto-field label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        .boleto-field span {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .boleto-field .valor {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .boleto-linha {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-top: 4px;
+        }
+        .boleto-linha label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .boleto-linha .linha-valor {
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            word-break: break-all;
+            line-height: 1.6;
+        }
+        .btn-copy {
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--primary);
+            cursor: pointer;
+            margin-top: 8px;
+            transition: background 0.15s;
+        }
+        .btn-copy:hover { background: var(--primary-light); }
+        .btn-copy.copied { background: var(--success-bg); color: var(--success); border-color: var(--success); }
+
+        /* Tabs */
+        .btn-tab {
+            border: 2px solid var(--border);
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-tab:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-tab.active {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .btn-tab i { margin-right: 4px; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .empty-state i {
+            font-size: 48px;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+        }
+        .empty-state h3 {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .empty-state p {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+        .loading-spinner.show { display: block; }
+        .loading-spinner i { font-size: 32px; color: var(--primary); animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .footer a { color: var(--primary); text-decoration: none; }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header h1 { font-size: 20px; }
+            .search-form { flex-direction: column; }
+            .btn-search { width: 100%; }
+            .boleto-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="brand">
+                <span class="brand-name">Columbia <span class="sync">SYNC</span></span>
+            </div>
+            <h1><i class="fas fa-barcode"></i> Consulta de Boletos</h1>
+            <p>Consulte seus boletos por CPF/CNPJ ou pelo número da nota fiscal</p>
+        </div>
+    </header>
+
+    <main class="main">
+        <!-- Search -->
+        <div class="search-card">
+            <h2><i class="fas fa-search"></i> Localizar boletos</h2>
+
+            <!-- Tabs de modo -->
+            <div style="display:flex;gap:4px;margin-bottom:16px;">
+                <button type="button" class="btn-tab active" data-modo="cpf_cnpj" id="tabCpf">
+                    <i class="fas fa-id-card"></i> CPF / CNPJ
+                </button>
+                <button type="button" class="btn-tab" data-modo="nota" id="tabNota">
+                    <i class="fas fa-file-invoice"></i> Nº da NF + Valor
+                </button>
+            </div>
+
+            <form class="search-form" id="searchForm" novalidate>
+                <!-- Modo CPF/CNPJ -->
+                <div class="field search-modo" id="modoCpf">
+                    <label for="cpfCnpj">CPF ou CNPJ</label>
+                    <input type="text" id="cpfCnpj" name="cpf_cnpj"
+                           placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                           maxlength="18" autocomplete="off" inputmode="numeric">
+                </div>
+
+                <!-- Modo NF + Valor -->
+                <div class="field search-modo" id="modoNota" style="display:none;">
+                    <label for="numeroNota">Número da NF</label>
+                    <input type="text" id="numeroNota" name="numero_nota"
+                           placeholder="Ex: 12345" maxlength="20" autocomplete="off">
+                </div>
+                <div class="field search-modo" id="modoValor" style="display:none;">
+                    <label for="valorNota">Valor (opcional)</label>
+                    <input type="text" id="valorNota" name="valor"
+                           placeholder="Ex: 1.500,00" autocomplete="off" inputmode="decimal">
+                </div>
+
+                <button type="submit" class="btn-search" id="btnSearch">
+                    <i class="fas fa-search"></i> Consultar
+                </button>
+            </form>
+            <div class="feedback" id="feedback" role="alert"></div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading-spinner" id="loading">
+            <i class="fas fa-spinner"></i>
+            <p style="margin-top:8px;color:var(--text-muted);font-size:13px;font-weight:600;">Consultando boletos...</p>
+        </div>
+
+        <!-- Results -->
+        <div class="results-section" id="resultsSection">
+            <div class="results-header">
+                <h3><i class="fas fa-file-invoice-dollar" style="color:var(--primary);margin-right:4px;"></i> Boletos encontrados</h3>
+                <span class="results-count" id="resultsCount">0 boletos</span>
+            </div>
+            <div id="resultsList"></div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>Banco do Brasil &mdash; Cobranca &bull; Columbia Sync &copy; 2026</p>
+        <p style="margin-top:4px;"><a href="/login">Acesso administrativo</a></p>
+    </footer>
+
+    <script>
+    (function() {
+        const form = document.getElementById('searchForm');
+        const inputCpf = document.getElementById('cpfCnpj');
+        const inputNota = document.getElementById('numeroNota');
+        const inputValor = document.getElementById('valorNota');
+        const btn = document.getElementById('btnSearch');
+        const feedback = document.getElementById('feedback');
+        const loading = document.getElementById('loading');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsList = document.getElementById('resultsList');
+        const resultsCount = document.getElementById('resultsCount');
+
+        let modoAtual = 'cpf_cnpj';
+
+        /* ---------- Tabs ---------- */
+        document.querySelectorAll('.btn-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.btn-tab').forEach(function(t) { t.classList.remove('active'); });
+                this.classList.add('active');
+                modoAtual = this.getAttribute('data-modo');
+
+                document.getElementById('modoCpf').style.display = modoAtual === 'cpf_cnpj' ? '' : 'none';
+                document.getElementById('modoNota').style.display = modoAtual === 'nota' ? '' : 'none';
+                document.getElementById('modoValor').style.display = modoAtual === 'nota' ? '' : 'none';
+                hideFeedback();
+            });
+        });
+
+        /* ---------- Máscara CPF/CNPJ ---------- */
+        inputCpf.addEventListener('input', function() {
+            let v = this.value.replace(/\D/g, '');
+            if (v.length <= 11) {
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            } else {
+                v = v.substring(0, 14);
+                v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+                v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+                v = v.replace(/(\d{4})(\d)/, '$1-$2');
+            }
+            this.value = v;
+        });
+
+        /* ---------- Máscara Valor ---------- */
+        inputValor.addEventListener('input', function() {
+            let v = this.value.replace(/[^\d,]/g, '');
+            this.value = v;
+        });
+
+        /* ---------- Submit ---------- */
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideFeedback();
+            resultsSection.classList.remove('show');
+
+            var body = {};
+
+            if (modoAtual === 'nota') {
+                var nota = inputNota.value.trim();
+                if (!nota) {
+                    showFeedback('Informe o número da nota fiscal.', 'error');
+                    return;
+                }
+                var valorStr = inputValor.value.replace(/\./g, '').replace(',', '.').trim();
+                body = { modo: 'nota', numero_nota: nota, valor: valorStr ? parseFloat(valorStr) : 0 };
+            } else {
+                var doc = inputCpf.value.replace(/\D/g, '');
+                if (!doc || (doc.length !== 11 && doc.length !== 14)) {
+                    showFeedback('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.', 'error');
+                    return;
+                }
+                body = { modo: 'cpf_cnpj', cpf_cnpj: doc };
+            }
+
+            loading.classList.add('show');
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/api/boletos/consultar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+
+                if (!resp.ok || !data.sucesso) {
+                    showFeedback(data.error || 'Erro ao consultar boletos.', 'error');
+                    return;
+                }
+
+                if (data.total === 0) {
+                    var msg = modoAtual === 'nota'
+                        ? 'Nenhum boleto encontrado para esta nota fiscal.'
+                        : 'Nenhum boleto encontrado para este CPF/CNPJ.';
+                    showFeedback(msg, 'info');
+                    renderEmpty();
+                    return;
+                }
+
+                if (data.mensagem) {
+                    showFeedback(data.mensagem, 'warning');
+                }
+
+                renderBoletos(data.boletos);
+            } catch (err) {
+                showFeedback('Erro de conexão. Tente novamente.', 'error');
+            } finally {
+                loading.classList.remove('show');
+                btn.disabled = false;
+            }
+        });
+
+        /* ---------- Render ---------- */
+        function renderBoletos(boletos) {
+            resultsList.innerHTML = '';
+            resultsCount.textContent = boletos.length + (boletos.length === 1 ? ' boleto' : ' boletos');
+            resultsSection.classList.add('show');
+
+            if (!boletos.length) {
+                renderEmpty();
+                return;
+            }
+
+            boletos.forEach(function(b) {
+                const statusClass = getStatusClass(b.status);
+                const card = document.createElement('div');
+                card.className = 'boleto-card';
+                card.innerHTML =
+                    '<div class="boleto-top">' +
+                        '<div class="boleto-id">' +
+                            'Nosso Nº <strong>' + esc(b.nosso_numero || '---') + '</strong>' +
+                            (b.numero_nota ? ' <small>Doc: ' + esc(b.numero_nota) + '</small>' : '') +
+                        '</div>' +
+                        '<span class="status-badge ' + statusClass + '">' +
+                            '<i class="fas fa-circle" style="font-size:6px;"></i> ' + esc(b.status || 'Gerado') +
+                        '</span>' +
+                    '</div>' +
+                    '<div class="boleto-grid">' +
+                        '<div class="boleto-field"><label>Valor</label><span class="valor">R$ ' + formatMoney(b.valor) + '</span></div>' +
+                        '<div class="boleto-field"><label>Vencimento</label><span>' + esc(b.vencimento || '---') + '</span></div>' +
+                        '<div class="boleto-field"><label>Pagamento</label><span>' + esc(b.data_pagamento || '---') + '</span></div>' +
+                        '<div class="boleto-field"><label>Banco</label><span>' + esc(b.banco || 'Banco do Brasil') + '</span></div>' +
+                    '</div>' +
+                    (b.linha_digitavel
+                        ? '<div class="boleto-linha">' +
+                            '<label>Linha Digitável</label>' +
+                            '<div class="linha-valor">' + esc(b.linha_digitavel) + '</div>' +
+                            '<button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '">' +
+                                '<i class="fas fa-copy"></i> Copiar linha digitável' +
+                            '</button>' +
+                          '</div>'
+                        : '') +
+                    (b.codigo_barras
+                        ? '<div style="margin-top:8px;">' +
+                            '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '">' +
+                                '<i class="fas fa-barcode"></i> Copiar código de barras' +
+                            '</button>' +
+                          '</div>'
+                        : '');
+                resultsList.appendChild(card);
+            });
+        }
+
+        function renderEmpty() {
+            resultsList.innerHTML =
+                '<div class="empty-state">' +
+                    '<i class="fas fa-file-invoice"></i>' +
+                    '<h3>Nenhum boleto encontrado</h3>' +
+                    '<p>Verifique os dados informados e tente novamente.</p>' +
+                '</div>';
+            resultsSection.classList.add('show');
+            resultsCount.textContent = '0 boletos';
+        }
+
+        /* ---------- Copy ---------- */
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-copy');
+            if (!btn) return;
+            const text = btn.getAttribute('data-copy');
+            if (!text) return;
+
+            navigator.clipboard.writeText(text).then(function() {
+                btn.classList.add('copied');
+                btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+                setTimeout(function() {
+                    btn.classList.remove('copied');
+                    if (btn.getAttribute('data-copy') === text) {
+                        const isBarcode = text.length > 50 && !text.includes(' ');
+                        btn.innerHTML = isBarcode
+                            ? '<i class="fas fa-barcode"></i> Copiar código de barras'
+                            : '<i class="fas fa-copy"></i> Copiar linha digitável';
+                    }
+                }, 2000);
+            });
+        });
+
+        /* ---------- Helpers ---------- */
+        function showFeedback(msg, type) {
+            feedback.className = 'feedback show ' + type;
+            feedback.innerHTML = '<i class="fas fa-' + (type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle') + '"></i> ' + esc(msg);
+        }
+        function hideFeedback() { feedback.className = 'feedback'; feedback.innerHTML = ''; }
+
+        function getStatusClass(status) {
+            const s = (status || '').toLowerCase();
+            if (s === 'pago' || s === 'paid' || s === 'liquidado') return 'status-pago';
+            if (s === 'vencido' || s === 'overdue') return 'status-vencido';
+            if (s === 'pendente' || s === 'pending' || s === 'registrado') return 'status-pendente';
+            return 'status-gerado';
+        }
+
+        function formatMoney(v) {
+            return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        function escAttr(s) {
+            return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+    })();
+    </script>
+</body>
+</html>

@@ -192,6 +192,7 @@
             <button class="btn primary" onclick="refreshAll()"><i class="fas fa-sync-alt"></i> Atualizar</button>
             <button class="btn" onclick="processarFilaFiscal()"><i class="fas fa-tasks"></i> Processar Fila Fiscal</button>
             <button class="btn" onclick="executarReconciliacao()"><i class="fas fa-balance-scale"></i> Reconciliar ERP x WMS</button>
+            <button class="btn success" onclick="executarSyncERP()"><i class="fas fa-cloud-download-alt"></i> Sincronizar ERP</button>
             <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit WMS</a>
             <a class="btn" href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Endereços</a>
         </div>
@@ -238,6 +239,57 @@
                     <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Carregando fila da integração fiscal...</td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- ===== SINCRONIZAÇÃO ERP ===== -->
+    <div class="card">
+        <h3><i class="fas fa-cloud-download-alt"></i> Sincronização ERP → WMS</h3>
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+            <div>
+                <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Último sync:</span>
+                <span id="erpSyncUltimo" class="badge badge-c">Nunca</span>
+            </div>
+            <div>
+                <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Status:</span>
+                <span id="erpSyncStatus" class="badge badge-c">—</span>
+            </div>
+            <div style="flex:1;"></div>
+            <button class="btn success" onclick="executarSyncERP()"><i class="fas fa-play"></i> Executar Sync Agora</button>
+            <button class="btn" onclick="previewEstoqueERP()"><i class="fas fa-eye"></i> Preview Estoque ERP</button>
+        </div>
+        <div id="erpSyncResultado" style="display:none; background:#f8fafc; border:1px solid var(--border-color); border-radius:10px; padding:16px; margin-bottom:14px;">
+            <strong style="font-size:12px; color:var(--sap-blue);">Resultado da última sincronização:</strong>
+            <div id="erpSyncResumo" style="margin-top:8px; font-size:13px;"></div>
+        </div>
+        <div id="erpPreviewWrap" style="display:none;">
+            <div class="row-search">
+                <input id="erpPreviewFiltro" class="input" placeholder="Filtrar por código, descrição, família ou grupo..." style="max-width:420px;"
+                       onkeydown="if(event.key==='Enter') previewEstoqueERP()" />
+                <button class="btn primary sm" onclick="previewEstoqueERP()"><i class="fas fa-search"></i> Buscar</button>
+                <button class="btn sm" onclick="document.getElementById('erpPreviewWrap').style.display='none'"><i class="fas fa-times"></i> Fechar</button>
+            </div>
+            <div class="table-wrap" style="max-height:400px; overflow-y:auto;">
+                <table>
+                    <thead style="position:sticky; top:0; z-index:10;">
+                        <tr>
+                            <th>Código</th>
+                            <th>Descrição</th>
+                            <th>Família</th>
+                            <th>Grupo</th>
+                            <th>UN</th>
+                            <th style="text-align:right;">Qtd Total</th>
+                            <th style="text-align:right;">Reservada</th>
+                            <th style="text-align:right;">Disponível</th>
+                            <th>Localização</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyErpPreview">
+                        <tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Clique em "Preview" para carregar.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p id="erpPreviewTotal" style="font-size:11px; color:var(--text-muted); margin-top:8px;"></p>
         </div>
     </div>
 
@@ -672,12 +724,106 @@ async function salvarSku() {
     }
 }
 
+// ─── Sincronização ERP ───────────────────────────────────────────────────────
+
+async function carregarStatusSync() {
+    try {
+        const data = await fetchJson('/api/wms/erp-sync/status');
+        const sync = data.ultimo_sync;
+        const elUltimo = document.getElementById('erpSyncUltimo');
+        const elStatus = document.getElementById('erpSyncStatus');
+        if (!sync) {
+            elUltimo.textContent = 'Nunca executado';
+            elUltimo.className = 'badge badge-c';
+            elStatus.textContent = '—';
+            elStatus.className = 'badge badge-c';
+            return;
+        }
+        elUltimo.textContent = formatarData(sync.criado_em);
+        elUltimo.className = 'badge badge-fifo';
+        const statusMap = { Sucesso: 'badge-a', Falha: 'badge-b', Processando: 'badge-fefo' };
+        elStatus.textContent = sync.status;
+        elStatus.className = 'badge ' + (statusMap[sync.status] || 'badge-c');
+    } catch (e) { /* silent */ }
+}
+
+async function executarSyncERP() {
+    if (!confirm('Executar sincronização do estoque ERP → WMS?\nIsso pode levar alguns segundos.')) return;
+    const el = document.getElementById('erpSyncResultado');
+    const resumo = document.getElementById('erpSyncResumo');
+    el.style.display = 'block';
+    resumo.innerHTML = '<em>Sincronizando... aguarde.</em>';
+    try {
+        const data = await fetchJson('/api/wms/erp-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const r = data.resultado || {};
+        const skus = r.skus || {};
+        resumo.innerHTML = `
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;">
+                <div><strong style="font-size:20px; color:var(--sap-blue);">${r.total_itens_erp || 0}</strong><br/><small>Itens ERP</small></div>
+                <div><strong style="font-size:20px; color:var(--success-erp);">${skus.criados || 0}</strong><br/><small>SKUs criados</small></div>
+                <div><strong style="font-size:20px; color:var(--warning-erp);">${skus.atualizados || 0}</strong><br/><small>SKUs atualizados</small></div>
+                <div><strong style="font-size:20px; color:#7c3aed;">${r.enderecados || 0}</strong><br/><small>Endereçados</small></div>
+                <div><strong style="font-size:20px; color:var(--danger-erp);">${r.divergencias || 0}</strong><br/><small>Divergências</small></div>
+                <div><strong style="font-size:20px; color:#d97706;">${r.alertas || 0}</strong><br/><small>Alertas</small></div>
+            </div>
+        `;
+        showToast(`Sync ERP concluído: ${r.total_itens_erp} itens, ${skus.criados} novos SKUs.`);
+        carregarStatusSync();
+        pesquisarSku();
+    } catch (e) {
+        resumo.innerHTML = `<span style="color:var(--danger-erp);"><i class="fas fa-exclamation-triangle"></i> Erro: ${e.message}</span>`;
+        showToast(`Erro no sync ERP: ${e.message}`, 'err');
+    }
+}
+
+async function previewEstoqueERP() {
+    const wrap = document.getElementById('erpPreviewWrap');
+    wrap.style.display = 'block';
+    const tbody = document.getElementById('tbodyErpPreview');
+    const totalEl = document.getElementById('erpPreviewTotal');
+    const filtro = (document.getElementById('erpPreviewFiltro').value || '').trim();
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Carregando estoque do ERP...</td></tr>';
+    try {
+        const url = '/api/wms/erp-sync/preview' + (filtro ? `?filtro=${encodeURIComponent(filtro)}&limite=200` : '?limite=200');
+        const data = await fetchJson(url);
+        const itens = data.itens || [];
+        totalEl.textContent = `Mostrando ${itens.length} de ${data.total} itens.`;
+        tbody.innerHTML = '';
+        if (!itens.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted);">Nenhum item encontrado.</td></tr>';
+            return;
+        }
+        itens.forEach(i => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong style="color:var(--sap-blue)">${i.codigo_interno || '—'}</strong></td>
+                <td>${(i.item || '').substring(0, 60)}</td>
+                <td style="font-size:11px;">${i.familia || '—'}</td>
+                <td style="font-size:11px;">${i.grupo || '—'}</td>
+                <td>${i.unidade || '—'}</td>
+                <td style="text-align:right; font-weight:700;">${i.qtde_total ?? 0}</td>
+                <td style="text-align:right; color:var(--warning-erp);">${i.qtde_reservada ?? 0}</td>
+                <td style="text-align:right; color:var(--success-erp); font-weight:700;">${i.qtde_disponivel ?? 0}</td>
+                <td style="font-size:11px;">${i.localizacao_estoque || '—'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger-erp);">Erro: ${e.message}</td></tr>`;
+        totalEl.textContent = '';
+    }
+}
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 function refreshAll() {
     carregarFluxoFiscal();
     carregarParametros();
     pesquisarSku();
+    carregarStatusSync();
 }
 
 document.addEventListener('DOMContentLoaded', refreshAll);

@@ -1358,6 +1358,131 @@ def inventree_sincronizar_nota_admin():
         return jsonify({'sucesso': False, 'erro': str(exc)}), 502
 
 
+# ============================================================================
+# ESTOQUE EM TEMPO REAL (LAYOUT)
+# ============================================================================
+
+@wms_bp.route('/estoque-tempo-real', methods=['GET'])
+@requer_wms_operacao
+def estoque_tempo_real():
+    """Retorna visão consolidada do estoque por localização com dados do SKU mestre."""
+    filtro = (request.args.get('filtro') or '').strip().lower()
+    deposito_codigo = (request.args.get('deposito') or '').strip().upper()
+    apenas_com_saldo = request.args.get('com_saldo', '1').strip() == '1'
+
+    query = (
+        db.session.query(EstoqueWMS, LocalizacaoArmazem, DepositoWMS, WMSSkuMestre)
+        .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+        .outerjoin(DepositoWMS, LocalizacaoArmazem.deposito_id == DepositoWMS.id)
+        .outerjoin(
+            WMSSkuMestre,
+            func.lower(func.trim(WMSSkuMestre.codigo_item)) == func.lower(func.trim(EstoqueWMS.codigo_item)),
+        )
+        .filter(LocalizacaoArmazem.ativo == True)
+    )
+
+    if apenas_com_saldo:
+        query = query.filter(EstoqueWMS.qtd_total > 0)
+
+    if deposito_codigo:
+        query = query.filter(func.upper(DepositoWMS.codigo) == deposito_codigo)
+
+    if filtro:
+        query = query.filter(
+            or_(
+                func.lower(EstoqueWMS.codigo_item).contains(filtro),
+                func.lower(LocalizacaoArmazem.codigo).contains(filtro),
+                func.lower(LocalizacaoArmazem.rua).contains(filtro),
+            )
+        )
+
+    registros = query.order_by(
+        LocalizacaoArmazem.rua.asc(),
+        LocalizacaoArmazem.predio.asc(),
+        LocalizacaoArmazem.nivel.asc(),
+        EstoqueWMS.codigo_item.asc(),
+    ).limit(1000).all()
+
+    resultado = []
+    for est, loc, dep, sku in registros:
+        qtd_disponivel = (est.qtd_total or 0) - (est.qtd_separada or 0) - (est.qtd_bloqueada or 0)
+        resultado.append({
+            'estoque_id': est.id,
+            'codigo_item': est.codigo_item,
+            'localizacao_id': loc.id,
+            'localizacao_codigo': loc.codigo,
+            'rua': loc.rua,
+            'predio': loc.predio,
+            'nivel': loc.nivel,
+            'deposito_codigo': dep.codigo if dep else None,
+            'deposito_nome': dep.nome if dep else None,
+            'qtd_total': est.qtd_total,
+            'qtd_separada': est.qtd_separada,
+            'qtd_bloqueada': est.qtd_bloqueada,
+            'qtd_disponivel': round(qtd_disponivel, 2),
+            'unidade': sku.unidade if sku else 'UN',
+            'curva_abc': sku.curva_abc if sku else None,
+            'estoque_minimo': sku.estoque_minimo if sku else None,
+            'estoque_maximo': sku.estoque_maximo if sku else None,
+            'data_atualizacao': est.data_atualizacao.isoformat() if est.data_atualizacao else None,
+        })
+
+    # Totais por localização para o resumo
+    loc_resumo = {}
+    for r in resultado:
+        key = r['localizacao_codigo']
+        if key not in loc_resumo:
+            loc_resumo[key] = {'skus': 0, 'qtd_total': 0, 'rua': r['rua'], 'deposito': r['deposito_codigo']}
+        loc_resumo[key]['skus'] += 1
+        loc_resumo[key]['qtd_total'] += r['qtd_total']
+
+    return jsonify({
+        'itens': resultado,
+        'total_registros': len(resultado),
+        'total_localizacoes_com_saldo': len(loc_resumo),
+        'resumo_por_localizacao': loc_resumo,
+    }), 200
+
+
+# ============================================================================
+# SINCRONIZAÇÃO ERP → WMS
+# ============================================================================
+
+@wms_bp.route('/erp-sync', methods=['POST'])
+@requer_admin
+def executar_sync_erp():
+    """Executa sincronização completa do estoque ERP → WMS"""
+    from ..services.erp_sync_service import ERPSyncService
+    try:
+        resultado = ERPSyncService.executar_sync_completo()
+        return jsonify({'sucesso': True, 'resultado': resultado}), 200
+    except Exception as exc:
+        return jsonify({'sucesso': False, 'erro': str(exc)}), 502
+
+
+@wms_bp.route('/erp-sync/status', methods=['GET'])
+@requer_wms_operacao
+def status_sync_erp():
+    """Retorna status da última sincronização ERP"""
+    from ..services.erp_sync_service import ERPSyncService
+    ultimo = ERPSyncService.obter_ultimo_sync()
+    return jsonify({'ultimo_sync': ultimo}), 200
+
+
+@wms_bp.route('/erp-sync/preview', methods=['GET'])
+@requer_wms_operacao
+def preview_estoque_erp():
+    """Preview dos dados de estoque do ERP (somente leitura)"""
+    from ..services.erp_sync_service import ERPSyncService
+    filtro = (request.args.get('filtro') or '').strip() or None
+    limite = min(int(request.args.get('limite') or 200), 500)
+    try:
+        resultado = ERPSyncService.preview_estoque_erp(filtro=filtro, limite=limite)
+        return jsonify(resultado), 200
+    except Exception as exc:
+        return jsonify({'erro': str(exc)}), 502
+
+
 def registrar_rotas_wms(app):
     """Registra o blueprint WMS na aplicação"""
     app.register_blueprint(wms_bp)

@@ -84,6 +84,12 @@ from ..models import (
     ItemNota,
     ChecklistRecebimento,
     LocalizacaoArmazem,
+    AgendamentoCliente,
+    AgendamentoFornecedor,
+    AgendamentoSolicitacao,
+    AgendamentoSolicitacaoHistorico,
+    AgendamentoSolicitacaoItem,
+    AgendamentoVeiculo,
     ItemWMS,
     BoletoContaReceber,
     LogAcessoAdministrativo,
@@ -119,6 +125,25 @@ from ..schemas.api_schemas import (
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste, listar_nfes_consyste_por_caixa
+from ..services.agendamento_service import (
+    PRIORIDADES_SOLICITACAO,
+    STATUS_ATIVOS,
+    STATUS_SOLICITACAO,
+    TIPOS_SOLICITACAO,
+    VEICULOS_KANBAN,
+    consultar_nf_agendamento,
+    consultar_oc_agendamento,
+    ensure_cadastros_base_carregados,
+    formatar_endereco_logistico,
+    importar_cadastros_excel,
+    listar_cadastros,
+    listar_veiculos_agendamento,
+    localizar_cadastro,
+    prioridade_label_agendamento,
+    resumo_cadastros,
+    serializar_cadastro,
+    status_label_agendamento,
+)
 from ..services.conserto_service import ConsertoService
 from ..services.expedicao_service import (
     list_conferencia_reports,
@@ -3190,6 +3215,32 @@ def _gerar_campos_boleto(numero_nota: str, valor: float):
     return nosso_numero, linha_digitavel, codigo_barras
 
 
+def _boleto_bank_label() -> str:
+    label = str(current_app.config.get("BOLETO_BANK_LABEL", "")).strip()
+    return label or "Banco do Brasil"
+
+
+def _normalizar_banco_boleto(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw or raw.upper().startswith("BOFA"):
+        return _boleto_bank_label()
+    return raw
+
+
+def _coerce_date(value):
+    if value is None:
+        return None
+    if hasattr(value, "date"):
+        return value.date()
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
 @api_bp.route("/api/financeiro/contas-receber/notas")
 @permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
 def financeiro_contas_receber_notas():
@@ -3229,7 +3280,7 @@ def financeiro_contas_receber_notas():
                 "data_ref": (r[7] or r[8]).strftime("%d/%m/%Y %H:%M") if (r[7] or r[8]) else "---",
                 "boleto_gerado": bool(boleto),
                 "boleto": {
-                    "banco": boleto.banco,
+                    "banco": _normalizar_banco_boleto(boleto.banco),
                     "valor": float(boleto.valor or 0.0),
                     "nosso_numero": boleto.nosso_numero,
                     "linha_digitavel": boleto.linha_digitavel,
@@ -3242,7 +3293,7 @@ def financeiro_contas_receber_notas():
             }
         )
 
-    return jsonify({"itens": resultado, "total": len(resultado), "banco_padrao": "BOFA - Bank of America"})
+    return jsonify({"itens": resultado, "total": len(resultado), "banco_padrao": _boleto_bank_label()})
 
 
 @api_bp.route("/api/financeiro/contas-receber/gerar-boleto", methods=["POST"])
@@ -3253,14 +3304,30 @@ def financeiro_contas_receber_gerar_boleto():
     if not nota:
         return jsonify({"sucesso": False, "error": "Informe a nota."}), 400
 
+    cpf_cnpj_pagador = str(data.get("cpf_cnpj") or "").strip()
+    cpf_cnpj_pagador_digits = _only_digits(cpf_cnpj_pagador)
+    if cpf_cnpj_pagador and len(cpf_cnpj_pagador_digits) not in (11, 14):
+        return jsonify({"sucesso": False, "error": "Informe um CPF/CNPJ valido do pagador."}), 400
+
+    nome_pagador = str(data.get("nome_pagador") or "").strip()[:200]
+
     boleto_existente = BoletoContaReceber.query.filter_by(numero_nota=nota).first()
     if boleto_existente:
+        atualizou = False
+        if cpf_cnpj_pagador_digits and boleto_existente.cpf_cnpj_pagador != cpf_cnpj_pagador_digits:
+            boleto_existente.cpf_cnpj_pagador = cpf_cnpj_pagador_digits
+            atualizou = True
+        if nome_pagador and boleto_existente.nome_pagador != nome_pagador:
+            boleto_existente.nome_pagador = nome_pagador
+            atualizou = True
+        if atualizou:
+            db.session.commit()
         return jsonify(
             {
                 "sucesso": True,
                 "ja_existia": True,
                 "boleto": {
-                    "banco": boleto_existente.banco,
+                    "banco": _normalizar_banco_boleto(boleto_existente.banco),
                     "valor": float(boleto_existente.valor or 0.0),
                     "nosso_numero": boleto_existente.nosso_numero,
                     "linha_digitavel": boleto_existente.linha_digitavel,
@@ -3276,6 +3343,7 @@ def financeiro_contas_receber_gerar_boleto():
             func.max(ItemNota.chave_acesso),
             func.max(ItemNota.valor_pagamento_xml),
             func.max(ItemNota.pagamento_xml),
+            func.max(ItemNota.vencimento_pagamento_xml),
         )
         .filter(ItemNota.numero_nota == nota)
         .first()
@@ -3283,19 +3351,26 @@ def financeiro_contas_receber_gerar_boleto():
     if not nota_info or not bool(nota_info[2]):
         return jsonify({"sucesso": False, "error": "Nota sem informação de pagamento no XML."}), 400
 
+    if not cpf_cnpj_pagador_digits:
+        return jsonify({"sucesso": False, "error": "Informe o CPF/CNPJ do pagador para liberar a consulta no portal do cliente."}), 400
+
     valor = float(nota_info[1] or 0.0)
+    vencimento = _coerce_date(nota_info[3])
     nosso_numero, linha_digitavel, codigo_barras = _gerar_campos_boleto(nota, valor)
 
     boleto = BoletoContaReceber(
         numero_nota=nota,
         chave_acesso=str(nota_info[0] or ""),
-        banco="BOFA - Bank of America",
+        banco=_boleto_bank_label(),
         valor=valor,
         nosso_numero=nosso_numero,
         linha_digitavel=linha_digitavel,
         codigo_barras=codigo_barras,
         status="Gerado",
         usuario_geracao=session.get("username", "sistema"),
+        cpf_cnpj_pagador=cpf_cnpj_pagador_digits,
+        nome_pagador=nome_pagador or None,
+        vencimento=vencimento,
     )
     db.session.add(boleto)
     db.session.commit()
@@ -3305,7 +3380,7 @@ def financeiro_contas_receber_gerar_boleto():
             "sucesso": True,
             "ja_existia": False,
             "boleto": {
-                "banco": boleto.banco,
+                "banco": _normalizar_banco_boleto(boleto.banco),
                 "valor": float(boleto.valor or 0.0),
                 "nosso_numero": boleto.nosso_numero,
                 "linha_digitavel": boleto.linha_digitavel,
@@ -4220,9 +4295,11 @@ def _expedicao_conferencia_simples_fotos_dir() -> str:
     return base_dir
 
 
-def _nome_foto_expedicao_conferencia(orcamento: str, data_ref: datetime, index: int, extensao: str) -> str:
+def _nome_foto_expedicao_conferencia(referencia: str, data_ref: datetime, index: int, extensao: str, prefixo: str = "REFERENCIA") -> str:
     extensao_limpa = extensao if extensao.startswith(".") else f".{extensao}"
-    return f"ORÇAMENTO {orcamento} - {data_ref.strftime('%Y-%m-%d %H-%M-%S')} - FOTO {index:02d}{extensao_limpa}"
+    referencia_limpa = re.sub(r"\s+", " ", str(referencia or "").strip()) or "SEM REFERENCIA"
+    prefixo_limpo = re.sub(r"\s+", " ", str(prefixo or "REFERENCIA").strip()).upper()
+    return f"{prefixo_limpo} {referencia_limpa} - {data_ref.strftime('%Y-%m-%d %H-%M-%S')} - FOTO {index:02d}{extensao_limpa}"
 
 
 def _extrair_documentos_consyste(payload):
@@ -4387,13 +4464,80 @@ def _estorno_pendente_info(conferencia_id):
     }
 
 
+def _tipo_referencia_expedicao(valor: str | None, default: str = "Orcamento") -> str:
+    texto = str(valor or "").strip().casefold()
+    if not texto:
+        return default
+    if texto in {"ordemcompra", "ordem_compra", "ordem de compra", "oc", "pedido"}:
+        return "OrdemCompra"
+    return "Orcamento"
+
+
+def _dados_referencia_expedicao(origem) -> tuple[str, str, str, str]:
+    tipo_referencia = _tipo_referencia_expedicao(getattr(origem, "tipo_referencia", None))
+    orcamento = str(getattr(origem, "orcamento", "") or "").strip()
+    numero_os = str(getattr(origem, "numero_os", "") or "").strip()
+    ordem_compra = str(getattr(origem, "ordem_compra", "") or "").strip()
+    return tipo_referencia, orcamento, numero_os, ordem_compra
+
+
+def _referencia_principal_expedicao(origem) -> str:
+    tipo_referencia, orcamento, _, ordem_compra = _dados_referencia_expedicao(origem)
+    return ordem_compra if tipo_referencia == "OrdemCompra" else orcamento
+
+
+def _referencia_titulo_expedicao(origem) -> str:
+    tipo_referencia, orcamento, numero_os, ordem_compra = _dados_referencia_expedicao(origem)
+    if tipo_referencia == "OrdemCompra":
+        return f"Ordem de compra {ordem_compra}" if ordem_compra else "Ordem de compra não informada"
+    if orcamento and numero_os:
+        return f"Orçamento {orcamento} · OS {numero_os}"
+    if orcamento:
+        return f"Orçamento {orcamento}"
+    if numero_os:
+        return f"OS {numero_os}"
+    return "Referência não informada"
+
+
+def _campo_principal_referencia_expedicao(tipo_referencia: str) -> str:
+    return "ordem_compra" if tipo_referencia == "OrdemCompra" else "orcamento"
+
+
+def _label_tipo_referencia_expedicao(tipo_referencia: str) -> str:
+    return "Ordem de compra" if tipo_referencia == "OrdemCompra" else "Orçamento"
+
+
+def _extrair_referencia_expedicao_payload(source) -> tuple[str, str, str, str]:
+    getter = source.get if hasattr(source, "get") else lambda key, default="": default
+    tipo_referencia = _tipo_referencia_expedicao(getter("tipo_referencia"))
+    orcamento = str(getter("orcamento") or "").strip()
+    numero_os = str(getter("numero_os") or "").strip()
+    ordem_compra = str(getter("ordem_compra") or "").strip()
+
+    if tipo_referencia == "OrdemCompra":
+        return tipo_referencia, "", "", ordem_compra
+    return tipo_referencia, orcamento, numero_os, ""
+
+
+def _foto_expedicao_conferencia_disponivel(foto: ExpedicaoConferenciaSimplesFoto) -> bool:
+    caminho = str(getattr(foto, "file_path", "") or "").strip()
+    return bool(caminho) and os.path.isfile(caminho)
+
+
 def _serializar_expedicao_conferencia_simples(registro: ExpedicaoConferenciaSimples, fotos=None) -> dict:
     fotos = fotos or []
     status_texto = _status_normalizado_expedicao_conferencia(registro.status)
     status_slug = _status_slug_expedicao_conferencia(status_texto)
+    tipo_referencia, _, numero_os, ordem_compra = _dados_referencia_expedicao(registro)
     return {
         "id": registro.id,
         "orcamento": registro.orcamento,
+        "tipo_referencia": tipo_referencia,
+        "tipo_referencia_label": _label_tipo_referencia_expedicao(tipo_referencia),
+        "numero_os": numero_os,
+        "ordem_compra": ordem_compra,
+        "referencia_numero": _referencia_principal_expedicao(registro),
+        "referencia_titulo": _referencia_titulo_expedicao(registro),
         "conferente": registro.conferente,
         "data_conferencia": registro.data_conferencia.strftime("%d/%m/%Y %H:%M") if registro.data_conferencia else "",
         "numero_nf": registro.numero_nf or "",
@@ -4413,6 +4557,7 @@ def _serializar_expedicao_conferencia_simples(registro: ExpedicaoConferenciaSimp
                 "id": foto.id,
                 "nome": foto.file_name,
                 "url": f"/api/expedicao/conferencia-simples/fotos/{foto.id}",
+                "disponivel": _foto_expedicao_conferencia_disponivel(foto),
             }
             for foto in fotos
         ],
@@ -4434,6 +4579,8 @@ def listar_expedicao_conferencia_simples():
         query = query.filter(
             or_(
                 ExpedicaoConferenciaSimples.orcamento.ilike(termo),
+                ExpedicaoConferenciaSimples.numero_os.ilike(termo),
+                ExpedicaoConferenciaSimples.ordem_compra.ilike(termo),
                 ExpedicaoConferenciaSimples.numero_nf.ilike(termo),
                 ExpedicaoConferenciaSimples.nome_cliente.ilike(termo),
                 ExpedicaoConferenciaSimples.conferente.ilike(termo),
@@ -4617,6 +4764,9 @@ def buscar_nf_expedicao():
     agora = datetime.now()
     registro = ExpedicaoConferenciaSimples(
         orcamento="",
+        tipo_referencia="Orcamento",
+        numero_os=None,
+        ordem_compra=None,
         conferente=usuario,
         data_conferencia=agora,
         numero_nf=numero_nf,
@@ -4670,6 +4820,9 @@ def vincular_nf_emitida_expedicao():
     agora = datetime.now()
     registro = ExpedicaoConferenciaSimples(
         orcamento=orcamento or "",
+        tipo_referencia="Orcamento",
+        numero_os=None,
+        ordem_compra=None,
         conferente=usuario,
         data_conferencia=agora,
         numero_nf=numero_nf,
@@ -4693,13 +4846,13 @@ def vincular_nf_emitida_expedicao():
 @api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/completar", methods=["POST"])
 @permission_required("PAGE_EXPEDICAO_CONFERENCIA")
 def completar_conferencia_simples(conferencia_id: int):
-    """Conferente completa conferência pendente: adiciona fotos, orçamento, transporte."""
+    """Completa o registro pendente com referência, fotos e dados da expedição."""
     registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
     if not registro:
         return jsonify({"error": "Conferência não encontrada."}), 404
 
-    orcamento = str(request.form.get("orcamento") or "").strip()
-    nome_cliente = str(request.form.get("nome_cliente") or "").strip()
+    tipo_referencia, orcamento, numero_os, ordem_compra = _extrair_referencia_expedicao_payload(request.form)
+    nome_cliente_informado = str(request.form.get("nome_cliente") or "").strip()
     transportadora = str(request.form.get("transportadora") or "").strip()
     placa = str(request.form.get("placa") or "").strip().upper()
     motorista = str(request.form.get("motorista") or "").strip()
@@ -4709,24 +4862,57 @@ def completar_conferencia_simples(conferencia_id: int):
     if not fotos:
         fotos_existentes = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count()
         if fotos_existentes == 0:
-            return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
+            return jsonify({"error": "Inclua pelo menos uma foto da expedição."}), 400
 
     for arquivo in fotos:
         extensao = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
         if extensao not in ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS:
             return jsonify({"error": "Envie apenas imagens JPG, PNG, WEBP ou BMP."}), 400
 
-    if orcamento:
-        registro.orcamento = orcamento
+    if tipo_referencia == "OrdemCompra":
+        if not ordem_compra:
+            return jsonify({"error": "Informe o número da ordem de compra."}), 400
+    elif not orcamento:
+        return jsonify({"error": "Informe o número do orçamento."}), 400
 
-    # Prioridade NF: se conferente colocou NF manualmente, mantém a dele
-    if numero_nf_form and numero_nf_form != re.sub(r"\D", "", str(registro.numero_nf or "")):
+    registro.tipo_referencia = tipo_referencia
+    registro.orcamento = orcamento
+    registro.numero_os = numero_os or None
+    registro.ordem_compra = ordem_compra or None
+
+    nome_cliente_final = registro.nome_cliente or None
+    cliente_origem = registro.cliente_origem or "Manual"
+    consyste_document_id = registro.consyste_document_id
+    nf_origem = registro.nf_origem or "Manual"
+
+    if numero_nf_form:
+        consulta_nf = _consultar_nf_emitida_exp_conferencia(numero_nf_form)
+        if consulta_nf.get("encontrada"):
+            nome_cliente_consyste = str(consulta_nf.get("nome_cliente") or "").strip()
+            if nome_cliente_informado:
+                nome_cliente_final = nome_cliente_informado
+                cliente_origem = "Manual"
+            else:
+                nome_cliente_final = nome_cliente_consyste or nome_cliente_final
+                cliente_origem = "Consyste" if nome_cliente_consyste else "Manual"
+            consyste_document_id = str(consulta_nf.get("documento_id") or "").strip() or None
+            nf_origem = "Consyste"
+        else:
+            if not nome_cliente_informado:
+                return jsonify({"error": "Informe o nome do cliente/fornecedor quando a NF ainda não estiver disponível na Consyste."}), 400
+            nome_cliente_final = nome_cliente_informado
+            cliente_origem = "Manual"
+            consyste_document_id = None
+            nf_origem = "Manual"
         registro.numero_nf = numero_nf_form
-        registro.nf_origem = "Manual"
+    elif nome_cliente_informado:
+        nome_cliente_final = nome_cliente_informado
+        cliente_origem = "Manual"
 
-    # Nome do cliente: conferente pode corrigir razão social vinda do Consyste
-    if nome_cliente:
-        registro.nome_cliente = nome_cliente
+    registro.nome_cliente = nome_cliente_final or None
+    registro.cliente_origem = cliente_origem
+    registro.consyste_document_id = consyste_document_id
+    registro.nf_origem = nf_origem
 
     if transportadora:
         registro.transportadora = transportadora
@@ -4743,10 +4929,12 @@ def completar_conferencia_simples(conferencia_id: int):
         base_dir = _expedicao_conferencia_simples_fotos_dir()
         agora = datetime.now()
         fotos_existentes_count = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count()
+        referencia_foto = _referencia_principal_expedicao(registro) or str(registro.id)
+        prefixo_foto = "ORDEM COMPRA" if registro.tipo_referencia == "OrdemCompra" else "ORCAMENTO"
         try:
             for index, arquivo in enumerate(fotos, start=fotos_existentes_count + 1):
                 extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1].lower() or ".jpg"
-                nome_final = _nome_foto_expedicao_conferencia(registro.orcamento or str(registro.id), agora, index, extensao)
+                nome_final = _nome_foto_expedicao_conferencia(referencia_foto, agora, index, extensao, prefixo=prefixo_foto)
                 nome_arquivo_local = secure_filename(nome_final) or f"conf_{registro.id}_{index}{extensao}"
                 caminho_final = os.path.join(base_dir, nome_arquivo_local)
                 arquivo.save(caminho_final)
@@ -4777,17 +4965,20 @@ def completar_conferencia_simples(conferencia_id: int):
 @api_bp.route("/api/expedicao/conferencia-simples", methods=["POST"])
 @permission_required("PAGE_EXPEDICAO_CONFERENCIA")
 def criar_expedicao_conferencia_simples():
-    orcamento = str(request.form.get("orcamento") or "").strip()
+    tipo_referencia, orcamento, numero_os, ordem_compra = _extrair_referencia_expedicao_payload(request.form)
     numero_nf = re.sub(r"\D", "", str(request.form.get("numero_nf") or ""))
     nome_cliente_manual = str(request.form.get("nome_cliente") or "").strip()
     transportadora = str(request.form.get("transportadora") or "").strip()
     placa = str(request.form.get("placa") or "").strip().upper()
     fotos = [arquivo for arquivo in request.files.getlist("fotos") if arquivo and str(arquivo.filename or "").strip()]
 
-    if not orcamento:
-        return jsonify({"error": "Informe o orçamento."}), 400
+    if tipo_referencia == "OrdemCompra":
+        if not ordem_compra:
+            return jsonify({"error": "Informe o número da ordem de compra."}), 400
+    elif not orcamento:
+        return jsonify({"error": "Informe o número do orçamento."}), 400
     if not fotos:
-        return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
+        return jsonify({"error": "Inclua pelo menos uma foto da expedição."}), 400
 
     for arquivo in fotos:
         extensao = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
@@ -4805,13 +4996,16 @@ def criar_expedicao_conferencia_simples():
             cliente_origem = "Consyste" if nome_cliente else "Manual"
             consyste_document_id = str(consulta_nf.get("documento_id") or "").strip() or None
         elif not nome_cliente_manual:
-            return jsonify({"error": "Informe o nome do cliente quando a NF ainda não estiver disponível na Consyste."}), 400
+            return jsonify({"error": "Informe o nome do cliente/fornecedor quando a NF ainda não estiver disponível na Consyste."}), 400
 
     usuario = session.get("username", "desconhecido")
     agora = datetime.now()
     motorista = str(request.form.get("motorista") or "").strip()
     registro = ExpedicaoConferenciaSimples(
         orcamento=orcamento,
+        tipo_referencia=tipo_referencia,
+        numero_os=numero_os or None,
+        ordem_compra=ordem_compra or None,
         conferente=usuario,
         data_conferencia=agora,
         numero_nf=numero_nf or None,
@@ -4831,11 +5025,13 @@ def criar_expedicao_conferencia_simples():
 
     fotos_salvas = []
     base_dir = _expedicao_conferencia_simples_fotos_dir()
+    referencia_foto = _referencia_principal_expedicao(registro) or str(registro.id)
+    prefixo_foto = "ORDEM COMPRA" if registro.tipo_referencia == "OrdemCompra" else "ORCAMENTO"
     try:
         for index, arquivo in enumerate(fotos, start=1):
             extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1].lower() or ".jpg"
-            nome_final = _nome_foto_expedicao_conferencia(registro.orcamento, agora, index, extensao)
-            nome_arquivo_local = secure_filename(nome_final) or f"orcamento_{registro.orcamento}_{index}{extensao}"
+            nome_final = _nome_foto_expedicao_conferencia(referencia_foto, agora, index, extensao, prefixo=prefixo_foto)
+            nome_arquivo_local = secure_filename(nome_final) or f"expedicao_{registro.id}_{index}{extensao}"
             caminho_final = os.path.join(base_dir, nome_arquivo_local)
             arquivo.save(caminho_final)
 
@@ -4848,7 +5044,7 @@ def criar_expedicao_conferencia_simples():
             fotos_salvas.append(foto)
     except Exception as exc:
         db.session.rollback()
-        return jsonify({"error": f"Falha ao salvar as fotos da conferência. Detalhe: {exc}"}), 500
+        return jsonify({"error": f"Falha ao salvar as fotos da expedição. Detalhe: {exc}"}), 500
 
     db.session.commit()
     return jsonify(
@@ -4928,6 +5124,11 @@ def excluir_expedicao_conferencia_simples(conferencia_id: int):
     if not registro:
         return jsonify({"error": "Conferência não encontrada."}), 404
 
+    estornos = (
+        ExpedicaoConferenciaSimplesEstorno.query
+        .filter_by(conferencia_id=registro.id)
+        .all()
+    )
     fotos = (
         ExpedicaoConferenciaSimplesFoto.query
         .filter_by(conferencia_id=registro.id)
@@ -4935,18 +5136,25 @@ def excluir_expedicao_conferencia_simples(conferencia_id: int):
         .all()
     )
 
-    for foto in fotos:
-        caminho_foto = str(foto.file_path or "").strip()
-        if caminho_foto and os.path.isfile(caminho_foto):
-            try:
-                os.remove(caminho_foto)
-            except OSError:
-                pass
-        db.session.delete(foto)
+    try:
+        for estorno in estornos:
+            db.session.delete(estorno)
 
-    db.session.delete(registro)
-    db.session.commit()
-    return jsonify({"sucesso": True})
+        for foto in fotos:
+            caminho_foto = str(foto.file_path or "").strip()
+            if caminho_foto and os.path.isfile(caminho_foto):
+                try:
+                    os.remove(caminho_foto)
+                except OSError:
+                    pass
+            db.session.delete(foto)
+
+        db.session.delete(registro)
+        db.session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Não foi possível excluir o registro. Detalhe: {exc}"}), 500
 
 
 

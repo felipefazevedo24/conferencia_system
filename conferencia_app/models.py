@@ -175,7 +175,7 @@ class BoletoContaReceber(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), nullable=False, unique=True, index=True)
     chave_acesso = db.Column(db.String(44), index=True)
-    banco = db.Column(db.String(80), nullable=False, default="BOFA - Bank of America")
+    banco = db.Column(db.String(80), nullable=False, default="Banco do Brasil")
     valor = db.Column(db.Float, nullable=False, default=0.0)
     nosso_numero = db.Column(db.String(40), nullable=False, unique=True, index=True)
     linha_digitavel = db.Column(db.String(120), nullable=False)
@@ -183,6 +183,11 @@ class BoletoContaReceber(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Gerado", index=True)
     usuario_geracao = db.Column(db.String(100), nullable=False)
     data_geracao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    cpf_cnpj_pagador = db.Column(db.String(18), index=True)
+    nome_pagador = db.Column(db.String(200))
+    vencimento = db.Column(db.Date)
+    data_pagamento = db.Column(db.Date)
+    bofa_id = db.Column(db.String(100))
 
 
 class LogExclusaoNota(db.Model):
@@ -302,6 +307,9 @@ class ExpedicaoEstorno(db.Model):
 class ExpedicaoConferenciaSimples(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     orcamento = db.Column(db.String(80), nullable=False, index=True)
+    tipo_referencia = db.Column(db.String(20), nullable=False, default="Orcamento")
+    numero_os = db.Column(db.String(80), index=True)
+    ordem_compra = db.Column(db.String(80), index=True)
     conferente = db.Column(db.String(100), nullable=False, index=True)
     data_conferencia = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     numero_nf = db.Column(db.String(40), index=True)
@@ -348,6 +356,191 @@ class ExpedicaoConferenciaSimplesEstorno(db.Model):
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class AgendamentoVeiculo(db.Model):
+    __tablename__ = "agendamento_veiculo"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    nome_exibicao = db.Column(db.String(60), nullable=False)
+    placa = db.Column(db.String(12))
+    cor_kanban = db.Column(db.String(20))
+    janela_conflito_min = db.Column(db.Integer, nullable=False, default=30)
+    duracao_padrao_min = db.Column(db.Integer, nullable=False, default=120)
+    ordem_exibicao = db.Column(db.Integer, nullable=False, default=0)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class AgendamentoMotorista(db.Model):
+    __tablename__ = "agendamento_motorista"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False, index=True)
+    telefone = db.Column(db.String(40))
+    cnh = db.Column(db.String(40), index=True)
+    observacoes = db.Column(db.String(500))
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class AgendamentoFornecedor(db.Model):
+    __tablename__ = "agendamento_fornecedor"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), index=True)
+    nome = db.Column(db.String(160), nullable=False, index=True)
+    razao_social = db.Column(db.String(220))
+    cnpj_cpf = db.Column(db.String(20), index=True)
+    tipo_pessoa = db.Column(db.String(30))
+    contato = db.Column(db.String(120))
+    telefone = db.Column(db.String(40))
+    telefone_secundario = db.Column(db.String(40))
+    email = db.Column(db.String(160))
+    logradouro = db.Column(db.String(180))
+    numero = db.Column(db.String(30))
+    complemento = db.Column(db.String(80))
+    bairro = db.Column(db.String(80))
+    cidade = db.Column(db.String(80), index=True)
+    uf = db.Column(db.String(2), index=True)
+    cep = db.Column(db.String(10))
+    observacoes = db.Column(db.String(500))
+    janela_atendimento = db.Column(db.String(120))
+    transportadora = db.Column(db.String(160))
+    codigo_integracao = db.Column(db.String(80), index=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    fonte_arquivo = db.Column(db.String(260))
+    importado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class AgendamentoCliente(db.Model):
+    __tablename__ = "agendamento_cliente"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), index=True)
+    nome = db.Column(db.String(160), nullable=False, index=True)
+    razao_social = db.Column(db.String(220))
+    cnpj_cpf = db.Column(db.String(20), index=True)
+    tipo_pessoa = db.Column(db.String(30))
+    contato = db.Column(db.String(120))
+    telefone = db.Column(db.String(40))
+    telefone_secundario = db.Column(db.String(40))
+    email = db.Column(db.String(160))
+    logradouro = db.Column(db.String(180))
+    numero = db.Column(db.String(30))
+    complemento = db.Column(db.String(80))
+    bairro = db.Column(db.String(80))
+    cidade = db.Column(db.String(80), index=True)
+    uf = db.Column(db.String(2), index=True)
+    cep = db.Column(db.String(10))
+    observacoes = db.Column(db.String(500))
+    municipio_entrega = db.Column(db.String(120))
+    codigo_integracao = db.Column(db.String(80), index=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    fonte_arquivo = db.Column(db.String(260))
+    importado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class AgendamentoSolicitacao(db.Model):
+    __tablename__ = "agendamento_solicitacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(30), unique=True, index=True)
+    tipo = db.Column(db.String(10), nullable=False, index=True)  # COLETA | ENTREGA
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    prioridade = db.Column(db.String(20), nullable=False, default="Media", index=True)
+    prazo_limite = db.Column(db.DateTime, index=True)
+    solicitante = db.Column(db.String(100), nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    documento_tipo = db.Column(db.String(10), nullable=False, index=True)  # OC | NF
+    documento_numero = db.Column(db.String(60), nullable=False, index=True)
+    numero_oc = db.Column(db.String(60), index=True)
+    numero_nf = db.Column(db.String(60), index=True)
+    origem_documento = db.Column(db.String(20), nullable=False, default="Manual")
+    parceiro_tipo = db.Column(db.String(20), nullable=False)  # Fornecedor | Cliente
+    parceiro_codigo = db.Column(db.String(50), index=True)
+    parceiro_nome = db.Column(db.String(160), nullable=False, index=True)
+    parceiro_razao_social = db.Column(db.String(220))
+    parceiro_documento = db.Column(db.String(20), index=True)
+    contato = db.Column(db.String(120))
+    telefone = db.Column(db.String(40))
+    email = db.Column(db.String(160))
+    logradouro = db.Column(db.String(180), nullable=False)
+    numero = db.Column(db.String(30))
+    complemento = db.Column(db.String(80))
+    bairro = db.Column(db.String(80))
+    cidade = db.Column(db.String(80), nullable=False, index=True)
+    uf = db.Column(db.String(2), nullable=False, index=True)
+    cep = db.Column(db.String(10))
+    observacoes_endereco = db.Column(db.String(500))
+    observacoes_solicitante = db.Column(db.String(500))
+    observacoes_logistica = db.Column(db.String(500))
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    motorista_nome = db.Column(db.String(160), index=True)
+    data_hora_saida_prevista = db.Column(db.DateTime, index=True)
+    data_hora_retorno_prevista = db.Column(db.DateTime)
+    data_hora_saida_real = db.Column(db.DateTime)
+    data_hora_retorno_real = db.Column(db.DateTime)
+    origem_latitude = db.Column(db.Float)
+    origem_longitude = db.Column(db.Float)
+    destino_latitude = db.Column(db.Float)
+    destino_longitude = db.Column(db.Float)
+    km_estimado = db.Column(db.Float)
+    km_estimado_retorno = db.Column(db.Float)
+    alocado_por = db.Column(db.String(100))
+    alocado_em = db.Column(db.DateTime)
+    concluido_por = db.Column(db.String(100))
+    concluido_em = db.Column(db.DateTime)
+    cancelado_por = db.Column(db.String(100))
+    cancelado_em = db.Column(db.DateTime)
+    motivo_cancelamento = db.Column(db.String(500))
+    qtd_itens = db.Column(db.Integer, nullable=False, default=0)
+    qtd_volumes = db.Column(db.Float, nullable=False, default=0.0)
+    resumo_itens = db.Column(db.String(100), nullable=False, default="0 itens / 0 volumes")
+    payload_origem = db.Column(db.Text)
+
+
+class AgendamentoSolicitacaoItem(db.Model):
+    __tablename__ = "agendamento_solicitacao_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer,
+        db.ForeignKey("agendamento_solicitacao.id"),
+        nullable=False,
+        index=True,
+    )
+    sequencia = db.Column(db.Integer, nullable=False, default=1)
+    codigo_item = db.Column(db.String(60), index=True)
+    descricao = db.Column(db.String(255), nullable=False)
+    quantidade = db.Column(db.Float, nullable=False, default=0.0)
+    unidade = db.Column(db.String(20))
+    volumes = db.Column(db.Float, nullable=False, default=0.0)
+    observacoes = db.Column(db.String(500))
+
+
+class AgendamentoSolicitacaoHistorico(db.Model):
+    __tablename__ = "agendamento_solicitacao_historico"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer,
+        db.ForeignKey("agendamento_solicitacao.id"),
+        nullable=False,
+        index=True,
+    )
+    evento = db.Column(db.String(40), nullable=False, index=True)
+    status_anterior = db.Column(db.String(20))
+    status_novo = db.Column(db.String(20))
+    usuario = db.Column(db.String(100), nullable=False, index=True)
+    detalhe = db.Column(db.String(500))
+    payload_json = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
 # ============================================================================

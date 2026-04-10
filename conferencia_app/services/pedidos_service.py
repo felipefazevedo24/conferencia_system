@@ -12,6 +12,7 @@ Planilha (pública):
 import csv
 import json
 import re
+import unicodedata
 from io import StringIO
 from pathlib import Path
 from datetime import datetime
@@ -28,6 +29,31 @@ PEDIDOS_SHEETS_URL = (
 )
 PEDIDOS_LOCAL_EXCEL_PATH = Path(__file__).resolve().parent.parent.parent / "instance" / "pedidos" / "pedidos.xlsx"
 PEDIDOS_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / "instance" / "pedidos" / "pedidos_cache.json"
+PEDIDOS_FONTE_GOOGLE_SHEETS = "GoogleSheets"
+PEDIDOS_FONTE_CACHE_LOCAL = "CacheLocal"
+PEDIDOS_FONTE_EXCEL_LOCAL = "ExcelLocal"
+
+_PEDIDOS_HEADER_ALIASES = {
+    "pedido_compra": {"oc", "ordemdecompra", "numerodaoc", "numeroordemdecompra", "pedidocompra", "pedido"},
+    "codigo_material": {"codigomaterial", "codmaterial", "materialcodigo", "itemcodigo"},
+    "descricao_material": {"descricaomaterial", "descricao", "materialdescricao", "itemdescricao"},
+    "quantidade": {"quantidade", "qtd"},
+    "valor_unit": {"valorunitario", "valorunit", "vlunit", "valor"},
+    "fornecedor_codigo": {"codigofornecedor", "fornecedorcodigo", "codfornecedor"},
+    "fornecedor_nome": {"fornecedor", "nomefornecedor", "razaosocialfornecedor", "fornecedorrazaosocial", "parceiro"},
+    "fornecedor_cnpj": {"cnpjfornecedor", "fornecedorcnpj", "cnpj", "cnpjcpf", "documentofornecedor"},
+    "contato": {"contato", "contatofornecedor", "responsavel", "responsavelfornecedor"},
+    "telefone": {"telefone", "telefonefornecedor", "fone", "celular"},
+    "email": {"email", "emailfornecedor"},
+    "logradouro": {"endereco", "enderecofornecedor", "logradouro", "rua"},
+    "numero": {"numero", "numeroendereco", "numerofornecedor"},
+    "complemento": {"complemento", "complementoendereco"},
+    "bairro": {"bairro", "bairrofornecedor"},
+    "cidade": {"cidade", "cidadefornecedor"},
+    "uf": {"uf", "estado", "uffornecedor"},
+    "cep": {"cep", "cepfornecedor"},
+    "observacoes": {"observacoes", "observacao", "obs", "janelaatendimento"},
+}
 
 
 def _normalizar_numero(val) -> str:
@@ -52,6 +78,13 @@ def _normalizar_numero(val) -> str:
             return txt
 
     return txt
+
+
+def _normalizar_header(valor) -> str:
+    texto = str(valor or "").strip().lower()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", "", texto)
 
 
 def _ler_float(row, col_index: int) -> float:
@@ -128,6 +161,24 @@ def _sheets_to_csv_url(url: str) -> str:
     return url + ("&" if "?" in url else "?") + "format=csv"
 
 
+def obter_fonte_pedidos_google_sheets() -> dict:
+    return {
+        "tipo": PEDIDOS_FONTE_GOOGLE_SHEETS,
+        "label": "Google Sheets",
+        "url": PEDIDOS_SHEETS_URL,
+        "csv_url": _sheets_to_csv_url(PEDIDOS_SHEETS_URL),
+    }
+
+
+def label_fonte_pedidos(fonte: str | None) -> str:
+    mapping = {
+        PEDIDOS_FONTE_GOOGLE_SHEETS: "Google Sheets",
+        PEDIDOS_FONTE_CACHE_LOCAL: "Cache local",
+        PEDIDOS_FONTE_EXCEL_LOCAL: "Excel local",
+    }
+    return mapping.get(str(fonte or "").strip(), str(fonte or "").strip())
+
+
 def _parse_lista_pedidos(numero_pedido: str) -> list[str]:
     raw = str(numero_pedido or "").strip()
     if not raw:
@@ -155,6 +206,125 @@ def _carregar_rows_google_sheets() -> list:
 
     reader = csv.reader(StringIO(resp.text))
     return list(reader)
+
+
+def _resolver_header_map_pedidos(rows: list) -> dict[str, int]:
+    if not rows:
+        return {}
+    header_row = rows[0] or []
+    normalized = {_normalizar_header(valor): idx for idx, valor in enumerate(header_row)}
+    mapping = {}
+    for campo, aliases in _PEDIDOS_HEADER_ALIASES.items():
+        for alias in aliases:
+            idx = normalized.get(alias)
+            if idx is not None:
+                mapping[campo] = idx
+                break
+    return mapping
+
+
+def _valor_celula_row(row, idx: int | None):
+    if idx is None or idx < 0 or idx >= len(row):
+        return None
+    return row[idx]
+
+
+def _texto_row(row, idx: int | None) -> str:
+    valor = _valor_celula_row(row, idx)
+    return str(valor).strip() if valor not in (None, "") else ""
+
+
+def _extrair_metadados_pedido(row, header_map: dict[str, int]) -> dict:
+    extras = {}
+    for campo in (
+        "fornecedor_codigo",
+        "fornecedor_nome",
+        "fornecedor_cnpj",
+        "contato",
+        "telefone",
+        "email",
+        "logradouro",
+        "numero",
+        "complemento",
+        "bairro",
+        "cidade",
+        "uf",
+        "cep",
+        "observacoes",
+    ):
+        valor = _texto_row(row, header_map.get(campo))
+        if campo in {"fornecedor_cnpj", "cep"}:
+            valor = re.sub(r"\D", "", valor)
+        if campo == "uf":
+            valor = valor[:2].upper()
+        if valor:
+            extras[campo] = valor
+    return extras
+
+
+def _append_linha_pedido(
+    destino: list,
+    linhas_por_pedido: dict,
+    row,
+    pedido_row: str,
+    *,
+    header_map: dict[str, int] | None = None,
+    fonte_dados: str = PEDIDOS_FONTE_GOOGLE_SHEETS,
+) -> None:
+    header_map = header_map or {}
+    codigo_idx = header_map.get("codigo_material", 3)
+    descricao_idx = header_map.get("descricao_material", 4)
+    qtd_idx = header_map.get("quantidade", 5)
+    valor_idx = header_map.get("valor_unit", 6)
+
+    codigo_material_raw = _texto_row(row, codigo_idx)
+    descricao_material = _texto_row(row, descricao_idx)
+    linha = {
+        "pedido_compra": pedido_row,
+        "qtd": _ler_float(row, qtd_idx),
+        "valor_unit": _ler_float(row, valor_idx),
+        "codigo_material": _formatar_codigo_material_padrao(codigo_material_raw),
+        "descricao_material": descricao_material,
+        "fonte_dados": fonte_dados,
+    }
+    linha.update(_extrair_metadados_pedido(row, header_map))
+    destino.append(linha)
+    linhas_por_pedido.setdefault(pedido_row, []).append(linha)
+
+
+def _normalizar_linha_cache(linha: dict, pedido: str) -> dict:
+    normalizada = {
+        "pedido_compra": str(linha.get("pedido_compra") or pedido),
+        "qtd": float(linha.get("qtd") or 0.0),
+        "valor_unit": float(linha.get("valor_unit") or 0.0),
+        "codigo_material": _formatar_codigo_material_padrao(linha.get("codigo_material")),
+        "descricao_material": str(linha.get("descricao_material") or "").strip(),
+        "fonte_dados": str(linha.get("fonte_dados") or PEDIDOS_FONTE_CACHE_LOCAL),
+    }
+    for campo in (
+        "fornecedor_codigo",
+        "fornecedor_nome",
+        "fornecedor_cnpj",
+        "contato",
+        "telefone",
+        "email",
+        "logradouro",
+        "numero",
+        "complemento",
+        "bairro",
+        "cidade",
+        "uf",
+        "cep",
+        "observacoes",
+    ):
+        valor = str(linha.get(campo) or "").strip()
+        if campo in {"fornecedor_cnpj", "cep"}:
+            valor = re.sub(r"\D", "", valor)
+        if campo == "uf":
+            valor = valor[:2].upper()
+        if valor:
+            normalizada[campo] = valor
+    return normalizada
 
 
 def _carregar_rows_excel_local() -> list:
@@ -224,28 +394,23 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
     linhas_po = []
     pedidos_encontrados = set()
     linhas_por_pedido = {}
-
-    def _append_linha(row, pedido_row):
-        codigo_material_raw = row[3].strip() if len(row) > 3 and isinstance(row[3], str) else str(row[3]).strip() if len(row) > 3 and row[3] is not None else ""
-        codigo_material = _formatar_codigo_material_padrao(codigo_material_raw)
-        descricao_material = row[4].strip() if len(row) > 4 and isinstance(row[4], str) else str(row[4]).strip() if len(row) > 4 and row[4] is not None else ""
-        linha = {
-            "pedido_compra": pedido_row,
-            "qtd": _ler_float(row, 5),
-            "valor_unit": _ler_float(row, 6),
-            "codigo_material": codigo_material,
-            "descricao_material": descricao_material,
-        }
-        linhas_po.append(linha)
-        linhas_por_pedido.setdefault(pedido_row, []).append(linha)
+    header_map = _resolver_header_map_pedidos(rows)
 
     for idx, row in enumerate(rows):
         if idx == 0:
             continue
-        pedido_row = _normalizar_numero(row[0] if row else None)
+        pedido_idx = header_map.get("pedido_compra", 0)
+        pedido_row = _normalizar_numero(_valor_celula_row(row, pedido_idx))
         if pedido_row in pedidos:
             pedidos_encontrados.add(pedido_row)
-            _append_linha(row, pedido_row)
+            _append_linha_pedido(
+                linhas_po,
+                linhas_por_pedido,
+                row,
+                pedido_row,
+                header_map=header_map,
+                fonte_dados=PEDIDOS_FONTE_GOOGLE_SHEETS,
+            )
 
     faltantes = [p for p in pedidos if p not in pedidos_encontrados]
     if faltantes:
@@ -255,15 +420,7 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
             linhas_cache = _cache_get_linhas_pedido(pedido)
             if linhas_cache:
                 for linha in linhas_cache:
-                    linhas_po.append(
-                        {
-                            "pedido_compra": str(linha.get("pedido_compra") or pedido),
-                            "qtd": float(linha.get("qtd") or 0.0),
-                            "valor_unit": float(linha.get("valor_unit") or 0.0),
-                            "codigo_material": _formatar_codigo_material_padrao(linha.get("codigo_material")),
-                            "descricao_material": str(linha.get("descricao_material") or "").strip(),
-                        }
-                    )
+                    linhas_po.append(_normalizar_linha_cache(linha, pedido))
             else:
                 ainda_faltantes.append(pedido)
 
@@ -271,12 +428,21 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
 
     if faltantes:
         rows_local = _carregar_rows_excel_local()
+        header_map_local = _resolver_header_map_pedidos(rows_local)
         for idx, row in enumerate(rows_local):
             if idx == 0:
                 continue
-            pedido_row = _normalizar_numero(row[0] if row else None)
+            pedido_idx = header_map_local.get("pedido_compra", 0)
+            pedido_row = _normalizar_numero(_valor_celula_row(row, pedido_idx))
             if pedido_row in faltantes:
-                _append_linha(row, pedido_row)
+                _append_linha_pedido(
+                    linhas_po,
+                    linhas_por_pedido,
+                    row,
+                    pedido_row,
+                    header_map=header_map_local,
+                    fonte_dados=PEDIDOS_FONTE_EXCEL_LOCAL,
+                )
 
     # Atualiza cache com o que veio do Sheets/Excel para uso futuro.
     for pedido, linhas in linhas_por_pedido.items():

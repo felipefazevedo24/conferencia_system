@@ -57,6 +57,44 @@ class Config:
     INVENTREE_TIMEOUT_SECONDS = int(os.environ.get("INVENTREE_TIMEOUT_SECONDS", "20"))
     INVENTREE_STOCK_NOTE_PREFIX = str(os.environ.get("INVENTREE_STOCK_NOTE_PREFIX", "ERP/WMS")).strip() or "ERP/WMS"
 
+    ERP_ESTOQUE_URL = os.environ.get("ERP_ESTOQUE_URL", "https://superelevated-han-throughly.ngrok-free.dev/estoque")
+    ERP_ESTOQUE_TIMEOUT = int(os.environ.get("ERP_ESTOQUE_TIMEOUT", "30"))
+
+    BOLETO_PROVIDER = str(os.environ.get("BOLETO_PROVIDER", "BB")).strip().upper() or "BB"
+    BOLETO_BANK_LABEL = str(os.environ.get("BOLETO_BANK_LABEL", "Banco do Brasil")).strip() or "Banco do Brasil"
+
+    BB_CLIENT_ID = str(os.environ.get("BB_CLIENT_ID", "")).strip()
+    BB_CLIENT_SECRET = str(os.environ.get("BB_CLIENT_SECRET", "")).strip()
+    BB_DEVELOPER_APPLICATION_KEY = str(
+        os.environ.get("BB_DEVELOPER_APPLICATION_KEY", os.environ.get("BB_DEV_APP_KEY", os.environ.get("BB_APP_KEY", "")))
+    ).strip()
+    BB_API_BASE = str(os.environ.get("BB_API_BASE", "https://api.hm.bb.com.br/cobrancas/v2")).strip().rstrip("/")
+    BB_OAUTH_BASE = str(os.environ.get("BB_OAUTH_BASE", "https://oauth.hm.bb.com.br")).strip().rstrip("/")
+    BB_OAUTH_TOKEN_PATH = str(os.environ.get("BB_OAUTH_TOKEN_PATH", "/oauth/token")).strip()
+    BB_OAUTH_TOKEN_URL = str(os.environ.get("BB_OAUTH_TOKEN_URL", "")).strip()
+    BB_SCOPE = str(os.environ.get("BB_SCOPE", "cobrancas.boletos-info")).strip()
+    BB_CONVENIO = str(os.environ.get("BB_CONVENIO", "")).strip()
+    BB_CERT_PATH = str(os.environ.get("BB_CERT_PATH", "")).strip()
+    BB_KEY_PATH = str(os.environ.get("BB_KEY_PATH", "")).strip()
+    BB_API_TIMEOUT_SECONDS = int(os.environ.get("BB_API_TIMEOUT_SECONDS", "30"))
+
+    AGENDAMENTO_FORNECEDORES_XLSX = str(
+        os.environ.get("AGENDAMENTO_FORNECEDORES_XLSX", BASE_DIR / "fornecedores.xlsx")
+    ).strip()
+    AGENDAMENTO_CLIENTES_XLSX = str(
+        os.environ.get("AGENDAMENTO_CLIENTES_XLSX", BASE_DIR / "clientes.xlsx")
+    ).strip()
+    AGENDAMENTO_CONFLITO_MINUTOS = int(os.environ.get("AGENDAMENTO_CONFLITO_MINUTOS", "30"))
+    AGENDAMENTO_DURACAO_PADRAO_MINUTOS = int(os.environ.get("AGENDAMENTO_DURACAO_PADRAO_MINUTOS", "120"))
+    AGENDAMENTO_BASE_ORIGEM = str(os.environ.get("AGENDAMENTO_BASE_ORIGEM", "")).strip()
+    AGENDAMENTO_BASE_LATITUDE = float(os.environ.get("AGENDAMENTO_BASE_LATITUDE", "0") or 0)
+    AGENDAMENTO_BASE_LONGITUDE = float(os.environ.get("AGENDAMENTO_BASE_LONGITUDE", "0") or 0)
+    AGENDAMENTO_ESTIMATIVA_KM_FATOR = float(os.environ.get("AGENDAMENTO_ESTIMATIVA_KM_FATOR", "1.28") or 1.28)
+    AGENDAMENTO_GEOCODE_TIMEOUT_SECONDS = int(os.environ.get("AGENDAMENTO_GEOCODE_TIMEOUT_SECONDS", "8"))
+    AGENDAMENTO_GEOCODE_URL = str(
+        os.environ.get("AGENDAMENTO_GEOCODE_URL", "https://nominatim.openstreetmap.org/search")
+    ).strip().rstrip("/")
+
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
     LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))

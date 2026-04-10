@@ -3,7 +3,7 @@ from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
-from .models import Usuario, DepositoWMS
+from .models import AgendamentoMotorista, AgendamentoVeiculo, DepositoWMS, Usuario
 
 
 def _has_table(table_name: str) -> bool:
@@ -347,7 +347,7 @@ def _ensure_item_nota_columns() -> None:
                     id INTEGER PRIMARY KEY,
                     numero_nota VARCHAR(20) NOT NULL UNIQUE,
                     chave_acesso VARCHAR(44),
-                    banco VARCHAR(80) NOT NULL DEFAULT 'BOFA - Bank of America',
+                    banco VARCHAR(80) NOT NULL DEFAULT 'Banco do Brasil',
                     valor FLOAT NOT NULL DEFAULT 0,
                     nosso_numero VARCHAR(40) NOT NULL UNIQUE,
                     linha_digitavel VARCHAR(120) NOT NULL,
@@ -360,6 +360,28 @@ def _ensure_item_nota_columns() -> None:
             )
         )
         conn.commit()
+        cols_boleto = _get_column_names("boleto_conta_receber")
+        if "cpf_cnpj_pagador" not in cols_boleto:
+            conn.execute(db.text("ALTER TABLE boleto_conta_receber ADD COLUMN cpf_cnpj_pagador VARCHAR(18)"))
+            conn.commit()
+        if "nome_pagador" not in cols_boleto:
+            conn.execute(db.text("ALTER TABLE boleto_conta_receber ADD COLUMN nome_pagador VARCHAR(200)"))
+            conn.commit()
+        if "vencimento" not in cols_boleto:
+            conn.execute(db.text("ALTER TABLE boleto_conta_receber ADD COLUMN vencimento DATE"))
+            conn.commit()
+        if "data_pagamento" not in cols_boleto:
+            conn.execute(db.text("ALTER TABLE boleto_conta_receber ADD COLUMN data_pagamento DATE"))
+            conn.commit()
+        if "bofa_id" not in cols_boleto:
+            conn.execute(db.text("ALTER TABLE boleto_conta_receber ADD COLUMN bofa_id VARCHAR(100)"))
+            conn.commit()
+        _create_index_if_missing(
+            conn,
+            "boleto_conta_receber",
+            "ix_boleto_conta_receber_cpf_cnpj_pagador",
+            "CREATE INDEX ix_boleto_conta_receber_cpf_cnpj_pagador ON boleto_conta_receber (cpf_cnpj_pagador)",
+        )
 
         cols_fat = _get_column_names("expedicao_faturamento")
         if "transporte_tipo" not in cols_fat:
@@ -470,6 +492,12 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
 
         cols_conf = _get_column_names("expedicao_conferencia_simples")
         missing_conf_columns = [
+            (
+                "tipo_referencia",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN tipo_referencia VARCHAR(20) NOT NULL DEFAULT 'Orcamento'",
+            ),
+            ("numero_os", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_os VARCHAR(80)"),
+            ("ordem_compra", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN ordem_compra VARCHAR(80)"),
             ("numero_nf", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_nf VARCHAR(40)"),
             ("nome_cliente", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN nome_cliente VARCHAR(160)"),
             (
@@ -502,6 +530,18 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
                 conn.execute(db.text(ddl))
                 conn.commit()
 
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples",
+            "ix_expedicao_conferencia_simples_numero_os",
+            "CREATE INDEX ix_expedicao_conferencia_simples_numero_os ON expedicao_conferencia_simples (numero_os)",
+        )
+        _create_index_if_missing(
+            conn,
+            "expedicao_conferencia_simples",
+            "ix_expedicao_conferencia_simples_ordem_compra",
+            "CREATE INDEX ix_expedicao_conferencia_simples_ordem_compra ON expedicao_conferencia_simples (ordem_compra)",
+        )
         _create_index_if_missing(
             conn,
             "expedicao_conferencia_simples",
@@ -603,6 +643,7 @@ def initialize_database(app: Flask) -> None:
 
         # Criar 5 depósitos fixos se não existirem
         _ensure_depositos_wms()
+        _ensure_agendamento_veiculos()
 
         try:
             _ensure_item_nota_columns()
@@ -619,6 +660,95 @@ def initialize_database(app: Flask) -> None:
             _ensure_expedicao_conferencia_simples_schema()
         except Exception:
             pass
+
+
+def _ensure_agendamento_veiculos() -> None:
+    conn = db.engine.connect()
+    try:
+        for table_name in (
+            "agendamento_veiculo",
+            "agendamento_motorista",
+            "agendamento_fornecedor",
+            "agendamento_cliente",
+            "agendamento_solicitacao",
+            "agendamento_solicitacao_item",
+            "agendamento_solicitacao_historico",
+        ):
+            table = db.metadata.tables.get(table_name)
+            if table is not None:
+                table.create(bind=conn, checkfirst=True)
+
+        cols_solicitacao = _get_column_names("agendamento_solicitacao")
+        missing_columns = [
+            ("motorista_id", "ALTER TABLE agendamento_solicitacao ADD COLUMN motorista_id INTEGER"),
+            ("motorista_nome", "ALTER TABLE agendamento_solicitacao ADD COLUMN motorista_nome VARCHAR(160)"),
+            ("origem_latitude", "ALTER TABLE agendamento_solicitacao ADD COLUMN origem_latitude FLOAT"),
+            ("origem_longitude", "ALTER TABLE agendamento_solicitacao ADD COLUMN origem_longitude FLOAT"),
+            ("destino_latitude", "ALTER TABLE agendamento_solicitacao ADD COLUMN destino_latitude FLOAT"),
+            ("destino_longitude", "ALTER TABLE agendamento_solicitacao ADD COLUMN destino_longitude FLOAT"),
+            ("km_estimado", "ALTER TABLE agendamento_solicitacao ADD COLUMN km_estimado FLOAT"),
+            ("km_estimado_retorno", "ALTER TABLE agendamento_solicitacao ADD COLUMN km_estimado_retorno FLOAT"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols_solicitacao:
+                conn.execute(db.text(ddl))
+                conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "agendamento_solicitacao",
+            "ix_agendamento_solicitacao_motorista_id",
+            "CREATE INDEX ix_agendamento_solicitacao_motorista_id ON agendamento_solicitacao (motorista_id)",
+        )
+        _create_index_if_missing(
+            conn,
+            "agendamento_solicitacao",
+            "ix_agendamento_solicitacao_motorista_nome",
+            "CREATE INDEX ix_agendamento_solicitacao_motorista_nome ON agendamento_solicitacao (motorista_nome)",
+        )
+
+        cols_motorista = _get_column_names("agendamento_motorista")
+        if "ativo" not in cols_motorista:
+            conn.execute(db.text("ALTER TABLE agendamento_motorista ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT 1"))
+            conn.commit()
+    finally:
+        conn.close()
+
+    veiculos = [
+        {
+            "codigo": "IVECO",
+            "nome_exibicao": "IVECO",
+            "placa": "",
+            "cor_kanban": "blue",
+            "janela_conflito_min": 30,
+            "duracao_padrao_min": 180,
+            "ordem_exibicao": 10,
+        },
+        {
+            "codigo": "SAVEIRO",
+            "nome_exibicao": "SAVEIRO",
+            "placa": "",
+            "cor_kanban": "gold",
+            "janela_conflito_min": 30,
+            "duracao_padrao_min": 120,
+            "ordem_exibicao": 20,
+        },
+    ]
+
+    for payload in veiculos:
+        registro = AgendamentoVeiculo.query.filter_by(codigo=payload["codigo"]).first()
+        if not registro:
+            registro = AgendamentoVeiculo(codigo=payload["codigo"])
+            db.session.add(registro)
+        registro.nome_exibicao = payload["nome_exibicao"]
+        registro.placa = payload["placa"]
+        registro.cor_kanban = payload["cor_kanban"]
+        registro.janela_conflito_min = payload["janela_conflito_min"]
+        registro.duracao_padrao_min = payload["duracao_padrao_min"]
+        registro.ordem_exibicao = payload["ordem_exibicao"]
+        registro.ativo = True
+
+    db.session.commit()
 
 
 def _ensure_depositos_wms() -> None:
