@@ -22,6 +22,7 @@ from ..models import (
     AgendamentoMotorista,
     AgendamentoVeiculo,
     ItemNota,
+    Usuario,
 )
 from .consyste_service import listar_nfes_consyste_por_caixa
 from .pedidos_service import (
@@ -230,6 +231,44 @@ def salvar_motorista_agendamento(payload: dict) -> AgendamentoMotorista:
     return row
 
 
+def sincronizar_motoristas_usuarios(*, commit: bool = False) -> None:
+    """Sincroniza motoristas com usuarios de role Motorista.
+
+    Para cada usuario com role 'Motorista', verifica se existe um
+    AgendamentoMotorista vinculado via usuario_username. Se nao existir,
+    tenta encontrar um motorista pelo nome igual ao username ou cria um novo.
+    """
+    usuarios_motoristas = Usuario.query.filter_by(role="Motorista").all()
+    for usuario in usuarios_motoristas:
+        username = str(usuario.username or "").strip()
+        if not username:
+            continue
+        # Verifica se ja existe motorista vinculado a este usuario
+        motorista = AgendamentoMotorista.query.filter_by(usuario_username=username).first()
+        if motorista:
+            continue
+        # Tenta encontrar um motorista pelo nome igual ao username
+        motorista = AgendamentoMotorista.query.filter(
+            AgendamentoMotorista.nome.ilike(username),
+            AgendamentoMotorista.usuario_username.is_(None),
+        ).first()
+        if motorista:
+            motorista.usuario_username = username
+            motorista.updated_at = datetime.now()
+        else:
+            # Cria novo motorista vinculado ao usuario
+            motorista = AgendamentoMotorista(
+                nome=username,
+                usuario_username=username,
+                ativo=True,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.session.add(motorista)
+    if commit:
+        db.session.commit()
+
+
 def _normalizar_float(valor) -> float | None:
     if valor in (None, ""):
         return None
@@ -341,11 +380,11 @@ def montar_waze_url_agendamento(destino: dict | None) -> str:
     lat = _normalizar_float(destino.get("latitude"))
     lng = _normalizar_float(destino.get("longitude"))
     if lat is not None and lng is not None:
-        return f"https://waze.com/ul?ll={lat:.6f},{lng:.6f}&navigate=yes&utm_source=columbia_sync"
+        return f"https://www.google.com/maps/dir/?api=1&destination={lat:.6f},{lng:.6f}"
     busca = quote(montar_endereco_rota(destino))
     if not busca:
         return ""
-    return f"https://waze.com/ul?q={busca}&navigate=yes&utm_source=columbia_sync"
+    return f"https://www.google.com/maps/dir/?api=1&destination={busca}"
 
 
 def estimar_rota_agendamento(destino: dict | None, *, origem_latitude=None, origem_longitude=None) -> dict:

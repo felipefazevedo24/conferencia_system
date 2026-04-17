@@ -133,7 +133,7 @@
     <div class="cr-card">
         <div class="cr-row">
             <div class="cr-field">
-                <label for="sync-numero">Consulta Consyste por Numero da NF</label>
+                <label for="sync-numero">Consulta Consyste por Número da NF</label>
                 <input id="sync-numero" placeholder="Ex: 12345" />
             </div>
             <div class="cr-field">
@@ -326,7 +326,7 @@
                 setMsg(data.error || `Falha ao gerar boleto (HTTP ${res.status}).`, false);
                 return;
             }
-            setMsg(data.ja_existia ? `Boleto da NF ${nota} ja existia.` : `Boleto da NF ${nota} gerado com sucesso!`, true);
+            setMsg(data.ja_existia ? `Boleto da NF ${nota} já existia.` : `Boleto da NF ${nota} gerado com sucesso!`, true);
             await carregarContasReceber();
         } catch (err) {
             setMsg('Erro ao gerar boleto: ' + err.message, false);

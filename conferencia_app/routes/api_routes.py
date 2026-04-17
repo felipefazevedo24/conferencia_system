@@ -4432,6 +4432,8 @@ def _status_slug_expedicao_conferencia(status: str | None) -> str:
         return "expedido"
     if norm == "Aguardando estorno":
         return "aguardando_estorno"
+    if norm == "Finalizado":
+        return "finalizado"
     return "pendente_expedicao"
 
 
@@ -4552,6 +4554,11 @@ def _serializar_expedicao_conferencia_simples(registro: ExpedicaoConferenciaSimp
         "status_slug": status_slug,
         "expedido_at": registro.expedido_at.strftime("%d/%m/%Y %H:%M") if registro.expedido_at else "",
         "expedido_by": registro.expedido_by or "",
+        "canhoto_url": f"/api/expedicao/conferencia-simples/{registro.id}/canhoto" if registro.canhoto_file_name else None,
+        "canhoto_uploaded_at": registro.canhoto_uploaded_at.strftime("%d/%m/%Y %H:%M") if registro.canhoto_uploaded_at else None,
+        "canhoto_uploaded_by": registro.canhoto_uploaded_by or None,
+        "finalizado_at": registro.finalizado_at.strftime("%d/%m/%Y %H:%M") if registro.finalizado_at else None,
+        "finalizado_by": registro.finalizado_by or None,
         "fotos": [
             {
                 "id": foto.id,
@@ -5246,6 +5253,75 @@ def obter_foto_expedicao_conferencia_simples(foto_id: int):
     if not os.path.isfile(foto.file_path):
         return jsonify({"error": "Arquivo da foto não encontrado no armazenamento."}), 404
     return send_file(foto.file_path)
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/canhoto", methods=["POST"])
+@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
+def upload_canhoto_expedicao_conferencia_simples(conferencia_id: int):
+    """Upload de foto do canhoto assinado pelo cliente apos expedicao."""
+    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
+    if not registro:
+        return jsonify({"error": "Conferencia nao encontrada."}), 404
+
+    if registro.status != "Expedido":
+        return jsonify({"error": "O canhoto so pode ser adicionado apos a expedicao ser concluida."}), 400
+
+    canhoto = request.files.get("canhoto")
+    if not canhoto or not canhoto.filename:
+        return jsonify({"error": "Envie a foto do canhoto."}), 400
+
+    extensao = os.path.splitext(secure_filename(canhoto.filename or ""))[1].lower()
+    if extensao not in ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS:
+        return jsonify({"error": "Envie apenas imagens JPG, PNG, WEBP ou BMP."}), 400
+
+    base_dir = _expedicao_conferencia_simples_fotos_dir()
+    agora = datetime.now()
+    referencia = registro.orcamento or str(registro.id)
+    nome_final = f"CANHOTO_{referencia}_{agora.strftime('%Y%m%d_%H%M%S')}{extensao}"
+    nome_arquivo_local = secure_filename(nome_final) or f"canhoto_{registro.id}{extensao}"
+    caminho_final = os.path.join(base_dir, nome_arquivo_local)
+
+    try:
+        canhoto.save(caminho_final)
+    except Exception as exc:
+        return jsonify({"error": f"Falha ao salvar o canhoto. Detalhe: {exc}"}), 500
+
+    registro.canhoto_file_name = nome_final
+    registro.canhoto_file_path = caminho_final
+    registro.canhoto_uploaded_at = agora
+    registro.canhoto_uploaded_by = session.get("username", "desconhecido")
+    registro.status = "Finalizado"
+    registro.finalizado_at = agora
+    registro.finalizado_by = session.get("username", "desconhecido")
+    registro.updated_at = agora
+
+    db.session.commit()
+
+    fotos = (
+        ExpedicaoConferenciaSimplesFoto.query
+        .filter_by(conferencia_id=registro.id)
+        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
+        .all()
+    )
+    return jsonify({
+        "sucesso": True,
+        "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos),
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/canhoto")
+@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
+def obter_canhoto_expedicao_conferencia_simples(conferencia_id: int):
+    """Retorna a foto do canhoto assinado."""
+    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
+    if not registro:
+        return jsonify({"error": "Conferencia nao encontrada."}), 404
+    if not registro.canhoto_file_name:
+        return jsonify({"error": "Canhoto nao anexado."}), 404
+    if not os.path.isfile(registro.canhoto_file_path):
+        return jsonify({"error": "Arquivo do canhoto nao encontrado."}), 404
+    return send_file(registro.canhoto_file_path)
+
 
 
 @api_bp.route("/api/expedicao/conferencia/relatorios")

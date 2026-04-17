@@ -73,7 +73,7 @@ class ConsertoService:
     def _obter_estoque(conserto_estoque_id):
         estoque = db.session.get(ConsertoEstoque, conserto_estoque_id)
         if not estoque:
-            raise ValueError("Saldo de estoque nao encontrado.")
+            raise ValueError("Saldo de estoque não encontrado.")
         return estoque
 
     @staticmethod
@@ -162,7 +162,7 @@ class ConsertoService:
                     "numero_nota": ConsertoService._normalizar_texto(item.numero_nota),
                     "chave_acesso": chave,
                     "data_emissao": item.data_importacao or datetime.now(),
-                    "fornecedor_nome": ConsertoService._normalizar_texto(item.fornecedor) or "Fornecedor nao informado",
+                    "fornecedor_nome": ConsertoService._normalizar_texto(item.fornecedor) or "Fornecedor não informado",
                     "fornecedor_cnpj": ConsertoService._normalizar_texto(item.cnpj_emitente),
                     "tipo_controle": ConsertoService.TIPO_CONTROLE_PADRAO,
                     "tipo_operacao": ConsertoService._tipo_operacao_por_cfop(item.cfop) or "Conserto",
@@ -233,7 +233,7 @@ class ConsertoService:
                         existente.numero_nf_retorno = retorno["numero_nota"]
                         db.session.commit()
                     resumo["baixas_existentes"] += 1
-                    log(f"Baixa ja existente para retorno {retorno['numero_nota']} item {codigo}.")
+                    log(f"Baixa já existente para retorno {retorno['numero_nota']} item {codigo}.")
                     continue
 
                 if quantidade <= 0:
@@ -385,7 +385,7 @@ class ConsertoService:
             emitido_em = ConsertoService._parse_data_qualquer(doc.get("emitido_em"))
             if data_inicial and not emitido_em:
                 if debug_callback:
-                    debug_callback(f"NF {numero or chave} ignorada: Consyste nao informou a data de emissao.")
+                    debug_callback(f"NF {numero or chave} ignorada: Consyste não informou a data de emissao.")
                 continue
             if data_inicial and emitido_em < data_inicial:
                 if debug_callback:
@@ -476,7 +476,7 @@ class ConsertoService:
             produto_codigo=produto_codigo,
         ).first()
         if saldo_existente:
-            raise ValueError("Ja existe um saldo aberto para esta remessa e produto.")
+            raise ValueError("Já existe um saldo aberto para esta remessa e produto.")
 
         try:
             saldo = ConsertoEstoque(
@@ -532,7 +532,7 @@ class ConsertoService:
         cfop_retorno = ConsertoService._normalizar_texto(cfop_retorno)[:4] or None
 
         if quantidade > estoque.quantidade_saldo:
-            raise ValueError("A quantidade sugerida nao pode ser maior que o saldo em aberto.")
+            raise ValueError("A quantidade sugerida não pode ser maior que o saldo em aberto.")
 
         if chave_nf_retorno:
             existente = ConsertoBaixa.query.filter_by(
@@ -596,7 +596,7 @@ class ConsertoService:
         if not data_nf_retorno:
             raise ValueError("Informe a data da NF de retorno.")
         if quantidade > estoque.quantidade_saldo:
-            raise ValueError("A quantidade vinculada nao pode ser maior que o saldo em aberto.")
+            raise ValueError("A quantidade vinculada não pode ser maior que o saldo em aberto.")
 
         try:
             baixa = ConsertoBaixa(
@@ -710,7 +710,7 @@ class ConsertoService:
                 type("Doc", (), {"cnpj_emitente": nota["emit_cnpj"], "cnpj_destinatario": nota["dest_cnpj"]})(),
                 "remessa",
             ):
-                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: nao e remessa emitida pela empresa.")
+                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: não e remessa emitida pela empresa.")
                 continue
 
             possui_cfop_remessa = any(
@@ -723,7 +723,7 @@ class ConsertoService:
                 continue
 
             resumo["remessas_emitidas_consyste"] += 1
-            log(f"Processando remessa {nota['numero_nota'] or doc['chave']} para {nota['dest_nome'] or 'fornecedor nao informado'}.")
+            log(f"Processando remessa {nota['numero_nota'] or doc['chave']} para {nota['dest_nome'] or 'fornecedor não informado'}.")
             for codigo, dados_item in nota["itens"].items():
                 if not any(cfop in ConsertoService.CFOPS_REMESSA for cfop in dados_item["cfops"]):
                     continue
@@ -748,7 +748,7 @@ class ConsertoService:
                         existente.status = "Pendente de retorno"
                     db.session.commit()
                     resumo["saldos_existentes"] += 1
-                    log(f"Saldo ja existente para NF {nota['numero_nota']} item {codigo} ({tipo_operacao}).")
+                    log(f"Saldo já existente para NF {nota['numero_nota']} item {codigo} ({tipo_operacao}).")
                     continue
 
                 try:
@@ -757,7 +757,7 @@ class ConsertoService:
                         chave_nf_remessa=nota["chave_acesso"],
                         data_emissao=nota["data_emissao"],
                         fornecedor_cnpj=nota["dest_cnpj"] or "00000000000000",
-                        fornecedor_nome=nota["dest_nome"] or "Fornecedor nao informado",
+                        fornecedor_nome=nota["dest_nome"] or "Fornecedor não informado",
                         produto_codigo=codigo,
                         produto_descricao=dados_item["descricao"] or codigo,
                         quantidade=dados_item["quantidade"],
@@ -863,7 +863,7 @@ class ConsertoService:
                     "numero_nota": nota_xml["numero_nota"],
                     "chave_acesso": nota_xml["chave_acesso"],
                     "data_emissao": nota_xml["data_emissao"],
-                    "fornecedor_nome": nota_xml["emit_nome"] or "Fornecedor nao informado",
+                    "fornecedor_nome": nota_xml["emit_nome"] or "Fornecedor não informado",
                     "fornecedor_cnpj": nota_xml["emit_cnpj"],
                     "tipo_operacao": ConsertoService._tipo_operacao_por_cfop(
                         next(
@@ -888,14 +888,14 @@ class ConsertoService:
                 break
 
         if not nota:
-            raise ValueError("NF de retorno nao encontrada para consulta automatica.")
+            raise ValueError("NF de retorno não encontrada para consulta automatica.")
 
         if (nota.get("tipo_operacao") or "Conserto") != (estoque.tipo_operacao or "Conserto"):
             raise ValueError("A NF informada pertence a uma operacao diferente do saldo selecionado.")
 
         item = (nota.get("itens") or {}).get(estoque.produto_codigo)
         if not item:
-            raise ValueError("A NF informada nao possui o item correspondente ao saldo selecionado.")
+            raise ValueError("A NF informada não possui o item correspondente ao saldo selecionado.")
 
         return {
             "numero_nf_retorno": nota.get("numero_nota") or numero_nf_retorno,

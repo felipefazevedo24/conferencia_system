@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Expedicao - Controle Admin{% endblock %}
+{% block title %}Expedição - Controle Admin{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -42,7 +42,7 @@
         </div>
         <div class="adm-body">
             <div class="grid-2">
-                <input id="admin-conferencia-id" class="inp" placeholder="Conferencia ID" />
+                <input id="admin-conferencia-id" class="inp" placeholder="Conferência ID" />
                 <input id="admin-motivo-total" class="inp" placeholder="Motivo do estorno total" />
             </div>
             <div style="margin-top:10px;"><button class="btn-a btn-danger" onclick="estornarTotalAdmin()">Estornar total</button></div>
@@ -54,7 +54,7 @@
         <div class="adm-body">
             <input id="admin-motivo-parcial" class="inp" placeholder="Motivo do estorno parcial" />
             <table>
-                <thead><tr><th>Sel</th><th>Faturamento</th><th>NF</th><th>Conferencia</th><th>Item</th><th>Qtd</th></tr></thead>
+                <thead><tr><th>Sel</th><th>Faturamento</th><th>NF</th><th>Conferência</th><th>Item</th><th>Qtd</th></tr></thead>
                 <tbody id="tbody-admin-faturamentos"></tbody>
             </table>
             <div style="margin-top:10px;"><button class="btn-a btn-danger" onclick="estornarParcialAdmin()">Estornar parcial</button></div>

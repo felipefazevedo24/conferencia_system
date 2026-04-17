@@ -328,7 +328,7 @@ def _normalizar_linha_cache(linha: dict, pedido: str) -> dict:
 
 
 def _carregar_rows_excel_local() -> list:
-    """Fallback para pedidos antigos quando nao existem mais no Google Sheets."""
+    """Fallback para pedidos antigos quando não existem mais no Google Sheets."""
     if openpyxl is None:
         return []
     if not PEDIDOS_LOCAL_EXCEL_PATH.exists():

@@ -118,7 +118,7 @@
             <div class="x-body">
                 <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;">
-                        <div><label class="x-muted">Numero da NF</label><input id="nf" class="n-input" placeholder="Ex: 123456" /></div>
+                        <div><label class="x-muted">Número da NF</label><input id="nf" class="n-input" placeholder="Ex: 123456" /></div>
                         <div><label class="x-muted">Tipo</label><select id="tipo" class="s-input" onchange="aplicarTipo()"><option value="Parcial">Parcial</option><option value="Total">Total</option></select></div>
                         <div><button class="x-btn x-primary" onclick="registrarFaturamento()">Registrar expedição</button></div>
                     </div>
@@ -165,7 +165,7 @@
         <div class="x-panel x-hidden" id="panel-historico">
             <div class="x-head"><h3>Histórico do que já foi enviado</h3></div>
             <table>
-                <thead><tr><th>Arquivo</th><th>Codigo</th><th>OS</th><th>Cliente</th><th>Faturada</th><th>Restante</th></tr></thead>
+                <thead><tr><th>Arquivo</th><th>Código</th><th>OS</th><th>Cliente</th><th>Faturada</th><th>Restante</th></tr></thead>
                 <tbody id="tb-hist"></tbody>
             </table>
         </div>
@@ -194,7 +194,7 @@
                     <button class="x-btn" onclick="buscarVinculos()">Buscar</button>
                 </div>
                 <table>
-                    <thead><tr><th>Arquivo HTML</th><th>NF</th><th>Tipo</th><th>Status</th><th>Data</th><th>Usuario</th></tr></thead>
+                    <thead><tr><th>Arquivo HTML</th><th>NF</th><th>Tipo</th><th>Status</th><th>Data</th><th>Usuário</th></tr></thead>
                     <tbody id="tb-vinc"></tbody>
                 </table>
             </div>
@@ -574,7 +574,7 @@ async function validarConferencia() {
     if (!relatorioAtual) return;
     if (relatorioAtual.status === 'Fechada') return;
     if (relatorioAtual.registro_pendente && relatorioAtual.status !== 'PendenteDecisao') {
-        alert('As quantidades ja foram gravadas. Continue apenas no registro de expedicao.');
+        alert('As quantidades já foram gravadas. Continue apenas no registro de expedicao.');
         montarRegistro();
         irParaRegistro();
         return;
@@ -608,7 +608,7 @@ async function executarValidacao(contagens) {
     const data = await resp.json();
     if (!resp.ok) {
         if (resp.status === 409 && data.bloqueio_quantidade) {
-            res.innerHTML = `Aviso: ${data.error || 'Conferencia de quantidades ja gravada.'}`;
+            res.innerHTML = `Aviso: ${data.error || 'Conferência de quantidades já gravada.'}`;
             await abrirRelatorioAtual();
             montarRegistro();
             irParaRegistro();

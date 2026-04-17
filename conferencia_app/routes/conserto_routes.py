@@ -17,7 +17,7 @@ SYNC_JOBS = {}
 def _parse_iso_date(value):
     raw = (value or "").strip()
     if not raw:
-        raise ValueError("Data nao informada.")
+        raise ValueError("Data não informada.")
     if len(raw) == 10:
         return datetime.strptime(raw, "%Y-%m-%d")
     return datetime.fromisoformat(raw.replace("Z", ""))
@@ -206,7 +206,7 @@ def sincronizar_notas():
 def status_sincronizacao_notas(job_id):
     job = SYNC_JOBS.get(str(job_id))
     if not job:
-        return jsonify({"error": "Sincronizacao nao encontrada."}), 404
+        return jsonify({"error": "Sincronizacao não encontrada."}), 404
     return jsonify(job), 200
 
 
@@ -281,7 +281,7 @@ def consultar_retorno_manual():
 def confirmar_baixa():
     data = request.get_json(silent=True) or {}
     if "baixa_id" not in data:
-        return jsonify({"error": "ID da baixa nao fornecido"}), 400
+        return jsonify({"error": "ID da baixa não fornecido"}), 400
 
     try:
         baixa = ConsertoService.confirmar_baixa(
@@ -290,7 +290,7 @@ def confirmar_baixa():
             observacoes=data.get("observacoes"),
         )
         if not baixa:
-            return jsonify({"error": "Baixa nao encontrada ou ja confirmada"}), 404
+            return jsonify({"error": "Baixa não encontrada ou já confirmada"}), 404
         return jsonify({"id": baixa.id, "msg": "Baixa confirmada"}), 200
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

@@ -359,7 +359,7 @@ class InventreeService:
     def _ensure_localizacao(localizacao_id):
         localizacao = LocalizacaoArmazem.query.get(localizacao_id) if localizacao_id else None
         if not localizacao or not localizacao.ativo:
-            raise RuntimeError("Localizacao WMS nao encontrada para sincronizacao")
+            raise RuntimeError("Localizacao WMS não encontrada para sincronizacao")
 
         chave = str(localizacao.id)
         vinculo = InventreeService._vinculo("localizacao", chave)
@@ -533,7 +533,7 @@ class InventreeService:
     def sincronizar_item_enderecado(item_wms_id: int, usuario: str):
         item = ItemWMS.query.get(item_wms_id)
         if not item or not item.ativo or not item.localizacao_id:
-            raise RuntimeError("Item WMS invalido para sincronizacao de enderecamento")
+            raise RuntimeError("Item WMS inválido para sincronizacao de enderecamento")
 
         destino = InventreeService._ensure_localizacao(item.localizacao_id)
         stock_item_id = InventreeService._transfer_stock_item(
@@ -547,7 +547,7 @@ class InventreeService:
     def sincronizar_estorno_enderecamento(item_wms_id: int, usuario: str):
         item = ItemWMS.query.get(item_wms_id)
         if not item or not item.ativo:
-            raise RuntimeError("Item WMS invalido para sincronizacao de estorno")
+            raise RuntimeError("Item WMS inválido para sincronizacao de estorno")
 
         destino = InventreeService._resolve_pending_destination(item)
         stock_item_id = InventreeService._transfer_stock_item(
@@ -561,7 +561,7 @@ class InventreeService:
     def sincronizar_transferencia_deposito(item_wms_id: int, usuario: str):
         item = ItemWMS.query.get(item_wms_id)
         if not item or not item.ativo:
-            raise RuntimeError("Item WMS invalido para sincronizacao de transferencia")
+            raise RuntimeError("Item WMS inválido para sincronizacao de transferencia")
 
         if item.localizacao_id:
             destino = InventreeService._ensure_localizacao(item.localizacao_id)
@@ -609,4 +609,4 @@ class InventreeService:
         if evento.tipo_evento == InventreeService.EVENTO_TRANSFERENCIA_DEPOSITO:
             return InventreeService.sincronizar_transferencia_deposito(int(payload.get("item_wms_id") or 0), usuario)
 
-        return {"sucesso": False, "mensagem": f"Tipo de evento nao suportado: {evento.tipo_evento}"}
+        return {"sucesso": False, "mensagem": f"Tipo de evento não suportado: {evento.tipo_evento}"}

@@ -6,6 +6,10 @@ from .extensions import db
 from .models import AgendamentoMotorista, AgendamentoVeiculo, DepositoWMS, Usuario
 
 
+DEFAULT_ADMIN_USERNAME = "ADMIN"
+DEFAULT_ADMIN_PASSWORD = "admin1234"
+
+
 def _has_table(table_name: str) -> bool:
     return inspect(db.engine).has_table(table_name)
 
@@ -52,6 +56,52 @@ def _ensure_usuario_password_capacity() -> None:
         with db.engine.connect() as conn:
             conn.execute(db.text("ALTER TABLE usuario MODIFY COLUMN password VARCHAR(255) NOT NULL"))
             conn.commit()
+
+
+def _admin_password_needs_reset(password: str | None) -> bool:
+    stored = str(password or "").strip()
+    if not stored:
+        return True
+    if stored == DEFAULT_ADMIN_PASSWORD:
+        return True
+    if stored.startswith("scrypt:"):
+        return stored.count("$") < 2 or len(stored) < 140
+    if stored.startswith("pbkdf2:"):
+        return stored.count("$") < 2 or len(stored) < 80
+    return ":" not in stored and "$" not in stored
+
+
+def _ensure_default_admin_user() -> None:
+    existing_admin = Usuario.query.filter_by(username=DEFAULT_ADMIN_USERNAME).first()
+    if not existing_admin:
+        old_admin = Usuario.query.filter_by(username="admin").first()
+        if old_admin:
+            old_admin.username = DEFAULT_ADMIN_USERNAME
+            old_admin.role = "Admin"
+            old_admin.password = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
+            db.session.commit()
+            return
+
+        admin = Usuario(
+            username=DEFAULT_ADMIN_USERNAME,
+            email=None,
+            password=generate_password_hash(DEFAULT_ADMIN_PASSWORD),
+            role="Admin",
+        )
+        db.session.add(admin)
+        db.session.commit()
+        return
+
+    updated = False
+    if existing_admin.role != "Admin":
+        existing_admin.role = "Admin"
+        updated = True
+    if _admin_password_needs_reset(existing_admin.password):
+        existing_admin.password = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
+        updated = True
+
+    if updated:
+        db.session.commit()
 
 
 def _ensure_item_nota_columns() -> None:
@@ -498,7 +548,7 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             ),
             ("numero_os", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_os VARCHAR(80)"),
             ("ordem_compra", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN ordem_compra VARCHAR(80)"),
-            ("numero_nf", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_nf VARCHAR(40)"),
+            ("numero_nf", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN numero_nf VARCHAR(160)"),
             ("nome_cliente", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN nome_cliente VARCHAR(160)"),
             (
                 "cliente_origem",
@@ -560,6 +610,13 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             "ix_expedicao_conferencia_simples_consyste_chave",
             "CREATE INDEX ix_expedicao_conferencia_simples_consyste_chave ON expedicao_conferencia_simples (consyste_chave)",
         )
+
+        numero_nf_details = _get_column_details("expedicao_conferencia_simples", "numero_nf")
+        numero_nf_type = numero_nf_details.get("type") if numero_nf_details else None
+        numero_nf_length = getattr(numero_nf_type, "length", None)
+        if db.engine.dialect.name == "mysql" and numero_nf_length is not None and numero_nf_length < 160:
+            conn.execute(db.text("ALTER TABLE expedicao_conferencia_simples MODIFY COLUMN numero_nf VARCHAR(160)"))
+            conn.commit()
 
         cols_foto = _get_column_names("expedicao_conferencia_simples_foto")
         missing_foto_columns = [
@@ -632,14 +689,12 @@ def initialize_database(app: Flask) -> None:
         except Exception:
             pass
 
-        if not Usuario.query.filter_by(username="admin").first():
-            admin = Usuario(
-                username="admin",
-                password=generate_password_hash("admin123"),
-                role="Admin",
-            )
-            db.session.add(admin)
-            db.session.commit()
+        try:
+            _ensure_usuario_email_column()
+        except Exception:
+            pass
+
+        _ensure_default_admin_user()
 
         # Criar 5 depósitos fixos se não existirem
         _ensure_depositos_wms()
@@ -660,6 +715,47 @@ def initialize_database(app: Flask) -> None:
             _ensure_expedicao_conferencia_simples_schema()
         except Exception:
             pass
+
+
+def _ensure_usuario_email_column() -> None:
+    """Add email column to usuario table if missing, and remove non-admin users.
+    Also ensures password column is nullable (SQLite requires table recreation)."""
+    from sqlalchemy import text, inspect as sa_inspect
+    insp = sa_inspect(db.engine)
+    cols = {c["name"] for c in insp.get_columns("usuario")}
+    if "email" not in cols:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE usuario ADD COLUMN email VARCHAR(160)"))
+            conn.commit()
+        # Remove all non-admin users so they can be re-registered with email
+        with db.engine.connect() as conn:
+            conn.execute(text("DELETE FROM usuario WHERE UPPER(username) != 'ADMIN'"))
+            conn.commit()
+
+    # Ensure password is nullable (SQLite needs table recreation, MySQL uses ALTER)
+    col_details = _get_column_details("usuario", "password")
+    if col_details and col_details.get("nullable") is False:
+        if db.engine.dialect.name == "mysql":
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE usuario MODIFY COLUMN password VARCHAR(255) NULL"))
+                conn.commit()
+        else:
+            with db.engine.connect() as conn:
+                conn.execute(text(
+                    "CREATE TABLE usuario_tmp ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "username VARCHAR(80) NOT NULL UNIQUE, "
+                    "password VARCHAR(120), "
+                    "role VARCHAR(20), "
+                    "email VARCHAR(160) UNIQUE)"
+                ))
+                conn.execute(text(
+                    "INSERT INTO usuario_tmp (id, username, password, role, email) "
+                    "SELECT id, username, password, role, email FROM usuario"
+                ))
+                conn.execute(text("DROP TABLE usuario"))
+                conn.execute(text("ALTER TABLE usuario_tmp RENAME TO usuario"))
+                conn.commit()
 
 
 def _ensure_agendamento_veiculos() -> None:
@@ -711,6 +807,22 @@ def _ensure_agendamento_veiculos() -> None:
         if "ativo" not in cols_motorista:
             conn.execute(db.text("ALTER TABLE agendamento_motorista ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT 1"))
             conn.commit()
+        if "usuario_username" not in cols_motorista:
+            conn.execute(db.text("ALTER TABLE agendamento_motorista ADD COLUMN usuario_username VARCHAR(80)"))
+            conn.commit()
+
+        # Campos novos na solicitacao
+        extra_sol_cols = [
+            ("data_desejada", "ALTER TABLE agendamento_solicitacao ADD COLUMN data_desejada DATETIME"),
+            ("cancelamento_pendente", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_pendente BOOLEAN NOT NULL DEFAULT 0"),
+            ("cancelamento_solicitado_por", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_solicitado_por VARCHAR(100)"),
+            ("cancelamento_motivo_pendente", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_motivo_pendente VARCHAR(500)"),
+            ("tempo_estimado_min", "ALTER TABLE agendamento_solicitacao ADD COLUMN tempo_estimado_min INTEGER"),
+        ]
+        for col_name, ddl in extra_sol_cols:
+            if col_name not in cols_solicitacao:
+                conn.execute(db.text(ddl))
+                conn.commit()
     finally:
         conn.close()
 
@@ -748,6 +860,19 @@ def _ensure_agendamento_veiculos() -> None:
         registro.ordem_exibicao = payload["ordem_exibicao"]
         registro.ativo = True
 
+    db.session.commit()
+
+    # Auto-sync: criar AgendamentoMotorista para usuarios com role Motorista que não tem registro
+    from .models import Usuario
+    motorista_users = Usuario.query.filter_by(role="Motorista").all()
+    for u in motorista_users:
+        existing = AgendamentoMotorista.query.filter_by(usuario_username=u.username).first()
+        if not existing:
+            db.session.add(AgendamentoMotorista(
+                nome=u.username,
+                usuario_username=u.username,
+                ativo=True,
+            ))
     db.session.commit()
 
 

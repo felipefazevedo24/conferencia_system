@@ -111,7 +111,7 @@ class BBBoletoService:
         scope = str(current_app.config.get("BB_SCOPE", "")).strip()
 
         if not client_id or not client_secret:
-            logger.warning("BB: credenciais nao configuradas (BB_CLIENT_ID / BB_CLIENT_SECRET).")
+            logger.warning("BB: credenciais não configuradas (BB_CLIENT_ID / BB_CLIENT_SECRET).")
             return None
 
         data = {"grant_type": "client_credentials"}
@@ -401,7 +401,7 @@ class BBBoletoService:
     def consultar_boletos(cls, cpf_cnpj: str) -> dict:
         doc = _only_digits(cpf_cnpj)
         if not doc or len(doc) < 11:
-            return {"fonte": "erro", "boletos": [], "mensagem": "CPF/CNPJ invalido."}
+            return {"fonte": "erro", "boletos": [], "mensagem": "CPF/CNPJ inválido."}
 
         local_result = cls.consultar_boletos_local(doc)
         enriched, refreshed = cls._enriquecer_boletos_com_api(local_result)

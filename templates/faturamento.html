@@ -123,21 +123,19 @@
 <div class="fat-wrap">
     <div class="fat-header">
         <h2 class="fat-title"><i class="fas fa-file-signature"></i> Financeiro - Faturamento (Consyste)</h2>
-        <p class="fat-sub">Solicite emissao de NF-e por TXT e acompanhe o status da solicitacao por ID.</p>
+        <p class="fat-sub">Solicite emissão de NF-e por TXT e acompanhe o status da solicitação por ID.</p>
     </div>
 
     <div class="fat-grid">
         <section class="fat-card">
-            <h3>1. Solicitar Emissao</h3>
-            <div class="fat-help">
-                Preencha os campos abaixo e clique em "Gerar TXT automaticamente". O sistema monta um TXT base no padrao Consyste para voce revisar e enviar.
-            </div>
+            <h3>1. Solicitar Emissão</h3>
+            <div class="fat-help">Preencha os campos abaixo e clique em "Gerar TXT automaticamente". O sistema monta um TXT base no padrão Consyste para você revisar e enviar.</div>
             <div class="fat-row">
                 <div class="fat-field">
                     <label for="ambiente">Ambiente</label>
                     <select id="ambiente">
-                        <option value="2" selected>Homologacao (2)</option>
-                        <option value="1">Producao (1)</option>
+                        <option value="2" selected>Homologação (2)</option>
+                        <option value="1">Produção (1)</option>
                     </select>
                 </div>
                 <div class="fat-field">
@@ -147,52 +145,52 @@
             </div>
             <div class="fat-row">
                 <div class="fat-field">
-                    <label for="numero-nf">Numero NF</label>
+                    <label for="numero-nf">Número NF</label>
                     <input id="numero-nf" placeholder="Ex: 12345" />
                 </div>
                 <div class="fat-field">
-                    <label for="serie-nf">Serie</label>
+                    <label for="serie-nf">Série</label>
                     <input id="serie-nf" placeholder="Ex: 1" value="1" />
                 </div>
             </div>
             <div class="fat-row">
                 <div class="fat-field">
-                    <label for="natureza-operacao">Natureza Operacao</label>
+                    <label for="natureza-operacao">Natureza da Operação</label>
                     <input id="natureza-operacao" placeholder="Ex: VENDA" value="VENDA" />
                 </div>
                 <div class="fat-field">
-                    <label for="codigo-municipio">Codigo Municipio IBGE</label>
+                    <label for="codigo-municipio">Código do Município IBGE</label>
                     <input id="codigo-municipio" placeholder="Ex: 3550308" value="3550308" />
                 </div>
             </div>
             <div class="fat-row">
                 <div class="fat-field">
-                    <label for="data-emissao">Data Emissao</label>
+                    <label for="data-emissao">Data de Emissão</label>
                     <input id="data-emissao" type="date" />
                 </div>
                 <div class="fat-field">
-                    <label for="data-saida">Data Saida</label>
+                    <label for="data-saida">Data de Saída</label>
                     <input id="data-saida" type="date" />
                 </div>
             </div>
 
             <div class="fat-row">
                 <div class="fat-field">
-                    <label for="dest-cnpj">CNPJ/CPF Destinatario</label>
+                    <label for="dest-cnpj">CNPJ/CPF do Destinatário</label>
                     <input id="dest-cnpj" placeholder="00.000.000/0000-00" />
                 </div>
                 <div class="fat-field">
-                    <label for="dest-nome">Nome Destinatario</label>
-                    <input id="dest-nome" placeholder="Razao social/Nome" />
+                    <label for="dest-nome">Nome do Destinatário</label>
+                    <input id="dest-nome" placeholder="Razão social/Nome" />
                 </div>
             </div>
             <div class="fat-row">
                 <div class="fat-field">
-                    <label for="dest-cidade">Cidade Destinatario</label>
+                    <label for="dest-cidade">Cidade do Destinatário</label>
                     <input id="dest-cidade" placeholder="Ex: SAO PAULO" />
                 </div>
                 <div class="fat-field">
-                    <label for="dest-uf">UF Destinatario</label>
+                    <label for="dest-uf">UF do Destinatário</label>
                     <input id="dest-uf" placeholder="Ex: SP" maxlength="2" />
                 </div>
             </div>
@@ -207,11 +205,11 @@
 
             <div class="fat-field">
                 <label for="txt-payload">TXT da NF-e</label>
-                <textarea id="txt-payload" placeholder="Cole aqui o TXT no padrao da Consyste"></textarea>
+                <textarea id="txt-payload" placeholder="Cole aqui o TXT no padrão da Consyste"></textarea>
             </div>
             <div class="fat-actions">
                 <button class="btn-fat" onclick="gerarTxtAutomatico()">Gerar TXT Automaticamente</button>
-                <button class="btn-fat primary" onclick="solicitarEmissao()">Solicitar Emissao</button>
+                <button class="btn-fat primary" onclick="solicitarEmissao()">Solicitar Emissão</button>
                 <button class="btn-fat" onclick="limparSolicitacao()">Limpar</button>
             </div>
             <div id="status-solicitacao" class="fat-status"></div>
@@ -219,17 +217,17 @@
         </section>
 
         <section class="fat-card">
-            <h3>2. Consultar Solicitacao</h3>
+            <h3>2. Consultar Solicitação</h3>
             <div class="fat-row">
                 <div class="fat-field">
                     <label for="ambiente-consulta">Ambiente</label>
                     <select id="ambiente-consulta">
-                        <option value="2" selected>Homologacao (2)</option>
-                        <option value="1">Producao (1)</option>
+                        <option value="2" selected>Homologação (2)</option>
+                        <option value="1">Produção (1)</option>
                     </select>
                 </div>
                 <div class="fat-field">
-                    <label for="emissao-id">ID da Solicitacao</label>
+                    <label for="emissao-id">ID da Solicitação</label>
                     <input id="emissao-id" placeholder="Ex: 62b080477bbe81e57e06b5bc" />
                 </div>
             </div>
@@ -312,8 +310,8 @@
                     <button class="btn-fat danger" type="button" onclick="removerItem(${idx})">Remover</button>
                 </div>
                 <div class="fat-row">
-                    <div class="fat-field"><label>Codigo</label><input data-key="codigo" placeholder="SKU-001" /></div>
-                    <div class="fat-field"><label>Descricao</label><input data-key="descricao" placeholder="Descricao do item" /></div>
+                    <div class="fat-field"><label>Código</label><input data-key="codigo" placeholder="SKU-001" /></div>
+                    <div class="fat-field"><label>Descrição</label><input data-key="descricao" placeholder="Descrição do item" /></div>
                 </div>
                 <div class="fat-row">
                     <div class="fat-field"><label>NCM</label><input data-key="ncm" placeholder="00000000" /></div>
@@ -324,8 +322,8 @@
                     <div class="fat-field"><label>Quantidade</label><input data-key="qtd" placeholder="1" value="1" /></div>
                 </div>
                 <div class="fat-row">
-                    <div class="fat-field"><label>Valor Unitario</label><input data-key="vlr_unit" placeholder="10,00" value="0" /></div>
-                    <div class="fat-field"><label>Aliquota ICMS (%)</label><input data-key="aliq_icms" placeholder="18" value="0" /></div>
+                    <div class="fat-field"><label>Valor Unitário</label><input data-key="vlr_unit" placeholder="10,00" value="0" /></div>
+                    <div class="fat-field"><label>Alíquota de ICMS (%)</label><input data-key="aliq_icms" placeholder="18" value="0" /></div>
                 </div>
             </div>
         `;
@@ -386,19 +384,19 @@
         const itens = coletarItensFormulario();
 
         if (cnpj.length !== 14) {
-            setStatus('status-solicitacao', 'Para gerar TXT, informe CNPJ emitente com 14 digitos.', false);
+            setStatus('status-solicitacao', 'Para gerar TXT, informe o CNPJ do emitente com 14 dígitos.', false);
             return;
         }
         if (!numeroNF) {
-            setStatus('status-solicitacao', 'Para gerar TXT, informe o numero da NF.', false);
+            setStatus('status-solicitacao', 'Para gerar TXT, informe o número da NF.', false);
             return;
         }
         if (destCnpj.length < 11 || !destNome) {
-            setStatus('status-solicitacao', 'Para gerar TXT, informe CNPJ/CPF e nome do destinatario.', false);
+            setStatus('status-solicitacao', 'Para gerar TXT, informe CNPJ/CPF e nome do destinatário.', false);
             return;
         }
         if (!itens.length) {
-            setStatus('status-solicitacao', 'Adicione ao menos 1 item valido para gerar o TXT.', false);
+            setStatus('status-solicitacao', 'Adicione ao menos 1 item válido para gerar o TXT.', false);
             return;
         }
 
@@ -421,7 +419,7 @@
         linhas.push('Z|TXT GERADO AUTOMATICAMENTE PELO ERP - REVISE DADOS FISCAIS ANTES DE EMITIR');
 
         document.getElementById('txt-payload').value = linhas.join('\n');
-        setStatus('status-solicitacao', 'TXT base gerado com sucesso. Revise e clique em Solicitar Emissao.', true);
+        setStatus('status-solicitacao', 'TXT base gerado com sucesso. Revise e clique em Solicitar Emissão.', true);
     }
 
     async function solicitarEmissao() {
@@ -430,11 +428,11 @@
         const txt_payload = document.getElementById('txt-payload').value || '';
 
         if (cnpj.length !== 14) {
-            setStatus('status-solicitacao', 'CNPJ invalido. Informe 14 digitos.', false);
+            setStatus('status-solicitacao', 'CNPJ inválido. Informe 14 dígitos.', false);
             return;
         }
         if (txt_payload.trim().length < 20) {
-            setStatus('status-solicitacao', 'TXT muito curto para emissao.', false);
+            setStatus('status-solicitacao', 'TXT muito curto para emissão.', false);
             return;
         }
 
@@ -446,11 +444,11 @@
             });
             const data = await parseApiResponse(res);
 
-            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Solicitacao processada' : 'Falha na solicitacao'}`;
+            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Solicitação processada' : 'Falha na solicitação'}`;
             if (res.status === 400 && String(data.error || '').includes('CONSYSTE_TOKEN')) {
                 mensagem = 'Configuração inválida: token Consyste não configurado no servidor.';
             } else if (res.status === 502) {
-                mensagem = 'Consyste retornou 502. Verifique token, CNPJ autorizado e se o TXT está no layout completo esperado.';
+                mensagem = 'Consyste retornou 502. Verifique o token, o CNPJ autorizado e se o TXT está no layout completo esperado.';
             }
 
             setStatus('status-solicitacao', mensagem, data.sucesso);
@@ -461,7 +459,7 @@
                 document.getElementById('emissao-id').value = nfeId;
             }
         } catch (err) {
-            setStatus('status-solicitacao', 'Erro ao solicitar emissao: ' + err.message, false);
+            setStatus('status-solicitacao', 'Erro ao solicitar emissão: ' + err.message, false);
             document.getElementById('resultado-solicitacao').innerText = String(err);
         }
     }
@@ -471,7 +469,7 @@
         const emissao_id = String(document.getElementById('emissao-id').value || '').trim();
 
         if (!emissao_id) {
-            setStatus('status-consulta', 'Informe o ID da solicitacao.', false);
+            setStatus('status-consulta', 'Informe o ID da solicitação.', false);
             return;
         }
 
@@ -482,7 +480,7 @@
                 body: JSON.stringify({ ambiente, emissao_id }),
             });
             const data = await parseApiResponse(res);
-            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Consulta concluida' : 'Consulta retornou alerta/erro'}`;
+            let mensagem = `HTTP ${res.status} - ${data.sucesso ? 'Consulta concluída' : 'Consulta retornou alerta/erro'}`;
             if (res.status === 400 && String(data.error || '').includes('CONSYSTE_TOKEN')) {
                 mensagem = 'Configuração inválida: token Consyste não configurado no servidor.';
             } else if (res.status === 502) {
@@ -491,7 +489,7 @@
             setStatus('status-consulta', mensagem, data.sucesso);
             document.getElementById('resultado-consulta').innerText = toPrettyJson(data);
         } catch (err) {
-            setStatus('status-consulta', 'Erro ao consultar emissao: ' + err.message, false);
+            setStatus('status-consulta', 'Erro ao consultar emissão: ' + err.message, false);
             document.getElementById('resultado-consulta').innerText = String(err);
         }
     }

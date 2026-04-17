@@ -1,130 +1,563 @@
 {% extends "base.html" %}
 
-{% block title %}Gestao de Rotas | Columbia Sync{% endblock %}
-{% block shell_title %}Gestao de Rotas{% endblock %}
-{% block shell_subtitle %}Quadro da logistica com agenda, motoristas e rota media.{% endblock %}
+{% block title %}Gestão de Rotas | Columbia Sync{% endblock %}
+{% block shell_title %}Gestão de Rotas{% endblock %}
+{% block shell_subtitle %}Painel logístico com tabela de solicitações, agenda e motoristas.{% endblock %}
 
 {% block extra_head %}
 <style>
-.rt-shell{max-width:1520px;margin:0 auto;display:grid;gap:18px}
-.rt-panel{border:1px solid rgba(18,40,58,.12);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#f5f8fb 100%);box-shadow:0 16px 32px rgba(18,40,58,.08)}
-.rt-pad{padding:22px;display:grid;gap:16px}.rt-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}
-.rt-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(30px,4vw,46px);line-height:.95;letter-spacing:-.05em}
-.rt-copy{margin:0;color:#667e92;font-size:13px;line-height:1.7;max-width:860px}.rt-actions,.rt-filters,.rt-inline,.rt-badges{display:flex;gap:10px;flex-wrap:wrap}
-.rt-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.rt-metric,.rt-card,.rt-agenda-item,.rt-driver,.rt-cadastro,.rt-mini,.rt-state{border:1px solid rgba(18,40,58,.1);border-radius:18px;background:#fff}
-.rt-metric{padding:14px}.rt-metric span{display:block;color:#667e92;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.rt-metric strong{display:block;margin-top:10px;color:#12283a;font-family:var(--font-display);font-size:30px;line-height:.95}
-.rt-state{padding:12px 14px;background:rgba(15,98,201,.05);border-style:dashed;color:#667e92;font-size:12px}.rt-state.error{background:rgba(176,56,56,.07);color:#9f2f2f}
-.rt-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.rt-col{border:1px solid rgba(18,40,58,.1);border-radius:22px;background:linear-gradient(180deg,#f6efe5 0%,#fff 100%);padding:14px;min-height:540px;display:grid;gap:12px}
-.rt-col.drop-active{outline:2px dashed rgba(15,98,201,.35);outline-offset:3px}.rt-col-head{display:flex;justify-content:space-between;align-items:center}.rt-count{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:#fff;border:1px solid rgba(18,40,58,.1);font-size:12px;font-weight:800}
-.rt-list,.rt-agenda,.rt-drivers,.rt-cadastros,.rt-history{display:grid;gap:10px}.rt-card,.rt-agenda-item,.rt-driver,.rt-cadastro,.rt-mini{padding:14px;box-shadow:0 10px 20px rgba(18,40,58,.05)}
-.rt-card{cursor:pointer}.rt-card h3{margin:8px 0 0;color:#12283a;font-size:14px;font-weight:800;line-height:1.45}.rt-card p,.rt-agenda-item p,.rt-driver p,.rt-cadastro p,.rt-mini p{margin:6px 0 0;color:#667e92;font-size:12px;line-height:1.6}
-.rt-badge{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.b-blue{background:rgba(15,98,201,.1);color:#0f62c9}.b-gold{background:rgba(207,148,22,.12);color:#8b6208}.b-green{background:rgba(26,135,84,.12);color:#19784b}.b-red{background:rgba(176,56,56,.12);color:#9f2f2f}.b-slate{background:rgba(18,40,58,.08);color:#12283a}
-.rt-grid{display:grid;grid-template-columns:1.25fr .95fr .95fr;gap:18px}.rt-empty{padding:18px;border:1px dashed rgba(18,40,58,.16);border-radius:16px;text-align:center;color:#667e92;background:rgba(255,255,255,.72)}.rt-split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.rt-form .form-control,.rt-form .form-select{min-height:46px;border-radius:14px}
-@media (max-width:1320px){.rt-metrics,.rt-board,.rt-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:920px){.rt-metrics,.rt-board,.rt-grid,.rt-split{grid-template-columns:1fr}}
+.rt-shell{max-width:1800px;margin:0 auto;display:grid;gap:20px;padding:10px 20px}
+.rt-panel{border:1px solid rgba(18,40,58,.08);border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(18,40,58,.04);transition:box-shadow .3s ease}
+.rt-panel:hover{box-shadow:0 12px 32px rgba(18,40,58,.08)}
+.rt-pad{padding:24px;display:grid;gap:20px}
+.rt-hero{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 50%,#0ea5e9 100%);border-radius:20px;padding:32px;color:#fff;position:relative;overflow:hidden;box-shadow:0 12px 40px rgba(30,64,175,.25)}
+.rt-hero::before{content:'';position:absolute;top:-50%;right:-20%;width:60%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.1) 0%,transparent 70%);pointer-events:none}
+.rt-hero::after{content:'';position:absolute;bottom:-30%;left:-10%;width:50%;height:150%;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 60%);pointer-events:none}
+.rt-hero .rt-title{color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.1)}
+.rt-hero .rt-copy{color:rgba(255,255,255,.9);text-shadow:0 1px 2px rgba(0,0,0,.1)}
+.rt-hero .btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;backdrop-filter:blur(8px)}
+.rt-hero .btn:hover{background:rgba(255,255,255,.25);transform:translateY(-2px)}
+.rt-hero .btn-primary{background:#fff;color:#1e40af;border:none;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.rt-hero .btn-primary:hover{background:#f0f9ff;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.rt-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}
+.rt-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(24px,3vw,32px);font-weight:800;line-height:1.2;letter-spacing:-.03em}
+.rt-copy{margin:4px 0 0;color:#667e92;font-size:14px;line-height:1.6;max-width:860px}
+.rt-actions,.rt-filters{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.rt-inline{display:flex;gap:4px;flex-wrap:nowrap;align-items:center}
+.rt-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px}
+.rt-metric{border:1px solid rgba(18,40,58,.06);border-radius:20px;background:#fff;padding:20px;transition:all .3s ease;position:relative;overflow:hidden}
+.rt-metric::before{content:'';position:absolute;top:0;right:0;width:80px;height:80px;border-radius:50%;transform:translate(30%,-30%);transition:all .3s ease}
+.rt-metric:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(18,40,58,.1)}
+.rt-metric span{display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.rt-metric strong{display:block;color:#0f172a;font-family:var(--font-display);font-size:36px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.rt-metric i{font-size:20px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:14px;transition:transform .3s ease}
+.rt-metric:hover i{transform:scale(1.1)}
+.rt-metric.tone-slate i{color:#64748b;background:rgba(100,116,139,.1)}.rt-metric.tone-slate::before{background:rgba(100,116,139,.05)}
+.rt-metric.tone-blue i{color:#2563eb;background:rgba(37,99,235,.1)}.rt-metric.tone-blue::before{background:rgba(37,99,235,.05)}
+.rt-metric.tone-gold i{color:#d97706;background:rgba(217,119,6,.1)}.rt-metric.tone-gold::before{background:rgba(217,119,6,.05)}
+.rt-metric.tone-green i{color:#16a34a;background:rgba(22,163,74,.1)}.rt-metric.tone-green::before{background:rgba(22,163,74,.05)}
+.rt-metric.tone-red i{color:#ef4444;background:rgba(239,68,68,.1)}.rt-metric.tone-red::before{background:rgba(239,68,68,.05)}
+.rt-badge{display:inline-flex;align-items:center;min-height:22px;padding:0 10px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.b-blue{background:linear-gradient(135deg,rgba(15,98,201,.15),rgba(15,98,201,.1));color:#0f62c9}.b-gold{background:linear-gradient(135deg,rgba(234,179,8,.15),rgba(234,179,8,.1));color:#a16207}
+.b-green{background:linear-gradient(135deg,rgba(22,163,74,.15),rgba(22,163,74,.1));color:#15803d}.b-red{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(239,68,68,.1));color:#dc2626}
+.b-slate{background:linear-gradient(135deg,rgba(100,116,139,.15),rgba(100,116,139,.1));color:#475569}
+.erp-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(18,40,58,.04);table-layout:auto}
+.erp-table thead th{background:linear-gradient(180deg,#f8fafc,#f1f5f9);color:#334155;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:12px 10px;border-bottom:2px solid rgba(18,40,58,.06);position:sticky;top:0;z-index:2;white-space:nowrap;cursor:pointer;user-select:none;transition:all .2s}
+.erp-table thead th:hover{background:linear-gradient(180deg,#f1f5f9,#e2e8f0);color:#1e293b}
+.erp-table tbody td{padding:10px;border-bottom:1px solid rgba(18,40,58,.04);vertical-align:middle;color:#334155}
+.erp-table tbody tr{cursor:pointer;transition:all .2s ease;background:#fff}
+.erp-table tbody tr:hover{background:linear-gradient(90deg,#f8fafc,#fff);box-shadow:inset 4px 0 0 #3b82f6}
+.rt-state{padding:20px;border:2px dashed rgba(18,40,58,.12);border-radius:16px;text-align:center;color:#64748b;background:#f8fafc;font-size:14px;font-weight:500}
+.rt-state.error{background:#fef2f2;border-color:#fecaca;color:#ef4444}
+.rt-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:6px;background:rgba(18,40,58,.04);border-radius:16px}
+.rt-tab{cursor:pointer;font-size:13px;font-weight:600;padding:12px 18px;border-radius:12px;color:#64748b;background:transparent;border:none;display:inline-flex;align-items:center;gap:10px;transition:all .25s ease;white-space:nowrap}
+.rt-tab:hover{color:#1e293b;background:rgba(255,255,255,.8)}
+.rt-tab.active{color:#2563eb;background:#fff;box-shadow:0 4px 12px rgba(18,40,58,.08)}
+.rt-tab .tab-count{background:rgba(100,116,139,.15);color:#64748b;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;min-width:22px;text-align:center;transition:all .25s ease}
+.rt-tab:hover .tab-count{background:rgba(37,99,235,.1);color:#3b82f6}
+.rt-tab.active .tab-count{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+.rt-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:20px;align-items:start}
+.rt-agenda{display:grid;gap:12px}
+.rt-agenda-item{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;padding:16px;transition:box-shadow .2s ease;box-shadow:0 4px 12px rgba(18,40,58,.02);border-left:4px solid #2563eb}
+.rt-agenda-item:hover{box-shadow:0 8px 24px rgba(18,40,58,.06)}
+.rt-agenda-item strong{font-size:15px;color:#1e293b;font-weight:700}
+.rt-agenda-item p{margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.5}
+.rt-agenda-item .agenda-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rt-agenda-item .agenda-header i{color:#2563eb;font-size:14px}
+.rt-drivers{display:grid;gap:12px}
+.rt-driver{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;padding:16px;transition:all .2s ease;box-shadow:0 4px 12px rgba(18,40,58,.02);display:flex;align-items:center;gap:14px}
+.rt-driver:hover{box-shadow:0 8px 24px rgba(18,40,58,.06);transform:translateY(-1px)}
+.rt-driver-avatar{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#eff6ff,#dbeafe);display:flex;align-items:center;justify-content:center;color:#2563eb;font-size:18px;font-weight:700;flex-shrink:0}
+.rt-driver-info{flex:1;min-width:0}
+.rt-driver-info strong{font-size:15px;color:#1e293b;font-weight:700;display:block}
+.rt-driver-info p{margin:4px 0 0;color:#64748b;font-size:13px;line-height:1.5}
+.rt-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 20px;text-align:center;color:#94a3b8}
+.rt-empty i{font-size:48px;opacity:.4}
+.rt-empty p{margin:0;font-size:14px;font-weight:500;max-width:320px}
+.rt-split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.rt-mini{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#f8fafc;padding:16px}
+.rt-mini span{display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.rt-mini strong{display:block;color:#0f172a;font-size:15px;font-weight:700}
+.rt-mini p{margin:6px 0 0;color:#475569;font-size:13px;line-height:1.5}
+.rt-history{display:grid;gap:12px}
+.rt-card{border:1px solid rgba(18,40,58,.08);border-radius:12px;background:#fff;padding:16px;box-shadow:0 2px 8px rgba(18,40,58,.02)}
+.rt-card strong{font-size:14px;color:#1e293b}
+.rt-card p{margin:6px 0 0;color:#64748b;font-size:13px}
+.form-control, .form-select {border-radius:12px;border:1px solid #cbd5e1;padding:10px 14px;font-size:14px;transition:all .2s ease;background-color:#f8fafc}
+.form-control:focus, .form-select:focus {border-color:#3b82f6;background-color:#fff;box-shadow:0 0 0 4px rgba(59,130,246,.1)}
+.btn {border-radius:10px;font-weight:600;padding:8px 14px;font-size:13px;transition:all .2s ease;display:inline-flex;align-items:center;gap:6px}
+.btn-sm {padding:6px 10px;font-size:12px;border-radius:8px;gap:4px}
+.btn-primary {background:#2563eb;border:none;box-shadow:0 4px 12px rgba(37,99,235,.2)}
+.btn-primary:hover {background:#1d4ed8;box-shadow:0 6px 16px rgba(37,99,235,.3);transform:translateY(-1px)}
+.btn-outline-primary {color:#2563eb;border-color:#bfdbfe;background:#eff6ff}
+.btn-outline-primary:hover {background:#dbeafe;border-color:#93c5fd;transform:translateY(-1px)}
+.btn-outline-secondary {color:#475569;border-color:#e2e8f0;background:#f8fafc}
+.btn-outline-secondary:hover {background:#f1f5f9;border-color:#cbd5e1;transform:translateY(-1px)}
+.btn-outline-success {color:#16a34a;border-color:#bbf7d0;background:#f0fdf4}
+.btn-outline-success:hover {background:#dcfce7;border-color:#86efac;transform:translateY(-1px)}
+.btn-success {background:#16a34a;border:none;color:#fff;box-shadow:0 4px 12px rgba(22,163,74,.2)}
+.btn-success:hover {background:#15803d;box-shadow:0 6px 16px rgba(22,163,74,.3);transform:translateY(-1px)}
+.btn-outline-danger {color:#dc2626;border-color:#fecaca;background:#fef2f2}
+.btn-outline-danger:hover {background:#fee2e2;border-color:#fca5a5;transform:translateY(-1px)}
+.modal{z-index:1600!important}.modal-backdrop{z-index:1550!important}
+.modal-content{border:none;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.1)}
+.modal-header{border-bottom:1px solid #f1f5f9;padding:20px 24px}
+.modal-body{padding:24px}
+.modal-footer{border-top:1px solid #f1f5f9;padding:20px 24px}
+.modal-dialog { margin: 1.75rem auto; }
+.erp-pagination{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:14px;color:#64748b;margin-top:16px}
+
+/* ── Toast ── */
+.rt-toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.rt-toast{pointer-events:auto;display:flex;align-items:center;gap:12px;padding:14px 20px;border-radius:14px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.12);border-left:4px solid #2563eb;font-size:14px;font-weight:500;color:#1e293b;transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);max-width:420px}
+.rt-toast.show{transform:translateX(0);opacity:1}
+.rt-toast.success{border-left-color:#22c55e}.rt-toast.error{border-left-color:#ef4444}.rt-toast.info{border-left-color:#3b82f6}
+.rt-toast i{font-size:18px}
+.rt-toast.success i{color:#22c55e}.rt-toast.error i{color:#ef4444}.rt-toast.info i{color:#3b82f6}
+.rt-toast-progress{position:absolute;bottom:0;left:0;height:3px;border-radius:0 0 14px 14px;transition:width linear}
+.rt-toast.success .rt-toast-progress{background:#22c55e}.rt-toast.error .rt-toast-progress{background:#ef4444}.rt-toast.info .rt-toast-progress{background:#3b82f6}
+
+/* ── Stepper ── */
+.rt-stepper{display:flex;align-items:center;gap:0;margin:12px 0 4px;width:100%}
+.rt-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
+.rt-step-dot{width:28px;height:28px;border-radius:50%;border:3px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;color:#94a3b8;transition:all .3s ease;z-index:1;position:relative}
+.rt-step.done .rt-step-dot{background:#22c55e;border-color:#22c55e;color:#fff}
+.rt-step.active .rt-step-dot{background:#2563eb;border-color:#2563eb;color:#fff;box-shadow:0 0 0 4px rgba(37,99,235,.2);animation:rtStepPulse 2s infinite}
+.rt-step.cancelled .rt-step-dot{background:#ef4444;border-color:#ef4444;color:#fff}
+.rt-step-label{font-size:10px;font-weight:600;color:#94a3b8;margin-top:6px;text-align:center;white-space:nowrap}
+.rt-step.done .rt-step-label{color:#16a34a}.rt-step.active .rt-step-label{color:#2563eb;font-weight:700}.rt-step.cancelled .rt-step-label{color:#ef4444}
+.rt-step-line{flex:1;height:3px;background:#e2e8f0;border-radius:2px;margin:0 -4px;align-self:flex-start;margin-top:13px;transition:background .3s ease}
+.rt-step-line.done{background:#22c55e}
+@keyframes rtStepPulse{0%,100%{box-shadow:0 0 0 4px rgba(37,99,235,.2)}50%{box-shadow:0 0 0 8px rgba(37,99,235,.1)}}
+
+/* ── Chips ── */
+.rt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rt-chip{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:6px 12px;font-size:12px;color:#334155;font-weight:500;transition:all .2s ease}
+.rt-chip:hover{background:#e2e8f0}
+.rt-chip i{font-size:10px;color:#64748b}
+.rt-chip .chip-qty{background:#2563eb;color:#fff;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:2px}
+
+/* ── Responsiveness Improvements ── */
+@media(max-width:1320px){.rt-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1100px){
+    .rt-filters{flex-wrap:wrap;gap:8px}
+    .rt-filters .form-control,.rt-filters .form-select{max-width:100%!important;flex:1 1 120px}
+    .modal-dialog.modal-xl{max-width:95vw}
+}
+@media(max-width:920px){
+    .rt-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .rt-grid{grid-template-columns:1fr}
+    .rt-split{grid-template-columns:1fr}
+    .erp-table{display:block;overflow-x:auto;font-size:12px}
+    .erp-table thead th,.erp-table tbody td{padding:10px 12px;white-space:nowrap}
+    .rt-top{flex-direction:column;gap:12px}
+    .rt-actions{width:100%;justify-content:flex-end}
+    .rt-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+    .rt-tab{min-width:fit-content;padding:8px 12px;font-size:13px}
+}
+@media(max-width:640px){
+    .rt-shell{padding:8px}
+    .rt-pad{padding:16px}
+    .rt-hero{padding:24px;border-radius:16px}
+    .rt-hero .rt-title{font-size:20px!important}
+    .rt-hero .rt-copy{font-size:12px}
+    .rt-metrics{grid-template-columns:1fr}
+    .rt-metric strong{font-size:24px}
+    .rt-title{font-size:22px!important}
+    .rt-copy{font-size:13px}
+    .rt-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+    .rt-tab{padding:10px 14px;font-size:12px}
+    .rt-agenda-item,.rt-driver{padding:12px}
+    .rt-driver{flex-direction:column;text-align:center;gap:10px}
+    .rt-driver-avatar{width:56px;height:56px;font-size:22px}
+    .btn{padding:8px 14px;font-size:13px}
+    .form-control,.form-select{padding:8px 12px;font-size:13px}
+    .modal-body{padding:16px}
+    .modal-header,.modal-footer{padding:14px 16px}
+    .rt-stepper{transform:scale(0.9);transform-origin:center}
+    .rt-step-label{font-size:9px}
+    .erp-pagination{font-size:12px;flex-direction:column;align-items:stretch;text-align:center}
+    .rt-filters{flex-direction:column}
+    .rt-filters .form-control,.rt-filters .form-select{width:100%!important;max-width:100%!important}
+}
+@media(max-width:400px){
+    .rt-shell{padding:4px}
+    .rt-pad{padding:12px}
+    .rt-hero{padding:20px;border-radius:14px}
+    .rt-hero .rt-title{font-size:18px!important}
+    .rt-title{font-size:18px!important}
+    .rt-metric strong{font-size:20px}
+    .rt-metric span{font-size:10px}
+    .btn{padding:6px 12px;font-size:12px}
+    .rt-actions{flex-direction:column;align-items:stretch}
+    .rt-actions .btn{width:100%;justify-content:center}
+}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="rt-toast-container" id="toastContainer"></div>
 <div class="rt-shell">
-    <section class="rt-panel rt-pad">
+    <section class="rt-hero">
         <div class="rt-top">
             <div>
-                <h1 class="rt-title">Planner logistico organizado para a operacao.</h1>
-                <p class="rt-copy">Abertura de demanda agora fica em uma pagina separada. Aqui a logistica fica com quadro, agenda, motoristas, cadastros e uma media de quilometragem com botao direto para abrir a rota no Waze.</p>
+                <h1 class="rt-title"><i class="fas fa-route" style="margin-right:12px;opacity:.9"></i>Gestão de Rotas</h1>
+                <p class="rt-copy">Central de operações logísticas — gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas em tempo real.</p>
             </div>
             <div class="rt-actions">
-                <a class="btn btn-outline-primary" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Pagina do solicitante</a>
-                <button class="btn btn-primary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar</button>
+                <a class="btn" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
+                <button class="btn btn-primary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
             </div>
         </div>
+    </section>
+    <section class="rt-panel rt-pad" style="margin-top:-10px;position:relative;z-index:1">
         <div id="metricGrid" class="rt-metrics"></div>
     </section>
 
     <section class="rt-panel rt-pad">
         <div class="rt-top">
             <div class="rt-filters">
-                <input id="boardSearch" class="form-control" placeholder="Buscar parceiro, documento ou cidade">
-                <select id="boardTipo" class="form-select"><option value="">Todos os tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option></select>
-                <select id="boardPrioridade" class="form-select"><option value="">Todas as prioridades</option><option value="Critica">Critica</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baixa">Baixa</option></select>
+                <input id="boardSearch" class="form-control" placeholder="Buscar parceiro, documento ou cidade" style="max-width:260px">
+                <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option></select>
+                <select id="boardStatus" class="form-select" style="max-width:170px"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Alocada">Alocada</option><option value="EmAndamento">Em andamento</option><option value="EmRota">Em rota</option><option value="Concluida">Concluída</option></select>
+                <select id="boardPrioridade" class="form-select" style="max-width:150px"><option value="">Prioridade</option><option value="Critica">Crítica</option><option value="Alta">Alta</option><option value="Media">Média</option><option value="Baixa">Baixa</option></select>
                 <button class="btn btn-outline-secondary" type="button" onclick="loadDashboard()"><i class="fas fa-filter"></i></button>
             </div>
-            <div class="rt-inline">
-                <span class="rt-badge b-slate">Arraste para alocar</span>
-                <span class="rt-badge b-blue">Waze</span>
-                <span class="rt-badge b-gold">Km medio</span>
-            </div>
         </div>
-        <div id="boardState" class="rt-state">Carregando quadro...</div>
-        <div class="rt-board">
-            <div class="rt-col" data-column="pendentes"><div class="rt-col-head"><strong>Tarefas pendentes</strong><span class="rt-count" id="count-pendentes">0</span></div><div class="rt-list" id="column-pendentes"></div></div>
-            <div class="rt-col" data-column="IVECO" data-vehicle-code="IVECO"><div class="rt-col-head"><strong>IVECO</strong><span class="rt-count" id="count-IVECO">0</span></div><div class="rt-list" id="column-IVECO"></div></div>
-            <div class="rt-col" data-column="SAVEIRO" data-vehicle-code="SAVEIRO"><div class="rt-col-head"><strong>SAVEIRO</strong><span class="rt-count" id="count-SAVEIRO">0</span></div><div class="rt-list" id="column-SAVEIRO"></div></div>
-            <div class="rt-col" data-column="concluido"><div class="rt-col-head"><strong>Concluido</strong><span class="rt-count" id="count-concluido">0</span></div><div class="rt-list" id="column-concluido"></div></div>
+        <div class="rt-tabs" id="rtTabs">
+            <button class="rt-tab active" onclick="setQuickTab('todas')">Todas <span class="tab-count" id="tabAll">0</span></button>
+            <button class="rt-tab" onclick="setQuickTab('pendente')"><i class="fas fa-clock" style="font-size:12px"></i> Pendentes <span class="tab-count" id="tabPending">0</span></button>
+            <button class="rt-tab" onclick="setQuickTab('andamento')"><i class="fas fa-route" style="font-size:12px"></i> Em andamento <span class="tab-count" id="tabActive">0</span></button>
+            <button class="rt-tab" onclick="setQuickTab('concluida')"><i class="fas fa-circle-check" style="font-size:12px"></i> Concluídas <span class="tab-count" id="tabDone">0</span></button>
         </div>
+        <div id="boardState" class="rt-state">Carregando solicitações...</div>
+        <div style="overflow-x:auto">
+            <table class="erp-table" id="erpTable" style="display:none">
+                <thead>
+                    <tr>
+                        <th data-sort="codigo">Código</th>
+                        <th data-sort="tipo">Tipo</th>
+                        <th data-sort="status">Status</th>
+                        <th data-sort="prioridade">Prior.</th>
+                        <th data-sort="parceiro_nome">Parceiro</th>
+                        <th>Documento</th>
+                        <th data-sort="cidade">Cidade/UF</th>
+                        <th data-sort="departamento">Depto</th>
+                        <th data-sort="motorista">Motorista</th>
+                        <th data-sort="veiculo">Veículo</th>
+                        <th data-sort="saida">Saída prev.</th>
+                        <th>KM</th>
+                        <th>Rota</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="erpBody"></tbody>
+            </table>
+        </div>
+        <div class="erp-pagination" id="erpPagination"></div>
     </section>
 
     <div class="rt-grid">
         <section class="rt-panel rt-pad">
             <div class="rt-top">
-                <div><h2 class="panel-title">Agenda por veiculo</h2><p class="rt-copy">Semana ou dia, com motorista e estimativa de km.</p></div>
-                <div class="rt-filters"><select id="agendaModo" class="form-select"><option value="semana">Semana</option><option value="dia">Dia</option></select><input id="agendaData" type="date" class="form-control"><button class="btn btn-outline-secondary" type="button" onclick="loadAgenda()"><i class="fas fa-calendar-day"></i></button></div>
+                <div>
+                    <h2 style="margin:0;font-size:18px;font-weight:800;color:#12283a">Agenda por veículo</h2>
+                    <p class="rt-copy">Semana ou dia, com motorista e estimativa de km.</p>
+                </div>
+                <div class="rt-filters">
+                    <select id="agendaModo" class="form-select" style="max-width:130px"><option value="semana">Semana</option><option value="dia">Dia</option></select>
+                    <input id="agendaData" type="date" class="form-control" style="max-width:170px">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="loadAgenda()"><i class="fas fa-calendar-day"></i></button>
+                </div>
             </div>
             <div id="agendaGrid" class="rt-agenda"></div>
         </section>
 
         <section class="rt-panel rt-pad">
             <div class="rt-top">
-                <div><h2 class="panel-title">Motoristas</h2><p class="rt-copy">Cadastro rapido e uso na alocacao.</p></div>
-                <button class="btn btn-outline-primary" type="button" onclick="openMotoristaModal()"><i class="fas fa-user-plus"></i> Novo motorista</button>
+                <div>
+                    <h2 style="margin:0;font-size:18px;font-weight:800;color:#12283a">Motoristas</h2>
+                    <p class="rt-copy">Motoristas são criados automaticamente ao registrar usuário com cargo Motorista.</p>
+                </div>
             </div>
             <div id="motoristaState" class="rt-state">Carregando motoristas...</div>
             <div id="motoristaList" class="rt-drivers"></div>
         </section>
-
-        <section class="rt-panel rt-pad">
-            <div class="rt-top">
-                <div><h2 class="panel-title">Cadastros de apoio</h2><p class="rt-copy">Fornecedores e clientes para manter a rota visivel.</p></div>
-                <div class="rt-filters"><select id="cadastroTipo" class="form-select"><option value="fornecedor">Fornecedores</option><option value="cliente">Clientes</option></select><input id="cadastroBusca" class="form-control" placeholder="Buscar cadastro"><button class="btn btn-outline-secondary" type="button" onclick="loadCadastros()"><i class="fas fa-search"></i></button></div>
-            </div>
-            <div class="rt-inline"><button class="btn btn-outline-primary btn-sm" type="button" onclick="importarCadastroPadrao('fornecedor')">Reimportar fornecedores.xlsx</button><button class="btn btn-outline-primary btn-sm" type="button" onclick="importarCadastroPadrao('cliente')">Reimportar clientes.xlsx</button></div>
-            <div id="cadastroResumo" class="rt-state">Carregando cadastros...</div>
-            <div id="cadastroList" class="rt-cadastros"></div>
-        </section>
     </div>
 </div>
 
-<div class="modal fade" id="detalheModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Detalhe da solicitacao</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="detalheBody"></div></div></div></div>
-<div class="modal fade" id="alocarModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Alocar rota</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="alocarForm" class="rt-form"><div class="modal-body"><input type="hidden" id="alocarSolicitacaoId"><div class="mb-3"><label class="form-label">Veiculo</label><select id="alocarVeiculo" class="form-select"></select></div><div class="mb-3"><label class="form-label">Motorista</label><select id="alocarMotorista" class="form-select"><option value="">Sem motorista definido</option></select></div><div class="mb-3"><label class="form-label">Saida planejada</label><input id="alocarSaida" type="datetime-local" class="form-control"></div><div class="mb-3"><label class="form-label">Previsao de retorno</label><input id="alocarRetorno" type="datetime-local" class="form-control"></div><div><label class="form-label">Observacoes</label><textarea id="alocarObservacao" class="form-control" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
-<div class="modal fade" id="cancelarModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Cancelar solicitacao</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="cancelarForm"><div class="modal-body"><input type="hidden" id="cancelarSolicitacaoId"><label class="form-label">Motivo</label><textarea id="cancelarMotivo" class="form-control" rows="4" required></textarea></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-danger" type="submit">Cancelar</button></div></form></div></div></div>
-<div class="modal fade" id="motoristaModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Cadastro de motorista</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="motoristaForm" class="rt-form"><div class="modal-body"><input type="hidden" id="motoristaId"><div class="mb-3"><label class="form-label">Nome</label><input id="motoristaNome" class="form-control" required></div><div class="mb-3"><label class="form-label">Telefone</label><input id="motoristaTelefone" class="form-control"></div><div class="mb-3"><label class="form-label">CNH</label><input id="motoristaCnh" class="form-control"></div><div class="mb-3"><label class="form-label">Observacoes</label><textarea id="motoristaObservacoes" class="form-control" rows="3"></textarea></div><div class="form-check"><input id="motoristaAtivo" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="motoristaAtivo">Motorista ativo</label></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
+<div class="modal fade" id="detalheModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Detalhe da solicitação</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="detalheBody"></div></div></div></div>
+<div class="modal fade" id="alocarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Alocar rota</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="alocarForm" class="rt-form"><div class="modal-body"><input type="hidden" id="alocarSolicitacaoId"><div class="mb-3"><label class="form-label">Departamento solicitante <span class="text-danger">*</span></label><select id="alocarDepartamento" class="form-select" required><option value="">Selecione o departamento...</option><option value="COMPRAS">COMPRAS</option><option value="ASSISTÊNCIA TÉCNICA">ASSISTÊNCIA TÉCNICA</option><option value="ENGENHARIA/PCP">ENGENHARIA/PCP</option><option value="LOGÍSTICA">LOGÍSTICA</option><option value="FACILITIES">FACILITIES</option></select></div><div class="mb-3"><label class="form-label">Veículo</label><select id="alocarVeiculo" class="form-select"></select></div><div class="mb-3"><label class="form-label">Motorista</label><select id="alocarMotorista" class="form-select"><option value="">Sem motorista definido</option></select></div><div class="mb-3"><label class="form-label">Saída planejada</label><input id="alocarSaida" type="datetime-local" class="form-control"></div><div><label class="form-label">Observações</label><textarea id="alocarObservacao" class="form-control" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
+<div class="modal fade" id="cancelarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Solicitar cancelamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="cancelarForm"><div class="modal-body"><input type="hidden" id="cancelarSolicitacaoId"><label class="form-label">Motivo</label><textarea id="cancelarMotivo" class="form-control" rows="4" required></textarea></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-danger" type="submit">Solicitar cancelamento</button></div></form></div></div></div>
+<div class="modal fade" id="motoristaModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Editar motorista</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="motoristaForm" class="rt-form"><div class="modal-body"><input type="hidden" id="motoristaId"><div class="mb-3"><label class="form-label">Nome</label><input id="motoristaNome" class="form-control" required></div><div class="mb-3"><label class="form-label">Telefone</label><input id="motoristaTelefone" class="form-control"></div><div class="mb-3"><label class="form-label">CNH</label><input id="motoristaCnh" class="form-control"></div><div class="mb-3"><label class="form-label">Observações</label><textarea id="motoristaObservacoes" class="form-control" rows="3"></textarea></div><div class="form-check"><input id="motoristaAtivo" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="motoristaAtivo">Motorista ativo</label></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const state={dashboard:null,motoristas:[],draggedId:null,geo:null};const detalheModal=new bootstrap.Modal(document.getElementById('detalheModal'));const alocarModal=new bootstrap.Modal(document.getElementById('alocarModal'));const cancelarModal=new bootstrap.Modal(document.getElementById('cancelarModal'));const motoristaModal=new bootstrap.Modal(document.getElementById('motoristaModal'));
-const boardSearch=document.getElementById('boardSearch');const boardTipo=document.getElementById('boardTipo');const boardPrioridade=document.getElementById('boardPrioridade');const agendaModo=document.getElementById('agendaModo');const agendaData=document.getElementById('agendaData');const agendaGrid=document.getElementById('agendaGrid');const cadastroTipo=document.getElementById('cadastroTipo');const cadastroBusca=document.getElementById('cadastroBusca');const cadastroList=document.getElementById('cadastroList');const cadastroResumo=document.getElementById('cadastroResumo');const detalheBody=document.getElementById('detalheBody');const alocarForm=document.getElementById('alocarForm');const alocarSolicitacaoId=document.getElementById('alocarSolicitacaoId');const alocarVeiculo=document.getElementById('alocarVeiculo');const alocarMotorista=document.getElementById('alocarMotorista');const alocarSaida=document.getElementById('alocarSaida');const alocarRetorno=document.getElementById('alocarRetorno');const alocarObservacao=document.getElementById('alocarObservacao');const cancelarForm=document.getElementById('cancelarForm');const cancelarSolicitacaoId=document.getElementById('cancelarSolicitacaoId');const cancelarMotivo=document.getElementById('cancelarMotivo');const motoristaForm=document.getElementById('motoristaForm');const motoristaState=document.getElementById('motoristaState');const motoristaList=document.getElementById('motoristaList');const motoristaId=document.getElementById('motoristaId');const motoristaNome=document.getElementById('motoristaNome');const motoristaTelefone=document.getElementById('motoristaTelefone');const motoristaCnh=document.getElementById('motoristaCnh');const motoristaObservacoes=document.getElementById('motoristaObservacoes');const motoristaAtivo=document.getElementById('motoristaAtivo');
-const badge=(t,v)=>t==='status'?({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[v]||'b-slate'):({Critica:'b-red',Alta:'b-gold',Media:'b-blue',Baixa:'b-slate'}[v]||'b-slate');
-const km=v=>Number.isFinite(Number(v))?`${Number(v).toFixed(1)} km`:'';const setBoard=(m,e=false)=>{const b=document.getElementById('boardState');b.textContent=m;b.classList.toggle('error',!!e);};
-function metrics(r={},m=[]){const cards=[['Pendentes',r.pendentes||0],['IVECO',r.iveco||0],['SAVEIRO',r.saveiro||0],['Em rota',r.em_rota||0],['Atrasadas',r.atrasadas||0],['Motoristas',r.motoristas_ativos||m.length||0]];document.getElementById('metricGrid').innerHTML=cards.map(([l,v])=>`<article class="rt-metric"><span>${l}</span><strong>${v}</strong></article>`).join('');}
-function cardHtml(c){return `<article class="rt-card" draggable="true" data-id="${c.id}"><div class="rt-badges"><span class="rt-badge b-blue">${c.tipo_label}</span><span class="rt-badge ${badge('priority',c.prioridade)}">${c.prioridade_label}</span><span class="rt-badge ${badge('status',c.status)}">${c.status_label}</span>${c.atrasada?'<span class="rt-badge b-red">Atrasada</span>':''}</div><h3>${c.parceiro_nome||'Sem parceiro'} · ${c.documento_tipo} ${c.documento_numero||'---'}</h3><p>${c.endereco_formatado||'Endereco nao informado'}</p><p>Saida: ${c.data_hora_saida_prevista_label||'Sem horario'} · ${c.resumo_itens||'0 item(ns)'}</p>${c.motorista?.nome?`<p>Motorista: <strong>${c.motorista.nome}</strong></p>`:''}${c.km_estimado?`<p><strong>${km(c.km_estimado)}</strong>${c.km_estimado_retorno?` · ${km(c.km_estimado_retorno)} ida e volta`:''}</p>`:''}${c.waze_url?`<div class="rt-inline"><a class="rt-badge b-blue" href="${c.waze_url}" target="_blank" rel="noopener">Waze</a></div>`:''}</article>`;}
-function attachCards(){document.querySelectorAll('.rt-card').forEach(card=>{card.addEventListener('click',()=>openDetalhe(card.dataset.id));card.addEventListener('dragstart',()=>state.draggedId=card.dataset.id);card.addEventListener('dragend',()=>{state.draggedId=null;document.querySelectorAll('.rt-col').forEach(c=>c.classList.remove('drop-active'));});});document.querySelectorAll('.rt-col[data-vehicle-code]').forEach(col=>{col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('drop-active');});col.addEventListener('dragleave',()=>col.classList.remove('drop-active'));col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('drop-active');if(state.draggedId)openAlocarModal(state.draggedId,col.dataset.vehicleCode);});});}
-function motoristaOptions(selected=''){document.getElementById('alocarMotorista').innerHTML=`<option value="">Sem motorista definido</option>${state.motoristas.map(m=>`<option value="${m.id}" ${String(m.id)===String(selected)?'selected':''}>${m.nome}</option>`).join('')}`;}
-async function loadDashboard(){setBoard('Atualizando quadro...');const p=new URLSearchParams();if(boardSearch.value.trim())p.set('q',boardSearch.value.trim());if(boardTipo.value)p.set('tipo',boardTipo.value);if(boardPrioridade.value)p.set('prioridade',boardPrioridade.value);const r=await fetch(`/api/logistica/agendamento-veiculos/dashboard?${p.toString()}`);const d=await r.json();if(!r.ok)return setBoard(d.error||'Falha ao carregar quadro.',true);state.dashboard=d;state.motoristas=d.motoristas||[];metrics(d.resumo,state.motoristas);['pendentes','IVECO','SAVEIRO','concluido'].forEach(k=>{const items=d.colunas?.[k]||[];document.getElementById(`count-${k}`).textContent=items.length;document.getElementById(`column-${k}`).innerHTML=items.length?items.map(cardHtml).join(''):'<div class="rt-empty">Nenhum card nesta coluna.</div>';});document.getElementById('alocarVeiculo').innerHTML=(d.veiculos||[]).map(v=>`<option value="${v.id}">${v.nome}</option>`).join('');motoristaOptions();document.getElementById('cadastroResumo').textContent=`Fornecedores: ${d.cadastros?.fornecedores||0} | Clientes: ${d.cadastros?.clientes||0}`;setBoard('Quadro sincronizado.');attachCards();}
-async function loadAgenda(){const r=await fetch(`/api/logistica/agendamento-veiculos/agenda?modo=${encodeURIComponent(agendaModo.value)}&data=${encodeURIComponent(agendaData.value)}`);const d=await r.json();if(!r.ok)return agendaGrid.innerHTML=`<div class="rt-empty">${d.error||'Falha ao carregar agenda.'}</div>`;if(!d.agenda?.length)return agendaGrid.innerHTML='<div class="rt-empty">Nenhum horario planejado.</div>';const g={};d.agenda.forEach(i=>{const k=`${i.data}__${i.veiculo_codigo}`;if(!g[k])g[k]=[];g[k].push(i);});agendaGrid.innerHTML=Object.values(g).map(items=>`<article class="rt-agenda-item"><strong>${items[0].data} · ${items[0].veiculo_nome}</strong>${items.map(i=>`<p>${i.saida_label}${i.retorno_label?` -> ${i.retorno_label}`:''} · ${i.tipo} · ${i.documento} · ${i.parceiro_nome}${i.motorista_nome?` · ${i.motorista_nome}`:''}${i.km_estimado?` · ${km(i.km_estimado)}`:''}</p>`).join('')}</article>`).join('');}
-async function loadCadastros(){const r=await fetch(`/api/logistica/agendamento-veiculos/cadastros?tipo=${encodeURIComponent(cadastroTipo.value)}&q=${encodeURIComponent(cadastroBusca.value.trim())}`);const d=await r.json();cadastroList.innerHTML=d.rows?.length?d.rows.map(i=>`<article class="rt-cadastro"><strong>${i.nome||i.razao_social||'Sem nome'}</strong><p>${i.codigo?`Codigo ${i.codigo} · `:''}${i.cnpj_cpf||'Sem documento'}</p><p>${i.endereco_formatado||'Endereco nao informado'}</p><p>${i.contato||'Sem contato'}${i.telefone?` · ${i.telefone}`:''}</p></article>`).join(''):'<div class="rt-empty">Nenhum cadastro encontrado.</div>';}
-async function importarCadastroPadrao(tipo){const f=new FormData();f.append('tipo',tipo);const r=await fetch('/api/logistica/agendamento-veiculos/cadastros/importar',{method:'POST',body:f});const d=await r.json();cadastroResumo.textContent=r.ok?`${d.resumo.importados} registros importados em ${tipo}.`:(d.error||'Falha na importacao.');if(r.ok){await loadDashboard();await loadCadastros();}}
-async function loadMotoristas(){const r=await fetch('/api/logistica/agendamento-veiculos/motoristas');const d=await r.json();if(!r.ok){motoristaState.textContent=d.error||'Falha ao carregar motoristas.';motoristaState.classList.add('error');return;}state.motoristas=d.rows||[];motoristaOptions();motoristaState.textContent=`${state.motoristas.length} motorista(s) ativo(s).`;motoristaState.classList.remove('error');motoristaList.innerHTML=state.motoristas.length?state.motoristas.map(m=>`<article class="rt-driver"><strong>${m.nome}</strong><p>${m.telefone||'Sem telefone'}${m.cnh?` · CNH ${m.cnh}`:''}</p><p>${m.observacoes||'Sem observacoes.'}</p><div class="rt-inline"><button class="btn btn-outline-secondary btn-sm" type="button" onclick="openMotoristaModal(${m.id})">Editar</button></div></article>`).join(''):'<div class="rt-empty">Nenhum motorista cadastrado.</div>';}
-async function openDetalhe(id){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}`);const d=await r.json();if(!r.ok)return;const s=d.solicitacao;detalheBody.innerHTML=`<div class="rt-split"><div class="rt-mini"><span>${s.tipo_label} · ${s.status_label}</span><strong>${s.parceiro_nome} · ${s.documento_tipo} ${s.documento_numero}</strong><p>${s.endereco_formatado}</p><p>Solicitante: ${s.solicitante}</p><p>Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p></div><div class="rt-mini"><span>Execucao</span><strong>${s.veiculo?.nome||'Sem veiculo'}${s.motorista?.nome?` · ${s.motorista.nome}`:''}</strong><p>Saida: ${s.data_hora_saida_prevista_label||'---'}</p><p>Retorno: ${s.data_hora_retorno_prevista_label||'---'}</p><p>${s.km_estimado?`Estimativa: ${km(s.km_estimado)}`:'Estimativa de km indisponivel'}${s.km_estimado_retorno?` · ${km(s.km_estimado_retorno)} ida e volta`:''}</p>${s.waze_url?`<p><a href="${s.waze_url}" target="_blank" rel="noopener">Abrir rota no Waze</a></p>`:''}</div></div><div class="rt-inline mt-3"><button class="btn btn-outline-primary btn-sm" type="button" onclick="openAlocarModal(${s.id})">Alocar</button><button class="btn btn-outline-secondary btn-sm" type="button" onclick="updateStatus(${s.id},'EmAnalise')">Em analise</button><button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus(${s.id},'EmRota')">Em rota</button><button class="btn btn-success btn-sm" type="button" onclick="updateStatus(${s.id},'Concluida')">Concluir</button><button class="btn btn-outline-danger btn-sm" type="button" onclick="openCancelarModal(${s.id})">Cancelar</button></div><div class="rt-mini mt-3"><span>Itens</span><strong>${(s.itens||[]).map(i=>`${i.descricao} (${i.quantidade})`).join(' · ')||'Sem itens'}</strong></div><div class="rt-history mt-3">${(s.historico||[]).map(i=>`<div class="rt-card"><strong>${i.criado_em} · ${i.evento}</strong><p>${i.usuario}</p><p>${i.detalhe||''}</p></div>`).join('')||'<div class="rt-empty">Sem historico.</div>'}</div>`;detalheModal.show();}
-function openAlocarModal(id,code=''){alocarSolicitacaoId.value=id;motoristaOptions();if(code){const o=[...alocarVeiculo.options].find(i=>i.text.includes(code));if(o)alocarVeiculo.value=o.value;}alocarModal.show();}
-function openCancelarModal(id){cancelarSolicitacaoId.value=id;cancelarMotivo.value='';cancelarModal.show();}
-function openMotoristaModal(id=''){const m=state.motoristas.find(i=>String(i.id)===String(id));motoristaId.value=m?.id||'';motoristaNome.value=m?.nome||'';motoristaTelefone.value=m?.telefone||'';motoristaCnh.value=m?.cnh||'';motoristaObservacoes.value=m?.observacoes||'';motoristaAtivo.checked=m?!!m.ativo:true;motoristaModal.show();}
-async function updateStatus(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok)return setBoard(d.error||'Falha ao alterar status.',true);detalheModal.hide();await refreshAll();}
-async function refreshAll(){await loadDashboard();await loadAgenda();await loadMotoristas();await loadCadastros();}
-alocarForm.addEventListener('submit',async e=>{e.preventDefault();const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,data_hora_retorno_prevista:alocarRetorno.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:state.geo?.lat||'',origem_longitude:state.geo?.lng||''};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${alocarSolicitacaoId.value}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)return setBoard(d.error||'Falha ao alocar.',true);alocarModal.hide();await refreshAll();});
-cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok)return setBoard(d.error||'Falha ao cancelar.',true);cancelarModal.hide();detalheModal.hide();await refreshAll();});
-motoristaForm.addEventListener('submit',async e=>{e.preventDefault();const payload={id:motoristaId.value||'',nome:motoristaNome.value.trim(),telefone:motoristaTelefone.value.trim(),cnh:motoristaCnh.value.trim(),observacoes:motoristaObservacoes.value.trim(),ativo:motoristaAtivo.checked};const r=await fetch('/api/logistica/agendamento-veiculos/motoristas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){motoristaState.textContent=d.error||'Falha ao salvar motorista.';motoristaState.classList.add('error');return;}motoristaModal.hide();await loadMotoristas();await loadDashboard();});
+const state={allCards:[],activeTab:'todas',motoristas:[],geo:null,sortField:'saida',sortDir:'asc',page:1,perPage:25,userRole:'{{ user_role }}'};
+const detalheModal=new bootstrap.Modal(document.getElementById('detalheModal'));
+const alocarModal=new bootstrap.Modal(document.getElementById('alocarModal'));
+const cancelarModal=new bootstrap.Modal(document.getElementById('cancelarModal'));
+const motoristaModal=new bootstrap.Modal(document.getElementById('motoristaModal'));
+const boardSearch=document.getElementById('boardSearch');
+const boardTipo=document.getElementById('boardTipo');
+const boardStatus=document.getElementById('boardStatus');
+const boardPrioridade=document.getElementById('boardPrioridade');
+const agendaModo=document.getElementById('agendaModo');
+const agendaData=document.getElementById('agendaData');
+const agendaGrid=document.getElementById('agendaGrid');
+const detalheBody=document.getElementById('detalheBody');
+const alocarForm=document.getElementById('alocarForm');
+const alocarSolicitacaoId=document.getElementById('alocarSolicitacaoId');
+const alocarVeiculo=document.getElementById('alocarVeiculo');
+const alocarMotorista=document.getElementById('alocarMotorista');
+const alocarSaida=document.getElementById('alocarSaida');
+const alocarObservacao=document.getElementById('alocarObservacao');
+const cancelarForm=document.getElementById('cancelarForm');
+const cancelarSolicitacaoId=document.getElementById('cancelarSolicitacaoId');
+const cancelarMotivo=document.getElementById('cancelarMotivo');
+const motoristaForm=document.getElementById('motoristaForm');
+const motoristaState=document.getElementById('motoristaState');
+const motoristaList=document.getElementById('motoristaList');
+const motoristaId=document.getElementById('motoristaId');
+const motoristaNome=document.getElementById('motoristaNome');
+const motoristaTelefone=document.getElementById('motoristaTelefone');
+const motoristaCnh=document.getElementById('motoristaCnh');
+const motoristaObservacoes=document.getElementById('motoristaObservacoes');
+const motoristaAtivo=document.getElementById('motoristaAtivo');
+const erpTable=document.getElementById('erpTable');
+const erpBody=document.getElementById('erpBody');
+const erpPagination=document.getElementById('erpPagination');
+
+const badge=(t,v)=>t==='status'?({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmAndamento:'b-blue',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[v]||'b-slate'):({Critica:'b-red',Alta:'b-gold',Media:'b-blue',Baixa:'b-slate'}[v]||'b-slate');
+const km=v=>Number.isFinite(Number(v))?`${Number(v).toFixed(1)} km`:'';
+const setBoard=(m,e=false)=>{const b=document.getElementById('boardState');b.textContent=m;b.classList.toggle('error',!!e);b.style.display='block';};
+const priorOrdem={Critica:0,Alta:1,Media:2,Baixa:3};
+
+/* ── Toast system ── */
+function showToast(msg, type='info', duration=4000){
+    const container=document.getElementById('toastContainer');
+    const icons={success:'fa-circle-check',error:'fa-circle-xmark',info:'fa-circle-info'};
+    const toast=document.createElement('div');
+    toast.className=`rt-toast ${type}`;
+    toast.innerHTML=`<i class="fas ${icons[type]||icons.info}"></i><span>${msg}</span><div class="rt-toast-progress" style="width:100%"></div>`;
+    container.appendChild(toast);
+    requestAnimationFrame(()=>{toast.classList.add('show');const bar=toast.querySelector('.rt-toast-progress');bar.style.transitionDuration=duration+'ms';requestAnimationFrame(()=>bar.style.width='0%');});
+    setTimeout(()=>{toast.classList.remove('show');setTimeout(()=>toast.remove(),400);},duration);
+}
+
+/* ── Stepper builder ── */
+const STEP_ORDER=['Pendente','EmAnalise','Alocada','EmRota','Concluida'];
+const STEP_LABELS={'Pendente':'Pendente','EmAnalise':'Em Análise','Alocada':'Alocada','EmRota':'Em Rota','Concluida':'Concluída'};
+const STEP_ICONS={'Pendente':'fa-clock','EmAnalise':'fa-magnifying-glass','Alocada':'fa-truck','EmRota':'fa-route','Concluida':'fa-circle-check'};
+function buildStepper(status){
+    const cancelled=status==='Cancelada';
+    const idx=STEP_ORDER.indexOf(status);
+    let html='<div class="rt-stepper">';
+    STEP_ORDER.forEach((step,i)=>{
+        let cls='';
+        if(cancelled)cls='cancelled';
+        else if(i<idx)cls='done';
+        else if(i===idx)cls='active';
+        const icon=cancelled&&i===idx?'fa-xmark':(cls==='done'?'fa-check':STEP_ICONS[step]);
+        html+=`<div class="rt-step ${cls}"><div class="rt-step-dot"><i class="fas ${icon}"></i></div><div class="rt-step-label">${STEP_LABELS[step]}</div></div>`;
+        if(i<STEP_ORDER.length-1)html+=`<div class="rt-step-line ${i<idx&&!cancelled?'done':''}"></div>`;
+    });
+    html+='</div>';
+    return html;
+}
+
+const filterTab=(c)=>{
+    if(state.activeTab==='pendente') return c.status==='Pendente'||c.status==='EmAnalise';
+    if(state.activeTab==='andamento') return ['Alocada','EmAndamento','EmRota'].includes(c.status);
+    if(state.activeTab==='concluida') return c.status==='Concluida'||c.status==='Cancelada';
+    return true;
+};
+
+function updateTabCounts(){
+    const all=state.allCards;
+    document.getElementById('tabAll').textContent=all.length;
+    document.getElementById('tabPending').textContent=all.filter(c=>c.status==='Pendente'||c.status==='EmAnalise').length;
+    document.getElementById('tabActive').textContent=all.filter(c=>['Alocada','EmAndamento','EmRota'].includes(c.status)).length;
+    document.getElementById('tabDone').textContent=all.filter(c=>c.status==='Concluida'||c.status==='Cancelada').length;
+}
+
+function setQuickTab(tab){
+    state.activeTab=tab;
+    document.querySelectorAll('.rt-tab').forEach((el,i)=>{
+        el.classList.toggle('active', ['todas','pendente','andamento','concluida'][i] === tab);
+    });
+    state.page=1;
+    renderTable(state.allCards);
+}
+
+function metrics(r={},m=[]){
+    const cards=[
+        {label:'Pendentes',value:r.pendentes||0,icon:'fa-clock',tone:'tone-slate'},
+        {label:'Alocadas',value:r.alocadas||0,icon:'fa-truck',tone:'tone-gold'},
+        {label:'Em andamento',value:r.em_andamento||0,icon:'fa-spinner',tone:'tone-blue'},
+        {label:'Em rota',value:r.em_rota||0,icon:'fa-route',tone:'tone-green'},
+        {label:'Concluídas',value:r.concluidas||0,icon:'fa-circle-check',tone:'tone-green'},
+        {label:'Atrasadas',value:r.atrasadas||0,icon:'fa-triangle-exclamation',tone:'tone-red'},
+        {label:'Motoristas',value:r.motoristas_ativos||m.length||0,icon:'fa-id-card',tone:'tone-blue'},
+    ];
+    document.getElementById('metricGrid').innerHTML=cards.map(c=>`<article class="rt-metric ${c.tone}"><i class="fas ${c.icon}"></i><span>${c.label}</span><strong>${c.value}</strong></article>`).join('');
+}
+
+function sortCards(cards){
+    const f=state.sortField,d=state.sortDir==='asc'?1:-1;
+    return [...cards].sort((a,b)=>{
+        let va,vb;
+        if(f==='codigo'){va=a.codigo||'';vb=b.codigo||'';}
+        else if(f==='tipo'){va=a.tipo||'';vb=b.tipo||'';}
+        else if(f==='status'){va=a.status||'';vb=b.status||'';}
+        else if(f==='prioridade'){va=priorOrdem[a.prioridade]??9;vb=priorOrdem[b.prioridade]??9;return (va-vb)*d;}
+        else if(f==='parceiro_nome'){va=a.parceiro_nome||'';vb=b.parceiro_nome||'';}
+        else if(f==='cidade'){va=(a.endereco?.cidade||'')+(a.endereco?.uf||'');vb=(b.endereco?.cidade||'')+(b.endereco?.uf||'');}
+        else if(f==='motorista'){va=a.motorista?.nome||'';vb=b.motorista?.nome||'';}
+        else if(f==='veiculo'){va=a.veiculo?.nome||'';vb=b.veiculo?.nome||'';}
+        else if(f==='saida'){va=a.data_hora_saida_prevista||'9999';vb=b.data_hora_saida_prevista||'9999';}
+        else{va=a.codigo||'';vb=b.codigo||'';}
+        if(typeof va==='string')return va.localeCompare(vb)*d;
+        return (va-vb)*d;
+    });
+}
+
+function renderTable(cards){
+    const filtered=cards.filter(filterTab);
+    const sorted=sortCards(filtered);
+    const total=sorted.length;
+    const pages=Math.max(1,Math.ceil(total/state.perPage));
+    state.page=Math.min(state.page,pages);
+    const start=(state.page-1)*state.perPage;
+    const slice=sorted.slice(start,start+state.perPage);
+    if(!total){erpTable.style.display='none';setBoard('Nenhuma solicitação encontrada.');return;}
+    erpBody.innerHTML=slice.map(c=>{
+        const canAlocar=c.status==='Pendente'||c.status==='EmAnalise';
+        const canRota=c.veiculo&&(c.status==='Alocada'||c.status==='EmAndamento');
+        const canConcluir=c.status==='EmRota'||c.status==='EmAndamento'||c.status==='Alocada';
+        return `<tr onclick="openDetalhe(${c.id})">
+            <td><strong>${c.codigo}</strong></td>
+            <td><span class="rt-badge b-blue">${c.tipo_label}</span></td>
+            <td><span class="rt-badge ${badge('status',c.status)}">${c.status_label}</span>${c.cancelamento_pendente?'<span class="rt-badge b-red" style="margin-left:4px">Cancel. pendente</span>':''}${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
+            <td><span class="rt-badge ${badge('priority',c.prioridade)}">${c.prioridade_label}</span></td>
+            <td title="${c.parceiro_razao_social||''}">${c.parceiro_nome||'---'}</td>
+            <td>${c.documento_tipo} ${c.documento_numero||'---'}</td>
+            <td>${c.endereco?.cidade||'---'}/${c.endereco?.uf||''}</td>
+            <td>${c.departamento_solicitante||'<span class="text-muted">---</span>'}</td>
+            <td>${c.motorista?.nome||'<span class="text-muted">---</span>'}</td>
+            <td>${c.veiculo?.nome||'<span class="text-muted">---</span>'}</td>
+            <td>${c.data_hora_saida_prevista_label||'---'}</td>
+            <td>${c.km_estimado?km(c.km_estimado):'---'}</td>
+            <td onclick="event.stopPropagation()">${c.google_maps_url?`<a href="${c.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" title="Google Maps"><i class="fas fa-map-location-dot"></i></a>`:''}</td>
+            <td onclick="event.stopPropagation()">
+                <div class="rt-inline">
+                ${canAlocar?`<button class="btn btn-outline-primary btn-sm" onclick="openAlocarModal(${c.id})" title="Alocar"><i class="fas fa-truck"></i></button>`:''}
+                ${canRota?`<button class="btn btn-outline-success btn-sm" onclick="updateStatus(${c.id},'EmRota')" title="Em rota"><i class="fas fa-road"></i></button>`:''}
+                ${canConcluir&&state.userRole==='Admin'?`<button class="btn btn-success btn-sm" onclick="updateStatus(${c.id},'Concluida')" title="Concluir"><i class="fas fa-check"></i></button>`:''}
+                ${c.status!=='Concluida'&&c.status!=='Cancelada'?`<button class="btn btn-outline-danger btn-sm" onclick="openCancelarModal(${c.id})" title="Solicitar cancelamento"><i class="fas fa-xmark"></i></button>`:''}
+                ${c.cancelamento_pendente?'<span class="rt-badge b-red" style="font-size:9px">Aguard. solicitante</span>':''}
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+    erpTable.style.display='table';
+    setBoard(`${total} solicitação(ões). Página ${state.page} de ${pages}.`);
+    erpPagination.innerHTML=`<span>${total} registro(s)</span><div class="rt-inline">${state.page>1?`<button class="btn btn-outline-secondary btn-sm" onclick="goPage(${state.page-1})"><i class="fas fa-chevron-left"></i></button>`:''}<span>Pág. ${state.page}/${pages}</span>${state.page<pages?`<button class="btn btn-outline-secondary btn-sm" onclick="goPage(${state.page+1})"><i class="fas fa-chevron-right"></i></button>`:''}</div>`;
+}
+
+function goPage(p){state.page=p;renderTable(state.allCards);}
+
+document.querySelectorAll('.erp-table th[data-sort]').forEach(th=>{
+    th.addEventListener('click',()=>{
+        const f=th.dataset.sort;
+        if(state.sortField===f)state.sortDir=state.sortDir==='asc'?'desc':'asc';
+        else{state.sortField=f;state.sortDir='asc';}
+        state.page=1;renderTable(state.allCards);
+    });
+});
+
+function motoristaOptions(selected=''){
+    alocarMotorista.innerHTML=`<option value="">Sem motorista definido</option>${state.motoristas.map(m=>`<option value="${m.id}" ${String(m.id)===String(selected)?'selected':''}>${m.nome}</option>`).join('')}`;
+}
+
+async function loadDashboard(){
+    setBoard('Atualizando...');erpTable.style.display='none';
+    const p=new URLSearchParams();
+    if(boardSearch.value.trim())p.set('q',boardSearch.value.trim());
+    if(boardTipo.value)p.set('tipo',boardTipo.value);
+    if(boardPrioridade.value)p.set('prioridade',boardPrioridade.value);
+    if(boardStatus.value)p.set('status',boardStatus.value);
+    if(boardStatus.value==='Concluida')p.set('incluir_canceladas','0');
+    const r=await fetch(`/api/logistica/agendamento-veiculos/dashboard?${p.toString()}`);
+    const d=await r.json();
+    if(!r.ok){showToast(d.error||'Falha ao carregar painel.','error');return setBoard(d.error||'Falha ao carregar.',true);}
+    state.motoristas=d.motoristas||[];
+    const allCards=[];
+    Object.values(d.colunas||{}).forEach(arr=>arr.forEach(c=>allCards.push(c)));
+    state.allCards=allCards;
+    metrics(d.resumo,state.motoristas);
+    updateTabCounts();
+    alocarVeiculo.innerHTML=(d.veiculos||[]).map(v=>`<option value="${v.id}">${v.nome}</option>`).join('');
+    motoristaOptions();
+    state.page=1;
+    renderTable(state.allCards);
+    showToast('Painel atualizado.','success');
+}
+
+async function loadAgenda(){
+    const r=await fetch(`/api/logistica/agendamento-veiculos/agenda?modo=${encodeURIComponent(agendaModo.value)}&data=${encodeURIComponent(agendaData.value)}`);
+    const d=await r.json();
+    if(!r.ok)return agendaGrid.innerHTML=`<div class="rt-empty"><i class="fas fa-calendar-xmark"></i><p>${d.error||'Falha ao carregar agenda.'}</p></div>`;
+    if(!d.agenda?.length)return agendaGrid.innerHTML='<div class="rt-empty"><i class="fas fa-calendar"></i><p>Nenhum horário planejado para este período.</p></div>';
+    const g={};d.agenda.forEach(i=>{const k=`${i.data}__${i.veiculo_codigo}`;if(!g[k])g[k]=[];g[k].push(i);});
+    agendaGrid.innerHTML=Object.values(g).map(items=>`<article class="rt-agenda-item"><div class="agenda-header"><i class="fas fa-truck"></i><strong>${items[0].data} &middot; ${items[0].veiculo_nome}</strong></div>${items.map(i=>`<p><i class="fas fa-circle" style="font-size:6px;vertical-align:middle;color:#94a3b8;margin-right:6px"></i>${i.saida_label}${i.retorno_label?` → ${i.retorno_label}`:''} &middot; <span class="rt-badge ${badge('status','Alocada')}" style="font-size:9px;min-height:18px">${i.tipo}</span> &middot; ${i.documento} &middot; ${i.parceiro_nome}${i.motorista_nome?' &middot; <i class="fas fa-user" style="font-size:10px"></i> '+i.motorista_nome:''}${i.km_estimado?' &middot; <strong>'+km(i.km_estimado)+'</strong>':''}</p>`).join('')}</article>`).join('');
+}
+
+async function loadMotoristas(){
+    const r=await fetch('/api/logistica/agendamento-veiculos/motoristas');
+    const d=await r.json();
+    if(!r.ok){motoristaState.textContent=d.error||'Falha ao carregar motoristas.';motoristaState.classList.add('error');return;}
+    state.motoristas=d.rows||[];motoristaOptions();
+    motoristaState.textContent=`${state.motoristas.length} motorista(s) ativo(s).`;motoristaState.classList.remove('error');
+    motoristaList.innerHTML=state.motoristas.length?state.motoristas.map(m=>{
+        const initials=(m.nome||'??').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        return`<article class="rt-driver"><div class="rt-driver-avatar">${initials}</div><div class="rt-driver-info"><strong>${m.nome}</strong><p><i class="fas fa-phone" style="font-size:10px;color:#94a3b8"></i> ${m.telefone||'Sem telefone'}${m.cnh?' &middot; <i class="fas fa-id-card" style="font-size:10px;color:#94a3b8"></i> CNH '+m.cnh:''}</p>${m.observacoes?`<p>${m.observacoes}</p>`:''}</div><button class="btn btn-outline-secondary btn-sm" type="button" onclick="openMotoristaModal(${m.id})"><i class="fas fa-pen"></i></button></article>`;
+    }).join(''):'<div class="rt-empty"><i class="fas fa-user-slash"></i><p>Nenhum motorista cadastrado. Cadastre usuários com cargo Motorista na gestão de acessos.</p></div>';
+}
+
+async function openDetalhe(id){
+    const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}`);
+    const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao abrir detalhe.','error');return;}const s=d.solicitacao;
+    const chips=(s.itens||[]).map(i=>`<span class="rt-chip"><i class="fas fa-box"></i>${i.descricao||'Item'}${i.quantidade?`<span class="chip-qty">${i.quantidade} ${i.unidade||''}</span>`:''}</span>`).join('');
+    detalheBody.innerHTML=`
+        ${buildStepper(s.status)}
+        <div class="rt-split" style="margin-top:16px">
+            <div class="rt-mini"><span><i class="fas fa-file-lines"></i> ${s.tipo_label} &middot; ${s.status_label}${s.cancelamento_pendente?' &middot; <span class="rt-badge b-red">Cancel. pendente</span>':''}</span><strong>${s.parceiro_nome} &middot; ${s.documento_tipo} ${s.documento_numero}</strong><p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p><p><i class="fas fa-tag" style="color:#94a3b8"></i> Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
+            <div class="rt-mini"><span><i class="fas fa-truck-fast"></i> Execução</span><strong>${s.veiculo?.nome||'Sem veículo'}${s.motorista?.nome?' &middot; '+s.motorista.nome:''}</strong>${s.departamento_solicitante?`<p><i class="fas fa-building" style="color:#94a3b8"></i> Depto: ${s.departamento_solicitante}</p>`:''}<p><i class="fas fa-clock" style="color:#94a3b8"></i> Saída: ${s.data_hora_saida_prevista_label||'---'}</p><p><i class="fas fa-road" style="color:#94a3b8"></i> ${s.km_estimado?`Estimativa: ${km(s.km_estimado)}`:'Estimativa de km indisponível'}${s.km_estimado_retorno?' &middot; '+km(s.km_estimado_retorno)+' ida e volta':''}</p>${s.google_maps_url?`<p><a href="${s.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" style="margin-top:6px"><i class="fas fa-map-location-dot"></i> Abrir rota</a></p>`:''}</div>
+        </div>
+        ${s.cancelamento_pendente?`<div class="rt-mini mt-3" style="border-color:#9f2f2f;background:rgba(176,56,56,.04)"><span style="color:#9f2f2f"><i class="fas fa-triangle-exclamation"></i> Cancelamento solicitado por ${s.cancelamento_solicitado_por}</span><p>${s.cancelamento_motivo_pendente||'Sem motivo'}</p><p style="font-size:11px;color:#667e92">Aguardando aprovação do solicitante.</p></div>`:''}
+        <div class="rt-inline mt-3">
+            <button class="btn btn-outline-primary btn-sm" type="button" onclick="openAlocarModal(${s.id})"><i class="fas fa-truck"></i> Alocar</button>
+            <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus(${s.id},'EmRota')" ${!s.veiculo?'disabled title="Aloque um veículo antes"':''}><i class="fas fa-road"></i> Em rota</button>
+            ${state.userRole==='Admin'?`<button class="btn btn-success btn-sm" type="button" onclick="updateStatus(${s.id},'Concluida')"><i class="fas fa-check"></i> Concluir</button>`:''}
+            <button class="btn btn-outline-danger btn-sm" type="button" onclick="openCancelarModal(${s.id})"><i class="fas fa-xmark"></i> Cancelar</button>
+        </div>
+        <div class="rt-mini mt-3"><span><i class="fas fa-boxes-stacked"></i> Itens</span>${chips?`<div class="rt-chips">${chips}</div>`:`<p>Sem itens registrados.</p>`}</div>
+        <div class="rt-history mt-3">${(s.historico||[]).map(i=>`<div class="rt-card"><strong><i class="fas fa-clock-rotate-left" style="color:#94a3b8;font-size:12px;margin-right:4px"></i>${i.criado_em} &middot; ${i.evento}</strong><p>${i.usuario}</p>${i.detalhe?`<p>${i.detalhe}</p>`:''}</div>`).join('')||'<div class="rt-empty"><i class="fas fa-clock-rotate-left"></i><p>Sem histórico registrado.</p></div>'}</div>`;
+    detalheModal.show();
+}
+
+function openAlocarModal(id,code=''){alocarSolicitacaoId.value=id;document.getElementById('alocarDepartamento').value='';motoristaOptions();if(code){const o=[...alocarVeiculo.options].find(i=>i.text.includes(code));if(o)alocarVeiculo.value=o.value;}alocarModal.show();}
+function openCancelarModal(id){detalheModal.hide();cancelarSolicitacaoId.value=id;cancelarMotivo.value='';setTimeout(()=>cancelarModal.show(),300);}
+function openMotoristaModal(id=''){const m=state.motoristas.find(i=>String(i.id)===String(id));if(!m)return;motoristaId.value=m.id;motoristaNome.value=m.nome||'';motoristaTelefone.value=m.telefone||'';motoristaCnh.value=m.cnh||'';motoristaObservacoes.value=m.observacoes||'';motoristaAtivo.checked=!!m.ativo;motoristaModal.show();}
+
+async function updateStatus(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alterar status.','error');return setBoard(d.error||'Falha ao alterar status.',true);}showToast(`Status atualizado para ${STEP_LABELS[status]||status}.`,'success');detalheModal.hide();await refreshAll();}
+async function refreshAll(){await loadDashboard();await loadAgenda();await loadMotoristas();}
+
+alocarForm.addEventListener('submit',async e=>{e.preventDefault();const dept=document.getElementById('alocarDepartamento').value;if(!dept){showToast('Selecione o departamento solicitante.','error');return;}const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:state.geo?.lat||'',origem_longitude:state.geo?.lng||'',departamento_solicitante:dept};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${alocarSolicitacaoId.value}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alocar.','error');return setBoard(d.error||'Falha ao alocar.',true);}showToast('Rota alocada com sucesso!','success');alocarModal.hide();await refreshAll();});
+cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao cancelar.','error');return setBoard(d.error||'Falha ao cancelar.',true);}showToast('Cancelamento solicitado. Aguardando aprovação do solicitante.','info',5000);cancelarModal.hide();detalheModal.hide();await refreshAll();});
+motoristaForm.addEventListener('submit',async e=>{e.preventDefault();const payload={id:motoristaId.value||'',nome:motoristaNome.value.trim(),telefone:motoristaTelefone.value.trim(),cnh:motoristaCnh.value.trim(),observacoes:motoristaObservacoes.value.trim(),ativo:motoristaAtivo.checked};const r=await fetch('/api/logistica/agendamento-veiculos/motoristas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar motorista.','error');motoristaState.textContent=d.error||'Falha ao salvar motorista.';motoristaState.classList.add('error');return;}showToast('Motorista salvo com sucesso!','success');motoristaModal.hide();await loadMotoristas();await loadDashboard();});
 if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>state.geo={lat:p.coords.latitude,lng:p.coords.longitude},()=>{},{enableHighAccuracy:true,timeout:8000,maximumAge:300000});}
 agendaData.value=new Date().toISOString().slice(0,10);refreshAll();
 </script>

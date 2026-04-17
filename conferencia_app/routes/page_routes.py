@@ -181,12 +181,12 @@ HOME_MODULES = [
     {
         "id": "agendamento_solicitacao",
         "title": "Solicitar Coleta ou Entrega",
-        "subtitle": "Abertura rapida",
-        "description": "Abra uma demanda em poucos passos e acompanhe o andamento sem entrar no planner da logistica.",
+        "subtitle": "Abertura rápida",
+        "description": "Abra uma demanda em poucos passos e acompanhe o andamento sem entrar no planner da logística.",
         "href": "/logistica/solicitar-transporte",
         "icon": "fa-file-circle-plus",
         "permission": "PAGE_LOGISTICA_SOLICITACAO",
-        "section": "Logistica",
+        "section": "Logística",
         "tone": "slate",
         "priority": 88,
         "keywords": ["solicitacao", "coleta", "entrega", "pedido", "transporte"],
@@ -194,13 +194,13 @@ HOME_MODULES = [
     },
     {
         "id": "agendamento_veiculos",
-        "title": "Gestao de Rotas",
-        "subtitle": "Planner logistico",
-        "description": "Gerencie o Kanban da logistica, aloque motorista e veiculo, acompanhe agenda e cadastros.",
+        "title": "Gestão de Rotas",
+        "subtitle": "Planner logístico",
+        "description": "Gerencie o Kanban da logística, aloque motorista e veículo, acompanhe agenda e cadastros.",
         "href": "/logistica/agendamento-veiculos",
         "icon": "fa-truck-fast",
         "permission": "PAGE_LOGISTICA_AGENDAMENTO",
-        "section": "LogÃ­stica",
+        "section": "Logística",
         "tone": "slate",
         "priority": 87,
         "keywords": ["agendamento", "kanban", "veiculo", "coleta", "entrega"],
@@ -665,7 +665,7 @@ def fiscal_liberadas_page():
 @page_bp.route("/recebimento/etiquetas")
 @permission_required("PAGE_ETIQUETAS")
 def etiquetas_page():
-    return render_template("etiquetas.html", user=session.get("username", "Operacao"))
+    return render_template("etiquetas.html", user=session.get("username", "Operação"))
 
 
 @page_bp.route("/historico")
@@ -747,6 +747,16 @@ def agendamento_veiculos_page():
 @permission_required("PAGE_EXPEDICAO_ADMIN")
 def expedicao_admin_page():
     return render_template("expedicao_admin.html", user=session["username"])
+
+
+@page_bp.route("/logistica/painel-motorista")
+@permission_required("PAGE_LOGISTICA_MOTORISTA")
+def painel_motorista_page():
+    return render_template(
+        "agendamento_motorista.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+    )
 
 
 @page_bp.route("/expedicao/romaneio")

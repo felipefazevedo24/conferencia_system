@@ -47,7 +47,7 @@ def requer_wms_operacao(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         if session.get('role') not in ('Admin', 'Fiscal'):
-            return jsonify({'erro': 'Acesso restrito ao modulo WMS (Fiscal/Admin).'}), 403
+            return jsonify({'erro': 'Acesso restrito ao módulo WMS (Fiscal/Admin).'}), 403
         return f(*args, **kwargs)
     return wrapper
 
@@ -207,11 +207,11 @@ def validar_localizacao_por_endereco():
     try:
         deposito_id = int(deposito_id)
     except Exception:
-        return jsonify({'erro': 'deposito_id invalido.'}), 400
+        return jsonify({'erro': 'deposito_id inválido.'}), 400
 
     deposito = DepositoWMS.query.get(deposito_id)
     if not deposito:
-        return jsonify({'erro': 'Deposito informado nao encontrado.'}), 404
+        return jsonify({'erro': 'Deposito informado não encontrado.'}), 404
 
     codigo = WMSService.formatar_codigo_localizacao(
         deposito_codigo=deposito.codigo,
@@ -817,26 +817,26 @@ def cadastrar_estoque_inicial():
     try:
         qtd = float(data.get('qtd') or 0)
     except Exception:
-        return jsonify({'erro': 'Quantidade invalida.'}), 400
+        return jsonify({'erro': 'Quantidade inválida.'}), 400
 
     try:
         deposito_id = int(deposito_id)
     except Exception:
-        return jsonify({'erro': 'Deposito invalido.'}), 400
+        return jsonify({'erro': 'Deposito inválido.'}), 400
 
     if localizacao_id is not None and str(localizacao_id).strip() != '':
         try:
             localizacao_id = int(localizacao_id)
         except Exception:
-            return jsonify({'erro': 'Endereco invalido.'}), 400
+            return jsonify({'erro': 'Endereco inválido.'}), 400
 
     localizacao = None
     if localizacao_id:
         localizacao = LocalizacaoArmazem.query.filter_by(id=localizacao_id, ativo=True).first()
         if not localizacao:
-            return jsonify({'erro': 'Endereco selecionado nao foi encontrado.'}), 400
+            return jsonify({'erro': 'Endereco selecionado não foi encontrado.'}), 400
         if int(localizacao.deposito_id or 0) != int(deposito_id):
-            return jsonify({'erro': 'Endereco selecionado nao pertence ao deposito informado.'}), 400
+            return jsonify({'erro': 'Endereco selecionado não pertence ao deposito informado.'}), 400
     else:
         if not all([deposito_id, rua, predio, nivel]):
             return jsonify({'erro': 'Informe depósito e selecione um endereço cadastrado.'}), 400
@@ -865,7 +865,7 @@ def cadastrar_estoque_inicial():
         numero_nota=numero_nota,
     )
     if not resultado.get('sucesso'):
-        return jsonify({'erro': resultado.get('erro') or 'Nao foi possivel cadastrar o estoque inicial.'}), 400
+        return jsonify({'erro': resultado.get('erro') or 'Não foi possível cadastrar o estoque inicial.'}), 400
 
     return jsonify(resultado), 201
 
@@ -895,7 +895,7 @@ def enderecar_item_manual():
         return jsonify({'erro': 'Item não encontrado para endereçamento.'}), 404
 
     # Codigo GRV passa a ser opcional no fluxo do operador.
-    # Se nao for informado, reaproveita o que ja existe no item ou cai para o codigo do material.
+    # Se não for informado, reaproveita o que já existe no item ou cai para o codigo do material.
     if not codigo_grv:
         if item.codigo_grv:
             codigo_grv = str(item.codigo_grv).strip()
@@ -929,7 +929,7 @@ def enderecar_item_manual():
         ordem_compra=ordem_compra or None,
     )
     if not item:
-        return jsonify({'erro': 'Nao foi possivel enderecar item (item invalido, ja enderecado ou sem capacidade).'}), 400
+        return jsonify({'erro': 'Não foi possível enderecar item (item inválido, já enderecado ou sem capacidade).'}), 400
 
     movimentacao = (
         MovimentacaoWMS.query
@@ -953,7 +953,7 @@ def enderecar_item_manual():
         origem='WMS',
         idempotency_key=f"enderecamento:{movimentacao.id if movimentacao else item.id}",
     )
-    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento já sincronizado'}
 
     return jsonify(
         {
@@ -1024,7 +1024,7 @@ def estornar_enderecamento_admin():
         origem='WMS',
         idempotency_key=f"estorno_enderecamento:{movimentacao.id if movimentacao else item.id}",
     )
-    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+    processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento já sincronizado'}
 
     return jsonify({
         'sucesso': True,
@@ -1298,7 +1298,7 @@ def transferir_item_entre_depositos():
         origem='WMS',
         idempotency_key=f"transferencia_deposito:{movimentacao.id if movimentacao else item_wms_id}",
     )
-    resultado['integracao_inventree'] = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+    resultado['integracao_inventree'] = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento já sincronizado'}
 
     return jsonify(resultado), 200
 
@@ -1343,7 +1343,7 @@ def inventree_sincronizar_nota_admin():
     numero_nota = (data.get('numero_nota') or '').strip()
     usuario = session.get('username', 'Sistema')
     if not numero_nota:
-        return jsonify({'erro': 'numero_nota e obrigatorio'}), 400
+        return jsonify({'erro': 'numero_nota e obrigatório'}), 400
     try:
         evento, evento_criado = InventreeService.enfileirar_evento(
             InventreeService.EVENTO_NOTA_LANCADA,
@@ -1352,7 +1352,7 @@ def inventree_sincronizar_nota_admin():
             origem='WMS',
             idempotency_key=f"nota_lancada:{numero_nota}",
         )
-        processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento ja sincronizado'}
+        processamento = _processar_evento_integracao_imediato(evento) if evento_criado else {'sucesso': True, 'mensagem': 'Evento já sincronizado'}
         return jsonify({'sucesso': True, 'evento_id': evento.id if evento else None, 'resultado': processamento}), 200
     except Exception as exc:
         return jsonify({'sucesso': False, 'erro': str(exc)}), 502

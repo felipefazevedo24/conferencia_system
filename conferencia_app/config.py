@@ -37,7 +37,14 @@ class Config:
     _database_url = _normalize_database_url(os.environ.get("DATABASE_URL", ""))
     SQLALCHEMY_DATABASE_URI = _database_url or f"sqlite:///{_db_path.as_posix()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {} if SQLALCHEMY_DATABASE_URI.startswith("sqlite:") else {"pool_pre_ping": True}
+    SQLALCHEMY_ENGINE_OPTIONS = (
+        {}
+        if SQLALCHEMY_DATABASE_URI.startswith("sqlite:")
+        else {
+            "pool_pre_ping": True,
+            "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "280")),
+        }
+    )
 
     CONSYSTE_TOKEN = os.environ.get("CONSYSTE_TOKEN", "T-PsbZoTuzx1CAj1yYgz")
     CONSYSTE_API_BASE = "https://portal.consyste.com.br/api/v1"
@@ -86,14 +93,21 @@ class Config:
     ).strip()
     AGENDAMENTO_CONFLITO_MINUTOS = int(os.environ.get("AGENDAMENTO_CONFLITO_MINUTOS", "30"))
     AGENDAMENTO_DURACAO_PADRAO_MINUTOS = int(os.environ.get("AGENDAMENTO_DURACAO_PADRAO_MINUTOS", "120"))
-    AGENDAMENTO_BASE_ORIGEM = str(os.environ.get("AGENDAMENTO_BASE_ORIGEM", "")).strip()
-    AGENDAMENTO_BASE_LATITUDE = float(os.environ.get("AGENDAMENTO_BASE_LATITUDE", "0") or 0)
-    AGENDAMENTO_BASE_LONGITUDE = float(os.environ.get("AGENDAMENTO_BASE_LONGITUDE", "0") or 0)
+    AGENDAMENTO_BASE_ORIGEM = str(os.environ.get("AGENDAMENTO_BASE_ORIGEM", "Avenida Carlos Roberto Prataviera, 600 - Jardim Nova Europa, Indaiatuba - SP, 13184-889")).strip()
+    AGENDAMENTO_BASE_LATITUDE = float(os.environ.get("AGENDAMENTO_BASE_LATITUDE", "-23.0903") or 0)
+    AGENDAMENTO_BASE_LONGITUDE = float(os.environ.get("AGENDAMENTO_BASE_LONGITUDE", "-47.2186") or 0)
     AGENDAMENTO_ESTIMATIVA_KM_FATOR = float(os.environ.get("AGENDAMENTO_ESTIMATIVA_KM_FATOR", "1.28") or 1.28)
     AGENDAMENTO_GEOCODE_TIMEOUT_SECONDS = int(os.environ.get("AGENDAMENTO_GEOCODE_TIMEOUT_SECONDS", "8"))
     AGENDAMENTO_GEOCODE_URL = str(
         os.environ.get("AGENDAMENTO_GEOCODE_URL", "https://nominatim.openstreetmap.org/search")
     ).strip().rstrip("/")
+
+    # Email SMTP
+    MAIL_SMTP_SERVER = os.environ.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
+    MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
+    MAIL_SENDER = os.environ.get("MAIL_SENDER", "sync.columbia@gmail.com")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "cvwu wwdq kbbw ridh")
+    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "Sistema Columbia")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))

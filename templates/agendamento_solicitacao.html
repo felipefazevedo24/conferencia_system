@@ -6,20 +6,161 @@
 
 {% block extra_head %}
 <style>
-.rq-shell{max-width:1420px;margin:0 auto;display:grid;gap:18px}.rq-panel{border:1px solid rgba(18,40,58,.12);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#f5f8fb 100%);box-shadow:0 16px 32px rgba(18,40,58,.08)}.rq-pad{padding:22px;display:grid;gap:16px}.rq-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}.rq-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(30px,4vw,46px);line-height:.95;letter-spacing:-.05em}.rq-copy{margin:0;color:#667e92;font-size:13px;line-height:1.7;max-width:760px}.rq-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}.rq-form .form-control,.rq-form .form-select{min-height:46px;border-radius:14px}.rq-state,.rq-mini,.rq-card{border:1px solid rgba(18,40,58,.1);border-radius:18px;background:#fff}.rq-state{padding:12px 14px;background:rgba(15,98,201,.05);border-style:dashed;color:#667e92;font-size:12px}.rq-state.error{background:rgba(176,56,56,.07);color:#9f2f2f}.rq-mini{padding:14px}.rq-mini span{display:block;color:#667e92;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.rq-mini strong{display:block;margin-top:8px;color:#12283a;font-size:14px;line-height:1.5}.rq-items{width:100%;border-collapse:separate;border-spacing:0}.rq-items th,.rq-items td{padding:8px 6px;border-bottom:1px solid rgba(18,40,58,.08);vertical-align:top}.rq-items th{color:#667e92;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.rq-items input{width:100%;min-height:40px;border:1px solid rgba(18,40,58,.14);border-radius:12px;padding:0 10px}.rq-list{display:grid;gap:10px}.rq-card{padding:14px;box-shadow:0 10px 20px rgba(18,40,58,.05)}.rq-card h3{margin:8px 0 0;color:#12283a;font-size:14px;font-weight:800;line-height:1.45}.rq-card p{margin:6px 0 0;color:#667e92;font-size:12px;line-height:1.6}.rq-badges{display:flex;gap:6px;flex-wrap:wrap}.rq-badge{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.b-blue{background:rgba(15,98,201,.1);color:#0f62c9}.b-gold{background:rgba(207,148,22,.12);color:#8b6208}.b-green{background:rgba(26,135,84,.12);color:#19784b}.b-red{background:rgba(176,56,56,.12);color:#9f2f2f}.b-slate{background:rgba(18,40,58,.08);color:#12283a}.rq-empty{padding:18px;border:1px dashed rgba(18,40,58,.16);border-radius:16px;text-align:center;color:#667e92;background:rgba(255,255,255,.72)}@media (max-width:980px){.rq-grid{grid-template-columns:1fr}}
+.rq-shell{max-width:1420px;margin:0 auto;display:grid;gap:20px;padding:10px}
+.rq-panel{border:1px solid rgba(18,40,58,.08);border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(18,40,58,.04);transition:box-shadow .3s ease}
+.rq-panel:hover{box-shadow:0 12px 32px rgba(18,40,58,.08)}
+.rq-pad{padding:24px;display:grid;gap:20px}
+.rq-hero{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 50%,#0ea5e9 100%);border-radius:20px;padding:32px;color:#fff;position:relative;overflow:hidden;box-shadow:0 12px 40px rgba(30,64,175,.25)}
+.rq-hero::before{content:'';position:absolute;top:-50%;right:-20%;width:60%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.1) 0%,transparent 70%);pointer-events:none}
+.rq-hero::after{content:'';position:absolute;bottom:-30%;left:-10%;width:50%;height:150%;background:radial-gradient(circle,rgba(255,255,255,.05) 0%,transparent 60%);pointer-events:none}
+.rq-hero .rq-title{color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.1)}
+.rq-hero .rq-copy{color:rgba(255,255,255,.9);text-shadow:0 1px 2px rgba(0,0,0,.1)}
+.rq-hero .btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;backdrop-filter:blur(8px)}
+.rq-hero .btn:hover{background:rgba(255,255,255,.25);transform:translateY(-2px)}
+.rq-hero .btn-primary{background:#fff;color:#1e40af;border:none;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.rq-hero .btn-primary:hover{background:#eff6ff;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.rq-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:start}
+.rq-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(28px,4vw,42px);line-height:1.2;font-weight:800;letter-spacing:-.03em}
+.rq-copy{margin:4px 0 0;color:#667e92;font-size:14px;line-height:1.6;max-width:760px}
+.panel-title{margin:0;font-size:20px;font-weight:800;color:#12283a;letter-spacing:-.02em}
+.rq-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}
+.form-control,.form-select{border-radius:12px;border:1px solid #cbd5e1;padding:10px 14px;font-size:14px;transition:all .2s ease;background-color:#f8fafc;min-height:44px}
+.form-control:focus,.form-select:focus{border-color:#3b82f6;background-color:#fff;box-shadow:0 0 0 4px rgba(59,130,246,.1)}
+.rq-state,.rq-mini,.rq-card{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;box-shadow:0 4px 12px rgba(18,40,58,.02);transition:box-shadow .2s ease}
+.rq-mini:hover,.rq-card:hover{box-shadow:0 8px 24px rgba(18,40,58,.06)}
+.rq-state{padding:16px;background:#f8fafc;border:2px dashed #cbd5e1;color:#475569;font-size:14px;font-weight:500;text-align:center}
+.rq-state.error{background:#fef2f2;border-color:#fecaca;color:#ef4444}
+.rq-mini{padding:16px;background:#f8fafc}
+.rq-mini span{display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.rq-mini strong{display:block;color:#0f172a;font-size:15px;font-weight:700;line-height:1.4}
+.rq-items{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border-radius:12px;overflow:hidden}
+.rq-items th{color:#334155;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:14px 10px;border-bottom:2px solid rgba(18,40,58,.06);background:linear-gradient(180deg,#f8fafc,#f1f5f9)}
+.rq-items td{padding:12px 10px;border-bottom:1px solid rgba(18,40,58,.04);vertical-align:middle}
+.rq-list{display:grid;gap:14px}
+.rq-card{padding:18px;transition:all .3s ease}
+.rq-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(18,40,58,.08)}
+.rq-card h3{margin:0 0 8px;color:#1e293b;font-size:16px;font-weight:700;line-height:1.4}
+.rq-card p{margin:0;color:#64748b;font-size:13px;line-height:1.6}
+.rq-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.rq-badge{display:inline-flex;align-items:center;min-height:26px;padding:0 14px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;transition:transform .2s ease}
+.rq-badge:hover{transform:scale(1.05)}
+.b-blue{background:linear-gradient(135deg,rgba(15,98,201,.15),rgba(15,98,201,.1));color:#0f62c9}.b-gold{background:linear-gradient(135deg,rgba(234,179,8,.15),rgba(234,179,8,.1));color:#a16207}.b-green{background:linear-gradient(135deg,rgba(22,163,74,.15),rgba(22,163,74,.1));color:#15803d}.b-red{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(239,68,68,.1));color:#dc2626}.b-slate{background:linear-gradient(135deg,rgba(100,116,139,.15),rgba(100,116,139,.1));color:#475569}
+.btn{border-radius:10px;font-weight:600;padding:10px 20px;font-size:14px;transition:all .2s ease;display:inline-flex;align-items:center;gap:8px}
+.btn-primary{background:linear-gradient(135deg,#2563eb,#3b82f6);border:none;box-shadow:0 4px 12px rgba(37,99,235,.25)}
+.btn-primary:hover{background:linear-gradient(135deg,#1d4ed8,#2563eb);box-shadow:0 6px 16px rgba(37,99,235,.35);transform:translateY(-1px)}
+.btn-outline-primary{color:#2563eb;border-color:#bfdbfe;background:#eff6ff}
+.btn-outline-primary:hover{background:#dbeafe;border-color:#93c5fd;transform:translateY(-1px)}
+.btn-outline-secondary{color:#475569;border-color:#e2e8f0;background:#f8fafc}
+.btn-outline-secondary:hover{background:#f1f5f9;border-color:#cbd5e1;transform:translateY(-1px)}
+
+/* ── Accordion parceiro ── */
+.rq-accordion-toggle{display:flex;align-items:center;gap:8px;background:none;border:1px solid #e2e8f0;border-radius:12px;padding:10px 16px;color:#475569;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s ease;width:100%}
+.rq-accordion-toggle:hover{background:#f8fafc;border-color:#cbd5e1;color:#1e293b}
+.rq-accordion-toggle i.chevron{transition:transform .3s ease;margin-left:auto;font-size:12px}
+.rq-accordion-toggle.open i.chevron{transform:rotate(180deg)}
+.rq-accordion-body{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.4,0,.2,1),opacity .3s ease;opacity:0}
+.rq-accordion-body.open{max-height:600px;opacity:1;margin-top:12px}
+
+/* ── Stepper ── */
+.rq-stepper{display:flex;align-items:center;gap:0;margin:12px 0 4px;width:100%}
+.rq-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
+.rq-step-dot{width:28px;height:28px;border-radius:50%;border:3px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;color:#94a3b8;transition:all .3s ease;z-index:1;position:relative}
+.rq-step.done .rq-step-dot{background:#22c55e;border-color:#22c55e;color:#fff}
+.rq-step.active .rq-step-dot{background:#2563eb;border-color:#2563eb;color:#fff;box-shadow:0 0 0 4px rgba(37,99,235,.2);animation:stepPulse 2s infinite}
+.rq-step.cancelled .rq-step-dot{background:#ef4444;border-color:#ef4444;color:#fff}
+.rq-step-label{font-size:10px;font-weight:600;color:#94a3b8;margin-top:6px;text-align:center;white-space:nowrap}
+.rq-step.done .rq-step-label{color:#16a34a}
+.rq-step.active .rq-step-label{color:#2563eb;font-weight:700}
+.rq-step.cancelled .rq-step-label{color:#ef4444}
+.rq-step-line{flex:1;height:3px;background:#e2e8f0;border-radius:2px;margin:0 -4px;align-self:flex-start;margin-top:13px;transition:background .3s ease}
+.rq-step-line.done{background:#22c55e}
+
+/* ── Toast ── */
+.rq-toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.rq-toast{pointer-events:auto;display:flex;align-items:center;gap:12px;padding:14px 20px;border-radius:14px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.12);border-left:4px solid #2563eb;font-size:14px;font-weight:500;color:#1e293b;transform:translateX(120%);opacity:0;transition:all .4s cubic-bezier(.4,0,.2,1);max-width:420px}
+.rq-toast.show{transform:translateX(0);opacity:1}
+.rq-toast.success{border-left-color:#22c55e}
+.rq-toast.error{border-left-color:#ef4444}
+.rq-toast.info{border-left-color:#3b82f6}
+.rq-toast i{font-size:18px}
+.rq-toast.success i{color:#22c55e}
+.rq-toast.error i{color:#ef4444}
+.rq-toast.info i{color:#3b82f6}
+.rq-toast-progress{position:absolute;bottom:0;left:0;height:3px;border-radius:0 0 14px 14px;transition:width linear}
+.rq-toast.success .rq-toast-progress{background:#22c55e}
+.rq-toast.error .rq-toast-progress{background:#ef4444}
+.rq-toast.info .rq-toast-progress{background:#3b82f6}
+@keyframes stepPulse{0%,100%{box-shadow:0 0 0 4px rgba(37,99,235,.2)}50%{box-shadow:0 0 0 8px rgba(37,99,235,.1)}}
+
+/* ── Disponibilidade veiculos ── */
+.rq-disp-card{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;padding:16px 20px;transition:all .2s ease;box-shadow:0 4px 12px rgba(18,40,58,.02)}
+.rq-disp-card:hover{box-shadow:0 8px 24px rgba(18,40,58,.06)}
+.rq-disp-card.livre{border-left:4px solid #22c55e}
+.rq-disp-card.ocupado{border-left:4px solid #f59e0b}
+.rq-disp-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rq-disp-header i{font-size:18px}
+.rq-disp-card.livre .rq-disp-header i{color:#22c55e}
+.rq-disp-card.ocupado .rq-disp-header i{color:#f59e0b}
+.rq-disp-header h3{margin:0;font-size:15px;font-weight:700;color:#1e293b}
+.rq-disp-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 10px;border-radius:8px}
+.rq-disp-status.livre{background:rgba(34,197,94,.1);color:#16a34a}
+.rq-disp-status.ocupado{background:rgba(245,158,11,.1);color:#b45309}
+.rq-disp-bloco{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed rgba(18,40,58,.06);font-size:12px;color:#475569}
+.rq-disp-bloco:last-child{border-bottom:none}
+.rq-disp-bloco i{font-size:10px;color:#94a3b8}
+
+/* ── Chips de itens ── */
+.rq-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rq-chip{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:6px 12px;font-size:12px;color:#334155;font-weight:500;transition:all .2s ease}
+.rq-chip:hover{background:#e2e8f0}
+.rq-chip i{font-size:10px;color:#64748b}
+.rq-chip .chip-qty{background:#2563eb;color:#fff;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:2px}
+
+/* ── Empty state ilustrado ── */
+.rq-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 20px;text-align:center;color:#94a3b8}
+.rq-empty i{font-size:48px;opacity:.4}
+.rq-empty p{margin:0;font-size:14px;font-weight:500;max-width:300px}
+
+/* ── Solicitation card extras ── */
+.rq-card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
+.rq-card-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px}
+.rq-card-meta-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b}
+.rq-card-meta-item i{width:16px;text-align:center;color:#94a3b8;font-size:11px}
+
+@media (max-width:980px){.rq-grid{grid-template-columns:1fr}}
+@media (max-width:640px){
+    .rq-shell{padding:8px}
+    .rq-pad{padding:16px}
+    .rq-hero{padding:24px;border-radius:16px}
+    .rq-hero .rq-title{font-size:20px}
+    .rq-hero .rq-copy{font-size:12px}
+    .rq-title{font-size:20px!important}
+    .panel-title{font-size:18px}
+    .btn{padding:8px 14px;font-size:13px}
+    .rq-stepper{transform:scale(0.85);transform-origin:center}
+    .rq-step-dot{width:24px;height:24px;font-size:10px}
+    .rq-step-label{font-size:9px}
+}
+@media (max-width:400px){
+    .rq-hero{padding:20px;border-radius:14px}
+    .rq-hero .rq-title{font-size:18px}
+    .rq-title{font-size:18px!important}
+    .rq-pad{padding:12px}
+}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="rq-toast-container" id="toastContainer"></div>
 <div class="rq-shell">
-    <section class="rq-panel rq-pad">
+    <section class="rq-hero">
         <div class="rq-top">
             <div>
-                <h1 class="rq-title">Abra a demanda sem entrar no planner.</h1>
-                <p class="rq-copy">Use esta pagina para pedir coleta ou entrega. A logistica recebe no quadro de pendencias, faz a alocacao e voce acompanha o andamento aqui mesmo.</p>
+                <h1 class="rq-title"><i class="fas fa-truck-fast" style="margin-right:14px;opacity:.9"></i>Solicitação de Transporte</h1>
+                <p class="rq-copy">Abertura de demandas logísticas. Consulte a OC (coleta) ou NF (entrega), preencha os dados e envie para a logística. Acompanhe o status em tempo real.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a class="btn btn-outline-primary" href="/logistica/agendamento-veiculos"><i class="fas fa-truck-fast"></i> Ir para gestao de rotas</a>{% endif %}
+                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a class="btn" href="/logistica/agendamento-veiculos"><i class="fas fa-gauge-high"></i> Ir para gestão de rotas</a>{% endif %}
                 <button class="btn btn-primary" type="button" onclick="loadMinhasSolicitacoes()"><i class="fas fa-rotate"></i> Atualizar status</button>
             </div>
         </div>
@@ -27,13 +168,14 @@
 
     <div class="rq-grid">
         <section class="rq-panel rq-pad">
-            <div><h2 class="panel-title">Nova solicitacao</h2><p class="rq-copy">Consulte a OC no Google Sheets ou a NF no Consyste e envie a demanda para a logistica.</p></div>
+            <div><h2 class="panel-title">Nova solicitação</h2><p class="rq-copy">Consulte a OC no Google Sheets ou a NF no Consyste e envie a demanda para a logística.</p></div>
             <form id="solicitacaoForm" class="rq-form">
                 <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label">Tipo</label><select id="tipoSolicitacao" class="form-select"><option value="COLETA">COLETA</option><option value="ENTREGA">ENTREGA</option></select></div>
-                    <div class="col-md-6"><label class="form-label">Prioridade</label><select id="prioridadeSolicitacao" class="form-select"><option value="Media">Media</option><option value="Alta">Alta</option><option value="Critica">Critica</option><option value="Baixa">Baixa</option></select></div>
-                    <div class="col-md-7"><label class="form-label" id="documentoLabel">Ordem de Compra (OC)</label><div class="input-group"><input id="documentoInput" class="form-control" placeholder="Digite a OC"><button class="btn btn-outline-primary" type="button" onclick="consultarDocumento()"><i class="fas fa-search"></i></button></div></div>
-                    <div class="col-md-5"><label class="form-label">Prazo</label><input id="prazoLimite" type="datetime-local" class="form-control"></div>
+                    <div class="col-md-6"><label class="form-label">Tipo <span class="text-danger">*</span></label><select id="tipoSolicitacao" class="form-select" required><option value="COLETA">COLETA</option><option value="ENTREGA">ENTREGA</option></select></div>
+                    <div class="col-md-6"><label class="form-label">Prioridade</label><select id="prioridadeSolicitacao" class="form-select"><option value="Media">Média</option><option value="Alta">Alta</option><option value="Critica">Crítica</option><option value="Baixa">Baixa</option></select></div>
+                    <div class="col-md-7"><label class="form-label" id="documentoLabel">Ordem de Compra (OC) <span class="text-danger">*</span></label><div class="input-group"><input id="documentoInput" class="form-control" placeholder="Digite a OC" required><button class="btn btn-outline-primary" type="button" onclick="consultarDocumento()"><i class="fas fa-search"></i></button></div></div>
+                    <div class="col-md-5"><label class="form-label">Data desejada <span class="text-danger">*</span></label><input id="dataDesejada" type="datetime-local" class="form-control" title="Data em que você gostaria que a coleta/entrega acontecesse" required></div>
+                    <div class="col-md-5"><label class="form-label">Prazo limite <span class="text-danger">*</span></label><input id="prazoLimite" type="datetime-local" class="form-control" required></div>
                     <div class="col-12"><div id="lookupState" class="rq-state">Busque o documento para puxar parceiro e itens automaticamente.</div></div>
                 </div>
 
@@ -42,17 +184,26 @@
                     <div class="col-md-6"><div class="rq-mini"><span>Contato</span><strong id="parceiroContato">Sem contato</strong><small id="parceiroTelefone"></small></div></div>
                 </div>
 
-                <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label">Nome manual do parceiro</label><input id="parceiroNomeManual" class="form-control"></div>
-                    <div class="col-md-6"><label class="form-label">Documento</label><input id="parceiroDocumentoManual" class="form-control"></div>
-                    <div class="col-md-6"><label class="form-label">Contato</label><input id="parceiroContatoManual" class="form-control"></div>
-                    <div class="col-md-6"><label class="form-label">Telefone</label><input id="parceiroTelefoneManual" class="form-control"></div>
-                    <div class="col-md-8"><label class="form-label">Endereco</label><input id="logradouroManual" class="form-control"></div>
-                    <div class="col-md-4"><label class="form-label">Numero</label><input id="numeroManual" class="form-control"></div>
-                    <div class="col-md-4"><label class="form-label">Bairro</label><input id="bairroManual" class="form-control"></div>
-                    <div class="col-md-4"><label class="form-label">Cidade</label><input id="cidadeManual" class="form-control"></div>
-                    <div class="col-md-2"><label class="form-label">UF</label><input id="ufManual" maxlength="2" class="form-control"></div>
-                    <div class="col-md-2"><label class="form-label">CEP</label><input id="cepManual" class="form-control"></div>
+                <!-- Accordion: campos manuais do parceiro -->
+                <div>
+                    <button type="button" class="rq-accordion-toggle" onclick="toggleAccordion(this)">
+                        <i class="fas fa-pen-to-square"></i> Editar dados do parceiro manualmente
+                        <i class="fas fa-chevron-down chevron"></i>
+                    </button>
+                    <div class="rq-accordion-body" id="parceiroAccordion">
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label">Nome manual do parceiro</label><input id="parceiroNomeManual" class="form-control"></div>
+                            <div class="col-md-6"><label class="form-label">Documento</label><input id="parceiroDocumentoManual" class="form-control"></div>
+                            <div class="col-md-6"><label class="form-label">Contato</label><input id="parceiroContatoManual" class="form-control"></div>
+                            <div class="col-md-6"><label class="form-label">Telefone</label><input id="parceiroTelefoneManual" class="form-control"></div>
+                            <div class="col-md-8"><label class="form-label">Endereço</label><input id="logradouroManual" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label">Número</label><input id="numeroManual" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label">Bairro</label><input id="bairroManual" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label">Cidade</label><input id="cidadeManual" class="form-control"></div>
+                            <div class="col-md-2"><label class="form-label">UF</label><input id="ufManual" maxlength="2" class="form-control"></div>
+                            <div class="col-md-2"><label class="form-label">CEP</label><input id="cepManual" class="form-control"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -61,21 +212,31 @@
                 </div>
                 <div class="table-responsive">
                     <table class="rq-items">
-                        <thead><tr><th>Descricao</th><th>Qtd</th><th>Unidade</th><th>Volumes</th><th>Obs.</th><th></th></tr></thead>
+                        <thead><tr><th>Descrição</th><th>Qtd</th><th>Unidade</th><th>Volumes</th><th>Obs.</th><th></th></tr></thead>
                         <tbody id="itemsBody"></tbody>
                     </table>
                 </div>
 
-                <div><label class="form-label">Observacoes do solicitante</label><textarea id="observacoesSolicitante" class="form-control" rows="3"></textarea></div>
+                <div><label class="form-label">Observações do solicitante</label><textarea id="observacoesSolicitante" class="form-control" rows="3"></textarea></div>
                 <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para a logistica</button>
+                    <button class="btn btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para a logística</button>
                     <button class="btn btn-outline-secondary" type="button" onclick="resetFormState()">Limpar</button>
                 </div>
             </form>
         </section>
 
         <section class="rq-panel rq-pad">
-            <div><h2 class="panel-title">Minhas solicitacoes</h2><p class="rq-copy">Acompanhe status, horario previsto, motorista e o link da rota quando a logistica fizer a alocacao.</p></div>
+            <div><h2 class="panel-title">Disponibilidade de veículos</h2><p class="rq-copy">Veja quando cada veículo está livre ou ocupado nos próximos dias.</p></div>
+            <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                <input id="dispDataInicio" type="date" class="form-control" style="max-width:170px">
+                <input id="dispDataFim" type="date" class="form-control" style="max-width:170px">
+                <button class="btn btn-outline-primary btn-sm" type="button" onclick="loadDisponibilidade()"><i class="fas fa-calendar-check"></i> Consultar</button>
+            </div>
+            <div id="dispGrid" class="rq-list"></div>
+        </section>
+
+        <section class="rq-panel rq-pad">
+            <div><h2 class="panel-title">Minhas solicitações</h2><p class="rq-copy">Acompanhe status, horário previsto, motorista e o link da rota quando a logística fizer a alocação.</p></div>
             <div id="myState" class="rq-state">Carregando solicitacoes...</div>
             <div id="myList" class="rq-list"></div>
         </section>
@@ -85,8 +246,50 @@
 
 {% block extra_js %}
 <script>
-const state={lookup:null};const badge=(t,v)=>t==='status'?({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[v]||'b-slate'):({Critica:'b-red',Alta:'b-gold',Media:'b-blue',Baixa:'b-slate'}[v]||'b-slate');
-const solicitacaoForm=document.getElementById('solicitacaoForm');const tipoSolicitacao=document.getElementById('tipoSolicitacao');const prioridadeSolicitacao=document.getElementById('prioridadeSolicitacao');const documentoLabel=document.getElementById('documentoLabel');const documentoInput=document.getElementById('documentoInput');const prazoLimite=document.getElementById('prazoLimite');const lookupState=document.getElementById('lookupState');const parceiroNome=document.getElementById('parceiroNome');const parceiroDocumento=document.getElementById('parceiroDocumento');const parceiroContato=document.getElementById('parceiroContato');const parceiroTelefone=document.getElementById('parceiroTelefone');const parceiroNomeManual=document.getElementById('parceiroNomeManual');const parceiroDocumentoManual=document.getElementById('parceiroDocumentoManual');const parceiroContatoManual=document.getElementById('parceiroContatoManual');const parceiroTelefoneManual=document.getElementById('parceiroTelefoneManual');const logradouroManual=document.getElementById('logradouroManual');const numeroManual=document.getElementById('numeroManual');const bairroManual=document.getElementById('bairroManual');const cidadeManual=document.getElementById('cidadeManual');const ufManual=document.getElementById('ufManual');const cepManual=document.getElementById('cepManual');const itemsBody=document.getElementById('itemsBody');const observacoesSolicitante=document.getElementById('observacoesSolicitante');const myState=document.getElementById('myState');const myList=document.getElementById('myList');
+const state={lookup:null};
+const badge=(t,v)=>t==='status'?({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[v]||'b-slate'):({Critica:'b-red',Alta:'b-gold',Media:'b-blue',Baixa:'b-slate'}[v]||'b-slate');
+
+/* ── Toast system ── */
+function showToast(msg, type='info', duration=4000){
+    const container=document.getElementById('toastContainer');
+    const icons={success:'fa-circle-check',error:'fa-circle-xmark',info:'fa-circle-info'};
+    const toast=document.createElement('div');
+    toast.className=`rq-toast ${type}`;
+    toast.innerHTML=`<i class="fas ${icons[type]||icons.info}"></i><span>${msg}</span><div class="rq-toast-progress" style="width:100%"></div>`;
+    container.appendChild(toast);
+    requestAnimationFrame(()=>{toast.classList.add('show');const bar=toast.querySelector('.rq-toast-progress');bar.style.transitionDuration=duration+'ms';requestAnimationFrame(()=>bar.style.width='0%');});
+    setTimeout(()=>{toast.classList.remove('show');setTimeout(()=>toast.remove(),400);},duration);
+}
+
+/* ── Accordion ── */
+function toggleAccordion(btn){
+    btn.classList.toggle('open');
+    const body=btn.nextElementSibling;
+    body.classList.toggle('open');
+}
+
+/* ── Stepper builder ── */
+const STEP_ORDER=['Pendente','EmAnalise','Alocada','EmRota','Concluida'];
+const STEP_LABELS={'Pendente':'Pendente','EmAnalise':'Em Análise','Alocada':'Alocada','EmRota':'Em Rota','Concluida':'Concluída'};
+const STEP_ICONS={'Pendente':'fa-clock','EmAnalise':'fa-magnifying-glass','Alocada':'fa-truck','EmRota':'fa-route','Concluida':'fa-circle-check'};
+function buildStepper(status){
+    const cancelled=status==='Cancelada';
+    const idx=STEP_ORDER.indexOf(status);
+    let html='<div class="rq-stepper">';
+    STEP_ORDER.forEach((step,i)=>{
+        let cls='';
+        if(cancelled)cls='cancelled';
+        else if(i<idx)cls='done';
+        else if(i===idx)cls='active';
+        const icon=cancelled&&i===idx?'fa-xmark':(cls==='done'?'fa-check':STEP_ICONS[step]);
+        html+=`<div class="rq-step ${cls}"><div class="rq-step-dot"><i class="fas ${icon}"></i></div><div class="rq-step-label">${STEP_LABELS[step]}</div></div>`;
+        if(i<STEP_ORDER.length-1)html+=`<div class="rq-step-line ${i<idx&&!cancelled?'done':''}"></div>`;
+    });
+    html+='</div>';
+    return html;
+}
+
+const solicitacaoForm=document.getElementById('solicitacaoForm');const tipoSolicitacao=document.getElementById('tipoSolicitacao');const prioridadeSolicitacao=document.getElementById('prioridadeSolicitacao');const documentoLabel=document.getElementById('documentoLabel');const documentoInput=document.getElementById('documentoInput');const dataDesejada=document.getElementById('dataDesejada');const prazoLimite=document.getElementById('prazoLimite');const lookupState=document.getElementById('lookupState');const parceiroNome=document.getElementById('parceiroNome');const parceiroDocumento=document.getElementById('parceiroDocumento');const parceiroContato=document.getElementById('parceiroContato');const parceiroTelefone=document.getElementById('parceiroTelefone');const parceiroNomeManual=document.getElementById('parceiroNomeManual');const parceiroDocumentoManual=document.getElementById('parceiroDocumentoManual');const parceiroContatoManual=document.getElementById('parceiroContatoManual');const parceiroTelefoneManual=document.getElementById('parceiroTelefoneManual');const logradouroManual=document.getElementById('logradouroManual');const numeroManual=document.getElementById('numeroManual');const bairroManual=document.getElementById('bairroManual');const cidadeManual=document.getElementById('cidadeManual');const ufManual=document.getElementById('ufManual');const cepManual=document.getElementById('cepManual');const itemsBody=document.getElementById('itemsBody');const observacoesSolicitante=document.getElementById('observacoesSolicitante');const myState=document.getElementById('myState');const myList=document.getElementById('myList');
 const km=v=>Number.isFinite(Number(v))?`${Number(v).toFixed(1)} km`:'';const setLookup=(m,e=false)=>{lookupState.textContent=m;lookupState.classList.toggle('error',!!e);};const setMine=(m,e=false)=>{myState.textContent=m;myState.classList.toggle('error',!!e);};
 function addItemRow(item={}){const tr=document.createElement('tr');tr.innerHTML=`<td><input class="item-desc" value="${item.descricao||''}"></td><td><input class="item-qtd" value="${item.quantidade??''}"></td><td><input class="item-und" value="${item.unidade||''}"></td><td><input class="item-vol" value="${item.volumes??''}"></td><td><input class="item-obs" value="${item.observacoes||''}"></td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>`;itemsBody.appendChild(tr);}
 function resetLookup(){state.lookup=null;parceiroNome.textContent='Aguardando consulta';parceiroDocumento.textContent='';parceiroContato.textContent='Sem contato';parceiroTelefone.textContent='';itemsBody.innerHTML='';addItemRow();setLookup('Busque o documento para puxar parceiro e itens automaticamente.');}
@@ -94,9 +297,46 @@ function updateDocumentoLabel(){const tipo=tipoSolicitacao.value;documentoLabel.
 function resetFormState(){solicitacaoForm.reset();tipoSolicitacao.value='COLETA';prioridadeSolicitacao.value='Media';updateDocumentoLabel();}
 function collectPartner(){return{nome:parceiroNomeManual.value.trim(),razao_social:parceiroNomeManual.value.trim(),cnpj_cpf:parceiroDocumentoManual.value.trim(),contato:parceiroContatoManual.value.trim(),telefone:parceiroTelefoneManual.value.trim(),logradouro:logradouroManual.value.trim(),numero:numeroManual.value.trim(),bairro:bairroManual.value.trim(),cidade:cidadeManual.value.trim(),uf:ufManual.value.trim(),cep:cepManual.value.trim(),observacoes:state.lookup?.warning||''};}
 function collectItems(){return[...document.querySelectorAll('#itemsBody tr')].map(row=>({descricao:row.querySelector('.item-desc').value.trim(),quantidade:row.querySelector('.item-qtd').value.trim(),unidade:row.querySelector('.item-und').value.trim(),volumes:row.querySelector('.item-vol').value.trim(),observacoes:row.querySelector('.item-obs').value.trim()}));}
-async function consultarDocumento(){const tipo=tipoSolicitacao.value;const documento=documentoInput.value.trim();if(!documento)return setLookup('Informe o documento para consultar.',true);const url=tipo==='COLETA'?`/api/logistica/agendamento-veiculos/referencia/oc/${encodeURIComponent(documento)}`:`/api/logistica/agendamento-veiculos/referencia/nf/${encodeURIComponent(documento)}`;setLookup('Consultando documento...');const r=await fetch(url);const d=await r.json();if(!r.ok)return setLookup(d.error||'Documento nao localizado.',true);state.lookup=d;const p=d.fornecedor||d.cliente||{};parceiroNome.textContent=p.nome||p.razao_social||'Sem nome';parceiroDocumento.textContent=p.cnpj_cpf||'';parceiroContato.textContent=p.contato||'Sem contato';parceiroTelefone.textContent=p.telefone||'';parceiroNomeManual.value=p.nome||p.razao_social||'';parceiroDocumentoManual.value=p.cnpj_cpf||'';parceiroContatoManual.value=p.contato||'';parceiroTelefoneManual.value=p.telefone||'';logradouroManual.value=p.logradouro||'';numeroManual.value=p.numero||'';bairroManual.value=p.bairro||'';cidadeManual.value=p.cidade||'';ufManual.value=p.uf||'';cepManual.value=p.cep||'';itemsBody.innerHTML='';(d.itens||[]).forEach(addItemRow);if(!d.itens?.length)addItemRow();setLookup(`${d.warning||'Documento localizado e campos preenchidos.'}${d.fonte?.label?` Fonte: ${d.fonte.label}.`:''}`);}
-async function loadMinhasSolicitacoes(){setMine('Atualizando suas solicitacoes...');const r=await fetch('/api/logistica/agendamento-veiculos/minhas-solicitacoes');const d=await r.json();if(!r.ok)return setMine(d.error||'Falha ao carregar solicitacoes.',true);setMine('Solicitacoes sincronizadas.');myList.innerHTML=d.rows?.length?d.rows.map(s=>`<article class="rq-card"><div class="rq-badges"><span class="rq-badge b-blue">${s.tipo_label}</span><span class="rq-badge ${badge('priority',s.prioridade)}">${s.prioridade_label}</span><span class="rq-badge ${badge('status',s.status)}">${s.status_label}</span></div><h3>${s.parceiro_nome||'Sem parceiro'} · ${s.documento_tipo} ${s.documento_numero||'---'}</h3><p>${s.endereco_formatado||'Endereco nao informado'}</p><p>Criada em ${s.criado_em}</p><p>${s.data_hora_saida_prevista_label?`Saida prevista: ${s.data_hora_saida_prevista_label}`:'Aguardando alocacao'}${s.veiculo?.nome?` · ${s.veiculo.nome}`:''}${s.motorista?.nome?` · ${s.motorista.nome}`:''}</p>${s.km_estimado?`<p><strong>${km(s.km_estimado)}</strong>${s.km_estimado_retorno?` · ${km(s.km_estimado_retorno)} ida e volta`:''}</p>`:''}${s.waze_url?`<p><a href="${s.waze_url}" target="_blank" rel="noopener">Abrir rota no Waze</a></p>`:''}</article>`).join(''):'<div class="rq-empty">Voce ainda nao abriu solicitacoes.</div>';}
-solicitacaoForm.addEventListener('submit',async e=>{e.preventDefault();const tipo=tipoSolicitacao.value;const payload={tipo,prioridade:prioridadeSolicitacao.value,prazo_limite:prazoLimite.value||'',numero_oc:tipo==='COLETA'?documentoInput.value.trim():'',numero_nf:tipo==='ENTREGA'?documentoInput.value.trim():'',parceiro:collectPartner(),itens:collectItems(),observacoes_solicitante:observacoesSolicitante.value.trim()};const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)return setLookup(d.error||'Falha ao salvar solicitacao.',true);resetFormState();setLookup('Solicitacao enviada para a logistica.');await loadMinhasSolicitacoes();});
+async function consultarDocumento(){const tipo=tipoSolicitacao.value;const documento=documentoInput.value.trim();if(!documento){showToast('Informe o documento para consultar.','error');return setLookup('Informe o documento para consultar.',true);}const url=tipo==='COLETA'?`/api/logistica/agendamento-veiculos/referencia/oc/${encodeURIComponent(documento)}`:`/api/logistica/agendamento-veiculos/referencia/nf/${encodeURIComponent(documento)}`;setLookup('Consultando documento...');const r=await fetch(url);const d=await r.json();if(!r.ok){showToast(d.error||'Documento não localizado.','error');return setLookup(d.error||'Documento não localizado.',true);}state.lookup=d;const p=d.fornecedor||d.cliente||{};parceiroNome.textContent=p.nome||p.razao_social||'Sem nome';parceiroDocumento.textContent=p.cnpj_cpf||'';parceiroContato.textContent=p.contato||'Sem contato';parceiroTelefone.textContent=p.telefone||'';parceiroNomeManual.value=p.nome||p.razao_social||'';parceiroDocumentoManual.value=p.cnpj_cpf||'';parceiroContatoManual.value=p.contato||'';parceiroTelefoneManual.value=p.telefone||'';logradouroManual.value=p.logradouro||'';numeroManual.value=p.numero||'';bairroManual.value=p.bairro||'';cidadeManual.value=p.cidade||'';ufManual.value=p.uf||'';cepManual.value=p.cep||'';itemsBody.innerHTML='';(d.itens||[]).forEach(addItemRow);if(!d.itens?.length)addItemRow();showToast('Documento localizado e campos preenchidos.','success');setLookup(`${d.warning||'Documento localizado e campos preenchidos.'}${d.fonte?.label?` Fonte: ${d.fonte.label}.`:''}`);}
+
+/* ── Disponibilidade com ícones e cores ── */
+async function loadDisponibilidade(){const di=document.getElementById('dispDataInicio').value;const df=document.getElementById('dispDataFim').value;const dispGrid=document.getElementById('dispGrid');dispGrid.innerHTML='<div class="rq-state">Carregando disponibilidade...</div>';const p=new URLSearchParams();if(di)p.set('data_inicio',di);if(df)p.set('data_fim',df);const r=await fetch(`/api/logistica/agendamento-veiculos/disponibilidade?${p.toString()}`);const d=await r.json();if(!r.ok){dispGrid.innerHTML=`<div class="rq-state error">${d.error||'Falha ao carregar.'}</div>`;return;}if(!d.veiculos?.length){dispGrid.innerHTML='<div class="rq-empty"><i class="fas fa-truck"></i><p>Nenhum veículo cadastrado no sistema.</p></div>';return;}
+dispGrid.innerHTML=d.veiculos.map(v=>{
+    const livre=!v.blocos?.length;
+    const cls=livre?'livre':'ocupado';
+    const statusBadge=livre?'<span class="rq-disp-status livre"><i class="fas fa-circle-check"></i> Livre</span>':'<span class="rq-disp-status ocupado"><i class="fas fa-calendar-xmark"></i> Ocupado</span>';
+    const formatDt=(dt)=>{const p=dt.split(' ');const d=p[0].split('-');return`${d[2]}/${d[1]} ${p[1]}`;};
+    const blocos=v.blocos?.length?v.blocos.map(b=>`<div class="rq-disp-bloco"><i class="fas fa-circle"></i><span class="rq-badge ${badge('status',b.status)}">${b.status}</span> <strong>${formatDt(b.inicio)} - ${formatDt(b.fim)}</strong> &middot; ${b.tipo} &middot; ${b.parceiro} (${b.codigo})</div>`).join(''):'';
+    return`<article class="rq-disp-card ${cls}"><div class="rq-disp-header"><i class="fas ${livre?'fa-truck':'fa-truck-loading'}"></i><h3>${v.nome}${v.placa?' &middot; '+v.placa:''}</h3>${statusBadge}</div>${blocos}</article>`;
+}).join('');}
+
+/* ── Minhas solicitações com stepper e chips ── */
+async function loadMinhasSolicitacoes(){setMine('Atualizando suas solicitações...');const r=await fetch('/api/logistica/agendamento-veiculos/minhas-solicitacoes');const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao carregar solicitações.','error');return setMine(d.error||'Falha ao carregar solicitações.',true);}showToast('Solicitações atualizadas.','success');setMine('');
+myList.innerHTML=d.rows?.length?d.rows.map(s=>{
+    const chips=(s.itens||[]).map(it=>`<span class="rq-chip"><i class="fas fa-box"></i>${it.descricao||'Item'}${it.quantidade?`<span class="chip-qty">${it.quantidade} ${it.unidade||''}</span>`:''}</span>`).join('');
+    return`<article class="rq-card">
+        <div class="rq-card-header">
+            <h3>${s.parceiro_nome||'Sem parceiro'} &middot; ${s.documento_tipo} ${s.documento_numero||'---'}</h3>
+            <div class="rq-badges"><span class="rq-badge b-blue">${s.tipo_label}</span><span class="rq-badge ${badge('priority',s.prioridade)}">${s.prioridade_label}</span></div>
+        </div>
+        ${buildStepper(s.status)}
+        <div class="rq-card-meta">
+            ${s.endereco_formatado?`<div class="rq-card-meta-item"><i class="fas fa-location-dot"></i>${s.endereco_formatado}</div>`:''}
+            ${s.data_desejada_label?`<div class="rq-card-meta-item"><i class="fas fa-calendar-day"></i>Desejada: ${s.data_desejada_label}</div>`:''}
+            <div class="rq-card-meta-item"><i class="fas fa-clock"></i>Criada em ${s.criado_em}</div>
+            <div class="rq-card-meta-item"><i class="fas fa-truck"></i>${s.data_hora_saida_prevista_label?`Saída: ${s.data_hora_saida_prevista_label}`:'Aguardando alocação'}${s.veiculo?.nome?' &middot; '+s.veiculo.nome:''}${s.motorista?.nome?' &middot; '+s.motorista.nome:''}</div>
+            ${s.km_estimado?`<div class="rq-card-meta-item"><i class="fas fa-road"></i><strong>${km(s.km_estimado)}</strong>${s.km_estimado_retorno?' &middot; '+km(s.km_estimado_retorno)+' ida e volta':''}</div>`:''}
+        </div>
+        ${chips?`<div class="rq-chips">${chips}</div>`:''}
+        ${s.google_maps_url?`<p style="margin-top:10px"><a href="${s.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="fas fa-map-location-dot"></i> Abrir rota no Google Maps</a></p>`:''}
+        ${s.cancelamento_pendente?`<div style="margin-top:12px;padding:14px;border:1px dashed #9f2f2f;border-radius:14px;background:rgba(176,56,56,.04)"><p style="margin:0 0 10px;color:#9f2f2f;font-size:13px;font-weight:700"><i class="fas fa-triangle-exclamation"></i> A logística solicitou cancelamento: ${s.cancelamento_motivo_pendente||'Sem motivo'}</p><div class="d-flex gap-2"><button class="btn btn-danger btn-sm" onclick="aprovarCancelamento(${s.id})"><i class="fas fa-check"></i> Aprovar cancelamento</button><button class="btn btn-outline-secondary btn-sm" onclick="rejeitarCancelamento(${s.id})"><i class="fas fa-xmark"></i> Rejeitar</button></div></div>`:''}
+    </article>`;
+}).join(''):'<div class="rq-empty"><i class="fas fa-inbox"></i><p>Você ainda não abriu solicitações de transporte.</p></div>';}
+
+solicitacaoForm.addEventListener('submit',async e=>{e.preventDefault();const tipo=tipoSolicitacao.value;const payload={tipo,prioridade:prioridadeSolicitacao.value,data_desejada:dataDesejada.value||'',prazo_limite:prazoLimite.value||'',numero_oc:tipo==='COLETA'?documentoInput.value.trim():'',numero_nf:tipo==='ENTREGA'?documentoInput.value.trim():'',parceiro:collectPartner(),itens:collectItems(),observacoes_solicitante:observacoesSolicitante.value.trim()};const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar solicitação.','error');return setLookup(d.error||'Falha ao salvar solicitação.',true);}resetFormState();showToast('Solicitação enviada com sucesso para a logística!','success',5000);setLookup('Solicitação enviada para a logística.');await loadMinhasSolicitacoes();});
+async function aprovarCancelamento(id){if(!confirm('Tem certeza que deseja aprovar o cancelamento?'))return;const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/aprovar-cancelamento`,{method:'POST',headers:{'Content-Type':'application/json'}});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao aprovar.','error');return setMine(d.error||'Falha ao aprovar.',true);}showToast('Cancelamento aprovado.','success');await loadMinhasSolicitacoes();}
+async function rejeitarCancelamento(id){if(!confirm('Tem certeza que deseja rejeitar o cancelamento?'))return;const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/rejeitar-cancelamento`,{method:'POST',headers:{'Content-Type':'application/json'}});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao rejeitar.','error');return setMine(d.error||'Falha ao rejeitar.',true);}showToast('Cancelamento rejeitado.','success');await loadMinhasSolicitacoes();}
 tipoSolicitacao.addEventListener('change',updateDocumentoLabel);resetFormState();loadMinhasSolicitacoes();
+(function(){const hoje=new Date().toISOString().slice(0,10);const di=document.getElementById('dispDataInicio');const df=document.getElementById('dispDataFim');if(di)di.value=hoje;if(df){const d=new Date();d.setDate(d.getDate()+7);df.value=d.toISOString().slice(0,10);}loadDisponibilidade();})();
 </script>
 {% endblock %}

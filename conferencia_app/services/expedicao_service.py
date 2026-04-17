@@ -60,9 +60,9 @@ def _resolve_report_path(base_dir: str, file_name: str) -> Path:
     base_path = Path(base_dir).resolve()
     report_path = (base_path / file_name).resolve()
     if base_path not in report_path.parents:
-        raise ValueError("Arquivo de relatorio invalido.")
+        raise ValueError("Arquivo de relatorio inválido.")
     if not report_path.exists() or not report_path.is_file():
-        raise FileNotFoundError("Relatorio nao encontrado.")
+        raise FileNotFoundError("Relatorio não encontrado.")
     if report_path.suffix.lower() not in HTML_EXTENSIONS:
         raise ValueError("Arquivo precisa ser HTML.")
     return report_path
@@ -218,14 +218,14 @@ def resolve_report_image_path(base_dir: str, file_name: str, image_name: str) ->
     report_path = _resolve_report_path(base_dir, file_name)
     safe_name = Path(image_name).name
     if not safe_name:
-        raise ValueError("Imagem invalida.")
+        raise ValueError("Imagem inválida.")
 
     image_folder = report_path.with_suffix("")
     image_folder = image_folder.parent / f"{image_folder.name}.files"
     image_path = (image_folder / safe_name).resolve()
 
     if image_folder.resolve() not in image_path.parents and image_path != image_folder.resolve():
-        raise ValueError("Imagem invalida.")
+        raise ValueError("Imagem inválida.")
     if not image_path.exists() or not image_path.is_file():
-        raise FileNotFoundError("Imagem nao encontrada.")
+        raise FileNotFoundError("Imagem não encontrada.")
     return image_path

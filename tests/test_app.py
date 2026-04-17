@@ -4,7 +4,13 @@ import sqlite3
 from datetime import datetime
 from unittest.mock import Mock, patch
 
+from flask import session
+from sqlalchemy import event
+from sqlalchemy.exc import OperationalError
+
 from conferencia_app import create_app
+from conferencia_app.bootstrap import initialize_database
+from conferencia_app.auth import check_active_session
 from conferencia_app.extensions import db
 from conferencia_app.models import (
     BoletoContaReceber,
@@ -19,7 +25,7 @@ from conferencia_app.models import (
     SolicitacaoDevolucaoRecebimento,
 )
 from conferencia_app.services.xml_service import process_xml_and_store
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 def build_test_app(tmp_path):
@@ -32,8 +38,25 @@ def build_test_app(tmp_path):
     )
 
 
+def enable_sqlite_foreign_keys(app):
+    with app.app_context():
+        engine = db.engine
+        if engine.dialect.name != "sqlite" or engine.info.get("foreign_keys_enabled_for_tests"):
+            return
+
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragma(dbapi_connection, _connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON")
+            cursor.close()
+
+        engine.info["foreign_keys_enabled_for_tests"] = True
+        db.session.remove()
+        engine.dispose()
+
+
 def login_admin(client):
-    return client.post("/login", json={"username": "admin", "password": "admin123"})
+    return client.post("/login", json={"username": "admin", "password": "admin1234"})
 
 
 def login_portaria(client, app):
@@ -164,6 +187,70 @@ def test_login_invalid_password(tmp_path):
     assert response.get_json()["sucesso"] is False
 
 
+def test_login_recovers_legacy_plaintext_admin_password(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        admin = Usuario.query.filter_by(username="ADMIN").first()
+        admin.password = "admin1234"
+        db.session.commit()
+
+    response = login_admin(client)
+
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        admin = Usuario.query.filter_by(username="ADMIN").first()
+        assert admin.password != "admin1234"
+        assert check_password_hash(admin.password, "admin1234")
+
+
+def test_initialize_database_resets_truncated_admin_hash(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        admin = Usuario.query.filter_by(username="ADMIN").first()
+        admin.password = generate_password_hash("admin1234")[:120]
+        admin.role = "Conferente"
+        db.session.commit()
+
+        initialize_database(app)
+        db.session.expire_all()
+
+        admin = Usuario.query.filter_by(username="ADMIN").first()
+        assert admin.role == "Admin"
+        assert check_password_hash(admin.password, "admin1234")
+
+
+def test_check_active_session_retries_after_operational_error(tmp_path):
+    app = build_test_app(tmp_path)
+    sessao_mock = Mock()
+    sessao_mock.is_active = True
+
+    with app.test_request_context("/"):
+        session["session_id"] = "sessao-teste"
+
+        with patch(
+            "conferencia_app.auth._load_and_touch_active_session",
+            side_effect=[
+                OperationalError("SELECT 1", {"session_id": "sessao-teste"}, Exception("lost connection")),
+                sessao_mock,
+            ],
+        ) as load_mock, patch("conferencia_app.auth._recover_db_connection") as recover_mock:
+            check_active_session()
+
+    assert load_mock.call_count == 2
+    recover_mock.assert_called_once()
+
+
 def test_stats_requires_authentication(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -177,7 +264,7 @@ def test_stats_requires_authentication(tmp_path):
 def test_validar_payload_missing_fields_returns_400(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     response = client.post("/validar", json={"nota": "123"})
 
@@ -190,7 +277,7 @@ def test_validar_payload_missing_fields_returns_400(tmp_path):
 def test_reverter_conferencia_requires_reason(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     response = client.post("/api/admin/resetar_nota", json={"nota": "123"})
 
@@ -203,7 +290,7 @@ def test_reverter_conferencia_requires_reason(tmp_path):
 def test_nao_permite_reverter_conferencia_de_nota_lancada(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     with app.app_context():
         db.session.add(
@@ -994,7 +1081,7 @@ def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path
                 codigo="CR-4",
                 descricao="Item portal cliente",
                 qtd_real=1.0,
-                status="LanÃ§ado",
+                status="Lançado",
                 pagamento_xml=True,
                 tipo_pagamento_xml="15",
                 valor_pagamento_xml=321.45,
@@ -1686,7 +1773,7 @@ def test_api_expedicao_conferencia_lista_html_e_pasta_de_imagens(tmp_path):
         }
     )
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     response = client.get("/api/expedicao/conferencia/relatorios")
 
@@ -1731,7 +1818,7 @@ def test_api_expedicao_conferencia_abre_relatorio_e_valida_cego(tmp_path):
         }
     )
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     detalhe = client.get("/api/expedicao/conferencia/relatorio", query_string={"file_name": html_file.name})
     assert detalhe.status_code == 200
@@ -1786,7 +1873,7 @@ def test_bootstrap_corrige_schema_legado_expedicao_conferencia_simples(tmp_path)
         }
     )
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     response = client.get("/api/expedicao/conferencia-simples")
 
@@ -1845,7 +1932,7 @@ def test_cria_registro_expedicao_com_ordem_de_compra_e_cliente_manual(tmp_path):
         }
     )
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     with patch(
         "conferencia_app.routes.api_routes._consultar_nf_emitida_exp_conferencia",
@@ -1885,6 +1972,67 @@ def test_cria_registro_expedicao_com_ordem_de_compra_e_cliente_manual(tmp_path):
         assert registro.nome_cliente == "Fornecedor Manual"
 
 
+def test_cria_registro_expedicao_aceita_multiplas_nfs_do_mesmo_cnpj(tmp_path):
+    fotos_dir = tmp_path / "expedicao_fotos"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+            "EXPEDICAO_CONFERENCIA_FOTOS_DIR": str(fotos_dir),
+        }
+    )
+    client = app.test_client()
+    set_logged_user(client, "ADMIN", "Admin")
+
+    respostas_consyste = {
+        "12345": {
+            "encontrada": True,
+            "numero_nf": "12345",
+            "nome_cliente": "Cliente XPTO",
+            "cnpj_cliente": "11222333000144",
+            "documento_id": "doc-12345",
+        },
+        "67890": {
+            "encontrada": True,
+            "numero_nf": "67890",
+            "nome_cliente": "Cliente XPTO",
+            "cnpj_cliente": "11222333000144",
+            "documento_id": "doc-67890",
+        },
+    }
+
+    with patch(
+        "conferencia_app.routes.api_routes._consultar_nf_emitida_exp_conferencia",
+        side_effect=lambda numero_nf: respostas_consyste[numero_nf],
+    ):
+        response = client.post(
+            "/api/expedicao/conferencia-simples",
+            data={
+                "tipo_referencia": "OrdemCompra",
+                "ordem_compra": "OC-9010",
+                "numero_nf": "12345, 67890",
+                "nome_cliente": "Cliente Manual",
+                "transportadora": "Trans Multi",
+                "placa": "abc1234",
+                "motorista": "Carlos",
+                "fotos": (io.BytesIO(b"fake-image"), "foto.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["registro"]["numero_nf"] == "12345, 67890"
+    assert data["registro"]["nome_cliente"] == "Cliente Manual"
+    assert data["registro"]["cliente_origem"] == "Manual"
+
+    with app.app_context():
+        registro = ExpedicaoConferenciaSimples.query.one()
+        assert registro.numero_nf == "12345, 67890"
+        assert registro.nome_cliente == "Cliente Manual"
+        assert registro.nf_origem == "Manual"
+
+
 def test_completa_registro_expedicao_com_orcamento_e_os(tmp_path):
     fotos_dir = tmp_path / "expedicao_fotos"
     app = create_app(
@@ -1895,7 +2043,7 @@ def test_completa_registro_expedicao_com_orcamento_e_os(tmp_path):
         }
     )
     client = app.test_client()
-    login_admin(client)
+    set_logged_user(client, "ADMIN", "Admin")
 
     with app.app_context():
         agora = datetime.now()
@@ -1951,6 +2099,79 @@ def test_completa_registro_expedicao_com_orcamento_e_os(tmp_path):
         assert registro.placa == "DEF5678"
 
 
+def test_completar_registro_expedicao_bloqueia_multiplas_nfs_com_cnpj_diferente(tmp_path):
+    fotos_dir = tmp_path / "expedicao_fotos"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+            "EXPEDICAO_CONFERENCIA_FOTOS_DIR": str(fotos_dir),
+        }
+    )
+    client = app.test_client()
+    set_logged_user(client, "ADMIN", "Admin")
+
+    with app.app_context():
+        agora = datetime.now()
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="",
+            tipo_referencia="Orcamento",
+            conferente="admin",
+            data_conferencia=agora,
+            status="Pendente de expedição",
+            created_at=agora,
+            updated_at=agora,
+        )
+        db.session.add(registro)
+        db.session.commit()
+        registro_id = registro.id
+
+    respostas_consyste = {
+        "99887": {
+            "encontrada": True,
+            "numero_nf": "99887",
+            "nome_cliente": "Cliente A",
+            "cnpj_cliente": "11222333000144",
+            "documento_id": "doc-99887",
+        },
+        "99888": {
+            "encontrada": True,
+            "numero_nf": "99888",
+            "nome_cliente": "Cliente B",
+            "cnpj_cliente": "55666777000188",
+            "documento_id": "doc-99888",
+        },
+    }
+
+    with patch(
+        "conferencia_app.routes.api_routes._consultar_nf_emitida_exp_conferencia",
+        side_effect=lambda numero_nf: respostas_consyste[numero_nf],
+    ):
+        response = client.post(
+            f"/api/expedicao/conferencia-simples/{registro_id}/completar",
+            data={
+                "tipo_referencia": "Orcamento",
+                "orcamento": "ORC-7799",
+                "numero_os": "OS-992",
+                "numero_nf": "99887, 99888",
+                "transportadora": "Transportadora Azul",
+                "placa": "def5678",
+                "motorista": "Maria",
+                "fotos": (io.BytesIO(b"fake-image-2"), "saida.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 409
+    data = response.get_json()
+    assert "CNPJ" in data["error"]
+
+    with app.app_context():
+        registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+        assert not registro.numero_nf
+        assert registro.orcamento == ""
+
+
 def test_excluir_registro_expedicao_remove_vinculos_mesmo_com_foto_perdida(tmp_path):
     app = create_app(
         {
@@ -1958,6 +2179,7 @@ def test_excluir_registro_expedicao_remove_vinculos_mesmo_com_foto_perdida(tmp_p
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
         }
     )
+    enable_sqlite_foreign_keys(app)
     client = app.test_client()
     login_admin(client)
 

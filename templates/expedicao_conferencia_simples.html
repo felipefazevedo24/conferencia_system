@@ -1,75 +1,99 @@
 {% extends "base.html" %}
 
-{% block title %}Expedição - Registro{% endblock %}
+{% block title %}Expedição - Conferência{% endblock %}
 {% block shell_title %}Expedição{% endblock %}
 
 {% block extra_head %}
 <style>
-    .exp-page { max-width: 1400px; margin: 0 auto; display: grid; gap: 22px; }
-    .exp-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; align-items: start; }
-    .exp-card { border-radius: 24px; border: 1px solid rgba(204, 217, 229, 0.96); background: linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(247,251,255,0.98) 100%); box-shadow: 0 18px 34px rgba(16, 37, 58, 0.08); overflow: hidden; }
-    .exp-head { padding: 22px 24px 18px; border-bottom: 1px solid rgba(221, 231, 240, 0.95); display: grid; gap: 6px; }
-    .exp-head span { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
-    .exp-head h2 { margin: 0; font-size: 24px; line-height: 1; letter-spacing: -0.04em; color: var(--color-brand-900); }
-    .exp-head p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--color-text-muted); }
-    .exp-body { padding: 24px; }
-    .exp-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-    .exp-field { display: grid; gap: 8px; }
+    :root {
+        --sap-blue: #3b82f6;
+        --sap-blue-dark: #2563eb;
+        --erp-bg: #f4f6f9;
+        --erp-card: #fff;
+        --erp-text: #1e293b;
+        --erp-muted: #64748b;
+        --erp-border: #e2e8f0;
+        --erp-success: #10b981;
+        --erp-warning: #f59e0b;
+        --erp-danger: #ef4444;
+        --radius: 18px;
+    }
+    .exp-page { max-width: 1600px; margin: 0 auto; display: grid; gap: 24px; padding: 24px; background: var(--erp-bg) !important; min-height: 100vh; }
+    .exp-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; align-items: start; }
+    .exp-card { border-radius: 20px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); box-shadow: 0 10px 40px rgba(0,0,0,0.08); overflow: hidden; }
+    .exp-head { padding: 24px 28px 20px; border-bottom: 1px solid #f1f5f9; display: grid; gap: 8px; }
+    .exp-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sap-blue); }
+    .exp-head h2 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: -0.02em; color: var(--erp-text); font-weight: 800; }
+    .exp-head p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--erp-muted); font-weight: 500; }
+    .exp-body { padding: 24px 28px; }
+    .exp-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .exp-field { display: grid; gap: 10px; }
     .exp-field.full { grid-column: 1 / -1; }
     .exp-field.hidden { display: none; }
-    .exp-field label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-brand-800); }
-    .exp-field input, .exp-field select, .exp-toolbar input, .exp-toolbar select { min-height: 50px; border-radius: 16px; border: 1px solid rgba(191, 205, 219, 0.96); padding: 0 16px; background: #fff; color: var(--color-brand-900); font-size: 14px; }
-    .exp-field input:focus, .exp-field select:focus, .exp-toolbar input:focus, .exp-toolbar select:focus { outline: none; border-color: rgba(15, 98, 201, 0.55); box-shadow: 0 0 0 4px rgba(15, 98, 201, 0.12); }
-    .exp-field input[readonly] { background: #f4f8fc; color: var(--color-text-muted); }
-    .exp-inline { display: flex; gap: 10px; align-items: center; }
+    .exp-field label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--erp-muted); }
+    .exp-field input, .exp-toolbar input, .exp-toolbar select { min-height: 50px; border-radius: 14px; border: 1px solid var(--erp-border); padding: 0 16px; background: #fff; color: var(--erp-text); font-size: 14px; font-weight: 600; }
+    .exp-field input:focus, .exp-toolbar input:focus, .exp-toolbar select:focus { outline: none; border-color: var(--sap-blue); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+    .exp-field input[readonly] { background: #f8fafc; color: var(--erp-muted); }
+    .exp-inline { display: flex; gap: 12px; align-items: center; }
     .exp-inline input { flex: 1; }
-    .exp-btn, .exp-btn-secondary { min-height: 48px; border-radius: 16px; padding: 0 18px; border: none; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
-    .exp-btn { background: linear-gradient(180deg, #1f77dc 0%, #0f62c9 100%); color: #fff; box-shadow: 0 14px 24px rgba(15, 98, 201, 0.22); }
-    .exp-btn-secondary { background: linear-gradient(180deg, #ffffff 0%, #edf3f8 100%); color: var(--color-brand-900); border: 1px solid rgba(191, 205, 219, 0.96); }
-    .exp-btn:disabled, .exp-btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
-    .exp-subtle { min-height: 20px; font-size: 12px; color: var(--color-text-muted); }
-    .exp-subtle.success { color: #0c8a58; }
-    .exp-subtle.warning { color: #ad6d00; }
-    .exp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
-    .exp-pill { padding: 14px 16px; border-radius: 18px; border: 1px solid rgba(205, 217, 229, 0.96); background: rgba(255,255,255,0.94); }
-    .exp-pill span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
-    .exp-pill strong { display: block; margin-top: 8px; font-size: 15px; color: var(--color-brand-900); }
-    .exp-upload { min-height: 140px; border: 1px dashed rgba(160, 184, 206, 0.96); border-radius: 22px; background: rgba(255,255,255,0.72); padding: 18px; display: grid; place-items: center; text-align: center; color: var(--color-text-muted); }
+    .exp-btn, .exp-btn-secondary { min-height: 48px; border-radius: 14px; padding: 0 20px; border: none; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.2s ease; }
+    .exp-btn { background: linear-gradient(135deg, var(--sap-blue) 0%, var(--sap-blue-dark) 100%); color: #fff; box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25); }
+    .exp-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(59, 130, 246, 0.35); }
+    .exp-btn-secondary { background: #fff; color: var(--erp-text); border: 1px solid var(--erp-border); }
+    .exp-btn-secondary:hover { background: #f8fafc; border-color: var(--sap-blue); }
+    .exp-btn:disabled, .exp-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .exp-subtle { min-height: 20px; font-size: 12px; color: var(--erp-muted); font-weight: 500; }
+    .exp-subtle.success { color: var(--erp-success); }
+    .exp-subtle.warning { color: var(--erp-warning); }
+    .exp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .exp-pill { padding: 16px 18px; border-radius: 16px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); }
+    .exp-pill span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--erp-muted); }
+    .exp-pill strong { display: block; margin-top: 8px; font-size: 15px; color: var(--erp-text); font-weight: 700; }
+    .exp-upload { min-height: 140px; border: 2px dashed var(--erp-border); border-radius: 18px; background: #f8fafc; padding: 20px; display: grid; place-items: center; text-align: center; color: var(--erp-muted); transition: all 0.2s ease; }
+    .exp-upload:hover { border-color: var(--sap-blue); background: rgba(59, 130, 246, 0.04); }
     .exp-upload input { width: 100%; border: none; padding: 0; background: transparent; min-height: auto; }
-    .exp-upload-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .exp-upload-actions { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
     .exp-file-input-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
-    .exp-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 14px; }
-    .exp-preview-card, .exp-photo { overflow: hidden; border-radius: 18px; border: 1px solid rgba(204, 217, 229, 0.96); background: #fff; }
-    .exp-preview-card img, .exp-photo img { width: 100%; height: 94px; object-fit: cover; display: block; background: #eef4f9; }
-    .exp-preview-card span, .exp-photo span { display: block; padding: 10px; font-size: 11px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .exp-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; }
-    .exp-steps { display: grid; gap: 12px; }
-    .exp-step { padding: 16px 18px; border-radius: 18px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.92); }
-    .exp-step strong { display: block; margin-bottom: 6px; font-size: 14px; color: var(--color-brand-900); }
-    .exp-step p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--color-text-muted); }
-    .exp-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
-    .exp-summary-card { padding: 18px; border-radius: 22px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.92); }
-    .exp-summary-card span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
-    .exp-summary-card strong { display: block; margin-top: 10px; font-size: 34px; line-height: 1; color: var(--color-brand-900); }
-    .exp-toolbar { display: grid; grid-template-columns: 1fr 220px; gap: 14px; margin-bottom: 18px; }
-    .exp-list { display: grid; gap: 16px; }
-    .exp-record { padding: 20px; border-radius: 22px; border: 1px solid rgba(204, 217, 229, 0.96); background: rgba(255,255,255,0.94); display: grid; gap: 16px; }
-    .exp-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-    .exp-record-title { display: grid; gap: 6px; }
-    .exp-record-title strong { font-size: 22px; line-height: 1; color: var(--color-brand-900); }
-    .exp-record-title span, .exp-caption { font-size: 12px; color: var(--color-text-muted); }
-    .exp-status { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-    .exp-status.pending { background: #fff5de; border: 1px solid #f6d99b; color: #9b6400; }
-    .exp-status.done { background: #e8f8f1; border: 1px solid #bce6d4; color: #0c8a58; }
-    .exp-record-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .exp-record-field { padding: 14px 16px; border-radius: 18px; background: #f7fbff; border: 1px solid rgba(224, 233, 242, 0.96); }
-    .exp-record-field span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-muted); }
-    .exp-record-field strong { display: block; margin-top: 8px; font-size: 14px; color: var(--color-brand-900); word-break: break-word; }
-    .exp-record-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .exp-toast { position: fixed; right: 24px; bottom: 24px; min-width: 260px; max-width: 420px; padding: 14px 16px; border-radius: 18px; color: #fff; background: rgba(8, 21, 35, 0.95); box-shadow: 0 18px 34px rgba(7, 18, 31, 0.28); opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity .18s ease, transform .18s ease; z-index: 80; }
+    .exp-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-top: 16px; }
+    .exp-preview-card, .exp-photo { overflow: hidden; border-radius: 16px; border: 1px solid var(--erp-border); background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .exp-preview-card img, .exp-photo img { width: 100%; height: 100px; object-fit: cover; display: block; background: #f8fafc; }
+    .exp-preview-card span, .exp-photo span { display: block; padding: 10px 12px; font-size: 11px; color: var(--erp-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-actions { display: flex; justify-content: flex-end; gap: 14px; margin-top: 24px; }
+    .exp-steps { display: grid; gap: 14px; }
+    .exp-step { padding: 18px 20px; border-radius: 16px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); transition: all 0.2s ease; }
+    .exp-step:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
+    .exp-step strong { display: block; margin-bottom: 8px; font-size: 14px; color: var(--erp-text); font-weight: 700; }
+    .exp-step p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--erp-muted); }
+    .exp-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .exp-summary-card { padding: 20px; border-radius: 18px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); box-shadow: 0 4px 16px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px; }
+    .exp-summary-card .kpi-icon { width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; flex-shrink: 0; }
+    .exp-summary-card .kpi-icon.total { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+    .exp-summary-card .kpi-icon.pendentes { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    .exp-summary-card .kpi-icon.expedidos { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .exp-summary-card .kpi-icon.aguardando { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+    .exp-summary-card span { display: block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--erp-muted); }
+    .exp-summary-card strong { display: block; margin-top: 6px; font-size: 28px; line-height: 1; color: var(--erp-text); font-weight: 900; }
+    .exp-toolbar { display: grid; grid-template-columns: 1fr 220px; gap: 16px; margin-bottom: 20px; }
+    .exp-list { display: grid; gap: 18px; }
+    .exp-record { padding: 22px; border-radius: 20px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); display: grid; gap: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); transition: all 0.2s ease; }
+    .exp-record:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    .exp-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    .exp-record-title { display: grid; gap: 8px; }
+    .exp-record-title strong { font-size: 20px; line-height: 1; color: var(--erp-text); font-weight: 800; }
+    .exp-record-title span, .exp-caption { font-size: 12px; color: var(--erp-muted); font-weight: 500; }
+    .exp-status { display: inline-flex; align-items: center; min-height: 34px; padding: 0 16px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    .exp-status.pending { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #fbbf24; color: #92400e; }
+    .exp-status.expedido { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 1px solid #60a5fa; color: #1e40af; }
+    .exp-status.done { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #34d399; color: #065f46; }
+    .exp-record-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .exp-record-field { padding: 16px 18px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--erp-border); }
+    .exp-record-field span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--erp-muted); }
+    .exp-record-field strong { display: block; margin-top: 8px; font-size: 14px; color: var(--erp-text); font-weight: 700; word-break: break-word; }
+    .exp-record-actions { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .exp-toast { position: fixed; right: 24px; bottom: 24px; min-width: 280px; max-width: 440px; padding: 16px 20px; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); opacity: 0; pointer-events: none; transform: translateY(12px); transition: all 0.25s ease; z-index: 80; font-weight: 600; }
     .exp-toast.show { opacity: 1; transform: translateY(0); }
-    .exp-toast.success { background: rgba(12, 138, 88, 0.96); }
-    .exp-toast.error { background: rgba(176, 42, 55, 0.96); }
+    .exp-toast.success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .exp-toast.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
     @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } .exp-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar, .exp-record-grid { grid-template-columns: 1fr; } .exp-record-head, .exp-record-actions { display: grid; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } }
 
@@ -108,30 +132,38 @@
 {% endblock %}
 
 {% block content %}
-<section class="exp-page">
-    <section class="page-header-erp">
-        <div>
-            <span class="eyebrow">Registro de expedição</span>
-            <h1>Registro de Expedição</h1>
-            <p>As NFs que você emitiu aparecem automaticamente abaixo. O responsável adiciona as fotos e marca como expedido. Também é possível incluir registros manualmente.</p>
-        </div>
-    </section>
-
-    <!-- BUSCA RÁPIDA DE NF -->
-    <section class="exp-card" id="busca-nf-section">
-        <div class="exp-head">
+<section class="exp-page" style="padding:24px; max-width:1600px; margin:0 auto; background:#f4f6f9 !important; min-height:100vh;">
+    <!-- HERO HEADER -->
+    <div class="page-header-modern" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:28px 32px; margin-bottom:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px;">
             <div>
-                <h2 style="margin:0;">🔍 Buscar NF</h2>
-                <p style="margin:2px 0 0;font-size:12px;color:#888;">Digite o número da NF para iniciar o registro automaticamente</p>
+                <h1 style="margin:0; font-size:24px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:14px;">
+                    <span style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px;"><i class="fas fa-truck-loading"></i></span>
+                    Conferência Cega - Expedição
+                </h1>
+                <p style="margin:8px 0 0 0; color:#64748b; font-size:14px; font-weight:500;">As NFs que você emitiu aparecem automaticamente abaixo. O conferente adiciona as fotos e marca como expedido.</p>
             </div>
         </div>
-        <div class="exp-body">
-            <div style="display:flex;gap:10px;align-items:flex-end;">
+    </div>
+
+    <!-- BUSCA RÁPIDA DE NF -->
+    <section class="exp-card" id="busca-nf-section" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden; margin-bottom:24px;">
+        <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
+            <div>
+                <h2 style="margin:0; font-size:18px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:12px;">
+                    <span style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;"><i class="fas fa-search"></i></span>
+                    Buscar NF
+                </h2>
+                <p style="margin:6px 0 0;font-size:12px;color:#64748b;font-weight:500;">Digite o número da NF para iniciar a conferência automaticamente</p>
+            </div>
+        </div>
+        <div class="exp-body" style="padding:24px 28px;">
+            <div style="display:flex;gap:12px;align-items:flex-end;">
                 <div class="exp-field" style="flex:1;margin:0;">
-                    <label for="busca-nf-input">Número da NF</label>
-                    <input id="busca-nf-input" type="text" placeholder="Ex: 10500" style="font-size:16px;padding:10px 14px;" inputmode="numeric">
+                    <label for="busca-nf-input" style="font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Número da NF</label>
+                    <input id="busca-nf-input" type="text" placeholder="Ex: 10500" style="font-size:16px;padding:12px 16px;min-height:50px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;color:#1e293b;font-weight:600;" inputmode="numeric">
                 </div>
-                <button class="exp-btn" type="button" id="btn-buscar-nf" style="min-height:44px;padding:0 24px;font-size:14px;">Buscar</button>
+                <button class="exp-btn" type="button" id="btn-buscar-nf" style="min-height:50px;padding:0 28px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);color:#fff;border:none;border-radius:14px;cursor:pointer;">Buscar</button>
             </div>
             <div id="busca-nf-resultado" style="margin-top:12px;display:none;"></div>
         </div>
@@ -139,56 +171,57 @@
 
 
 
-    <section class="exp-grid">
-        <section class="exp-card">
-            <div class="exp-head">
-                <span>Novo registro</span>
-                <h2>Inclusão manual</h2>
-                <p>O responsável e a data são registrados automaticamente pelo sistema.</p>
+    <section class="exp-grid" style="display:grid; grid-template-columns:1.15fr 0.85fr; gap:24px; align-items:start;">
+        <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
+            <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
+                <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Nova conferência</span>
+                <h2 style="margin:0; font-size:20px; color:#1e293b; font-weight:800;">Inclusão manual</h2>
+                <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">O conferente e a data são registrados automaticamente pelo sistema.</p>
             </div>
-            <div class="exp-body">
-                <div class="exp-meta">
-                    <div class="exp-pill"><span>Responsável</span><strong>{{ user }}</strong></div>
-                    <div class="exp-pill"><span>Status inicial</span><strong>Pendente de expedição</strong></div>
+            <div class="exp-body" style="padding:24px 28px;">
+                <div class="exp-meta" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; margin-bottom:20px;">
+                    <div class="exp-pill" style="padding:16px 18px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);">
+                        <span style="display:block; font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#64748b;">Conferente logado</span>
+                        <strong style="display:block; margin-top:8px; font-size:15px; color:#1e293b; font-weight:700;">{{ user }}</strong>
+                    </div>
+                    <div class="exp-pill" style="padding:16px 18px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);">
+                        <span style="display:block; font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#64748b;">Status inicial</span>
+                        <strong style="display:block; margin-top:8px; font-size:15px; color:#1e293b; font-weight:700;">Pendente de expedição</strong>
+                    </div>
                 </div>
 
                 <form id="expedicao-form">
                     <div class="exp-form-grid">
                         <div class="exp-field">
                             <label for="tipo_referencia">Tipo de referência *</label>
-                            <select id="tipo_referencia" name="tipo_referencia">
-                                <option value="Orcamento">Orçamento</option>
-                                <option value="OrdemCompra">Ordem de compra</option>
+                            <select id="tipo_referencia" name="tipo_referencia" style="min-height:50px;border-radius:16px;border:1px solid rgba(191,205,219,0.96);padding:0 16px;background:#fff;font-size:14px;">
+                                <option value="Orcamento" selected>Orçamento</option>
+                                <option value="OrdemCompra">Ordem de Compra</option>
                             </select>
                         </div>
 
                         <div class="exp-field" id="orcamento-wrapper">
-                            <label for="orcamento">Número do orçamento *</label>
+                            <label for="orcamento">Nº Orçamento *</label>
                             <input id="orcamento" name="orcamento" type="text" placeholder="Informe o número do orçamento" required>
                         </div>
 
                         <div class="exp-field hidden" id="ordem-compra-wrapper">
-                            <label for="ordem_compra">Ordem de compra *</label>
-                            <input id="ordem_compra" name="ordem_compra" type="text" placeholder="Informe o número da ordem de compra">
-                        </div>
-
-                        <div class="exp-field" id="numero-os-wrapper">
-                            <label for="numero_os">Número da OS</label>
-                            <input id="numero_os" name="numero_os" type="text" placeholder="Opcional">
+                            <label for="ordem_compra">Nº Ordem de Compra *</label>
+                            <input id="ordem_compra" name="ordem_compra" type="text" placeholder="Informe o número da OC">
                         </div>
 
                         <div class="exp-field">
                             <label for="numero_nf">Nº nota fiscal</label>
                             <div class="exp-inline">
-                                <input id="numero_nf" name="numero_nf" type="text" inputmode="numeric" placeholder="Se já existir na Consyste">
+                                <input id="numero_nf" name="numero_nf" type="text" placeholder="Ex: 1234, 1235, 1236 (separadas por vírgula)">
                                 <button class="exp-btn-secondary" type="button" id="btn-consultar-nf">Consultar NF</button>
                             </div>
                             <div id="nf-feedback" class="exp-subtle"></div>
                         </div>
 
                         <div class="exp-field full hidden" id="nome-cliente-wrapper">
-                            <label for="nome_cliente">Nome do cliente / fornecedor</label>
-                            <input id="nome_cliente" name="nome_cliente" type="text" placeholder="Preencha manualmente quando a NF ainda não estiver na Consyste">
+                            <label for="nome_cliente">Nome do cliente</label>
+                            <input id="nome_cliente" name="nome_cliente" type="text" placeholder="Preencha manualmente se a NF ainda não estiver disponível">
                         </div>
 
                         <div class="exp-field">
@@ -207,7 +240,7 @@
                         </div>
 
                         <div class="exp-field full">
-                            <label for="fotos">Foto da expedição *</label>
+                            <label for="fotos">Foto da conferência *</label>
                             <div class="exp-upload">
                                 <div>
                                     <strong>Tire a foto na hora ou escolha da galeria</strong>
@@ -227,97 +260,120 @@
 
                     <div class="exp-actions">
                         <button class="exp-btn-secondary" type="reset" id="btn-limpar-form">Limpar</button>
-                        <button class="exp-btn" type="submit" id="btn-salvar-conferencia">Salvar registro</button>
+                        <button class="exp-btn" type="submit" id="btn-salvar-conferencia">Salvar conferência</button>
                     </div>
                 </form>
             </div>
         </section>
 
-        <section class="exp-card">
-            <div class="exp-head">
-                <span>Fluxo</span>
-                <h2>Como funciona</h2>
-                <p>Só o essencial para a equipe operar sem desviar para outro painel.</p>
+        <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
+            <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
+                <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Fluxo</span>
+                <h2 style="margin:0; font-size:20px; color:#1e293b; font-weight:800;">Como funciona</h2>
+                <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">Só o essencial para a equipe operar sem desviar para outro painel.</p>
             </div>
-            <div class="exp-body">
-                <div class="exp-steps">
-                    <div class="exp-step"><strong>1. NFs emitidas aparecem automaticamente</strong><p>As notas que você emitiu chegam da Consyste com status Pendente.</p></div>
-                    <div class="exp-step"><strong>2. Adicione as fotos</strong><p>Clique em "Completar registro" no histórico e anexe as fotos da carga.</p></div>
-                    <div class="exp-step"><strong>3. Corrija dados se necessário</strong><p>Se a NF foi digitada antes do Consyste, o sistema mantém a NF informada no registro. Dados como razão social podem ser corrigidos.</p></div>
-                    <div class="exp-step"><strong>4. Marque como expedido</strong><p>Quando a saída acontecer, atualize o status no histórico.</p></div>
+            <div class="exp-body" style="padding:24px 28px;">
+                <div class="exp-steps" style="display:grid; gap:14px;">
+                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
+                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">1</span>
+                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">NFs emitidas aparecem automaticamente</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">As notas que você emitiu chegam da Consyste com status Pendente.</p></div>
+                    </div>
+                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
+                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">2</span>
+                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Conferente adiciona fotos</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Clique em "Completar conferência" no histórico e anexe as fotos da carga.</p></div>
+                    </div>
+                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
+                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">3</span>
+                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Corrija dados se necessário</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Se a NF foi digitada antes do Consyste, o sistema mantém a NF do conferente.</p></div>
+                    </div>
+                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
+                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">4</span>
+                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Marque como expedido</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Quando a saída acontecer, atualize o status no histórico.</p></div>
+                    </div>
                 </div>
             </div>
         </section>
     </section>
 
-    <section class="exp-card">
-        <div class="exp-head">
-            <span>Histórico</span>
-            <h2>Registros de expedição</h2>
-            <p>Filtre por referência, NF, cliente, placa ou responsável e altere o status quando a expedição sair.</p>
+    <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
+        <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
+            <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Histórico</span>
+            <h2 style="margin:0; font-size:20px; color:#1e293b; font-weight:800;">Conferências registradas</h2>
+            <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">Filtre por orçamento, NF, cliente, placa ou conferente e altere o status quando a expedição sair.</p>
         </div>
-        <div class="exp-body">
-            <div class="exp-summary">
-                <div class="exp-summary-card"><span>Total</span><strong id="resumo-total">0</strong></div>
-                <div class="exp-summary-card"><span>Pendentes</span><strong id="resumo-pendentes">0</strong></div>
-                <div class="exp-summary-card"><span>Expedidos</span><strong id="resumo-expedidos">0</strong></div>
-                <div class="exp-summary-card" style="border-left:3px solid #f59e0b;"><span>Aguardando estorno</span><strong id="resumo-aguardando">0</strong></div>
+        <div class="exp-body" style="padding:24px 28px;">
+            <div class="exp-summary" style="display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="exp-summary-card" style="padding:20px; border-radius:18px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); box-shadow:0 4px 16px rgba(0,0,0,0.04); display:flex; align-items:center; gap:16px;">
+                    <div class="kpi-icon total" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff; flex-shrink:0;"><i class="fas fa-clipboard-list"></i></div>
+                    <div><span style="display:block; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Total</span><strong id="resumo-total" style="display:block; margin-top:6px; font-size:28px; line-height:1; color:#1e293b; font-weight:900;">0</strong></div>
+                </div>
+                <div class="exp-summary-card" style="padding:20px; border-radius:18px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); box-shadow:0 4px 16px rgba(0,0,0,0.04); display:flex; align-items:center; gap:16px;">
+                    <div class="kpi-icon pendentes" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff; flex-shrink:0;"><i class="fas fa-hourglass-half"></i></div>
+                    <div><span style="display:block; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Pendentes</span><strong id="resumo-pendentes" style="display:block; margin-top:6px; font-size:28px; line-height:1; color:#1e293b; font-weight:900;">0</strong></div>
+                </div>
+                <div class="exp-summary-card" style="padding:20px; border-radius:18px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); box-shadow:0 4px 16px rgba(0,0,0,0.04); display:flex; align-items:center; gap:16px;">
+                    <div class="kpi-icon expedidos" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff; flex-shrink:0;"><i class="fas fa-truck"></i></div>
+                    <div><span style="display:block; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Expedidos</span><strong id="resumo-expedidos" style="display:block; margin-top:6px; font-size:28px; line-height:1; color:#1e293b; font-weight:900;">0</strong></div>
+                </div>
+                <div class="exp-summary-card" style="padding:20px; border-radius:18px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); box-shadow:0 4px 16px rgba(0,0,0,0.04); display:flex; align-items:center; gap:16px;">
+                    <div class="kpi-icon finalizados" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff; flex-shrink:0;"><i class="fas fa-check-circle"></i></div>
+                    <div><span style="display:block; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Finalizados</span><strong id="resumo-finalizados" style="display:block; margin-top:6px; font-size:28px; line-height:1; color:#1e293b; font-weight:900;">0</strong></div>
+                </div>
+                <div class="exp-summary-card" style="padding:20px; border-radius:18px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); box-shadow:0 4px 16px rgba(0,0,0,0.04); display:flex; align-items:center; gap:16px;">
+                    <div class="kpi-icon aguardando" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff; flex-shrink:0;"><i class="fas fa-undo-alt"></i></div>
+                    <div><span style="display:block; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Aguardando estorno</span><strong id="resumo-aguardando" style="display:block; margin-top:6px; font-size:28px; line-height:1; color:#1e293b; font-weight:900;">0</strong></div>
+                </div>
             </div>
 
-            <div class="exp-toolbar">
-                <input id="busca-historico" type="search" placeholder="Buscar por orçamento, ordem de compra, OS, NF, cliente ou responsável">
-                <select id="filtro-status">
+            <div class="exp-toolbar" style="display:grid; grid-template-columns:1fr 220px; gap:16px; margin-bottom:20px;">
+                <input id="busca-historico" type="search" placeholder="Buscar por orçamento, cliente, NF, placa ou conferente" style="min-height:50px; border-radius:14px; border:1px solid #e2e8f0; padding:0 16px; background:#fff; color:#1e293b; font-size:14px; font-weight:600;">
+                <select id="filtro-status" style="min-height:50px; border-radius:14px; border:1px solid #e2e8f0; padding:0 16px; background:#fff; color:#1e293b; font-size:14px; font-weight:600;">
                     <option value="">Todos os status</option>
                     <option value="Pendente de expedição">Pendente de expedição</option>
                     <option value="Expedido">Expedido</option>
+                    <option value="Finalizado">Finalizado</option>
                     <option value="Aguardando estorno">Aguardando estorno</option>
                 </select>
             </div>
 
-            <div id="historico-lista" class="exp-list">
-                <div class="empty-state"><strong>Carregando registros...</strong><span>Em instantes o histórico aparece aqui.</span></div>
+            <div id="historico-lista" class="exp-list" style="display:grid; gap:18px;">
+                <div class="empty-state" style="padding:60px 20px; color:#94a3b8; text-align:center; border:2px dashed #e2e8f0; border-radius:18px; background:#f8fafc;"><strong style="display:block; font-size:16px; color:#1e293b;">Carregando conferências...</strong><span style="display:block; margin-top:6px;">Em instantes o histórico aparece aqui.</span></div>
             </div>
         </div>
     </section>
 </section>
 
 <!-- Modal estorno -->
-<div id="modal-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.18);">
-        <h3 style="margin:0 0 6px;font-size:17px;color:#1e293b;">Solicitar estorno de expedição</h3>
-        <p id="modal-estorno-info" style="margin:0 0 16px;font-size:13px;color:#64748b;">A solicitação será enviada para o administrador aprovar.</p>
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Motivo do estorno *</label>
-        <textarea id="modal-estorno-motivo" rows="3" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:14px;resize:vertical;" placeholder="Descreva o motivo do estorno..."></textarea>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-            <button type="button" onclick="fecharModalEstorno()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
-            <button type="button" id="btn-confirmar-estorno" onclick="confirmarEstorno()" style="padding:8px 18px;border:none;border-radius:8px;background:#ef4444;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Solicitar estorno</button>
+<div id="modal-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);border-radius:20px;padding:32px 28px;max-width:460px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,.25);">
+        <h3 style="margin:0 0 8px;font-size:20px;color:#1e293b;font-weight:800;display:flex;align-items:center;gap:12px;">
+            <span style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;"><i class="fas fa-undo-alt"></i></span>
+            Solicitar estorno
+        </h3>
+        <p id="modal-estorno-info" style="margin:0 0 20px;font-size:13px;color:#64748b;font-weight:500;">A solicitação será enviada para o administrador aprovar.</p>
+        <label style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;display:block;margin-bottom:8px;">Motivo do estorno *</label>
+        <textarea id="modal-estorno-motivo" rows="3" style="width:100%;border:1px solid #e2e8f0;border-radius:14px;padding:14px;font-size:14px;resize:vertical;color:#1e293b;font-weight:500;" placeholder="Descreva o motivo do estorno..."></textarea>
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" onclick="fecharModalEstorno()" style="padding:12px 22px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer;font-size:13px;font-weight:700;color:#475569;">Cancelar</button>
+            <button type="button" id="btn-confirmar-estorno" onclick="confirmarEstorno()" style="padding:12px 22px;border:none;border-radius:12px;background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 8px 20px rgba(239,68,68,.25);">Solicitar estorno</button>
         </div>
     </div>
 </div>
 
 <!-- Modal admin aprovar/rejeitar estorno -->
-<div id="modal-admin-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.18);">
-        <h3 style="margin:0 0 6px;font-size:17px;color:#1e293b;">Autorizar estorno?</h3>
-        <p id="modal-admin-estorno-info" style="margin:0 0 16px;font-size:13px;color:#64748b;"></p>
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Observação (opcional)</label>
-        <textarea id="modal-admin-estorno-obs" rows="2" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:14px;resize:vertical;" placeholder="Observação do admin..."></textarea>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-            <button type="button" onclick="fecharModalAdminEstorno()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
-            <button type="button" id="btn-rejeitar-estorno" onclick="decidirEstorno('rejeitar')" style="padding:8px 18px;border:1px solid #ef4444;border-radius:8px;background:#fff;color:#ef4444;cursor:pointer;font-size:14px;font-weight:600;">Rejeitar</button>
-            <button type="button" id="btn-aprovar-estorno" onclick="decidirEstorno('aprovar')" style="padding:8px 18px;border:none;border-radius:8px;background:#16a34a;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aprovar</button>
-        </div>
-    </div>
-</div>
-
-<!-- Modal exclusão -->
-<div id="modal-excluir-registro" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.18);">
-        <h3 style="margin:0 0 6px;font-size:17px;color:#1e293b;">Excluir registro?</h3>
-        <p id="modal-excluir-info" style="margin:0 0 16px;font-size:13px;color:#64748b;">Essa ação não poderá ser desfeita.</p>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-            <button type="button" onclick="fecharModalExcluirRegistro()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;">Cancelar</button>
-            <button type="button" id="btn-confirmar-exclusao" onclick="confirmarExclusaoRegistro()" style="padding:8px 18px;border:none;border-radius:8px;background:#ef4444;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Excluir</button>
+<div id="modal-admin-estorno" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);border-radius:20px;padding:32px 28px;max-width:460px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,.25);">
+        <h3 style="margin:0 0 8px;font-size:20px;color:#1e293b;font-weight:800;display:flex;align-items:center;gap:12px;">
+            <span style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;"><i class="fas fa-user-shield"></i></span>
+            Autorizar estorno?
+        </h3>
+        <p id="modal-admin-estorno-info" style="margin:0 0 20px;font-size:13px;color:#64748b;font-weight:500;"></p>
+        <label style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;display:block;margin-bottom:8px;">Observação (opcional)</label>
+        <textarea id="modal-admin-estorno-obs" rows="2" style="width:100%;border:1px solid #e2e8f0;border-radius:14px;padding:14px;font-size:14px;resize:vertical;color:#1e293b;font-weight:500;" placeholder="Observação do admin..."></textarea>
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" onclick="fecharModalAdminEstorno()" style="padding:12px 22px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer;font-size:13px;font-weight:700;color:#475569;">Cancelar</button>
+            <button type="button" id="btn-rejeitar-estorno" onclick="decidirEstorno('rejeitar')" style="padding:12px 22px;border:1px solid #ef4444;border-radius:12px;background:#fff;color:#ef4444;cursor:pointer;font-size:13px;font-weight:700;">Rejeitar</button>
+            <button type="button" id="btn-aprovar-estorno" onclick="decidirEstorno('aprovar')" style="padding:12px 22px;border:none;border-radius:12px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:700;box-shadow:0 8px 20px rgba(16,185,129,.25);">Aprovar</button>
         </div>
     </div>
 </div>
@@ -329,11 +385,9 @@
 {% block extra_js %}
 <script>
 const form = document.getElementById("expedicao-form");
-const tipoReferenciaInput = document.getElementById("tipo_referencia");
+const tipoReferenciaSelect = document.getElementById("tipo_referencia");
 const orcamentoWrapper = document.getElementById("orcamento-wrapper");
 const orcamentoInput = document.getElementById("orcamento");
-const numeroOsWrapper = document.getElementById("numero-os-wrapper");
-const numeroOsInput = document.getElementById("numero_os");
 const ordemCompraWrapper = document.getElementById("ordem-compra-wrapper");
 const ordemCompraInput = document.getElementById("ordem_compra");
 const nfInput = document.getElementById("numero_nf");
@@ -355,17 +409,6 @@ const toastEl = document.getElementById("expedicao-toast");
 const isAdmin = {{ "true" if is_admin else "false" }};
 let toastTimer = null;
 let fotosSelecionadas = [];
-let deleteRegistroId = null;
-let deleteRegistroReferencia = "";
-
-function escapeHtml(value) {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
 
 function showToast(message, type = "success") {
     toastEl.textContent = message;
@@ -373,6 +416,24 @@ function showToast(message, type = "success") {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3200);
 }
+
+function toggleTipoReferencia() {
+    const tipo = tipoReferenciaSelect.value;
+    if (tipo === "OrdemCompra") {
+        orcamentoWrapper.classList.add("hidden");
+        ordemCompraWrapper.classList.remove("hidden");
+        orcamentoInput.required = false;
+        orcamentoInput.value = "";
+        ordemCompraInput.required = true;
+    } else {
+        orcamentoWrapper.classList.remove("hidden");
+        ordemCompraWrapper.classList.add("hidden");
+        orcamentoInput.required = true;
+        ordemCompraInput.required = false;
+        ordemCompraInput.value = "";
+    }
+}
+tipoReferenciaSelect.addEventListener("change", toggleTipoReferencia);
 
 function debounce(fn, wait = 250) {
     let timer = null;
@@ -382,59 +443,13 @@ function debounce(fn, wait = 250) {
     };
 }
 
-function normalizarTipoReferencia(valor) {
-    return valor === "OrdemCompra" ? "OrdemCompra" : "Orcamento";
-}
-
-function labelTipoReferencia(valor) {
-    return normalizarTipoReferencia(valor) === "OrdemCompra" ? "Ordem de compra" : "Orçamento";
-}
-
-function referenciaNumero(registro) {
-    if (registro?.referencia_numero) return registro.referencia_numero;
-    return normalizarTipoReferencia(registro?.tipo_referencia) === "OrdemCompra"
-        ? (registro?.ordem_compra || "")
-        : (registro?.orcamento || "");
-}
-
-function referenciaTitulo(registro) {
-    if (registro?.referencia_titulo) return registro.referencia_titulo;
-    const tipo = normalizarTipoReferencia(registro?.tipo_referencia);
-    if (tipo === "OrdemCompra") return registro?.ordem_compra ? `Ordem de compra ${registro.ordem_compra}` : "Ordem de compra não informada";
-    if (registro?.orcamento && registro?.numero_os) return `Orçamento ${registro.orcamento} · OS ${registro.numero_os}`;
-    if (registro?.orcamento) return `Orçamento ${registro.orcamento}`;
-    if (registro?.numero_os) return `OS ${registro.numero_os}`;
-    return "Referência não informada";
-}
-
-function atualizarCamposReferenciaFormulario() {
-    const isOc = normalizarTipoReferencia(tipoReferenciaInput.value) === "OrdemCompra";
-    orcamentoWrapper.classList.toggle("hidden", isOc);
-    numeroOsWrapper.classList.toggle("hidden", isOc);
-    ordemCompraWrapper.classList.toggle("hidden", !isOc);
-    orcamentoInput.required = !isOc;
-    ordemCompraInput.required = isOc;
-}
-
-function focarCampoPrincipalReferencia() {
-    (normalizarTipoReferencia(tipoReferenciaInput.value) === "OrdemCompra" ? ordemCompraInput : orcamentoInput)?.focus();
-}
-
-function mostrarCampoNomeCliente({ value = nomeClienteInput.value, required = false, readOnly = false, focus = false } = {}) {
-    nomeClienteWrapper.classList.remove("hidden");
-    nomeClienteInput.required = required;
-    nomeClienteInput.readOnly = readOnly;
-    nomeClienteInput.value = value || "";
-    if (focus) nomeClienteInput.focus();
-}
-
-function resetNfState({ clearNome = true } = {}) {
+function resetNfState() {
     nfFeedback.textContent = "";
     nfFeedback.className = "exp-subtle";
     nomeClienteWrapper.classList.add("hidden");
     nomeClienteInput.required = false;
     nomeClienteInput.readOnly = false;
-    if (clearNome) nomeClienteInput.value = "";
+    nomeClienteInput.value = "";
 }
 
 function syncFotoFeedback() {
@@ -453,32 +468,38 @@ function addFotos(files) {
 }
 
 async function consultarNf() {
-    const numero = (nfInput.value || "").replace(/\D/g, "").trim();
-    nfInput.value = numero;
+    const numero = nfInput.value.trim();
     if (!numero) {
         resetNfState();
         return;
     }
     nfFeedback.textContent = "Consultando a Consyste...";
-    nfFeedback.className = "exp-subtle";
     btnConsultarNf.disabled = true;
     try {
         const response = await fetch(`/api/expedicao/conferencia-simples/consultar-nf?numero_nf=${encodeURIComponent(numero)}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Não foi possível consultar a nota fiscal.");
+        nfFeedback.textContent = data.warning || (data.encontrada ? `NF encontrada. Cliente: ${data.nome_cliente || "sem razão social retornada"}.` : "");
+        nfFeedback.className = `exp-subtle ${data.encontrada ? "success" : (data.warning ? "warning" : "")}`;
         if (data.encontrada && data.nome_cliente) {
-            nfFeedback.textContent = `NF encontrada. Cliente/fornecedor: ${data.nome_cliente}.`;
-            nfFeedback.className = "exp-subtle success";
-            mostrarCampoNomeCliente({ value: data.nome_cliente, required: false, readOnly: true });
-            return;
+            nomeClienteWrapper.classList.remove("hidden");
+            nomeClienteInput.readOnly = true;
+            nomeClienteInput.required = false;
+            nomeClienteInput.value = data.nome_cliente;
+        } else if (data.manual_required) {
+            nomeClienteWrapper.classList.remove("hidden");
+            nomeClienteInput.readOnly = false;
+            nomeClienteInput.required = true;
+            if (!data.encontrada) nomeClienteInput.focus();
+        } else {
+            resetNfState();
         }
-        nfFeedback.textContent = data.warning || `NF ${numero} não encontrada na Consyste. Informe o cliente/fornecedor manualmente.`;
-        nfFeedback.className = "exp-subtle warning";
-        mostrarCampoNomeCliente({ required: true, readOnly: false, focus: !nomeClienteInput.value });
     } catch (error) {
         nfFeedback.textContent = error.message;
         nfFeedback.className = "exp-subtle warning";
-        mostrarCampoNomeCliente({ required: true, readOnly: false, focus: !nomeClienteInput.value });
+        nomeClienteWrapper.classList.remove("hidden");
+        nomeClienteInput.readOnly = false;
+        nomeClienteInput.required = true;
     } finally {
         btnConsultarNf.disabled = false;
     }
@@ -495,7 +516,7 @@ function updateFotoPreview() {
         const url = URL.createObjectURL(file);
         const card = document.createElement("div");
         card.className = "exp-preview-card";
-        card.innerHTML = `<img src="${url}" alt="${escapeHtml(file.name)}"><span>${escapeHtml(file.name)}</span>`;
+        card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
         fotosPreview.appendChild(card);
     });
 }
@@ -505,68 +526,78 @@ function renderHistorico(data) {
     document.getElementById("resumo-total").textContent = data?.resumo?.total || 0;
     document.getElementById("resumo-pendentes").textContent = data?.resumo?.pendentes || 0;
     document.getElementById("resumo-expedidos").textContent = data?.resumo?.expedidos || 0;
+    document.getElementById("resumo-finalizados").textContent = data?.resumo?.finalizados || 0;
     document.getElementById("resumo-aguardando").textContent = data?.resumo?.aguardando_estorno || 0;
     const registros = data?.registros || [];
     if (!registros.length) {
-        historicoLista.innerHTML = `<div class="empty-state"><strong>Nenhum registro encontrado.</strong><span>Abra o primeiro registro acima ou ajuste os filtros.</span></div>`;
+        historicoLista.innerHTML = `<div class="empty-state"><strong>Nenhuma conferência encontrada.</strong><span>Abra a primeira conferência acima ou ajuste os filtros.</span></div>`;
         return;
     }
     historicoLista.innerHTML = registros.map(registro => {
         const pending = registro.status_slug === "pendente_expedicao";
         const aguardando = registro.status_slug === "aguardando_estorno";
-        const badgeClass = pending || aguardando ? "pending" : "done";
-        const tipo = normalizarTipoReferencia(registro.tipo_referencia);
-        const referenciaLabel = escapeHtml(registro.tipo_referencia_label || labelTipoReferencia(tipo));
-        const referenciaTexto = escapeHtml(referenciaTitulo(registro));
-        const numeroReferencia = escapeHtml(referenciaNumero(registro) || "Não informada");
-        const numeroOs = tipo === "OrdemCompra" ? "Não se aplica" : (registro.numero_os || "Não informada");
-        const cliente = escapeHtml(registro.nome_cliente || "Não informado");
-        const nf = escapeHtml(registro.numero_nf || "Não informada");
-        const transportadora = escapeHtml(registro.transportadora || "Não informada");
-        const placa = escapeHtml(registro.placa || "Não informada");
-        const motorista = escapeHtml(registro.motorista || "Não informado");
-        const origemNf = escapeHtml(registro.nf_origem || "Manual");
+        const expedido = registro.status_slug === "expedido";
+        const finalizado = registro.status_slug === "finalizado";
+        const badgeClass = pending ? "pending" : (aguardando ? "pending" : (expedido ? "expedido" : "done"));
         const fotosHtml = (registro.fotos || []).length
-            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => foto.disponivel
-                ? `<a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${escapeHtml(foto.nome)}"><span>${escapeHtml(foto.nome)}</span></a>`
-                : `<div class="exp-photo" style="display:grid;align-content:center;background:#fff7ed;border-color:#fdba74;"><div style="height:94px;display:grid;place-items:center;color:#c2410c;font-size:12px;font-weight:700;padding:8px;text-align:center;">Arquivo indisponível</div><span>${escapeHtml(foto.nome)}</span></div>`
-            ).join("")}</div>`
+            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `<a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>`).join("")}</div>`
             : `<div class="exp-caption">Sem fotos anexadas.</div>`;
-        const observacao = registro.expedido_at
-            ? `Atualizado para expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}.`
-            : (aguardando
-                ? `Estorno solicitado por ${registro.estorno_pendente?.solicitante || "---"} em ${registro.estorno_pendente?.data || "---"}: ${registro.estorno_pendente?.motivo || ""}`
-                : `Origem do cliente/fornecedor: ${registro.cliente_origem || "Manual"}.`);
+        
+        // Título baseado no tipo de referência
+        const tipoRef = registro.tipo_referencia === "OrdemCompra" ? "OC" : "Orç";
+        const numRef = registro.tipo_referencia === "OrdemCompra" ? (registro.ordem_compra || "N/A") : (registro.orcamento || "N/A");
+        const tituloRef = `${tipoRef} ${numRef}`;
+        
+        // Box de canhoto
+        let canhotoHtml = "";
+        if (expedido && !registro.canhoto_url) {
+            canhotoHtml = `
+                <div style="margin-top:12px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#dbeafe 0%,#eff6ff 100%);border:1px dashed #3b82f6;">
+                    <div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:8px;">📸 Foto do Canhoto Pendente</div>
+                    <p style="margin:0 0 10px;font-size:12px;color:#1e40af;">Para finalizar, tire uma foto do canhoto assinado pelo motorista.</p>
+                    <input type="file" accept="image/*" capture="environment" data-action="upload-canhoto" data-id="${registro.id}" style="display:none;" id="canhoto-input-${registro.id}">
+                    <button class="exp-btn" type="button" onclick="document.getElementById('canhoto-input-${registro.id}').click()">📷 Tirar foto do canhoto</button>
+                </div>`;
+        } else if (finalizado && registro.canhoto_url) {
+            canhotoHtml = `
+                <div style="margin-top:12px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%);border:1px solid #22c55e;">
+                    <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px;">✅ Canhoto anexado</div>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <a href="${registro.canhoto_url}" target="_blank"><img src="${registro.canhoto_url}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:2px solid #22c55e;" alt="Canhoto"></a>
+                        <span style="font-size:12px;color:#166534;">Anexado em ${registro.canhoto_uploaded_at || "---"} por ${registro.canhoto_uploaded_by || "---"}</span>
+                    </div>
+                </div>`;
+        }
+        
         return `
             <article class="exp-record">
                 <div class="exp-record-head">
                     <div class="exp-record-title">
-                        <strong>${referenciaTexto}</strong>
-                        <span>${escapeHtml(registro.data_conferencia || "---")} · Responsável ${escapeHtml(registro.conferente || "---")}</span>
+                        <strong>${tituloRef}</strong>
+                        <span>${registro.data_conferencia} · Conferente ${registro.conferente}</span>
                     </div>
-                    <span class="exp-status ${badgeClass}">${escapeHtml(registro.status || "---")}</span>
+                    <span class="exp-status ${badgeClass}">${registro.status}</span>
                 </div>
                 <div class="exp-record-grid">
-                    <div class="exp-record-field"><span>${referenciaLabel}</span><strong>${numeroReferencia}</strong></div>
-                    <div class="exp-record-field"><span>OS</span><strong>${escapeHtml(numeroOs)}</strong></div>
-                    <div class="exp-record-field"><span>NF</span><strong>${nf}</strong></div>
-                    <div class="exp-record-field"><span>Cliente / fornecedor</span><strong>${cliente}</strong></div>
-                    <div class="exp-record-field"><span>Transportadora</span><strong>${transportadora}</strong></div>
-                    <div class="exp-record-field"><span>Placa</span><strong>${placa}</strong></div>
-                    <div class="exp-record-field"><span>Motorista</span><strong>${motorista}</strong></div>
-                    <div class="exp-record-field"><span>Origem NF</span><strong>${origemNf}</strong></div>
+                    <div class="exp-record-field"><span>NF</span><strong>${registro.numero_nf || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Cliente</span><strong>${registro.nome_cliente || "Não informado"}</strong></div>
+                    <div class="exp-record-field"><span>Transportadora</span><strong>${registro.transportadora || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Placa</span><strong>${registro.placa || "Não informada"}</strong></div>
+                    <div class="exp-record-field"><span>Motorista</span><strong>${registro.motorista || "Não informado"}</strong></div>
+                    <div class="exp-record-field"><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
                 </div>
                 ${fotosHtml}
+                ${canhotoHtml}
                 <div class="exp-record-actions">
-                    <div class="exp-caption">${escapeHtml(observacao)}</div>
+                    <div class="exp-caption">${finalizado ? `Finalizado em ${registro.finalizado_at} por ${registro.finalizado_by || "sistema"}.` : (expedido ? `Expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}. Aguardando foto do canhoto.` : (aguardando ? `Estorno solicitado por ${registro.estorno_pendente?.solicitante || "---"} em ${registro.estorno_pendente?.data || "---"}: ${registro.estorno_pendente?.motivo || ""}` : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`))}</div>
                     <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                        ${pending ? `<button class="exp-btn" data-action="completar" data-id="${registro.id}" data-tipo-referencia="${escapeHtml(tipo)}" data-orcamento="${escapeHtml(registro.orcamento || "")}" data-numero-os="${escapeHtml(registro.numero_os || "")}" data-ordem-compra="${escapeHtml(registro.ordem_compra || "")}" data-referencia="${referenciaTexto}" data-nf="${escapeHtml(registro.numero_nf || "")}" data-cliente="${escapeHtml(registro.nome_cliente || "")}" data-nf-origem="${escapeHtml(registro.nf_origem || "Manual")}" data-transportadora="${escapeHtml(registro.transportadora || "")}" data-placa="${escapeHtml(registro.placa || "")}" data-motorista="${escapeHtml(registro.motorista || "")}" data-has-fotos="${(registro.fotos || []).length ? '1' : ''}">${(registro.fotos || []).length ? 'Editar registro' : 'Completar registro'}</button>` : ""}
+                        ${pending ? `<button class="exp-btn" data-action="completar" data-id="${registro.id}" data-orcamento="${registro.orcamento}" data-nf="${registro.numero_nf}" data-cliente="${registro.nome_cliente}" data-transportadora="${registro.transportadora || ''}" data-placa="${registro.placa || ''}" data-motorista="${registro.motorista || ''}" data-has-fotos="${(registro.fotos || []).length ? '1' : ''}" data-was-expedido="${registro.expedido_at ? '1' : ''}">${(registro.fotos || []).length ? 'Editar conferência' : 'Completar conferência'}</button>` : ""}
                         ${aguardando ? "" : (pending ? `<button class="exp-btn" data-action="status" data-id="${registro.id}" data-status-slug="expedido" data-status-label="Expedido">Marcar expedido</button>` : "")}
-                        ${(!pending && !aguardando) ? (isAdmin ? `<button class="exp-btn-secondary" data-action="status" data-id="${registro.id}" data-status-slug="pendente_expedicao" data-status-label="Pendente de expedição">Voltar para pendente</button>` : `<button class="exp-btn-secondary" style="border-color:#ef4444;color:#ef4444;" data-action="solicitar-estorno" data-id="${registro.id}" data-referencia="${referenciaTexto}">Solicitar estorno</button>`) : ""}
-                        ${aguardando && isAdmin && registro.estorno_pendente ? `<button class="exp-btn" style="background:#16a34a;" data-action="admin-estorno" data-estorno-id="${registro.estorno_pendente.id}" data-referencia="${referenciaTexto}" data-motivo="${escapeHtml(registro.estorno_pendente.motivo || "")}" data-solicitante="${escapeHtml(registro.estorno_pendente.solicitante || "")}">Aprovar / Rejeitar estorno</button>` : ""}
+                        ${(expedido || finalizado) && !aguardando ? (isAdmin ? `<button class="exp-btn-secondary" data-action="status" data-id="${registro.id}" data-status-slug="pendente_expedicao" data-status-label="Pendente de expedição">Voltar para pendente</button>` : `<button class="exp-btn-secondary" style="border-color:#ef4444;color:#ef4444;" data-action="solicitar-estorno" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Solicitar estorno</button>`) : ""}
+                        ${aguardando && isAdmin && registro.estorno_pendente ? `<button class="exp-btn" style="background:#16a34a;" data-action="admin-estorno" data-estorno-id="${registro.estorno_pendente.id}" data-orcamento="${registro.orcamento}" data-motivo="${registro.estorno_pendente.motivo}" data-solicitante="${registro.estorno_pendente.solicitante}">Aprovar / Rejeitar estorno</button>` : ""}
                         ${aguardando && !isAdmin ? `<span style="font-size:13px;color:#f59e0b;font-weight:600;">&#9200; Aguardando aprovação do administrador</span>` : ""}
                         <button class="exp-btn-secondary" data-action="romaneio" data-id="${registro.id}">Romaneio</button>
-                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-referencia="${referenciaTexto}">Excluir</button>` : ""}
+                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Excluir</button>` : ""}
                     </div>
                 </div>
             </article>
@@ -578,7 +609,7 @@ async function loadHistorico() {
     const params = new URLSearchParams();
     if (buscaHistorico.value.trim()) params.set("q", buscaHistorico.value.trim());
     if (filtroStatus.value) params.set("status", filtroStatus.value);
-    historicoLista.innerHTML = `<div class="empty-state"><strong>Atualizando histórico...</strong><span>Buscando os registros cadastrados.</span></div>`;
+    historicoLista.innerHTML = `<div class="empty-state"><strong>Atualizando histórico...</strong><span>Buscando as conferências registradas.</span></div>`;
     try {
         const response = await fetch(`/api/expedicao/conferencia-simples?${params.toString()}`);
         const data = await response.json();
@@ -601,7 +632,7 @@ async function atualizarStatus(id, statusSlug, statusLabel) {
         if (data.aguardando_admin) {
             showToast("Solicitação de estorno enviada. Aguarde aprovação do admin.");
         } else {
-            showToast(`Registro atualizado para ${statusLabel}.`);
+            showToast(`Conferência atualizada para ${statusLabel}.`);
         }
         loadHistorico();
     } catch (error) {
@@ -609,56 +640,27 @@ async function atualizarStatus(id, statusSlug, statusLabel) {
     }
 }
 
-function abrirModalExcluirRegistro(id, referencia) {
-    deleteRegistroId = id;
-    deleteRegistroReferencia = referencia || `Registro ${id}`;
-    document.getElementById("modal-excluir-info").textContent = `Deseja excluir ${deleteRegistroReferencia}? Essa ação não poderá ser desfeita.`;
-    document.getElementById("modal-excluir-registro").style.display = "flex";
-}
+async function excluirConferencia(id, orcamento) {
+    const confirmado = window.confirm(`Deseja excluir a conferência do orçamento ${orcamento}? Essa ação não poderá ser desfeita.`);
+    if (!confirmado) return;
 
-function fecharModalExcluirRegistro() {
-    document.getElementById("modal-excluir-registro").style.display = "none";
-    deleteRegistroId = null;
-    deleteRegistroReferencia = "";
-}
-
-async function confirmarExclusaoRegistro() {
-    if (!deleteRegistroId) return;
-    const btn = document.getElementById("btn-confirmar-exclusao");
-    btn.disabled = true;
-    btn.textContent = "Excluindo...";
     try {
-        const response = await fetch(`/api/expedicao/conferencia-simples/${deleteRegistroId}`, {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${id}`, {
             method: "DELETE",
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Não foi possível excluir o registro.");
-        showToast(`${deleteRegistroReferencia} excluído com sucesso.`);
-        fecharModalExcluirRegistro();
+        if (!response.ok) throw new Error(data.error || "Não foi possível excluir a conferência.");
+        showToast(`Conferência do orçamento ${orcamento} excluída com sucesso.`);
         loadHistorico();
     } catch (error) {
         showToast(error.message, "error");
-    } finally {
-        btn.disabled = false;
-        btn.textContent = "Excluir";
     }
 }
 
 form.addEventListener("submit", async event => {
     event.preventDefault();
-    const tipo = normalizarTipoReferencia(tipoReferenciaInput.value);
-    if (tipo === "OrdemCompra" && !ordemCompraInput.value.trim()) {
-        showToast("Informe o número da ordem de compra.", "error");
-        ordemCompraInput.focus();
-        return;
-    }
-    if (tipo === "Orcamento" && !orcamentoInput.value.trim()) {
-        showToast("Informe o número do orçamento.", "error");
-        orcamentoInput.focus();
-        return;
-    }
     if (!fotosSelecionadas.length) {
-        showToast("Inclua pelo menos uma foto da expedição.", "error");
+        showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
     }
     btnSalvar.disabled = true;
@@ -668,11 +670,11 @@ form.addEventListener("submit", async event => {
         fotosSelecionadas.forEach(file => formData.append("fotos", file));
         const response = await fetch("/api/expedicao/conferencia-simples", { method: "POST", body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Não foi possível salvar o registro.");
-        showToast("Registro criado com sucesso.");
+        if (!response.ok) throw new Error(data.error || "Não foi possível salvar a conferência.");
+        showToast("Conferência criada com sucesso.");
         form.reset();
-        tipoReferenciaInput.value = "Orcamento";
-        atualizarCamposReferenciaFormulario();
+        tipoReferenciaSelect.value = "Orcamento";
+        toggleTipoReferencia();
         resetNfState();
         fotosSelecionadas = [];
         fotosPreview.innerHTML = "";
@@ -682,13 +684,11 @@ form.addEventListener("submit", async event => {
         showToast(error.message, "error");
     } finally {
         btnSalvar.disabled = false;
-        btnSalvar.textContent = "Salvar registro";
+        btnSalvar.textContent = "Salvar conferência";
     }
 });
 
 document.getElementById("btn-limpar-form").addEventListener("click", () => {
-    tipoReferenciaInput.value = "Orcamento";
-    atualizarCamposReferenciaFormulario();
     resetNfState();
     fotosSelecionadas = [];
     fotosCameraInput.value = "";
@@ -696,15 +696,8 @@ document.getElementById("btn-limpar-form").addEventListener("click", () => {
     fotosPreview.innerHTML = "";
     syncFotoFeedback();
 });
-tipoReferenciaInput.addEventListener("change", atualizarCamposReferenciaFormulario);
 btnConsultarNf.addEventListener("click", consultarNf);
-nfInput.addEventListener("blur", () => {
-    if (!nfInput.value.trim()) {
-        resetNfState();
-        return;
-    }
-    consultarNf();
-});
+nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
 btnAbrirCamera.addEventListener("click", () => fotosCameraInput.click());
 btnEscolherFotos.addEventListener("click", () => fotosGaleriaInput.click());
 fotosCameraInput.addEventListener("change", event => {
@@ -732,13 +725,13 @@ historicoLista.addEventListener("click", event => {
 
     const deleteButton = event.target.closest("[data-action='delete']");
     if (deleteButton) {
-        abrirModalExcluirRegistro(deleteButton.dataset.id, deleteButton.dataset.referencia);
+        excluirConferencia(deleteButton.dataset.id, deleteButton.dataset.orcamento);
         return;
     }
 
     const estornoButton = event.target.closest("[data-action='solicitar-estorno']");
     if (estornoButton) {
-        abrirModalEstorno(estornoButton.dataset.id, estornoButton.dataset.referencia);
+        abrirModalEstorno(estornoButton.dataset.id, estornoButton.dataset.orcamento);
         return;
     }
 
@@ -746,7 +739,7 @@ historicoLista.addEventListener("click", event => {
     if (adminEstornoButton) {
         abrirModalAdminEstorno(
             adminEstornoButton.dataset.estornoId,
-            adminEstornoButton.dataset.referencia,
+            adminEstornoButton.dataset.orcamento,
             adminEstornoButton.dataset.motivo,
             adminEstornoButton.dataset.solicitante,
         );
@@ -755,21 +748,17 @@ historicoLista.addEventListener("click", event => {
 
     const completarButton = event.target.closest("[data-action='completar']");
     if (completarButton) {
-        abrirCompletarConferencia({
-            id: completarButton.dataset.id,
-            tipoReferencia: completarButton.dataset.tipoReferencia,
-            orcamento: completarButton.dataset.orcamento,
-            numeroOs: completarButton.dataset.numeroOs,
-            ordemCompra: completarButton.dataset.ordemCompra,
-            referencia: completarButton.dataset.referencia,
-            nf: completarButton.dataset.nf,
-            cliente: completarButton.dataset.cliente,
-            nfOrigem: completarButton.dataset.nfOrigem,
-            transportadora: completarButton.dataset.transportadora,
-            placa: completarButton.dataset.placa,
-            motorista: completarButton.dataset.motorista,
-            hasFotos: completarButton.dataset.hasFotos,
-        });
+        abrirCompletarConferencia(
+            completarButton.dataset.id,
+            completarButton.dataset.orcamento,
+            completarButton.dataset.nf,
+            completarButton.dataset.cliente,
+            completarButton.dataset.transportadora,
+            completarButton.dataset.placa,
+            completarButton.dataset.motorista,
+            completarButton.dataset.hasFotos,
+            completarButton.dataset.wasExpedido,
+        );
     }
 });
 
@@ -777,9 +766,9 @@ historicoLista.addEventListener("click", event => {
 let estornoConferenciaId = null;
 let adminEstornoId = null;
 
-function abrirModalEstorno(id, referencia) {
+function abrirModalEstorno(id, orcamento) {
     estornoConferenciaId = id;
-    document.getElementById("modal-estorno-info").textContent = `${referencia || `Registro ${id}`}. A solicitação será enviada para o administrador aprovar.`;
+    document.getElementById("modal-estorno-info").textContent = `Orçamento ${orcamento || id}. A solicitação será enviada para o administrador aprovar.`;
     document.getElementById("modal-estorno-motivo").value = "";
     document.getElementById("modal-estorno").style.display = "flex";
 }
@@ -821,9 +810,9 @@ async function confirmarEstorno() {
     }
 }
 
-function abrirModalAdminEstorno(estornoId, referencia, motivo, solicitante) {
+function abrirModalAdminEstorno(estornoId, orcamento, motivo, solicitante) {
     adminEstornoId = estornoId;
-    document.getElementById("modal-admin-estorno-info").innerHTML = `<strong>Referência:</strong> ${escapeHtml(referencia || "---")}<br><strong>Solicitante:</strong> ${escapeHtml(solicitante || "---")}<br><strong>Motivo:</strong> ${escapeHtml(motivo || "---")}`;
+    document.getElementById("modal-admin-estorno-info").innerHTML = `<strong>Orçamento:</strong> ${orcamento || "---"}<br><strong>Solicitante:</strong> ${solicitante || "---"}<br><strong>Motivo:</strong> ${motivo || "---"}`;
     document.getElementById("modal-admin-estorno-obs").value = "";
     document.getElementById("modal-admin-estorno").style.display = "flex";
 }
@@ -847,7 +836,7 @@ async function decidirEstorno(acao) {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Falha ao processar estorno.");
-        showToast(acao === "aprovar" ? "Estorno aprovado. Registro voltou para pendente." : "Estorno rejeitado. Registro permanece expedido.");
+        showToast(acao === "aprovar" ? "Estorno aprovado. Conferência voltou para pendente." : "Estorno rejeitado. Conferência permanece expedida.");
         fecharModalAdminEstorno();
         loadHistorico();
     } catch (error) {
@@ -890,7 +879,7 @@ async function buscarNfRapida() {
         if (data.ja_existe) {
             buscaNfResultado.innerHTML = `
                 <div style="padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #f59e0b;">
-                    <strong style="color:#b45309;">⚠ NF ${numero} já possui registro</strong>
+                    <strong style="color:#b45309;">⚠ NF ${numero} já possui conferência</strong>
                     <p style="margin:6px 0 0;font-size:13px;color:#78350f;">ID: ${data.conferencia_id} — Status: ${data.status || "---"}</p>
                 </div>`;
             return;
@@ -899,7 +888,7 @@ async function buscarNfRapida() {
         if (data.encontrada && data.conferencia_criada) {
             buscaNfResultado.innerHTML = `
                 <div style="padding:12px;background:#d1fae5;border-radius:8px;border:1px solid #10b981;">
-                    <strong style="color:#065f46;">✅ Registro criado para NF ${numero}</strong>
+                    <strong style="color:#065f46;">✅ Conferência criada para NF ${numero}</strong>
                     <p style="margin:6px 0 0;font-size:13px;color:#064e3b;">Status: Pendente de expedição. Acesse o histórico abaixo para completar.</p>
                 </div>`;
             buscaNfInput.value = "";
@@ -912,7 +901,7 @@ async function buscarNfRapida() {
             buscaNfResultado.innerHTML = `
                 <div style="padding:14px;background:#fef2f2;border-radius:8px;border:1px solid #ef4444;">
                     <strong style="color:#991b1b;">NF ${numero} não encontrada na Consyste</strong>
-                    <p style="margin:8px 0 12px;font-size:13px;color:#7f1d1d;">Você pode incluir o registro manualmente e preencher o cliente/fornecedor.</p>
+                    <p style="margin:8px 0 12px;font-size:13px;color:#7f1d1d;">O que deseja fazer?</p>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <button class="exp-btn" onclick="incluirManualComNf('${numero}')" style="background:#2563eb;">Incluir manualmente</button>
                         <button class="exp-btn-secondary" onclick="corrigirNumeroNf()" style="min-height:36px;">Corrigir número</button>
@@ -929,14 +918,15 @@ async function buscarNfRapida() {
 }
 
 function incluirManualComNf(numero) {
-    nfInput.value = numero;
-    nfFeedback.textContent = `NF ${numero} não encontrada na Consyste. Informe o cliente/fornecedor manualmente.`;
-    nfFeedback.className = "exp-subtle warning";
-    mostrarCampoNomeCliente({ value: "", required: true, readOnly: false });
+    /* Preenche o formulário manual e rola até ele */
+    const nfField = document.getElementById("numero_nf");
+    if (nfField) nfField.value = numero;
     buscaNfResultado.style.display = "none";
     buscaNfInput.value = "";
-    form.scrollIntoView({ behavior: "smooth", block: "center" });
-    focarCampoPrincipalReferencia();
+    const form = document.getElementById("expedicao-form");
+    if (form) form.scrollIntoView({ behavior: "smooth", block: "center" });
+    const orcField = document.getElementById("orcamento");
+    if (orcField) orcField.focus();
     showToast(`NF ${numero} preenchida no formulário. Complete os dados e salve.`);
 }
 
@@ -962,12 +952,10 @@ function cacheRegistros(data) {
 
 function abrirRomaneio(id) {
     const reg = romaneioRegistros.find(r => String(r.id) === String(id));
-    if (!reg) { showToast("Registro não encontrado.", "error"); return; }
+    if (!reg) { showToast("Conferência não encontrada.", "error"); return; }
     const overlay = document.getElementById("romaneio-overlay");
-    const tipo = normalizarTipoReferencia(reg.tipo_referencia);
-    const fotosDisponiveis = (reg.fotos || []).filter(f => f.disponivel);
-    const fotosHtml = fotosDisponiveis.length
-        ? `<div class="romaneio-fotos"><h3>Fotos da expedição</h3><div class="romaneio-fotos-grid">${fotosDisponiveis.map(f => `<img src="${f.url}" alt="${escapeHtml(f.nome)}">`).join("")}</div></div>`
+    const fotosHtml = (reg.fotos || []).length
+        ? `<div class="romaneio-fotos"><h3>Fotos da conferência</h3><div class="romaneio-fotos-grid">${reg.fotos.map(f => `<img src="${f.url}" alt="${f.nome}">`).join("")}</div></div>`
         : "";
     overlay.innerHTML = `
         <div class="romaneio-sheet">
@@ -978,26 +966,24 @@ function abrirRomaneio(id) {
             <div class="romaneio-content">
                 <div class="romaneio-header">
                     <h2>Romaneio de Expedição</h2>
-                    <p>Registro #${escapeHtml(reg.id)} · ${escapeHtml(reg.data_conferencia || "---")}</p>
+                    <p>Conferência #${reg.id} · ${reg.data_conferencia || "---"}</p>
                 </div>
                 <div class="romaneio-grid">
-                    <div class="romaneio-cell"><label>Referência</label><span>${escapeHtml(referenciaTitulo(reg))}</span></div>
-                    <div class="romaneio-cell"><label>Tipo</label><span>${escapeHtml(reg.tipo_referencia_label || labelTipoReferencia(tipo))}</span></div>
-                    <div class="romaneio-cell"><label>OS</label><span>${escapeHtml(tipo === "OrdemCompra" ? "Não se aplica" : (reg.numero_os || "Não informada"))}</span></div>
-                    <div class="romaneio-cell"><label>Nota Fiscal</label><span>${escapeHtml(reg.numero_nf || "Não informada")}</span></div>
-                    <div class="romaneio-cell full"><label>Cliente / fornecedor</label><span>${escapeHtml(reg.nome_cliente || "Não informado")}</span></div>
-                    <div class="romaneio-cell"><label>Transportadora</label><span>${escapeHtml(reg.transportadora || "Não informada")}</span></div>
-                    <div class="romaneio-cell"><label>Placa</label><span>${escapeHtml(reg.placa || "Não informada")}</span></div>
-                    <div class="romaneio-cell"><label>Motorista</label><span>${escapeHtml(reg.motorista || "Não informado")}</span></div>
-                    <div class="romaneio-cell"><label>Responsável</label><span>${escapeHtml(reg.conferente || "---")}</span></div>
-                    <div class="romaneio-cell"><label>Status</label><span>${escapeHtml(reg.status || "---")}</span></div>
-                    <div class="romaneio-cell"><label>Origem NF</label><span>${escapeHtml(reg.nf_origem || "Manual")}</span></div>
-                    ${reg.expedido_at ? `<div class="romaneio-cell"><label>Expedido em</label><span>${escapeHtml(reg.expedido_at)}</span></div><div class="romaneio-cell"><label>Expedido por</label><span>${escapeHtml(reg.expedido_by || "---")}</span></div>` : `<div class="romaneio-cell"><label>Origem cliente</label><span>${escapeHtml(reg.cliente_origem || "Manual")}</span></div>`}
-                    ${reg.consyste_chave ? `<div class="romaneio-cell full"><label>Chave de acesso</label><span style="font-size:12px;word-break:break-all;">${escapeHtml(reg.consyste_chave)}</span></div>` : ""}
+                    <div class="romaneio-cell"><label>Orçamento</label><span>${reg.orcamento || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Nota Fiscal</label><span>${reg.numero_nf || "Não informada"}</span></div>
+                    <div class="romaneio-cell full"><label>Cliente</label><span>${reg.nome_cliente || "Não informado"}</span></div>
+                    <div class="romaneio-cell"><label>Transportadora</label><span>${reg.transportadora || "Não informada"}</span></div>
+                    <div class="romaneio-cell"><label>Placa</label><span>${reg.placa || "Não informada"}</span></div>
+                    <div class="romaneio-cell"><label>Motorista</label><span>${reg.motorista || "Não informado"}</span></div>
+                    <div class="romaneio-cell"><label>Conferente</label><span>${reg.conferente || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Status</label><span>${reg.status || "---"}</span></div>
+                    <div class="romaneio-cell"><label>Origem NF</label><span>${reg.nf_origem || "Manual"}</span></div>
+                    ${reg.expedido_at ? `<div class="romaneio-cell"><label>Expedido em</label><span>${reg.expedido_at}</span></div><div class="romaneio-cell"><label>Expedido por</label><span>${reg.expedido_by || "---"}</span></div>` : `<div class="romaneio-cell"><label>Origem cliente</label><span>${reg.cliente_origem || "Manual"}</span></div>`}
+                    ${reg.consyste_chave ? `<div class="romaneio-cell full"><label>Chave de acesso</label><span style="font-size:12px;word-break:break-all;">${reg.consyste_chave}</span></div>` : ""}
                 </div>
                 ${fotosHtml}
                 <div class="romaneio-footer">
-                    <div><div class="sig-line">Responsável</div></div>
+                    <div><div class="sig-line">Conferente</div></div>
                     <div><div class="sig-line">Motorista / Transportadora</div></div>
                 </div>
             </div>
@@ -1009,72 +995,48 @@ function abrirRomaneio(id) {
     });
 }
 
-/* ========== COMPLETAR REGISTRO (modal inline) ========== */
+/* ========== COMPLETAR CONFERÊNCIA (modal inline) ========== */
 let completarConferenciaId = null;
 
-function abrirCompletarConferencia(registro) {
-    completarConferenciaId = registro.id;
-    document.getElementById("completar-overlay")?.remove();
-
-    const tipoReferencia = normalizarTipoReferencia(registro.tipoReferencia);
-    const isEditing = Boolean(registro.hasFotos);
-    const tituloForm = isEditing ? "Editar registro" : "Completar registro";
-    const fotoLabel = isEditing ? "Fotos adicionais (opcional)" : "Fotos da expedição *";
-    const clienteInicial = registro.cliente || "";
-    const clienteSomenteLeitura = registro.nfOrigem === "Consyste" && Boolean(clienteInicial);
-    const clienteVisivel = Boolean(clienteInicial) || Boolean(registro.nf);
+function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, placa, motorista, hasFotos, wasExpedido) {
+    completarConferenciaId = id;
+    const isEditing = !!hasFotos;
+    const wasExp = !!wasExpedido;
+    const tituloForm = isEditing ? 'Editar conferência' : 'Completar conferência';
+    const fotoLabel = isEditing ? 'Fotos adicionais (opcional)' : 'Fotos da conferência *';
     const html = `
         <article class="exp-record" id="completar-form-wrapper" style="border:2px solid rgba(15,98,201,0.4);background:rgba(247,251,255,0.98);">
             <div class="exp-record-head">
                 <div class="exp-record-title">
-                    <strong>${tituloForm} #${escapeHtml(registro.id)}</strong>
-                    <span>${escapeHtml(registro.referencia || referenciaTitulo(registro))} · NF ${escapeHtml(registro.nf || "Não informada")}</span>
+                    <strong>${tituloForm} #${id}</strong>
+                    <span>NF ${nf || "Não informada"} · ${cliente || "Cliente não informado"}</span>
                 </div>
             </div>
             <form id="completar-form">
                 <div class="exp-form-grid">
                     <div class="exp-field">
-                        <label for="compl-tipo-referencia">Tipo de referência *</label>
-                        <select id="compl-tipo-referencia" name="tipo_referencia">
-                            <option value="Orcamento" ${tipoReferencia === "Orcamento" ? "selected" : ""}>Orçamento</option>
-                            <option value="OrdemCompra" ${tipoReferencia === "OrdemCompra" ? "selected" : ""}>Ordem de compra</option>
-                        </select>
-                    </div>
-                    <div class="exp-field ${tipoReferencia === "OrdemCompra" ? "hidden" : ""}" id="compl-orcamento-wrapper">
-                        <label for="compl-orcamento">Número do orçamento *</label>
-                        <input id="compl-orcamento" name="orcamento" type="text" value="${escapeHtml(registro.orcamento || "")}" placeholder="Número do orçamento">
-                    </div>
-                    <div class="exp-field ${tipoReferencia === "OrdemCompra" ? "" : "hidden"}" id="compl-ordem-compra-wrapper">
-                        <label for="compl-ordem-compra">Ordem de compra *</label>
-                        <input id="compl-ordem-compra" name="ordem_compra" type="text" value="${escapeHtml(registro.ordemCompra || "")}" placeholder="Número da ordem de compra">
-                    </div>
-                    <div class="exp-field ${tipoReferencia === "OrdemCompra" ? "hidden" : ""}" id="compl-numero-os-wrapper">
-                        <label for="compl-numero-os">Número da OS</label>
-                        <input id="compl-numero-os" name="numero_os" type="text" value="${escapeHtml(registro.numeroOs || "")}" placeholder="Opcional">
+                        <label for="compl-orcamento">Orçamento${wasExp ? ' (não editável)' : ''}</label>
+                        <input id="compl-orcamento" name="orcamento" type="text" value="${orcamento || ""}" placeholder="Número do orçamento" ${wasExp ? 'readonly' : ''}>
                     </div>
                     <div class="exp-field">
-                        <label for="compl-nf">Nº NF</label>
-                        <div class="exp-inline">
-                            <input id="compl-nf" name="numero_nf" type="text" value="${escapeHtml(registro.nf || "")}" placeholder="Manter ou corrigir">
-                            <button class="exp-btn-secondary" type="button" id="compl-btn-consultar-nf">Consultar NF</button>
-                        </div>
-                        <div id="compl-nf-feedback" class="exp-subtle"></div>
+                        <label for="compl-nf">Nº NF${wasExp ? ' (não editável)' : ' (corrigir se necessário)'}</label>
+                        <input id="compl-nf" name="numero_nf" type="text" value="${nf || ""}" placeholder="Manter ou corrigir" ${wasExp ? 'readonly' : ''}>
                     </div>
-                    <div class="exp-field full ${clienteVisivel ? "" : "hidden"}" id="compl-cliente-wrapper">
-                        <label for="compl-cliente">Nome do cliente / fornecedor</label>
-                        <input id="compl-cliente" name="nome_cliente" type="text" value="${escapeHtml(clienteInicial)}" placeholder="Preencha manualmente quando a NF ainda não estiver na Consyste" ${clienteSomenteLeitura ? "readonly" : ""}>
+                    <div class="exp-field">
+                        <label for="compl-cliente">Nome do cliente</label>
+                        <input id="compl-cliente" name="nome_cliente" type="text" value="${cliente || ""}" placeholder="Corrigir razão social se precisar">
                     </div>
                     <div class="exp-field">
                         <label for="compl-transportadora">Transportadora</label>
-                        <input id="compl-transportadora" name="transportadora" type="text" value="${escapeHtml(registro.transportadora || "")}" placeholder="Opcional">
+                        <input id="compl-transportadora" name="transportadora" type="text" value="${transportadora || ""}" placeholder="Opcional">
                     </div>
                     <div class="exp-field">
                         <label for="compl-placa">Placa</label>
-                        <input id="compl-placa" name="placa" type="text" value="${escapeHtml(registro.placa || "")}" placeholder="Opcional">
+                        <input id="compl-placa" name="placa" type="text" value="${placa || ""}" placeholder="Opcional">
                     </div>
                     <div class="exp-field">
                         <label for="compl-motorista">Motorista</label>
-                        <input id="compl-motorista" name="motorista" type="text" value="${escapeHtml(registro.motorista || "")}" placeholder="Opcional">
+                        <input id="compl-motorista" name="motorista" type="text" value="${motorista || ""}" placeholder="Opcional">
                     </div>
                     <div class="exp-field full">
                         <label>${fotoLabel}</label>
@@ -1095,90 +1057,24 @@ function abrirCompletarConferencia(registro) {
                 </div>
                 <div class="exp-actions" style="margin-top:14px;">
                     <button class="exp-btn-secondary" type="button" id="compl-cancelar">Cancelar</button>
-                    <button class="exp-btn" type="submit" id="compl-salvar">Salvar registro</button>
+                    <button class="exp-btn" type="submit" id="compl-salvar">Salvar conferência</button>
                 </div>
             </form>
         </article>
     `;
-
+    // Insert at top of historico list
     const wrapper = document.createElement("div");
     wrapper.id = "completar-overlay";
     wrapper.innerHTML = html;
     historicoLista.prepend(wrapper);
 
+    // Wire up the completar form
     let complFotos = [];
     const complForm = document.getElementById("completar-form");
-    const complTipoReferenciaInput = document.getElementById("compl-tipo-referencia");
-    const complOrcamentoWrapper = document.getElementById("compl-orcamento-wrapper");
-    const complOrcamentoInput = document.getElementById("compl-orcamento");
-    const complNumeroOsWrapper = document.getElementById("compl-numero-os-wrapper");
-    const complOrdemCompraWrapper = document.getElementById("compl-ordem-compra-wrapper");
-    const complOrdemCompraInput = document.getElementById("compl-ordem-compra");
-    const complNfInput = document.getElementById("compl-nf");
-    const complNfFeedback = document.getElementById("compl-nf-feedback");
-    const complClienteWrapper = document.getElementById("compl-cliente-wrapper");
-    const complClienteInput = document.getElementById("compl-cliente");
     const complCamera = document.getElementById("compl-fotos-camera");
     const complGaleria = document.getElementById("compl-fotos-galeria");
     const complPreview = document.getElementById("compl-fotos-preview");
     const complFeedback = document.getElementById("compl-fotos-feedback");
-
-    function atualizarCamposReferenciaCompletar() {
-        const isOc = normalizarTipoReferencia(complTipoReferenciaInput.value) === "OrdemCompra";
-        complOrcamentoWrapper.classList.toggle("hidden", isOc);
-        complNumeroOsWrapper.classList.toggle("hidden", isOc);
-        complOrdemCompraWrapper.classList.toggle("hidden", !isOc);
-        complOrcamentoInput.required = !isOc;
-        complOrdemCompraInput.required = isOc;
-    }
-
-    function mostrarClienteCompletar({ value = complClienteInput.value, required = false, readOnly = false, focus = false } = {}) {
-        complClienteWrapper.classList.remove("hidden");
-        complClienteInput.required = required;
-        complClienteInput.readOnly = readOnly;
-        complClienteInput.value = value || "";
-        if (focus) complClienteInput.focus();
-    }
-
-    function resetNfCompletar({ clearNome = false } = {}) {
-        complNfFeedback.textContent = "";
-        complNfFeedback.className = "exp-subtle";
-        complClienteInput.required = false;
-        if (clearNome && !clienteInicial) complClienteInput.value = "";
-        if (!clienteInicial && !complClienteInput.value) complClienteWrapper.classList.add("hidden");
-    }
-
-    async function consultarNfCompletar() {
-        const numero = (complNfInput.value || "").replace(/\D/g, "").trim();
-        complNfInput.value = numero;
-        if (!numero) {
-            resetNfCompletar({ clearNome: true });
-            return;
-        }
-        complNfFeedback.textContent = "Consultando a Consyste...";
-        complNfFeedback.className = "exp-subtle";
-        document.getElementById("compl-btn-consultar-nf").disabled = true;
-        try {
-            const response = await fetch(`/api/expedicao/conferencia-simples/consultar-nf?numero_nf=${encodeURIComponent(numero)}`);
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Não foi possível consultar a nota fiscal.");
-            if (data.encontrada && data.nome_cliente) {
-                complNfFeedback.textContent = `NF encontrada. Cliente/fornecedor: ${data.nome_cliente}.`;
-                complNfFeedback.className = "exp-subtle success";
-                mostrarClienteCompletar({ value: data.nome_cliente, required: false, readOnly: true });
-                return;
-            }
-            complNfFeedback.textContent = data.warning || `NF ${numero} não encontrada na Consyste. Informe o cliente/fornecedor manualmente.`;
-            complNfFeedback.className = "exp-subtle warning";
-            mostrarClienteCompletar({ required: true, readOnly: false, focus: !complClienteInput.value });
-        } catch (error) {
-            complNfFeedback.textContent = error.message;
-            complNfFeedback.className = "exp-subtle warning";
-            mostrarClienteCompletar({ required: true, readOnly: false, focus: !complClienteInput.value });
-        } finally {
-            document.getElementById("compl-btn-consultar-nf").disabled = false;
-        }
-    }
 
     function updateComplPreview() {
         complPreview.innerHTML = "";
@@ -1187,92 +1083,69 @@ function abrirCompletarConferencia(registro) {
             const url = URL.createObjectURL(file);
             const card = document.createElement("div");
             card.className = "exp-preview-card";
-            card.innerHTML = `<img src="${url}" alt="${escapeHtml(file.name)}"><span>${escapeHtml(file.name)}</span>`;
+            card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
             complPreview.appendChild(card);
         });
     }
 
-    atualizarCamposReferenciaCompletar();
-    if (clienteVisivel) complClienteInput.required = !clienteSomenteLeitura && !clienteInicial;
-
-    complTipoReferenciaInput.addEventListener("change", atualizarCamposReferenciaCompletar);
-    document.getElementById("compl-btn-consultar-nf").addEventListener("click", consultarNfCompletar);
-    complNfInput.addEventListener("blur", () => {
-        if (!complNfInput.value.trim()) {
-            resetNfCompletar({ clearNome: true });
-            return;
-        }
-        consultarNfCompletar();
-    });
     document.getElementById("compl-btn-camera").addEventListener("click", () => complCamera.click());
     document.getElementById("compl-btn-galeria").addEventListener("click", () => complGaleria.click());
-    complCamera.addEventListener("change", event => {
-        complFotos = complFotos.concat(Array.from(event.target.files || []));
-        updateComplPreview();
-        event.target.value = "";
-    });
-    complGaleria.addEventListener("change", event => {
-        complFotos = complFotos.concat(Array.from(event.target.files || []));
-        updateComplPreview();
-        event.target.value = "";
-    });
+    complCamera.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
+    complGaleria.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
     document.getElementById("compl-cancelar").addEventListener("click", () => { document.getElementById("completar-overlay")?.remove(); });
 
-    complForm.addEventListener("submit", async event => {
-        event.preventDefault();
-        const tipo = normalizarTipoReferencia(complTipoReferenciaInput.value);
-        if (tipo === "OrdemCompra" && !complOrdemCompraInput.value.trim()) {
-            showToast("Informe o número da ordem de compra.", "error");
-            complOrdemCompraInput.focus();
-            return;
-        }
-        if (tipo === "Orcamento" && !complOrcamentoInput.value.trim()) {
-            showToast("Informe o número do orçamento.", "error");
-            complOrcamentoInput.focus();
-            return;
-        }
-        if (!complFotos.length && !isEditing) {
-            showToast("Inclua pelo menos uma foto.", "error");
-            return;
-        }
-
+    complForm.addEventListener("submit", async e => {
+        e.preventDefault();
+        if (!complFotos.length && !isEditing) { showToast("Inclua pelo menos uma foto.", "error"); return; }
         const btn = document.getElementById("compl-salvar");
-        btn.disabled = true;
-        btn.textContent = "Salvando...";
+        btn.disabled = true; btn.textContent = "Salvando...";
         try {
             const fd = new FormData(complForm);
             complFotos.forEach(f => fd.append("fotos", f));
             const resp = await fetch(`/api/expedicao/conferencia-simples/${completarConferenciaId}/completar`, { method: "POST", body: fd });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || "Erro ao completar.");
-            showToast(isEditing ? "Registro atualizado com sucesso." : "Registro completado com sucesso.");
+            showToast("Conferência completada com sucesso.");
             document.getElementById("completar-overlay")?.remove();
             loadHistorico();
         } catch (err) {
             showToast(err.message, "error");
         } finally {
-            btn.disabled = false;
-            btn.textContent = "Salvar registro";
+            btn.disabled = false; btn.textContent = "Salvar conferência";
         }
     });
 
+    // Scroll to the form
     document.getElementById("completar-form-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    atualizarCamposReferenciaFormulario();
-    syncFotoFeedback();
-    loadHistorico();
+document.addEventListener("DOMContentLoaded", () => { loadHistorico(); });
 
-    document.getElementById("modal-estorno")?.addEventListener("click", event => {
-        if (event.target.id === "modal-estorno") fecharModalEstorno();
-    });
-    document.getElementById("modal-admin-estorno")?.addEventListener("click", event => {
-        if (event.target.id === "modal-admin-estorno") fecharModalAdminEstorno();
-    });
-    document.getElementById("modal-excluir-registro")?.addEventListener("click", event => {
-        if (event.target.id === "modal-excluir-registro") fecharModalExcluirRegistro();
-    });
+// Listener para upload de canhoto
+historicoLista.addEventListener("change", async event => {
+    const input = event.target;
+    if (input.getAttribute("data-action") !== "upload-canhoto") return;
+    const registroId = input.getAttribute("data-id");
+    const file = input.files?.[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append("canhoto", file);
+    
+    try {
+        showToast("Enviando foto do canhoto...");
+        const response = await fetch(`/api/expedicao/conferencia-simples/${registroId}/canhoto`, {
+            method: "POST",
+            body: formData
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível enviar o canhoto.");
+        showToast("Canhoto anexado com sucesso! Registro finalizado.", "success");
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+    input.value = "";
 });
 </script>
 {% endblock %}

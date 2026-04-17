@@ -8,63 +8,147 @@
 
 <style>
     :root {
-        --sap-blue: #2563eb;
-        --sap-hover: #1d4ed8;
-        --erp-bg: #f8fafc;
+        --sap-blue: #3b82f6;
+        --sap-hover: #2563eb;
+        --erp-bg: #f4f6f9;
         --border-color: #e2e8f0;
-        --text-main: #0f172a;
+        --text-main: #1e293b;
         --text-muted: #64748b;
-        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
         --success-erp: #10b981;
         --danger-erp: #ef4444;
         --warning-erp: #f59e0b;
-        --radius: 12px;
+        --radius: 18px;
     }
 
     body { 
-        background-color: var(--erp-bg); 
+        background-color: var(--erp-bg) !important; 
         color: var(--text-main); 
-        font-family: 'Inter', sans-serif; 
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
         font-size: 14px;
         line-height: 1.5;
     }
 
-    .wrap { padding: 30px; max-width: 1600px; margin: 0 auto; }
+    .wrap { padding: 24px; max-width: 1600px; margin: 0 auto; }
+
+    /* === DASHBOARD KPI CARDS === */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .kpi-card {
+        padding: 20px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+        border: 1px solid var(--border-color);
+        box-shadow: var(--card-shadow);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 45px rgba(59, 130, 246, 0.15);
+    }
+
+    .kpi-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .kpi-icon.pendentes { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    .kpi-icon.auditadas { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+    .kpi-icon.aprovadas { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .kpi-icon.recusadas { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+
+    .kpi-info { flex: 1; }
+
+    .kpi-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 700;
+    }
+
+    .kpi-value {
+        display: block;
+        margin-top: 6px;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--text-main);
+    }
 
     /* Header Estilizado */
     .header {
-        background: #fff; 
+        background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); 
         border: 1px solid var(--border-color); 
         border-radius: var(--radius); 
         box-shadow: var(--card-shadow); 
-        padding: 24px; 
+        padding: 28px 32px; 
         margin-bottom: 24px;
         display: flex; 
         justify-content: space-between; 
         align-items: center;
-        transition: transform 0.2s;
+        position: relative;
+        overflow: hidden;
+    }
+    .header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+        pointer-events: none;
     }
     .header h1 { 
         margin: 0; 
-        font-size: 22px; 
+        font-size: 24px; 
         font-weight: 800; 
         color: var(--text-main);
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
     }
-    .header h1 i { color: var(--sap-blue); }
-    .header p { margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px; }
+    .header h1 i { 
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+    .header p { margin: 8px 0 0 0; color: var(--text-muted); font-size: 14px; font-weight: 600; }
 
     /* Botões Modernos */
     .btn {
         border: 1px solid var(--border-color); 
         background: #fff; 
         color: #475569;
-        border-radius: 8px; 
-        padding: 10px 18px; 
-        font-size: 13px; 
-        font-weight: 600;
+        border-radius: 12px; 
+        padding: 11px 18px; 
+        font-size: 12px; 
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
         cursor: pointer; 
         text-decoration: none; 
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -75,21 +159,21 @@
     .btn:hover { background: #f1f5f9; border-color: #cbd5e1; transform: translateY(-1px); }
     .btn:active { transform: translateY(0); }
     
-    .btn.primary { background: var(--sap-blue); color: #fff; border: none; }
-    .btn.primary:hover { background: var(--sap-hover); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+    .btn.primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border: none; }
+    .btn.primary:hover { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35); }
     
-    .btn.success { background: var(--success-erp); color: #fff; border: none; }
-    .btn.success:hover { background: #059669; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+    .btn.success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; }
+    .btn.success:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35); }
 
-    .btn.warning { background: var(--warning-erp); color: #fff; border: none; }
-    .btn.warning:hover { background: #d97706; }
+    .btn.warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border: none; }
+    .btn.warning:hover { background: linear-gradient(135deg, #d97706 0%, #b45309 100%); }
 
     /* Layout em Grid */
     .layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: start; }
 
     /* Cards */
     .card {
-        background: #fff; 
+        background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); 
         border: 1px solid var(--border-color);
         border-radius: var(--radius); 
         box-shadow: var(--card-shadow); 
@@ -97,75 +181,82 @@
     }
     .card h3 {
         margin: 0 0 20px 0; 
-        font-size: 15px; 
-        color: var(--text-main);
-        font-weight: 700; 
+        font-size: 12px; 
+        color: var(--sap-blue);
+        font-weight: 800; 
         display: flex; 
         align-items: center; 
         gap: 10px;
-        padding-bottom: 12px;
+        padding-bottom: 14px;
         border-bottom: 1px solid #f1f5f9;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
     }
 
     /* Inputs */
     .input {
-        border: 1px solid #cbd5e1; 
-        border-radius: 8px; 
-        padding: 11px 14px; 
+        border: 1px solid var(--border-color); 
+        border-radius: 12px; 
+        padding: 12px 14px; 
         width: 100%; 
         box-sizing: border-box;
         font-family: inherit;
-        font-size: 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-main);
         transition: all 0.2s;
+        background: #fff;
     }
     .input:focus { 
         border-color: var(--sap-blue); 
         outline: none; 
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); 
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); 
     }
 
     /* Tabelas */
-    .table-wrap { border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; background: #fff; }
+    .table-wrap { border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; background: #fff; }
     table { width: 100%; border-collapse: collapse; }
-    th { background: #f8fafc; padding: 14px; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; text-align: left; letter-spacing: 0.5px; }
-    td { padding: 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    th { background: #f8fafc; padding: 14px 16px; font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 800; text-align: left; letter-spacing: 0.08em; }
+    td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 600; color: var(--text-main); }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #f8fafc; }
+    tr.selected td { background: rgba(59, 130, 246, 0.1); }
 
     /* Badges */
     .badge { 
         display: inline-flex; 
-        padding: 4px 10px; 
-        border-radius: 6px; 
-        font-size: 11px; 
-        font-weight: 700; 
-        text-transform: uppercase; 
+        padding: 5px 12px; 
+        border-radius: 8px; 
+        font-size: 10px; 
+        font-weight: 800; 
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
-    .b-pendente { background: #fffbeb; color: #92400e; border: 1px solid #fef3c7; }
-    .b-ok { background: #f0fdf4; color: #166534; border: 1px solid #dcfce7; }
-    .b-inc { background: #fef2f2; color: #991b1b; border: 1px solid #fee2e2; }
-    .b-dec-ok { background: #ecfdf5; color: #166534; border: 1px solid #86efac; }
-    .b-dec-no { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .b-pendente { background: rgba(245, 158, 11, 0.1); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .b-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .b-inc { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .b-dec-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .b-dec-no { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
 
     /* Detalhes */
-    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
     .box { 
-        border: 1px solid #f1f5f9; 
-        border-radius: 10px; 
-        padding: 12px; 
-        background: #fbfcfd; 
+        border: 1px solid var(--border-color); 
+        border-radius: 14px; 
+        padding: 14px 16px; 
+        background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); 
         transition: all 0.2s;
     }
-    .box:hover { border-color: #e2e8f0; }
-    .box label { display: block; font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
-    .box span { font-size: 14px; font-weight: 600; color: var(--text-main); }
+    .box:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .box label { display: block; font-size: 10px; color: var(--text-muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .box span { font-size: 14px; font-weight: 700; color: var(--text-main); }
 
     .inconsistencias { 
         border-left: 4px solid var(--danger-erp); 
-        background: #fff1f2; 
-        border-radius: 8px; 
-        padding: 16px; 
-        margin: 15px 0; 
+        background: rgba(239, 68, 68, 0.05); 
+        border-radius: 12px; 
+        padding: 18px; 
+        margin: 18px 0; 
     }
 
     .pedido-result {
@@ -413,17 +504,52 @@
 {% endblock %}
 
 {% block content %}
-<div class="wrap">
-    <div class="header">
+<div class="wrap" style="padding:24px; max-width:1600px; margin:0 auto; background:#f4f6f9 !important; min-height:100vh;">
+    <div class="header" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:28px 32px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
         <div>
-            <h1><i class="fas fa-clipboard-check"></i> Auditor de Compras</h1>
-            <p>Gerenciamento fiscal e validação de Notas Fiscais importadas.</p>
+            <h1 style="margin:0; font-size:24px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:14px;">
+                <span style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px;"><i class="fas fa-clipboard-check"></i></span>
+                Auditor de Compras
+            </h1>
+            <p style="margin:8px 0 0 0; color:#64748b; font-size:14px; font-weight:600;">Gerenciamento fiscal e validação de Notas Fiscais importadas.</p>
         </div>
         <div style="display:flex; gap:10px;">
-            <a class="btn" href="/upload"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
-            <button class="btn primary" onclick="carregarNotas()"><i class="fas fa-sync"></i> Sincronizar</button>
+            <a class="btn" href="/upload" style="border:1px solid #e2e8f0; background:#fff; color:#475569; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-decoration:none; display:inline-flex; align-items:center; gap:8px;"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
+            <button class="btn primary" onclick="carregarNotas()" style="background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; border:none; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; display:inline-flex; align-items:center; gap:8px;"><i class="fas fa-sync"></i> Sincronizar</button>
         </div>
     </div>
+
+    <!-- KPI Dashboard Cards -->
+    <section id="kpi-dashboard" class="kpi-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
+        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
+            <div class="kpi-icon pendentes" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-hourglass-half"></i></div>
+            <div class="kpi-info">
+                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Pendentes</span>
+                <strong class="kpi-value" id="kpi-pendentes" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
+            </div>
+        </div>
+        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
+            <div class="kpi-icon auditadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-search"></i></div>
+            <div class="kpi-info">
+                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Auditadas</span>
+                <strong class="kpi-value" id="kpi-auditadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
+            </div>
+        </div>
+        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
+            <div class="kpi-icon aprovadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-check-circle"></i></div>
+            <div class="kpi-info">
+                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Aprovadas</span>
+                <strong class="kpi-value" id="kpi-aprovadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
+            </div>
+        </div>
+        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
+            <div class="kpi-icon recusadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-times-circle"></i></div>
+            <div class="kpi-info">
+                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Recusadas</span>
+                <strong class="kpi-value" id="kpi-recusadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
+            </div>
+        </div>
+    </section>
 
     <div id="msg" class="msg"></div>
     <div id="modalOverlay" class="modal-overlay">
@@ -488,31 +614,31 @@
         </div>
     </div>
 
-    <div class="layout">
-        <section class="card">
-            <h3><i class="fas fa-stream"></i> Fila de Auditoria</h3>
-            <div class="toolbar" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <div style="position: relative; flex: 1;">
-                    <i class="fas fa-search" style="position: absolute; left: 12px; top: 14px; color: #94a3b8;"></i>
-                    <input id="filtro" class="input" style="padding-left: 35px;" placeholder="Pesquisar NF, fornecedor ou pedido..." oninput="renderNotas()" />
+    <div class="layout" style="display:grid; grid-template-columns:1.2fr 1fr; gap:24px; align-items:start;">
+        <section class="card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:24px;">
+            <h3 style="margin:0 0 20px 0; font-size:12px; color:#3b82f6; font-weight:800; display:flex; align-items:center; gap:10px; padding-bottom:14px; border-bottom:1px solid #f1f5f9; text-transform:uppercase; letter-spacing:0.08em;"><i class="fas fa-stream"></i> Fila de Auditoria</h3>
+            <div class="toolbar" style="display:flex; gap:10px; margin-bottom:20px;">
+                <div style="position:relative; flex:1;">
+                    <i class="fas fa-search" style="position:absolute; left:14px; top:14px; color:#94a3b8;"></i>
+                    <input id="filtro" class="input" style="padding-left:40px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; font-size:13px; font-weight:600; color:#1e293b;" placeholder="Pesquisar NF, fornecedor ou pedido..." oninput="renderNotas()" />
                 </div>
-                <button class="btn" onclick="carregarNotas()">Atualizar</button>
+                <button class="btn" onclick="carregarNotas()" style="border:1px solid #e2e8f0; background:#fff; color:#475569; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase;">Atualizar</button>
             </div>
             
-            <div class="table-wrap">
+            <div class="table-wrap" style="border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; background:#fff;">
                 <table>
                     <thead>
-                        <tr>
-                            <th>NF / Data</th>
-                            <th>Fornecedor</th>
-                            <th>Status Auditoria</th>
-                            <th>Decisão Fiscal</th>
-                            <th>Status Fluxo</th>
-                            <th style="text-align:center;">Ação</th>
+                        <tr style="background:#f8fafc;">
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">NF / Data</th>
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Fornecedor</th>
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Status Auditoria</th>
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Decisão Fiscal</th>
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Status Fluxo</th>
+                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:center; letter-spacing:0.08em;">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyNotas">
-                        <tr><td colspan="6" style="text-align:center; padding: 40px; color: #94a3b8;">
+                        <tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">
                             <i class="fas fa-spinner fa-spin fa-2x"></i><br><br>Carregando registros...
                         </td></tr>
                     </tbody>
@@ -520,12 +646,12 @@
             </div>
         </section>
 
-        <section class="card">
-            <h3><i class="fas fa-info-circle"></i> Detalhes da Operação</h3>
+        <section class="card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:24px; position:sticky; top:18px;">
+            <h3 style="margin:0 0 20px 0; font-size:12px; color:#3b82f6; font-weight:800; display:flex; align-items:center; gap:10px; padding-bottom:14px; border-bottom:1px solid #f1f5f9; text-transform:uppercase; letter-spacing:0.08em;"><i class="fas fa-info-circle"></i> Detalhes da Operação</h3>
             
-            <div id="detalheVazio" style="padding: 60px 20px; color:#94a3b8; text-align:center; border: 2px dashed #e2e8f0; border-radius: var(--radius);">
-                <i class="fas fa-mouse-pointer fa-3x" style="margin-bottom: 15px; opacity: 0.3;"></i>
-                <p>Selecione um registro na lista ao lado para iniciar a auditoria fiscal.</p>
+            <div id="detalheVazio" style="padding:60px 20px; color:#94a3b8; text-align:center; border:2px dashed #e2e8f0; border-radius:18px; background:#f8fafc;">
+                <i class="fas fa-mouse-pointer fa-3x" style="margin-bottom:15px; opacity:0.3;"></i>
+                <p style="font-weight:600;">Selecione um registro na lista ao lado para iniciar a auditoria fiscal.</p>
             </div>
 
             <div id="detalheWrap" style="display:none;">

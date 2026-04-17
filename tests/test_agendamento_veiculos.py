@@ -3,10 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from openpyxl import Workbook
+from werkzeug.security import generate_password_hash
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import AgendamentoSolicitacao
+from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, Usuario
 from conferencia_app.services.pedidos_service import buscar_linhas_pedido
 
 
@@ -23,7 +24,7 @@ def build_test_app(tmp_path: Path, fornecedores_path: Path, clientes_path: Path)
 
 
 def login_admin(client):
-    return client.post("/login", json={"username": "admin", "password": "admin123"})
+    return client.post("/login", json={"username": "admin", "password": "admin1234"})
 
 
 def criar_excel_fornecedores(path: Path):
@@ -159,6 +160,82 @@ def test_agendamento_dashboard_importa_cadastros_e_renderiza_pagina(tmp_path):
     data = response.get_json()
     assert data["cadastros"]["fornecedores"] >= 1
     assert data["cadastros"]["clientes"] >= 1
+
+
+def test_motorista_cadastrado_em_usuarios_aparece_na_logistica_sem_reload(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            Usuario(
+                username="motorista.teste",
+                password=generate_password_hash("123456"),
+                role="Motorista",
+            )
+        )
+        db.session.commit()
+        assert AgendamentoMotorista.query.filter_by(usuario_username="motorista.teste").first() is None
+
+    response = client.get("/api/logistica/agendamento-veiculos/motoristas")
+    assert response.status_code == 200
+    rows = response.get_json()["rows"]
+    assert any(row["nome"] == "motorista.teste" for row in rows)
+
+    dashboard = client.get("/api/logistica/agendamento-veiculos/dashboard")
+    assert dashboard.status_code == 200
+    assert dashboard.get_json()["resumo"]["motoristas_ativos"] >= 1
+
+    with app.app_context():
+        motorista = AgendamentoMotorista.query.filter_by(usuario_username="motorista.teste").first()
+        assert motorista is not None
+        assert motorista.ativo is True
+
+
+def test_registrar_usuario_motorista_cria_cadastro_operacional(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+
+    with client.session_transaction() as sess:
+        sess["username"] = "ADMIN"
+        sess["role"] = "Admin"
+
+    with patch("conferencia_app.routes.api_routes.enviar_email_registro") as enviar_email_mock:
+        response = client.post(
+            "/api/registrar",
+            json={
+                "username": "motorista.registro",
+                "email": "motorista.registro@teste.com",
+                "role": "Motorista",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+    enviar_email_mock.assert_called_once()
+
+    _, kwargs = enviar_email_mock.call_args
+    assert kwargs["destinatario_email"] == "motorista.registro@teste.com"
+    assert kwargs["username"] == "MOTORISTA.REGISTRO"
+    assert kwargs["role"] == "Motorista"
+    assert kwargs["url_login"].endswith("/login")
+
+    with app.app_context():
+        motorista = AgendamentoMotorista.query.filter_by(usuario_username="MOTORISTA.REGISTRO").first()
+        assert motorista is not None
+        assert motorista.nome == "MOTORISTA.REGISTRO"
+        assert motorista.ativo is True
 
 
 def test_busca_linhas_pedido_extrai_metadados_do_google_sheets():

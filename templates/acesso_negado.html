@@ -2,7 +2,7 @@
 
 {% block title %}Acesso Restrito | Columbia Sync{% endblock %}
 {% block shell_title %}Acesso restrito{% endblock %}
-{% block shell_subtitle %}Seu perfil nao possui permissao para concluir esta acao neste momento.{% endblock %}
+{% block shell_subtitle %}Seu perfil não possui permissao para concluir esta acao neste momento.{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260407-1">
@@ -24,10 +24,10 @@
             </div>
 
             <span class="auth-kicker"><i class="fas fa-lock"></i> permissao insuficiente</span>
-            <h1 class="card-title">Acesso nao autorizado.</h1>
+            <h1 class="card-title">Acesso não autorizado.</h1>
             <p class="card-copy">
-                Seu perfil atual <span class="error-code">{{ session.role }}</span> nao possui privilegios para abrir este modulo.
-                Se voce acredita que isso esta incorreto, fale com um administrador.
+                Seu perfil atual <span class="error-code">{{ session.role }}</span> não possui privilégios para abrir este módulo.
+                Se você acredita que isso esta incorreto, fale com um administrador.
             </p>
             <div class="error-meta">Erro: HTTP 403 - Forbidden / Security Policy Restriction</div>
 

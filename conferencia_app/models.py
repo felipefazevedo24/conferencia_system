@@ -14,7 +14,8 @@ class ActiveSession(db.Model):
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    password = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(160), unique=True, nullable=True, index=True)
+    password = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), default="Conferente")
 
 
@@ -312,7 +313,7 @@ class ExpedicaoConferenciaSimples(db.Model):
     ordem_compra = db.Column(db.String(80), index=True)
     conferente = db.Column(db.String(100), nullable=False, index=True)
     data_conferencia = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
-    numero_nf = db.Column(db.String(40), index=True)
+    numero_nf = db.Column(db.String(160), index=True)
     nome_cliente = db.Column(db.String(160))
     cliente_origem = db.Column(db.String(20), nullable=False, default="Manual")
     nf_origem = db.Column(db.String(20), nullable=False, default="Manual")  # Manual | Consyste (quem preencheu a NF)
@@ -326,6 +327,13 @@ class ExpedicaoConferenciaSimples(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     expedido_at = db.Column(db.DateTime)
     expedido_by = db.Column(db.String(100))
+    # Canhoto - foto obrigatória para finalizar
+    canhoto_file_name = db.Column(db.String(260))
+    canhoto_file_path = db.Column(db.String(500))
+    canhoto_uploaded_at = db.Column(db.DateTime)
+    canhoto_uploaded_by = db.Column(db.String(100))
+    finalizado_at = db.Column(db.DateTime)
+    finalizado_by = db.Column(db.String(100))
 
 
 class ExpedicaoConferenciaSimplesFoto(db.Model):
@@ -383,6 +391,7 @@ class AgendamentoMotorista(db.Model):
     cnh = db.Column(db.String(40), index=True)
     observacoes = db.Column(db.String(500))
     ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    usuario_username = db.Column(db.String(80), index=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
@@ -499,6 +508,12 @@ class AgendamentoSolicitacao(db.Model):
     cancelado_por = db.Column(db.String(100))
     cancelado_em = db.Column(db.DateTime)
     motivo_cancelamento = db.Column(db.String(500))
+    data_desejada = db.Column(db.DateTime, index=True)
+    cancelamento_pendente = db.Column(db.Boolean, nullable=False, default=False)
+    cancelamento_solicitado_por = db.Column(db.String(100))
+    cancelamento_motivo_pendente = db.Column(db.String(500))
+    departamento_solicitante = db.Column(db.String(50), index=True)  # COMPRAS, ASSISTÊNCIA TÉCNICA, ENGENHARIA/PCP, LOGÍSTICA, FACILITIES
+    tempo_estimado_min = db.Column(db.Integer)
     qtd_itens = db.Column(db.Integer, nullable=False, default=0)
     qtd_volumes = db.Column(db.Float, nullable=False, default=0.0)
     resumo_itens = db.Column(db.String(100), nullable=False, default="0 itens / 0 volumes")

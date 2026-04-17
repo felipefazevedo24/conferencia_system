@@ -17,18 +17,49 @@
             --card-shadow: 0 10px 25px rgba(0,0,0,0.05);
         }
 
-        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        body { background-color: var(--erp-bg); color: #333; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
         .main-content { padding: 25px; max-width: 1400px; margin: 0 auto; }
         
-        /* Dashboard Stats Topo */
-        .stats-header { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
-        .stat-badge { 
-            background: white; padding: 15px; border-radius: 12px; border-bottom: 4px solid var(--sap-blue);
-            box-shadow: var(--card-shadow); display: flex; align-items: center; gap: 15px;
+        /* === DASHBOARD STATS MELHORADO === */
+        .stats-header { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 16px; 
+            margin-bottom: 25px; 
         }
-        .stat-badge i { font-size: 24px; color: var(--sap-blue); opacity: 0.8; }
-        .stat-info span { display: block; font-size: 10px; text-transform: uppercase; font-weight: 800; color: #777; }
-        .stat-info b { font-size: 18px; color: var(--protheus-gray); }
+        .stat-badge { 
+            background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); 
+            padding: 20px; 
+            border-radius: 18px; 
+            border: 1px solid var(--border-color);
+            box-shadow: var(--card-shadow); 
+            display: flex; 
+            align-items: center; 
+            gap: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stat-badge:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(26, 49, 74, 0.12);
+        }
+        .stat-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .stat-icon.blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .stat-icon.green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .stat-icon.orange { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .stat-icon.purple { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+        .stat-info span { display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.05em; }
+        .stat-info b { font-size: 26px; color: #1e293b; font-weight: 900; display: block; margin-top: 4px; }
+        .stat-info small { font-size: 11px; color: #94a3b8; font-weight: 600; }
 
         /* Cabeçalho de Página */
 /* Cabeçalho de Página Atualizado */
@@ -107,7 +138,7 @@
         #status, #consyste-status { 
             margin-top: 20px; font-size: 12px; padding: 15px; border-radius: 10px;
             display: none; background: #1e1e1e; color: #00ff00; border-left: 6px solid var(--sap-blue);
-            font-family: 'Cascadia Code', 'Consolas', monospace; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+            font-family: monospace; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
         }
 
         /* Tabelas Modernas */
@@ -535,10 +566,46 @@
         <h2>Pre-Nota e Tratativas Administrativas</h2>
     </div>
 
+    <!-- Dashboard de KPIs -->
+    <div class="stats-header" id="upload-dashboard">
+        <div class="stat-badge">
+            <div class="stat-icon blue"><i class="fas fa-file-import"></i></div>
+            <div class="stat-info">
+                <span>Importados Hoje</span>
+                <b id="kpi-importados">-</b>
+                <small>XMLs processados</small>
+            </div>
+        </div>
+        <div class="stat-badge">
+            <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-info">
+                <span>Prontos p/ Lançar</span>
+                <b id="kpi-prontos">-</b>
+                <small>Aguardando fiscal</small>
+            </div>
+        </div>
+        <div class="stat-badge">
+            <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
+            <div class="stat-info">
+                <span>Em Auditoria</span>
+                <b id="kpi-auditoria">-</b>
+                <small>Pendentes de análise</small>
+            </div>
+        </div>
+        <div class="stat-badge">
+            <div class="stat-icon purple"><i class="fas fa-undo-alt"></i></div>
+            <div class="stat-info">
+                <span>Devoluções</span>
+                <b id="kpi-devolucoes">-</b>
+                <small>Solicitações abertas</small>
+            </div>
+        </div>
+    </div>
+
     <section class="page-session">
         <div class="page-session-head">
             <div>
-                <span class="page-session-kicker"><i class="fas fa-inbox"></i> Operacao</span>
+                <span class="page-session-kicker"><i class="fas fa-inbox"></i> Operação</span>
                 <h3 class="page-session-title">Captura operacional da pre-nota</h3>
                 <p class="page-session-subtitle">Os recursos operacionais continuam na mesma pagina, mas separados em blocos para ficar mais claro onde importar e processar documentos.</p>
             </div>
@@ -594,8 +661,8 @@
         <div class="page-session-head">
             <div>
                 <span class="page-session-kicker"><i class="fas fa-link"></i> Sessao 4</span>
-                <h3 class="page-session-title">Integracao com auditor XML</h3>
-                <p class="page-session-subtitle">Bloco dedicado para acompanhar notas aguardando liberacao e abrir o auditor integrado sem sair da mesma pagina.</p>
+                <h3 class="page-session-title">Integração com auditor XML</h3>
+                <p class="page-session-subtitle">Bloco dedicado para acompanhar notas aguardando liberação e abrir o auditor integrado sem sair da mesma pagina.</p>
             </div>
         </div>
         <div class="page-session-divider"></div>
@@ -632,9 +699,9 @@
     <section class="page-session">
         <div class="page-session-head">
             <div>
-                <span class="page-session-kicker"><i class="fas fa-undo-alt"></i> Sessao 5</span>
-                <h3 class="page-session-title">Solicitacoes de devolucao total</h3>
-                <p class="page-session-subtitle">Aprovacoes administrativas separadas para o time decidir rapido o que deve voltar integralmente.</p>
+                <span class="page-session-kicker"><i class="fas fa-undo-alt"></i> Sessão 5</span>
+                <h3 class="page-session-title">Solicitações de devolução total</h3>
+                <p class="page-session-subtitle">Aprovações administrativas separadas para o time decidir rápido o que deve voltar integralmente.</p>
             </div>
         </div>
         <div class="page-session-divider"></div>
@@ -642,7 +709,7 @@
     <div class="card-sap" style="margin-top:25px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <h3 style="margin:0; border:none;"><i class="fas fa-undo-alt"></i> Solicitações de Devolução Total</h3>
-            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarSolicitacoesDevolucao()">
+            <button class="btn-sap btn-primary-sap" style="padding: 8px 15px;" onclick="carregarSolicitacoesDevolução()">
                 <i class="fas fa-sync"></i> Atualizar
             </button>
         </div>
@@ -669,9 +736,9 @@
     <section class="page-session">
         <div class="page-session-head">
             <div>
-                <span class="page-session-kicker"><i class="fas fa-trash-alt"></i> Sessao 6</span>
-                <h3 class="page-session-title">Zona de exclusao de pendencias</h3>
-                <p class="page-session-subtitle">Area isolada para saneamento manual, mantendo a acao critica separada do restante do fluxo.</p>
+                <span class="page-session-kicker"><i class="fas fa-trash-alt"></i> Sessão 6</span>
+                <h3 class="page-session-title">Zona de exclusão de pendências</h3>
+                <p class="page-session-subtitle">Área isolada para saneamento manual, mantendo a ação crítica separada do restante do fluxo.</p>
             </div>
         </div>
         <div class="page-session-divider"></div>
@@ -724,31 +791,41 @@
     <a href="/admin" class="voltar-link"><i class="fas fa-arrow-left"></i> Painel de Controle Principal</a>
 </div>
 
-<div id="modal-selecao" class="modal-overlay">
-    <div class="modal-sap" style="border-radius: 20px; overflow: hidden; border: none;">
-        <div class="modal-head" style="background: #1e293b; padding: 20px;">
-            <span style="letter-spacing: 1px;">SELEÇÃO DE DOCUMENTO LOCALIZADO</span>
-            <button onclick="fecharModalSelecao()" style="color:white; background:rgba(255,255,255,0.1); border:none; cursor:pointer; width:30px; height:30px; border-radius:50%;">&times;</button>
+<div id="modal-selecao" class="modal-overlay" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+    <div class="modal-sap" style="border-radius: 24px; overflow: hidden; border: none; max-width: 900px; width: 95%; box-shadow: 0 25px 80px rgba(0,0,0,0.5);">
+        <div class="modal-head" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 22px 28px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; background: rgba(255,255,255,0.15); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-copy" style="font-size: 18px; color: #fff;"></i>
+                </div>
+                <div>
+                    <span style="letter-spacing: 0.5px; font-size: 14px; font-weight: 800; color: #fff;">Documentos Duplicados</span>
+                    <div style="font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 2px;">Selecione qual documento deseja importar</div>
+                </div>
+            </div>
+            <button onclick="fecharModalSelecao()" style="color: #fff; background: rgba(255,255,255,0.15); border: none; cursor: pointer; width: 36px; height: 36px; border-radius: 10px; font-size: 20px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">&times;</button>
         </div>
-        <div class="modal-body" style="margin:0; border:none; padding: 25px;">
-            <div class="table-container">
-                <table class="erp-table">
+        <div class="modal-body" style="margin: 0; border: none; padding: 0; background: #f8fafc;">
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                     <thead>
-                        <tr>
-                            <th>MODELO</th>
-                            <th>Nº DOC</th>
-                            <th>EMISSÃO</th>
-                            <th>EMITENTE</th>
-                            <th>CHAVE / ID</th>
-                            <th width="120" style="text-align:center">AÇÃO</th>
+                        <tr style="background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);">
+                            <th style="padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8;">MODELO</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8;">Nº DOC</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8;">EMISSÃO</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8;">EMITENTE</th>
+                            <th style="padding: 14px 16px; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8;">CHAVE / ID</th>
+                            <th style="padding: 14px 16px; text-align: center; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; border-bottom: 2px solid #94a3b8; width: 140px;">AÇÃO</th>
                         </tr>
                     </thead>
                     <tbody id="lista-selecao-corpo"></tbody>
                 </table>
             </div>
         </div>
-        <div style="padding: 20px; text-align: right; background: #f8fafc;">
-            <button class="btn-sap" style="background: #cbd5e1; color: #475569;" onclick="fecharModalSelecao()">Cancelar</button>
+        <div style="padding: 18px 24px; background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); border-top: 1px solid #cbd5e1; display: flex; justify-content: flex-end;">
+            <button class="btn-sap" style="background: #64748b; color: #fff; padding: 10px 20px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer;" onclick="fecharModalSelecao()">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
         </div>
     </div>
 </div>
@@ -773,7 +850,7 @@
     let documentosModal = [];
     const mgmtState = {
         pendentesExclusao: [],
-        solicitacoesDevolucao: [],
+        solicitacoesDevolução: [],
         aguardandoLiberacao: [],
     };
 
@@ -817,7 +894,7 @@
                 ok: false,
                 status: 0,
                 data: null,
-                error: 'Falha de comunicacao com o servidor.',
+                error: 'Falha de comunicação com o servidor.',
             };
         }
     }
@@ -918,7 +995,7 @@
         const expedicao = payload.expedicao || {};
         const acessos = payload.acessos || {};
         const aguardando = Array.isArray(payload.aguardandoLiberacao) ? payload.aguardandoLiberacao : [];
-        const devolucoes = Array.isArray(payload.solicitacoesDevolucao) ? payload.solicitacoesDevolucao : [];
+        const devolucoes = Array.isArray(payload.solicitacoesDevolução) ? payload.solicitacoesDevolução : [];
 
         const cards = [
             {
@@ -929,37 +1006,37 @@
             {
                 label: 'NF conferidas',
                 value: formatNumber(totais.notas_conferidas ?? 0),
-                foot: `${formatNumber(totais.notas_com_divergencia ?? 0)} com divergencia no periodo`,
+                foot: `${formatNumber(totais.notas_com_divergencia ?? 0)} com divergência no período`,
             },
             {
-                label: 'Notas lancadas',
+                label: 'Notas lançadas',
                 value: formatNumber(totais.notas_lancadas ?? processo.kpis?.notas_lancadas_periodo ?? fiscal.notas_lancadas ?? 0),
-                foot: `${formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? fiscal.percentual_sem_intervencao_manual ?? 0)} sem intervencao`,
+                foot: `${formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? fiscal.percentual_sem_intervencao_manual ?? 0)} sem intervenção`,
             },
             {
-                label: 'Manifestacao OK',
+                label: 'Manifestação OK',
                 value: formatNumber(totais.manifestacoes_sucesso ?? 0),
-                foot: `${formatNumber(totais.manifestacoes_pendentes ?? 0)} pendente(s) de manifestacao`,
+                foot: `${formatNumber(totais.manifestacoes_pendentes ?? 0)} pendente(s) de manifestação`,
             },
             {
-                label: 'Fila de excecao',
+                label: 'Fila de exceção',
                 value: formatNumber(processo.kpis?.fila_excecao_total ?? 0),
                 foot: `${formatNumber(sla.resumo?.notas_em_risco ?? 0)} nota(s) em risco de SLA`,
             },
             {
-                label: 'Pendencias criticas',
+                label: 'Pendências críticas',
                 value: formatNumber((sla.resumo?.pendentes_criticos ?? 0) + (sla.resumo?.fiscal_criticos ?? 0)),
-                foot: `${formatNumber(totais.manifestacoes_falha ?? 0)} falha(s) de manifestacao e ${formatNumber(totais.divergencias_periodo ?? 0)} divergencia(s)`,
+                foot: `${formatNumber(totais.manifestacoes_falha ?? 0)} falha(s) de manifestação e ${formatNumber(totais.divergencias_periodo ?? 0)} divergência(s)`,
             },
             {
                 label: 'WMS pendente',
                 value: formatNumber(wms.cards?.pendentes_enderecamento ?? consolidado.wms?.itens_sem_endereco ?? 0),
-                foot: `${formatNumber(consolidado.wms?.movimentacoes_periodo ?? 0)} movimentacao(oes) WMS no periodo`,
+                foot: `${formatNumber(consolidado.wms?.movimentacoes_periodo ?? 0)} movimentação(oes) WMS no período`,
             },
             {
-                label: 'Governanca ativa',
+                label: 'Governança ativa',
                 value: formatNumber(acessos.total_24h ?? 0),
-                foot: `${formatNumber(aguardando.length)} aguardando liberacao e ${formatNumber(devolucoes.length)} devolucao(oes)`,
+                foot: `${formatNumber(aguardando.length)} aguardando liberação e ${formatNumber(devolucoes.length)} devolução(oes)`,
             },
         ];
 
@@ -979,7 +1056,7 @@
         if (!el) return;
         if (!consolidado || !consolidado.totais) {
             setMgmtBadge('mgmt-global-badge', 'Sem consolidado', 'gray');
-            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar os totais gerais do painel.');
+            el.innerHTML = renderMgmtEmpty('Não foi possível consolidar os totais gerais do painel.');
             return;
         }
 
@@ -988,14 +1065,14 @@
         const conferencia = consolidado.conferencia || {};
         const wms = consolidado.wms || {};
         const indicadores = [
-            { label: 'Notas importadas', value: formatNumber(totais.notas_importadas ?? 0), foot: 'Entradas capturadas no periodo' },
-            { label: 'NF conferidas', value: formatNumber(totais.notas_conferidas ?? 0), foot: `${formatNumber(conferencia.notas_com_divergencia ?? 0)} com divergencia` },
-            { label: 'Notas lancadas', value: formatNumber(totais.notas_lancadas ?? 0), foot: 'Notas concluidas no fiscal' },
-            { label: 'Manifestacao OK', value: formatNumber(manifestacao.sucesso ?? 0), foot: `${formatNumber(manifestacao.pendentes ?? 0)} ainda pendente(s)` },
-            { label: 'Manifestacao falha', value: formatNumber(manifestacao.falha ?? 0), foot: 'Ultimo status com erro no periodo' },
-            { label: 'Enderecamentos WMS', value: formatNumber(wms.enderecamentos_periodo ?? 0), foot: `${formatNumber(wms.movimentacoes_periodo ?? 0)} movimentacao(oes)` },
+            { label: 'Notas importadas', value: formatNumber(totais.notas_importadas ?? 0), foot: 'Entradas capturadas no período' },
+            { label: 'NF conferidas', value: formatNumber(totais.notas_conferidas ?? 0), foot: `${formatNumber(conferencia.notas_com_divergencia ?? 0)} com divergência` },
+            { label: 'Notas lançadas', value: formatNumber(totais.notas_lancadas ?? 0), foot: 'Notas concluídas no fiscal' },
+            { label: 'Manifestação OK', value: formatNumber(manifestacao.sucesso ?? 0), foot: `${formatNumber(manifestacao.pendentes ?? 0)} ainda pendente(s)` },
+            { label: 'Manifestação falha', value: formatNumber(manifestacao.falha ?? 0), foot: 'Último status com erro no período' },
+            { label: 'Enderecamentos WMS', value: formatNumber(wms.enderecamentos_periodo ?? 0), foot: `${formatNumber(wms.movimentacoes_periodo ?? 0)} movimentação(oes)` },
             { label: 'Itens ativos WMS', value: formatNumber(wms.itens_ativos ?? 0), foot: `${formatNumber(wms.itens_sem_endereco ?? 0)} sem endereco` },
-            { label: 'Usuarios ativos', value: formatNumber(totais.usuarios_ativos ?? 0), foot: 'Usuarios com producao registrada' },
+            { label: 'Usuários ativos', value: formatNumber(totais.usuarios_ativos ?? 0), foot: 'Usuários com produção registrada' },
         ];
 
         const manifestacoesTipos = Array.isArray(manifestacao.tipos) ? manifestacao.tipos : [];
@@ -1004,7 +1081,7 @@
 
         setMgmtBadge(
             'mgmt-global-badge',
-            `${formatNumber(totais.usuarios_ativos ?? 0)} usuario(s) ativos`,
+            `${formatNumber(totais.usuarios_ativos ?? 0)} usuário(s) ativos`,
             (totais.manifestacoes_falha ?? 0) > 0 || (totais.divergencias_periodo ?? 0) > 0 ? 'orange' : 'green'
         );
 
@@ -1018,7 +1095,7 @@
                     </div>
                 `).join('')}
             </div>
-            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Manifestacao do destinatario</div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Manifestação do destinatario</div>
             <div class="mgmt-list">
                 ${manifestacoesTipos.length ? manifestacoesTipos.map((item) => `
                     <div class="mgmt-list-item">
@@ -1026,11 +1103,11 @@
                             <span class="mgmt-list-title">${escapeHtml(item.manifestacao || 'confirmada')}</span>
                             <span class="mgmt-badge ${Number(item.falha || 0) > 0 ? 'orange' : 'green'}">${escapeHtml(formatNumber((item.sucesso || 0) + (item.falha || 0)))} NF(s)</span>
                         </div>
-                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.sucesso || 0))} sucesso(s) e ${escapeHtml(formatNumber(item.falha || 0))} falha(s) considerando o ultimo status por NF.</div>
+                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.sucesso || 0))} sucesso(s) e ${escapeHtml(formatNumber(item.falha || 0))} falha(s) considerando o último status por NF.</div>
                     </div>
-                `).join('') : renderMgmtEmpty('Sem manifestacoes registradas no periodo.')}
+                `).join('') : renderMgmtEmpty('Sem manifestações registradas no período.')}
             </div>
-            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Conferencia e operadores do WMS</div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Conferência e operadores do WMS</div>
             <div class="mgmt-list">
                 ${(topConferencia.length || wmsOperadores.length) ? `
                     ${topConferencia.length ? topConferencia.slice(0, 3).map((item) => `
@@ -1039,19 +1116,19 @@
                                 <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
                                 <span class="mgmt-badge blue">${escapeHtml(formatNumber(item.notas_conferidas || 0))} conferida(s)</span>
                             </div>
-                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.notas_lancadas || 0))} nota(s) lancada(s) apos conferencia.</div>
+                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.notas_lancadas || 0))} nota(s) lançada(s) após conferência.</div>
                         </div>
                     `).join('') : ''}
                     ${wmsOperadores.length ? wmsOperadores.slice(0, 3).map((item) => `
                         <div class="mgmt-list-item">
                             <div class="mgmt-list-head">
                                 <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
-                                <span class="mgmt-badge ${Number(item.movimentacoes_wms || 0) > 0 ? 'green' : 'gray'}">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} acao(oes)</span>
+                                <span class="mgmt-badge ${Number(item.movimentacoes_wms || 0) > 0 ? 'green' : 'gray'}">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} ação(oes)</span>
                             </div>
-                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentacao(oes), ${escapeHtml(formatNumber(item.qtd_movimentada_wms || 0, 2))} movimentada(s).</div>
+                            <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentação(oes), ${escapeHtml(formatNumber(item.qtd_movimentada_wms || 0, 2))} movimentada(s).</div>
                         </div>
                     `).join('') : ''}
-                ` : renderMgmtEmpty('Sem producao por usuario disponivel para conferencia ou WMS.')}
+                ` : renderMgmtEmpty('Sem produção por usuário disponível para conferência ou WMS.')}
             </div>
         `;
     }
@@ -1061,8 +1138,8 @@
         if (!el) return;
         const usuarios = Array.isArray(consolidado?.por_usuario) ? consolidado.por_usuario : [];
         if (!usuarios.length) {
-            setMgmtBadge('mgmt-users-badge', 'Sem usuarios ativos', 'gray');
-            el.innerHTML = renderMgmtEmpty('Nenhuma produtividade por usuario encontrada no periodo.');
+            setMgmtBadge('mgmt-users-badge', 'Sem usuários ativos', 'gray');
+            el.innerHTML = renderMgmtEmpty('Nenhuma produtividade por usuário encontrada no período.');
             return;
         }
 
@@ -1077,7 +1154,7 @@
                 <table class="mgmt-table">
                     <thead>
                         <tr>
-                            <th>Usuario</th>
+                            <th>Usuário</th>
                             <th>Import</th>
                             <th>Conf</th>
                             <th>Lanc</th>
@@ -1117,15 +1194,15 @@
         const el = document.getElementById('mgmt-processo');
         if (!el) return;
         if (!processo || !processo.etapas) {
-            setMgmtBadge('mgmt-process-badge', 'Sem visao do processo', 'gray');
-            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar o mapa do processo agora.');
+            setMgmtBadge('mgmt-process-badge', 'Sem visão do processo', 'gray');
+            el.innerHTML = renderMgmtEmpty('Não foi possível consolidar o mapa do processo agora.');
             return;
         }
 
         const stages = [
             { key: 'pre_nota', label: 'Pre-nota', color: '#1d4ed8' },
             { key: 'auditoria_pendente', label: 'Auditoria pendente', color: '#ea580c' },
-            { key: 'conferencia', label: 'Conferencia', color: '#0f766e' },
+            { key: 'conferencia', label: 'Conferência', color: '#0f766e' },
             { key: 'documento_entrada', label: 'Documento de entrada', color: '#7c3aed' },
             { key: 'finalizado', label: 'Finalizado', color: '#166534' },
             { key: 'outros', label: 'Outros', color: '#64748b' },
@@ -1136,7 +1213,7 @@
 
         setMgmtBadge(
             'mgmt-process-badge',
-            filaTotal ? `${formatNumber(filaTotal)} em excecao` : 'Fluxo estavel',
+            filaTotal ? `${formatNumber(filaTotal)} em exceção` : 'Fluxo estável',
             filaTotal ? (filaTotal > 8 ? 'red' : 'orange') : 'green'
         );
 
@@ -1185,15 +1262,15 @@
                     </tbody>
                 </table>
             </div>
-        ` : renderMgmtEmpty('Nenhuma nota na fila de excecao dentro da janela selecionada.');
+        ` : renderMgmtEmpty('Nenhuma nota na fila de exceção dentro da janela selecionada.');
 
         el.innerHTML = `
             <div>
                 ${stagesHtml}
                 <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px;">
                     <span class="mgmt-badge blue">Janela ${escapeHtml(formatNumber(processo.janela_dias || 0))} dias</span>
-                    <span class="mgmt-badge green">${escapeHtml(formatNumber(processo.kpis?.notas_lancadas_sem_divergencia ?? 0))} sem divergencia</span>
-                    <span class="mgmt-badge orange">${escapeHtml(formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? 0))} sem intervencao</span>
+                    <span class="mgmt-badge green">${escapeHtml(formatNumber(processo.kpis?.notas_lancadas_sem_divergencia ?? 0))} sem divergência</span>
+                    <span class="mgmt-badge orange">${escapeHtml(formatPercent(processo.kpis?.taxa_sem_intervencao_percentual ?? 0))} sem intervenção</span>
                 </div>
                 <div class="mgmt-card-kicker" style="margin-top:18px;">Fila priorizada por score operacional</div>
                 ${filaHtml}
@@ -1207,8 +1284,8 @@
         if (!resumoEl || !listaEl) return;
         if (!sla || !sla.resumo) {
             setMgmtBadge('mgmt-risk-badge', 'Sem SLA consolidado', 'gray');
-            resumoEl.innerHTML = renderMgmtEmpty('Nao foi possivel carregar os indicadores de SLA.');
-            listaEl.innerHTML = renderMgmtEmpty('Sem lista de risco disponivel.');
+            resumoEl.innerHTML = renderMgmtEmpty('Não foi possível carregar os indicadores de SLA.');
+            listaEl.innerHTML = renderMgmtEmpty('Sem lista de risco disponível.');
             return;
         }
 
@@ -1222,9 +1299,9 @@
 
         const riskCards = [
             {
-                label: 'Pendencias criticas',
+                label: 'Pendências críticas',
                 value: formatNumber(resumo.pendentes_criticos ?? 0),
-                foot: `Limite de conferencia: ${formatNumber(resumo.pendente_horas ?? 0)}h`,
+                foot: `Limite de conferência: ${formatNumber(resumo.pendente_horas ?? 0)}h`,
             },
             {
                 label: 'Fiscal critico',
@@ -1234,12 +1311,12 @@
             {
                 label: 'Notas em risco',
                 value: formatNumber(resumo.notas_em_risco ?? 0),
-                foot: 'Atencao preventiva antes do estouro de SLA',
+                foot: 'Atenção preventiva antes do estouro de SLA',
             },
             {
-                label: 'Fornecedores criticos',
+                label: 'Fornecedores críticos',
                 value: formatNumber((sla.fornecedores_criticos || []).length),
-                foot: 'Ranking por recorrencia de retrabalho',
+                foot: 'Ranking por recorrência de retrabalho',
             },
         ];
         resumoEl.innerHTML = riskCards.map((card) => `
@@ -1253,7 +1330,7 @@
         const risks = [
             ...(Array.isArray(sla.pendentes) ? sla.pendentes.slice(0, 3).map((item) => ({
                 titulo: `NF ${item.nota || '---'}`,
-                detalhe: `${item.fornecedor || '---'} parada ha ${formatHours(item.horas || 0)} em conferencia`,
+                detalhe: `${item.fornecedor || '---'} parada há ${formatHours(item.horas || 0)} em conferência`,
                 tone: 'red',
             })) : []),
             ...(Array.isArray(sla.fiscal) ? sla.fiscal.slice(0, 3).map((item) => ({
@@ -1290,14 +1367,14 @@
         const expedicao = payload.expedicao || {};
         const processo = payload.processo || {};
         const aguardando = Array.isArray(payload.aguardandoLiberacao) ? payload.aguardandoLiberacao : [];
-        const devolucoes = Array.isArray(payload.solicitacoesDevolucao) ? payload.solicitacoesDevolucao : [];
+        const devolucoes = Array.isArray(payload.solicitacoesDevolução) ? payload.solicitacoesDevolução : [];
 
         const insights = [];
         const fornecedorCritico = Array.isArray(sla.fornecedores_criticos) ? sla.fornecedores_criticos[0] : null;
         if (fornecedorCritico) {
             insights.push({
                 tone: 'warn',
-                text: `${fornecedorCritico.fornecedor || 'Fornecedor'} lidera o retrabalho recente com ${formatNumber(fornecedorCritico.divergencias || 0)} divergencia(s) em ${formatNumber(fornecedorCritico.notas_impactadas || 0)} nota(s).`,
+                text: `${fornecedorCritico.fornecedor || 'Fornecedor'} lidera o retrabalho recente com ${formatNumber(fornecedorCritico.divergencias || 0)} divergência(s) em ${formatNumber(fornecedorCritico.notas_impactadas || 0)} nota(s).`,
             });
         }
 
@@ -1314,35 +1391,35 @@
         if (Number(expedicao.itens_divergentes ?? 0) > 0) {
             insights.push({
                 tone: 'warn',
-                text: `Expedicao possui ${formatNumber(expedicao.itens_divergentes || 0)} item(ns) divergente(s) e ${formatNumber(expedicao.pendente_decisao || 0)} conferencia(s) aguardando decisao.`,
+                text: `Expedição possui ${formatNumber(expedicao.itens_divergentes || 0)} item(ns) divergente(s) e ${formatNumber(expedicao.pendente_decisao || 0)} conferência(s) aguardando decisão.`,
             });
         }
 
         if (Number(fiscal.percentual_sem_intervencao_manual ?? 0) >= 80 && Number(processo.kpis?.fila_excecao_total ?? 0) <= 5) {
             insights.push({
                 tone: 'success',
-                text: `Documento de entrada com ${formatPercent(fiscal.percentual_sem_intervencao_manual || 0)} de lancamento sem intervencao manual e fila de excecao sob controle.`,
+                text: `Documento de entrada com ${formatPercent(fiscal.percentual_sem_intervencao_manual || 0)} de lancamento sem intervenção manual e fila de excecao sob controle.`,
             });
         }
 
         if (aguardando.length > 0) {
             insights.push({
                 tone: aguardando.length >= 5 ? 'danger' : 'warn',
-                text: `${formatNumber(aguardando.length)} NF(s) seguem aguardando liberacao no auditor e precisam de destravamento para o fluxo avancar.`,
+                text: `${formatNumber(aguardando.length)} NF(s) seguem aguardando liberação no auditor e precisam de destravamento para o fluxo avancar.`,
             });
         }
 
         if (devolucoes.length > 0) {
             insights.push({
                 tone: 'warn',
-                text: `${formatNumber(devolucoes.length)} solicitacao(oes) de devolucao total aguardam decisao administrativa.`,
+                text: `${formatNumber(devolucoes.length)} solicitação(oes) de devolução total aguardam decisão administrativa.`,
             });
         }
 
         if (Number(consolidado.totais?.manifestacoes_falha ?? 0) > 0) {
             insights.push({
                 tone: 'danger',
-                text: `${formatNumber(consolidado.totais?.manifestacoes_falha ?? 0)} NF(s) ficaram com manifestacao falha no periodo e merecem reprocesso.`,
+                text: `${formatNumber(consolidado.totais?.manifestacoes_falha ?? 0)} NF(s) ficaram com manifestacao falha no período e merecem reprocesso.`,
             });
         }
 
@@ -1350,7 +1427,7 @@
         if (topUsuario && Number(topUsuario.total_processado || 0) > 0) {
             insights.push({
                 tone: 'success',
-                text: `${topUsuario.usuario || 'Usuario'} lidera o processamento do periodo com ${formatNumber(topUsuario.total_processado || 0)} acao(oes) consolidadas.`,
+                text: `${topUsuario.usuario || 'Usuário'} lidera o processamento do período com ${formatNumber(topUsuario.total_processado || 0)} ação(oes) consolidadas.`,
             });
         }
 
@@ -1371,7 +1448,7 @@
         if (!el) return;
         if (!wms || !wms.cards) {
             setMgmtBadge('mgmt-wms-badge', 'Sem visao WMS', 'gray');
-            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar o cockpit de WMS.');
+            el.innerHTML = renderMgmtEmpty('Não foi possível consolidar o cockpit de WMS.');
             return;
         }
 
@@ -1380,7 +1457,7 @@
         const alertas = Number(cards.alertas_abertos ?? 0) + Number(cards.divergencias_abertas ?? 0);
         setMgmtBadge(
             'mgmt-wms-badge',
-            alertas ? `${formatNumber(alertas)} alerta(s)` : 'Operacao estavel',
+            alertas ? `${formatNumber(alertas)} alerta(s)` : 'Operação estavel',
             alertas ? 'red' : (pendencias ? 'orange' : 'green')
         );
 
@@ -1409,9 +1486,9 @@
                     <span>Idade media pendente: ${escapeHtml(formatHours(cards.idade_media_pendente_horas ?? 0))}</span>
                 </div>
                 <div class="mgmt-mini-card">
-                    <label>Alertas e divergencias</label>
+                    <label>Alertas e divergências</label>
                     <strong>${escapeHtml(formatNumber(alertas))}</strong>
-                    <span>${escapeHtml(formatNumber(cards.alertas_abertos ?? 0))} alertas e ${escapeHtml(formatNumber(cards.divergencias_abertas ?? 0))} divergencias</span>
+                    <span>${escapeHtml(formatNumber(cards.alertas_abertos ?? 0))} alertas e ${escapeHtml(formatNumber(cards.divergencias_abertas ?? 0))} divergências</span>
                 </div>
             </div>
             <div class="mgmt-card-kicker" style="margin-bottom:10px;">Capacidade por deposito</div>
@@ -1422,7 +1499,7 @@
                             <span class="mgmt-list-title">${escapeHtml(dep.deposito_codigo || dep.deposito_nome || '---')}</span>
                             <span class="mgmt-badge ${toneFromPercentValue(dep.ocupacao_percentual)}">${escapeHtml(formatPercent(dep.ocupacao_percentual || 0, 0))}</span>
                         </div>
-                        <div class="mgmt-list-text">Ocupado ${escapeHtml(formatNumber(dep.capacidade_ocupada || 0, 2))} / ${escapeHtml(formatNumber(dep.capacidade_total || 0, 2))} com ${escapeHtml(formatNumber(dep.localizacoes_criticas || 0))} localizacao(oes) critica(s).</div>
+                        <div class="mgmt-list-text">Ocupado ${escapeHtml(formatNumber(dep.capacidade_ocupada || 0, 2))} / ${escapeHtml(formatNumber(dep.capacidade_total || 0, 2))} com ${escapeHtml(formatNumber(dep.localizacoes_criticas || 0))} localização(ões) crítica(s).</div>
                     </div>
                 `).join('') : renderMgmtEmpty('Nenhum deposito ativo encontrado.')}
             </div>
@@ -1442,7 +1519,7 @@
             <div class="mgmt-list">
                 <div class="mgmt-list-item">
                     <div class="mgmt-list-head">
-                        <span class="mgmt-list-title">Integracao WMS</span>
+                        <span class="mgmt-list-title">Integração WMS</span>
                         <span class="mgmt-badge ${Number(wmsResumo.integracoes_falha || 0) > 0 ? 'red' : 'blue'}">${escapeHtml(formatNumber(wmsResumo.integracoes_pendentes || 0))} pendente(s)</span>
                     </div>
                     <div class="mgmt-list-text">${escapeHtml(formatNumber(wmsResumo.integracoes_falha || 0))} falha(s), ${escapeHtml(formatNumber(wmsResumo.itens_ativos || 0))} item(ns) ativo(s), ${escapeHtml(formatNumber(wmsResumo.notas_sem_endereco || 0))} NF(s) sem endereco.</div>
@@ -1451,9 +1528,9 @@
                     <div class="mgmt-list-item">
                         <div class="mgmt-list-head">
                             <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
-                            <span class="mgmt-badge green">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} acao(oes)</span>
+                            <span class="mgmt-badge green">${escapeHtml(formatNumber((item.enderecamentos_wms || 0) + (item.movimentacoes_wms || 0)))} ação(oes)</span>
                         </div>
-                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentacao(oes), saldo ${escapeHtml(formatNumber(item.qtd_armazenada_wms || 0, 2))}.</div>
+                        <div class="mgmt-list-text">${escapeHtml(formatNumber(item.enderecamentos_wms || 0))} enderecamento(s), ${escapeHtml(formatNumber(item.movimentacoes_wms || 0))} movimentação(oes), saldo ${escapeHtml(formatNumber(item.qtd_armazenada_wms || 0, 2))}.</div>
                     </div>
                 `).join('') : ''}
             </div>
@@ -1465,7 +1542,7 @@
         if (!el) return;
         if (!fiscal && !expedicao) {
             setMgmtBadge('mgmt-flow-badge', 'Sem performance consolidada', 'gray');
-            el.innerHTML = renderMgmtEmpty('Nao foi possivel consolidar fiscal e expedicao.');
+            el.innerHTML = renderMgmtEmpty('Não foi possível consolidar fiscal e expedicao.');
             return;
         }
 
@@ -1473,7 +1550,7 @@
         const pendenteDecisao = Number(expedicao?.pendente_decisao ?? 0);
         setMgmtBadge(
             'mgmt-flow-badge',
-            divergencias > 15 || pendenteDecisao > 0 ? 'Atencao na saida' : 'Performance estavel',
+            divergencias > 15 || pendenteDecisao > 0 ? 'Atenção na saída' : 'Performance estável',
             divergencias > 15 ? 'red' : ((divergencias > 0 || pendenteDecisao > 0) ? 'orange' : 'green')
         );
 
@@ -1488,20 +1565,20 @@
                 <div class="mgmt-mini-card">
                     <label>Total de notas</label>
                     <strong>${escapeHtml(formatNumber(fiscal?.total_notas ?? 0))}</strong>
-                    <span>${escapeHtml(formatNumber(fiscal?.notas_lancadas ?? 0))} lancadas no periodo</span>
+                    <span>${escapeHtml(formatNumber(fiscal?.notas_lancadas ?? 0))} lançadas no período</span>
                 </div>
                 <div class="mgmt-mini-card">
                     <label>Lead time fiscal</label>
                     <strong>${escapeHtml(formatHours(fiscal?.tempo_medio_importacao_lancamento_horas ?? 0))}</strong>
-                    <span>Importacao ate lancamento</span>
+                    <span>Importação até lançamento</span>
                 </div>
                 <div class="mgmt-mini-card">
-                    <label>Manifestacao</label>
+                    <label>Manifestação</label>
                     <strong>${escapeHtml(formatNumber(manifestacao.sucesso ?? 0))}</strong>
                     <span>${escapeHtml(formatNumber(manifestacao.pendentes ?? 0))} pendente(s) | ${escapeHtml(formatNumber(manifestacao.falha ?? 0))} falha(s)</span>
                 </div>
                 <div class="mgmt-mini-card">
-                    <label>Expedicoes abertas</label>
+                    <label>Expedições abertas</label>
                     <strong>${escapeHtml(formatNumber(expedicao?.abertas ?? 0))}</strong>
                     <span>${escapeHtml(formatNumber(expedicao?.itens_divergentes ?? 0))} item(ns) divergente(s) | ${escapeHtml(formatNumber(conferencia.notas_conferidas ?? 0))} NF conferida(s)</span>
                 </div>
@@ -1514,9 +1591,9 @@
                             <span class="mgmt-list-title">${escapeHtml(item.fornecedor || '---')}</span>
                             <span class="mgmt-badge orange">${escapeHtml(formatNumber(item.ocorrencias || 0))} ocorrencia(s)</span>
                         </div>
-                        <div class="mgmt-list-text">Ranking fiscal por divergencia, falha de manifestacao, estorno ou recusa.</div>
+                        <div class="mgmt-list-text">Ranking fiscal por divergência, falha de manifestação, estorno ou recusa.</div>
                     </div>
-                `).join('') : renderMgmtEmpty('Nenhum fornecedor com retrabalho relevante no periodo.')}
+                `).join('') : renderMgmtEmpty('Nenhum fornecedor com retrabalho relevante no período.')}
             </div>
             <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Clientes com maior volume faturado</div>
             <div class="mgmt-list">
@@ -1538,69 +1615,69 @@
                             <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
                             <span class="mgmt-badge green">${escapeHtml(formatNumber(item.notas_lancadas || 0))} nota(s)</span>
                         </div>
-                        <div class="mgmt-list-text">Tempo medio ${escapeHtml(formatHours(item.tempo_medio_horas || 0))} | ${escapeHtml(formatNumber(item.notas_com_divergencia || 0))} com divergencia</div>
+                        <div class="mgmt-list-text">Tempo médio ${escapeHtml(formatHours(item.tempo_medio_horas || 0))} | ${escapeHtml(formatNumber(item.notas_com_divergencia || 0))} com divergência</div>
                     </div>
-                `).join('') : renderMgmtEmpty('Sem produtividade fiscal disponivel para o periodo.')}
+                `).join('') : renderMgmtEmpty('Sem produtividade fiscal disponível para o período.')}
             </div>
         `;
     }
 
-    function renderMgmtGovernanca(acessos, aguardandoLiberacao, solicitacoesDevolucao, pendentesExclusao) {
+    function renderMgmtGovernanca(acessos, aguardandoLiberacao, solicitacoesDevolução, pendentesExclusao) {
         const el = document.getElementById('mgmt-governanca');
         if (!el) return;
 
         const aguardando = Array.isArray(aguardandoLiberacao) ? aguardandoLiberacao : [];
-        const devolucoes = Array.isArray(solicitacoesDevolucao) ? solicitacoesDevolucao : [];
+        const devolucoes = Array.isArray(solicitacoesDevolução) ? solicitacoesDevolução : [];
         const pendentes = Array.isArray(pendentesExclusao) ? pendentesExclusao : [];
-        const totalPendencias = aguardando.length + devolucoes.length + pendentes.length;
+        const totalPendências = aguardando.length + devolucoes.length + pendentes.length;
 
         setMgmtBadge(
             'mgmt-gov-badge',
-            totalPendencias ? `${formatNumber(totalPendencias)} pendencia(s)` : 'Sem fila administrativa',
-            totalPendencias ? (totalPendencias >= 8 ? 'red' : 'orange') : 'green'
+            totalPendências ? `${formatNumber(totalPendências)} pendência(s)` : 'Sem fila administrativa',
+            totalPendências ? (totalPendências >= 8 ? 'red' : 'orange') : 'green'
         );
 
         const topUsuarios = Array.isArray(acessos?.top_usuarios) ? acessos.top_usuarios : [];
         const topRotas = Array.isArray(acessos?.top_rotas) ? acessos.top_rotas : [];
         const cards = [
             {
-                label: 'Aguardando liberacao',
+                label: 'Aguardando liberação',
                 value: formatNumber(aguardando.length),
                 foot: 'Notas presas na integracao pre-nota x auditor',
             },
             {
-                label: 'Devolucoes pendentes',
+                label: 'Devoluções pendentes',
                 value: formatNumber(devolucoes.length),
-                foot: 'Solicitacoes aguardando aprovacao administrativa',
+                foot: 'Solicitações aguardando aprovação administrativa',
             },
             {
-                label: 'Fila de exclusao',
+                label: 'Fila de exclusão',
                 value: formatNumber(pendentes.length),
-                foot: 'Pendencias ainda nao saneadas ou removidas',
+                foot: 'Pendências ainda não saneadas ou removidas',
             },
             {
                 label: 'Acessos administrativos',
                 value: formatNumber(acessos?.total_24h ?? 0),
-                foot: `${formatNumber(acessos?.total_7d ?? 0)} acessos nos ultimos 7 dias`,
+                foot: `${formatNumber(acessos?.total_7d ?? 0)} acessos nos últimos 7 dias`,
             },
         ];
         const pendenciasConsolidadas = [
             ...aguardando.slice(0, 2).map((item) => ({
                 titulo: `NF ${item.numero || '---'}`,
-                detalhe: `${item.fornecedor || '---'} aguardando liberacao no auditor`,
-                badge: 'Liberacao',
+                detalhe: `${item.fornecedor || '---'} aguardando liberação no auditor`,
+                badge: 'Liberação',
                 tone: 'orange',
             })),
             ...devolucoes.slice(0, 2).map((item) => ({
                 titulo: `NF ${item.numero || '---'}`,
                 detalhe: `${item.fornecedor || '---'} solicitada por ${item.solicitante || '---'}`,
-                badge: 'Devolucao',
+                badge: 'Devolução',
                 tone: 'red',
             })),
             ...pendentes.slice(0, 2).map((item) => ({
                 titulo: `NF ${item.numero || '---'}`,
-                detalhe: `${item.fornecedor || '---'} pronta para saneamento ou exclusao`,
-                badge: 'Pendencia',
+                detalhe: `${item.fornecedor || '---'} pronta para saneamento ou exclusão`,
+                badge: 'Pendência',
                 tone: 'gray',
             })),
         ];
@@ -1615,7 +1692,7 @@
                     </div>
                 `).join('')}
             </div>
-            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Usuarios mais ativos</div>
+            <div class="mgmt-card-kicker" style="margin-bottom:10px;">Usuários mais ativos</div>
             <div class="mgmt-list">
                 ${topUsuarios.length ? topUsuarios.map((item) => `
                     <div class="mgmt-list-item">
@@ -1623,9 +1700,9 @@
                             <span class="mgmt-list-title">${escapeHtml(item.usuario || '---')}</span>
                             <span class="mgmt-badge blue">${escapeHtml(formatNumber(item.qtd || 0))} acesso(s)</span>
                         </div>
-                        <div class="mgmt-list-text">Atividade registrada na camada administrativa na ultima semana.</div>
+                        <div class="mgmt-list-text">Atividade registrada na camada administrativa na última semana.</div>
                     </div>
-                `).join('') : renderMgmtEmpty('Sem dados de acesso administrativo para o periodo.')}
+                `).join('') : renderMgmtEmpty('Sem dados de acesso administrativo para o período.')}
             </div>
             <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Rotas mais acessadas</div>
             <div class="mgmt-list">
@@ -1635,11 +1712,11 @@
                             <span class="mgmt-list-title">${escapeHtml(item.rota || '---')}</span>
                             <span class="mgmt-badge gray">${escapeHtml(formatNumber(item.qtd || 0))}</span>
                         </div>
-                        <div class="mgmt-list-text">Indicador de concentracao de uso na operacao administrativa.</div>
+                        <div class="mgmt-list-text">Indicador de concentração de uso na operação administrativa.</div>
                     </div>
                 `).join('') : renderMgmtEmpty('Sem rotas administrativas registradas recentemente.')}
             </div>
-            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Pendencias para destravar</div>
+            <div class="mgmt-card-kicker" style="margin:16px 0 10px;">Pendências para destravar</div>
             <div class="mgmt-list">
                 ${pendenciasConsolidadas.length ? pendenciasConsolidadas.map((item) => `
                     <div class="mgmt-list-item">
@@ -1649,7 +1726,7 @@
                         </div>
                         <div class="mgmt-list-text">${escapeHtml(item.detalhe)}</div>
                     </div>
-                `).join('') : renderMgmtEmpty('Nenhuma pendencia administrativa relevante no momento.')}
+                `).join('') : renderMgmtEmpty('Nenhuma pendência administrativa relevante no momento.')}
             </div>
         `;
     }
@@ -1663,14 +1740,14 @@
         const lastUpdateEl = document.getElementById('mgmt-last-update');
         if (lastUpdateEl) lastUpdateEl.textContent = 'Atualizando cockpit...';
 
-        if (refreshDependencias || (!mgmtState.pendentesExclusao.length && !mgmtState.solicitacoesDevolucao.length && !mgmtState.aguardandoLiberacao.length)) {
+        if (refreshDependencias || (!mgmtState.pendentesExclusao.length && !mgmtState.solicitacoesDevolução.length && !mgmtState.aguardandoLiberacao.length)) {
             const [pendentes, devolucoes, aguardando] = await Promise.all([
                 carregarPendentesParaExclusao(),
-                carregarSolicitacoesDevolucao(),
+                carregarSolicitacoesDevolução(),
                 carregarIntegracaoAuditorPreNota(),
             ]);
             mgmtState.pendentesExclusao = Array.isArray(pendentes) ? pendentes : [];
-            mgmtState.solicitacoesDevolucao = Array.isArray(devolucoes) ? devolucoes : [];
+            mgmtState.solicitacoesDevolução = Array.isArray(devolucoes) ? devolucoes : [];
             mgmtState.aguardandoLiberacao = Array.isArray(aguardando) ? aguardando : [];
         }
 
@@ -1701,7 +1778,7 @@
             expedicao,
             acessos,
             aguardandoLiberacao: mgmtState.aguardandoLiberacao,
-            solicitacoesDevolucao: mgmtState.solicitacoesDevolucao,
+            solicitacoesDevolução: mgmtState.solicitacoesDevolução,
         });
         renderMgmtConsolidado(consolidado);
         renderMgmtUsuarios(consolidado);
@@ -1715,11 +1792,11 @@
             wms,
             expedicao,
             aguardandoLiberacao: mgmtState.aguardandoLiberacao,
-            solicitacoesDevolucao: mgmtState.solicitacoesDevolucao,
+            solicitacoesDevolução: mgmtState.solicitacoesDevolução,
         });
         renderMgmtWms(wms, consolidado?.wms || {});
         renderMgmtFiscalExpedicao(fiscal, expedicao, consolidado);
-        renderMgmtGovernanca(acessos, mgmtState.aguardandoLiberacao, mgmtState.solicitacoesDevolucao, mgmtState.pendentesExclusao);
+        renderMgmtGovernanca(acessos, mgmtState.aguardandoLiberacao, mgmtState.solicitacoesDevolução, mgmtState.pendentesExclusao);
 
         const falhas = [consolidadoRes, processoRes, slaRes, fiscalRes, wmsRes, expedicaoRes, acessosRes].filter((result) => !result.ok);
         if (falhas.length === 7) {
@@ -1858,14 +1935,18 @@
         documentosModal = documentos || [];
         const corpo = document.getElementById('lista-selecao-corpo');
         corpo.innerHTML = documentosModal.map((doc, idx) => `
-            <tr>
-                <td><b>${(doc.modelo || 'nfe').toUpperCase()}</b></td>
-                <td><b>${doc.numero}</b></td>
-                <td>${doc.emissao || '---'}</td>
-                <td>${doc.emitente_nome || doc.emit_nome}</td>
-                <td style="font-family:monospace; color: var(--sap-blue)">${doc.chave || doc.documento_id || doc.id || '---'}</td>
-                <td style="text-align:center">
-                    <button class="btn-sap btn-primary-sap" style="padding: 5px 12px; font-size: 10px;" onclick="importarDaSelecao(${idx})">Selecionar</button>
+            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; transition: background 0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}'">
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0;">
+                    <span style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 800;">${escapeHtml((doc.modelo || 'nfe').toUpperCase())}</span>
+                </td>
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 800; font-size: 16px; color: #1e293b;">${escapeHtml(doc.numero)}</td>
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">${escapeHtml(doc.emissao || '---')}</td>
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0; color: #334155; font-weight: 700;">${escapeHtml(doc.emitente_nome || doc.emit_nome || 'N/A')}</td>
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0; font-family: 'Consolas', monospace; font-size: 11px; color: #3b82f6; word-break: break-all;">${escapeHtml(doc.chave || doc.documento_id || doc.id || '---')}</td>
+                <td style="padding: 14px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+                    <button onclick="importarDaSelecao(${idx})" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: transform 0.15s, box-shadow 0.15s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 20px rgba(16,185,129,0.35)'" onmouseout="this.style.transform='none'; this.style.boxShadow='none'">
+                        <i class="fas fa-check"></i> IMPORTAR
+                    </button>
                 </td>
             </tr>
         `).join('');
@@ -1960,13 +2041,13 @@
         } catch (e) { showStatus("Erro no processamento local", "error"); }
     }
 
-    async function carregarSolicitacoesDevolucao() {
+    async function carregarSolicitacoesDevolução() {
         const tbody = document.getElementById('lista-solicitacoes-devolucao');
         const result = await safeFetchJson('/api/admin/recebimento/solicitacoes_devolucao');
         const lista = result.ok && Array.isArray(result.data) ? result.data : [];
-        mgmtState.solicitacoesDevolucao = lista;
+        mgmtState.solicitacoesDevolução = lista;
         if (!result.ok) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar solicitacoes.' : 'Nao foi possivel carregar as solicitacoes.')}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar solicitacoes.' : 'Não foi possível carregar as solicitacoes.')}</td></tr>`;
             return [];
         }
         if (lista.length === 0) {
@@ -1982,14 +2063,14 @@
                 <td style="font-size:11px;">${item.motivo}</td>
                 <td style="font-size:11px;">${item.data}</td>
                 <td style="text-align:center;">
-                    <button class="btn-sap btn-primary-sap" style="padding:5px 12px; font-size:10px; background:var(--danger-erp);" onclick="aprovarSolicitacaoDevolucao(${item.id}, '${item.numero}')">Aprovar</button>
+                    <button class="btn-sap btn-primary-sap" style="padding:5px 12px; font-size:10px; background:var(--danger-erp);" onclick="aprovarSolicitacaoDevolução(${item.id}, '${item.numero}')">Aprovar</button>
                 </td>
             </tr>
         `).join('');
         return lista;
     }
 
-    async function aprovarSolicitacaoDevolucao(solicitacaoId, numeroNota) {
+    async function aprovarSolicitacaoDevolução(solicitacaoId, numeroNota) {
         const observacao = prompt(`Aprovar devolução total da NF ${numeroNota}. Observação do admin (opcional):`, '') || '';
         const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
             method: 'POST',
@@ -2002,7 +2083,7 @@
             return;
         }
         showStatus(data.msg || `NF ${numeroNota} aprovada para devolução.`);
-        await carregarSolicitacoesDevolucao();
+        await carregarSolicitacoesDevolução();
         await carregarPendentesParaExclusao();
         await carregarPainelGerencial();
     }
@@ -2026,7 +2107,7 @@
         mgmtState.aguardandoLiberacao = lista;
 
         if (!result.ok) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar a integracao.' : 'Nao foi possivel carregar as NFs aguardando liberacao.')}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">${escapeHtml(result.status === 403 ? 'Sem permissao para visualizar a integracao.' : 'Não foi possível carregar as NFs aguardando liberação.')}</td></tr>`;
             return [];
         }
 
@@ -2066,7 +2147,28 @@
         modal.style.display = 'none';
     }
 
+    async function carregarDashboardKpis() {
+        try {
+            const res = await safeFetchJson('/api/admin/upload-kpis');
+            if (res.ok && res.data) {
+                const d = res.data;
+                document.getElementById('kpi-importados').textContent = formatNumber(d.importados_hoje ?? 0);
+                document.getElementById('kpi-prontos').textContent = formatNumber(d.prontos_lancar ?? 0);
+                document.getElementById('kpi-auditoria').textContent = formatNumber(d.em_auditoria ?? 0);
+                document.getElementById('kpi-devolucoes').textContent = formatNumber(d.devolucoes_abertas ?? 0);
+            } else {
+                document.getElementById('kpi-importados').textContent = '0';
+                document.getElementById('kpi-prontos').textContent = '0';
+                document.getElementById('kpi-auditoria').textContent = '0';
+                document.getElementById('kpi-devolucoes').textContent = '0';
+            }
+        } catch (e) {
+            console.error('Erro carregando KPIs:', e);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
+        carregarDashboardKpis();
         await carregarPainelGerencial(true);
     });
 </script>

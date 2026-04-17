@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Dashboard{% endblock %}
 {% block shell_title %}Dashboard{% endblock %}
@@ -97,7 +97,7 @@
     <section class="dashboard-shell">
         <section class="page-header-erp dashboard-hero">
             <div class="dashboard-hero-copy">
-                <span class="eyebrow">Visao executiva</span>
+                <span class="eyebrow">Visão executiva</span>
                 <h1>Dashboard do Columbia Sync</h1>
                 <p id="dashboard-subtitle">Monitoramento de recebimento e conformidade fiscal em um painel mais limpo e consistente.</p>
             </div>
@@ -110,7 +110,7 @@
         </section>
 
         <section id="overview-shell" class="overview-shell dashboard-section">
-            <div class="section-header">Visao geral consolidada</div>
+            <div class="section-header">Visão geral consolidada</div>
             <div class="overview-toolbar">
                 <div>
                     <div class="overview-heading">Resumo gerencial da operação</div>
@@ -135,7 +135,7 @@
                 <div class="overview-card danger"><span class="kpi-label">Manifestação pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando ação</div></div>
                 <div class="overview-card danger"><span class="kpi-label">Divergências</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrências no período</div></div>
                 <div class="overview-card success"><span class="kpi-label">Enderecamentos WMS</span><div class="kpi-value" id="ov-wms-end">0</div><div class="overview-foot" id="ov-wms-end-foot">Armazenagens realizadas</div></div>
-                <div class="overview-card process"><span class="kpi-label">Movimentacoes WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazem</div></div>
+                <div class="overview-card process"><span class="kpi-label">Movimentações WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazém</div></div>
             </div>
 
             <div class="overview-panels">
@@ -164,10 +164,10 @@
         <section id="painel-recebimento" class="dashboard-section">
             <div class="section-header">Indicadores de recebimento</div>
             <div class="kpi-grid">
-                <div class="kpi-card warning"><span class="kpi-label">Conferencia</span><div class="kpi-value" id="qtd-estoque">0</div></div>
+                <div class="kpi-card warning"><span class="kpi-label">Conferência</span><div class="kpi-value" id="qtd-estoque">0</div></div>
                 <div class="kpi-card process"><span class="kpi-label">Fiscal</span><div class="kpi-value" id="qtd-fiscal">0</div></div>
                 <div class="kpi-card success"><span class="kpi-label">Finalizados</span><div class="kpi-value" id="qtd-lancado">0</div></div>
-                <div class="kpi-card danger"><span class="kpi-label">Excluidas</span><div class="kpi-value" id="qtd-excluidas">0</div></div>
+                <div class="kpi-card danger"><span class="kpi-label">Excluídas</span><div class="kpi-value" id="qtd-excluidas">0</div></div>
             </div>
             <div class="charts-container">
                 <div class="chart-box"><div class="chart-title">Status do recebimento</div><canvas id="chartDonut"></canvas></div>
@@ -187,13 +187,13 @@
                 <div class="process-kpi">
                     <div class="process-kpi-item" id="proc-kpi-lancadas">Lançadas no período: 0</div>
                     <div class="process-kpi-item" id="proc-kpi-sem-div">Lançadas sem divergência: 0</div>
-                    <div class="process-kpi-item" id="proc-kpi-taxa">Taxa sem intervencao: 0%</div>
-                    <div class="process-kpi-item" id="proc-kpi-fila">Fila de excecao: 0</div>
+                    <div class="process-kpi-item" id="proc-kpi-taxa">Taxa sem intervenção: 0%</div>
+                    <div class="process-kpi-item" id="proc-kpi-fila">Fila de exceção: 0</div>
                 </div>
 
                 <div class="process-list" id="proc-fila-lista">
                     <div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div>
-                    <div class="process-empty">Carregando fila de excecao...</div>
+                    <div class="process-empty">Carregando fila de exceção...</div>
                 </div>
             </div>
         </section>
@@ -209,6 +209,29 @@
             <div class="charts-container">
                 <div class="chart-box"><div class="chart-title">Status da expedição</div><canvas id="chartExpDonut"></canvas></div>
                 <div class="chart-box"><div class="chart-title">Volume da expedição</div><canvas id="chartExpBars"></canvas></div>
+            </div>
+        </section>
+
+        <section class="dashboard-section">
+            <div class="section-header">Logística - km por motorista</div>
+            <div class="overview-shell">
+                <div class="overview-toolbar">
+                    <div>
+                        <div class="overview-heading">Quilometragem estimada por motorista</div>
+                        <div class="overview-subheading">Média de km computada a cada alocação de rota. Dados do período selecionado.</div>
+                    </div>
+                    <div class="overview-toolbar-actions">
+                        <label for="motorista-km-period">Período</label>
+                        <select id="motorista-km-period" class="op-filter">
+                            <option value="7">7 dias</option>
+                            <option value="30" selected>30 dias</option>
+                            <option value="90">90 dias</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="motorista-km-grid" class="overview-mini-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+                    <div class="overview-empty">Carregando km por motorista...</div>
+                </div>
             </div>
         </section>
 
@@ -585,10 +608,10 @@
             <table class="overview-table">
                 <thead>
                     <tr>
-                        <th>Usuario</th>
+                        <th>Usuário</th>
                         <th>Importadas</th>
                         <th>Conferidas</th>
-                        <th>Lancadas</th>
+                        <th>Lançadas</th>
                         <th>Manifestação</th>
                         <th>End. WMS</th>
                         <th>Mov. WMS</th>
@@ -714,7 +737,7 @@
             const d = await response.json();
             const etapas = d.etapas || {};
             const kpis = d.kpis || {};
-            const filaExcecao = Array.isArray(d.fila_excecao) ? d.fila_excecao : [];
+            const filaExcecao = Array.isArray(d.fila_exceção) ? d.fila_exceção : [];
 
             document.getElementById('proc-pre-nota').innerText = etapas.pre_nota || 0;
             document.getElementById('proc-auditoria').innerText = etapas.auditoria_pendente || 0;
@@ -725,7 +748,7 @@
             document.getElementById('proc-kpi-lancadas').innerText = `Lançadas no período: ${kpis.notas_lancadas_periodo || 0}`;
             document.getElementById('proc-kpi-sem-div').innerText = `Lançadas sem divergência: ${kpis.notas_lancadas_sem_divergencia || 0}`;
             document.getElementById('proc-kpi-taxa').innerText = `Taxa sem intervenção: ${kpis.taxa_sem_intervencao_percentual || 0}%`;
-            document.getElementById('proc-kpi-fila').innerText = `Fila de exceção: ${kpis.fila_excecao_total || 0}`;
+            document.getElementById('proc-kpi-fila').innerText = `Fila de exceção: ${kpis.fila_exceção_total || 0}`;
 
             if (!filaExcecao.length) {
                 fila.innerHTML = '<div class="process-row head"><span>Nota</span><span>Fornecedor</span><span>Etapa</span><span>Horas</span><span>Score</span></div><div class="process-empty">Sem exceções relevantes no período.</div>';
@@ -782,6 +805,24 @@
         status.style.color = data.sucesso ? 'green' : 'red';
     }
 
+    async function carregarMotoristaKm() {
+        const dias = Number(document.getElementById('motorista-km-period')?.value || 30);
+        const grid = document.getElementById('motorista-km-grid');
+        if (!grid) return;
+        const d = await fetchJsonSafe(`/api/logistica/agendamento-veiculos/motoristas-km?dias=${dias}`);
+        if (!d || !d.motoristas?.length) {
+            grid.innerHTML = '<div class="overview-empty">Nenhum dado de km disponível no período.</div>';
+            return;
+        }
+        grid.innerHTML = d.motoristas.map(m => `
+            <div class="overview-mini-card">
+                <span class="label">${escapeHtml(m.motorista_nome)}</span>
+                <span class="value">${formatarNumero(m.km_total, 1)} km</span>
+                <span class="meta">${m.viagens} viagem(ns) · média ${formatarNumero(m.km_medio, 1)} km/viagem</span>
+            </div>
+        `).join('');
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('op-selector').addEventListener('change', (e) => {
             operacaoAtual = e.target.value;
@@ -796,7 +837,9 @@
         carregarSla();
         carregarPainelProcesso();
         carregarExpedicaoDashboard();
+        carregarMotoristaKm();
         aplicarFiltroOperacao();
+        document.getElementById('motorista-km-period').addEventListener('change', () => carregarMotoristaKm());
         setInterval(carregarVisaoGeralConsolidada, 30000);
         setInterval(atualizarStats, 15000);
         setInterval(carregarSla, 20000);

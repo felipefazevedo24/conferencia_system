@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Painel do Motorista | Columbia Sync{% endblock %}
+{% block shell_title %}Painel do Motorista{% endblock %}
+{% block shell_subtitle %}Visualize suas viagens e finalize entregas/coletas.{% endblock %}
+
+{% block extra_head %}
+<style>
+.mot-shell{max-width:1200px;margin:0 auto;display:grid;gap:18px}
+.mot-panel{border:1px solid rgba(18,40,58,.12);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#f5f8fb 100%);box-shadow:0 16px 32px rgba(18,40,58,.08);padding:22px;display:grid;gap:16px}
+.mot-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
+.mot-title{margin:0;color:#12283a;font-family:var(--font-display);font-size:clamp(22px,3vw,34px);line-height:1;letter-spacing:-.04em}
+.mot-copy{margin:0;color:#667e92;font-size:13px}
+.mot-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.mot-metric{border:1px solid rgba(18,40,58,.1);border-radius:18px;background:#fff;padding:14px}
+.mot-metric span{display:block;color:#667e92;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.mot-metric strong{display:block;margin-top:8px;color:#12283a;font-family:var(--font-display);font-size:28px;line-height:.95}
+.mot-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.mot-table thead th{background:#f0f4f8;color:#667e92;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:10px 12px;border-bottom:2px solid rgba(18,40,58,.1);position:sticky;top:0;z-index:2}
+.mot-table tbody td{padding:10px 12px;border-bottom:1px solid rgba(18,40,58,.06);vertical-align:middle}
+.mot-table tbody tr:hover{background:rgba(15,98,201,.03)}
+.mot-badge{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.b-blue{background:rgba(15,98,201,.1);color:#0f62c9}.b-gold{background:rgba(207,148,22,.12);color:#8b6208}
+.b-green{background:rgba(26,135,84,.12);color:#19784b}.b-red{background:rgba(176,56,56,.12);color:#9f2f2f}
+.b-slate{background:rgba(18,40,58,.08);color:#12283a}
+.mot-state{padding:14px;border:1px dashed rgba(18,40,58,.16);border-radius:16px;text-align:center;color:#667e92;background:rgba(255,255,255,.72);font-size:13px}
+.mot-state.error{background:rgba(176,56,56,.07);color:#9f2f2f}
+.modal{z-index:1600!important}.modal-backdrop{z-index:1550!important}
+/* ── Responsiveness Improvements for Driver Panel ── */
+@media(max-width:768px){
+    .mot-table{display:block;overflow-x:auto;font-size:12px}
+    .mot-metrics{grid-template-columns:repeat(2,1fr)}
+    .mot-top{flex-direction:column;align-items:stretch;gap:12px}
+    .mot-panel{padding:16px;border-radius:20px}
+    .mot-title{font-size:24px!important}
+    .mot-table thead th,.mot-table tbody td{padding:8px 10px;white-space:nowrap}
+}
+@media(max-width:480px){
+    .mot-shell{padding:8px}
+    .mot-panel{padding:12px;border-radius:16px}
+    .mot-metrics{grid-template-columns:1fr}
+    .mot-metric strong{font-size:24px}
+    .mot-title{font-size:20px!important}
+    .mot-copy{font-size:12px}
+    .btn{width:100%;justify-content:center}
+    .mot-badge{font-size:9px;padding:0 8px;min-height:22px}
+    .modal-body{padding:14px}
+    .modal-header{padding:14px}
+    .mot-state{padding:12px;font-size:12px}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mot-shell">
+    <section class="mot-panel">
+        <div class="mot-top">
+            <div>
+                <h1 class="mot-title">Minhas viagens</h1>
+                <p class="mot-copy">Bem-vindo, <strong id="motNome">{{ user }}</strong>. Veja abaixo suas viagens programadas.</p>
+            </div>
+            <button class="btn btn-primary" type="button" onclick="loadViagens()"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+        <div id="motMetrics" class="mot-metrics"></div>
+    </section>
+
+    <section class="mot-panel">
+        <div id="motState" class="mot-state">Carregando viagens...</div>
+        <div style="overflow-x:auto">
+            <table class="mot-table" id="motTable" style="display:none">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Parceiro</th>
+                        <th>Documento</th>
+                        <th>Destino</th>
+                        <th>Saída prevista</th>
+                        <th>Veiculo</th>
+                        <th>KM est.</th>
+                        <th>Rota</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="motBody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade" id="iniciarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-play text-primary"></i> Iniciar viagem</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p>Confirma que está <strong>iniciando</strong> esta viagem agora?</p>
+                <p id="iniciarInfo" class="text-muted"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary" type="button" id="iniciarBtn"><i class="fas fa-play"></i> Iniciar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-flag-checkered text-success"></i> Finalizar viagem</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <p>Confirma que <strong>finalizou</strong> esta viagem?</p>
+                <p id="confirmarInfo" class="text-muted"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-success" type="button" id="confirmarBtn"><i class="fas fa-check"></i> Finalizar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const iniciarModal=new bootstrap.Modal(document.getElementById('iniciarModal'));
+const confirmarModal=new bootstrap.Modal(document.getElementById('confirmarModal'));
+const motState=document.getElementById('motState');
+const motTable=document.getElementById('motTable');
+const motBody=document.getElementById('motBody');
+const motMetrics=document.getElementById('motMetrics');
+const iniciarBtn=document.getElementById('iniciarBtn');
+const confirmarBtn=document.getElementById('confirmarBtn');
+const iniciarInfo=document.getElementById('iniciarInfo');
+const confirmarInfo=document.getElementById('confirmarInfo');
+let pendingId=null;
+let pendingAction=null;
+
+const statusBadge=s=>({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmAndamento:'b-blue',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[s]||'b-slate');
+
+function setState(msg,err){motState.textContent=msg;motState.classList.toggle('error',!!err);motState.style.display='block';}
+
+async function loadViagens(){
+    setState('Carregando viagens...');
+    motTable.style.display='none';
+    const r=await fetch('/api/logistica/motorista/minhas-viagens');
+    const d=await r.json();
+    if(!r.ok)return setState(d.error||'Falha ao carregar viagens.',true);
+    if(d.motorista)document.getElementById('motNome').textContent=d.motorista.nome;
+    const viagens=d.viagens||[];
+    const ativas=viagens.filter(v=>v.status!=='Concluida'&&v.status!=='Cancelada');
+    const emRota=viagens.filter(v=>v.status==='EmRota');
+    const concluidas=viagens.filter(v=>v.status==='Concluida');
+    motMetrics.innerHTML=[
+        ['Aguardando início',ativas.filter(v=>v.status==='Alocada'||v.status==='EmAndamento').length],
+        ['Em rota',emRota.length],
+        ['Concluídas',concluidas.length],
+        ['Total',viagens.length]
+    ].map(([l,v])=>`<article class="mot-metric"><span>${l}</span><strong>${v}</strong></article>`).join('');
+    if(!viagens.length){setState('Nenhuma viagem atribuída a você.');return;}
+    motBody.innerHTML=viagens.map(v=>{
+        const canStart=v.status==='Alocada'||v.status==='EmAndamento';
+        const canFinish=v.status==='EmRota';
+        const info=`${v.codigo} — ${(v.parceiro_nome||'').replace(/'/g,"\\'")}`;
+        let actions='';
+        if(canStart) actions=`<button class="btn btn-primary btn-sm" onclick="pedirIniciar(${v.id},'${info}')"><i class="fas fa-play"></i> Iniciar</button>`;
+        else if(canFinish) actions=`<button class="btn btn-success btn-sm" onclick="pedirFinalizar(${v.id},'${info}')"><i class="fas fa-flag-checkered"></i> Finalizar</button>`;
+        else if(v.status==='Concluida') actions='<span class="mot-badge b-green"><i class="fas fa-check"></i> OK</span>';
+        return `<tr>
+            <td><strong>${v.codigo}</strong></td>
+            <td>${v.tipo_label}</td>
+            <td><span class="mot-badge ${statusBadge(v.status)}">${v.status_label}</span></td>
+            <td>${v.parceiro_nome||'---'}</td>
+            <td>${v.documento_tipo} ${v.documento_numero||'---'}</td>
+            <td>${v.endereco_formatado||'---'}</td>
+            <td>${v.data_hora_saida_prevista_label||'---'}</td>
+            <td>${v.veiculo?.nome||'---'}</td>
+            <td>${v.km_estimado?Number(v.km_estimado).toFixed(1)+' km':'---'}</td>
+            <td>${v.google_maps_url?`<a href="${v.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="fas fa-map-location-dot"></i></a>`:''}</td>
+            <td>${actions}</td>
+        </tr>`;
+    }).join('');
+    motTable.style.display='table';
+    setState(`${viagens.length} viagem(ns) encontrada(s).`);
+}
+
+function pedirIniciar(id,info){pendingId=id;pendingAction='iniciar';iniciarInfo.textContent=info;iniciarModal.show();}
+function pedirFinalizar(id,info){pendingId=id;pendingAction='finalizar';confirmarInfo.textContent=info;confirmarModal.show();}
+
+iniciarBtn.addEventListener('click',async()=>{
+    if(!pendingId)return;
+    iniciarBtn.disabled=true;
+    const r=await fetch(`/api/logistica/motorista/iniciar/${pendingId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    iniciarBtn.disabled=false;
+    if(!r.ok){setState(d.error||'Falha ao iniciar viagem.',true);iniciarModal.hide();return;}
+    iniciarModal.hide();
+    pendingId=null;
+    await loadViagens();
+});
+
+confirmarBtn.addEventListener('click',async()=>{
+    if(!pendingId)return;
+    confirmarBtn.disabled=true;
+    const r=await fetch(`/api/logistica/motorista/finalizar/${pendingId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    confirmarBtn.disabled=false;
+    if(!r.ok){setState(d.error||'Falha ao finalizar viagem.',true);confirmarModal.hide();return;}
+    confirmarModal.hide();
+    pendingId=null;
+    await loadViagens();
+});
+
+loadViagens();
+</script>
+{% endblock %}

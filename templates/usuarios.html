@@ -103,25 +103,28 @@
             <h3>Manutenção de Cadastro</h3>
             <div class="form-group">
                 <label>Username (Identificador)</label>
-                <input type="text" id="reg-user" placeholder="Ex: felipe.azevedo">
+                <input type="text" id="reg-user" placeholder="Ex: FELAZE" style="text-transform:uppercase">
             </div>
             <div class="form-group">
-                <label>Senha Provisória</label>
-                <input type="password" id="reg-pass" placeholder="••••••••">
+                <label>E-mail</label>
+                <input type="email" id="reg-email" placeholder="Ex: felaze@colmac.com">
             </div>
             <div class="form-group">
                 <label>Perfil de Acesso</label>
                 <select id="reg-role">
-                    <option value="Conferente">LOGÍSTICA</option>
+                    <option value="Logística">LOGÍSTICA</option>
                     <option value="Portaria">PORTARIA</option>
                     <option value="Fiscal">FISCAL</option>
                     <option value="Financeiro">FINANCEIRO</option>
+                    <option value="Compras">COMPRAS</option>
+                    <option value="Motorista">MOTORISTA</option>
                     <option value="Admin">ADMINISTRADOR</option>
                 </select>
             </div>
             <button class="btn-sap btn-save" onclick="salvarUsuario()">
                 <i class="fas fa-user-plus"></i> Efetivar Registro
             </button>
+            <p style="margin-top:12px;font-size:11px;color:#64748b"><i class="fas fa-info-circle"></i> O usuário definirá a própria senha no primeiro acesso pelo e-mail cadastrado.</p>
         </div>
 
         <div class="card-sap">
@@ -135,9 +138,11 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Identificador do Usuário</th>
-                            <th>Nível de Permissão</th>
-                            <th width="80" style="text-align:center">Ações</th>
+                            <th>Identificador</th>
+                            <th>E-mail</th>
+                            <th>Perfil</th>
+                            <th>Senha</th>
+                            <th width="120" style="text-align:center">Ações</th>
                         </tr>
                     </thead>
                     <tbody id="lista-usuarios-corpo">
@@ -163,11 +168,13 @@
             <div class="form-group" id="wrap-role" style="margin-bottom:0;">
                 <label>Cargo</label>
                 <select id="perm-role">
-                    <option value="Fiscal">Fiscal</option>
-                    <option value="Conferente">Conferente</option>
-                    <option value="Portaria">Portaria</option>
-                    <option value="Financeiro">Financeiro</option>
                     <option value="Admin">Admin</option>
+                    <option value="Fiscal">Fiscal</option>
+                    <option value="Financeiro">Financeiro</option>
+                    <option value="Compras">Compras</option>
+                    <option value="Portaria">Portaria</option>
+                    <option value="Motorista">Motorista</option>
+                    <option value="Logística">Logística</option>
                 </select>
             </div>
             <div class="form-group" id="wrap-user" style="margin-bottom:0; display:none;">
@@ -191,26 +198,26 @@
     let permissoesEditando = {};
 
     async function salvarUsuario() {
-        const u = document.getElementById('reg-user').value.trim();
-        const p = document.getElementById('reg-pass').value.trim();
+        const u = document.getElementById('reg-user').value.trim().toUpperCase();
+        const e = document.getElementById('reg-email').value.trim().toLowerCase();
         const r = document.getElementById('reg-role').value;
         
-        if(!u || !p) return alert("Erro: Defina o usuário e a senha.");
+        if(!u || !e) return alert("Erro: Defina o usuário e o e-mail.");
         
         const res = await fetch('/api/registrar', { 
             method: 'POST', 
             headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({username: u, password: p, role: r}) 
+            body: JSON.stringify({username: u, email: e, role: r}) 
         });
         
         const data = await res.json();
         if(data.sucesso) { 
-            alert("Usuário registrado no banco de dados."); 
+            alert("Usuário registrado. Ele definirá a senha no primeiro login."); 
             document.getElementById('reg-user').value = '';
-            document.getElementById('reg-pass').value = '';
+            document.getElementById('reg-email').value = '';
             carregarUsuarios(); 
         } else {
-            alert("Falha: " + data.msg);
+            alert("Falha: " + (data.msg || data.error || JSON.stringify(data.details || '')));
         }
     }
 
@@ -223,14 +230,49 @@
         document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => `
             <tr>
                 <td><b style="color:var(--sap-blue)">${u.username}</b></td>
+                <td>${u.email || '<span style="color:#94a3b8">—</span>'}</td>
                 <td><span class="badge-role role-${u.role.toLowerCase()}">${u.role}</span></td>
+                <td>${u.tem_senha ? '<span style="color:#16a34a"><i class="fas fa-check-circle"></i> Definida</span>' : '<span style="color:#d97706"><i class="fas fa-clock"></i> Pendente</span>'}</td>
                 <td style="text-align:center">
-                    <button class="btn-delete" title="Remover Acesso" onclick="deletarUsuario('${u.username}')">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    <div style="display:flex;gap:4px;justify-content:center">
+                        <button class="btn-delete" title="Redefinir Senha" onclick="resetarSenha('${u.username}')" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af">
+                            <i class="fas fa-key"></i>
+                        </button>
+                        <button class="btn-delete" title="Limpar Senha (forçar recadastro)" onclick="limparSenha('${u.username}')" style="background:#fefce8;border-color:#fde68a;color:#92400e">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                        <button class="btn-delete" title="Remover Acesso" onclick="deletarUsuario('${u.username}')">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `).join('');
+    }
+
+    async function resetarSenha(username) {
+        const novaSenha = prompt(`Digite a nova senha para ${username} (mín. 4 caracteres):`);
+        if (!novaSenha || novaSenha.length < 4) return alert('Senha inválida (mínimo 4 caracteres).');
+        const res = await fetch(`/api/admin/usuario/${encodeURIComponent(username)}/resetar_senha`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({nova_senha: novaSenha})
+        });
+        const data = await res.json();
+        alert(data.msg || (data.sucesso ? 'Senha redefinida.' : 'Erro.'));
+        if (data.sucesso) carregarUsuarios();
+    }
+
+    async function limparSenha(username) {
+        if (!confirm(`Limpar a senha de ${username}? Ele precisará se cadastrar novamente no próximo login.`)) return;
+        const res = await fetch(`/api/admin/usuario/${encodeURIComponent(username)}/limpar_senha`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        alert(data.msg || (data.sucesso ? 'Senha removida.' : 'Erro.'));
+        if (data.sucesso) carregarUsuarios();
     }
 
     async function deletarUsuario(user) {

@@ -2,9 +2,10 @@ from ..models import ActiveSession
 from ..extensions import db
 import uuid
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for, send_from_directory
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 from flask import current_app
+from sqlalchemy import func
 
 from ..models import Usuario
 from ..schemas.api_schemas import LoginSchema
@@ -19,6 +20,29 @@ def _attempt_key(username: str, ip: str) -> str:
     return f"{username.lower()}::{ip}"
 
 
+def _password_matches_and_upgrade(user: Usuario | None, password: str | None) -> bool:
+    if not user:
+        return False
+
+    stored_password = str(user.password or "")
+    password = str(password or "")
+    if not stored_password or not password:
+        return False
+
+    try:
+        if check_password_hash(stored_password, password):
+            return True
+    except (TypeError, ValueError):
+        pass
+
+    # Compatibilidade com bancos antigos que ainda tenham senha em texto puro.
+    if stored_password == password:
+        user.password = generate_password_hash(password)
+        return True
+
+    return False
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login_page():
     if request.method == "GET" and "username" in session:
@@ -26,7 +50,7 @@ def login_page():
 
     if request.method == "POST":
         data = login_schema.load(request.json or {})
-        username = (data.get("username") or "").strip()
+        username = (data.get("username") or "").strip().upper()
         password = data.get("password")
         ip = request.headers.get("X-Forwarded-For", request.remote_addr or "local")
 
@@ -42,7 +66,17 @@ def login_page():
             }), 429
 
         user = Usuario.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
+
+        # Usuário sem senha definida — precisa se cadastrar
+        if user and not user.password:
+            return jsonify({
+                "sucesso": False,
+                "code": "FIRST_LOGIN",
+                "msg": "Primeiro acesso detectado. Cadastre sua senha.",
+                "email_hint": _mask_email(user.email),
+            }), 403
+
+        if _password_matches_and_upgrade(user, password):
             ultimo_acesso = (
                 ActiveSession.query
                 .filter(ActiveSession.username == user.username)
@@ -99,6 +133,40 @@ def login_page():
         login_message=request.args.get("msg") or "",
         login_message_type=request.args.get("type") or "",
     )
+
+
+def _mask_email(email):
+    """Mask email for security: fe***@col***.com"""
+    if not email or "@" not in email:
+        return "***@***.com"
+    local, domain = email.split("@", 1)
+    parts = domain.rsplit(".", 1)
+    masked_local = local[:2] + "***" if len(local) > 2 else local[0] + "***"
+    masked_domain = parts[0][:3] + "***" if len(parts[0]) > 3 else parts[0]
+    return f"{masked_local}@{masked_domain}.{parts[1]}" if len(parts) > 1 else f"{masked_local}@{masked_domain}"
+
+
+@auth_bp.route("/cadastrar-senha", methods=["POST"])
+def cadastrar_senha():
+    """First-time password registration: user provides email + new password."""
+    data = request.json or {}
+    email = (data.get("email") or "").strip().lower()
+    nova_senha = (data.get("senha") or "").strip()
+
+    if not email or not nova_senha:
+        return jsonify({"sucesso": False, "msg": "E-mail e senha são obrigatórios."}), 400
+    if len(nova_senha) < 4:
+        return jsonify({"sucesso": False, "msg": "A senha deve ter pelo menos 4 caracteres."}), 400
+
+    user = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "E-mail não encontrado no sistema. Fale com um administrador."}), 404
+    if user.password:
+        return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente ou peça a um admin para resetar."}), 409
+
+    user.password = generate_password_hash(nova_senha)
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "Senha cadastrada com sucesso! Faça login com seu usuário e a senha definida.", "username": user.username})
 
 
 @auth_bp.route("/logout")

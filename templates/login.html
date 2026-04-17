@@ -31,8 +31,8 @@
                         </div>
                     </a>
 
-                    <h1 class="card-title">Seja bem-vindo de volta!</h1>
-                    <p class="card-copy">
+                    <h1 class="card-title" id="card-title">Seja bem-vindo de volta!</h1>
+                    <p class="card-copy" id="card-copy">
                         Use seu usuário para entrar no sistema.
                     </p>
 
@@ -50,11 +50,11 @@
                     <form id="login-form" novalidate>
                         <div class="field">
                             <label for="user">
-                                <span>Usuario</span>
+                                <span>Usuário</span>
                                 <span class="field-note">Seu login interno</span>
                             </label>
                             <div class="input-shell">
-                                <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuario">
+                                <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuario" style="text-transform:uppercase">
                             </div>
                             <div class="field-meta" id="user-meta"></div>
                         </div>
@@ -89,6 +89,56 @@
                         </button>
                     </form>
 
+                    <!-- Registration form (hidden by default) -->
+                    <form id="register-form" novalidate style="display:none">
+                        <div class="field">
+                            <label for="reg-email">
+                                <span>Seu e-mail corporativo</span>
+                                <span class="field-note" id="email-hint">Informe o e-mail cadastrado pelo admin</span>
+                            </label>
+                            <div class="input-shell">
+                                <input type="email" id="reg-email" name="email" autocomplete="email" placeholder="seu.email@empresa.com">
+                            </div>
+                            <div class="field-meta" id="email-meta"></div>
+                        </div>
+
+                        <div class="field">
+                            <label for="reg-pass">
+                                <span>Defina sua senha</span>
+                                <span class="field-note">Mínimo 4 caracteres</span>
+                            </label>
+                            <div class="input-shell has-action">
+                                <input type="password" id="reg-pass" name="new-password" autocomplete="new-password" placeholder="Escolha uma senha segura">
+                                <button type="button" class="field-action" id="toggle-reg-pass" aria-label="Mostrar senha">
+                                    <span id="toggle-reg-pass-icon">VER</span>
+                                </button>
+                            </div>
+                            <div class="field-meta" id="reg-pass-meta"></div>
+                        </div>
+
+                        <div class="field">
+                            <label for="reg-pass-confirm">
+                                <span>Confirme sua senha</span>
+                                <span class="field-note">Repita a senha escolhida</span>
+                            </label>
+                            <div class="input-shell">
+                                <input type="password" id="reg-pass-confirm" name="confirm-password" autocomplete="new-password" placeholder="Confirme a senha">
+                            </div>
+                            <div class="field-meta" id="reg-confirm-meta"></div>
+                        </div>
+
+                        <button type="submit" class="login-button" id="register-button">
+                            <span class="button-content">
+                                <span class="spinner" aria-hidden="true"></span>
+                                <span class="button-text">Cadastrar senha</span>
+                            </span>
+                        </button>
+
+                        <div style="text-align:center;margin-top:12px">
+                            <a href="#" id="back-to-login" style="color:var(--sap-blue,#0a6ed1);font-size:13px;text-decoration:none">← Voltar para o login</a>
+                        </div>
+                    </form>
+
                     <div class="footnote">
                         <strong>Segurança:</strong> se você esqueceu sua senha, fale com um administrador do sistema.
                     </div>
@@ -111,12 +161,15 @@
         const rememberCheckbox = document.getElementById("remember-user");
         const loginButton = document.getElementById("login-button");
         const loginForm = document.getElementById("login-form");
+        const registerForm = document.getElementById("register-form");
         const feedback = document.getElementById("feedback");
         const userMeta = document.getElementById("user-meta");
         const passMeta = document.getElementById("pass-meta");
         const capsLockHint = document.getElementById("caps-lock-hint");
         const togglePassButton = document.getElementById("toggle-pass");
         const togglePassIcon = document.getElementById("toggle-pass-icon");
+        const cardTitle = document.getElementById("card-title");
+        const cardCopy = document.getElementById("card-copy");
 
         function setFieldWarning(input, metaTarget, message) {
             input.setAttribute("aria-invalid", "true");
@@ -153,7 +206,7 @@
         function saveRememberedUser() {
             if (rememberCheckbox.checked) {
                 localStorage.setItem(STORAGE_REMEMBER_KEY, "1");
-                localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim());
+                localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim().toUpperCase());
                 return;
             }
 
@@ -201,11 +254,103 @@
         passInput.addEventListener("keyup", updateCapsLockState);
         passInput.addEventListener("keydown", updateCapsLockState);
 
+        /* ── Switch to registration view ── */
+        function showRegistrationForm(emailHint) {
+            loginForm.style.display = "none";
+            registerForm.style.display = "";
+            cardTitle.textContent = "Primeiro acesso";
+            cardCopy.textContent = "Cadastre sua senha para acessar o sistema.";
+            if (emailHint) {
+                document.getElementById("email-hint").textContent = `Dica: ${emailHint}`;
+            }
+            document.getElementById("reg-email").focus();
+        }
+
+        function showLoginForm() {
+            registerForm.style.display = "none";
+            loginForm.style.display = "";
+            cardTitle.textContent = "Seja bem-vindo de volta!";
+            cardCopy.textContent = "Use seu usuário para entrar no sistema.";
+            feedback.className = "feedback";
+            feedback.innerHTML = "";
+            userInput.focus();
+        }
+
+        document.getElementById("back-to-login").addEventListener("click", (e) => {
+            e.preventDefault();
+            showLoginForm();
+        });
+
+        /* ── Registration form toggle password ── */
+        document.getElementById("toggle-reg-pass").addEventListener("click", () => {
+            const regPass = document.getElementById("reg-pass");
+            const showing = regPass.type === "text";
+            regPass.type = showing ? "password" : "text";
+            document.getElementById("toggle-reg-pass-icon").textContent = showing ? "VER" : "OCULTAR";
+        });
+
+        /* ── Registration form submit ── */
+        registerForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const email = document.getElementById("reg-email").value.trim();
+            const senha = document.getElementById("reg-pass").value;
+            const confirma = document.getElementById("reg-pass-confirm").value;
+
+            if (!email) {
+                showFeedback("warning", "Informe o e-mail cadastrado pelo administrador.");
+                pulseError();
+                return;
+            }
+            if (!senha || senha.length < 4) {
+                showFeedback("warning", "A senha deve ter pelo menos 4 caracteres.");
+                pulseError();
+                return;
+            }
+            if (senha !== confirma) {
+                showFeedback("warning", "As senhas não conferem.");
+                pulseError();
+                return;
+            }
+
+            const regBtn = document.getElementById("register-button");
+            regBtn.disabled = true;
+            regBtn.classList.add("loading");
+            showFeedback("info", "Cadastrando sua senha...");
+
+            try {
+                const response = await fetch("/cadastrar-senha", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, senha })
+                });
+                const data = await response.json();
+                if (data.sucesso) {
+                    showFeedback("success", data.msg, "Redirecionando para o login...");
+                    setTimeout(() => {
+                        showLoginForm();
+                        if (data.username) userInput.value = data.username;
+                        passInput.focus();
+                        showFeedback("success", "Senha cadastrada! Agora faça login.");
+                    }, 1500);
+                } else {
+                    showFeedback("error", data.msg || "Falha ao cadastrar senha.");
+                    pulseError();
+                }
+            } catch (err) {
+                showFeedback("error", "Falha de comunicação. Tente novamente.");
+                pulseError();
+            } finally {
+                regBtn.disabled = false;
+                regBtn.classList.remove("loading");
+            }
+        });
+
+        /* ── Login form submit ── */
         loginForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             clearFieldMeta();
 
-            const username = userInput.value.trim();
+            const username = userInput.value.trim().toUpperCase();
             const password = passInput.value;
 
             if (!username || !password) {
@@ -237,10 +382,10 @@
 
                 if (data.sucesso) {
                     const role = data.user?.role ? `Perfil ${data.user.role}` : "Acesso autorizado";
-                    let detail = "Redirecionando voce para o menu principal.";
+                    let detail = "Redirecionando você para o menu principal.";
 
                     if (data.previous_access_at) {
-                        detail = `Ultimo acesso registrado em ${new Date(data.previous_access_at).toLocaleString("pt-BR")}.`;
+                        detail = `Último acesso registrado em ${new Date(data.previous_access_at).toLocaleString("pt-BR")}.`;
                     }
 
                     showFeedback("success", "Login realizado com sucesso.", `${role}. ${detail}`);
@@ -248,6 +393,13 @@
                     setTimeout(() => {
                         window.location.href = data.redirect_to || "/";
                     }, 420);
+                    return;
+                }
+
+                /* First login — show registration form */
+                if (data.code === "FIRST_LOGIN") {
+                    showFeedback("info", data.msg);
+                    showRegistrationForm(data.email_hint || "");
                     return;
                 }
 
@@ -261,7 +413,7 @@
                 passInput.value = "";
                 passInput.focus();
                 passInput.setAttribute("aria-invalid", "true");
-                showFeedback(data.code === "RATE_LIMIT" ? "warning" : "error", data.msg || "Nao foi possivel autenticar.", detail);
+                showFeedback(data.code === "RATE_LIMIT" ? "warning" : "error", data.msg || "Não foi possível autenticar.", detail);
                 pulseError();
             } catch (error) {
                 showFeedback("error", "Falha de comunicacao com o sistema.", "Verifique sua conexao ou tente novamente em alguns instantes.");
@@ -278,7 +430,7 @@
             userMeta.className = "field-meta";
 
             if (rememberCheckbox.checked) {
-                localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim());
+                localStorage.setItem(STORAGE_USER_KEY, userInput.value.trim().toUpperCase());
             }
         });
 

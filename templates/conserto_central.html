@@ -392,7 +392,7 @@
                     <input id="fornecedor_nome" name="fornecedor_nome" required>
                 </div>
                 <div class="conserto-field">
-                    <label for="produto_codigo">Codigo do produto</label>
+                    <label for="produto_codigo">Código do produto</label>
                     <input id="produto_codigo" name="produto_codigo" required>
                 </div>
                 <div class="conserto-field">
@@ -400,7 +400,7 @@
                     <input id="quantidade" name="quantidade" type="number" step="0.01" min="0.01" required>
                 </div>
                 <div class="conserto-field conserto-field-full">
-                    <label for="produto_descricao">Descricao do produto</label>
+                    <label for="produto_descricao">Descrição do produto</label>
                     <input id="produto_descricao" name="produto_descricao" required>
                 </div>
                 <div class="conserto-field conserto-field-full">
@@ -419,12 +419,12 @@
     </section>
 
     <section id="tab-relatorio" class="conserto-card conserto-table-card">
-        <h3>Relatorio executivo do estoque</h3>
+        <h3>Relatório executivo do estoque</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
-                        <th>Operacao</th>
+                        <th>Operação</th>
                         <th>Registros</th>
                         <th>Qtd enviada</th>
                         <th>Qtd baixada</th>
@@ -437,9 +437,9 @@
     </section>
 
     <div class="conserto-tabs">
-        <button class="conserto-tab-btn" data-tab="relatorio" type="button">Relatorio</button>
+        <button class="conserto-tab-btn" data-tab="relatorio" type="button">Relatório</button>
         <button class="conserto-tab-btn" data-tab="estoque" type="button">Estoque em aberto</button>
-        <button class="conserto-tab-btn" data-tab="historico" type="button">Historico de estoque</button>
+        <button class="conserto-tab-btn" data-tab="historico" type="button">Histórico de estoque</button>
         <button class="conserto-tab-btn" data-tab="baixa" type="button">Autorizacao de baixa</button>
         <button class="conserto-tab-btn" data-tab="auditoria" type="button">Auditoria</button>
     </div>
@@ -451,14 +451,14 @@
                 <thead>
                     <tr>
                         <th>Controle</th>
-                        <th>Operacao</th>
+                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>Fornecedor</th>
                         <th>Produto</th>
                         <th>Qtd enviada</th>
                         <th>Saldo</th>
                         <th>Status</th>
-                        <th>Emissao</th>
+                        <th>Emissão</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -473,7 +473,7 @@
             <table class="conserto-table">
                 <thead>
                     <tr>
-                        <th>Operacao</th>
+                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>NF retorno</th>
                         <th>Produto</th>
@@ -490,13 +490,13 @@
     </section>
 
     <section id="tab-historico" class="conserto-card conserto-table-card">
-        <h3>Historico completo do estoque</h3>
+        <h3>Histórico completo do estoque</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
                         <th>Controle</th>
-                        <th>Operacao</th>
+                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>Fornecedor</th>
                         <th>Produto</th>
@@ -504,7 +504,7 @@
                         <th>Qtd baixada</th>
                         <th>Saldo atual</th>
                         <th>Status</th>
-                        <th>Emissao</th>
+                        <th>Emissão</th>
                         <th>Criado por</th>
                     </tr>
                 </thead>
@@ -523,7 +523,7 @@
                         <th>Acao</th>
                         <th>Referencia</th>
                         <th>Tipo</th>
-                        <th>Usuario</th>
+                        <th>Usuário</th>
                         <th>Detalhes</th>
                     </tr>
                 </thead>
@@ -539,7 +539,7 @@
         <form id="form-vinculo" class="conserto-form-grid">
             <input id="modal-estoque-id" name="conserto_estoque_id" type="hidden">
             <div class="conserto-field">
-                <label for="modal-numero">Numero NF retorno</label>
+                <label for="modal-numero">Número NF retorno</label>
                 <input id="modal-numero" name="numero_nf_retorno" required>
             </div>
             <div class="conserto-field">
@@ -579,7 +579,7 @@
                 <thead>
                     <tr>
                         <th>Item</th>
-                        <th>Descricao</th>
+                        <th>Descrição</th>
                         <th>Qtd enviada</th>
                         <th>Qtd baixada</th>
                         <th>Saldo</th>
@@ -837,7 +837,7 @@
             estadoConserto.historico;
         const grupo = agruparPorNota(origem, tipo).find((item) => item.chave === chaveGrupo);
         if (!grupo) {
-            mostrarToast("Detalhes da NF nao encontrados.", "error");
+            mostrarToast("Detalhes da NF não encontrados.", "error");
             return;
         }
 
@@ -846,7 +846,7 @@
             <div><strong>Controle:</strong> ${grupo.tipo_controle || "-"}</div>
             <div><strong>Fornecedor:</strong> ${grupo.fornecedor_nome || "-"} (${grupo.fornecedor_cnpj || "-"})</div>
             <div><strong>Chave NF:</strong> ${grupo.chave_nf || "-"}</div>
-            <div><strong>Emissao:</strong> ${formatarData(grupo.data_emissao)}</div>
+            <div><strong>Emissão:</strong> ${formatarData(grupo.data_emissao)}</div>
             <div><strong>Total de itens:</strong> ${grupo.quantidade_itens}</div>
         `;
 
@@ -1027,7 +1027,7 @@
         });
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error || "Nao foi possivel consultar a NF de retorno.");
+            throw new Error(data.error || "Não foi possível consultar a NF de retorno.");
         }
 
         document.getElementById("modal-numero").value = data.numero_nf_retorno || numero;
@@ -1051,7 +1051,7 @@
         });
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error || "Nao foi possivel confirmar a baixa.");
+            throw new Error(data.error || "Não foi possível confirmar a baixa.");
         }
         mostrarToast(data.msg || "Baixa confirmada com sucesso.");
         await recarregarTudo();
@@ -1071,7 +1071,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Nao foi possivel sincronizar as notas.");
+                throw new Error(data.error || "Não foi possível sincronizar as notas.");
             }
             const jobId = data.job_id;
             let concluido = false;
@@ -1160,7 +1160,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Nao foi possivel cadastrar o saldo.");
+                throw new Error(data.error || "Não foi possível cadastrar o saldo.");
             }
 
             form.reset();
@@ -1206,7 +1206,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Nao foi possivel vincular o retorno.");
+                throw new Error(data.error || "Não foi possível vincular o retorno.");
             }
 
             fecharModalVinculo();

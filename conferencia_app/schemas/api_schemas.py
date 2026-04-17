@@ -3,13 +3,13 @@ from marshmallow import Schema, fields, validate
 
 class LoginSchema(Schema):
     username = fields.Str(required=True, validate=validate.Length(min=1, max=80))
-    password = fields.Str(required=True, validate=validate.Length(min=1, max=120))
+    password = fields.Str(load_default="", validate=validate.Length(max=120))
 
 
 class RegisterSchema(Schema):
     username = fields.Str(required=True, validate=validate.Length(min=3, max=80))
-    password = fields.Str(required=True, validate=validate.Length(min=4, max=120))
-    role = fields.Str(required=True, validate=validate.OneOf(["Admin", "Fiscal", "Conferente", "Portaria"]))
+    email = fields.Email(required=True, validate=validate.Length(min=5, max=160))
+    role = fields.Str(required=True, validate=validate.OneOf(["Admin", "Fiscal", "Logística", "Portaria", "Financeiro", "Compras", "Motorista"]))
 
 
 class ConsysteDownloadSchema(Schema):

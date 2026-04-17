@@ -36,7 +36,7 @@ class WMSService:
         'WMS_QUARENTENA_ATIVA': ('1', 'Ativa processo de quarentena para divergencias/avarias.'),
         'WMS_PENDENCIA_ALERTA_HORAS': ('24', 'Horas para alerta de pendencia antiga de enderecamento.'),
         'WMS_OCUPACAO_ALERTA_PERCENTUAL': ('90', 'Percentual de ocupacao para alerta de capacidade.'),
-        'WMS_RECON_DIVERGENCIA_MINIMA': ('0.01', 'Diferenca minima para registrar divergencia de reconciliacao.'),
+        'WMS_RECON_DIVERGENCIA_MINIMA': ('0.01', 'Diferenca mínima para registrar divergencia de reconciliacao.'),
     }
 
     @staticmethod
@@ -709,24 +709,24 @@ class WMSService:
         try:
             qtd = float(qtd or 0)
         except Exception:
-            return {'sucesso': False, 'erro': 'Quantidade invalida.'}
+            return {'sucesso': False, 'erro': 'Quantidade inválida.'}
 
         if not codigo_item:
-            return {'sucesso': False, 'erro': 'Codigo do material e obrigatorio.'}
+            return {'sucesso': False, 'erro': 'Codigo do material e obrigatório.'}
         if qtd <= 0:
             return {'sucesso': False, 'erro': 'Quantidade deve ser maior que zero.'}
 
         deposito = DepositoWMS.query.get(deposito_id) if deposito_id else WMSService._obter_deposito_padrao_al()
         if not deposito or not deposito.ativo:
-            return {'sucesso': False, 'erro': 'Deposito informado nao existe ou esta inativo.'}
+            return {'sucesso': False, 'erro': 'Deposito informado não existe ou esta inativo.'}
 
         localizacao = None
         if localizacao_id:
             localizacao = LocalizacaoArmazem.query.get(localizacao_id)
             if not localizacao or not localizacao.ativo:
-                return {'sucesso': False, 'erro': 'Endereco informado nao existe.'}
+                return {'sucesso': False, 'erro': 'Endereco informado não existe.'}
             if int(localizacao.deposito_id or 0) != int(deposito.id):
-                return {'sucesso': False, 'erro': 'Endereco informado nao pertence ao deposito selecionado.'}
+                return {'sucesso': False, 'erro': 'Endereco informado não pertence ao deposito selecionado.'}
             capacidade_disp = float(localizacao.capacidade_maxima or 0) - float(localizacao.capacidade_atual or 0)
             if qtd > capacidade_disp:
                 return {'sucesso': False, 'erro': 'Endereco sem capacidade suficiente para este cadastro.'}

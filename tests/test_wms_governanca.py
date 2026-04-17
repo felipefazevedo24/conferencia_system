@@ -17,7 +17,7 @@ def build_test_app(tmp_path):
 
 
 def login_admin(client):
-    return client.post("/login", json={"username": "admin", "password": "admin123"})
+    return client.post("/login", json={"username": "admin", "password": "admin1234"})
 
 
 def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):

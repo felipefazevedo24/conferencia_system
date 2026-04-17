@@ -14,7 +14,115 @@
             --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
         }
 
-        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
+        /* === DASHBOARD MELHORADO === */
+        .metrics-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(26, 49, 74, 0.15);
+        }
+        .metric-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .metric-icon.liberados { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .metric-icon.itens { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+        .metric-icon.conferidos { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .metric-icon.lancados { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .metric-icon.atualizacao { background: linear-gradient(135deg, #64748b 0%, #475569 100%); }
+        .metric-info { flex: 1; }
+        .metric-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-value { font-size: 28px; font-weight: 900; color: #1e293b; line-height: 1.2; margin-top: 2px; }
+        .metric-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+        /* === AVATAR FORNECEDOR === */
+        .fornecedor-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--sap-blue) 0%, #1e40af 100%);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        /* === TEMPO ESPERA COLORIDO === */
+        .tempo-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        .tempo-badge.verde { background: #dcfce7; color: #166534; }
+        .tempo-badge.amarelo { background: #fef9c3; color: #854d0e; }
+        .tempo-badge.laranja { background: #ffedd5; color: #9a3412; }
+        .tempo-badge.vermelho { background: #fee2e2; color: #991b1b; }
+
+        /* === MINI CHART === */
+        .mini-chart {
+            display: flex;
+            gap: 3px;
+            margin-top: 8px;
+        }
+        .mini-bar {
+            width: 8px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            min-height: 20px;
+            transition: height 0.3s ease;
+        }
+        .mini-bar.filled { background: linear-gradient(180deg, var(--sap-blue) 0%, #1e40af 100%); }
+        .mini-bar.success { background: linear-gradient(180deg, #10b981 0%, #059669 100%); }
+        .mini-bar.warning { background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%); }
+
+        /* === LINHA HOVER MELHORADO === */
+        .nf-row {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .nf-row:hover {
+            background: linear-gradient(90deg, #f8fbff 0%, #eef6ff 100%);
+            transform: scale(1.005);
+        }
+        .nf-row.active {
+            background: linear-gradient(90deg, #dbeafe 0%, #eff6ff 100%);
+            box-shadow: inset 4px 0 0 var(--sap-blue);
+        }
+
+        body { background-color: var(--erp-bg); color: #333; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; }
         .main-content { padding: 25px; max-width: 1600px; margin: 0 auto; }
         
         /* Cabeçalho Branco Padronizado */
@@ -191,16 +299,44 @@
 
     <div class="metrics-bar">
         <div class="metric-card">
-            <span class="metric-label">Documentos Liberados</span>
-            <span class="metric-value" id="metric-notas">0</span>
+            <div class="metric-icon liberados"><i class="fas fa-file-invoice"></i></div>
+            <div class="metric-info">
+                <span class="metric-label">Documentos Liberados</span>
+                <span class="metric-value" id="metric-notas">0</span>
+                <span class="metric-sub">NFs disponíveis</span>
+            </div>
         </div>
         <div class="metric-card">
-            <span class="metric-label">Total de Itens</span>
-            <span class="metric-value" id="metric-itens">0</span>
+            <div class="metric-icon itens"><i class="fas fa-cubes"></i></div>
+            <div class="metric-info">
+                <span class="metric-label">Total de Itens</span>
+                <span class="metric-value" id="metric-itens">0</span>
+                <span class="metric-sub">Produtos a lançar</span>
+            </div>
         </div>
         <div class="metric-card">
-            <span class="metric-label">Data da Consulta</span>
-            <span class="metric-value" id="ultima-atualizacao" style="font-size: 15px; margin-top: 10px;">---</span>
+            <div class="metric-icon conferidos"><i class="fas fa-check-double"></i></div>
+            <div class="metric-info">
+                <span class="metric-label">Conferidos</span>
+                <span class="metric-value" id="metric-conferidos">0</span>
+                <span class="metric-sub">Aguardando lançamento</span>
+            </div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-icon lancados"><i class="fas fa-clipboard-check"></i></div>
+            <div class="metric-info">
+                <span class="metric-label">Lançados</span>
+                <span class="metric-value" id="metric-lancados">0</span>
+                <span class="metric-sub">Finalizados no sistema</span>
+            </div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-icon atualizacao"><i class="fas fa-clock"></i></div>
+            <div class="metric-info">
+                <span class="metric-label">Última Atualização</span>
+                <span class="metric-value" id="ultima-atualizacao" style="font-size: 14px;">---</span>
+                <span class="metric-sub">Sincronização</span>
+            </div>
         </div>
     </div>
 
@@ -722,9 +858,43 @@
         aplicarFiltroLocal();
     }
 
+    function getIniciais(nome) {
+        if (!nome) return '??';
+        const partes = nome.trim().split(/\s+/);
+        if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
+        return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+    }
+
+    function calcularIdadeHoras(dataStr) {
+        if (!dataStr) return 0;
+        const dataLib = parseDataBR(dataStr);
+        const agora = new Date();
+        return Math.floor((agora - dataLib) / (1000 * 60 * 60));
+    }
+
+    function getTempoClass(horas) {
+        if (horas < 8) return 'verde';
+        if (horas < 24) return 'amarelo';
+        if (horas < 48) return 'laranja';
+        return 'vermelho';
+    }
+
+    function formatarTempo(horas) {
+        if (horas < 1) return '<1h';
+        if (horas < 24) return `${Math.round(horas)}h`;
+        const dias = Math.floor(horas / 24);
+        return `${dias}d ${Math.round(horas % 24)}h`;
+    }
+
     function atualizarMetricas(lista) {
         document.getElementById('metric-notas').innerText = lista.length;
         document.getElementById('metric-itens').innerText = lista.reduce((acc, item) => acc + Number(item.total_itens || 0), 0);
+        
+        const conferidos = lista.filter(n => n.status_atual === 'Conferido').length;
+        const lancados = lista.filter(n => n.status_atual === 'Lançado').length;
+        document.getElementById('metric-conferidos').innerText = conferidos;
+        document.getElementById('metric-lancados').innerText = lancados;
+        
         document.getElementById('ultima-atualizacao').innerText = new Date().toLocaleString('pt-BR');
     }
 
@@ -744,9 +914,17 @@
             return tags;
         };
 
-        tbody.innerHTML = notasFiltradas.map((nota) => `
+        tbody.innerHTML = notasFiltradas.map((nota) => {
+            const iniciais = getIniciais(nota.fornecedor);
+            const horas = calcularIdadeHoras(nota.data_liberacao);
+            const tempoClass = getTempoClass(horas);
+            const tempoLabel = formatarTempo(horas);
+            
+            return `
             <tr class="nf-row ${notaSelecionada === nota.numero ? 'active' : ''}" onclick="selecionarNota('${nota.numero}')">
-                <td><span class="nf-number">#${escapeHtml(nota.numero)}</span></td>
+                <td>
+                    <span class="nf-number">#${escapeHtml(nota.numero)}</span>
+                </td>
                 <td>${identificacao(nota).length
                     ? `<div class="ident-badges">${
                         nota.material_cliente ? '<span class="ident-badge mc" title="Material de cliente">MC</span>' : ''
@@ -758,13 +936,19 @@
                         (nota.sem_pedido_vinculado && !nota.remessa) ? '<span class="ident-badge sp" title="Sem pedido vinculado">SP</span>' : ''
                     }</div>`
                     : '<div class="ident-badges"><span class="ident-badge oc" title="Cenário normal com pedido de compra vinculado">OC</span></div>'}</td>
-                <td class="nf-fornecedor" title="${escapeHtml(nota.fornecedor || '')}">${escapeHtml(nota.fornecedor || '---')}</td>
+                <td class="nf-fornecedor" title="${escapeHtml(nota.fornecedor || '')}">
+                    <span class="fornecedor-avatar">${iniciais}</span>
+                    ${escapeHtml(nota.fornecedor || '---')}
+                </td>
                 <td><span class="badge-status ${getStatusClass(nota.status_atual)}">${escapeHtml(nota.status_atual)}</span></td>
-                <td>${escapeHtml(nota.data_liberacao || '---')}</td>
+                <td>
+                    ${escapeHtml(nota.data_liberacao || '---')}
+                    <div style="margin-top: 4px;"><span class="tempo-badge ${tempoClass}"><i class="fas fa-clock"></i> ${tempoLabel}</span></div>
+                </td>
                 <td style="text-align:right;">${escapeHtml(nota.total_itens || 0)}</td>
                 <td style="text-align:center;"><button class="btn-row-open" type="button" onclick="event.stopPropagation(); selecionarNota('${nota.numero}')">Abrir</button></td>
             </tr>
-        `).join('');
+        `}).join('');
     }
 
     function obterValorColunaNota(nota, col) {
