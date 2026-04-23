@@ -550,6 +550,65 @@
     @media (max-width: 780px) {
         .cockpit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+
+    /* ===== TABS WMS ===== */
+    .wms-tabs {
+        display: flex;
+        gap: 4px;
+        background: #ffffff;
+        padding: 6px;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        box-shadow: var(--card-shadow);
+        margin-bottom: 18px;
+        overflow-x: auto;
+    }
+    .wms-tab {
+        flex: 1 1 auto;
+        min-width: 160px;
+        border: none;
+        background: transparent;
+        color: #64748b;
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+    }
+    .wms-tab i { font-size: 13px; opacity: 0.85; }
+    .wms-tab:hover { background: #f1f5f9; color: #0f172a; }
+    .wms-tab.active {
+        background: var(--sap-blue);
+        color: #ffffff;
+        box-shadow: 0 6px 14px -6px rgba(10, 110, 209, 0.55);
+    }
+    .wms-tab.active i { opacity: 1; }
+    .wms-tab .wms-tab-badge {
+        display: inline-flex;
+        min-width: 22px;
+        padding: 0 6px;
+        height: 20px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.08);
+        color: #0f172a;
+        font-size: 10px;
+        font-weight: 800;
+        align-items: center;
+        justify-content: center;
+    }
+    .wms-tab.active .wms-tab-badge {
+        background: rgba(255, 255, 255, 0.22);
+        color: #ffffff;
+    }
+    .wms-panel[hidden] { display: none !important; }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
 {% endblock %}
@@ -581,14 +640,30 @@
     {% endif %}
 </div>
 
-<section class="sap-card" style="padding: 10px 14px; margin-bottom:14px;">
-    <div class="sap-row" style="margin:0;">
-        <span class="pill" style="background:#e0f2fe; color:#075985; border-color:#7dd3fc;">Categoria WMS | Operação</span>
-        {% if is_admin_wms %}
-        <span class="pill" style="background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe;">Categoria WMS | Gestão (Admin)</span>
-        {% endif %}
-    </div>
-</section>
+<nav class="wms-tabs" role="tablist" id="wmsTabs">
+    <button type="button" class="wms-tab active" data-tab="operar" role="tab" aria-selected="true">
+        <i class="fas fa-bolt"></i> Fila de endereçamento
+        <span class="wms-tab-badge" id="tabBadgeOperar">0</span>
+    </button>
+    <button type="button" class="wms-tab" data-tab="painel" role="tab" aria-selected="false">
+        <i class="fas fa-gauge-high"></i> Painel
+    </button>
+    <button type="button" class="wms-tab" data-tab="consulta" role="tab" aria-selected="false">
+        <i class="fas fa-cubes"></i> Consulta de estoque
+    </button>
+    <button type="button" class="wms-tab" data-tab="atividade" role="tab" aria-selected="false">
+        <i class="fas fa-stream"></i> Atividade
+    </button>
+    {% if is_admin_wms %}
+    <button type="button" class="wms-tab" data-tab="gestao" role="tab" aria-selected="false">
+        <i class="fas fa-shield-alt"></i> Gestão
+        <span class="wms-tab-badge" id="tabBadgeGestao">0</span>
+    </button>
+    {% endif %}
+</nav>
+
+<!-- =================== PANEL: PAINEL =================== -->
+<div class="wms-panel" data-panel="painel" role="tabpanel" hidden>
 
 <section class="sap-card flow-panel" style="margin-bottom:14px;">
     <div class="flow-header">
@@ -744,6 +819,8 @@
     </section>
 </section>
 
+</div> <!-- /panel painel -->
+
 <div id="assistBackdrop" class="assist-backdrop" onclick="fecharAssistenteEndereco()"></div>
 <aside id="assistDrawer" class="assist-drawer" aria-hidden="true">
     <div class="assist-head">
@@ -784,7 +861,8 @@
     </div>
 </aside>
 
-<div class="sap-grid">
+<!-- =================== PANEL: OPERAR (FILA) =================== -->
+<div class="wms-panel" data-panel="operar" role="tabpanel">
     <section class="sap-card">
         <h2 class="sap-card-title"><i class="fas fa-clock"></i> Pendentes de Endereçamento</h2>
         <p class="section-meta">Filtro operacional para atacar a fila por NF, material e prioridade.</p>
@@ -821,8 +899,11 @@
         </div>
         <p class="muted"><i class="fas fa-info-circle"></i> Os itens aparecem aqui após a conclusão do lançamento fiscal.</p>
     </section>
+</div> <!-- /panel operar -->
 
-    <div class="sap-col">
+<!-- =================== PANEL: CONSULTA =================== -->
+<div class="wms-panel" data-panel="consulta" role="tabpanel" hidden>
+<div class="sap-grid" style="grid-template-columns: 1.3fr 1fr;">
         <section class="sap-card" id="relatorio-estoque">
             <h2 class="sap-card-title"><i class="fas fa-clipboard-list"></i> Estoque por Código do Material</h2>
             <div class="sap-row">
@@ -856,7 +937,7 @@
 
         <section class="sap-card">
             <h2 class="sap-card-title"><i class="fas fa-map-marker-alt"></i> Guia de Localizações</h2>
-            <div class="table-wrap" style="max-height: 250px; overflow-y: auto;">
+            <div class="table-wrap" style="max-height: 520px; overflow-y: auto;">
                 <table class="sap-table">
                     <thead>
                         <tr>
@@ -871,7 +952,11 @@
                 </table>
             </div>
         </section>
+</div>
+</div> <!-- /panel consulta -->
 
+<!-- =================== PANEL: ATIVIDADE =================== -->
+<div class="wms-panel" data-panel="atividade" role="tabpanel" hidden>
         <section class="sap-card">
             <h2 class="sap-card-title"><i class="fas fa-history"></i> Ultimas movimentacoes</h2>
             <p class="section-meta">Rastreabilidade operacional das ultimas movimentacoes registradas.</p>
@@ -879,10 +964,11 @@
                 <div class="empty-inline">Carregando movimentacoes...</div>
             </div>
         </section>
-    </div>
-</div>
+</div> <!-- /panel atividade -->
 
 {% if is_admin_wms %}
+<!-- =================== PANEL: GESTÃO =================== -->
+<div class="wms-panel" data-panel="gestao" role="tabpanel" hidden>
 <section class="sap-card">
     <h2 class="sap-card-title"><i class="fas fa-shield-alt"></i> Governança Operacional WMS</h2>
     <div class="sap-row" style="margin-bottom: 18px;">
@@ -941,9 +1027,7 @@
         </table>
     </div>
 </section>
-{% endif %}
 
-{% if is_admin_wms %}
 <section class="sap-card">
     <h2 class="sap-card-title"><i class="fas fa-exchange-alt"></i> Transferência entre Depósitos</h2>
     <p class="muted" style="margin-bottom: 15px;"><i class="fas fa-info-circle"></i> Transfere um item para outro depósito. O item ficará pendente de endereçamento no novo depósito.</p>
@@ -969,6 +1053,7 @@
         </table>
     </div>
 </section>
+</div> <!-- /panel gestao -->
 {% endif %}
 
 <div id="modalEndereco" class="modal-backdrop-wms">
@@ -1200,6 +1285,7 @@ function renderCockpit(data) {
     document.getElementById('cockpitMov24h').textContent = formatarNumero(cards.movimentacoes_24h || 0);
     document.getElementById('cockpitAlertas').textContent = formatarNumero(alertas);
     document.getElementById('cockpitDivergencias').textContent = formatarNumero(divergencias);
+    if (typeof atualizarBadgesTabsWms === 'function') atualizarBadgesTabsWms(cards);
     document.getElementById('prioridadeCritica').textContent = formatarNumero(prioridades.Critica || 0);
     document.getElementById('prioridadeAlta').textContent = formatarNumero(prioridades.Alta || 0);
     document.getElementById('prioridadeMedia').textContent = formatarNumero(prioridades.Media || 0);
@@ -1989,8 +2075,46 @@ async function refreshAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
     instalarAtalhosWms();
+    instalarTabsWms();
     refreshAll();
 });
+
+function instalarTabsWms() {
+    const tabs = document.querySelectorAll('#wmsTabs .wms-tab');
+    const panels = document.querySelectorAll('.wms-panel[data-panel]');
+    if (!tabs.length) return;
+    const activate = (key) => {
+        tabs.forEach(t => {
+            const on = t.dataset.tab === key;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panels.forEach(p => {
+            p.hidden = p.dataset.panel !== key;
+        });
+        try { sessionStorage.setItem('wmsActiveTab', key); } catch (_) {}
+    };
+    tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
+    let initial = 'operar';
+    try {
+        const saved = sessionStorage.getItem('wmsActiveTab');
+        if (saved && document.querySelector(`#wmsTabs .wms-tab[data-tab="${saved}"]`)) {
+            initial = saved;
+        }
+    } catch (_) {}
+    activate(initial);
+}
+
+function atualizarBadgesTabsWms(cards) {
+    if (!cards) return;
+    const pend = Number(cards.pendentes_enderecamento || 0);
+    const alertas = Number(cards.alertas_abertos || 0);
+    const diverg = Number(cards.divergencias_abertas || 0);
+    const bOp = document.getElementById('tabBadgeOperar');
+    if (bOp) bOp.textContent = pend.toLocaleString('pt-BR');
+    const bGe = document.getElementById('tabBadgeGestao');
+    if (bGe) bGe.textContent = (alertas + diverg).toLocaleString('pt-BR');
+}
 </script>
 </div>
 {% endblock %}
