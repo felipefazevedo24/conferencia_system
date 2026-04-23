@@ -1,0 +1,973 @@
+{% extends "base.html" %}
+
+{% block title %}Facilities - Painel Admin | Columbia Sync{% endblock %}
+{% block shell_title %}Facilities - Painel de Gestão{% endblock %}
+{% block shell_subtitle %}Gerencie solicitações de EPI, cronograma de limpeza, projetos e colaboradores.{% endblock %}
+
+{% block extra_head %}
+<style>
+.fac-shell{max-width:1400px;margin:0 auto;display:grid;gap:20px;padding:10px}
+.fac-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.fac-metric{background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 12px rgba(18,40,58,.04);border-left:4px solid #3b82f6}
+.fac-metric.green{border-left-color:#22c55e}
+.fac-metric.orange{border-left-color:#f59e0b}
+.fac-metric.purple{border-left-color:#8b5cf6}
+.fac-metric h3{font-size:28px;font-weight:800;color:#0f172a;margin:0}
+.fac-metric p{font-size:13px;color:#64748b;margin:4px 0 0}
+.fac-tabs{display:flex;gap:8px;background:#fff;padding:8px;border-radius:14px;box-shadow:0 2px 8px rgba(18,40,58,.04)}
+.fac-tab{padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;color:#64748b;cursor:pointer;transition:all .2s;border:none;background:transparent}
+.fac-tab:hover{background:#f1f5f9;color:#1e293b}
+.fac-tab.active{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}
+.fac-panel{background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 24px rgba(18,40,58,.04);display:none}
+.fac-panel.active{display:block}
+.fac-table{width:100%;border-collapse:separate;border-spacing:0}
+.fac-table th{background:#f8fafc;padding:14px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0}
+.fac-table td{padding:14px 12px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#334155}
+.fac-table tr:hover td{background:#f8fafc}
+.fac-badge{display:inline-flex;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase}
+.fac-badge.solicitado{background:#fef3c7;color:#b45309}
+.fac-badge.liberado{background:#d1fae5;color:#059669}
+.fac-badge.negado{background:#fee2e2;color:#dc2626}
+.fac-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .2s}
+.fac-btn-sm{padding:6px 12px;font-size:12px}
+.fac-btn-green{background:#d1fae5;color:#059669}.fac-btn-green:hover{background:#bbf7d0}
+.fac-btn-red{background:#fee2e2;color:#dc2626}.fac-btn-red:hover{background:#fecaca}
+.fac-btn-blue{background:#dbeafe;color:#2563eb}.fac-btn-blue:hover{background:#bfdbfe}
+.fac-btn-primary{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}.fac-btn-primary:hover{transform:translateY(-1px)}
+.fac-empty{text-align:center;padding:40px;color:#94a3b8}
+.fac-empty i{font-size:48px;margin-bottom:16px}
+.fac-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.fac-modal.show{display:flex}
+.fac-modal-content{background:#fff;border-radius:20px;padding:28px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto}
+.fac-modal h2{font-size:20px;font-weight:700;color:#0f172a;margin:0 0 20px}
+.fac-form-group{margin-bottom:16px}
+.fac-form-group label{display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px}
+.fac-form-group input,.fac-form-group select,.fac-form-group textarea{width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;background:#f8fafc}
+.fac-form-group input:focus,.fac-form-group select:focus,.fac-form-group textarea:focus{outline:none;border-color:#3b82f6;background:#fff}
+.fac-form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.fac-modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fac-shell">
+    <!-- Métricas -->
+    <div class="fac-metrics" id="metricsGrid">
+        <div class="fac-metric orange">
+            <h3 id="metricEpiPendentes">-</h3>
+            <p>EPIs Pendentes</p>
+        </div>
+        <div class="fac-metric green">
+            <h3 id="metricEpiLiberados">-</h3>
+            <p>Liberados Hoje</p>
+        </div>
+        <div class="fac-metric">
+            <h3 id="metricLimpezasHoje">-</h3>
+            <p>Limpezas Hoje</p>
+        </div>
+        <div class="fac-metric purple">
+            <h3 id="metricProjetosAtivos">-</h3>
+            <p>Projetos Ativos</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="fac-tabs">
+        <button class="fac-tab active" onclick="switchTab('epi')"><i class="fas fa-hard-hat"></i> Solicitações EPI <span id="badgeEpi" class="fac-badge" style="display:none"></span></button>
+        <button class="fac-tab" onclick="switchTab('alertas')"><i class="fas fa-exclamation-triangle"></i> Alertas NR-6 <span id="badgeAlertas" class="fac-badge" style="display:none"></span></button>
+        <button class="fac-tab" onclick="switchTab('limpeza')"><i class="fas fa-broom"></i> Limpezas</button>
+        <button class="fac-tab" onclick="switchTab('templates')"><i class="fas fa-clipboard-list"></i> Templates Limpeza</button>
+        <button class="fac-tab" onclick="switchTab('projetos')"><i class="fas fa-tasks"></i> Projetos</button>
+        <button class="fac-tab" onclick="switchTab('colaboradores')"><i class="fas fa-users"></i> Colaboradores</button>
+        <button class="fac-tab" onclick="switchTab('materiais')"><i class="fas fa-boxes"></i> Materiais</button>
+        <button class="fac-tab" onclick="switchTab('ciclos')"><i class="fas fa-sync-alt"></i> Ciclos de Troca</button>
+        <button class="fac-tab" onclick="switchTab('auditoria')"><i class="fas fa-history"></i> Auditoria</button>
+    </div>
+
+    <!-- Panel: EPI -->
+    <div class="fac-panel active" id="panelEpi">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Solicitações de EPI/Uniforme</h2>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <input id="filterEpiBusca" type="search" placeholder="Buscar nome/item..." class="fac-form-group" style="margin:0;width:200px" oninput="debounceEpi()">
+                <select id="filterEpiStatus" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
+                    <option value="">Todos status</option>
+                    <option value="solicitado" selected>Pendentes</option>
+                    <option value="liberado">Liberadas</option>
+                    <option value="retirado">Retiradas</option>
+                    <option value="negado">Negadas</option>
+                    <option value="cancelado">Canceladas</option>
+                </select>
+                <select id="filterEpiTipo" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
+                    <option value="">Todos tipos</option>
+                    <option value="epi">EPI</option>
+                    <option value="uniforme">Uniforme</option>
+                </select>
+                <input id="filterEpiIni" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
+                <input id="filterEpiFim" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
+                <button class="fac-btn" onclick="loadEpi()"><i class="fas fa-sync"></i></button>
+            </div>
+        </div>
+        <div id="epiLoteBar" style="display:none;padding:10px;background:#eef5ff;border-radius:6px;margin-bottom:10px">
+            <span id="epiLoteCount">0 selecionadas</span>
+            <button class="fac-btn fac-btn-primary" style="margin-left:10px" onclick="acaoLote('liberar')">Liberar</button>
+            <button class="fac-btn" onclick="acaoLote('negar')">Negar</button>
+            <button class="fac-btn" onclick="acaoLote('cancelar')">Cancelar</button>
+        </div>
+        <table class="fac-table">
+            <thead>
+                <tr>
+                    <th style="width:28px"><input type="checkbox" id="epiSelAll" onchange="toggleSelAll(this)"></th>
+                    <th>Funcionário</th>
+                    <th>Solicitado por</th>
+                    <th>Item</th>
+                    <th>Tam.</th>
+                    <th>Qtd</th>
+                    <th>Data</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="epiTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Alertas NR-6 -->
+    <div class="fac-panel" id="panelAlertas">
+        <h2 style="margin:0 0 14px;font-size:18px;font-weight:700">Alertas NR-6 - Vencimentos</h2>
+        <div style="margin-bottom:12px">
+            <button class="fac-btn fac-btn-primary" onclick="enviarLembretes()"><i class="fas fa-envelope"></i> Enviar lembretes de retirada pendente</button>
+        </div>
+        <table class="fac-table">
+            <thead><tr><th>Colaborador</th><th>Setor</th><th>Item</th><th>Retirada</th><th>Próxima Troca</th><th>Situação</th><th>Ações</th></tr></thead>
+            <tbody id="alertasTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Templates de Limpeza -->
+    <div class="fac-panel" id="panelTemplates">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Templates de Limpeza</h2>
+            <div>
+                <button class="fac-btn" onclick="gerarLimpezasSemana()"><i class="fas fa-calendar-plus"></i> Gerar 7 dias</button>
+                <button class="fac-btn fac-btn-primary" onclick="openTemplateModal()"><i class="fas fa-plus"></i> Novo Template</button>
+            </div>
+        </div>
+        <table class="fac-table">
+            <thead><tr><th>Nome</th><th>Local</th><th>Recorrência</th><th>Horário</th><th>Responsável</th><th>QR</th><th>Ações</th></tr></thead>
+            <tbody id="templatesTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Ciclos de Troca -->
+    <div class="fac-panel" id="panelCiclos">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Ciclos de Troca (NR-6)</h2>
+            <button class="fac-btn fac-btn-primary" onclick="openCicloModal()"><i class="fas fa-plus"></i> Novo Ciclo</button>
+        </div>
+        <table class="fac-table">
+            <thead><tr><th>Palavra-chave</th><th>Código</th><th>Validade (meses)</th><th>Descrição</th><th>Ativo</th><th>Ações</th></tr></thead>
+            <tbody id="ciclosTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Auditoria -->
+    <div class="fac-panel" id="panelAuditoria">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Log de Auditoria</h2>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="auditEntidade" placeholder="entidade" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
+                <input id="auditUsuario" placeholder="usuário" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
+                <input id="auditIni" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
+                <input id="auditFim" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
+                <button class="fac-btn" onclick="loadAuditoria()"><i class="fas fa-sync"></i></button>
+            </div>
+        </div>
+        <table class="fac-table">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Entidade</th><th>ID</th><th>Ação</th><th>Detalhes</th></tr></thead>
+            <tbody id="auditTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Limpeza -->
+    <div class="fac-panel" id="panelLimpeza">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Cronograma de Limpeza</h2>
+            <button class="fac-btn fac-btn-primary" onclick="openLimpezaModal()"><i class="fas fa-plus"></i> Nova Limpeza</button>
+        </div>
+        <table class="fac-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Título</th>
+                    <th>Local</th>
+                    <th>Responsável</th>
+                    <th>Horário</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="limpezaTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Projetos -->
+    <div class="fac-panel" id="panelProjetos">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Projetos / Obras</h2>
+            <button class="fac-btn fac-btn-primary" onclick="openProjetoModal()"><i class="fas fa-plus"></i> Novo Projeto</button>
+        </div>
+        <table class="fac-table">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Nome</th>
+                    <th>Cliente</th>
+                    <th>Tarefas</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="projetosTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Colaboradores -->
+    <div class="fac-panel" id="panelColaboradores">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Colaboradores</h2>
+            <button class="fac-btn fac-btn-primary" onclick="openColaboradorModal()"><i class="fas fa-plus"></i> Novo Colaborador</button>
+        </div>
+        <table class="fac-table">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Cargo</th>
+                    <th>Setor</th>
+                    <th>Nível</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="colaboradoresTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Panel: Materiais -->
+    <div class="fac-panel" id="panelMateriais">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h2 style="margin:0;font-size:18px;font-weight:700">Materiais EPI/Uniforme</h2>
+            <button class="fac-btn fac-btn-primary" onclick="openMaterialModal()"><i class="fas fa-plus"></i> Novo Material</button>
+        </div>
+        <table class="fac-table">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Nome</th>
+                    <th>Tipo</th>
+                </tr>
+            </thead>
+            <tbody id="materiaisTableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Limpeza -->
+<div class="fac-modal" id="modalLimpeza">
+    <div class="fac-modal-content">
+        <h2><i class="fas fa-broom"></i> Nova Limpeza</h2>
+        <div class="fac-form-group">
+            <label>Título *</label>
+            <input type="text" id="limpezaTitulo" placeholder="Ex: Limpeza geral escritório">
+        </div>
+        <div class="fac-form-group">
+            <label>Local</label>
+            <input type="text" id="limpezaLocal" placeholder="Ex: Sala 01">
+        </div>
+        <div class="fac-form-row">
+            <div class="fac-form-group">
+                <label>Data *</label>
+                <input type="date" id="limpezaData">
+            </div>
+            <div class="fac-form-group">
+                <label>Responsável</label>
+                <select id="limpezaColaborador"></select>
+            </div>
+        </div>
+        <div class="fac-form-row">
+            <div class="fac-form-group">
+                <label>Hora Início</label>
+                <input type="time" id="limpezaHoraInicio">
+            </div>
+            <div class="fac-form-group">
+                <label>Hora Fim</label>
+                <input type="time" id="limpezaHoraFim">
+            </div>
+        </div>
+        <div class="fac-modal-actions">
+            <button class="fac-btn" onclick="closeModal('modalLimpeza')">Cancelar</button>
+            <button class="fac-btn fac-btn-primary" onclick="salvarLimpeza()">Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Projeto -->
+<div class="fac-modal" id="modalProjeto">
+    <div class="fac-modal-content">
+        <h2><i class="fas fa-tasks"></i> Novo Projeto</h2>
+        <div class="fac-form-group">
+            <label>Nome do Projeto *</label>
+            <input type="text" id="projetoNome" placeholder="Ex: Reforma sala reunião">
+        </div>
+        <div class="fac-form-group">
+            <label>Cliente</label>
+            <input type="text" id="projetoCliente" placeholder="Nome do cliente">
+        </div>
+        <div class="fac-form-group">
+            <label>Telefone</label>
+            <input type="text" id="projetoTelefone" placeholder="(00) 00000-0000">
+        </div>
+        <div class="fac-form-group">
+            <label>Observações</label>
+            <textarea id="projetoObs" rows="3" placeholder="Informações adicionais"></textarea>
+        </div>
+        <div class="fac-modal-actions">
+            <button class="fac-btn" onclick="closeModal('modalProjeto')">Cancelar</button>
+            <button class="fac-btn fac-btn-primary" onclick="salvarProjeto()">Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Colaborador -->
+<div class="fac-modal" id="modalColaborador">
+    <div class="fac-modal-content">
+        <h2><i class="fas fa-user-plus"></i> Novo Colaborador</h2>
+        <div class="fac-form-group">
+            <label>Nome *</label>
+            <input type="text" id="colaboradorNome" placeholder="Nome completo">
+        </div>
+        <div class="fac-form-row">
+            <div class="fac-form-group">
+                <label>Cargo</label>
+                <input type="text" id="colaboradorCargo" placeholder="Ex: Auxiliar">
+            </div>
+            <div class="fac-form-group">
+                <label>Setor</label>
+                <input type="text" id="colaboradorSetor" placeholder="Ex: Produção">
+            </div>
+        </div>
+        <div class="fac-form-group">
+            <label>Nível de Acesso</label>
+            <select id="colaboradorNivel">
+                <option value="solicitante">Solicitante</option>
+                <option value="gestor">Gestor (pode aprovar)</option>
+            </select>
+        </div>
+        <div class="fac-modal-actions">
+            <button class="fac-btn" onclick="closeModal('modalColaborador')">Cancelar</button>
+            <button class="fac-btn fac-btn-primary" onclick="salvarColaborador()">Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Material -->
+<div class="fac-modal" id="modalMaterial">
+    <div class="fac-modal-content">
+        <h2><i class="fas fa-box"></i> Novo Material</h2>
+        <div class="fac-form-row">
+            <div class="fac-form-group">
+                <label>Código Interno *</label>
+                <input type="text" id="materialCodigo" placeholder="Ex: EPI001">
+            </div>
+            <div class="fac-form-group">
+                <label>Tipo</label>
+                <select id="materialTipo">
+                    <option value="epi">EPI</option>
+                    <option value="uniforme">Uniforme</option>
+                </select>
+            </div>
+        </div>
+        <div class="fac-form-group">
+            <label>Nome *</label>
+            <input type="text" id="materialNome" placeholder="Ex: Luva de proteção">
+        </div>
+        <div class="fac-modal-actions">
+            <button class="fac-btn" onclick="closeModal('modalMaterial')">Cancelar</button>
+            <button class="fac-btn fac-btn-primary" onclick="salvarMaterial()">Salvar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let colaboradores = [];
+
+async function init() {
+    await loadDashboard();
+    await loadColaboradores();
+    await loadEpi();
+}
+
+async function loadDashboard() {
+    const r = await fetch('/api/facilities/dashboard');
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('metricEpiPendentes').textContent = d.epi_pendentes || 0;
+    document.getElementById('metricEpiLiberados').textContent = d.epi_liberados_hoje || 0;
+    document.getElementById('metricLimpezasHoje').textContent = d.limpezas_hoje || 0;
+    document.getElementById('metricProjetosAtivos').textContent = d.projetos_ativos || 0;
+
+    // Badges visuais nas tabs
+    const bEpi = document.getElementById('badgeEpi');
+    if (bEpi) {
+        if (d.epi_pendentes > 0) { bEpi.textContent = d.epi_pendentes; bEpi.style.display=''; }
+        else bEpi.style.display='none';
+    }
+    const bAlert = document.getElementById('badgeAlertas');
+    const totalAlert = (d.epi_vencido || 0) + (d.epi_vence_30d || 0);
+    if (bAlert) {
+        if (totalAlert > 0) { bAlert.textContent = totalAlert; bAlert.style.display=''; }
+        else bAlert.style.display='none';
+    }
+}
+
+// Polling leve para badge de pendentes (60s)
+setInterval(async () => {
+    try {
+        const r = await fetch('/api/facilities/badge');
+        if (!r.ok) return;
+        const d = await r.json();
+        const bEpi = document.getElementById('badgeEpi');
+        if (bEpi) {
+            if (d.epi_pendentes > 0) { bEpi.textContent = d.epi_pendentes; bEpi.style.display=''; }
+            else bEpi.style.display='none';
+        }
+    } catch(e){}
+}, 60000);
+
+async function loadColaboradores() {
+    const r = await fetch('/api/facilities/colaboradores');
+    const d = await r.json();
+    colaboradores = d.rows || [];
+    // Popular selects
+    const selLimpeza = document.getElementById('limpezaColaborador');
+    selLimpeza.innerHTML = '<option value="">-- Selecione --</option>';
+    colaboradores.forEach(c => {
+        selLimpeza.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
+    });
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.fac-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.fac-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.fac-tab[onclick*="${tab}"]`).classList.add('active');
+    document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+    
+    if (tab === 'epi') loadEpi();
+    else if (tab === 'alertas') loadAlertas();
+    else if (tab === 'limpeza') loadLimpezas();
+    else if (tab === 'templates') loadTemplates();
+    else if (tab === 'projetos') loadProjetos();
+    else if (tab === 'colaboradores') loadColaboradoresTable();
+    else if (tab === 'materiais') loadMateriais();
+    else if (tab === 'ciclos') loadCiclos();
+    else if (tab === 'auditoria') loadAuditoria();
+}
+
+// ========== EPI ==========
+let _debounceTimer = null;
+function debounceEpi(){ clearTimeout(_debounceTimer); _debounceTimer = setTimeout(loadEpi, 350); }
+
+function buildEpiQS(){
+    const p = new URLSearchParams();
+    const st = document.getElementById('filterEpiStatus').value; if (st) p.append('status', st);
+    const tp = document.getElementById('filterEpiTipo')?.value; if (tp) p.append('tipo', tp);
+    const q = document.getElementById('filterEpiBusca')?.value.trim(); if (q) p.append('busca', q);
+    const ini = document.getElementById('filterEpiIni')?.value; if (ini) p.append('data_ini', ini);
+    const fim = document.getElementById('filterEpiFim')?.value; if (fim) p.append('data_fim', fim);
+    return p.toString();
+}
+
+async function loadEpi() {
+    const qs = buildEpiQS();
+    const r = await fetch(`/api/facilities/epi-solicitacoes?${qs}`);
+    const d = await r.json();
+    const tbody = document.getElementById('epiTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="fac-empty"><i class="fas fa-inbox"></i><br>Nenhuma solicitação encontrada.</td></tr>';
+        updateLoteBar();
+        return;
+    }
+    tbody.innerHTML = d.rows.map(s => `
+        <tr>
+            <td>${s.status === 'solicitado' ? `<input type="checkbox" class="epi-chk" value="${s.id}" onchange="updateLoteBar()">` : ''}</td>
+            <td><strong>${s.colaborador_nome}</strong>${s.colaborador_setor ? '<br><small style="color:#64748b">' + s.colaborador_setor + '</small>' : ''}</td>
+            <td>${s.solicitante_nome || '-'}</td>
+            <td>${s.nome_item}${s.proxima_troca_em ? '<br><small style="color:#888">Próx. troca: ' + s.proxima_troca_em + '</small>' : ''}</td>
+            <td>${s.tamanho || '-'}</td>
+            <td>${s.quantidade}</td>
+            <td>${s.solicitado_em}</td>
+            <td><span class="fac-badge ${s.status}">${s.status === 'solicitado' ? 'Pendente' : s.status}</span></td>
+            <td>
+                ${s.status === 'solicitado' ? `
+                    <button class="fac-btn fac-btn-sm fac-btn-green" title="Liberar" onclick="aprovarEpi(${s.id}, 'liberar')"><i class="fas fa-check"></i></button>
+                    <button class="fac-btn fac-btn-sm fac-btn-red" title="Negar" onclick="aprovarEpi(${s.id}, 'negar')"><i class="fas fa-times"></i></button>
+                ` : ''}
+                ${s.status === 'liberado' ? `<a class="fac-btn fac-btn-sm fac-btn-blue" title="Retirar" href="/facilities/retirar/${s.id}"><i class="fas fa-hand-paper"></i></a>` : ''}
+                ${s.status === 'retirado' ? `<a class="fac-btn fac-btn-sm" title="Ficha PDF" href="/api/facilities/epi-solicitacoes/${s.id}/ficha-pdf" target="_blank"><i class="fas fa-file-pdf"></i></a>` : ''}
+            </td>
+        </tr>
+    `).join('');
+    updateLoteBar();
+}
+
+function toggleSelAll(cb){
+    document.querySelectorAll('.epi-chk').forEach(x => x.checked = cb.checked);
+    updateLoteBar();
+}
+function getSelIds(){
+    return [...document.querySelectorAll('.epi-chk:checked')].map(x => +x.value);
+}
+function updateLoteBar(){
+    const ids = getSelIds();
+    const bar = document.getElementById('epiLoteBar');
+    if (!bar) return;
+    if (ids.length > 0) { bar.style.display='block'; document.getElementById('epiLoteCount').textContent = ids.length + ' selecionada(s)'; }
+    else bar.style.display='none';
+}
+async function acaoLote(acao){
+    const ids = getSelIds();
+    if (ids.length === 0) return;
+    let motivo = '';
+    if (acao === 'negar' || acao === 'cancelar') {
+        motivo = prompt('Motivo (' + acao + '):') || '';
+    }
+    if (!confirm(`Confirma ${acao} de ${ids.length} solicitação(ões)?`)) return;
+    const r = await fetch('/api/facilities/epi-solicitacoes/acao-lote', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ids, acao, motivo })
+    });
+    const d = await r.json();
+    if (r.ok) { showToast(`Processadas: ${d.processadas}/${d.solicitadas}`, 'success'); loadEpi(); loadDashboard(); }
+    else showToast(d.error || 'Erro em lote', 'error');
+}
+
+async function aprovarEpi(id, acao) {
+    const r = await fetch(`/api/facilities/epi-solicitacoes/${id}/aprovar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao })
+    });
+    if (r.ok) {
+        showToast(acao === 'liberar' ? 'Solicitação liberada!' : 'Solicitação negada.', acao === 'liberar' ? 'success' : 'info');
+        loadEpi();
+        loadDashboard();
+    } else {
+        const d = await r.json();
+        showToast(d.error || 'Erro ao processar.', 'error');
+    }
+}
+
+// ========== Limpeza ==========
+async function loadLimpezas() {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const r = await fetch(`/api/facilities/limpezas?data_inicio=${hoje}`);
+    const d = await r.json();
+    const tbody = document.getElementById('limpezaTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="fac-empty"><i class="fas fa-calendar-check"></i><br>Nenhuma limpeza agendada.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(l => `
+        <tr>
+            <td>${l.data_agendada_label}</td>
+            <td><strong>${l.titulo}</strong></td>
+            <td>${l.local || '-'}</td>
+            <td>${l.colaborador_nome || '-'}</td>
+            <td>${l.hora_inicio ? l.hora_inicio + (l.hora_fim ? ' - ' + l.hora_fim : '') : '-'}</td>
+            <td><span class="fac-badge ${l.concluido ? 'liberado' : 'solicitado'}">${l.concluido ? 'Concluído' : 'Pendente'}</span></td>
+        </tr>
+    `).join('');
+}
+
+function openLimpezaModal() {
+    document.getElementById('limpezaTitulo').value = '';
+    document.getElementById('limpezaLocal').value = '';
+    document.getElementById('limpezaData').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('limpezaColaborador').value = '';
+    document.getElementById('limpezaHoraInicio').value = '';
+    document.getElementById('limpezaHoraFim').value = '';
+    document.getElementById('modalLimpeza').classList.add('show');
+}
+
+async function salvarLimpeza() {
+    const titulo = document.getElementById('limpezaTitulo').value.trim();
+    const data_agendada = document.getElementById('limpezaData').value;
+    if (!titulo || !data_agendada) return showToast('Título e data são obrigatórios.', 'error');
+    
+    const r = await fetch('/api/facilities/limpezas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            titulo,
+            local: document.getElementById('limpezaLocal').value.trim(),
+            data_agendada,
+            colaborador_id: document.getElementById('limpezaColaborador').value || null,
+            hora_inicio: document.getElementById('limpezaHoraInicio').value,
+            hora_fim: document.getElementById('limpezaHoraFim').value
+        })
+    });
+    if (r.ok) {
+        showToast('Limpeza agendada!', 'success');
+        closeModal('modalLimpeza');
+        loadLimpezas();
+    } else {
+        const d = await r.json();
+        showToast(d.error || 'Erro ao salvar.', 'error');
+    }
+}
+
+// ========== Projetos ==========
+async function loadProjetos() {
+    const r = await fetch('/api/facilities/projetos');
+    const d = await r.json();
+    const tbody = document.getElementById('projetosTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="fac-empty"><i class="fas fa-tasks"></i><br>Nenhum projeto cadastrado.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(p => `
+        <tr>
+            <td><code>${p.codigo}</code></td>
+            <td><strong>${p.nome}</strong></td>
+            <td>${p.cliente_nome || '-'}</td>
+            <td>${p.tarefas_concluidas}/${p.tarefas_total}</td>
+            <td><span class="fac-badge ${p.status === 'Em andamento' ? 'solicitado' : p.status === 'Concluído' ? 'liberado' : 'negado'}">${p.status}</span></td>
+            <td><button class="fac-btn fac-btn-sm fac-btn-blue" onclick="verTarefas(${p.id})"><i class="fas fa-list"></i></button></td>
+        </tr>
+    `).join('');
+}
+
+function openProjetoModal() {
+    document.getElementById('projetoNome').value = '';
+    document.getElementById('projetoCliente').value = '';
+    document.getElementById('projetoTelefone').value = '';
+    document.getElementById('projetoObs').value = '';
+    document.getElementById('modalProjeto').classList.add('show');
+}
+
+async function salvarProjeto() {
+    const nome = document.getElementById('projetoNome').value.trim();
+    if (!nome) return showToast('Nome é obrigatório.', 'error');
+    
+    const r = await fetch('/api/facilities/projetos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            nome,
+            cliente_nome: document.getElementById('projetoCliente').value.trim(),
+            cliente_telefone: document.getElementById('projetoTelefone').value.trim(),
+            observacoes: document.getElementById('projetoObs').value.trim()
+        })
+    });
+    if (r.ok) {
+        showToast('Projeto criado!', 'success');
+        closeModal('modalProjeto');
+        loadProjetos();
+        loadDashboard();
+    } else {
+        const d = await r.json();
+        showToast(d.error || 'Erro ao salvar.', 'error');
+    }
+}
+
+function verTarefas(projetoId) {
+    showToast('Funcionalidade de tarefas em desenvolvimento.', 'info');
+}
+
+// ========== Colaboradores ==========
+async function loadColaboradoresTable() {
+    const r = await fetch('/api/facilities/colaboradores');
+    const d = await r.json();
+    const tbody = document.getElementById('colaboradoresTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="fac-empty"><i class="fas fa-users"></i><br>Nenhum colaborador cadastrado.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(c => `
+        <tr>
+            <td><strong>${c.nome}</strong></td>
+            <td>${c.cargo || '-'}</td>
+            <td>${c.setor || '-'}</td>
+            <td><span class="fac-badge ${c.nivel_acesso === 'gestor' ? 'liberado' : 'solicitado'}">${c.nivel_acesso}</span></td>
+            <td>-</td>
+        </tr>
+    `).join('');
+}
+
+function openColaboradorModal() {
+    document.getElementById('colaboradorNome').value = '';
+    document.getElementById('colaboradorCargo').value = '';
+    document.getElementById('colaboradorSetor').value = '';
+    document.getElementById('colaboradorNivel').value = 'solicitante';
+    document.getElementById('modalColaborador').classList.add('show');
+}
+
+async function salvarColaborador() {
+    const nome = document.getElementById('colaboradorNome').value.trim();
+    if (!nome) return showToast('Nome é obrigatório.', 'error');
+    
+    const r = await fetch('/api/facilities/colaboradores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            nome,
+            cargo: document.getElementById('colaboradorCargo').value.trim(),
+            setor: document.getElementById('colaboradorSetor').value.trim(),
+            nivel_acesso: document.getElementById('colaboradorNivel').value
+        })
+    });
+    if (r.ok) {
+        showToast('Colaborador cadastrado!', 'success');
+        closeModal('modalColaborador');
+        loadColaboradoresTable();
+        loadColaboradores();
+    } else {
+        const d = await r.json();
+        showToast(d.error || 'Erro ao salvar.', 'error');
+    }
+}
+
+// ========== Materiais ==========
+async function loadMateriais() {
+    const r = await fetch('/api/facilities/epi-materiais');
+    const d = await r.json();
+    const tbody = document.getElementById('materiaisTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="fac-empty"><i class="fas fa-boxes"></i><br>Nenhum material cadastrado.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(m => `
+        <tr>
+            <td><code>${m.codigo_interno}</code></td>
+            <td><strong>${m.nome}</strong></td>
+            <td><span class="fac-badge ${m.tipo === 'epi' ? 'solicitado' : 'liberado'}">${m.tipo.toUpperCase()}</span></td>
+        </tr>
+    `).join('');
+}
+
+function openMaterialModal() {
+    document.getElementById('materialCodigo').value = '';
+    document.getElementById('materialNome').value = '';
+    document.getElementById('materialTipo').value = 'epi';
+    document.getElementById('modalMaterial').classList.add('show');
+}
+
+async function salvarMaterial() {
+    const codigo = document.getElementById('materialCodigo').value.trim();
+    const nome = document.getElementById('materialNome').value.trim();
+    if (!codigo || !nome) return showToast('Código e nome são obrigatórios.', 'error');
+    
+    const r = await fetch('/api/facilities/epi-materiais', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            codigo_interno: codigo,
+            nome,
+            tipo: document.getElementById('materialTipo').value
+        })
+    });
+    if (r.ok) {
+        showToast('Material cadastrado!', 'success');
+        closeModal('modalMaterial');
+        loadMateriais();
+    } else {
+        const d = await r.json();
+        showToast(d.error || 'Erro ao salvar.', 'error');
+    }
+}
+
+// ========== Helpers ==========
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
+}
+
+function showToast(msg, type = 'info') {
+    const container = document.querySelector('.toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle'}"></i> ${msg}`;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 4000);
+}
+
+function createToastContainer() {
+    const c = document.createElement('div');
+    c.className = 'toast-container';
+    c.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999';
+    document.body.appendChild(c);
+    return c;
+}
+
+// Fechar modais clicando fora
+document.querySelectorAll('.fac-modal').forEach(modal => {
+    modal.addEventListener('click', e => {
+        if (e.target === modal) modal.classList.remove('show');
+    });
+});
+
+// ========== Alertas NR-6 ==========
+async function loadAlertas() {
+    const r = await fetch('/api/facilities/epi/alertas-vencimento');
+    const d = await r.json();
+    const tbody = document.getElementById('alertasTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="fac-empty"><i class="fas fa-check-circle"></i><br>Nenhum EPI vencido ou próximo.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(s => `
+        <tr>
+            <td><strong>${s.colaborador_nome}</strong></td>
+            <td>${s.setor || '-'}</td>
+            <td>${s.nome_item}</td>
+            <td>${s.retirado_em}</td>
+            <td><b>${s.proxima_troca_em}</b></td>
+            <td><span class="fac-badge ${s.situacao === 'vencido' ? 'negado' : 'solicitado'}">${s.situacao === 'vencido' ? 'VENCIDO' : 'vence em ' + s.dias_restantes + 'd'}</span></td>
+            <td><a class="fac-btn fac-btn-sm fac-btn-blue" href="/api/facilities/colaboradores/${s.colaborador_id}/ficha-epi-pdf" target="_blank"><i class="fas fa-file-pdf"></i></a></td>
+        </tr>
+    `).join('');
+}
+async function enviarLembretes() {
+    if (!confirm('Enviar email de lembrete para todos com retirada pendente > 3 dias?')) return;
+    const r = await fetch('/api/facilities/epi/enviar-lembretes', { method:'POST' });
+    const d = await r.json();
+    if (r.ok) showToast(`Lembretes enviados: ${d.enviados}`, 'success');
+    else showToast('Erro ao enviar lembretes.', 'error');
+}
+
+// ========== Templates de Limpeza ==========
+async function loadTemplates() {
+    const r = await fetch('/api/facilities/limpeza-templates');
+    const d = await r.json();
+    const tbody = document.getElementById('templatesTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="fac-empty"><i class="fas fa-clipboard"></i><br>Nenhum template.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(t => `
+        <tr>
+            <td><strong>${t.nome}</strong></td>
+            <td>${t.local || '-'}</td>
+            <td>${t.recorrencia}${t.dias_semana ? ' (' + t.dias_semana + ')' : ''}</td>
+            <td>${t.hora_inicio || ''}${t.hora_fim ? ' - ' + t.hora_fim : ''}</td>
+            <td>${t.colaborador_nome || '-'}</td>
+            <td><a href="/facilities/qr/${t.qr_code}" target="_blank"><code>${t.qr_code}</code></a></td>
+            <td>
+                <button class="fac-btn fac-btn-sm" onclick="editTemplate(${t.id})"><i class="fas fa-edit"></i></button>
+                <button class="fac-btn fac-btn-sm fac-btn-red" onclick="delTemplate(${t.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+function openTemplateModal(t) {
+    const nome = prompt('Nome do template:', t?.nome || ''); if (!nome) return;
+    const local = prompt('Local:', t?.local || '') || '';
+    const recorrencia = prompt('Recorrência (diaria/semanal/quinzenal/mensal):', t?.recorrencia || 'diaria') || 'diaria';
+    const dias_semana = recorrencia==='semanal' ? (prompt('Dias (1-7 separados por vírgula, 1=seg):', t?.dias_semana || '1,2,3,4,5') || '') : '';
+    const hora_inicio = prompt('Hora início (HH:MM, opcional):', t?.hora_inicio || '') || '';
+    const hora_fim = prompt('Hora fim (HH:MM, opcional):', t?.hora_fim || '') || '';
+    const checklistStr = prompt('Checklist (itens separados por |):', '') || '';
+    const checklist = checklistStr.split('|').map(s => s.trim()).filter(Boolean);
+    salvarTemplate(t?.id, { nome, local, recorrencia, dias_semana, hora_inicio, hora_fim, checklist });
+}
+async function salvarTemplate(id, body){
+    const url = id ? `/api/facilities/limpeza-templates/${id}` : '/api/facilities/limpeza-templates';
+    const r = await fetch(url, { method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (r.ok){ showToast('Template salvo','success'); loadTemplates(); } else showToast('Erro','error');
+}
+async function editTemplate(id) {
+    const r = await fetch('/api/facilities/limpeza-templates'); const d = await r.json();
+    const t = (d.rows||[]).find(x => x.id===id); if (t) openTemplateModal(t);
+}
+async function delTemplate(id) {
+    if (!confirm('Excluir template?')) return;
+    const r = await fetch(`/api/facilities/limpeza-templates/${id}`, { method:'DELETE' });
+    if (r.ok) { showToast('Excluído','success'); loadTemplates(); }
+}
+async function gerarLimpezasSemana() {
+    const r = await fetch('/api/facilities/limpezas/gerar-da-semana', { method:'POST' });
+    const d = await r.json();
+    if (r.ok) showToast(`Criados: ${d.criados} agendamentos`, 'success');
+    else showToast('Erro','error');
+}
+
+// ========== Ciclos de Troca ==========
+async function loadCiclos() {
+    const r = await fetch('/api/facilities/ciclos-troca');
+    const d = await r.json();
+    const tbody = document.getElementById('ciclosTableBody');
+    if (!d.rows?.length) { tbody.innerHTML = '<tr><td colspan="6" class="fac-empty">Nenhum ciclo cadastrado.</td></tr>'; return; }
+    tbody.innerHTML = d.rows.map(c => `
+        <tr>
+            <td><strong>${c.palavra_chave}</strong></td>
+            <td>${c.codigo_interno || '-'}</td>
+            <td>${c.meses_validade}</td>
+            <td>${c.descricao || '-'}</td>
+            <td>${c.ativo?'Sim':'Não'}</td>
+            <td>
+                <button class="fac-btn fac-btn-sm" onclick="editCiclo(${c.id}, '${c.palavra_chave}', ${c.meses_validade}, '${(c.descricao||'').replace(/'/g,"\\'")}')"><i class="fas fa-edit"></i></button>
+                <button class="fac-btn fac-btn-sm fac-btn-red" onclick="delCiclo(${c.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+function openCicloModal() {
+    const pk = prompt('Palavra-chave (ex: BOTINA):'); if (!pk) return;
+    const meses = parseInt(prompt('Meses de validade:', '6') || '6');
+    const desc = prompt('Descrição (opcional):') || '';
+    salvarCiclo(null, { palavra_chave: pk, meses_validade: meses, descricao: desc });
+}
+function editCiclo(id, pk, meses, desc) {
+    const npk = prompt('Palavra-chave:', pk); if (!npk) return;
+    const nmeses = parseInt(prompt('Meses:', meses) || meses);
+    const ndesc = prompt('Descrição:', desc) || '';
+    salvarCiclo(id, { palavra_chave: npk, meses_validade: nmeses, descricao: ndesc });
+}
+async function salvarCiclo(id, body) {
+    const url = id ? `/api/facilities/ciclos-troca/${id}` : '/api/facilities/ciclos-troca';
+    const r = await fetch(url, { method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (r.ok) { showToast('Ciclo salvo','success'); loadCiclos(); }
+    else showToast('Erro','error');
+}
+async function delCiclo(id) {
+    if (!confirm('Excluir ciclo?')) return;
+    const r = await fetch(`/api/facilities/ciclos-troca/${id}`, { method:'DELETE' });
+    if (r.ok) { showToast('Excluído','success'); loadCiclos(); }
+}
+
+// ========== Auditoria ==========
+async function loadAuditoria() {
+    const p = new URLSearchParams();
+    const e = document.getElementById('auditEntidade')?.value.trim(); if (e) p.append('entidade', e);
+    const u = document.getElementById('auditUsuario')?.value.trim(); if (u) p.append('usuario', u);
+    const ini = document.getElementById('auditIni')?.value; if (ini) p.append('data_ini', ini);
+    const fim = document.getElementById('auditFim')?.value; if (fim) p.append('data_fim', fim);
+    const r = await fetch(`/api/facilities/audit-log?${p.toString()}`);
+    const d = await r.json();
+    const tbody = document.getElementById('auditTableBody');
+    if (!d.rows?.length) { tbody.innerHTML = '<tr><td colspan="6" class="fac-empty">Sem registros.</td></tr>'; return; }
+    tbody.innerHTML = d.rows.map(r => `
+        <tr>
+            <td>${r.ts}</td>
+            <td>${r.usuario}</td>
+            <td>${r.entidade}</td>
+            <td>${r.entidade_id ?? '-'}</td>
+            <td><b>${r.acao}</b></td>
+            <td><small>${(r.detalhes||'').replace(/</g,'&lt;')}</small></td>
+        </tr>
+    `).join('');
+}
+
+init();
+</script>
+{% endblock %}

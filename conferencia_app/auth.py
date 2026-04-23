@@ -81,6 +81,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_AGENDAMENTO": "Logística > Gestão de Rotas",
     "PAGE_LOGISTICA_SOLICITACAO": "Logística > Solicitar Coleta/Entrega",
     "PAGE_LOGISTICA_MOTORISTA": "Logística > Painel do Motorista",
+    "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestao (Admin)",
 }
 
 

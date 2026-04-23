@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Checklist Limpeza - {{ template.nome }}{% endblock %}
+
+{% block content %}
+<div style="max-width:680px;margin:20px auto;padding:0 16px">
+  <div class="card" style="padding:18px">
+    <h2 style="margin:0 0 6px">{{ template.nome }}</h2>
+    <p style="color:#666;margin:0 0 16px">
+      {{ template.local or '' }} · {{ template.recorrencia }}
+      {% if template.hora_inicio %} · {{ template.hora_inicio }}{% if template.hora_fim %} às {{ template.hora_fim }}{% endif %}{% endif %}
+    </p>
+    <form id="form-qr">
+      <div id="checklist" style="margin-bottom:14px"></div>
+      <label style="display:block;font-weight:600;margin-bottom:4px">Observações:</label>
+      <textarea id="obs" rows="3" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px"></textarea>
+      <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;margin-top:12px">Registrar Limpeza</button>
+    </form>
+    <p id="msg" style="margin-top:10px;font-weight:600"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const raw = {{ template.checklist_json|default("[]")|safe }};
+  const items = Array.isArray(raw) ? raw : [];
+  const box = document.getElementById('checklist');
+  if (items.length === 0) {
+    box.innerHTML = '<p style="color:#888">Nenhum item de checklist definido.</p>';
+  } else {
+    box.innerHTML = items.map((it,i)=>`
+      <label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eee">
+        <input type="checkbox" name="chk" value="${i}" style="width:18px;height:18px">
+        <span>${it}</span>
+      </label>`).join('');
+  }
+  document.getElementById('form-qr').onsubmit = async (e) => {
+    e.preventDefault();
+    const marcados = [...document.querySelectorAll('input[name=chk]:checked')].map(x=>items[+x.value]);
+    const obs = document.getElementById('obs').value.trim();
+    const body = {
+      local: {{ (template.local or template.nome)|tojson }},
+      descricao: '[QR] ' + {{ template.nome|tojson }} + (obs? ' - ' + obs : ''),
+      data_agendada: new Date().toISOString().slice(0,10),
+      responsavel_id: {{ template.colaborador_id or 'null' }},
+      checklist_marcados: marcados
+    };
+    const r = await fetch('/api/facilities/limpezas', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const msg = document.getElementById('msg');
+    if (r.ok) { msg.style.color='#0a7'; msg.textContent='Limpeza registrada!'; }
+    else { msg.style.color='#b00'; msg.textContent='Erro ao registrar.'; }
+  };
+})();
+</script>
+{% endblock %}

@@ -3,22 +3,23 @@
 {% block title %}Fiscal - Documento de Entrada{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}">
 <style>
     :root {
-        --doc-bg: #f4f6f9;
-        --doc-card: #ffffff;
-        --doc-ink: #1e293b;
-        --doc-muted: #64748b;
-        --doc-border: #e2e8f0;
-        --doc-primary: #3b82f6;
-        --doc-primary-soft: rgba(59, 130, 246, 0.1);
-        --doc-success: #10b981;
-        --doc-success-soft: rgba(16, 185, 129, 0.1);
-        --doc-warning: #f59e0b;
-        --doc-warning-soft: rgba(245, 158, 11, 0.1);
-        --doc-danger: #ef4444;
-        --doc-danger-soft: rgba(239, 68, 68, 0.1);
-        --doc-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        --doc-bg: var(--rec-bg);
+        --doc-card: var(--rec-surface);
+        --doc-ink: var(--rec-ink-700);
+        --doc-muted: var(--rec-ink-500);
+        --doc-border: var(--rec-border);
+        --doc-primary: var(--rec-blue-600);
+        --doc-primary-soft: var(--rec-blue-050);
+        --doc-success: var(--rec-green-600);
+        --doc-success-soft: var(--rec-green-100);
+        --doc-warning: var(--rec-amber-500);
+        --doc-warning-soft: var(--rec-amber-100);
+        --doc-danger: var(--rec-red-600);
+        --doc-danger-soft: var(--rec-red-100);
+        --doc-shadow: var(--rec-shadow-1);
     }
 
     body {
@@ -1120,7 +1121,7 @@
     <section class="doc-toolbar" style="display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:16px 20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); margin-bottom:20px;">
         <div class="doc-tabs" style="display:inline-flex; gap:6px; padding:5px; border-radius:14px; background:#f1f5f9;">
             <button id="tab-pendentes" class="doc-tab active" type="button" onclick="switchTab('pendentes')" style="border:none; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); padding:10px 16px; border-radius:10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#fff; cursor:pointer; box-shadow:0 6px 20px rgba(59,130,246,0.3);">Conferidas</button>
-            <button id="tab-lancadas" class="doc-tab" type="button" onclick="switchTab('lancadas')" style="border:none; background:transparent; padding:10px 16px; border-radius:10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; cursor:pointer;">Lancadas</button>
+            <button id="tab-lancadas" class="doc-tab" type="button" onclick="switchTab('lancadas')" style="border:none; background:transparent; padding:10px 16px; border-radius:10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; cursor:pointer;">Lançadas</button>
         </div>
         <div class="doc-filter-row" style="display:grid; grid-template-columns:minmax(180px,220px) minmax(220px,1fr) minmax(180px,200px); gap:10px;">
             <input id="filtro-nf" class="doc-input" placeholder="Buscar por número da NF" autocomplete="off" oninput="renderizarLista()" style="width:100%; border:1px solid #e2e8f0; border-radius:12px; background:#fff; padding:11px 14px; font-size:13px; font-weight:600; color:#1e293b;">
@@ -1130,7 +1131,7 @@
                 <option value="Importada">Importada</option>
                 <option value="Auditada">Auditada</option>
                 <option value="Liberada">Liberada</option>
-                <option value="Lançada">Lancada</option>
+                <option value="Lançada">Lançada</option>
                 <option value="Manifestada">Manifestada</option>
                 <option value="Bloqueada">Bloqueada</option>
                 <option value="Estornada">Estornada</option>
@@ -1175,7 +1176,7 @@
                     </button>
                 </div>
             </div>
-            <div id="detail-empty" class="doc-detail-empty" style="display:flex; align-items:center; justify-content:center; text-align:center; color:#64748b; padding:44px 24px; font-size:13px; font-weight:700;">Escolha uma nota para ver etapa, pendencias, itens, timeline e governanca fiscal.</div>
+            <div id="detail-empty" class="doc-detail-empty" style="display:flex; align-items:center; justify-content:center; text-align:center; color:#64748b; padding:44px 24px; font-size:13px; font-weight:700;">Escolha uma nota para ver etapa, pendências, itens, timeline e governança fiscal.</div>
             <div id="detail-body" class="doc-detail-body hidden" style="padding:20px; display:grid; gap:18px;"></div>
         </section>
     </section>
@@ -1255,7 +1256,7 @@
                 </div>
                 <div class="doc-form-block" style="margin-bottom:12px;">
                     <label class="doc-form-label" for="estorno-complemento">Complemento</label>
-                    <input id="estorno-complemento" class="doc-input" placeholder="Detalhe do erro, numero de chamado ou ajuste">
+                    <input id="estorno-complemento" class="doc-input" placeholder="Detalhe do erro, número de chamado ou ajuste">
                 </div>
             </div>
 
@@ -1374,7 +1375,7 @@
 
     function atualizarResumoHero(kpis) {
         document.getElementById('hero-count').innerText = `${kpis.notas_lancadas || 0}`;
-        document.getElementById('hero-text').innerText = `Notas lancadas nos ultimos ${kpis.periodo_dias || 30} dias. Tempo medio importacao->lancamento: ${kpis.tempo_medio_importacao_lancamento_horas || 0}h.`;
+        document.getElementById('hero-text').innerText = `Notas lançadas nos últimos ${kpis.periodo_dias || 30} dias. Tempo médio importação → lançamento: ${kpis.tempo_medio_importacao_lancamento_horas || 0}h.`;
     }
 
     function renderizarKpis(kpis) {
@@ -1451,6 +1452,12 @@
                     <div class="doc-note-supplier">
                         <span class="fornecedor-avatar">${iniciais}</span>
                         ${escapeHtml(item.fornecedor || 'Fornecedor não informado')}
+                    </div>
+                    <div class="doc-note-meta" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 14px; margin:8px 0; font-size:11px; color:#64748b; font-weight:600;">
+                        <div><i class="fas fa-file-invoice" style="width:14px; color:#0f62c9;"></i> Pedido <strong style="color:#1e293b; font-weight:700;">${escapeHtml(item.pedido_compra || '---')}</strong></div>
+                        <div><i class="fas fa-user-check" style="width:14px; color:#0f62c9;"></i> Conferiu <strong style="color:#1e293b; font-weight:700;">${escapeHtml(item.conferido_por || '---')}</strong></div>
+                        <div><i class="fas fa-clock" style="width:14px; color:#0f62c9;"></i> Conferida <strong style="color:#1e293b; font-weight:700;">${escapeHtml(item.data_conferencia || '---')}</strong></div>
+                        ${item.etapa_atual === 'Lançada' || item.status_atual === 'Lançado' ? `<div><i class="fas fa-book" style="width:14px; color:#0f62c9;"></i> Lançou <strong style="color:#1e293b; font-weight:700;">${escapeHtml(item.lancado_por || '---')}</strong></div>` : `<div><i class="fas fa-download" style="width:14px; color:#0f62c9;"></i> Importada <strong style="color:#1e293b; font-weight:700;">${escapeHtml(item.data_importacao || '---')}</strong></div>`}
                     </div>
                     <div class="doc-badges">
                         ${badgePendencia}
@@ -1661,22 +1668,47 @@
     }
 
     async function carregarPainel(forcarDetalhes = false) {
+        const safeJson = async (resp) => {
+            if (!resp || !resp.ok) return null;
+            try { return await resp.json(); } catch (_) { return null; }
+        };
+
+        let pendentesOk = false;
+        let lancadasOk = false;
+
         try {
-            const [resPendentes, resLancadas, resKpis] = await Promise.all([
-                fetch('/api/concluidas'),
-                fetch('/api/notas_lancadas'),
-                fetch('/api/fiscal/documento_entrada/kpis'),
-            ]);
-
-            notasPendentes = await resPendentes.json();
-            notasLancadas = await resLancadas.json();
-            renderizarKpis(await resKpis.json());
-            renderizarLista();
-
-            if (notaSelecionada) {
-                await carregarDetalhes(notaSelecionada, forcarDetalhes);
+            const respPendentes = await fetch('/api/concluidas').catch((err) => { console.error('[painel] /api/concluidas falhou', err); return null; });
+            const dataPendentes = await safeJson(respPendentes);
+            if (Array.isArray(dataPendentes)) {
+                notasPendentes = dataPendentes;
+                pendentesOk = true;
             }
-        } catch (erro) {
+        } catch (err) { console.error('[painel] pendentes', err); }
+
+        try {
+            const respLancadas = await fetch('/api/notas_lancadas').catch((err) => { console.error('[painel] /api/notas_lancadas falhou', err); return null; });
+            const dataLancadas = await safeJson(respLancadas);
+            if (Array.isArray(dataLancadas)) {
+                notasLancadas = dataLancadas;
+                lancadasOk = true;
+            }
+        } catch (err) { console.error('[painel] lancadas', err); }
+
+        try {
+            const respKpis = await fetch('/api/fiscal/documento_entrada/kpis').catch(() => null);
+            const kpisData = (await safeJson(respKpis)) || {};
+            renderizarKpis(kpisData);
+        } catch (err) { console.error('[painel] kpis', err); }
+
+        try { renderizarLista(); } catch (err) { console.error('[painel] renderizarLista', err); }
+
+        if (notaSelecionada) {
+            try {
+                await carregarDetalhes(notaSelecionada, forcarDetalhes);
+            } catch (err) { console.error('[painel] carregarDetalhes', err); }
+        }
+
+        if (!pendentesOk && !lancadasOk) {
             exibirFeedback('error', 'Painel indisponivel', 'Nao foi possivel carregar o cockpit fiscal agora. Tente novamente em instantes.');
         }
     }

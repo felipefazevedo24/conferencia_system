@@ -10,3 +10,4 @@ openpyxl
 PyMySQL
 google-api-python-client
 google-auth
+reportlab

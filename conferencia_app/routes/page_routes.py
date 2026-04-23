@@ -139,15 +139,29 @@ HOME_MODULES = [
     {
         "id": "wms",
         "title": "WMS",
-        "subtitle": "Endereçamento",
-        "description": "Gerencie estoque físico, endereços, governança e reconciliações.",
+        "subtitle": "Central de operações",
+        "description": "Painel único de recebimento, endereçamento, estoque e governança do armazém.",
         "href": "/wms",
         "icon": "fa-warehouse",
         "permission": "PAGE_WMS",
         "section": "Logística",
         "tone": "cyan",
-        "priority": 88,
-        "keywords": ["wms", "estoque", "endereco", "armazem"],
+        "priority": 90,
+        "keywords": ["wms", "estoque", "endereco", "armazem", "hub"],
+        "metric_key": "wms_pendente",
+    },
+    {
+        "id": "wms_enderecamento",
+        "title": "Endereçamento WMS",
+        "subtitle": "Operação",
+        "description": "Endereça pendências de entrada fiscal às posições do armazém.",
+        "href": "/wms/enderecamento",
+        "icon": "fa-map-marker-alt",
+        "permission": "PAGE_WMS",
+        "section": "Logística",
+        "tone": "cyan",
+        "priority": 87,
+        "keywords": ["wms", "enderecamento", "pendencia", "nota", "armazem"],
         "metric_key": "wms_pendente",
     },
     {
@@ -677,6 +691,12 @@ def historico_page():
 @page_bp.route("/wms")
 @permission_required("PAGE_WMS")
 def wms_page():
+    return render_template("wms_hub.html", user=session["username"])
+
+
+@page_bp.route("/wms/enderecamento")
+@permission_required("PAGE_WMS")
+def wms_enderecamento_page():
     return render_template("wms.html", user=session["username"])
 
 

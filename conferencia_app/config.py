@@ -67,6 +67,10 @@ class Config:
     ERP_ESTOQUE_URL = os.environ.get("ERP_ESTOQUE_URL", "https://superelevated-han-throughly.ngrok-free.dev/estoque")
     ERP_ESTOQUE_TIMEOUT = int(os.environ.get("ERP_ESTOQUE_TIMEOUT", "30"))
 
+    # Sincronizacao automatica ERP -> WMS (estoque + enderecos)
+    ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
+
     BOLETO_PROVIDER = str(os.environ.get("BOLETO_PROVIDER", "BB")).strip().upper() or "BB"
     BOLETO_BANK_LABEL = str(os.environ.get("BOLETO_BANK_LABEL", "Banco do Brasil")).strip() or "Banco do Brasil"
 
@@ -107,7 +111,19 @@ class Config:
     MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
     MAIL_SENDER = os.environ.get("MAIL_SENDER", "sync.columbia@gmail.com")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "cvwu wwdq kbbw ridh")
-    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "Sistema Columbia")
+    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "Columbia Sync")
+
+    # Envio automatico de NF-e emitida para cliente/destinatario
+    # Em modo teste, todos os envios sao redirecionados para NFE_EMAIL_TESTE_DESTINO.
+    NFE_EMAIL_MODO_TESTE = os.environ.get("NFE_EMAIL_MODO_TESTE", "1") == "1"
+    NFE_EMAIL_TESTE_DESTINO = os.environ.get("NFE_EMAIL_TESTE_DESTINO", "felaze@colmac.com")
+    NFE_EMAIL_AUTO_NO_FATURAMENTO = os.environ.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", "1") == "1"
+    # Scheduler automatico de envio de NF-e emitidas (poll Consyste)
+    NFE_EMAIL_AUTO_ENABLED = os.environ.get("NFE_EMAIL_AUTO_ENABLED", "1") == "1"
+    NFE_EMAIL_AUTO_DESDE = os.environ.get("NFE_EMAIL_AUTO_DESDE", "")  # YYYY-MM-DD; vazio = define no primeiro boot
+    NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
+    # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
+    NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))

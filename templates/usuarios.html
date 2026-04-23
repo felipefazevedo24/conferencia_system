@@ -112,7 +112,7 @@
             <div class="form-group">
                 <label>Perfil de Acesso</label>
                 <select id="reg-role">
-                    <option value="Logística">LOGÍSTICA</option>
+                    <option value="Logistica">LOGÍSTICA</option>
                     <option value="Portaria">PORTARIA</option>
                     <option value="Fiscal">FISCAL</option>
                     <option value="Financeiro">FINANCEIRO</option>
@@ -204,20 +204,38 @@
         
         if(!u || !e) return alert("Erro: Defina o usuário e o e-mail.");
         
-        const res = await fetch('/api/registrar', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({username: u, email: e, role: r}) 
-        });
+        console.log('Enviando:', {username: u, email: e, role: r});
         
-        const data = await res.json();
-        if(data.sucesso) { 
-            alert("Usuário registrado. Ele definirá a senha no primeiro login."); 
-            document.getElementById('reg-user').value = '';
-            document.getElementById('reg-email').value = '';
-            carregarUsuarios(); 
-        } else {
-            alert("Falha: " + (data.msg || data.error || JSON.stringify(data.details || '')));
+        try {
+            const res = await fetch('/api/registrar', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({username: u, email: e, role: r}) 
+            });
+            
+            const text = await res.text();
+            console.log('Resposta bruta:', text);
+            
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch(e) {
+                alert("Erro: Resposta inválida do servidor: " + text.substring(0, 200));
+                return;
+            }
+            
+            if(data.sucesso) { 
+                alert("Usuário registrado. Ele definirá a senha no primeiro login."); 
+                document.getElementById('reg-user').value = '';
+                document.getElementById('reg-email').value = '';
+                carregarUsuarios(); 
+            } else {
+                const detalhes = data.details ? JSON.stringify(data.details) : '';
+                alert("Falha: " + (data.msg || data.error || '') + (detalhes ? '\nDetalhes: ' + detalhes : ''));
+            }
+        } catch(err) {
+            console.error('Erro na requisição:', err);
+            alert("Erro de conexão: " + err.message);
         }
     }
 

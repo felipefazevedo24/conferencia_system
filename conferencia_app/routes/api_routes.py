@@ -51,7 +51,6 @@ import re
 import os
 import shutil
 import tempfile
-import mimetypes
 from datetime import timedelta
 
 import requests
@@ -74,39 +73,31 @@ from ..models import (
     EtiquetaRecebimento,
     ExpedicaoConferencia,
     ExpedicaoConferenciaDecisao,
+    ExpedicaoConferenciaItem,
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesFoto,
     ExpedicaoConferenciaSimplesEstorno,
-    ExpedicaoConferenciaItem,
     ExpedicaoEstorno,
     ExpedicaoFaturamento,
     ExpedicaoFaturamentoItem,
     ItemNota,
     ChecklistRecebimento,
     LocalizacaoArmazem,
-    AgendamentoCliente,
-    AgendamentoFornecedor,
-    AgendamentoSolicitacao,
-    AgendamentoSolicitacaoHistorico,
-    AgendamentoSolicitacaoItem,
-    AgendamentoVeiculo,
     ItemWMS,
     BoletoContaReceber,
     LogAcessoAdministrativo,
     LogDivergencia,
-    LogEventoFiscalNota,
     LogExclusaoNota,
     LogEstornoLancamento,
     LogManifestacaoDestinatario,
     LogReversaoConferencia,
     LogTentativaConferencia,
-    MovimentacaoWMS,
     PermissaoAcesso,
     SolicitacaoDevolucaoRecebimento,
     Usuario,
     WMSIntegracaoEvento,
 )
-from ..services import InventreeService, WMSService
+from ..services import WMSService
 from ..schemas.api_schemas import (
     AprovarSolicitacaoDevolucaoSchema,
     ConsysteEmissaoConsultarSchema,
@@ -124,27 +115,8 @@ from ..schemas.api_schemas import (
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
-from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste, listar_nfes_consyste_por_caixa
-from ..services.agendamento_service import (
-    PRIORIDADES_SOLICITACAO,
-    STATUS_ATIVOS,
-    STATUS_SOLICITACAO,
-    TIPOS_SOLICITACAO,
-    VEICULOS_KANBAN,
-    consultar_nf_agendamento,
-    consultar_oc_agendamento,
-    ensure_cadastros_base_carregados,
-    formatar_endereco_logistico,
-    importar_cadastros_excel,
-    listar_cadastros,
-    listar_veiculos_agendamento,
-    localizar_cadastro,
-    prioridade_label_agendamento,
-    resumo_cadastros,
-    serializar_cadastro,
-    status_label_agendamento,
-)
-from ..services.conserto_service import ConsertoService
+from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
+from ..services.consyste_service import listar_nfes_consyste_por_caixa
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -173,15 +145,6 @@ CFOPS_CONFERENCIA_PRINCIPAL = {"5124", "5125"}
 CFOPS_EXCLUIR_SEM_CONFERENCIA = {"5902", "6902"}
 CFOPS_REMESSA_EXIGE_CODIGO_MATERIAL = {"5124", "5125", "6124", "6125"}
 CNPJ_COLUMBIA_MACHINE = "30482274000125"
-MOTIVOS_ESTORNO_PADRAO = [
-    "Erro de classificacao fiscal",
-    "Codigo ERP incorreto",
-    "Documento lancado em duplicidade",
-    "Divergencia de fornecedor ou cadastro",
-    "Falha de integracao fiscal",
-    "Ajuste solicitado pela controladoria",
-]
-DECISOES_AUDITOR_BLOQUEIO = {"XML Recusado"}
 
 
 def _normalize_external_payload(payload):
@@ -190,766 +153,6 @@ def _normalize_external_payload(payload):
     if payload is None:
         return {}
     return {"raw": str(payload)[:1000]}
-
-
-def _normalize_status_text(value: str) -> str:
-    return str(value or "").strip().lower()
-
-
-def _status_matches(value: str, target: str) -> bool:
-    texto = _normalize_status_text(value)
-    alvo = str(target or "").strip().lower()
-
-    if alvo == "concluido":
-        return "conclu" in texto and "do" in texto
-    if alvo == "lancado":
-        return "lan" in texto and "ado" in texto
-    if alvo == "pendente":
-        return "pend" in texto
-    if alvo == "devolvido":
-        return "devolv" in texto
-    if alvo == "bloqueado":
-        return "bloq" in texto
-    return alvo in texto
-
-
-def _status_label_documento_entrada(value: str | None) -> str:
-    if _status_matches(value, "lancado"):
-        return "Lançado"
-    if _status_matches(value, "concluido"):
-        return "Concluído"
-    if _status_matches(value, "pendente"):
-        return "Pendente"
-    if _status_matches(value, "devolvido"):
-        return "Devolvido"
-    if _status_matches(value, "bloqueado"):
-        return "Bloqueado"
-    return str(value or "").strip() or "---"
-
-
-def _payload_json_text(payload) -> str | None:
-    if payload is None:
-        return None
-    try:
-        return json.dumps(payload, ensure_ascii=False, default=str)[:4000]
-    except Exception:
-        return json.dumps({"raw": str(payload)[:1000]}, ensure_ascii=False)
-
-
-def _registrar_evento_fiscal_nota(
-    numero_nota: str,
-    evento: str,
-    usuario: str,
-    etapa: str | None = None,
-    status: str | None = None,
-    detalhe: str | None = None,
-    payload: dict | None = None,
-    commit: bool = False,
-):
-    numero_nota = str(numero_nota or "").strip()
-    usuario = str(usuario or "").strip() or "sistema"
-    if not numero_nota:
-        return None
-
-    registro = LogEventoFiscalNota(
-        numero_nota=numero_nota,
-        evento=str(evento or "").strip()[:60] or "EventoFiscal",
-        etapa=str(etapa or "").strip()[:30] or None,
-        status=str(status or "").strip()[:20] or None,
-        detalhe=str(detalhe or "").strip()[:1000] or None,
-        payload_json=_payload_json_text(payload),
-        usuario=usuario,
-    )
-    db.session.add(registro)
-    if commit:
-        db.session.commit()
-    return registro
-
-
-def _ultimo_log_manifestacao(numero_nota: str, manifestacao: str | None = None):
-    query = LogManifestacaoDestinatario.query.filter_by(numero_nota=str(numero_nota or "").strip())
-    if manifestacao:
-        query = query.filter_by(manifestacao=manifestacao)
-    return query.order_by(LogManifestacaoDestinatario.data.desc(), LogManifestacaoDestinatario.id.desc()).first()
-
-
-def _ultimo_estorno_lancamento(numero_nota: str):
-    return (
-        LogEstornoLancamento.query.filter(
-            LogEstornoLancamento.numero_nota == str(numero_nota or "").strip(),
-            ~LogEstornoLancamento.motivo.like("[ESTORNO CONFERÊNCIA]%"),
-        )
-        .order_by(LogEstornoLancamento.data_estorno.desc(), LogEstornoLancamento.id.desc())
-        .first()
-    )
-
-
-def _ultimo_log_estorno(numero_nota: str):
-    return (
-        LogEstornoLancamento.query.filter(
-            LogEstornoLancamento.numero_nota == str(numero_nota or "").strip(),
-        )
-        .order_by(LogEstornoLancamento.data_estorno.desc(), LogEstornoLancamento.id.desc())
-        .first()
-    )
-
-
-def _classificar_log_estorno(motivo: str | None) -> tuple[str, str, str]:
-    motivo_texto = str(motivo or "").strip()
-    motivo_upper = motivo_texto.upper()
-
-    if motivo_upper.startswith("[ESTORNO CONFER"):
-        motivo_limpo = motivo_texto.split("]", 1)[1].strip() if "]" in motivo_texto else motivo_texto
-        return ("estorno_conferencia", "Estorno de conferência", motivo_limpo or motivo_texto)
-
-    return ("estorno_lancamento", "Estorno de lançamento", motivo_texto)
-
-
-def _motivo_estorno_composto(motivo_padrao: str, complemento: str, motivo_livre: str) -> str:
-    padrao = str(motivo_padrao or "").strip()
-    detalhe = str(complemento or "").strip()
-    livre = str(motivo_livre or "").strip()
-
-    if padrao and detalhe:
-        return f"{padrao}: {detalhe}"[:500]
-    if padrao and livre and livre.lower() != padrao.lower():
-        return f"{padrao}: {livre}"[:500]
-    return (livre or padrao)[:500]
-
-
-def _fase_documento_entrada(itens, numero_nota: str):
-    if not itens:
-        return {"atual": "Indefinida", "workflow": [], "bloqueada": False}
-
-    importado = min((i.data_importacao for i in itens if i.data_importacao), default=None)
-    auditado = max((i.auditor_data for i in itens if i.auditor_data), default=None)
-    conferido = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
-    lancado = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
-    manifestado = _ultimo_log_manifestacao(numero_nota, manifestacao="confirmada")
-    estornado = _ultimo_estorno_lancamento(numero_nota)
-    recusado = any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens)
-
-    atual = "Indefinida"
-    bloqueada = False
-    if estornado and (not lancado or (estornado.data_estorno and estornado.data_estorno >= lancado)):
-        atual = "Estornada"
-    elif recusado:
-        atual = "Bloqueada"
-        bloqueada = True
-    elif manifestado and manifestado.status == "Sucesso":
-        atual = "Manifestada"
-    elif lancado:
-        atual = "Lançada"
-    elif conferido or any(_status_matches(i.status, "concluido") for i in itens):
-        atual = "Liberada"
-    elif auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens):
-        atual = "Auditada"
-    elif importado:
-        atual = "Importada"
-    ordem = ["Importada", "Auditada", "Liberada", "Lançada", "Manifestada"]
-    progresso = {
-        "Importada": bool(importado),
-        "Auditada": bool(auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens)),
-        "Liberada": bool(conferido or any(_status_matches(i.status, "concluido") for i in itens)),
-        "Lançada": bool(lancado),
-        "Manifestada": bool(manifestado and manifestado.status == "Sucesso"),
-    }
-    indice_atual = ordem.index(atual) if atual in ordem else -1
-    workflow = []
-    for idx, nome in enumerate(ordem):
-        estado = "done" if progresso[nome] and idx < indice_atual else "pending"
-        if atual == nome:
-            estado = "current"
-        elif progresso[nome]:
-            estado = "done"
-        workflow.append({"nome": nome, "estado": estado})
-
-    if bloqueada:
-        workflow.append({"nome": "Bloqueada", "estado": "current"})
-    elif atual == "Estornada":
-        workflow.append({"nome": "Estornada", "estado": "current"})
-
-    return {"atual": atual, "workflow": workflow, "bloqueada": bloqueada}
-
-
-def _pendencias_documento_entrada(numero_nota: str, itens):
-    if not itens:
-        return []
-
-    pendencias = []
-    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
-    if resumo_divergencia["divergencia"] == "Sim":
-        pendencias.append(
-            {
-                "tipo": "Divergencia",
-                "severidade": "alta",
-                "titulo": "Divergência de conferência ativa",
-                "descricao": resumo_divergencia["detalhe_divergencia"] or "A NF possui divergências operacionais pendentes.",
-            }
-        )
-
-    if any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens):
-        pendencias.append(
-            {
-                "tipo": "BloqueioFiscal",
-                "severidade": "alta",
-                "titulo": "Documento bloqueado pela auditoria XML",
-                "descricao": next((str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()), "A decisão fiscal recusou a liberação deste documento."),
-            }
-        )
-
-    pedidos = _coletar_pedidos_nota(itens)
-    material_cliente = bool(itens[0].material_cliente)
-    remessa = bool(itens[0].remessa)
-    if not pedidos and not material_cliente and not remessa:
-        pendencias.append(
-            {
-                "tipo": "PedidoCompra",
-                "severidade": "media",
-                "titulo": "Pedido de compra não vinculado",
-                "descricao": "A NF segue sem pedido de compra associado no fluxo fiscal.",
-            }
-        )
-
-    if material_cliente:
-        pendencias.append(
-            {
-                "tipo": "MaterialCliente",
-                "severidade": "info",
-                "titulo": "Documento marcado como material de cliente",
-                "descricao": "Fluxo fiscal especial habilitado para material de cliente.",
-            }
-        )
-
-    if remessa:
-        pendencias.append(
-            {
-                "tipo": "Remessa",
-                "severidade": "info",
-                "titulo": "Documento marcado como remessa",
-                "descricao": "As regras de código material e escrituração especial estão ativas.",
-            }
-        )
-
-    manifestacao = _ultimo_log_manifestacao(numero_nota)
-    if manifestacao and manifestacao.status == "Falha":
-        pendencias.append(
-            {
-                "tipo": "Manifestacao",
-                "severidade": "media",
-                "titulo": "Última manifestação falhou",
-                "descricao": manifestacao.detalhe or "A SEFAZ retornou falha na última tentativa de manifestação.",
-            }
-        )
-
-    estorno = _ultimo_estorno_lancamento(numero_nota)
-    if estorno:
-        pendencias.append(
-            {
-                "tipo": "Estorno",
-                "severidade": "media",
-                "titulo": "Existe histórico de estorno",
-                "descricao": estorno.motivo or "Este documento já passou por estorno fiscal.",
-            }
-        )
-
-    return pendencias
-
-
-def _resumo_documento_entrada(numero_nota: str, itens):
-    numero_nota = str(numero_nota or "").strip()
-    if not itens:
-        return {}
-
-    workflow = _fase_documento_entrada(itens, numero_nota)
-    pendencias = _pendencias_documento_entrada(numero_nota, itens)
-    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
-    manifestacao = _ultimo_log_manifestacao(numero_nota)
-    pedidos = _coletar_pedidos_nota(itens)
-    importado_em = min((item.data_importacao for item in itens if item.data_importacao), default=None)
-    fim_conferencia = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
-    data_lancamento = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
-
-    return {
-        "numero": numero_nota,
-        "fornecedor": itens[0].fornecedor or "---",
-        "status_atual": _status_label_documento_entrada(itens[0].status),
-        "etapa_atual": workflow["atual"],
-        "workflow": workflow["workflow"],
-        "bloqueada": workflow["bloqueada"],
-        "pendencias": pendencias,
-        "motivo_pendencia": pendencias[0]["descricao"] if pendencias else "",
-        "divergencia_status": resumo_divergencia["divergencia_status"],
-        "divergencia_detalhe": resumo_divergencia["detalhe_divergencia"],
-        "pedido_compra": pedidos or "---",
-        "sem_pedido_vinculado": not bool(pedidos),
-        "material_cliente": bool(itens[0].material_cliente),
-        "remessa": bool(itens[0].remessa),
-        "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
-        "exige_codigo_material_remessa": bool(itens[0].remessa) and _remessa_exige_codigo_material(itens),
-        "data_importacao": importado_em.strftime("%d/%m/%Y %H:%M") if importado_em else "---",
-        "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M") if fim_conferencia else "---",
-        "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M") if data_lancamento else "---",
-        "conferido_por": next((item.usuario_conferencia for item in itens if item.usuario_conferencia), "---"),
-        "lancado_por": next((item.usuario_lancamento for item in itens if item.usuario_lancamento), "---"),
-        "manifestacao": (
-            {
-                "status": manifestacao.status,
-                "detalhe": manifestacao.detalhe,
-                "tipo": manifestacao.manifestacao,
-                "data": manifestacao.data.strftime("%d/%m/%Y %H:%M") if manifestacao.data else "---",
-            }
-            if manifestacao
-            else None
-        ),
-    }
-
-
-def _status_label_documento_entrada(value: str | None) -> str:
-    if _status_matches(value, "lancado"):
-        return "Lançado"
-    if _status_matches(value, "concluido"):
-        return "Concluído"
-    if _status_matches(value, "pendente"):
-        return "Pendente"
-    if _status_matches(value, "devolvido"):
-        return "Devolvido"
-    if _status_matches(value, "bloqueado"):
-        return "Bloqueado"
-    return str(value or "").strip() or "---"
-
-
-def _ultimo_estorno_lancamento(numero_nota: str):
-    return (
-        LogEstornoLancamento.query.filter(
-            LogEstornoLancamento.numero_nota == str(numero_nota or "").strip(),
-            ~LogEstornoLancamento.motivo.like("[ESTORNO CONFER%"),
-        )
-        .order_by(LogEstornoLancamento.data_estorno.desc(), LogEstornoLancamento.id.desc())
-        .first()
-    )
-
-
-def _classificar_log_estorno(motivo: str | None) -> tuple[str, str, str]:
-    motivo_texto = str(motivo or "").strip()
-    motivo_upper = motivo_texto.upper()
-
-    if motivo_upper.startswith("[ESTORNO CONFER"):
-        motivo_limpo = motivo_texto.split("]", 1)[1].strip() if "]" in motivo_texto else motivo_texto
-        return ("estorno_conferencia", "Estorno de conferência", motivo_limpo or motivo_texto)
-
-    return ("estorno_lancamento", "Estorno de lançamento", motivo_texto)
-
-
-def _fase_documento_entrada(itens, numero_nota: str):
-    if not itens:
-        return {"atual": "Indefinida", "workflow": [], "bloqueada": False}
-
-    importado = min((i.data_importacao for i in itens if i.data_importacao), default=None)
-    auditado = max((i.auditor_data for i in itens if i.auditor_data), default=None)
-    conferido = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
-    lancado = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
-    manifestado = _ultimo_log_manifestacao(numero_nota, manifestacao="confirmada")
-    estornado = _ultimo_estorno_lancamento(numero_nota)
-    recusado = any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens)
-    possui_status_concluido = any(_status_matches(i.status, "concluido") for i in itens)
-    possui_status_lancado = any(_status_matches(i.status, "lancado") for i in itens)
-
-    atual = "Indefinida"
-    bloqueada = False
-    if estornado and (not lancado or (estornado.data_estorno and estornado.data_estorno >= lancado)):
-        atual = "Estornada"
-    elif recusado:
-        atual = "Bloqueada"
-        bloqueada = True
-    elif manifestado and manifestado.status == "Sucesso":
-        atual = "Manifestada"
-    elif lancado or possui_status_lancado:
-        atual = "Lançada"
-    elif conferido or possui_status_concluido:
-        atual = "Liberada"
-    elif auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens):
-        atual = "Auditada"
-    elif importado:
-        atual = "Importada"
-
-    ordem = ["Importada", "Auditada", "Liberada", "Lançada", "Manifestada"]
-    progresso = {
-        "Importada": bool(importado),
-        "Auditada": bool(auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens)),
-        "Liberada": bool(conferido or possui_status_concluido),
-        "Lançada": bool(lancado or possui_status_lancado),
-        "Manifestada": bool(manifestado and manifestado.status == "Sucesso"),
-    }
-    indice_atual = ordem.index(atual) if atual in ordem else -1
-    workflow = []
-    for idx, nome in enumerate(ordem):
-        estado = "done" if progresso[nome] and idx < indice_atual else "pending"
-        if atual == nome:
-            estado = "current"
-        elif progresso[nome]:
-            estado = "done"
-        workflow.append({"nome": nome, "estado": estado})
-
-    if bloqueada:
-        workflow.append({"nome": "Bloqueada", "estado": "current"})
-    elif atual == "Estornada":
-        workflow.append({"nome": "Estornada", "estado": "current"})
-
-    return {"atual": atual, "workflow": workflow, "bloqueada": bloqueada}
-
-
-def _pendencias_documento_entrada(numero_nota: str, itens):
-    if not itens:
-        return []
-
-    pendencias = []
-    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
-    if resumo_divergencia["divergencia"] == "Sim":
-        pendencias.append(
-            {
-                "tipo": "Divergencia",
-                "severidade": "alta",
-                "titulo": "Divergência de conferência ativa",
-                "descricao": resumo_divergencia["detalhe_divergencia"] or "A NF possui divergências operacionais pendentes.",
-            }
-        )
-
-    if any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens):
-        pendencias.append(
-            {
-                "tipo": "BloqueioFiscal",
-                "severidade": "alta",
-                "titulo": "Documento bloqueado pela auditoria XML",
-                "descricao": next(
-                    (str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()),
-                    "A decisão fiscal recusou a liberação deste documento.",
-                ),
-            }
-        )
-
-    pedidos = _coletar_pedidos_nota(itens)
-    material_cliente = bool(itens[0].material_cliente)
-    remessa = bool(itens[0].remessa)
-    if not pedidos and not material_cliente and not remessa:
-        pendencias.append(
-            {
-                "tipo": "PedidoCompra",
-                "severidade": "media",
-                "titulo": "Pedido de compra não vinculado",
-                "descricao": "A NF segue sem pedido de compra associado no fluxo fiscal.",
-            }
-        )
-
-    if material_cliente:
-        pendencias.append(
-            {
-                "tipo": "MaterialCliente",
-                "severidade": "info",
-                "titulo": "Documento marcado como material de cliente",
-                "descricao": "Fluxo fiscal especial habilitado para material de cliente.",
-            }
-        )
-
-    if remessa:
-        pendencias.append(
-            {
-                "tipo": "Remessa",
-                "severidade": "info",
-                "titulo": "Documento marcado como remessa",
-                "descricao": "As regras de código material e escrituração especial estão ativas.",
-            }
-        )
-
-    manifestacao = _ultimo_log_manifestacao(numero_nota)
-    if manifestacao and manifestacao.status == "Falha":
-        pendencias.append(
-            {
-                "tipo": "Manifestacao",
-                "severidade": "media",
-                "titulo": "Última manifestação falhou",
-                "descricao": manifestacao.detalhe or "A SEFAZ retornou falha na última tentativa de manifestação.",
-            }
-        )
-
-    estorno = _ultimo_estorno_lancamento(numero_nota)
-    if estorno:
-        pendencias.append(
-            {
-                "tipo": "Estorno",
-                "severidade": "media",
-                "titulo": "Existe histórico de estorno",
-                "descricao": estorno.motivo or "Este documento já passou por estorno fiscal.",
-            }
-        )
-
-    return pendencias
-
-def _coletar_timeline_documento_entrada(numero_nota: str, itens=None):
-    numero_nota = str(numero_nota or "").strip()
-    itens = itens or ItemNota.query.filter_by(numero_nota=numero_nota).all()
-    eventos = []
-
-    if itens:
-        primeiro_import = min((i.data_importacao for i in itens if i.data_importacao), default=None)
-        usuario_importacao = next((i.usuario_importacao for i in itens if i.usuario_importacao), "---")
-        if primeiro_import:
-            eventos.append(
-                {
-                    "data": primeiro_import,
-                    "tipo": "Importacao",
-                    "descricao": f"Documento importado por {usuario_importacao or '---'}.",
-                }
-            )
-
-        auditor_data = max((i.auditor_data for i in itens if i.auditor_data), default=None)
-        auditor_usuario = next((i.auditor_usuario for i in itens if i.auditor_usuario), "---")
-        auditor_decisao = next((str(i.auditor_decisao or "").strip() for i in itens if str(i.auditor_decisao or "").strip()), "")
-        auditor_justificativa = next((str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()), "")
-        if auditor_data:
-            descricao_auditoria = f"Auditoria XML registrada por {auditor_usuario or '---'}."
-            if auditor_decisao:
-                descricao_auditoria += f" Decisao: {auditor_decisao}."
-            if auditor_justificativa:
-                descricao_auditoria += f" Justificativa: {auditor_justificativa}."
-            eventos.append({"data": auditor_data, "tipo": "Auditoria XML", "descricao": descricao_auditoria})
-
-        inicio_conferencia = min((i.inicio_conferencia for i in itens if i.inicio_conferencia), default=None)
-        if inicio_conferencia:
-            eventos.append(
-                {
-                    "data": inicio_conferencia,
-                    "tipo": "Conferencia",
-                    "descricao": "Inicio da conferencia logistica.",
-                }
-            )
-
-        fim_conferencia = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
-        usuario_conferencia = next((i.usuario_conferencia for i in itens if i.usuario_conferencia), "---")
-        if fim_conferencia:
-            eventos.append(
-                {
-                    "data": fim_conferencia,
-                    "tipo": "Conferencia",
-                    "descricao": f"Conferencia finalizada por {usuario_conferencia or '---'}.",
-                }
-            )
-
-        data_lancamento = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
-        usuario_lancamento = next((i.usuario_lancamento for i in itens if i.usuario_lancamento), "---")
-        numero_lancamento = next((str(i.numero_lancamento or "").strip() for i in itens if str(i.numero_lancamento or "").strip()), "")
-        if data_lancamento:
-            eventos.append(
-                {
-                    "data": data_lancamento,
-                    "tipo": "Lancamento",
-                    "descricao": f"Lancamento fiscal gravado por {usuario_lancamento or '---'} ({numero_lancamento or '---'}).",
-                }
-            )
-
-    for log in LogDivergencia.query.filter_by(numero_nota=numero_nota).all():
-        eventos.append(
-            {
-                "data": log.data_erro,
-                "tipo": "Divergencia",
-                "descricao": f"{log.item_descricao} - usuario {log.usuario_erro or '---'}.",
-            }
-        )
-
-    for log in LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).all():
-        eventos.append(
-            {
-                "data": log.data_reversao,
-                "tipo": "Estorno Conferencia",
-                "descricao": f"{log.usuario_reversao or '---'}: {log.motivo or 'Sem motivo informado'}.",
-            }
-        )
-
-    for log in LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).all():
-        eventos.append(
-            {
-                "data": log.data_estorno,
-                "tipo": "Estorno Lancamento",
-                "descricao": f"{log.usuario_estorno or '---'}: {log.motivo or 'Sem motivo informado'}.",
-            }
-        )
-
-    for log in LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota).all():
-        eventos.append(
-            {
-                "data": log.data,
-                "tipo": f"Manifestacao {str(log.manifestacao or '').strip() or 'Fiscal'}",
-                "descricao": f"{log.usuario or '---'}: {log.status or 'Sem status'} - {log.detalhe or 'Sem detalhe'}.",
-            }
-        )
-
-    for log in LogEventoFiscalNota.query.filter_by(numero_nota=numero_nota).all():
-        detalhes = [str(log.evento or "").strip()]
-        if log.etapa:
-            detalhes.append(f"etapa {log.etapa}")
-        if log.status:
-            detalhes.append(f"status {log.status}")
-        if log.detalhe:
-            detalhes.append(log.detalhe)
-        eventos.append(
-            {
-                "data": log.data,
-                "tipo": "Governanca Fiscal",
-                "descricao": " | ".join([parte for parte in detalhes if parte]),
-            }
-        )
-
-    for log in LogExclusaoNota.query.filter_by(numero_nota=numero_nota).all():
-        eventos.append(
-            {
-                "data": log.data_exclusao,
-                "tipo": "Exclusao",
-                "descricao": f"{log.usuario_exclusao or '---'}: {log.motivo or 'Sem motivo informado'}.",
-            }
-        )
-
-    eventos = [evento for evento in eventos if evento.get("data")]
-    eventos.sort(key=lambda evento: evento["data"])
-    return eventos
-
-
-def _serializar_timeline_documento_entrada(numero_nota: str, itens=None):
-    return [
-        {
-            "data": evento["data"].strftime("%d/%m/%Y %H:%M"),
-            "tipo": evento["tipo"],
-            "descricao": evento["descricao"],
-        }
-        for evento in _coletar_timeline_documento_entrada(numero_nota, itens=itens)
-    ]
-
-
-def _build_documento_entrada_kpis(periodo_dias: int = 30):
-    periodo_dias = max(1, min(int(periodo_dias or 30), 365))
-    limite = datetime.now() - timedelta(days=periodo_dias)
-    notas_map = {}
-
-    for item in ItemNota.query.order_by(ItemNota.numero_nota.asc(), ItemNota.id.asc()).all():
-        numero_nota = str(item.numero_nota or "").strip()
-        if not numero_nota:
-            continue
-        notas_map.setdefault(numero_nota, []).append(item)
-
-    total_notas = 0
-    notas_lancadas = 0
-    notas_com_divergencia = 0
-    notas_falha_manifestacao = 0
-    notas_sem_intervencao = 0
-    horas_importacao_lancamento = []
-    horas_importacao_conferencia = []
-    horas_conferencia_lancamento = []
-    horas_lancamento_manifestacao = []
-    fornecedores_retrabalho = {}
-    usuarios = {}
-
-    for numero_nota, itens in notas_map.items():
-        resumo = _resumo_documento_entrada(numero_nota, itens)
-        timeline = _coletar_timeline_documento_entrada(numero_nota, itens=itens)
-        ultima_data = max((evento["data"] for evento in timeline if evento.get("data")), default=None)
-        if limite and ultima_data and ultima_data < limite:
-            continue
-
-        total_notas += 1
-        fornecedor = str(itens[0].fornecedor or "---").strip() or "---"
-        importado_em = min((item.data_importacao for item in itens if item.data_importacao), default=None)
-        conferido_em = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
-        lancado_em = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
-        log_manifest_ok = _ultimo_log_manifestacao(numero_nota, manifestacao="confirmada")
-        manifestado_em = log_manifest_ok.data if log_manifest_ok and log_manifest_ok.status == "Sucesso" else None
-        possui_divergencia = resumo.get("divergencia_status") == "Com divergencia"
-        possui_falha_manifestacao = any(
-            (str(log.status or "").strip() == "Falha")
-            for log in LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota).all()
-        )
-        possui_recusa_auditoria = any(
-            str(item.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for item in itens
-        )
-        possui_estorno = _ultimo_estorno_lancamento(numero_nota) is not None
-
-        if lancado_em:
-            notas_lancadas += 1
-        if possui_divergencia:
-            notas_com_divergencia += 1
-        if possui_falha_manifestacao:
-            notas_falha_manifestacao += 1
-
-        if lancado_em and not any([possui_divergencia, possui_falha_manifestacao, possui_recusa_auditoria, possui_estorno]):
-            notas_sem_intervencao += 1
-
-        if importado_em and lancado_em:
-            horas_importacao_lancamento.append((lancado_em - importado_em).total_seconds() / 3600)
-        if importado_em and conferido_em:
-            horas_importacao_conferencia.append((conferido_em - importado_em).total_seconds() / 3600)
-        if conferido_em and lancado_em:
-            horas_conferencia_lancamento.append((lancado_em - conferido_em).total_seconds() / 3600)
-        if lancado_em and manifestado_em:
-            horas_lancamento_manifestacao.append((manifestado_em - lancado_em).total_seconds() / 3600)
-
-        ocorrencias_retrabalho = int(possui_divergencia) + int(possui_falha_manifestacao) + int(possui_estorno) + int(possui_recusa_auditoria)
-        if ocorrencias_retrabalho:
-            fornecedores_retrabalho[fornecedor] = fornecedores_retrabalho.get(fornecedor, 0) + ocorrencias_retrabalho
-
-        usuario_lancamento = next((item.usuario_lancamento for item in itens if item.usuario_lancamento), None)
-        if usuario_lancamento and lancado_em:
-            bloco = usuarios.setdefault(
-                usuario_lancamento,
-                {"usuario": usuario_lancamento, "notas_lancadas": 0, "soma_horas_ate_lancamento": 0.0, "notas_com_divergencia": 0},
-            )
-            bloco["notas_lancadas"] += 1
-            bloco["notas_com_divergencia"] += int(possui_divergencia)
-            if importado_em:
-                bloco["soma_horas_ate_lancamento"] += (lancado_em - importado_em).total_seconds() / 3600
-
-    def _media(valores):
-        return round(sum(valores) / len(valores), 2) if valores else 0.0
-
-    produtividade_usuarios = []
-    for bloco in usuarios.values():
-        notas_usuario = max(int(bloco["notas_lancadas"] or 0), 1)
-        produtividade_usuarios.append(
-            {
-                "usuario": bloco["usuario"],
-                "notas_lancadas": bloco["notas_lancadas"],
-                "tempo_medio_horas": round(float(bloco["soma_horas_ate_lancamento"]) / notas_usuario, 2),
-                "notas_com_divergencia": bloco["notas_com_divergencia"],
-            }
-        )
-
-    produtividade_usuarios.sort(key=lambda item: (-item["notas_lancadas"], item["tempo_medio_horas"], item["usuario"]))
-
-    top_fornecedores_retrabalho = [
-        {"fornecedor": fornecedor, "ocorrencias": ocorrencias}
-        for fornecedor, ocorrencias in sorted(
-            fornecedores_retrabalho.items(),
-            key=lambda item: (-item[1], item[0]),
-        )[:5]
-    ]
-
-    percentual_divergencia = round((notas_com_divergencia / total_notas) * 100, 1) if total_notas else 0.0
-    percentual_falha_manifestacao = round((notas_falha_manifestacao / notas_lancadas) * 100, 1) if notas_lancadas else 0.0
-    percentual_sem_intervencao = round((notas_sem_intervencao / notas_lancadas) * 100, 1) if notas_lancadas else 0.0
-
-    return {
-        "periodo_dias": periodo_dias,
-        "total_notas": total_notas,
-        "notas_lancadas": notas_lancadas,
-        "tempo_medio_importacao_lancamento_horas": _media(horas_importacao_lancamento),
-        "percentual_sem_intervencao_manual": percentual_sem_intervencao,
-        "percentual_com_divergencia": percentual_divergencia,
-        "percentual_falha_manifestacao": percentual_falha_manifestacao,
-        "tempos_etapas": {
-            "importacao_para_conferencia_horas": _media(horas_importacao_conferencia),
-            "conferencia_para_lancamento_horas": _media(horas_conferencia_lancamento),
-            "lancamento_para_manifestacao_horas": _media(horas_lancamento_manifestacao),
-        },
-        "top_fornecedores_retrabalho": top_fornecedores_retrabalho,
-        "produtividade_usuarios": produtividade_usuarios[:5],
-    }
 
 
 def _consyste_token_configurado_corretamente() -> bool:
@@ -1160,7 +363,6 @@ def _append_attempt_log(
         )
     )
 
-
 def _normalize_unidade_medida(unidade: str) -> str:
     return str(unidade or "").strip().upper()
 
@@ -1252,351 +454,6 @@ def _summarize_divergencia_nota(numero_nota: str):
         "tentativas_invalidas": total_invalidas,
         "detalhe_divergencia": f"Divergências resolvidas após {total_invalidas} tentativa(s) inválida(s).",
     }
-
-
-def _formatar_datahora_documento_entrada(valor) -> str:
-    return valor.strftime("%d/%m/%Y %H:%M") if valor else "---"
-
-
-def _buscar_itens_status_documento_entrada(status_alvo: str):
-    variantes = {
-        "concluido": ["Concluído", "ConcluÃ­do", "ConcluÃƒÂ­do"],
-        "lancado": ["Lançado", "LanÃ§ado", "LanÃƒÂ§ado"],
-    }
-    todos_itens = (
-        ItemNota.query.filter(ItemNota.status.in_(variantes.get(status_alvo, [])))
-        .order_by(ItemNota.id.asc())
-        .all()
-    )
-    if todos_itens:
-        return todos_itens
-
-    return [
-        item
-        for item in ItemNota.query.order_by(ItemNota.id.asc()).all()
-        if _status_matches(item.status, status_alvo)
-    ]
-
-
-def _batch_manifestacao_por_nota(notas_nums):
-    if not notas_nums:
-        return {}
-
-    logs = (
-        LogManifestacaoDestinatario.query.filter(LogManifestacaoDestinatario.numero_nota.in_(notas_nums))
-        .order_by(
-            LogManifestacaoDestinatario.numero_nota.asc(),
-            LogManifestacaoDestinatario.data.desc(),
-            LogManifestacaoDestinatario.id.desc(),
-        )
-        .all()
-    )
-
-    manifestacoes = {}
-    for log in logs:
-        numero = str(log.numero_nota or "").strip()
-        if numero and numero not in manifestacoes:
-            manifestacoes[numero] = log
-    return manifestacoes
-
-
-def _batch_estorno_por_nota(notas_nums):
-    if not notas_nums:
-        return {}
-
-    logs = (
-        LogEstornoLancamento.query.filter(LogEstornoLancamento.numero_nota.in_(notas_nums))
-        .order_by(
-            LogEstornoLancamento.numero_nota.asc(),
-            LogEstornoLancamento.data_estorno.desc(),
-            LogEstornoLancamento.id.desc(),
-        )
-        .all()
-    )
-
-    estornos = {}
-    for log in logs:
-        numero = str(log.numero_nota or "").strip()
-        if numero and numero not in estornos:
-            estornos[numero] = log
-    return estornos
-
-
-def _batch_divergencia_por_nota(notas_nums):
-    if not notas_nums:
-        return {}
-
-    tentativas = (
-        LogTentativaConferencia.query.filter(LogTentativaConferencia.numero_nota.in_(notas_nums))
-        .order_by(
-            LogTentativaConferencia.numero_nota.asc(),
-            LogTentativaConferencia.tentativa_numero.asc(),
-            LogTentativaConferencia.id.asc(),
-        )
-        .all()
-    )
-
-    acumulado = {}
-    for tentativa in tentativas:
-        numero = str(tentativa.numero_nota or "").strip()
-        if not numero:
-            continue
-
-        info = acumulado.setdefault(
-            numero,
-            {
-                "ultima_tentativa": 0,
-                "ultima_tem_divergencia": False,
-                "tentativas_com_divergencia": set(),
-            },
-        )
-        numero_tentativa = int(tentativa.tentativa_numero or 0)
-        status_item = str(tentativa.status_item or "").upper()
-
-        if numero_tentativa > info["ultima_tentativa"]:
-            info["ultima_tentativa"] = numero_tentativa
-            info["ultima_tem_divergencia"] = False
-
-        if "DIVERG" in status_item:
-            info["tentativas_com_divergencia"].add(numero_tentativa)
-            if numero_tentativa == info["ultima_tentativa"]:
-                info["ultima_tem_divergencia"] = True
-
-    resumo = {}
-    for numero, info in acumulado.items():
-        total_invalidas = len(info["tentativas_com_divergencia"])
-        if total_invalidas == 0:
-            resumo[numero] = {
-                "divergencia": "Não",
-                "divergencia_status": "Não",
-                "tentativas_invalidas": 0,
-                "detalhe_divergencia": "",
-            }
-            continue
-
-        if info["ultima_tem_divergencia"]:
-            resumo[numero] = {
-                "divergencia": "Sim",
-                "divergencia_status": "Ativa",
-                "tentativas_invalidas": total_invalidas,
-                "detalhe_divergencia": "A NF possui divergências operacionais pendentes.",
-            }
-            continue
-
-        resumo[numero] = {
-            "divergencia": "Não",
-            "divergencia_status": "Resolvida",
-            "tentativas_invalidas": total_invalidas,
-            "detalhe_divergencia": f"Divergências resolvidas após {total_invalidas} tentativa(s) inválida(s).",
-        }
-
-    return resumo
-
-
-def _fase_documento_entrada_lista(itens, manifestacao=None, estorno=None):
-    if not itens:
-        return "Indefinida"
-
-    importado = min((i.data_importacao for i in itens if i.data_importacao), default=None)
-    auditado = max((i.auditor_data for i in itens if i.auditor_data), default=None)
-    conferido = max((i.fim_conferencia for i in itens if i.fim_conferencia), default=None)
-    lancado = max((i.data_lancamento for i in itens if i.data_lancamento), default=None)
-    recusado = any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens)
-    possui_status_concluido = any(_status_matches(i.status, "concluido") for i in itens)
-    possui_status_lancado = any(_status_matches(i.status, "lancado") for i in itens)
-
-    if recusado:
-        return "Bloqueada"
-    if manifestacao and str(manifestacao.status or "").strip() == "Sucesso" and (lancado or possui_status_lancado):
-        return "Manifestada"
-    if lancado or possui_status_lancado:
-        return "Lançada"
-    if estorno and (conferido or possui_status_concluido):
-        return "Estornada"
-    if conferido or possui_status_concluido:
-        return "Liberada"
-    if auditado or any(str(i.auditor_status or "").strip() != "NaoAuditado" for i in itens):
-        return "Auditada"
-    if importado:
-        return "Importada"
-    return "Indefinida"
-
-
-def _build_documento_entrada_lista_record(
-    numero_nota: str,
-    itens,
-    divergencias_map,
-    manifestacoes_map,
-    estornos_map,
-):
-    item_ref = itens[0]
-    pedidos = _coletar_pedidos_nota(itens)
-    material_cliente = bool(item_ref.material_cliente)
-    remessa = bool(item_ref.remessa)
-    manifestacao = manifestacoes_map.get(numero_nota)
-    estorno = estornos_map.get(numero_nota)
-    resumo_divergencia = divergencias_map.get(
-        numero_nota,
-        {
-            "divergencia": "Não",
-            "divergencia_status": "Não",
-            "tentativas_invalidas": 0,
-            "detalhe_divergencia": "",
-        },
-    )
-
-    pendencias = []
-    if resumo_divergencia["divergencia_status"] == "Ativa":
-        pendencias.append(
-            {
-                "tipo": "Divergencia",
-                "severidade": "alta",
-                "titulo": "Divergência de conferência ativa",
-                "descricao": resumo_divergencia["detalhe_divergencia"] or "A NF possui divergências operacionais pendentes.",
-            }
-        )
-
-    if any(str(i.auditor_decisao or "").strip() in DECISOES_AUDITOR_BLOQUEIO for i in itens):
-        pendencias.append(
-            {
-                "tipo": "BloqueioFiscal",
-                "severidade": "alta",
-                "titulo": "Documento bloqueado pela auditoria XML",
-                "descricao": next(
-                    (str(i.auditor_justificativa or "").strip() for i in itens if str(i.auditor_justificativa or "").strip()),
-                    "A decisão fiscal recusou a liberação deste documento.",
-                ),
-            }
-        )
-
-    if not pedidos and not material_cliente and not remessa:
-        pendencias.append(
-            {
-                "tipo": "PedidoCompra",
-                "severidade": "media",
-                "titulo": "Pedido de compra não vinculado",
-                "descricao": "A NF segue sem pedido de compra associado no fluxo fiscal.",
-            }
-        )
-
-    if material_cliente:
-        pendencias.append(
-            {
-                "tipo": "MaterialCliente",
-                "severidade": "info",
-                "titulo": "Documento marcado como material de cliente",
-                "descricao": "Fluxo fiscal especial habilitado para material de cliente.",
-            }
-        )
-
-    if remessa:
-        pendencias.append(
-            {
-                "tipo": "Remessa",
-                "severidade": "info",
-                "titulo": "Documento marcado como remessa",
-                "descricao": "As regras de código material e escrituração especial estão ativas.",
-            }
-        )
-
-    if manifestacao and str(manifestacao.status or "").strip() == "Falha":
-        pendencias.append(
-            {
-                "tipo": "Manifestacao",
-                "severidade": "media",
-                "titulo": "Última manifestação falhou",
-                "descricao": manifestacao.detalhe or "A SEFAZ retornou falha na última tentativa de manifestação.",
-            }
-        )
-
-    if estorno:
-        _, tipo_estorno, motivo_estorno = _classificar_log_estorno(estorno.motivo)
-        pendencias.append(
-            {
-                "tipo": "Estorno",
-                "severidade": "media",
-                "titulo": tipo_estorno,
-                "descricao": motivo_estorno or "Este documento já passou por estorno fiscal.",
-            }
-        )
-
-    importado_em = min((item.data_importacao for item in itens if item.data_importacao), default=None)
-    fim_conferencia = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
-    data_lancamento = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
-
-    return {
-        "numero": numero_nota,
-        "fornecedor": item_ref.fornecedor or "---",
-        "status_atual": _status_label_documento_entrada(item_ref.status),
-        "etapa_atual": _fase_documento_entrada_lista(itens, manifestacao=manifestacao, estorno=estorno),
-        "pendencias": pendencias,
-        "motivo_pendencia": pendencias[0]["descricao"] if pendencias else "",
-        "divergencia_status": resumo_divergencia["divergencia_status"],
-        "divergencia_detalhe": resumo_divergencia["detalhe_divergencia"],
-        "pedido_compra": pedidos or "---",
-        "sem_pedido_vinculado": not bool(pedidos),
-        "material_cliente": material_cliente,
-        "remessa": remessa,
-        "sem_conferencia_logistica": bool(item_ref.sem_conferencia_logistica),
-        "exige_codigo_material_remessa": remessa and _remessa_exige_codigo_material(itens),
-        "data_importacao": _formatar_datahora_documento_entrada(importado_em),
-        "data_conferencia": _formatar_datahora_documento_entrada(fim_conferencia),
-        "data_lancamento": _formatar_datahora_documento_entrada(data_lancamento),
-        "conferido_por": next((item.usuario_conferencia for item in itens if item.usuario_conferencia), "---"),
-        "lancado_por": next((item.usuario_lancamento for item in itens if item.usuario_lancamento), "---"),
-        "codigo_erp": next((item.numero_lancamento for item in itens if item.numero_lancamento), ""),
-        "usuario": next((item.usuario_lancamento for item in itens if item.usuario_lancamento), ""),
-        "manifestacao": (
-            {
-                "status": manifestacao.status,
-                "detalhe": manifestacao.detalhe,
-                "tipo": manifestacao.manifestacao,
-                "data": _formatar_datahora_documento_entrada(manifestacao.data),
-            }
-            if manifestacao
-            else None
-        ),
-    }
-
-
-def _build_documento_entrada_lista(status_alvo: str):
-    from collections import defaultdict
-
-    itens_status = _buscar_itens_status_documento_entrada(status_alvo)
-    if not itens_status:
-        return []
-
-    por_nota = defaultdict(list)
-    for item in itens_status:
-        por_nota[str(item.numero_nota or "").strip()].append(item)
-
-    notas_nums = [numero for numero in por_nota.keys() if numero]
-    if not notas_nums:
-        return []
-
-    todos_itens_nota = (
-        ItemNota.query.filter(ItemNota.numero_nota.in_(notas_nums))
-        .order_by(ItemNota.id.asc())
-        .all()
-    )
-    todos_por_nota = defaultdict(list)
-    for item in todos_itens_nota:
-        todos_por_nota[str(item.numero_nota or "").strip()].append(item)
-
-    manifestacoes_map = _batch_manifestacao_por_nota(notas_nums)
-    estornos_map = _batch_estorno_por_nota(notas_nums)
-    divergencias_map = _batch_divergencia_por_nota(notas_nums)
-
-    return [
-        _build_documento_entrada_lista_record(
-            numero_nota,
-            todos_por_nota.get(numero_nota, por_nota[numero_nota]),
-            divergencias_map,
-            manifestacoes_map,
-            estornos_map,
-        )
-        for numero_nota in notas_nums
-    ]
 
 
 def _formatar_descricao_etiqueta(itens):
@@ -2004,129 +861,7 @@ def _fetch_consyste_document_bytes(chave_acesso, tipo_documento):
     return resp, tipo
 
 
-def _manifestar_destinatario_legacy(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
-    numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
-    if not numero_resolvido or not itens:
-        return {"sucesso": False, "msg": "NF não encontrada para manifestação.", "status_code": 404}
-
-    log_idempotente = _ultimo_log_manifestacao(numero_resolvido, manifestacao=manifestacao)
-    if log_idempotente and log_idempotente.status == "Sucesso":
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="ManifestacaoIdempotente",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Ignorado",
-            detalhe=f"{descricao_evento} já registrada com sucesso anteriormente.",
-            payload={"manifestacao": manifestacao},
-            commit=True,
-        )
-        return {
-            "sucesso": True,
-            "msg": f"{descricao_evento} já registrada com sucesso anteriormente.",
-            "status_code": 200,
-            "payload": {},
-            "idempotente": True,
-        }
-
-    if not chave_resolvida:
-        detalhe = "NF sem chave de acesso cadastrada para manifestação do destinatário."
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=None,
-                manifestacao=manifestacao,
-                status="Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao},
-        )
-        db.session.commit()
-        return {"sucesso": False, "msg": detalhe, "status_code": 400}
-
-    try:
-        ok, status_code, payload = manifestar_destinatario_consyste(
-            chave_resolvida,
-            manifestacao=manifestacao,
-            justificativa=justificativa,
-        )
-        payload = _normalize_external_payload(payload)
-        detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ."
-        if ok:
-            protocolo_raw = (
-                (payload or {}).get("nProt")
-                or (payload or {}).get("protocolo")
-                or (payload or {}).get("numero_protocolo")
-                or (payload or {}).get("protocol")
-            )
-            if protocolo_raw:
-                detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ. Protocolo: {str(protocolo_raw)[:60]}"
-        else:
-            detalhe = (
-                (payload or {}).get("error")
-                or (payload or {}).get("motivo")
-                or f"Falha ao enviar {descricao_evento.lower()}."
-            )[:500]
-
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=chave_resolvida,
-                manifestacao=manifestacao,
-                status="Sucesso" if ok else "Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Sucesso" if ok else "Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao, "payload": payload},
-        )
-        db.session.commit()
-        return {
-            "sucesso": ok,
-            "msg": detalhe,
-            "status_code": status_code,
-            "payload": payload,
-        }
-    except Exception as exc:
-        detalhe = str(exc)[:500]
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=chave_resolvida,
-                manifestacao=manifestacao,
-                status="Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao},
-        )
-        db.session.commit()
-        return {"sucesso": False, "msg": detalhe, "status_code": 500}
-
+def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
     numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
     if not numero_resolvido or not itens:
         return {"sucesso": False, "msg": "NF não encontrada para manifestação.", "status_code": 404}
@@ -2298,13 +1033,31 @@ def _enfileirar_integracao_wms_nota_lancada(numero_nota: str, usuario: str):
     usuario = str(usuario or 'Sistema').strip()
     if not numero_nota:
         return None, False
-    return InventreeService.enfileirar_evento(
-        InventreeService.EVENTO_NOTA_LANCADA,
-        numero_nota,
-        {'numero_nota': numero_nota, 'usuario': usuario},
+
+    idempotency_key = f"nota_lancada:{numero_nota}"
+    evento = WMSIntegracaoEvento.query.filter_by(idempotency_key=idempotency_key).first()
+    if evento:
+        if evento.status in ('Falha', 'DeadLetter'):
+            evento.status = 'Pendente'
+            evento.proxima_tentativa_em = None
+            evento.ultima_erro = None
+            db.session.commit()
+        return evento, False
+
+    payload = {'numero_nota': numero_nota, 'usuario': usuario}
+    evento = WMSIntegracaoEvento(
+        idempotency_key=idempotency_key,
+        tipo_evento='NotaLancada',
+        referencia=numero_nota,
         origem='Fiscal',
-        idempotency_key=f"nota_lancada:{numero_nota}",
+        payload_json=json.dumps(payload, ensure_ascii=True),
+        status='Pendente',
+        tentativas=0,
+        criado_em=datetime.now(),
     )
+    db.session.add(evento)
+    db.session.commit()
+    return evento, True
 
 
 def _processar_evento_integracao_wms(evento: WMSIntegracaoEvento):
@@ -2317,20 +1070,10 @@ def _processar_evento_integracao_wms(evento: WMSIntegracaoEvento):
         numero_nota = str(payload.get('numero_nota') or evento.referencia or '').strip()
         usuario = str(payload.get('usuario') or 'Integrador').strip()
 
-        if evento.tipo_evento == InventreeService.EVENTO_NOTA_LANCADA:
-            resultado_local = _armazenar_nota_no_wms(numero_nota, usuario)
-            if not resultado_local.get('sucesso'):
-                raise RuntimeError(resultado_local.get('mensagem') or 'Falha na sincronizacao local do WMS')
-
-            resultado_inventree = InventreeService.processar_evento(evento)
-            resultado = {
-                'sucesso': bool(resultado_inventree.get('sucesso')),
-                'mensagem': resultado_inventree.get('mensagem') or resultado_local.get('mensagem') or 'Integracao concluida',
-                'local': resultado_local,
-                'inventree': resultado_inventree,
-            }
+        if evento.tipo_evento == 'NotaLancada':
+            resultado = _armazenar_nota_no_wms(numero_nota, usuario)
         else:
-            resultado = InventreeService.processar_evento(evento)
+            resultado = {'sucesso': False, 'mensagem': f'Tipo de evento nao suportado: {evento.tipo_evento}'}
 
         if resultado.get('sucesso'):
             evento.status = 'Sucesso'
@@ -2602,14 +1345,12 @@ def _build_estornos_records(search_nota=None):
         )
 
     for item in estornos_lanc:
-        tipo_slug, tipo_label, motivo_limpo = _classificar_log_estorno(item.motivo)
         eventos.append(
             {
                 "nota": item.numero_nota,
-                "tipo": tipo_label,
-                "tipo_slug": tipo_slug,
+                "tipo": "Ajuste",
                 "usuario": item.usuario_estorno,
-                "motivo": motivo_limpo,
+                "motivo": item.motivo,
                 "data": item.data_estorno,
                 "data_fmt": item.data_estorno.strftime("%d/%m/%Y %H:%M"),
             }
@@ -2738,37 +1479,89 @@ def _build_notas_liberadas_records(search_nota=None):
 @api_bp.route("/api/registrar", methods=["POST"])
 @roles_required("Admin")
 def registrar():
-    data = register_schema.load(request.json or {})
-    username = data.get("username")
+    try:
+        data = register_schema.load(request.json or {})
+        username = (data.get("username") or "").strip().upper()
+        email = (data.get("email") or "").strip().lower()
+        role = data.get("role")
+        # Normaliza "Logistica" sem acento para "Logística"
+        if role == "Logistica":
+            role = "Logística"
 
-    if Usuario.query.filter_by(username=username).first():
-        return jsonify({"sucesso": False, "msg": "Usuário já existe"}), 400
+        if Usuario.query.filter_by(username=username).first():
+            return jsonify({"sucesso": False, "msg": "Usuário já existe"}), 400
 
-    novo = Usuario(
-        username=username,
-        password=generate_password_hash(data.get("password")),
-        role=data.get("role"),
-    )
-    db.session.add(novo)
-    db.session.commit()
-    return jsonify({"sucesso": True})
+        if Usuario.query.filter(func.lower(Usuario.email) == email).first():
+            return jsonify({"sucesso": False, "msg": "E-mail já cadastrado"}), 400
+
+        novo = Usuario(
+            username=username,
+            email=email,
+            password=None,
+            role=role,
+        )
+        db.session.add(novo)
+        db.session.commit()
+        return jsonify({"sucesso": True})
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"sucesso": False, "msg": f"Erro interno: {str(e)}"}), 500
 
 
 @api_bp.route("/api/listar_usuarios")
 @roles_required("Admin")
 def listar_usuarios():
     usuarios = Usuario.query.all()
-    return jsonify([{"username": u.username, "role": u.role} for u in usuarios])
+    return jsonify([{"username": u.username, "email": u.email or "", "role": u.role, "tem_senha": bool(u.password)} for u in usuarios])
+
+
+@api_bp.route("/api/admin/usuario/<username>/resetar_senha", methods=["POST"])
+@roles_required("Admin")
+def admin_resetar_senha(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    nova_senha = (request.json or {}).get("nova_senha", "").strip()
+    if not nova_senha or len(nova_senha) < 4:
+        return jsonify({"sucesso": False, "msg": "Senha deve ter pelo menos 4 caracteres."}), 400
+    user.password = generate_password_hash(nova_senha)
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": f"Senha de {username} alterada com sucesso."})
+
+
+@api_bp.route("/api/admin/usuario/<username>/limpar_senha", methods=["POST"])
+@roles_required("Admin")
+def admin_limpar_senha(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    user.password = None
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": f"Senha de {username} removida. O usuário precisará se cadastrar novamente."})
+
+
+@api_bp.route("/api/admin/upload-kpis", methods=["GET"])
+def get_upload_kpis():
+    """KPIs placeholder: modelo NotaPendente ainda nao implantado."""
+    return jsonify({
+        "importados_hoje": 0,
+        "prontos_lancar": 0,
+        "em_auditoria": 0,
+        "devolucoes_abertas": 0,
+    })
 
 
 @api_bp.route("/api/permissoes/catalogo", methods=["GET"])
 @roles_required("Admin")
 def listar_catalogo_permissoes():
+    from ..auth import BASE_ROLE_PERMISSIONS
     catalogo = get_permission_catalog()
     return jsonify(
         {
             "catalogo": [{"key": key, "label": label} for key, label in catalogo.items()],
-            "roles": ["Admin", "Fiscal", "Conferente", "Portaria"],
+            "roles": list(BASE_ROLE_PERMISSIONS.keys()),
         }
     )
 
@@ -2776,8 +1569,9 @@ def listar_catalogo_permissoes():
 @api_bp.route("/api/permissoes/role/<role>", methods=["GET"])
 @roles_required("Admin")
 def obter_permissoes_role(role):
+    from ..auth import BASE_ROLE_PERMISSIONS
     role = (role or "").strip()
-    if role not in ("Admin", "Fiscal", "Conferente", "Portaria"):
+    if role not in BASE_ROLE_PERMISSIONS:
         return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
 
     base = get_base_role_permissions(role)
@@ -2793,8 +1587,9 @@ def obter_permissoes_role(role):
 @api_bp.route("/api/permissoes/role/<role>", methods=["POST"])
 @roles_required("Admin")
 def salvar_permissoes_role(role):
+    from ..auth import BASE_ROLE_PERMISSIONS
     role = (role or "").strip()
-    if role not in ("Admin", "Fiscal", "Conferente", "Portaria"):
+    if role not in BASE_ROLE_PERMISSIONS:
         return jsonify({"sucesso": False, "msg": "Role inválida"}), 400
 
     data = request.get_json() or {}
@@ -3215,32 +2010,6 @@ def _gerar_campos_boleto(numero_nota: str, valor: float):
     return nosso_numero, linha_digitavel, codigo_barras
 
 
-def _boleto_bank_label() -> str:
-    label = str(current_app.config.get("BOLETO_BANK_LABEL", "")).strip()
-    return label or "Banco do Brasil"
-
-
-def _normalizar_banco_boleto(value: str) -> str:
-    raw = str(value or "").strip()
-    if not raw or raw.upper().startswith("BOFA"):
-        return _boleto_bank_label()
-    return raw
-
-
-def _coerce_date(value):
-    if value is None:
-        return None
-    if hasattr(value, "date"):
-        return value.date()
-    if isinstance(value, str):
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"):
-            try:
-                return datetime.strptime(value, fmt).date()
-            except ValueError:
-                continue
-    return None
-
-
 @api_bp.route("/api/financeiro/contas-receber/notas")
 @permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
 def financeiro_contas_receber_notas():
@@ -3280,7 +2049,7 @@ def financeiro_contas_receber_notas():
                 "data_ref": (r[7] or r[8]).strftime("%d/%m/%Y %H:%M") if (r[7] or r[8]) else "---",
                 "boleto_gerado": bool(boleto),
                 "boleto": {
-                    "banco": _normalizar_banco_boleto(boleto.banco),
+                    "banco": boleto.banco,
                     "valor": float(boleto.valor or 0.0),
                     "nosso_numero": boleto.nosso_numero,
                     "linha_digitavel": boleto.linha_digitavel,
@@ -3293,7 +2062,7 @@ def financeiro_contas_receber_notas():
             }
         )
 
-    return jsonify({"itens": resultado, "total": len(resultado), "banco_padrao": _boleto_bank_label()})
+    return jsonify({"itens": resultado, "total": len(resultado), "banco_padrao": "BOFA - Bank of America"})
 
 
 @api_bp.route("/api/financeiro/contas-receber/gerar-boleto", methods=["POST"])
@@ -3304,30 +2073,14 @@ def financeiro_contas_receber_gerar_boleto():
     if not nota:
         return jsonify({"sucesso": False, "error": "Informe a nota."}), 400
 
-    cpf_cnpj_pagador = str(data.get("cpf_cnpj") or "").strip()
-    cpf_cnpj_pagador_digits = _only_digits(cpf_cnpj_pagador)
-    if cpf_cnpj_pagador and len(cpf_cnpj_pagador_digits) not in (11, 14):
-        return jsonify({"sucesso": False, "error": "Informe um CPF/CNPJ valido do pagador."}), 400
-
-    nome_pagador = str(data.get("nome_pagador") or "").strip()[:200]
-
     boleto_existente = BoletoContaReceber.query.filter_by(numero_nota=nota).first()
     if boleto_existente:
-        atualizou = False
-        if cpf_cnpj_pagador_digits and boleto_existente.cpf_cnpj_pagador != cpf_cnpj_pagador_digits:
-            boleto_existente.cpf_cnpj_pagador = cpf_cnpj_pagador_digits
-            atualizou = True
-        if nome_pagador and boleto_existente.nome_pagador != nome_pagador:
-            boleto_existente.nome_pagador = nome_pagador
-            atualizou = True
-        if atualizou:
-            db.session.commit()
         return jsonify(
             {
                 "sucesso": True,
                 "ja_existia": True,
                 "boleto": {
-                    "banco": _normalizar_banco_boleto(boleto_existente.banco),
+                    "banco": boleto_existente.banco,
                     "valor": float(boleto_existente.valor or 0.0),
                     "nosso_numero": boleto_existente.nosso_numero,
                     "linha_digitavel": boleto_existente.linha_digitavel,
@@ -3343,7 +2096,6 @@ def financeiro_contas_receber_gerar_boleto():
             func.max(ItemNota.chave_acesso),
             func.max(ItemNota.valor_pagamento_xml),
             func.max(ItemNota.pagamento_xml),
-            func.max(ItemNota.vencimento_pagamento_xml),
         )
         .filter(ItemNota.numero_nota == nota)
         .first()
@@ -3351,26 +2103,19 @@ def financeiro_contas_receber_gerar_boleto():
     if not nota_info or not bool(nota_info[2]):
         return jsonify({"sucesso": False, "error": "Nota sem informação de pagamento no XML."}), 400
 
-    if not cpf_cnpj_pagador_digits:
-        return jsonify({"sucesso": False, "error": "Informe o CPF/CNPJ do pagador para liberar a consulta no portal do cliente."}), 400
-
     valor = float(nota_info[1] or 0.0)
-    vencimento = _coerce_date(nota_info[3])
     nosso_numero, linha_digitavel, codigo_barras = _gerar_campos_boleto(nota, valor)
 
     boleto = BoletoContaReceber(
         numero_nota=nota,
         chave_acesso=str(nota_info[0] or ""),
-        banco=_boleto_bank_label(),
+        banco="BOFA - Bank of America",
         valor=valor,
         nosso_numero=nosso_numero,
         linha_digitavel=linha_digitavel,
         codigo_barras=codigo_barras,
         status="Gerado",
         usuario_geracao=session.get("username", "sistema"),
-        cpf_cnpj_pagador=cpf_cnpj_pagador_digits,
-        nome_pagador=nome_pagador or None,
-        vencimento=vencimento,
     )
     db.session.add(boleto)
     db.session.commit()
@@ -3380,7 +2125,7 @@ def financeiro_contas_receber_gerar_boleto():
             "sucesso": True,
             "ja_existia": False,
             "boleto": {
-                "banco": _normalizar_banco_boleto(boleto.banco),
+                "banco": boleto.banco,
                 "valor": float(boleto.valor or 0.0),
                 "nosso_numero": boleto.nosso_numero,
                 "linha_digitavel": boleto.linha_digitavel,
@@ -3390,7 +2135,6 @@ def financeiro_contas_receber_gerar_boleto():
             },
         }
     )
-
 
 @api_bp.route("/api/financeiro/contas-receber/sincronizar-consyste", methods=["POST"])
 @permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
@@ -3975,7 +2719,7 @@ def sugestoes_vinculacao():
     Body:
       {
         "nota": "123456",
-        "pedido": "OC-2026-0001"
+        "pedido": "10790"
       }
     
     Response:
@@ -4283,1045 +3027,6 @@ def liberar_nota_conferencia():
         return jsonify({"sucesso": False, "msg": "NF já está liberada para conferência."}), 409
 
     return jsonify({"sucesso": False, "msg": "NF não está em estado aguardando liberação."}), 409
-
-
-ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
-
-
-def _expedicao_conferencia_simples_fotos_dir() -> str:
-    configured_dir = str(current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR") or "").strip()
-    base_dir = configured_dir or os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
-    os.makedirs(base_dir, exist_ok=True)
-    return base_dir
-
-
-def _nome_foto_expedicao_conferencia(referencia: str, data_ref: datetime, index: int, extensao: str, prefixo: str = "REFERENCIA") -> str:
-    extensao_limpa = extensao if extensao.startswith(".") else f".{extensao}"
-    referencia_limpa = re.sub(r"\s+", " ", str(referencia or "").strip()) or "SEM REFERENCIA"
-    prefixo_limpo = re.sub(r"\s+", " ", str(prefixo or "REFERENCIA").strip()).upper()
-    return f"{prefixo_limpo} {referencia_limpa} - {data_ref.strftime('%Y-%m-%d %H-%M-%S')} - FOTO {index:02d}{extensao_limpa}"
-
-
-def _extrair_documentos_consyste(payload):
-    if isinstance(payload, dict):
-        documentos = payload.get("documentos")
-        return documentos if isinstance(documentos, list) else []
-    if isinstance(payload, list):
-        return payload
-    return []
-
-
-def _extrair_nome_cliente_consyste(documento: dict) -> str:
-    return str(
-        documento.get("dest_nome")
-        or documento.get("destinatario_nome")
-        or documento.get("cliente_nome")
-        or documento.get("tomador_nome")
-        or documento.get("tomador_razao_social")
-        or documento.get("razao_social")
-        or ""
-    ).strip()
-
-
-def _consultar_nf_emitida_exp_conferencia(numero_nf: str) -> dict:
-    numero_limpo = re.sub(r"\D", "", str(numero_nf or ""))
-    if not numero_limpo:
-        return {
-            "encontrada": False,
-            "manual_required": False,
-            "numero_nf": "",
-            "nome_cliente": "",
-        }
-
-    token = current_app.config.get("CONSYSTE_TOKEN")
-    headers = {
-        "X-Consyste-Auth-Token": token,
-        "Accept": "application/json",
-    }
-    filtros = ["emitidos", "todos", "recebidos"]
-    termos = [f"numero:{numero_limpo}", numero_limpo]
-    campos_tentativas = [
-        "id,chave,emitido_em,numero,emit_nome,dest_nome",
-        None,
-    ]
-    indisponivel = False
-    autenticacao_falhou = False
-
-    for filtro in filtros:
-        base_url = f"{current_app.config['CONSYSTE_API_BASE']}/nfe/lista/{filtro}"
-        for termo in termos:
-            for campos in campos_tentativas:
-                params = {"q": termo}
-                if campos:
-                    params["campos"] = campos
-
-                try:
-                    resp = requests.get(base_url, headers=headers, params=params, timeout=15)
-                except Exception:
-                    indisponivel = True
-                    continue
-
-                if resp.status_code == 401 or resp.status_code == 403:
-                    autenticacao_falhou = True
-                    continue
-
-                if resp.status_code >= 500:
-                    indisponivel = True
-                    continue
-
-                if resp.status_code != 200:
-                    continue
-
-                dados = resp.json() if resp.content else {}
-                for documento in _extrair_documentos_consyste(dados):
-                    numero_documento = re.sub(r"\D", "", str(documento.get("numero") or ""))
-                    if numero_documento != numero_limpo:
-                        continue
-                    nome_cliente = _extrair_nome_cliente_consyste(documento)
-                    return {
-                        "encontrada": True,
-                        "manual_required": not bool(nome_cliente),
-                        "numero_nf": numero_limpo,
-                        "nome_cliente": nome_cliente,
-                        "documento_id": str(documento.get("id") or ""),
-                        "emitido_em": documento.get("emitido_em") or documento.get("emissao"),
-                    }
-
-    if autenticacao_falhou:
-        return {
-            "encontrada": False,
-            "manual_required": True,
-            "numero_nf": numero_limpo,
-            "nome_cliente": "",
-            "warning": "A consulta da Consyste foi recusada. Confira o token configurado no sistema.",
-        }
-
-    return {
-        "encontrada": False,
-        "manual_required": True,
-        "numero_nf": numero_limpo,
-        "nome_cliente": "",
-        "warning": (
-            "Consyste indisponível no momento. Informe o cliente manualmente."
-            if indisponivel
-            else "NF não localizada na Consyste. Informe o cliente manualmente."
-        ),
-    }
-
-
-def _status_normalizado_expedicao_conferencia(status: str | None, default: str = "Pendente de expedição") -> str:
-    texto = str(status or "").strip()
-    if not texto:
-        return default
-
-    texto_normalizado = texto.casefold()
-    if texto_normalizado.startswith("expedido"):
-        return "Expedido"
-    if "aguardando" in texto_normalizado and "estorno" in texto_normalizado:
-        return "Aguardando estorno"
-    if texto_normalizado in {"pendente_expedicao", "pendente de expedição", "pendente de expedicao"}:
-        return "Pendente de expedição"
-    if "pendente" in texto_normalizado and "expedi" in texto_normalizado:
-        return "Pendente de expedição"
-    return texto
-
-
-def _status_slug_expedicao_conferencia(status: str | None) -> str:
-    norm = _status_normalizado_expedicao_conferencia(status)
-    if norm == "Expedido":
-        return "expedido"
-    if norm == "Aguardando estorno":
-        return "aguardando_estorno"
-    if norm == "Finalizado":
-        return "finalizado"
-    return "pendente_expedicao"
-
-
-def _status_aliases_expedicao_conferencia(status: str | None) -> tuple[str, ...]:
-    status_normalizado = _status_normalizado_expedicao_conferencia(status)
-    if status_normalizado == "Expedido":
-        return ("Expedido", "expedido")
-    if "aguardando" in status_normalizado.lower() and "estorno" in status_normalizado.lower():
-        return ("Aguardando estorno", "aguardando_estorno")
-    return (
-        "Pendente de expedição",
-        "Pendente de expedicao",
-        "Pendente de expedição",
-        "Pendente de expedição",
-        "pendente_expedicao",
-    )
-
-
-def _estorno_pendente_info(conferencia_id):
-    estorno = ExpedicaoConferenciaSimplesEstorno.query.filter_by(
-        conferencia_id=conferencia_id, status="Pendente"
-    ).first()
-    if not estorno:
-        return None
-    return {
-        "id": estorno.id,
-        "solicitante": estorno.solicitante,
-        "motivo": estorno.motivo,
-        "data": estorno.created_at.strftime("%d/%m/%Y %H:%M") if estorno.created_at else "---",
-    }
-
-
-def _tipo_referencia_expedicao(valor: str | None, default: str = "Orcamento") -> str:
-    texto = str(valor or "").strip().casefold()
-    if not texto:
-        return default
-    if texto in {"ordemcompra", "ordem_compra", "ordem de compra", "oc", "pedido"}:
-        return "OrdemCompra"
-    return "Orcamento"
-
-
-def _dados_referencia_expedicao(origem) -> tuple[str, str, str, str]:
-    tipo_referencia = _tipo_referencia_expedicao(getattr(origem, "tipo_referencia", None))
-    orcamento = str(getattr(origem, "orcamento", "") or "").strip()
-    numero_os = str(getattr(origem, "numero_os", "") or "").strip()
-    ordem_compra = str(getattr(origem, "ordem_compra", "") or "").strip()
-    return tipo_referencia, orcamento, numero_os, ordem_compra
-
-
-def _referencia_principal_expedicao(origem) -> str:
-    tipo_referencia, orcamento, _, ordem_compra = _dados_referencia_expedicao(origem)
-    return ordem_compra if tipo_referencia == "OrdemCompra" else orcamento
-
-
-def _referencia_titulo_expedicao(origem) -> str:
-    tipo_referencia, orcamento, numero_os, ordem_compra = _dados_referencia_expedicao(origem)
-    if tipo_referencia == "OrdemCompra":
-        return f"Ordem de compra {ordem_compra}" if ordem_compra else "Ordem de compra não informada"
-    if orcamento and numero_os:
-        return f"Orçamento {orcamento} · OS {numero_os}"
-    if orcamento:
-        return f"Orçamento {orcamento}"
-    if numero_os:
-        return f"OS {numero_os}"
-    return "Referência não informada"
-
-
-def _campo_principal_referencia_expedicao(tipo_referencia: str) -> str:
-    return "ordem_compra" if tipo_referencia == "OrdemCompra" else "orcamento"
-
-
-def _label_tipo_referencia_expedicao(tipo_referencia: str) -> str:
-    return "Ordem de compra" if tipo_referencia == "OrdemCompra" else "Orçamento"
-
-
-def _extrair_referencia_expedicao_payload(source) -> tuple[str, str, str, str]:
-    getter = source.get if hasattr(source, "get") else lambda key, default="": default
-    tipo_referencia = _tipo_referencia_expedicao(getter("tipo_referencia"))
-    orcamento = str(getter("orcamento") or "").strip()
-    numero_os = str(getter("numero_os") or "").strip()
-    ordem_compra = str(getter("ordem_compra") or "").strip()
-
-    if tipo_referencia == "OrdemCompra":
-        return tipo_referencia, "", "", ordem_compra
-    return tipo_referencia, orcamento, numero_os, ""
-
-
-def _foto_expedicao_conferencia_disponivel(foto: ExpedicaoConferenciaSimplesFoto) -> bool:
-    caminho = str(getattr(foto, "file_path", "") or "").strip()
-    return bool(caminho) and os.path.isfile(caminho)
-
-
-def _serializar_expedicao_conferencia_simples(registro: ExpedicaoConferenciaSimples, fotos=None) -> dict:
-    fotos = fotos or []
-    status_texto = _status_normalizado_expedicao_conferencia(registro.status)
-    status_slug = _status_slug_expedicao_conferencia(status_texto)
-    tipo_referencia, _, numero_os, ordem_compra = _dados_referencia_expedicao(registro)
-    return {
-        "id": registro.id,
-        "orcamento": registro.orcamento,
-        "tipo_referencia": tipo_referencia,
-        "tipo_referencia_label": _label_tipo_referencia_expedicao(tipo_referencia),
-        "numero_os": numero_os,
-        "ordem_compra": ordem_compra,
-        "referencia_numero": _referencia_principal_expedicao(registro),
-        "referencia_titulo": _referencia_titulo_expedicao(registro),
-        "conferente": registro.conferente,
-        "data_conferencia": registro.data_conferencia.strftime("%d/%m/%Y %H:%M") if registro.data_conferencia else "",
-        "numero_nf": registro.numero_nf or "",
-        "nome_cliente": registro.nome_cliente or "",
-        "cliente_origem": registro.cliente_origem,
-        "nf_origem": getattr(registro, "nf_origem", "Manual") or "Manual",
-        "consyste_chave": getattr(registro, "consyste_chave", "") or "",
-        "transportadora": registro.transportadora or "",
-        "placa": registro.placa or "",
-        "motorista": getattr(registro, "motorista", "") or "",
-        "status": status_texto,
-        "status_slug": status_slug,
-        "expedido_at": registro.expedido_at.strftime("%d/%m/%Y %H:%M") if registro.expedido_at else "",
-        "expedido_by": registro.expedido_by or "",
-        "canhoto_url": f"/api/expedicao/conferencia-simples/{registro.id}/canhoto" if registro.canhoto_file_name else None,
-        "canhoto_uploaded_at": registro.canhoto_uploaded_at.strftime("%d/%m/%Y %H:%M") if registro.canhoto_uploaded_at else None,
-        "canhoto_uploaded_by": registro.canhoto_uploaded_by or None,
-        "finalizado_at": registro.finalizado_at.strftime("%d/%m/%Y %H:%M") if registro.finalizado_at else None,
-        "finalizado_by": registro.finalizado_by or None,
-        "fotos": [
-            {
-                "id": foto.id,
-                "nome": foto.file_name,
-                "url": f"/api/expedicao/conferencia-simples/fotos/{foto.id}",
-                "disponivel": _foto_expedicao_conferencia_disponivel(foto),
-            }
-            for foto in fotos
-        ],
-        "estorno_pendente": _estorno_pendente_info(registro.id),
-    }
-
-
-@api_bp.route("/api/expedicao/conferencia-simples")
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def listar_expedicao_conferencia_simples():
-    busca = str(request.args.get("q") or "").strip()
-    status = str(request.args.get("status") or "").strip()
-
-    query = ExpedicaoConferenciaSimples.query
-    if status:
-        query = query.filter(ExpedicaoConferenciaSimples.status.in_(_status_aliases_expedicao_conferencia(status)))
-    if busca:
-        termo = f"%{busca}%"
-        query = query.filter(
-            or_(
-                ExpedicaoConferenciaSimples.orcamento.ilike(termo),
-                ExpedicaoConferenciaSimples.numero_os.ilike(termo),
-                ExpedicaoConferenciaSimples.ordem_compra.ilike(termo),
-                ExpedicaoConferenciaSimples.numero_nf.ilike(termo),
-                ExpedicaoConferenciaSimples.nome_cliente.ilike(termo),
-                ExpedicaoConferenciaSimples.conferente.ilike(termo),
-                ExpedicaoConferenciaSimples.transportadora.ilike(termo),
-                ExpedicaoConferenciaSimples.placa.ilike(termo),
-            )
-        )
-
-    registros = query.order_by(
-        ExpedicaoConferenciaSimples.data_conferencia.desc(),
-        ExpedicaoConferenciaSimples.id.desc(),
-    ).all()
-
-    fotos_por_conferencia = {}
-    if registros:
-        conferencia_ids = [registro.id for registro in registros]
-        for foto in (
-            ExpedicaoConferenciaSimplesFoto.query
-            .filter(ExpedicaoConferenciaSimplesFoto.conferencia_id.in_(conferencia_ids))
-            .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-            .all()
-        ):
-            fotos_por_conferencia.setdefault(foto.conferencia_id, []).append(foto)
-
-    resumo = {
-        "total": len(registros),
-        "pendentes": sum(1 for registro in registros if _status_slug_expedicao_conferencia(registro.status) == "pendente_expedicao"),
-        "expedidos": sum(1 for registro in registros if _status_slug_expedicao_conferencia(registro.status) == "expedido"),
-        "aguardando_estorno": sum(1 for registro in registros if _status_slug_expedicao_conferencia(registro.status) == "aguardando_estorno"),
-    }
-
-    return jsonify(
-        {
-            "resumo": resumo,
-            "registros": [
-                _serializar_expedicao_conferencia_simples(
-                    registro,
-                    fotos=fotos_por_conferencia.get(registro.id, []),
-                )
-                for registro in registros
-            ],
-        }
-    )
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/consultar-nf")
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def consultar_nf_expedicao_conferencia_simples():
-    numero_nf = str(request.args.get("numero_nf") or "").strip()
-    if not numero_nf:
-        return jsonify({"error": "Informe o número da nota fiscal."}), 400
-    return jsonify(_consultar_nf_emitida_exp_conferencia(numero_nf))
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/nfs-emitidas")
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def listar_nfs_emitidas_expedicao():
-    """Lista NFs EMITIDAS da Consyste (a partir de 01/04) que ainda não têm conferência vinculada."""
-    from ..services.consyste_service import listar_nfes_consyste_por_caixa
-
-    ok, status_code, payload = listar_nfes_consyste_por_caixa(
-        caixa="emitidos",
-        campos="id,chave,numero,dest_nome,dest_cnpj,emit_nome,valor,situacao_sefaz,serie",
-    )
-    if not ok:
-        return jsonify({"error": "Não foi possível consultar a Consyste.", "nfs": []}), 200
-
-    documentos = _extrair_documentos_consyste(payload)
-
-    # Data de corte: somente NFs emitidas a partir de 01/04/2026
-    data_corte = datetime(2026, 4, 1)
-
-    nfs_ja_vinculadas_by_doc = set()
-    nfs_ja_vinculadas_by_nf = set()
-    registros_existentes = ExpedicaoConferenciaSimples.query.all()
-    for reg in registros_existentes:
-        if reg.consyste_document_id:
-            nfs_ja_vinculadas_by_doc.add(str(reg.consyste_document_id))
-        if reg.numero_nf:
-            nfs_ja_vinculadas_by_nf.add(re.sub(r"\D", "", str(reg.numero_nf)))
-
-    nfs = []
-    for doc in documentos:
-        doc_id = str(doc.get("id") or "")
-        numero = re.sub(r"\D", "", str(doc.get("numero") or ""))
-        if not numero:
-            continue
-
-        # Filtrar por data de emissão >= 01/04/2026 via chave (posições 2-5 = AAMM)
-        chave_raw = str(doc.get("chave") or "")
-        emitido_em_raw = str(doc.get("emitido_em") or "").strip()
-        if chave_raw and len(chave_raw) >= 6:
-            try:
-                aa = int(chave_raw[2:4])
-                mm = int(chave_raw[4:6])
-                ano_nf = 2000 + aa
-                if datetime(ano_nf, mm, 1) < data_corte:
-                    continue
-                if not emitido_em_raw:
-                    emitido_em_raw = f"{mm:02d}/20{aa:02d}"
-            except (ValueError, TypeError):
-                pass
-        elif emitido_em_raw:
-            try:
-                for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
-                    try:
-                        dt_emissao = datetime.strptime(emitido_em_raw[:19], fmt)
-                        break
-                    except ValueError:
-                        continue
-                else:
-                    dt_emissao = None
-                if dt_emissao and dt_emissao < data_corte:
-                    continue
-            except Exception:
-                pass
-
-        ja_vinculada = doc_id in nfs_ja_vinculadas_by_doc or numero in nfs_ja_vinculadas_by_nf
-
-        # Extrair status/situação da NF (situacao_sefaz: 100=Autorizada, 101=Cancelada)
-        sefaz_code = doc.get("situacao_sefaz")
-        if sefaz_code == 101 or str(sefaz_code) == "101":
-            situacao = "Cancelada"
-            cancelada = True
-        elif sefaz_code == 100 or str(sefaz_code) == "100":
-            situacao = "Autorizada"
-            cancelada = False
-        else:
-            situacao = f"Código {sefaz_code}" if sefaz_code else "Autorizada"
-            cancelada = False
-
-        nfs.append({
-            "documento_id": doc_id,
-            "numero": numero,
-            "chave": str(doc.get("chave") or ""),
-            "emitido_em": emitido_em_raw,
-            "destinatario": _extrair_nome_cliente_consyste(doc),
-            "emitente": str(doc.get("emit_nome") or ""),
-            "valor_total": doc.get("valor") or doc.get("valor_total") or "",
-            "situacao": situacao,
-            "cancelada": cancelada,
-            "ja_vinculada": ja_vinculada,
-        })
-
-    return jsonify({"nfs": nfs})
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/buscar-nf", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def buscar_nf_expedicao():
-    """Busca NF por número na Consyste e cria conferência automaticamente se encontrada."""
-    payload = request.get_json(silent=True) or {}
-    numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
-    if not numero_nf:
-        return jsonify({"error": "Informe o número da NF."}), 400
-
-    # Verifica se já existe conferência para esta NF
-    existente = ExpedicaoConferenciaSimples.query.filter(
-        ExpedicaoConferenciaSimples.numero_nf == numero_nf
-    ).first()
-    if existente:
-        return jsonify({
-            "encontrada": True,
-            "ja_existe": True,
-            "conferencia_id": existente.id,
-            "status": existente.status,
-            "message": f"Já existe conferência para NF {numero_nf} (ID {existente.id}).",
-        })
-
-    # Busca na Consyste
-    consulta = _consultar_nf_emitida_exp_conferencia(numero_nf)
-    if not consulta.get("encontrada"):
-        return jsonify({
-            "encontrada": False,
-            "numero_nf": numero_nf,
-            "message": f"NF {numero_nf} não encontrada na Consyste.",
-        })
-
-    # Cria conferência automaticamente
-    usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
-    registro = ExpedicaoConferenciaSimples(
-        orcamento="",
-        tipo_referencia="Orcamento",
-        numero_os=None,
-        ordem_compra=None,
-        conferente=usuario,
-        data_conferencia=agora,
-        numero_nf=numero_nf,
-        nome_cliente=consulta.get("nome_cliente") or None,
-        cliente_origem="Consyste" if consulta.get("nome_cliente") else "Manual",
-        nf_origem="Consyste",
-        consyste_document_id=consulta.get("documento_id") or None,
-        consyste_chave=None,
-        status="Pendente de expedição",
-        created_at=agora,
-        updated_at=agora,
-    )
-    db.session.add(registro)
-    db.session.commit()
-
-    fotos = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).all()
-    return jsonify({
-        "encontrada": True,
-        "ja_existe": False,
-        "conferencia_criada": True,
-        "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos),
-        "message": f"Conferência criada para NF {numero_nf}.",
-    }), 201
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/vincular-nf-emitida", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def vincular_nf_emitida_expedicao():
-    """Cria conferência a partir de NF emitida (Consyste) com status Pendente."""
-    payload = request.get_json(silent=True) or {}
-    documento_id = str(payload.get("documento_id") or "").strip()
-    numero_nf = re.sub(r"\D", "", str(payload.get("numero") or ""))
-    destinatario = str(payload.get("destinatario") or "").strip()
-    chave = str(payload.get("chave") or "").strip()
-    orcamento = str(payload.get("orcamento") or "").strip()
-
-    if not numero_nf:
-        return jsonify({"error": "Número da NF é obrigatório."}), 400
-
-    existente = ExpedicaoConferenciaSimples.query.filter(
-        ExpedicaoConferenciaSimples.numero_nf == numero_nf
-    ).first()
-    if not existente and documento_id:
-        existente = ExpedicaoConferenciaSimples.query.filter(
-            ExpedicaoConferenciaSimples.consyste_document_id == documento_id
-        ).first()
-    if existente:
-        return jsonify({"error": "Já existe conferência vinculada a esta NF.", "conferencia_id": existente.id}), 409
-
-    usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
-    registro = ExpedicaoConferenciaSimples(
-        orcamento=orcamento or "",
-        tipo_referencia="Orcamento",
-        numero_os=None,
-        ordem_compra=None,
-        conferente=usuario,
-        data_conferencia=agora,
-        numero_nf=numero_nf,
-        nome_cliente=destinatario or None,
-        cliente_origem="Consyste" if destinatario else "Manual",
-        nf_origem="Consyste",
-        consyste_document_id=documento_id or None,
-        consyste_chave=chave or None,
-        status="Pendente de expedição",
-        created_at=agora,
-        updated_at=agora,
-    )
-    db.session.add(registro)
-    db.session.commit()
-    return jsonify({
-        "sucesso": True,
-        "registro": _serializar_expedicao_conferencia_simples(registro, fotos=[]),
-    }), 201
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/completar", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def completar_conferencia_simples(conferencia_id: int):
-    """Completa o registro pendente com referência, fotos e dados da expedição."""
-    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferência não encontrada."}), 404
-
-    tipo_referencia, orcamento, numero_os, ordem_compra = _extrair_referencia_expedicao_payload(request.form)
-    nome_cliente_informado = str(request.form.get("nome_cliente") or "").strip()
-    transportadora = str(request.form.get("transportadora") or "").strip()
-    placa = str(request.form.get("placa") or "").strip().upper()
-    motorista = str(request.form.get("motorista") or "").strip()
-    numero_nf_form = re.sub(r"\D", "", str(request.form.get("numero_nf") or ""))
-    fotos = [arq for arq in request.files.getlist("fotos") if arq and str(arq.filename or "").strip()]
-
-    if not fotos:
-        fotos_existentes = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count()
-        if fotos_existentes == 0:
-            return jsonify({"error": "Inclua pelo menos uma foto da expedição."}), 400
-
-    for arquivo in fotos:
-        extensao = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
-        if extensao not in ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS:
-            return jsonify({"error": "Envie apenas imagens JPG, PNG, WEBP ou BMP."}), 400
-
-    if tipo_referencia == "OrdemCompra":
-        if not ordem_compra:
-            return jsonify({"error": "Informe o número da ordem de compra."}), 400
-    elif not orcamento:
-        return jsonify({"error": "Informe o número do orçamento."}), 400
-
-    registro.tipo_referencia = tipo_referencia
-    registro.orcamento = orcamento
-    registro.numero_os = numero_os or None
-    registro.ordem_compra = ordem_compra or None
-
-    nome_cliente_final = registro.nome_cliente or None
-    cliente_origem = registro.cliente_origem or "Manual"
-    consyste_document_id = registro.consyste_document_id
-    nf_origem = registro.nf_origem or "Manual"
-
-    if numero_nf_form:
-        consulta_nf = _consultar_nf_emitida_exp_conferencia(numero_nf_form)
-        if consulta_nf.get("encontrada"):
-            nome_cliente_consyste = str(consulta_nf.get("nome_cliente") or "").strip()
-            if nome_cliente_informado:
-                nome_cliente_final = nome_cliente_informado
-                cliente_origem = "Manual"
-            else:
-                nome_cliente_final = nome_cliente_consyste or nome_cliente_final
-                cliente_origem = "Consyste" if nome_cliente_consyste else "Manual"
-            consyste_document_id = str(consulta_nf.get("documento_id") or "").strip() or None
-            nf_origem = "Consyste"
-        else:
-            if not nome_cliente_informado:
-                return jsonify({"error": "Informe o nome do cliente/fornecedor quando a NF ainda não estiver disponível na Consyste."}), 400
-            nome_cliente_final = nome_cliente_informado
-            cliente_origem = "Manual"
-            consyste_document_id = None
-            nf_origem = "Manual"
-        registro.numero_nf = numero_nf_form
-    elif nome_cliente_informado:
-        nome_cliente_final = nome_cliente_informado
-        cliente_origem = "Manual"
-
-    registro.nome_cliente = nome_cliente_final or None
-    registro.cliente_origem = cliente_origem
-    registro.consyste_document_id = consyste_document_id
-    registro.nf_origem = nf_origem
-
-    if transportadora:
-        registro.transportadora = transportadora
-    if placa:
-        registro.placa = placa
-    if motorista:
-        registro.motorista = motorista
-
-    registro.conferente = session.get("username", registro.conferente)
-    registro.updated_at = datetime.now()
-
-    fotos_salvas = []
-    if fotos:
-        base_dir = _expedicao_conferencia_simples_fotos_dir()
-        agora = datetime.now()
-        fotos_existentes_count = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count()
-        referencia_foto = _referencia_principal_expedicao(registro) or str(registro.id)
-        prefixo_foto = "ORDEM COMPRA" if registro.tipo_referencia == "OrdemCompra" else "ORCAMENTO"
-        try:
-            for index, arquivo in enumerate(fotos, start=fotos_existentes_count + 1):
-                extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1].lower() or ".jpg"
-                nome_final = _nome_foto_expedicao_conferencia(referencia_foto, agora, index, extensao, prefixo=prefixo_foto)
-                nome_arquivo_local = secure_filename(nome_final) or f"conf_{registro.id}_{index}{extensao}"
-                caminho_final = os.path.join(base_dir, nome_arquivo_local)
-                arquivo.save(caminho_final)
-                foto = ExpedicaoConferenciaSimplesFoto(
-                    conferencia_id=registro.id,
-                    file_name=nome_final,
-                    file_path=caminho_final,
-                )
-                db.session.add(foto)
-                fotos_salvas.append(foto)
-        except Exception as exc:
-            db.session.rollback()
-            return jsonify({"error": f"Falha ao salvar as fotos. Detalhe: {exc}"}), 500
-
-    db.session.commit()
-    todas_fotos = (
-        ExpedicaoConferenciaSimplesFoto.query
-        .filter_by(conferencia_id=registro.id)
-        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-        .all()
-    )
-    return jsonify({
-        "sucesso": True,
-        "registro": _serializar_expedicao_conferencia_simples(registro, fotos=todas_fotos),
-    })
-
-
-@api_bp.route("/api/expedicao/conferencia-simples", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def criar_expedicao_conferencia_simples():
-    tipo_referencia, orcamento, numero_os, ordem_compra = _extrair_referencia_expedicao_payload(request.form)
-    numero_nf = re.sub(r"\D", "", str(request.form.get("numero_nf") or ""))
-    nome_cliente_manual = str(request.form.get("nome_cliente") or "").strip()
-    transportadora = str(request.form.get("transportadora") or "").strip()
-    placa = str(request.form.get("placa") or "").strip().upper()
-    fotos = [arquivo for arquivo in request.files.getlist("fotos") if arquivo and str(arquivo.filename or "").strip()]
-
-    if tipo_referencia == "OrdemCompra":
-        if not ordem_compra:
-            return jsonify({"error": "Informe o número da ordem de compra."}), 400
-    elif not orcamento:
-        return jsonify({"error": "Informe o número do orçamento."}), 400
-    if not fotos:
-        return jsonify({"error": "Inclua pelo menos uma foto da expedição."}), 400
-
-    for arquivo in fotos:
-        extensao = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
-        if extensao not in ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS:
-            return jsonify({"error": "Envie apenas imagens JPG, PNG, WEBP ou BMP."}), 400
-
-    nome_cliente = nome_cliente_manual
-    cliente_origem = "Manual"
-    consyste_document_id = None
-
-    if numero_nf:
-        consulta_nf = _consultar_nf_emitida_exp_conferencia(numero_nf)
-        if consulta_nf.get("encontrada"):
-            nome_cliente = str(consulta_nf.get("nome_cliente") or "").strip() or nome_cliente_manual
-            cliente_origem = "Consyste" if nome_cliente else "Manual"
-            consyste_document_id = str(consulta_nf.get("documento_id") or "").strip() or None
-        elif not nome_cliente_manual:
-            return jsonify({"error": "Informe o nome do cliente/fornecedor quando a NF ainda não estiver disponível na Consyste."}), 400
-
-    usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
-    motorista = str(request.form.get("motorista") or "").strip()
-    registro = ExpedicaoConferenciaSimples(
-        orcamento=orcamento,
-        tipo_referencia=tipo_referencia,
-        numero_os=numero_os or None,
-        ordem_compra=ordem_compra or None,
-        conferente=usuario,
-        data_conferencia=agora,
-        numero_nf=numero_nf or None,
-        nome_cliente=nome_cliente or None,
-        cliente_origem=cliente_origem,
-        nf_origem="Consyste" if (numero_nf and consyste_document_id) else "Manual",
-        consyste_document_id=consyste_document_id,
-        transportadora=transportadora or None,
-        placa=placa or None,
-        motorista=motorista or None,
-        status="Pendente de expedição",
-        created_at=agora,
-        updated_at=agora,
-    )
-    db.session.add(registro)
-    db.session.flush()
-
-    fotos_salvas = []
-    base_dir = _expedicao_conferencia_simples_fotos_dir()
-    referencia_foto = _referencia_principal_expedicao(registro) or str(registro.id)
-    prefixo_foto = "ORDEM COMPRA" if registro.tipo_referencia == "OrdemCompra" else "ORCAMENTO"
-    try:
-        for index, arquivo in enumerate(fotos, start=1):
-            extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1].lower() or ".jpg"
-            nome_final = _nome_foto_expedicao_conferencia(referencia_foto, agora, index, extensao, prefixo=prefixo_foto)
-            nome_arquivo_local = secure_filename(nome_final) or f"expedicao_{registro.id}_{index}{extensao}"
-            caminho_final = os.path.join(base_dir, nome_arquivo_local)
-            arquivo.save(caminho_final)
-
-            foto = ExpedicaoConferenciaSimplesFoto(
-                conferencia_id=registro.id,
-                file_name=nome_final,
-                file_path=caminho_final,
-            )
-            db.session.add(foto)
-            fotos_salvas.append(foto)
-    except Exception as exc:
-        db.session.rollback()
-        return jsonify({"error": f"Falha ao salvar as fotos da expedição. Detalhe: {exc}"}), 500
-
-    db.session.commit()
-    return jsonify(
-        {
-            "sucesso": True,
-            "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos_salvas),
-        }
-    ), 201
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/status", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def atualizar_status_expedicao_conferencia_simples(conferencia_id: int):
-    payload = request.get_json(silent=True) or {}
-    novo_status = payload.get("status_slug") or payload.get("status") or "expedido"
-    status_normalizado = _status_normalizado_expedicao_conferencia(str(novo_status))
-    if status_normalizado not in {"Pendente de expedição", "Expedido", "Aguardando estorno"}:
-        return jsonify({"error": "Status inválido."}), 400
-
-    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferência não encontrada."}), 404
-
-    usuario = session.get("username", "desconhecido")
-    is_admin = session.get("role") == "Admin"
-
-    # Conferente não pode reverter Expedido → Pendente diretamente; precisa de autorização admin
-    status_atual_normalizado = _status_normalizado_expedicao_conferencia(registro.status)
-    if status_atual_normalizado == "Expedido" and status_normalizado == "Pendente de expedição" and not is_admin:
-        motivo = str(payload.get("motivo") or "").strip()
-        if not motivo:
-            return jsonify({"error": "Informe o motivo do estorno."}), 400
-        existente = ExpedicaoConferenciaSimplesEstorno.query.filter_by(
-            conferencia_id=conferencia_id, status="Pendente"
-        ).first()
-        if existente:
-            return jsonify({"error": "Já existe uma solicitação de estorno pendente para esta conferência."}), 409
-        db.session.add(ExpedicaoConferenciaSimplesEstorno(
-            conferencia_id=conferencia_id,
-            solicitante=usuario,
-            motivo=motivo,
-        ))
-        registro.status = "Aguardando estorno"
-        registro.updated_at = datetime.now()
-        db.session.commit()
-        fotos = (
-            ExpedicaoConferenciaSimplesFoto.query
-            .filter_by(conferencia_id=registro.id)
-            .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-            .all()
-        )
-        return jsonify({"sucesso": True, "aguardando_admin": True, "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos)})
-
-    registro.status = status_normalizado
-    registro.updated_at = datetime.now()
-    if status_normalizado == "Expedido":
-        registro.expedido_at = datetime.now()
-        registro.expedido_by = usuario
-    else:
-        registro.expedido_at = None
-        registro.expedido_by = None
-
-    db.session.commit()
-    fotos = (
-        ExpedicaoConferenciaSimplesFoto.query
-        .filter_by(conferencia_id=registro.id)
-        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-        .all()
-    )
-    return jsonify({"sucesso": True, "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos)})
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>", methods=["DELETE"])
-@roles_required("Admin")
-def excluir_expedicao_conferencia_simples(conferencia_id: int):
-    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferência não encontrada."}), 404
-
-    estornos = (
-        ExpedicaoConferenciaSimplesEstorno.query
-        .filter_by(conferencia_id=registro.id)
-        .all()
-    )
-    fotos = (
-        ExpedicaoConferenciaSimplesFoto.query
-        .filter_by(conferencia_id=registro.id)
-        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-        .all()
-    )
-
-    try:
-        for estorno in estornos:
-            db.session.delete(estorno)
-
-        for foto in fotos:
-            caminho_foto = str(foto.file_path or "").strip()
-            if caminho_foto and os.path.isfile(caminho_foto):
-                try:
-                    os.remove(caminho_foto)
-                except OSError:
-                    pass
-            db.session.delete(foto)
-
-        db.session.delete(registro)
-        db.session.commit()
-        return jsonify({"sucesso": True})
-    except Exception as exc:
-        db.session.rollback()
-        return jsonify({"error": f"Não foi possível excluir o registro. Detalhe: {exc}"}), 500
-
-
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/estornos-pendentes")
-@roles_required("Admin")
-def listar_estornos_pendentes_conferencia_simples():
-    rows = (
-        ExpedicaoConferenciaSimplesEstorno.query
-        .filter_by(status="Pendente")
-        .order_by(ExpedicaoConferenciaSimplesEstorno.created_at.desc())
-        .all()
-    )
-    payload = []
-    for row in rows:
-        registro = ExpedicaoConferenciaSimples.query.get(row.conferencia_id)
-        payload.append({
-            "id": row.id,
-            "conferencia_id": row.conferencia_id,
-            "orcamento": registro.orcamento if registro else "---",
-            "numero_nf": registro.numero_nf if registro else "---",
-            "nome_cliente": registro.nome_cliente if registro else "---",
-            "solicitante": row.solicitante,
-            "motivo": row.motivo,
-            "data": row.created_at.strftime("%d/%m/%Y %H:%M") if row.created_at else "---",
-        })
-    return jsonify(payload)
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/estorno/<int:estorno_id>/aprovar", methods=["POST"])
-@roles_required("Admin")
-def aprovar_estorno_conferencia_simples(estorno_id: int):
-    estorno = ExpedicaoConferenciaSimplesEstorno.query.filter_by(id=estorno_id, status="Pendente").first()
-    if not estorno:
-        return jsonify({"error": "Solicitação não encontrada ou já processada."}), 404
-
-    payload = request.get_json(silent=True) or {}
-    observacao = str(payload.get("observacao") or "").strip()
-
-    registro = ExpedicaoConferenciaSimples.query.get(estorno.conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferência não encontrada."}), 404
-
-    estorno.status = "Aprovado"
-    estorno.admin_usuario = session.get("username", "admin")
-    estorno.admin_observacao = observacao
-    estorno.resolvido_at = datetime.now()
-
-    registro.status = "Pendente de expedição"
-    registro.expedido_at = None
-    registro.expedido_by = None
-    registro.updated_at = datetime.now()
-
-    db.session.commit()
-    return jsonify({"sucesso": True, "conferencia_id": registro.id})
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/estorno/<int:estorno_id>/rejeitar", methods=["POST"])
-@roles_required("Admin")
-def rejeitar_estorno_conferencia_simples(estorno_id: int):
-    estorno = ExpedicaoConferenciaSimplesEstorno.query.filter_by(id=estorno_id, status="Pendente").first()
-    if not estorno:
-        return jsonify({"error": "Solicitação não encontrada ou já processada."}), 404
-
-    payload = request.get_json(silent=True) or {}
-    observacao = str(payload.get("observacao") or "").strip()
-
-    registro = ExpedicaoConferenciaSimples.query.get(estorno.conferencia_id)
-    if registro and registro.status == "Aguardando estorno":
-        registro.status = "Expedido"
-        registro.updated_at = datetime.now()
-
-    estorno.status = "Rejeitado"
-    estorno.admin_usuario = session.get("username", "admin")
-    estorno.admin_observacao = observacao
-    estorno.resolvido_at = datetime.now()
-
-    db.session.commit()
-    return jsonify({"sucesso": True})
-
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/fotos/<int:foto_id>")
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def obter_foto_expedicao_conferencia_simples(foto_id: int):
-    foto = ExpedicaoConferenciaSimplesFoto.query.get(foto_id)
-    if not foto:
-        return jsonify({"error": "Foto não encontrada."}), 404
-    if not os.path.isfile(foto.file_path):
-        return jsonify({"error": "Arquivo da foto não encontrado no armazenamento."}), 404
-    return send_file(foto.file_path)
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/canhoto", methods=["POST"])
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def upload_canhoto_expedicao_conferencia_simples(conferencia_id: int):
-    """Upload de foto do canhoto assinado pelo cliente apos expedicao."""
-    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferencia nao encontrada."}), 404
-
-    if registro.status != "Expedido":
-        return jsonify({"error": "O canhoto so pode ser adicionado apos a expedicao ser concluida."}), 400
-
-    canhoto = request.files.get("canhoto")
-    if not canhoto or not canhoto.filename:
-        return jsonify({"error": "Envie a foto do canhoto."}), 400
-
-    extensao = os.path.splitext(secure_filename(canhoto.filename or ""))[1].lower()
-    if extensao not in ALLOWED_EXPEDICAO_CONFERENCIA_EXTENSIONS:
-        return jsonify({"error": "Envie apenas imagens JPG, PNG, WEBP ou BMP."}), 400
-
-    base_dir = _expedicao_conferencia_simples_fotos_dir()
-    agora = datetime.now()
-    referencia = registro.orcamento or str(registro.id)
-    nome_final = f"CANHOTO_{referencia}_{agora.strftime('%Y%m%d_%H%M%S')}{extensao}"
-    nome_arquivo_local = secure_filename(nome_final) or f"canhoto_{registro.id}{extensao}"
-    caminho_final = os.path.join(base_dir, nome_arquivo_local)
-
-    try:
-        canhoto.save(caminho_final)
-    except Exception as exc:
-        return jsonify({"error": f"Falha ao salvar o canhoto. Detalhe: {exc}"}), 500
-
-    registro.canhoto_file_name = nome_final
-    registro.canhoto_file_path = caminho_final
-    registro.canhoto_uploaded_at = agora
-    registro.canhoto_uploaded_by = session.get("username", "desconhecido")
-    registro.status = "Finalizado"
-    registro.finalizado_at = agora
-    registro.finalizado_by = session.get("username", "desconhecido")
-    registro.updated_at = agora
-
-    db.session.commit()
-
-    fotos = (
-        ExpedicaoConferenciaSimplesFoto.query
-        .filter_by(conferencia_id=registro.id)
-        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
-        .all()
-    )
-    return jsonify({
-        "sucesso": True,
-        "registro": _serializar_expedicao_conferencia_simples(registro, fotos=fotos),
-    })
-
-
-@api_bp.route("/api/expedicao/conferencia-simples/<int:conferencia_id>/canhoto")
-@permission_required("PAGE_EXPEDICAO_CONFERENCIA")
-def obter_canhoto_expedicao_conferencia_simples(conferencia_id: int):
-    """Retorna a foto do canhoto assinado."""
-    registro = ExpedicaoConferenciaSimples.query.get(conferencia_id)
-    if not registro:
-        return jsonify({"error": "Conferencia nao encontrada."}), 404
-    if not registro.canhoto_file_name:
-        return jsonify({"error": "Canhoto nao anexado."}), 404
-    if not os.path.isfile(registro.canhoto_file_path):
-        return jsonify({"error": "Arquivo do canhoto nao encontrado."}), 404
-    return send_file(registro.canhoto_file_path)
-
 
 
 @api_bp.route("/api/expedicao/conferencia/relatorios")
@@ -5792,12 +3497,36 @@ def registrar_faturamento_expedicao():
         conferencia.closed_by = session.get("username", "desconhecido")
 
     db.session.commit()
+
+    # Envio automatico de NF-e por e-mail (modo teste controlado por config)
+    email_resultado = None
+    try:
+        auto_enabled = bool(current_app.config.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", True))
+        email_flag = payload.get("enviar_email_nfe")
+        # Se flag explicita vier, respeita; caso contrario usa config.
+        deve_enviar = bool(email_flag) if email_flag is not None else auto_enabled
+        if deve_enviar:
+            from ..services.nfe_email_service import enviar_nfe_por_email
+            override_email = str(payload.get("email_destinatario") or "").strip() or None
+            email_resultado = enviar_nfe_por_email(
+                numero_nf=numero_nf,
+                override_email=override_email,
+                origem="Auto",
+                conferencia_id=conferencia.id,
+                faturamento_id=faturamento.id,
+                disparado_por=session.get("username", "desconhecido"),
+            )
+    except Exception as exc:  # nunca bloquear o faturamento
+        current_app.logger.warning("Falha ao disparar e-mail de NF-e: %s", exc)
+        email_resultado = {"sucesso": False, "erro": "excecao interna"}
+
     return jsonify(
         {
             "sucesso": True,
             "faturamento_id": faturamento.id,
             "status": conferencia.status,
             "alertas_parciais": alertas_parciais,
+            "email_nfe": email_resultado,
         }
     )
 
@@ -6299,7 +4028,7 @@ def admin_estornar_parcial_expedicao():
 
 
 @api_bp.route("/api/pendentes_priorizadas")
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def listar_pendentes_priorizadas():
     notas = (
         db.session.query(ItemNota.numero_nota, ItemNota.fornecedor)
@@ -6376,7 +4105,7 @@ def excluir_nota_pendente():
 
 
 @api_bp.route("/api/itens/<nota>")
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def buscar_itens(nota):
     ok_lock, lock = _acquire_lock(nota, session["username"])
     if not ok_lock:
@@ -6428,7 +4157,7 @@ def buscar_itens(nota):
 
 
 @api_bp.route("/api/lock/release", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def release_lock():
     data = request.get_json(silent=True) or {}
     payload = nota_schema.load(data)
@@ -6438,7 +4167,7 @@ def release_lock():
 
 
 @api_bp.route("/api/lock/heartbeat", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def lock_heartbeat():
     data = request.get_json(silent=True) or {}
     payload = nota_schema.load(data)
@@ -6457,7 +4186,7 @@ def lock_heartbeat():
 
 
 @api_bp.route("/api/checklist/<nota>")
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def obter_checklist(nota):
     checklist = ChecklistRecebimento.query.filter_by(numero_nota=str(nota)).first()
     if not checklist:
@@ -6477,7 +4206,7 @@ def obter_checklist(nota):
 
 
 @api_bp.route("/api/checklist", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def gravar_checklist():
     data = request.get_json(silent=True) or {}
     numero_nota = str(data.get("nota") or "").strip()
@@ -6501,7 +4230,7 @@ def gravar_checklist():
 
 
 @api_bp.route("/api/divergencia/evidencia", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def upload_evidencia_divergencia():
     file = request.files.get("arquivo")
     numero_nota = str(request.form.get("nota") or "").strip()
@@ -6553,7 +4282,7 @@ def listar_tentativas_conferencia(nota):
 
 
 @api_bp.route("/validar", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def validar():
     user = session["username"]
     dados = validar_schema.load(request.json or {})
@@ -6863,7 +4592,7 @@ def devolver_material():
 
 
 @api_bp.route("/api/recebimento/solicitar_devolucao", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def solicitar_devolucao_recebimento():
     data = devolver_schema.load(request.json or {})
     numero_nota = str(data.get("nota"))
@@ -7071,319 +4800,70 @@ def resetar_nota_admin():
     return jsonify({"sucesso": False, "msg": "Nota não encontrada"}), 404
 
 
-def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
-    numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
-    if not numero_resolvido or not itens:
-        return {"sucesso": False, "msg": "NF não encontrada para manifestação.", "status_code": 404}
-
-    log_idempotente = _ultimo_log_manifestacao(numero_resolvido, manifestacao=manifestacao)
-    if log_idempotente and log_idempotente.status == "Sucesso":
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="ManifestacaoIdempotente",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Ignorado",
-            detalhe=f"{descricao_evento} já registrada com sucesso anteriormente.",
-            payload={"manifestacao": manifestacao},
-            commit=True,
-        )
-        return {
-            "sucesso": True,
-            "msg": f"{descricao_evento} já registrada com sucesso anteriormente.",
-            "status_code": 200,
-            "payload": {},
-            "idempotente": True,
-        }
-
-    if not chave_resolvida:
-        detalhe = "NF sem chave de acesso cadastrada para manifestação do destinatário."
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=None,
-                manifestacao=manifestacao,
-                status="Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao},
-        )
-        db.session.commit()
-        return {"sucesso": False, "msg": detalhe, "status_code": 400}
-
-    try:
-        ok, status_code, payload = manifestar_destinatario_consyste(
-            chave_resolvida,
-            manifestacao=manifestacao,
-            justificativa=justificativa,
-        )
-        payload = _normalize_external_payload(payload)
-        detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ."
-        if ok:
-            protocolo_raw = (
-                (payload or {}).get("nProt")
-                or (payload or {}).get("protocolo")
-                or (payload or {}).get("numero_protocolo")
-                or (payload or {}).get("protocol")
-            )
-            if protocolo_raw:
-                detalhe = f"{descricao_evento} enviada com sucesso à SEFAZ. Protocolo: {str(protocolo_raw)[:60]}"
-        else:
-            detalhe = (
-                (payload or {}).get("error")
-                or (payload or {}).get("motivo")
-                or f"Falha ao enviar {descricao_evento.lower()}."
-            )[:500]
-
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=chave_resolvida,
-                manifestacao=manifestacao,
-                status="Sucesso" if ok else "Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Sucesso" if ok else "Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao, "payload": payload},
-        )
-        db.session.commit()
-        return {
-            "sucesso": ok,
-            "msg": detalhe,
-            "status_code": status_code,
-            "payload": payload,
-        }
-    except Exception as exc:
-        detalhe = str(exc)[:500]
-        db.session.add(
-            LogManifestacaoDestinatario(
-                numero_nota=numero_resolvido,
-                chave_acesso=chave_resolvida,
-                manifestacao=manifestacao,
-                status="Falha",
-                detalhe=detalhe,
-                usuario=usuario,
-            )
-        )
-        _registrar_evento_fiscal_nota(
-            numero_resolvido,
-            evento="Manifestacao",
-            usuario=usuario,
-            etapa="Manifestacao",
-            status="Falha",
-            detalhe=detalhe,
-            payload={"manifestacao": manifestacao},
-        )
-        db.session.commit()
-        return {"sucesso": False, "msg": detalhe, "status_code": 500}
 @api_bp.route("/api/concluidas")
 @roles_required("Fiscal", "Admin")
 def listar_concluidas():
-    return jsonify(_build_documento_entrada_lista("concluido"))
+    notas_db = (
+        db.session.query(
+            ItemNota.numero_nota,
+            ItemNota.fornecedor,
+            func.max(ItemNota.material_cliente),
+            func.max(ItemNota.remessa),
+        )
+        .filter_by(status="Concluído")
+        .group_by(ItemNota.numero_nota, ItemNota.fornecedor)
+        .all()
+    )
+    lista = []
+
+    for nota in notas_db:
+        numero_nota = nota[0]
+        resumo_divergencia = _summarize_divergencia_nota(numero_nota)
+        motivo = resumo_divergencia["detalhe_divergencia"] if resumo_divergencia["divergencia"] == "Sim" else ""
+        itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
+        exige_codigo_material_remessa = bool(nota[3]) and _remessa_exige_codigo_material(itens_nota)
+
+        pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
+        data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
+        fim_conferencia = max((i.fim_conferencia for i in itens_nota if i.fim_conferencia), default=None)
+        usuario_conferencia = next((i.usuario_conferencia for i in itens_nota if i.usuario_conferencia), None)
+
+        pendencias = []
+        if motivo:
+            pendencias.append({"tipo": "divergencia", "titulo": "Divergência", "severidade": "warning", "descricao": motivo})
+        if bool(nota[3]) and exige_codigo_material_remessa:
+            pendencias.append({"tipo": "remessa", "titulo": "Código material", "severidade": "warning", "descricao": "Remessa de industrialização exige código do material por item."})
+        if not pedido_compra or pedido_compra == "---":
+            if not bool(nota[2]) and not bool(nota[3]):
+                pendencias.append({"tipo": "pedido", "titulo": "Sem pedido", "severidade": "info", "descricao": "NF conferida sem pedido de compra vinculado."})
+
+        lista.append(
+            {
+                "numero": numero_nota,
+                "fornecedor": nota[1],
+                "material_cliente": bool(nota[2]),
+                "remessa": bool(nota[3]),
+                "exige_codigo_material_remessa": exige_codigo_material_remessa,
+                "motivo_pendencia": motivo,
+                "divergencia_status": resumo_divergencia["divergencia_status"],
+                "etapa_atual": "Liberada",
+                "status_atual": "Concluído",
+                "pedido_compra": pedido_compra,
+                "conferido_por": usuario_conferencia or "---",
+                "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M") if fim_conferencia else "---",
+                "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M") if data_importacao else "---",
+                "data_lancamento": "---",
+                "manifestacao": None,
+                "pendencias": pendencias,
+            }
+        )
+
+    return jsonify(lista)
+
 
 @api_bp.route("/api/confirmar_lancamento", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def confirmar_lancamento():
-    payload = confirmar_schema.load(request.json or {})
-    numero_nota = str(payload.get("nota") or "").strip()
-    codigo = str(payload.get("codigo") or "").strip()
-    codigo_material = str(payload.get("codigo_material") or "").strip()
-    codigos_materiais_payload = payload.get("codigos_materiais") or []
-    manifestar_destinatario = bool(payload.get("manifestar_destinatario", True))
-    idempotency_key = str(payload.get("idempotency_key") or "").strip()
-
-    itens_lancados = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").all()
-    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).all()
-    itens_lancados = [item for item in itens_nota if _status_matches(item.status, "lancado")]
-    if itens_lancados:
-        codigo_existente = next(
-            (str(item.numero_lancamento or "").strip() for item in itens_lancados if str(item.numero_lancamento or "").strip()),
-            "",
-        )
-        if codigo_existente == codigo:
-            return jsonify(
-                {
-                    "sucesso": True,
-                    "idempotente": True,
-                    "msg": "Lançamento fiscal já registrado anteriormente para esta NF.",
-                    "resumo": _resumo_documento_entrada(numero_nota, itens_lancados),
-                }
-            )
-        return (
-            jsonify(
-                {
-                    "sucesso": False,
-                    "msg": f"NF já lançada com o identificador {codigo_existente or '---'}.",
-                }
-            ),
-            409,
-        )
-
-    itens_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
-    itens_concluidos = [item for item in itens_nota if _status_matches(item.status, "concluido")]
-    if not itens_concluidos:
-        return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
-
-    eh_material_cliente = bool(itens_concluidos[0].material_cliente)
-    eh_remessa = bool(itens_concluidos[0].remessa)
-    remessa_exige_codigo_material = eh_remessa and _remessa_exige_codigo_material(itens_concluidos)
-
-    if remessa_exige_codigo_material:
-        codigos_por_item = {}
-        for entrada in codigos_materiais_payload:
-            item_id = entrada.get("item_id")
-            codigo_item = str(entrada.get("codigo_material") or "").strip()
-            if not isinstance(item_id, int):
-                continue
-            if not codigo_item:
-                continue
-            codigos_por_item[item_id] = codigo_item[:50]
-
-        itens_sem_codigo = [item.id for item in itens_concluidos if not codigos_por_item.get(item.id)]
-        if itens_sem_codigo:
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": "Para NF de remessa de industrialização, informe o código do material para cada item do XML no lançamento.",
-                    }
-                ),
-                400,
-            )
-
-        for item in itens_concluidos:
-            item.codigo = codigos_por_item.get(item.id)
-        db.session.commit()
-    elif eh_material_cliente:
-        if not codigo_material:
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": "Para NF de material de cliente, informe o código do material.",
-                    }
-                ),
-                400,
-            )
-        for item in itens_concluidos:
-            item.codigo = codigo_material[:50]
-        db.session.commit()
-
-    timestamp_lancamento = datetime.now()
-    for item in itens_concluidos:
-        item.status = "Lançado"
-        item.usuario_lancamento = session["username"]
-        item.data_lancamento = timestamp_lancamento
-        item.numero_lancamento = codigo
-    ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").update(
-        {
-            "status": "Lançado",
-            "usuario_lancamento": session["username"],
-            "data_lancamento": timestamp_lancamento,
-            "numero_lancamento": codigo,
-        }
-    )
-    _registrar_evento_fiscal_nota(
-        numero_nota,
-        evento="LancamentoFiscal",
-        usuario=session["username"],
-        etapa="Lancamento",
-        status="Sucesso",
-        detalhe=f"Lançamento fiscal gravado com código ERP {codigo or '---'}.",
-        payload={
-            "codigo": codigo,
-            "manifestar_destinatario": manifestar_destinatario,
-            "idempotency_key": idempotency_key or None,
-            "material_cliente": eh_material_cliente,
-            "remessa": eh_remessa,
-        },
-    )
-    db.session.commit()
-
-    conciliacao_conserto = None
-    try:
-        conciliacao_conserto = ConsertoService.processar_retorno_no_lancamento(
-            numero_nota=numero_nota,
-            usuario=session["username"],
-        )
-    except Exception:
-        db.session.rollback()
-
-    manifestacao_result = None
-    if manifestar_destinatario:
-        manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
-        if not manifestacao_result.get("sucesso"):
-            ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
-                {
-                    "status": "Concluído",
-                    "usuario_lancamento": None,
-                    "data_lancamento": None,
-                    "numero_lancamento": None,
-                }
-            )
-            _registrar_evento_fiscal_nota(
-                numero_nota,
-                evento="LancamentoFiscal",
-                usuario=session["username"],
-                etapa="Lancamento",
-                status="Revertido",
-                detalhe=manifestacao_result.get("msg") or "Falha ao manifestar destinatário após lançamento.",
-                payload={"codigo": codigo, "motivo": "falha_manifestacao"},
-            )
-            db.session.commit()
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
-                        "manifestacao": manifestacao_result,
-                    }
-                ),
-                manifestacao_result.get("status_code") or 502,
-            )
-
-    evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
-    processamento = (
-        _processar_evento_integracao_wms(evento)
-        if evento and criado
-        else {"sucesso": True, "resultado": {"mensagem": "Evento WMS ja sincronizado"}}
-    )
-    itens_atualizados = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-
-    return jsonify(
-        {
-            "sucesso": True,
-            "idempotente": False,
-            "conserto": conciliacao_conserto,
-            "manifestacao": manifestacao_result,
-            "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
-            "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
-            "fila_integracao": {
-                "evento_id": evento.id if evento else None,
-                "status": evento.status if evento else "NaoCriado",
-                "novo_evento": bool(criado),
-            },
-            "resumo": _resumo_documento_entrada(numero_nota, itens_atualizados),
-        }
-    )
-
     payload = confirmar_schema.load(request.json or {})
     numero_nota = str(payload.get("nota"))
     codigo = payload.get("codigo")
@@ -7450,15 +4930,6 @@ def confirmar_lancamento():
     )
     db.session.commit()
 
-    conciliacao_conserto = None
-    try:
-        conciliacao_conserto = ConsertoService.processar_retorno_no_lancamento(
-            numero_nota=numero_nota,
-            usuario=session["username"],
-        )
-    except Exception:
-        db.session.rollback()
-
     manifestacao_result = None
     if manifestar_destinatario:
         manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
@@ -7485,16 +4956,11 @@ def confirmar_lancamento():
 
     # Integração com WMS via fila (idempotente), com tentativa imediata best-effort.
     evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
-    processamento = (
-        _processar_evento_integracao_wms(evento)
-        if evento and criado
-        else {"sucesso": True, "resultado": {"mensagem": "Evento WMS ja sincronizado"}}
-    )
+    processamento = _processar_evento_integracao_wms(evento) if evento else {"sucesso": False, "erro": "evento_nao_criado"}
 
     return jsonify(
         {
             "sucesso": True,
-            "conserto": conciliacao_conserto,
             "manifestacao": manifestacao_result,
             "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
             "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
@@ -7510,33 +4976,6 @@ def confirmar_lancamento():
 @api_bp.route("/api/fiscal/manifestar_destinatario", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def manifestar_destinatario_fiscal():
-    payload = manifestar_destinatario_schema.load(request.json or {})
-    numero_nota = str(payload.get("nota") or "").strip()
-    if not numero_nota:
-        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
-
-    possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
-    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
-    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
-    possui_lancamento = next((item for item in ItemNota.query.filter_by(numero_nota=numero_nota).all() if _status_matches(item.status, "lancado")), None)
-    if not possui_lancamento:
-        return jsonify({"sucesso": False, "msg": "A confirmação da operação só pode ser enviada para NF lançada."}), 409
-
-    resultado = _manifestar_confirmacao_operacao(numero_nota, session["username"])
-    status_http = 200 if resultado.get("sucesso") else (resultado.get("status_code") or 500)
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-    return (
-        jsonify(
-            {
-                "sucesso": bool(resultado.get("sucesso")),
-                "msg": resultado.get("msg"),
-                "idempotente": bool(resultado.get("idempotente")),
-                "resumo": _resumo_documento_entrada(numero_nota, itens),
-            }
-        ),
-        status_http,
-    )
-
     payload = manifestar_destinatario_schema.load(request.json or {})
     numero_nota = str(payload.get("nota") or "").strip()
     if not numero_nota:
@@ -7565,17 +5004,12 @@ def processar_fila_integracao_wms():
 @roles_required("Fiscal", "Admin")
 def estornar_lancamento_fiscal():
     payload = estorno_lancamento_schema.load(request.json or {})
-    numero_nota = str(payload.get("nota") or "").strip()
-    motivo = _motivo_estorno_composto(
-        payload.get("motivo_padrao"),
-        payload.get("complemento"),
-        payload.get("motivo"),
-    )
+    numero_nota = str(payload.get("nota"))
+    motivo = payload.get("motivo")
     usuario = session["username"]
 
-    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-    itens_lancados = [item for item in itens_nota if _status_matches(item.status, "lancado")]
-    if not itens_lancados:
+    possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
+    if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
 
     possui_enderecamento_wms = (
@@ -7590,18 +5024,21 @@ def estornar_lancamento_fiscal():
         return (
             jsonify(
                 {
+                    "sucesso": False,
                     "msg": "Não é permitido estornar lançamento fiscal de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
                 }
             ),
             409,
         )
 
-    for item in itens_lancados:
-        item.status = "Concluído"
-        item.numero_lancamento = None
-        item.usuario_lancamento = None
-        item.data_lancamento = None
-
+    ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
+        {
+            "status": "Concluído",
+            "numero_lancamento": None,
+            "usuario_lancamento": None,
+            "data_lancamento": None,
+        }
+    )
     db.session.add(
         LogEstornoLancamento(
             numero_nota=numero_nota,
@@ -7609,70 +5046,106 @@ def estornar_lancamento_fiscal():
             motivo=motivo,
         )
     )
-    _registrar_evento_fiscal_nota(
-        numero_nota,
-        evento="EstornoLancamento",
-        usuario=usuario,
-        etapa="Lancamento",
-        status="Estornado",
-        detalhe=motivo,
-        payload={
-            "motivo_padrao": payload.get("motivo_padrao"),
-            "complemento": payload.get("complemento"),
-        },
-    )
     db.session.commit()
-
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-    return jsonify({"sucesso": True, "motivo": motivo, "resumo": _resumo_documento_entrada(numero_nota, itens)})
+    return jsonify({"sucesso": True})
 
 
 @api_bp.route("/api/fiscal/estornar_conferencia", methods=["POST"])
-@roles_required("Fiscal", "Admin")
-def estornar_conferencia_fiscal():
-    """Estorna conferência: reverte NF de 'Concluído' para 'Pendente'."""
-    payload = request.get_json(silent=True) or {}
-    numero_nota = str(payload.get("nota") or "").strip()
-    motivo = str(payload.get("motivo") or "").strip()
-    if not numero_nota or len(motivo) < 3:
-        return jsonify({"sucesso": False, "msg": "Nota e motivo (mín. 3 caracteres) são obrigatórios."}), 400
+@roles_required("Fiscal", "Admin", "Conferente")
+def estornar_conferencia_recebimento():
+    """Estorna a conferência de recebimento (exclui checklist e cria log de reversão)."""
+    data = request.get_json(silent=True) or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    motivo = str(data.get("motivo") or "").strip()
+    usuario = session["username"]
 
-    usuario = session.get("username", "desconhecido")
-    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).all()
-    itens_concluidos = [item for item in itens_nota if _status_matches(item.status, "concluido")]
-    if not itens_concluidos:
-        return jsonify({"sucesso": False, "msg": "Nota não está com status Concluído para estorno de conferência."}), 404
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "Número da NF obrigatório."}), 400
+    if not motivo:
+        return jsonify({"sucesso": False, "msg": "Motivo do estorno obrigatório."}), 400
 
-    for item in itens_concluidos:
-        item.status = "Pendente"
-        item.usuario_conferencia = None
-        item.inicio_conferencia = None
-        item.fim_conferencia = None
+    # Verifica se há checklist para estornar
+    checklist = ChecklistRecebimento.query.filter_by(numero_nota=numero_nota).first()
+    if not checklist:
+        return jsonify({"sucesso": False, "msg": "Não há conferência registrada para esta NF."}), 404
 
+    # Cria log de reversão da conferência
     db.session.add(
-        LogEstornoLancamento(
+        LogReversaoConferencia(
             numero_nota=numero_nota,
-            usuario_estorno=usuario,
-            motivo=f"[ESTORNO CONFERÊNCIA] {motivo}",
+            usuario_reversao=usuario,
+            motivo=motivo,
         )
     )
-    _registrar_evento_fiscal_nota(
-        numero_nota,
-        evento="EstornoConferencia",
-        usuario=usuario,
-        etapa="Conferencia",
-        status="Pendente",
-        detalhe=motivo,
-    )
+
+    # Remove o checklist de recebimento
+    db.session.delete(checklist)
     db.session.commit()
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
-    return jsonify({"sucesso": True, "motivo": motivo, "resumo": _resumo_documento_entrada(numero_nota, itens)})
+    return jsonify({"sucesso": True, "msg": "Conferência estornada com sucesso."})
+
 
 @api_bp.route("/api/notas_lancadas")
 @roles_required("Fiscal", "Admin")
 def listar_lancadas():
-    return jsonify(_build_documento_entrada_lista("lancado"))
+    notas_db = (
+        db.session.query(ItemNota.numero_nota, ItemNota.fornecedor)
+        .filter_by(status="Lançado")
+        .group_by(ItemNota.numero_nota, ItemNota.fornecedor)
+        .all()
+    )
+
+    resposta = []
+    for numero_nota, fornecedor in notas_db:
+        itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").all()
+        if not itens_nota:
+            continue
+
+        pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
+        data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
+        fim_conferencia = max((i.fim_conferencia for i in itens_nota if i.fim_conferencia), default=None)
+        usuario_conferencia = next((i.usuario_conferencia for i in itens_nota if i.usuario_conferencia), None)
+        data_lancamento = max((i.data_lancamento for i in itens_nota if i.data_lancamento), default=None)
+        usuario_lancamento = next((i.usuario_lancamento for i in itens_nota if i.usuario_lancamento), None)
+        numero_lancamento = next((i.numero_lancamento for i in itens_nota if i.numero_lancamento), None)
+
+        log_manifest = (
+            LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota)
+            .order_by(LogManifestacaoDestinatario.data.desc())
+            .first()
+        )
+        manifestacao = None
+        if log_manifest:
+            manifestacao = {
+                "status": log_manifest.status,
+                "detalhe": log_manifest.detalhe,
+                "data": log_manifest.data.strftime("%d/%m/%Y %H:%M") if log_manifest.data else "---",
+            }
+
+        resposta.append(
+            {
+                "numero": numero_nota,
+                "fornecedor": fornecedor,
+                "codigo_erp": numero_lancamento,
+                "usuario": usuario_lancamento,
+                "etapa_atual": "Lançada",
+                "status_atual": "Lançado",
+                "pedido_compra": pedido_compra,
+                "conferido_por": usuario_conferencia or "---",
+                "lancado_por": usuario_lancamento or "---",
+                "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M") if fim_conferencia else "---",
+                "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M") if data_importacao else "---",
+                "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M") if data_lancamento else "---",
+                "numero_lancamento": numero_lancamento or "---",
+                "material_cliente": bool(itens_nota[0].material_cliente),
+                "remessa": bool(itens_nota[0].remessa),
+                "pendencias": [],
+                "manifestacao": manifestacao,
+            }
+        )
+
+    return jsonify(resposta)
+
 
 @api_bp.route("/api/etiquetas/pendentes", methods=["GET"])
 @permission_required("PAGE_ETIQUETAS")
@@ -7813,93 +5286,6 @@ def imprimir_etiqueta():
 @api_bp.route("/api/detalhes_nf/<numero>")
 @roles_required("Fiscal", "Admin")
 def detalhes_nf(numero):
-    numero = str(numero or "").strip()
-    itens = ItemNota.query.filter_by(numero_nota=numero).order_by(ItemNota.id.asc()).all()
-    if itens:
-        pedido = _coletar_pedidos_nota(itens)
-        material_cliente = bool(itens[0].material_cliente)
-        remessa = bool(itens[0].remessa)
-        if pedido and not material_cliente and not remessa:
-            try:
-                _sincronizar_codigo_interno_por_pedido(numero, pedido)
-            except Exception:
-                db.session.rollback()
-            itens = ItemNota.query.filter_by(numero_nota=numero).order_by(ItemNota.id.asc()).all()
-
-    if not itens:
-        return jsonify({"erro": "Nota não encontrada"}), 404
-
-    resumo = _resumo_documento_entrada(numero, itens)
-    ultimo_estorno = _ultimo_log_estorno(numero)
-    ultimo_evento = (
-        LogEventoFiscalNota.query.filter_by(numero_nota=numero)
-        .order_by(LogEventoFiscalNota.data.desc(), LogEventoFiscalNota.id.desc())
-        .first()
-    )
-    return jsonify(
-        {
-            "numero": numero,
-            "fornecedor": itens[0].fornecedor,
-            "valor_total": itens[0].valor_total or "N/A",
-            "impostos": itens[0].valor_imposto or "N/A",
-            "status_atual": resumo.get("status_atual") or "---",
-            "etapa_atual": resumo.get("etapa_atual") or "---",
-            "workflow": resumo.get("workflow") or [],
-            "pendencias": resumo.get("pendencias") or [],
-            "pedido_compra": resumo.get("pedido_compra") or "---",
-            "material_cliente": bool(itens[0].material_cliente),
-            "remessa": bool(itens[0].remessa),
-            "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
-            "conferido_por": resumo.get("conferido_por") or "---",
-            "data_importacao": resumo.get("data_importacao") or "---",
-            "data_conferencia": resumo.get("data_conferencia") or "---",
-            "lancado_por": resumo.get("lancado_por") or "---",
-            "data_lancamento": resumo.get("data_lancamento") or "---",
-            "manifestacao": resumo.get("manifestacao"),
-            "documentos_disponiveis": any(str(i.chave_acesso or "").strip() for i in itens),
-            "motivos_estorno_padrao": MOTIVOS_ESTORNO_PADRAO,
-            "ultimo_estorno": (
-                (
-                    lambda tipo_slug, tipo_label, motivo_limpo: {
-                        "tipo": tipo_label,
-                        "tipo_slug": tipo_slug,
-                        "motivo": motivo_limpo or "---",
-                        "usuario": ultimo_estorno.usuario_estorno or "---",
-                        "data": ultimo_estorno.data_estorno.strftime("%d/%m/%Y %H:%M") if ultimo_estorno.data_estorno else "---",
-                    }
-                )(*_classificar_log_estorno(ultimo_estorno.motivo))
-                if ultimo_estorno
-                else None
-            ),
-            "ultimo_evento_fiscal": (
-                {
-                    "evento": ultimo_evento.evento,
-                    "etapa": ultimo_evento.etapa,
-                    "status": ultimo_evento.status,
-                    "detalhe": ultimo_evento.detalhe,
-                    "usuario": ultimo_evento.usuario,
-                    "data": ultimo_evento.data.strftime("%d/%m/%Y %H:%M") if ultimo_evento.data else "---",
-                }
-                if ultimo_evento
-                else None
-            ),
-            "timeline": _serializar_timeline_documento_entrada(numero, itens=itens),
-            "itens": [
-                {
-                    "id": i.id,
-                    "codigo": i.codigo,
-                    "desc": i.descricao,
-                    "descricao": i.descricao,
-                    "qtd": i.qtd_real,
-                    "unidade": i.unidade_comercial or "UN",
-                    "cfop": i.cfop or "---",
-                    "pedido_compra": i.pedido_compra or "---",
-                }
-                for i in itens
-            ],
-        }
-    )
-
     itens = ItemNota.query.filter_by(numero_nota=numero).all()
     if itens:
         pedido = _coletar_pedidos_nota(itens)
@@ -7922,9 +5308,87 @@ def detalhes_nf(numero):
             "desc": i.descricao,
             "descricao": i.descricao,
             "qtd": i.qtd_real,
+            "unidade": i.unidade_comercial or "UN",
+            "cfop": i.cfop,
+            "pedido_compra": i.pedido_compra,
         }
         for i in itens
     ]
+
+    # Verifica se há checklist de conferência de recebimento
+    checklist_info = {"existe": False}
+    checklist = ChecklistRecebimento.query.filter_by(numero_nota=str(numero)).first()
+    if checklist:
+        checklist_info = {
+            "existe": True,
+            "usuario": checklist.usuario,
+            "data": checklist.data.strftime("%d/%m/%Y %H:%M") if checklist.data else "---",
+        }
+
+    # Governança / dados chave
+    statuses = {str(item.status or "").strip() for item in itens}
+    if "Lançado" in statuses:
+        etapa_atual = "Lançado"
+    elif "Concluído" in statuses:
+        etapa_atual = "Concluído"
+    elif "Devolvido" in statuses:
+        etapa_atual = "Devolvido"
+    elif any(i.fim_conferencia for i in itens):
+        etapa_atual = "Conferido"
+    else:
+        etapa_atual = "Pendente"
+
+    data_importacao = min(
+        (i.data_importacao for i in itens if i.data_importacao), default=None
+    )
+    fim_conferencia = max(
+        (i.fim_conferencia for i in itens if i.fim_conferencia), default=None
+    )
+    usuario_conferencia = next(
+        (i.usuario_conferencia for i in itens if i.usuario_conferencia), None
+    )
+    data_lancamento = max(
+        (i.data_lancamento for i in itens if i.data_lancamento), default=None
+    )
+    usuario_lancamento = next(
+        (i.usuario_lancamento for i in itens if i.usuario_lancamento), None
+    )
+    numero_lancamento = next(
+        (i.numero_lancamento for i in itens if i.numero_lancamento), None
+    )
+    pedido_compra = _coletar_pedidos_nota(itens).strip() or None
+
+    log_manifest = (
+        LogManifestacaoDestinatario.query.filter_by(
+            numero_nota=str(numero), status="Sucesso"
+        )
+        .order_by(LogManifestacaoDestinatario.data.desc())
+        .first()
+    )
+    manifestacao = None
+    if log_manifest:
+        manifestacao = {
+            "status": log_manifest.status,
+            "data": log_manifest.data.strftime("%d/%m/%Y %H:%M")
+            if log_manifest.data
+            else "---",
+        }
+
+    ultimo_estorno_log = (
+        LogEstornoLancamento.query.filter_by(numero_nota=str(numero))
+        .order_by(LogEstornoLancamento.data_estorno.desc())
+        .first()
+    )
+    ultimo_estorno = None
+    if ultimo_estorno_log:
+        ultimo_estorno = {
+            "motivo": ultimo_estorno_log.motivo or "---",
+            "usuario": ultimo_estorno_log.usuario_estorno or "---",
+            "data": ultimo_estorno_log.data_estorno.strftime("%d/%m/%Y %H:%M")
+            if ultimo_estorno_log.data_estorno
+            else "---",
+        }
+
     return jsonify(
         {
             "numero": numero,
@@ -7932,7 +5396,29 @@ def detalhes_nf(numero):
             "valor_total": itens[0].valor_total or "N/A",
             "impostos": itens[0].valor_imposto or "N/A",
             "status_atual": itens[0].status or "---",
-            "documentos_disponiveis": any(str(i.chave_acesso or "").strip() for i in itens),
+            "etapa_atual": etapa_atual,
+            "pedido_compra": pedido_compra or "---",
+            "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M")
+            if data_importacao
+            else "---",
+            "data_conferencia": fim_conferencia.strftime("%d/%m/%Y %H:%M")
+            if fim_conferencia
+            else "---",
+            "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M")
+            if data_lancamento
+            else "---",
+            "conferido_por": usuario_conferencia or "---",
+            "lancado_por": usuario_lancamento or "---",
+            "numero_lancamento": numero_lancamento or "---",
+            "material_cliente": bool(itens[0].material_cliente),
+            "remessa": bool(itens[0].remessa),
+            "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
+            "manifestacao": manifestacao,
+            "ultimo_estorno": ultimo_estorno,
+            "documentos_disponiveis": any(
+                str(i.chave_acesso or "").strip() for i in itens
+            ),
+            "checklist": checklist_info,
             "itens": lista_itens,
         }
     )
@@ -8017,6 +5503,17 @@ def detalhes_nota_liberada_lancamento(numero):
             "usuario": log_manifest.usuario,
             "data": log_manifest.data.strftime("%d/%m/%Y %H:%M") if log_manifest.data else "---",
         }
+
+    # Verifica se há checklist de conferência de recebimento
+    checklist_info = {"existe": False}
+    checklist = ChecklistRecebimento.query.filter_by(numero_nota=str(numero)).first()
+    if checklist:
+        checklist_info = {
+            "existe": True,
+            "usuario": checklist.usuario,
+            "data": checklist.data.strftime("%d/%m/%Y %H:%M") if checklist.data else "---",
+        }
+
     return jsonify(
         {
             "numero": str(numero),
@@ -8032,6 +5529,7 @@ def detalhes_nota_liberada_lancamento(numero):
             "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M") if data_lancamento else "---",
             "chave_acesso": chave_acesso,
             "manifestacao_sefaz": manifestacao_sefaz,
+            "checklist": checklist_info,
             "valor_total": itens[0].valor_total or "N/A",
             "impostos": itens[0].valor_imposto or "N/A",
             "documentos_disponiveis": any(str(i.chave_acesso or "").strip() for i in itens),
@@ -8057,15 +5555,8 @@ def detalhes_nota_liberada_lancamento(numero):
     )
 
 
-@api_bp.route("/api/fiscal/documento_entrada/kpis")
-@roles_required("Fiscal", "Admin")
-def documento_entrada_kpis():
-    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=1, max_value=365)
-    return jsonify(_build_documento_entrada_kpis(periodo_dias))
-
-
 @api_bp.route("/api/historico_completo")
-@roles_required("Admin")
+@roles_required("Admin", "Conferente", "Fiscal", "Logística")
 def api_historico():
     data_ini = _parse_date(request.args.get("data_ini"))
     data_fim = _parse_date(request.args.get("data_fim"))
@@ -8089,10 +5580,8 @@ def api_estornos_historico():
 
 
 @api_bp.route("/api/timeline/<nota>")
-@roles_required("Fiscal", "Admin")
+@roles_required("Admin")
 def timeline_nota(nota):
-    return jsonify(_serializar_timeline_documento_entrada(nota))
-
     itens = ItemNota.query.filter_by(numero_nota=nota).all()
     eventos = []
     if itens:
@@ -8469,6 +5958,960 @@ def processo_recebimento_painel():
     )
 
 
+@api_bp.route("/api/fiscal/documento_entrada/kpis")
+@roles_required("Admin", "Fiscal")
+def documento_entrada_kpis():
+    """KPIs agregados da tela /lancamento (Documento de Entrada)."""
+    try:
+        dias = int(request.args.get("dias", "30") or 30)
+    except (TypeError, ValueError):
+        dias = 30
+    dias = max(1, min(dias, 365))
+
+    corte = datetime.now() - timedelta(days=dias)
+
+    itens = (
+        ItemNota.query.filter(
+            db.or_(
+                ItemNota.data_importacao >= corte,
+                ItemNota.data_lancamento >= corte,
+                ItemNota.fim_conferencia >= corte,
+            )
+        ).all()
+    )
+
+    notas = {}
+    for item in itens:
+        chave = str(item.numero_nota or "").strip()
+        if not chave:
+            continue
+        grupo = notas.setdefault(chave, [])
+        grupo.append(item)
+
+    total_notas = len(notas)
+    notas_lancadas = 0
+    notas_conferidas = 0
+    tempos_horas = []
+    retrabalho_fornecedor = {}
+    produtividade = {}
+    com_divergencia = 0
+    manifestadas = 0
+
+    for numero, lista in notas.items():
+        tem_lancamento = any(i.data_lancamento for i in lista)
+        tem_conferencia = any(i.fim_conferencia for i in lista)
+        tem_divergencia = any(
+            (i.status or "").lower() in ("divergente", "divergência", "divergencia")
+            or (i.auditor_decisao or "") in ("Reprovado", "Divergente")
+            for i in lista
+        )
+
+        if tem_lancamento:
+            notas_lancadas += 1
+            datas_imp = [i.data_importacao for i in lista if i.data_importacao]
+            datas_lanc = [i.data_lancamento for i in lista if i.data_lancamento]
+            if datas_imp and datas_lanc:
+                delta = max(datas_lanc) - min(datas_imp)
+                horas = delta.total_seconds() / 3600.0
+                if 0 <= horas <= 24 * 365:
+                    tempos_horas.append(horas)
+
+            usuario = next(
+                (i.usuario_lancamento for i in lista if i.usuario_lancamento),
+                "Não informado",
+            )
+            bucket = produtividade.setdefault(
+                usuario, {"usuario": usuario, "notas_lancadas": 0, "tempos": []}
+            )
+            bucket["notas_lancadas"] += 1
+            if datas_imp and datas_lanc:
+                bucket["tempos"].append(
+                    (max(datas_lanc) - min(datas_imp)).total_seconds() / 3600.0
+                )
+        elif tem_conferencia:
+            notas_conferidas += 1
+
+        if tem_divergencia:
+            com_divergencia += 1
+            fornecedor = next((i.fornecedor for i in lista if i.fornecedor), None)
+            if fornecedor:
+                retrabalho_fornecedor[fornecedor] = retrabalho_fornecedor.get(fornecedor, 0) + 1
+
+    numeros = list(notas.keys())
+    if numeros:
+        logs_manifestadas = (
+            db.session.query(LogManifestacaoDestinatario.numero_nota)
+            .filter(
+                LogManifestacaoDestinatario.status == "Sucesso",
+                LogManifestacaoDestinatario.numero_nota.in_(numeros),
+            )
+            .distinct()
+            .count()
+        )
+        manifestadas = logs_manifestadas or 0
+
+    tempo_medio = round(sum(tempos_horas) / len(tempos_horas), 1) if tempos_horas else 0.0
+
+    pct_manifestadas = (
+        round((manifestadas / total_notas) * 100, 1) if total_notas else 0.0
+    )
+    pct_divergencia = (
+        round((com_divergencia / total_notas) * 100, 1) if total_notas else 0.0
+    )
+
+    top_fornecedores = sorted(
+        (
+            {"fornecedor": nome, "ocorrencias": qtd}
+            for nome, qtd in retrabalho_fornecedor.items()
+        ),
+        key=lambda r: r["ocorrencias"],
+        reverse=True,
+    )[:5]
+
+    produtividade_list = []
+    for info in produtividade.values():
+        tempos = info.pop("tempos", [])
+        info["tempo_medio_horas"] = (
+            round(sum(tempos) / len(tempos), 1) if tempos else 0.0
+        )
+        produtividade_list.append(info)
+    produtividade_list.sort(key=lambda r: r["notas_lancadas"], reverse=True)
+    produtividade_list = produtividade_list[:5]
+
+    return jsonify(
+        {
+            "periodo_dias": dias,
+            "total_notas": total_notas,
+            "notas_lancadas": notas_lancadas,
+            "notas_conferidas": notas_conferidas,
+            "tempo_medio_importacao_lancamento_horas": tempo_medio,
+            "percentual_sem_intervencao_manual": pct_manifestadas,
+            "percentual_com_divergencia": pct_divergencia,
+            "top_fornecedores_retrabalho": top_fornecedores,
+            "produtividade_usuarios": produtividade_list,
+        }
+    )
+
+
+# ==============================================================================
+# EXPEDICAO CONFERENCIA SIMPLES
+# ==============================================================================
+
+def _status_to_slug(status):
+    """Converte status legível para slug."""
+    mapping = {
+        "Pendente de expedição": "pendente_expedicao",
+        "Expedido": "expedido",
+        "Finalizado": "finalizado",
+        "Aguardando estorno": "aguardando_estorno",
+    }
+    return mapping.get(status, "pendente_expedicao")
+
+
+def _resolver_foto_expedicao(fotos_dir, file_name, file_path=None):
+    """Localiza no disco o arquivo de uma foto de expedição aceitando
+    variações entre o nome gravado no banco e o nome persistido em disco.
+
+    Retorna o caminho absoluto se encontrado, ou None. A ordem de busca é:
+    1. file_path absoluto gravado no banco;
+    2. fotos_dir + file_name;
+    3. fotos_dir + secure_filename(file_name) (espaços viram "_");
+    4. busca case-insensitive no diretório.
+    """
+    if not file_name and not file_path:
+        return None
+
+    if file_path and os.path.exists(file_path):
+        return file_path
+
+    if fotos_dir and file_name:
+        direto = os.path.join(fotos_dir, file_name)
+        if os.path.exists(direto):
+            return direto
+
+        alternativo = os.path.join(fotos_dir, secure_filename(file_name))
+        if os.path.exists(alternativo):
+            return alternativo
+
+        try:
+            alvo = file_name.lower()
+            alvo_sec = secure_filename(file_name).lower()
+            for nome in os.listdir(fotos_dir):
+                nome_low = nome.lower()
+                if nome_low == alvo or nome_low == alvo_sec:
+                    return os.path.join(fotos_dir, nome)
+        except OSError:
+            pass
+
+    return None
+
+
+@api_bp.route("/api/expedicao/conferencia-simples")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def listar_registros_conferencia_simples():
+    """Lista todos os registros de conferência simples."""
+    query = ExpedicaoConferenciaSimples.query
+
+    # Filtro por status
+    status_filter = request.args.get("status", "").strip()
+    if status_filter:
+        query = query.filter(ExpedicaoConferenciaSimples.status == status_filter)
+
+    # Filtro por busca textual
+    q = request.args.get("q", "").strip()
+    if q:
+        like_pattern = f"%{q}%"
+        query = query.filter(
+            db.or_(
+                ExpedicaoConferenciaSimples.orcamento.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.ordem_compra.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.numero_nf.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.nome_cliente.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.transportadora.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.placa.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.conferente.ilike(like_pattern),
+                ExpedicaoConferenciaSimples.motorista.ilike(like_pattern),
+            )
+        )
+
+    registros = query.order_by(
+        ExpedicaoConferenciaSimples.data_conferencia.desc()
+    ).limit(500).all()
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    result = []
+    for reg in registros:
+        fotos_db = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=reg.id).all()
+        fotos = []
+        for f in fotos_db:
+            caminho_resolvido = _resolver_foto_expedicao(fotos_dir, f.file_name, f.file_path)
+            fotos.append({
+                "id": f.id,
+                "nome": f.file_name,
+                "url": f"/api/expedicao/conferencia-simples/{reg.id}/foto/{f.id}",
+                "disponivel": bool(caminho_resolvido),
+            })
+        estornos = ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=reg.id).all()
+        result.append({
+            "id": reg.id,
+            "orcamento": reg.orcamento,
+            "tipo_referencia": reg.tipo_referencia,
+            "numero_os": reg.numero_os,
+            "ordem_compra": reg.ordem_compra,
+            "conferente": reg.conferente,
+            "data_conferencia": reg.data_conferencia.strftime("%d/%m/%Y %H:%M") if reg.data_conferencia else None,
+            "numero_nf": reg.numero_nf,
+            "nome_cliente": reg.nome_cliente,
+            "cliente_origem": reg.cliente_origem,
+            "nf_origem": reg.nf_origem,
+            "transportadora": reg.transportadora,
+            "placa": reg.placa,
+            "motorista": reg.motorista,
+            "status": reg.status,
+            "status_slug": _status_to_slug(reg.status),
+            "expedido_at": reg.expedido_at.strftime("%d/%m/%Y %H:%M") if reg.expedido_at else None,
+            "expedido_by": reg.expedido_by,
+            "canhoto_url": f"/api/expedicao/conferencia-simples/{reg.id}/canhoto" if reg.canhoto_file_name else None,
+            "canhoto_uploaded_at": reg.canhoto_uploaded_at.strftime("%d/%m/%Y %H:%M") if reg.canhoto_uploaded_at else None,
+            "canhoto_uploaded_by": reg.canhoto_uploaded_by,
+            "finalizado_at": reg.finalizado_at.strftime("%d/%m/%Y %H:%M") if reg.finalizado_at else None,
+            "finalizado_by": reg.finalizado_by,
+            "fotos": fotos,
+            "estornos": [
+                {
+                    "id": e.id,
+                    "solicitante": e.solicitante,
+                    "motivo": e.motivo,
+                    "status": e.status,
+                    "admin_usuario": e.admin_usuario,
+                    "admin_observacao": e.admin_observacao,
+                    "resolvido_at": e.resolvido_at.strftime("%d/%m/%Y %H:%M") if e.resolvido_at else None,
+                    "created_at": e.created_at.strftime("%d/%m/%Y %H:%M") if e.created_at else None,
+                }
+                for e in estornos
+            ],
+            "estorno_pendente": next(
+                (
+                    {
+                        "id": e.id,
+                        "solicitante": e.solicitante,
+                        "motivo": e.motivo,
+                        "data": e.created_at.strftime("%d/%m/%Y %H:%M") if e.created_at else None,
+                    }
+                    for e in estornos if e.status == "Pendente"
+                ),
+                None
+            ),
+        })
+
+    # Calcula resumo (considera todos os registros, não só os filtrados)
+    total_regs = ExpedicaoConferenciaSimples.query.all()
+    pendentes = sum(1 for r in total_regs if r.status == "Pendente de expedição")
+    expedidos = sum(1 for r in total_regs if r.status == "Expedido")
+    finalizados = sum(1 for r in total_regs if r.status == "Finalizado")
+    aguardando = sum(1 for r in total_regs if r.status == "Aguardando estorno")
+
+    return jsonify({
+        "registros": result,
+        "resumo": {
+            "total": len(total_regs),
+            "pendentes": pendentes,
+            "expedidos": expedidos,
+            "finalizados": finalizados,
+            "aguardando_estorno": aguardando,
+        }
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/consultar-nf")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def consultar_nf_conferencia_simples():
+    """Consulta uma ou mais NFs na Consyste (sem criar registro)."""
+    numeros_raw = request.args.get("numero_nf", "")
+    # Suporta múltiplas NFs separadas por vírgula
+    numeros = [n.strip() for n in numeros_raw.replace(";", ",").split(",") if n.strip()]
+    if not numeros:
+        return jsonify({"error": "numero_nf é obrigatório."}), 400
+
+    resultados = []
+    cnpj_cliente = None
+    nome_cliente_final = None
+    todas_encontradas = True
+    
+    for numero in numeros:
+        try:
+            ok, status_code, data = listar_nfes_consyste_por_caixa(
+                caixa="emitidos",
+                q=f"numero:{numero}",
+                timeout=15,
+            )
+            documentos = []
+            if ok and isinstance(data, dict):
+                documentos = data.get("documentos") or data.get("documents") or data.get("results") or []
+                if isinstance(documentos, dict):
+                    documentos = [documentos]
+
+            # Pega o doc cujo numero bate exatamente (a API as vezes traz vizinhos)
+            doc = None
+            for d in documentos:
+                if str(d.get("numero") or d.get("nNF") or "").strip() == numero:
+                    doc = d
+                    break
+            if doc is None and documentos:
+                doc = documentos[0]
+
+            if doc:
+                nome = (
+                    doc.get("dest_nome")
+                    or (doc.get("destinatario") or {}).get("razao_social")
+                    or (doc.get("destinatario") or {}).get("nome")
+                    or (doc.get("dest") or {}).get("xNome")
+                    or doc.get("cliente")
+                    or ""
+                )
+                cnpj = (
+                    doc.get("dest_cnpj")
+                    or (doc.get("destinatario") or {}).get("cnpj")
+                    or (doc.get("destinatario") or {}).get("cpf")
+                    or (doc.get("dest") or {}).get("CNPJ")
+                    or ""
+                )
+
+                # Valida se todas as NFs sao do mesmo cliente
+                if cnpj_cliente is None:
+                    cnpj_cliente = cnpj
+                    nome_cliente_final = nome
+                elif cnpj and cnpj != cnpj_cliente:
+                    return jsonify({
+                        "error": f"NF {numero} pertence a cliente diferente. Todas as NFs devem ser do mesmo cliente.",
+                        "encontrada": False,
+                        "manual_required": True,
+                    }), 400
+
+                resultados.append({
+                    "numero": numero,
+                    "encontrada": True,
+                    "nome_cliente": nome,
+                    "cnpj": cnpj,
+                    "chave": doc.get("chave") or doc.get("chNFe"),
+                })
+            else:
+                todas_encontradas = False
+                resultados.append({
+                    "numero": numero,
+                    "encontrada": False,
+                })
+        except Exception as e:
+            todas_encontradas = False
+            resultados.append({
+                "numero": numero,
+                "encontrada": False,
+                "erro": str(e),
+            })
+    
+    if todas_encontradas and nome_cliente_final:
+        return jsonify({
+            "encontrada": True,
+            "nome_cliente": nome_cliente_final,
+            "cnpj": cnpj_cliente,
+            "nfs": resultados,
+            "manual_required": False,
+        })
+    elif any(r.get("encontrada") for r in resultados):
+        return jsonify({
+            "encontrada": True,
+            "nome_cliente": nome_cliente_final,
+            "cnpj": cnpj_cliente,
+            "nfs": resultados,
+            "warning": "Algumas NFs não foram encontradas na Consyste. Verifique os números.",
+            "manual_required": True,
+        })
+    else:
+        return jsonify({
+            "encontrada": False,
+            "nfs": resultados,
+            "warning": "Nenhuma NF encontrada na Consyste. Preencha o cliente manualmente.",
+            "manual_required": True,
+        })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/buscar-nf", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def buscar_nf_conferencia_simples():
+    """Busca NF na Consyste e cria registro se encontrada."""
+    payload = request.get_json(silent=True) or {}
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    if not numero_nf:
+        return jsonify({"error": "numero_nf é obrigatório."}), 400
+
+    # Verifica se já existe registro com essa NF
+    existente = ExpedicaoConferenciaSimples.query.filter_by(numero_nf=numero_nf).first()
+    if existente:
+        return jsonify({
+            "ja_existe": True,
+            "conferencia_id": existente.id,
+            "status": existente.status,
+        })
+
+    # Busca na Consyste (emitidos = NF de saída/venda)
+    try:
+        ok, status_code, data = listar_nfes_consyste_por_caixa(
+            caixa="emitidos",
+            q=f"numero:{numero_nf}",
+            timeout=15,
+        )
+        if not ok:
+            return jsonify({"encontrada": False, "consyste_error": f"Consyste retornou status {status_code}"})
+
+        documentos = data.get("documentos") or data.get("results") or []
+        if isinstance(documentos, dict):
+            documentos = [documentos]
+
+        # Procura documento com o número exato
+        doc_encontrado = None
+        for doc in documentos:
+            numero_doc = str(doc.get("numero") or doc.get("nNF") or "").strip()
+            if numero_doc == numero_nf:
+                doc_encontrado = doc
+                break
+
+        if not doc_encontrado:
+            return jsonify({"encontrada": False})
+
+        # Extrai dados do documento
+        nome_cliente = (
+            doc_encontrado.get("destinatario", {}).get("nome")
+            or doc_encontrado.get("dest", {}).get("xNome")
+            or doc_encontrado.get("cliente")
+            or ""
+        )
+        cnpj_cliente = (
+            doc_encontrado.get("destinatario", {}).get("cnpj")
+            or doc_encontrado.get("dest", {}).get("CNPJ")
+            or ""
+        )
+        chave = doc_encontrado.get("chave") or doc_encontrado.get("chNFe") or ""
+        documento_id = doc_encontrado.get("id") or doc_encontrado.get("_id") or ""
+
+        # Cria o registro
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="",
+            tipo_referencia="NF",
+            conferente=session.get("username", "desconhecido"),
+            numero_nf=numero_nf,
+            nome_cliente=nome_cliente,
+            cliente_origem="Consyste",
+            nf_origem="Consyste",
+            consyste_document_id=str(documento_id),
+            consyste_chave=chave,
+            status="Pendente de expedição",
+        )
+        db.session.add(registro)
+        db.session.commit()
+
+        return jsonify({
+            "encontrada": True,
+            "conferencia_criada": True,
+            "conferencia_id": registro.id,
+            "nome_cliente": nome_cliente,
+            "cnpj_cliente": cnpj_cliente,
+        })
+
+    except Exception as exc:
+        return jsonify({"error": f"Erro ao consultar Consyste: {str(exc)}"}), 500
+
+
+@api_bp.route("/api/expedicao/conferencia-simples", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def criar_registro_conferencia_simples():
+    """Cria um novo registro de conferência simples (manual ou via formulário)."""
+    # Suporta multipart/form-data (com fotos) ou JSON
+    if request.content_type and "multipart" in request.content_type:
+        orcamento = str(request.form.get("orcamento") or "").strip()
+        tipo_referencia = str(request.form.get("tipo_referencia") or "Orcamento").strip()
+        numero_os = str(request.form.get("numero_os") or "").strip() or None
+        ordem_compra = str(request.form.get("ordem_compra") or "").strip() or None
+        numero_nf = str(request.form.get("numero_nf") or "").strip()
+        nome_cliente = str(request.form.get("nome_cliente") or "").strip()
+        cliente_origem = str(request.form.get("cliente_origem") or "Manual").strip()
+        nf_origem = str(request.form.get("nf_origem") or "Manual").strip()
+        transportadora = str(request.form.get("transportadora") or "").strip()
+        placa = str(request.form.get("placa") or "").strip().upper()
+        motorista = str(request.form.get("motorista") or "").strip()
+        fotos_files = request.files.getlist("fotos")
+    else:
+        payload = request.get_json(silent=True) or {}
+        orcamento = str(payload.get("orcamento") or "").strip()
+        tipo_referencia = str(payload.get("tipo_referencia") or "Orcamento").strip()
+        numero_os = str(payload.get("numero_os") or "").strip() or None
+        ordem_compra = str(payload.get("ordem_compra") or "").strip() or None
+        numero_nf = str(payload.get("numero_nf") or "").strip()
+        nome_cliente = str(payload.get("nome_cliente") or "").strip()
+        cliente_origem = str(payload.get("cliente_origem") or "Manual").strip()
+        nf_origem = str(payload.get("nf_origem") or "Manual").strip()
+        transportadora = str(payload.get("transportadora") or "").strip()
+        placa = str(payload.get("placa") or "").strip().upper()
+        motorista = str(payload.get("motorista") or "").strip()
+        fotos_files = []
+
+    # Validação básica
+    if tipo_referencia == "OrdemCompra":
+        if not ordem_compra:
+            return jsonify({"error": "ordem_compra é obrigatório para tipo OrdemCompra."}), 400
+    elif tipo_referencia == "Orcamento":
+        if not orcamento:
+            return jsonify({"error": "orcamento é obrigatório para tipo Orcamento."}), 400
+
+    registro = ExpedicaoConferenciaSimples(
+        orcamento=orcamento,
+        tipo_referencia=tipo_referencia,
+        numero_os=numero_os,
+        ordem_compra=ordem_compra,
+        conferente=session.get("username", "desconhecido"),
+        numero_nf=numero_nf,
+        nome_cliente=nome_cliente,
+        cliente_origem=cliente_origem,
+        nf_origem=nf_origem,
+        transportadora=transportadora,
+        placa=placa,
+        motorista=motorista,
+        status="Pendente de expedição",
+    )
+    db.session.add(registro)
+    db.session.flush()  # Para obter o ID
+
+    # Salva fotos
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    os.makedirs(fotos_dir, exist_ok=True)
+
+    fotos_salvas = []
+    for foto in fotos_files:
+        if foto and foto.filename:
+            ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
+            nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            caminho = os.path.join(fotos_dir, nome_arquivo)
+            foto.save(caminho)
+            foto_db = ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id,
+                file_name=nome_arquivo,
+                file_path=caminho,
+            )
+            db.session.add(foto_db)
+            fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
+
+    db.session.commit()
+
+    return jsonify({
+        "registro": {
+            "id": registro.id,
+            "orcamento": registro.orcamento,
+            "tipo_referencia": registro.tipo_referencia,
+            "numero_os": registro.numero_os,
+            "ordem_compra": registro.ordem_compra,
+            "numero_nf": registro.numero_nf,
+            "nome_cliente": registro.nome_cliente,
+            "cliente_origem": registro.cliente_origem,
+            "status": registro.status,
+            "fotos": fotos_salvas,
+        }
+    }), 201
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/status", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def atualizar_status_conferencia_simples(registro_id):
+    """Atualiza status do registro. Regras:
+    - Admin pode ir direto para 'pendente_expedicao' (reabre sem aprovação).
+    - Não-admin pedindo 'pendente_expedicao' a partir de expedido/finalizado
+      cria uma solicitação de estorno (status 'Aguardando estorno').
+    - 'expedido' marca como expedido (atalho quando já tem fotos).
+    """
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    status_slug = (payload.get("status_slug") or "").strip().lower()
+    motivo = (payload.get("motivo") or "").strip()
+    usuario = session.get("username") or "desconhecido"
+    is_admin = session.get("role") == "Admin"
+    agora = datetime.now()
+
+    if status_slug == "expedido":
+        if registro.status == "Expedido":
+            return jsonify({"error": "Registro já está expedido."}), 400
+        tem_fotos = (
+            ExpedicaoConferenciaSimplesFoto.query
+            .filter_by(conferencia_id=registro.id).count() > 0
+        )
+        if not tem_fotos:
+            return jsonify({"error": "Inclua fotos da conferência antes de marcar como expedido."}), 400
+        registro.status = "Expedido"
+        registro.expedido_at = agora
+        registro.expedido_by = usuario
+        registro.updated_at = agora
+        db.session.commit()
+        return jsonify({
+            "sucesso": True,
+            "registro": {"id": registro.id, "status": registro.status,
+                         "status_slug": _status_to_slug(registro.status)},
+        })
+
+    if status_slug == "pendente_expedicao":
+        if is_admin:
+            registro.status = "Pendente de expedição"
+            registro.expedido_at = None
+            registro.expedido_by = None
+            registro.finalizado_at = None
+            registro.finalizado_by = None
+            registro.updated_at = agora
+            db.session.commit()
+            return jsonify({
+                "sucesso": True,
+                "aguardando_admin": False,
+                "registro": {"id": registro.id, "status": registro.status,
+                             "status_slug": _status_to_slug(registro.status)},
+            })
+
+        # Não-admin: cria solicitação de estorno
+        if registro.status not in ("Expedido", "Finalizado"):
+            return jsonify({"error": "Só é possível solicitar estorno de registros expedidos ou finalizados."}), 400
+        if not motivo:
+            return jsonify({"error": "Informe o motivo do estorno."}), 400
+        ja_pendente = (
+            ExpedicaoConferenciaSimplesEstorno.query
+            .filter_by(conferencia_id=registro.id, status="Pendente").first()
+        )
+        if ja_pendente:
+            return jsonify({"error": "Já existe uma solicitação de estorno pendente para este registro."}), 400
+        estorno = ExpedicaoConferenciaSimplesEstorno(
+            conferencia_id=registro.id,
+            solicitante=usuario,
+            motivo=motivo,
+            status="Pendente",
+        )
+        db.session.add(estorno)
+        registro.status = "Aguardando estorno"
+        registro.updated_at = agora
+        db.session.commit()
+        return jsonify({
+            "sucesso": True,
+            "aguardando_admin": True,
+            "registro": {"id": registro.id, "status": registro.status,
+                         "status_slug": _status_to_slug(registro.status)},
+        })
+
+    return jsonify({"error": f"Status inválido: {status_slug}"}), 400
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/estorno/<int:estorno_id>/<acao>", methods=["POST"])
+@roles_required("Admin")
+def decidir_estorno_conferencia_simples(estorno_id, acao):
+    """Admin aprova ou rejeita uma solicitação de estorno."""
+    acao = (acao or "").lower().strip()
+    if acao not in ("aprovar", "rejeitar"):
+        return jsonify({"error": "Ação inválida."}), 400
+
+    estorno = ExpedicaoConferenciaSimplesEstorno.query.get(estorno_id)
+    if not estorno:
+        return jsonify({"error": "Solicitação de estorno não encontrada."}), 404
+    if estorno.status != "Pendente":
+        return jsonify({"error": "Esta solicitação já foi processada."}), 400
+
+    registro = ExpedicaoConferenciaSimples.query.get(estorno.conferencia_id)
+    if not registro:
+        return jsonify({"error": "Conferência vinculada não encontrada."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    observacao = (payload.get("observacao") or "").strip() or None
+    usuario = session.get("username") or "admin"
+    agora = datetime.now()
+
+    estorno.admin_usuario = usuario
+    estorno.admin_observacao = observacao
+    estorno.resolvido_at = agora
+
+    if acao == "aprovar":
+        estorno.status = "Aprovado"
+        registro.status = "Pendente de expedição"
+        registro.expedido_at = None
+        registro.expedido_by = None
+        registro.finalizado_at = None
+        registro.finalizado_by = None
+    else:
+        estorno.status = "Rejeitado"
+        # Restaura status anterior: finalizado se há canhoto; senão expedido.
+        registro.status = "Finalizado" if registro.canhoto_file_name else "Expedido"
+
+    registro.updated_at = agora
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "estorno": {
+            "id": estorno.id,
+            "status": estorno.status,
+            "admin_usuario": estorno.admin_usuario,
+            "admin_observacao": estorno.admin_observacao,
+        },
+        "registro": {
+            "id": registro.id,
+            "status": registro.status,
+            "status_slug": _status_to_slug(registro.status),
+        },
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/completar", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def completar_registro_conferencia_simples(registro_id):
+    """Completa (expede) um registro de conferência simples."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+
+    if registro.status == "Expedido":
+        return jsonify({"error": "Registro já foi expedido."}), 400
+
+    # Suporta multipart/form-data (com fotos) ou JSON
+    if request.content_type and "multipart" in request.content_type:
+        transportadora = str(request.form.get("transportadora") or "").strip()
+        placa = str(request.form.get("placa") or "").strip().upper()
+        motorista = str(request.form.get("motorista") or "").strip()
+        orcamento = str(request.form.get("orcamento") or "").strip()
+        numero_nf = str(request.form.get("numero_nf") or "").strip()
+        nome_cliente = str(request.form.get("nome_cliente") or "").strip()
+        manter_pendente = str(request.form.get("manter_pendente") or "").strip() in ("1", "true", "True")
+        fotos_files = request.files.getlist("fotos")
+    else:
+        payload = request.get_json(silent=True) or {}
+        transportadora = str(payload.get("transportadora") or "").strip()
+        placa = str(payload.get("placa") or "").strip().upper()
+        motorista = str(payload.get("motorista") or "").strip()
+        orcamento = str(payload.get("orcamento") or "").strip()
+        numero_nf = str(payload.get("numero_nf") or "").strip()
+        nome_cliente = str(payload.get("nome_cliente") or "").strip()
+        manter_pendente = bool(payload.get("manter_pendente"))
+        fotos_files = []
+
+    registro.transportadora = transportadora or registro.transportadora
+    registro.placa = placa or registro.placa
+    registro.motorista = motorista or registro.motorista
+    if orcamento:
+        registro.orcamento = orcamento
+    if numero_nf:
+        registro.numero_nf = numero_nf
+    if nome_cliente:
+        registro.nome_cliente = nome_cliente
+    if manter_pendente:
+        registro.status = "Pendente de expedição"
+    else:
+        registro.status = "Expedido"
+        registro.expedido_at = datetime.now()
+        registro.expedido_by = session.get("username", "desconhecido")
+    registro.updated_at = datetime.now()
+
+    # Salva fotos adicionais
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    os.makedirs(fotos_dir, exist_ok=True)
+
+    for foto in fotos_files:
+        if foto and foto.filename:
+            ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
+            nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            caminho = os.path.join(fotos_dir, nome_arquivo)
+            foto.save(caminho)
+            foto_db = ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id,
+                file_name=nome_arquivo,
+                file_path=caminho,
+            )
+            db.session.add(foto_db)
+
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "registro": {
+            "id": registro.id,
+            "status": registro.status,
+            "expedido_at": registro.expedido_at.strftime("%d/%m/%Y %H:%M") if registro.expedido_at else None,
+            "expedido_by": registro.expedido_by,
+        }
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/canhoto", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def upload_canhoto_conferencia_simples(registro_id):
+    """Faz upload da foto do canhoto e finaliza o registro."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+
+    if registro.status != "Expedido":
+        return jsonify({"error": "Registro precisa estar expedido para anexar canhoto."}), 400
+
+    canhoto = request.files.get("canhoto")
+    if not canhoto or not canhoto.filename:
+        return jsonify({"error": "Arquivo do canhoto é obrigatório."}), 400
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    os.makedirs(fotos_dir, exist_ok=True)
+
+    ext = os.path.splitext(secure_filename(canhoto.filename))[1] or ".jpg"
+    nome_arquivo = f"canhoto_{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    caminho = os.path.join(fotos_dir, nome_arquivo)
+    canhoto.save(caminho)
+
+    registro.canhoto_file_name = nome_arquivo
+    registro.canhoto_file_path = caminho
+    registro.canhoto_uploaded_at = datetime.now()
+    registro.canhoto_uploaded_by = session.get("username", "desconhecido")
+    registro.status = "Finalizado"
+    registro.finalizado_at = datetime.now()
+    registro.finalizado_by = session.get("username", "desconhecido")
+    registro.updated_at = datetime.now()
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "registro": {
+            "id": registro.id,
+            "status": registro.status,
+            "canhoto_url": f"/api/expedicao/conferencia-simples/{registro.id}/canhoto",
+            "finalizado_at": registro.finalizado_at.strftime("%d/%m/%Y %H:%M") if registro.finalizado_at else None,
+        }
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/canhoto")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def obter_canhoto_conferencia_simples(registro_id):
+    """Retorna a foto do canhoto de um registro."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+
+    if not registro.canhoto_file_name:
+        return jsonify({"error": "Canhoto não anexado."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(
+        fotos_dir, registro.canhoto_file_name, registro.canhoto_file_path
+    )
+    if not caminho:
+        return jsonify({"error": "Arquivo não encontrado."}), 404
+
+    return send_file(caminho)
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def obter_foto_conferencia_simples(registro_id, foto_id):
+    """Retorna uma foto de um registro de conferência simples."""
+    foto = ExpedicaoConferenciaSimplesFoto.query.filter_by(
+        id=foto_id,
+        conferencia_id=registro_id
+    ).first()
+    if not foto:
+        return jsonify({"error": "Foto não encontrada."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(fotos_dir, foto.file_name, foto.file_path)
+    if not caminho:
+        return jsonify({"error": "Arquivo não encontrado."}), 404
+
+    return send_file(caminho)
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_registro_conferencia_simples(registro_id):
+    """Exclui um registro de conferência simples e suas fotos/estornos."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+
+    # Remove fotos do disco
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    fotos = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro_id).all()
+    for foto in fotos:
+        caminho = _resolver_foto_expedicao(fotos_dir, foto.file_name, foto.file_path)
+        if caminho and os.path.exists(caminho):
+            try:
+                os.remove(caminho)
+            except Exception:
+                pass
+        db.session.delete(foto)
+
+    # Remove estornos
+    ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=registro_id).delete()
+
+    # Remove registro
+    db.session.delete(registro)
+    db.session.commit()
+
+    return jsonify({"sucesso": True})
+
+
 @api_bp.route("/api/expedicao/dashboard")
 @roles_required("Admin", "Fiscal")
 def expedicao_dashboard():
@@ -8746,281 +7189,3 @@ def resumo_acessos_admin():
             "top_rotas": [{"rota": r, "qtd": qtd} for r, qtd in top_rotas_raw],
         }
     )
-
-
-def _build_upload_dashboard_consolidado(periodo_dias: int = 30):
-    agora = datetime.now()
-    corte = agora - timedelta(days=periodo_dias)
-    usuarios: dict[str, dict] = {}
-
-    def _ensure_usuario(usuario: str | None):
-        nome = str(usuario or "").strip()
-        if not nome:
-            return None
-        return usuarios.setdefault(
-            nome,
-            {
-                "usuario": nome,
-                "notas_importadas": 0,
-                "notas_conferidas": 0,
-                "notas_lancadas": 0,
-                "manifestacoes_sucesso": 0,
-                "manifestacoes_falha": 0,
-                "enderecamentos_wms": 0,
-                "movimentacoes_wms": 0,
-                "qtd_movimentada_wms": 0.0,
-                "qtd_armazenada_wms": 0.0,
-                "total_processado": 0,
-            },
-        )
-
-    importacoes = (
-        db.session.query(ItemNota.usuario_importacao, ItemNota.numero_nota)
-        .filter(ItemNota.usuario_importacao.isnot(None), ItemNota.data_importacao >= corte)
-        .group_by(ItemNota.usuario_importacao, ItemNota.numero_nota)
-        .all()
-    )
-    for usuario, numero_nota in importacoes:
-        bloco = _ensure_usuario(usuario)
-        if bloco and str(numero_nota or "").strip():
-            bloco["notas_importadas"] += 1
-
-    conferencias = (
-        db.session.query(ItemNota.usuario_conferencia, ItemNota.numero_nota)
-        .filter(ItemNota.usuario_conferencia.isnot(None), ItemNota.fim_conferencia >= corte)
-        .group_by(ItemNota.usuario_conferencia, ItemNota.numero_nota)
-        .all()
-    )
-    for usuario, numero_nota in conferencias:
-        bloco = _ensure_usuario(usuario)
-        if bloco and str(numero_nota or "").strip():
-            bloco["notas_conferidas"] += 1
-
-    lancamentos = (
-        db.session.query(ItemNota.usuario_lancamento, ItemNota.numero_nota)
-        .filter(ItemNota.usuario_lancamento.isnot(None), ItemNota.data_lancamento >= corte)
-        .group_by(ItemNota.usuario_lancamento, ItemNota.numero_nota)
-        .all()
-    )
-    for usuario, numero_nota in lancamentos:
-        bloco = _ensure_usuario(usuario)
-        if bloco and str(numero_nota or "").strip():
-            bloco["notas_lancadas"] += 1
-
-    manifest_logs = (
-        LogManifestacaoDestinatario.query.filter(LogManifestacaoDestinatario.data >= corte)
-        .order_by(LogManifestacaoDestinatario.data.asc(), LogManifestacaoDestinatario.id.asc())
-        .all()
-    )
-    manifestacoes_usuario_nota: dict[tuple[str, str], dict] = {}
-    manifestacao_nota_mais_recente: dict[str, dict] = {}
-    for log in manifest_logs:
-        numero_nota = str(log.numero_nota or "").strip()
-        usuario = str(log.usuario or "").strip()
-        status = str(log.status or "").strip() or "Falha"
-        tipo = str(log.manifestacao or "").strip() or "confirmada"
-        if numero_nota:
-            manifestacao_nota_mais_recente[numero_nota] = {
-                "status": status,
-                "manifestacao": tipo,
-                "usuario": usuario,
-            }
-        if not numero_nota or not usuario:
-            continue
-        bloco = manifestacoes_usuario_nota.setdefault(
-            (usuario, numero_nota),
-            {"sucesso": False, "falha": False},
-        )
-        if status.lower() == "sucesso":
-            bloco["sucesso"] = True
-        else:
-            bloco["falha"] = True
-
-    for (usuario, _numero_nota), status_info in manifestacoes_usuario_nota.items():
-        bloco = _ensure_usuario(usuario)
-        if not bloco:
-            continue
-        if status_info["sucesso"]:
-            bloco["manifestacoes_sucesso"] += 1
-        elif status_info["falha"]:
-            bloco["manifestacoes_falha"] += 1
-
-    enderecamentos_wms = (
-        db.session.query(
-            ItemWMS.usuario_armazenamento,
-            func.count(ItemWMS.id),
-            func.coalesce(func.sum(ItemWMS.qtd_recebida), 0.0),
-        )
-        .filter(ItemWMS.usuario_armazenamento.isnot(None), ItemWMS.data_armazenamento >= corte)
-        .group_by(ItemWMS.usuario_armazenamento)
-        .all()
-    )
-    for usuario, quantidade, saldo in enderecamentos_wms:
-        bloco = _ensure_usuario(usuario)
-        if not bloco:
-            continue
-        bloco["enderecamentos_wms"] += int(quantidade or 0)
-        bloco["qtd_armazenada_wms"] += float(saldo or 0.0)
-
-    movimentacoes_wms = (
-        db.session.query(
-            MovimentacaoWMS.usuario,
-            func.count(MovimentacaoWMS.id),
-            func.coalesce(func.sum(MovimentacaoWMS.qtd_movimentada), 0.0),
-        )
-        .filter(MovimentacaoWMS.data_movimentacao >= corte)
-        .group_by(MovimentacaoWMS.usuario)
-        .all()
-    )
-    for usuario, quantidade, saldo in movimentacoes_wms:
-        bloco = _ensure_usuario(usuario)
-        if not bloco:
-            continue
-        bloco["movimentacoes_wms"] += int(quantidade or 0)
-        bloco["qtd_movimentada_wms"] += float(saldo or 0.0)
-
-    for bloco in usuarios.values():
-        bloco["total_processado"] = (
-            int(bloco["notas_importadas"])
-            + int(bloco["notas_conferidas"])
-            + int(bloco["notas_lancadas"])
-            + int(bloco["manifestacoes_sucesso"])
-            + int(bloco["manifestacoes_falha"])
-            + int(bloco["enderecamentos_wms"])
-            + int(bloco["movimentacoes_wms"])
-        )
-
-    usuarios_ordenados = sorted(
-        usuarios.values(),
-        key=lambda item: (
-            -int(item["total_processado"]),
-            -int(item["notas_conferidas"]),
-            -int(item["movimentacoes_wms"]),
-            item["usuario"],
-        ),
-    )
-
-    divergencias_periodo = LogDivergencia.query.filter(LogDivergencia.data_erro >= corte).all()
-    notas_com_divergencia = {str(log.numero_nota or "").strip() for log in divergencias_periodo if str(log.numero_nota or "").strip()}
-
-    notas_importadas = {str(numero_nota or "").strip() for _usuario, numero_nota in importacoes if str(numero_nota or "").strip()}
-    notas_conferidas = {str(numero_nota or "").strip() for _usuario, numero_nota in conferencias if str(numero_nota or "").strip()}
-    notas_lancadas = {str(numero_nota or "").strip() for _usuario, numero_nota in lancamentos if str(numero_nota or "").strip()}
-
-    manifestacoes_tipo = {}
-    manifestacoes_sucesso = 0
-    manifestacoes_falha = 0
-    for registro in manifestacao_nota_mais_recente.values():
-        tipo = registro["manifestacao"]
-        bloco = manifestacoes_tipo.setdefault(tipo, {"manifestacao": tipo, "sucesso": 0, "falha": 0})
-        if str(registro["status"]).lower() == "sucesso":
-            bloco["sucesso"] += 1
-            manifestacoes_sucesso += 1
-        else:
-            bloco["falha"] += 1
-            manifestacoes_falha += 1
-
-    itens_wms_ativos = ItemWMS.query.filter_by(ativo=True).count()
-    itens_wms_sem_endereco = ItemWMS.query.filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None)).count()
-    notas_wms_sem_endereco = (
-        db.session.query(func.count(func.distinct(ItemWMS.numero_nota)))
-        .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None))
-        .scalar()
-        or 0
-    )
-    saldo_wms_total = (
-        db.session.query(func.coalesce(func.sum(ItemWMS.qtd_atual), 0.0))
-        .filter(ItemWMS.ativo == True)
-        .scalar()
-        or 0.0
-    )
-    wms_integracoes_pendentes = (
-        WMSIntegracaoEvento.query.filter(WMSIntegracaoEvento.status.in_(["Pendente", "Processando"])).count()
-    )
-    wms_integracoes_falha = (
-        WMSIntegracaoEvento.query.filter(WMSIntegracaoEvento.status.in_(["Falha", "DeadLetter"])).count()
-    )
-    operadores_wms = [
-        {
-            "usuario": item["usuario"],
-            "enderecamentos_wms": int(item["enderecamentos_wms"]),
-            "movimentacoes_wms": int(item["movimentacoes_wms"]),
-            "qtd_movimentada_wms": round(float(item["qtd_movimentada_wms"]), 2),
-            "qtd_armazenada_wms": round(float(item["qtd_armazenada_wms"]), 2),
-        }
-        for item in usuarios_ordenados
-        if int(item["enderecamentos_wms"]) or int(item["movimentacoes_wms"])
-    ][:8]
-
-    return {
-        "periodo_dias": periodo_dias,
-        "totais": {
-            "notas_importadas": len(notas_importadas),
-            "notas_conferidas": len(notas_conferidas),
-            "notas_lancadas": len(notas_lancadas),
-            "manifestacoes_sucesso": manifestacoes_sucesso,
-            "manifestacoes_falha": manifestacoes_falha,
-            "manifestacoes_pendentes": max(len(notas_lancadas) - manifestacoes_sucesso, 0),
-            "divergencias_periodo": len(divergencias_periodo),
-            "notas_com_divergencia": len(notas_com_divergencia),
-            "enderecamentos_wms": sum(int(item["enderecamentos_wms"]) for item in usuarios_ordenados),
-            "movimentacoes_wms": sum(int(item["movimentacoes_wms"]) for item in usuarios_ordenados),
-            "usuarios_ativos": len([item for item in usuarios_ordenados if int(item["total_processado"]) > 0]),
-        },
-        "manifestacao": {
-            "sucesso": manifestacoes_sucesso,
-            "falha": manifestacoes_falha,
-            "pendentes": max(len(notas_lancadas) - manifestacoes_sucesso, 0),
-            "tipos": sorted(
-                manifestacoes_tipo.values(),
-                key=lambda item: (-(int(item["sucesso"]) + int(item["falha"])), item["manifestacao"]),
-            ),
-        },
-        "conferencia": {
-            "notas_conferidas": len(notas_conferidas),
-            "divergencias": len(divergencias_periodo),
-            "notas_com_divergencia": len(notas_com_divergencia),
-            "por_usuario": [
-                {
-                    "usuario": item["usuario"],
-                    "notas_conferidas": int(item["notas_conferidas"]),
-                    "notas_lancadas": int(item["notas_lancadas"]),
-                }
-                for item in usuarios_ordenados
-                if int(item["notas_conferidas"]) or int(item["notas_lancadas"])
-            ][:8],
-        },
-        "wms": {
-            "itens_ativos": int(itens_wms_ativos),
-            "itens_sem_endereco": int(itens_wms_sem_endereco),
-            "notas_sem_endereco": int(notas_wms_sem_endereco),
-            "saldo_total": round(float(saldo_wms_total), 2),
-            "integracoes_pendentes": int(wms_integracoes_pendentes),
-            "integracoes_falha": int(wms_integracoes_falha),
-            "enderecamentos_periodo": sum(int(item["enderecamentos_wms"]) for item in usuarios_ordenados),
-            "movimentacoes_periodo": sum(int(item["movimentacoes_wms"]) for item in usuarios_ordenados),
-            "top_operadores": operadores_wms,
-        },
-        "por_usuario": [
-            {
-                **item,
-                "qtd_movimentada_wms": round(float(item["qtd_movimentada_wms"]), 2),
-                "qtd_armazenada_wms": round(float(item["qtd_armazenada_wms"]), 2),
-            }
-            for item in usuarios_ordenados
-        ],
-    }
-
-
-@api_bp.route("/api/upload/dashboard_consolidado")
-@permission_required("PAGE_UPLOAD")
-def upload_dashboard_consolidado():
-    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
-    return jsonify(_build_upload_dashboard_consolidado(periodo_dias))
-
-
-@api_bp.route("/api/admin/dashboard_consolidado")
-@permission_required("PAGE_ADMIN_DASHBOARD")
-def admin_dashboard_consolidado():
-    periodo_dias = _parse_positive_int(request.args.get("dias"), default=30, min_value=7, max_value=180)
-    return jsonify(_build_upload_dashboard_consolidado(periodo_dias))

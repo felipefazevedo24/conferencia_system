@@ -1,0 +1,542 @@
+{% extends "base.html" %}
+
+{% block title %}Financeiro - E-mails de NF-e{% endblock %}
+
+{% block extra_head %}
+<style>
+  .nfe-wrap { max-width: 1280px; margin: 0 auto; }
+  .nfe-header {
+    background: radial-gradient(circle at top right, rgba(21, 94, 239, 0.14), transparent 32%),
+                linear-gradient(135deg, #ffffff 0%, #eef3ff 100%);
+    border: 1px solid #dbe4ec;
+    border-bottom: 3px solid #155eef;
+    border-radius: 18px;
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    box-shadow: 0 14px 30px rgba(25, 45, 82, 0.08);
+    display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .nfe-title { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+  .nfe-sub { margin: 6px 0 0; color: #475569; font-size: 13px; font-weight: 600; }
+  .teste-pill {
+    padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 12px;
+    background: #fff7ed; color: #9a3412; border: 1px solid #fdba74;
+  }
+  .teste-pill.off { background: #ecfdf5; color: #047857; border-color: #6ee7b7; }
+
+  .card {
+    background: #fff; border: 1px solid #dbe4ec; border-radius: 16px; padding: 18px;
+    box-shadow: 0 10px 24px rgba(18, 38, 58, 0.06); margin-bottom: 16px;
+  }
+  .card h3 { margin: 0 0 12px; font-size: 14px; color: #1e293b; font-weight: 800; text-transform: uppercase; }
+
+  .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: end; }
+  .form-grid.narrow { grid-template-columns: repeat(6, 1fr); }
+  .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #475569; }
+  .form-grid input, .form-grid select {
+    padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px;
+  }
+  .btn {
+    border: 0; cursor: pointer; padding: 10px 16px; border-radius: 10px; font-weight: 700;
+    font-size: 13px; color: #fff; background: #155eef;
+  }
+  .btn.secondary { background: #475569; }
+  .btn.ghost { background: #e2e8f0; color: #1e293b; }
+  .btn.danger { background: #dc2626; }
+
+  table.nfe-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.nfe-table th, table.nfe-table td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+  table.nfe-table th { background: #f8fafc; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 11px; }
+  table.nfe-table tr:hover td { background: #f8fbff; }
+
+  .status { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .status.enviado { background: #ecfdf5; color: #047857; }
+  .status.pendente { background: #fef3c7; color: #92400e; }
+  .status.falha    { background: #fee2e2; color: #b91c1c; }
+
+  .origem { display: inline-block; padding: 3px 9px; border-radius: 6px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 700; }
+  .origem.auto { background: #e0f2fe; color: #075985; }
+  .origem.reenvio { background: #fce7f3; color: #9d174d; }
+
+  .fonte-chip { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; background: #f1f5f9; color: #334155; }
+
+  .sugestao-box {
+    margin-top: 10px; padding: 12px; border-radius: 10px; background: #f8fafc;
+    border: 1px dashed #cbd5e1; font-size: 13px; color: #334155;
+  }
+  .sugestao-box strong { color: #155eef; }
+
+  @media (max-width: 900px) {
+    .form-grid, .form-grid.narrow { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="nfe-wrap">
+  <div class="nfe-header">
+    <div>
+      <h1 class="nfe-title">E-mails de NF-e</h1>
+      <p class="nfe-sub">Envio automatico de XML + DANFE para cliente/destinatario.</p>
+    </div>
+    <div>
+      <span id="teste-pill" class="teste-pill">Carregando...</span>
+    </div>
+  </div>
+
+  {% if session.get('role') == 'Admin' %}
+  <div class="card">
+    <h3>Configuracao</h3>
+    <div class="form-grid narrow">
+      <label>
+        Modo teste
+        <select id="cfg-modo-teste">
+          <option value="true">Ligado (seguro)</option>
+          <option value="false">Desligado (envia ao cliente)</option>
+        </select>
+      </label>
+      <label>
+        E-mail de teste (destino)
+        <input id="cfg-destino-teste" type="email" placeholder="seu@email.com">
+      </label>
+      <label>
+        Envio automatico (polling)
+        <select id="cfg-auto-enabled">
+          <option value="true">Ligado</option>
+          <option value="false">Desligado</option>
+        </select>
+      </label>
+      <label>
+        Enviar autom. no faturamento
+        <select id="cfg-auto">
+          <option value="true">Ligado</option>
+          <option value="false">Desligado</option>
+        </select>
+      </label>
+      <label>
+        Auto apenas desde (NFs novas)
+        <input id="cfg-auto-desde" type="date">
+      </label>
+      <label>
+        Intervalo polling (segundos)
+        <input id="cfg-poll" type="number" min="60" step="30">
+      </label>
+      <label style="grid-column: span 3">
+        Sempre enviar em copia (CC - separados por virgula)
+        <input id="cfg-cc" type="text" placeholder="financeiro@empresa.com, fiscal@empresa.com">
+      </label>
+      <label>&nbsp;
+        <button class="btn" onclick="salvarConfig()">Salvar</button>
+      </label>
+    </div>
+    <div id="cfg-scheduler-status" style="margin-top:10px;font-size:12px;color:#64748b">&mdash;</div>
+    <div style="margin-top:8px">
+      <button class="btn ghost" onclick="rodarAgora()">Rodar ciclo agora</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>Enviar NF-e</h3>
+    <div class="form-grid">
+      <label>Numero NF<input id="f-numero" type="text" placeholder="12345"></label>
+      <label>Chave (opcional)<input id="f-chave" type="text" maxlength="44" placeholder="44 digitos"></label>
+      <label>E-mail manual (opcional)<input id="f-email" type="email" placeholder="cliente@empresa.com"></label>
+      <label>CC (virgulas)<input id="f-cc" type="text" placeholder="financeiro@..., fiscal@..."></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn ghost" onclick="sugerir()">Sugerir destinatario</button>
+      <button class="btn" onclick="enviar()">Enviar NF-e</button>
+    </div>
+    <div id="sugestao" class="sugestao-box" style="display:none"></div>
+  </div>
+
+  <div class="card">
+    <h3>NFs emitidas (a partir de abril)</h3>
+    <div class="form-grid narrow" style="margin-bottom:12px">
+      <label>Data inicial<input id="e-data" type="date"></label>
+      <label>Filtro texto<input id="e-filtro" type="text" placeholder="cliente, numero..." oninput="filtrarEmitidas()"></label>
+      <label>Situacao
+        <select id="e-status" onchange="filtrarEmitidas()">
+          <option value="">Todas</option>
+          <option value="pendentes">Pendentes (sem envio)</option>
+          <option value="enviadas">Ja enviadas</option>
+          <option value="sememail">Sem e-mail na planilha</option>
+        </select>
+      </label>
+      <label>&nbsp;<button class="btn" onclick="carregarEmitidas()">Carregar</button></label>
+    </div>
+    <div id="e-resumo" style="font-size:12px;color:#64748b;margin-bottom:8px">&mdash;</div>
+    <div style="overflow-x:auto;max-height:520px;overflow-y:auto">
+      <table class="nfe-table">
+        <thead style="position:sticky;top:0;background:#f8fafc;z-index:1">
+          <tr>
+            <th style="width:32px"><input type="checkbox" id="e-sel-all" onchange="selecionarTodas(this.checked)"></th>
+            <th>Emissao</th><th>NF</th><th>Destinatario</th><th>CNPJ</th>
+            <th>E-mail sugerido</th><th style="text-align:right">Valor</th><th>Status</th><th>Acao</th>
+          </tr>
+        </thead>
+        <tbody id="emit-body"><tr><td colspan="9" style="text-align:center;color:#94a3b8">Clique em "Carregar".</td></tr></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="enviarSelecionadas()">Enviar selecionadas</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Historico de envios</h3>
+    <div class="form-grid narrow" style="margin-bottom:12px">
+      <label>Numero NF<input id="q-numero" type="text" oninput="carregarHistorico()"></label>
+      <label>Status
+        <select id="q-status" onchange="carregarHistorico()">
+          <option value="">Todos</option>
+          <option>Enviado</option>
+          <option>Pendente</option>
+          <option>Falha</option>
+        </select>
+      </label>
+      <label>Origem
+        <select id="q-origem" onchange="carregarHistorico()">
+          <option value="">Todas</option>
+          <option>Manual</option>
+          <option>Auto</option>
+          <option>Reenvio</option>
+        </select>
+      </label>
+      <label>&nbsp;<button class="btn secondary" onclick="carregarHistorico()">Atualizar</button></label>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="nfe-table">
+        <thead>
+          <tr>
+            <th>Data</th><th>NF</th><th>Destinatario</th><th>E-mail enviado</th>
+            <th>Fonte</th><th>Origem</th><th>Status</th><th>Anexos</th><th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody id="hist-body"><tr><td colspan="9" style="text-align:center;color:#94a3b8">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+async function carregarConfig() {
+  try {
+    const r = await fetch('/api/nfe/email/config');
+    if (!r.ok) return;
+    const c = await r.json();
+    const pill = document.getElementById('teste-pill');
+    if (c.modo_teste) {
+      pill.textContent = 'MODO TESTE ligado - envios redirecionados para ' + (c.destino_teste || '?');
+      pill.classList.remove('off');
+    } else {
+      pill.textContent = 'MODO PRODUCAO - envios reais aos clientes';
+      pill.classList.add('off');
+    }
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('cfg-modo-teste', c.modo_teste ? 'true' : 'false');
+    set('cfg-destino-teste', c.destino_teste || '');
+    set('cfg-auto', c.auto_no_faturamento ? 'true' : 'false');
+    set('cfg-auto-enabled', c.auto_enabled ? 'true' : 'false');
+    set('cfg-auto-desde', c.auto_desde || '');
+    set('cfg-cc', c.cc || '');
+    set('cfg-poll', c.poll_intervalo || 300);
+    carregarSchedulerStatus();
+  } catch (e) { console.warn(e); }
+}
+
+async function carregarSchedulerStatus() {
+  try {
+    const r = await fetch('/api/nfe/email/scheduler/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    const el = document.getElementById('cfg-scheduler-status');
+    if (!el) return;
+    const lastRun = s.last_run ? new Date(s.last_run).toLocaleString('pt-BR') : 'nunca';
+    const estado = s.rodando ? 'rodando' : 'parado';
+    el.textContent = `Scheduler ${estado} | Ultima execucao: ${lastRun} | ${s.last_message || ''}`;
+  } catch (e) { /* silencioso */ }
+}
+
+async function salvarConfig() {
+  const body = {
+    modo_teste: document.getElementById('cfg-modo-teste').value === 'true',
+    destino_teste: document.getElementById('cfg-destino-teste').value,
+    auto_no_faturamento: document.getElementById('cfg-auto').value === 'true',
+    auto_enabled: document.getElementById('cfg-auto-enabled').value === 'true',
+    auto_desde: document.getElementById('cfg-auto-desde').value,
+    cc: document.getElementById('cfg-cc').value,
+    poll_intervalo: parseInt(document.getElementById('cfg-poll').value || '300', 10),
+  };
+  const r = await fetch('/api/nfe/email/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+  });
+  if (r.ok) { await carregarConfig(); alert('Configuracao salva.'); }
+  else alert('Falha ao salvar.');
+}
+
+async function rodarAgora() {
+  const r = await fetch('/api/nfe/email/scheduler/run-now', {method: 'POST'});
+  const data = await r.json();
+  if (data.ok) {
+    alert(`Ciclo executado: ${data.enviadas} enviadas, ${data.pendentes} pendentes, ${data.ignoradas} ignoradas.`);
+    carregarEmitidas();
+    carregarHistorico();
+    carregarSchedulerStatus();
+  } else {
+    alert('Erro: ' + (data.erro || 'desconhecido'));
+  }
+}
+
+async function sugerir() {
+  const numero = document.getElementById('f-numero').value.trim();
+  const chave = document.getElementById('f-chave').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  if (!numero && !chave) return alert('Informe numero ou chave.');
+  const r = await fetch('/api/nfe/email/destinatario-sugerido', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({numero_nf: numero, chave, email}),
+  });
+  const data = await r.json();
+  const box = document.getElementById('sugestao');
+  box.style.display = 'block';
+  if (data.email) {
+    box.innerHTML = `
+      Sugestao: <strong>${data.email}</strong>
+      <span class="fonte-chip">${data.fonte_email || '-'}</span><br>
+      Destinatario: ${data.dest_nome || '-'} (CNPJ ${data.dest_cnpj || '-'}) - NF ${data.numero} - Chave ${data.chave}
+      ${data.modo_teste ? '<br><em>Modo teste: e-mail real sera redirecionado para ' + (data.destino_teste || '?') + '</em>' : ''}
+    `;
+    document.getElementById('f-email').value = data.email;
+  } else {
+    box.innerHTML = '<strong>Nenhum e-mail encontrado.</strong> ' + (data.avisos || []).join(' ');
+  }
+}
+
+async function enviar() {
+  const numero = document.getElementById('f-numero').value.trim();
+  const chave = document.getElementById('f-chave').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const cc = document.getElementById('f-cc').value.trim();
+  if (!numero) return alert('Informe numero da NF.');
+  const r = await fetch('/api/nfe/email/enviar', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({numero_nf: numero, chave, email, cc: cc ? cc.split(',').map(s=>s.trim()) : []}),
+  });
+  const data = await r.json();
+  if (data.sucesso) {
+    alert('Enviado para ' + data.destinatario + (data.modo_teste ? ' (MODO TESTE - destino real era ' + data.destinatario_real + ')' : ''));
+    carregarHistorico();
+  } else {
+    alert('Falha: ' + (data.erro || 'erro desconhecido'));
+  }
+}
+
+async function reenviar(id) {
+  if (!confirm('Reenviar este e-mail?')) return;
+  const r = await fetch(`/api/nfe/email/${id}/reenviar`, {method: 'POST'});
+  const data = await r.json();
+  if (data.sucesso) { alert('Reenviado.'); carregarHistorico(); }
+  else alert('Falha: ' + (data.erro || ''));
+}
+
+async function carregarHistorico() {
+  const numero = document.getElementById('q-numero').value.trim();
+  const status = document.getElementById('q-status').value;
+  const origem = document.getElementById('q-origem').value;
+  const params = new URLSearchParams();
+  if (numero) params.set('numero_nf', numero);
+  if (status) params.set('status', status);
+  if (origem) params.set('origem', origem);
+  const r = await fetch('/api/nfe/email/historico?' + params.toString());
+  const rows = await r.json();
+  const tbody = document.getElementById('hist-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Sem registros.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const st = (r.status || '').toLowerCase();
+    const org = (r.origem || '').toLowerCase();
+    const anexos = [r.anexou_xml ? 'XML' : '', r.anexou_pdf ? 'PDF' : ''].filter(Boolean).join(' + ') || '-';
+    const data = r.criado_em ? new Date(r.criado_em).toLocaleString('pt-BR') : '-';
+    const retry = (r.status === 'Falha' || r.status === 'Pendente')
+      ? `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`
+      : `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`;
+    return `<tr>
+      <td>${data}</td>
+      <td><strong>${r.numero_nf || '-'}</strong></td>
+      <td>${r.destinatario_nome || '-'}</td>
+      <td>${r.destinatario_email || '-'}</td>
+      <td><span class="fonte-chip">${r.fonte_email || '-'}</span></td>
+      <td><span class="origem ${org}">${r.origem || '-'}</span></td>
+      <td><span class="status ${st}">${r.status || '-'}</span></td>
+      <td>${anexos}</td>
+      <td>${retry}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- NFs emitidas (lista) ----
+let EMITIDAS_CACHE = [];
+
+function defaultDataAbril() {
+  const hoje = new Date();
+  const ano = hoje.getMonth() < 3 ? hoje.getFullYear() - 1 : hoje.getFullYear();
+  return `${ano}-04-01`;
+}
+
+function fmtBR(num) {
+  if (num == null || isNaN(num)) return '-';
+  return Number(num).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+}
+
+function fmtData(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return d.toLocaleDateString('pt-BR');
+}
+
+async function carregarEmitidas() {
+  const dataInput = document.getElementById('e-data');
+  const data = dataInput.value || defaultDataAbril();
+  dataInput.value = data;
+  const resumo = document.getElementById('e-resumo');
+  const tbody = document.getElementById('emit-body');
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Consultando Consyste...</td></tr>';
+  resumo.textContent = 'Consultando...';
+  try {
+    const r = await fetch('/api/nfe/email/emitidas?data_inicial=' + encodeURIComponent(data));
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c">Erro: ${err.error || r.status}</td></tr>`;
+      resumo.textContent = '';
+      return;
+    }
+    const dados = await r.json();
+    EMITIDAS_CACHE = dados.notas || [];
+    const comEmail = EMITIDAS_CACHE.filter(n => n.email_sugerido).length;
+    const jaEnv = EMITIDAS_CACHE.filter(n => n.ja_enviado).length;
+    resumo.textContent = `${dados.total} NF-es desde ${dados.data_inicial} | ${comEmail} com e-mail da planilha | ${jaEnv} ja enviadas.`;
+    filtrarEmitidas();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="color:#b91c1c">Falha: ${e}</td></tr>`;
+  }
+}
+
+function renderEmitidas(lista) {
+  const tbody = document.getElementById('emit-body');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Nenhuma NF no filtro.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(n => {
+    const idx = EMITIDAS_CACHE.indexOf(n);
+    const disabled = n.ja_enviado ? 'disabled' : '';
+    const statusPill = n.ja_enviado
+      ? `<span class="status enviado" title="Enviado em ${fmtData(n.ultimo_envio_em)}">Enviado</span>`
+      : (n.aguardando_manual
+          ? '<span class="status falha" title="Scheduler nao achou e-mail - preencha aqui">Aguardando e-mail</span>'
+          : (n.email_sugerido
+              ? '<span class="status pendente">Pendente</span>'
+              : '<span class="status falha">Sem e-mail</span>'));
+    const emailCell = n.email_sugerido
+      ? `<input type="email" class="em-inp" data-idx="${idx}" value="${n.email_sugerido}" style="width:240px;padding:4px 7px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px">
+         <div style="font-size:10px;color:#94a3b8;margin-top:2px">Fonte: ${n.fonte_sugestao || '-'}</div>`
+      : `<input type="email" class="em-inp" data-idx="${idx}" placeholder="informe manualmente" style="width:240px;padding:4px 7px;border:1px solid #fca5a5;border-radius:7px;font-size:12px;background:#fef2f2">`;
+    return `<tr>
+      <td><input type="checkbox" class="em-chk" data-idx="${idx}" ${disabled}></td>
+      <td>${fmtData(n.emitido_em)}</td>
+      <td><strong>${n.numero}</strong></td>
+      <td>${n.dest_nome || '-'}</td>
+      <td style="font-family:Consolas,monospace;font-size:11px">${n.dest_cnpj || '-'}</td>
+      <td>${emailCell}</td>
+      <td style="text-align:right">${fmtBR(n.valor_total)}</td>
+      <td>${statusPill}</td>
+      <td><button class="btn" style="padding:5px 10px;font-size:11px" onclick="enviarUma(${idx})" ${disabled}>Enviar</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarEmitidas() {
+  const termo = (document.getElementById('e-filtro').value || '').toLowerCase();
+  const status = document.getElementById('e-status').value;
+  const filt = EMITIDAS_CACHE.filter(n => {
+    if (status === 'pendentes' && n.ja_enviado) return false;
+    if (status === 'enviadas' && !n.ja_enviado) return false;
+    if (status === 'sememail' && n.email_sugerido) return false;
+    if (!termo) return true;
+    return (n.numero + ' ' + (n.dest_nome || '') + ' ' + (n.dest_cnpj || '') + ' ' + (n.email_sugerido || ''))
+      .toLowerCase().includes(termo);
+  });
+  renderEmitidas(filt);
+}
+
+function selecionarTodas(on) {
+  document.querySelectorAll('.em-chk').forEach(c => { if (!c.disabled) c.checked = on; });
+}
+
+async function enviarUma(idx) {
+  const nota = EMITIDAS_CACHE[idx];
+  if (!nota) return;
+  const inp = document.querySelector(`.em-inp[data-idx="${idx}"]`);
+  const email = (inp && inp.value || '').trim();
+  if (!email) return alert('Informe um e-mail antes de enviar.');
+  if (!confirm(`Enviar NF ${nota.numero} para ${email}?`)) return;
+  const r = await fetch('/api/nfe/email/enviar', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({numero_nf: nota.numero, chave: nota.chave, email}),
+  });
+  const data = await r.json();
+  if (data.sucesso) {
+    nota.ja_enviado = true;
+    nota.ultimo_envio_em = new Date().toISOString();
+    nota.ultimo_envio_para = data.destinatario;
+    filtrarEmitidas();
+    alert('Enviado' + (data.modo_teste ? ' (MODO TESTE - destino real era ' + data.destinatario_real + ')' : ''));
+    carregarHistorico();
+  } else {
+    alert('Falha: ' + (data.erro || 'erro'));
+  }
+}
+
+async function enviarSelecionadas() {
+  const selecionadas = Array.from(document.querySelectorAll('.em-chk:checked'))
+    .map(c => parseInt(c.dataset.idx, 10))
+    .filter(i => !isNaN(i));
+  if (!selecionadas.length) return alert('Nenhuma NF selecionada.');
+  const sem = selecionadas.filter(i => {
+    const inp = document.querySelector(`.em-inp[data-idx="${i}"]`);
+    return !inp || !inp.value.trim();
+  });
+  if (sem.length) return alert(`${sem.length} NF(s) sem e-mail. Informe antes de enviar.`);
+  if (!confirm(`Enviar ${selecionadas.length} NF-es por e-mail?`)) return;
+  let ok = 0, fail = 0;
+  for (const i of selecionadas) {
+    const nota = EMITIDAS_CACHE[i];
+    const email = document.querySelector(`.em-inp[data-idx="${i}"]`).value.trim();
+    try {
+      const r = await fetch('/api/nfe/email/enviar', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({numero_nf: nota.numero, chave: nota.chave, email}),
+      });
+      const data = await r.json();
+      if (data.sucesso) {
+        ok++;
+        nota.ja_enviado = true;
+        nota.ultimo_envio_em = new Date().toISOString();
+      } else fail++;
+    } catch { fail++; }
+  }
+  filtrarEmitidas();
+  alert(`Enviadas: ${ok}. Falhas: ${fail}.`);
+  carregarHistorico();
+}
+
+carregarConfig();
+carregarHistorico();
+carregarEmitidas();
+</script>
+{% endblock %}

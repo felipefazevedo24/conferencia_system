@@ -1,0 +1,482 @@
+{% extends 'base.html' %}
+
+{% block title %}WMS • Central{% endblock %}
+{% block shell_title %}WMS — Central de Operações{% endblock %}
+{% block shell_subtitle %}Visão integrada de armazenagem, movimentação e governança.{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_hub.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="hub-root" id="wmsHubRoot" data-user="{{ user }}" data-role="{{ session.get('role', '') }}">
+
+    <!-- =========== HERO =========== -->
+    <section class="hub-hero">
+        <div class="hub-hero-grid">
+            <div>
+                <span class="hub-hero-eyebrow"><i class="fas fa-warehouse"></i> Warehouse Management</span>
+                <h1>Central WMS Columbia</h1>
+                <p>Todos os fluxos de armazenagem em um só lugar: recebimento fiscal, endereçamento guiado, movimentação, inventário e governança integrados ao seu ERP.</p>
+
+                <div class="hub-hero-quick">
+                    <a href="/wms/enderecamento"><i class="fas fa-map-marker-alt"></i> Endereçar pendências</a>
+                    <a href="/wms/estoque"><i class="fas fa-cubes"></i> Consultar estoque</a>
+                    {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}
+                    <a href="/admin/wms-enderecos"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>
+                    {% endif %}
+                    {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+                    <a href="/admin/wms-governanca"><i class="fas fa-sliders-h"></i> Governança</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="hub-hero-dial" aria-label="Saúde do WMS">
+                <canvas id="hubHeroDial"></canvas>
+                <div class="hub-hero-dial-center">
+                    <strong id="hubHealthValue">--</strong>
+                    <small>Saúde operacional</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========== KPIs =========== -->
+    <section class="hub-kpi-strip" id="hubKpiStrip">
+        <div class="hub-kpi">
+            <div class="hub-kpi-label"><i class="fas fa-inbox"></i> Pendentes de endereçamento</div>
+            <div class="hub-kpi-value" data-kpi="pendentes">—</div>
+            <div class="hub-kpi-delta" data-kpi-delta="idade_media">Idade média: — h</div>
+        </div>
+        <div class="hub-kpi success">
+            <div class="hub-kpi-label"><i class="fas fa-box-check"></i> Itens armazenados</div>
+            <div class="hub-kpi-value" data-kpi="enderecados">—</div>
+            <div class="hub-kpi-delta" data-kpi-delta="saldo">Saldo total: —</div>
+        </div>
+        <div class="hub-kpi">
+            <div class="hub-kpi-label"><i class="fas fa-exchange-alt"></i> Movimentações 24h</div>
+            <div class="hub-kpi-value" data-kpi="movimentacoes_24h">—</div>
+            <div class="hub-kpi-delta">Atividade operacional</div>
+        </div>
+        <div class="hub-kpi warn">
+            <div class="hub-kpi-label"><i class="fas fa-bell"></i> Alertas abertos</div>
+            <div class="hub-kpi-value" data-kpi="alertas_abertos">—</div>
+            <div class="hub-kpi-delta warn" data-kpi-delta="severidade">Sem alertas ativos</div>
+        </div>
+        <div class="hub-kpi danger">
+            <div class="hub-kpi-label"><i class="fas fa-balance-scale-right"></i> Divergências ERP×WMS</div>
+            <div class="hub-kpi-value" data-kpi="divergencias_abertas">—</div>
+            <div class="hub-kpi-delta">Reconciliação contínua</div>
+        </div>
+        <div class="hub-kpi">
+            <div class="hub-kpi-label"><i class="fas fa-plug"></i> Integração fiscal</div>
+            <div class="hub-kpi-value" data-kpi="integracoes_pendentes">—</div>
+            <div class="hub-kpi-delta" data-kpi-delta="fila">Sucesso 24h: —</div>
+        </div>
+    </section>
+
+    <!-- =========== MÓDULOS =========== -->
+    <div class="hub-modules-title">
+        <h2>Módulos do WMS</h2>
+        <small>Clique para acessar</small>
+    </div>
+
+    <section class="hub-modules">
+        <a class="hub-module" data-accent="blue" href="/wms/enderecamento">
+            <div class="hub-module-icon"><i class="fas fa-map-marker-alt"></i></div>
+            <h3>Endereçamento de entrada</h3>
+            <p>Recebe pendências geradas a partir de NF-e lançada e direciona cada item para sua localização física no armazém.</p>
+            <div class="hub-module-footer">
+                <span>Operar agora</span>
+                <span class="hub-pill" id="modPendCount">—</span>
+            </div>
+        </a>
+
+        <a class="hub-module" data-accent="cyan" href="/wms/estoque">
+            <div class="hub-module-icon"><i class="fas fa-cubes"></i></div>
+            <h3>Estoque em tempo real</h3>
+            <p>Consulta consolidada por SKU, localização e depósito com quantidades disponível, separada e bloqueada.</p>
+            <div class="hub-module-footer">
+                <span>Consultar</span>
+                <span class="hub-pill" id="modSkuCount">—</span>
+            </div>
+        </a>
+
+        {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}
+        <a class="hub-module" data-accent="violet" href="/admin/wms-enderecos">
+            <div class="hub-module-icon"><i class="fas fa-map-signs"></i></div>
+            <h3>Cadastro de endereços</h3>
+            <p>Gerencia depósitos, ruas, prédios e posições. Cadastra estoque legado e transfere itens entre depósitos.</p>
+            <div class="hub-module-footer">
+                <span>Administrar</span>
+                <span class="hub-pill" id="modLocCount">—</span>
+            </div>
+        </a>
+        {% endif %}
+
+        {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+        <a class="hub-module" data-accent="amber" href="/admin/wms-governanca">
+            <div class="hub-module-icon"><i class="fas fa-sliders-h"></i></div>
+            <h3>Governança & reconciliação</h3>
+            <p>Parâmetros operacionais (FIFO, quarentena), alertas de capacidade e idade, reconciliação ERP × WMS.</p>
+            <div class="hub-module-footer">
+                <span>Configurar</span>
+                <span class="hub-pill" id="modGovCount">—</span>
+            </div>
+        </a>
+        {% endif %}
+
+        <div class="hub-module soon" data-accent="green">
+            <div class="hub-module-icon"><i class="fas fa-hand-holding-box"></i></div>
+            <h3>Separação por onda (picking)</h3>
+            <p>Geração de ondas com regra FIFO/FEFO, rota otimizada e confirmação por coletor. Em desenvolvimento.</p>
+            <div class="hub-module-footer">
+                <span>Em breve</span>
+                <span class="hub-pill">Fase 3</span>
+            </div>
+        </div>
+
+        <div class="hub-module soon" data-accent="pink">
+            <div class="hub-module-icon"><i class="fas fa-clipboard-list-check"></i></div>
+            <h3>Inventário cíclico</h3>
+            <p>Contagem às cegas por localização com agendamento ABC e tratamento automático de divergências. Em breve.</p>
+            <div class="hub-module-footer">
+                <span>Em breve</span>
+                <span class="hub-pill">Fase 4</span>
+            </div>
+        </div>
+
+        <div class="hub-module soon" data-accent="slate">
+            <div class="hub-module-icon"><i class="fas fa-truck-loading"></i></div>
+            <h3>Expedição integrada</h3>
+            <p>Romaneio, carga, conferência de saída e baixa sincronizada com o ERP. Em breve.</p>
+            <div class="hub-module-footer">
+                <span>Em breve</span>
+                <span class="hub-pill">Fase 5</span>
+            </div>
+        </div>
+
+        <div class="hub-module soon" data-accent="blue">
+            <div class="hub-module-icon"><i class="fas fa-chart-bar"></i></div>
+            <h3>Relatórios gerenciais</h3>
+            <p>Curva ABC calculada, giro de estoque, acuracidade histórica e ocupação por zona. Em breve.</p>
+            <div class="hub-module-footer">
+                <span>Em breve</span>
+                <span class="hub-pill">Fase 7</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========== PANEIS =========== -->
+    <section class="hub-panels">
+        <div class="hub-panel">
+            <div class="hub-panel-head">
+                <div>
+                    <h3><i class="fas fa-warehouse-alt" style="color:var(--wms-primary)"></i> Ocupação por depósito</h3>
+                    <small>Percentual de capacidade utilizada</small>
+                </div>
+                <button class="hub-refresh" id="btnHubRefresh"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            </div>
+            <div id="hubDepositos">
+                <div class="hub-empty"><i class="fas fa-hourglass-half"></i>Carregando depósitos…</div>
+            </div>
+
+            <div class="hub-panel-head" style="margin-top:22px">
+                <div>
+                    <h3><i class="fas fa-tachometer-alt-fast" style="color:var(--wms-primary)"></i> Pendências por prioridade</h3>
+                    <small>Itens aguardando endereçamento</small>
+                </div>
+            </div>
+            <div class="hub-priority-grid" id="hubPriorityGrid">
+                <div class="hub-priority" data-p="critica"><strong data-p="Critica">—</strong><small>Crítica</small></div>
+                <div class="hub-priority" data-p="alta"><strong data-p="Alta">—</strong><small>Alta</small></div>
+                <div class="hub-priority" data-p="media"><strong data-p="Media">—</strong><small>Média</small></div>
+                <div class="hub-priority" data-p="baixa"><strong data-p="Baixa">—</strong><small>Baixa</small></div>
+            </div>
+        </div>
+
+        <div class="hub-panel">
+            <div class="hub-panel-head">
+                <div>
+                    <h3><i class="fas fa-bell" style="color:#c98a1a"></i> Alertas operacionais</h3>
+                    <small>Capacidade, pendência antiga, ruptura</small>
+                </div>
+            </div>
+            <ul class="hub-alert-list" id="hubAlerts">
+                <li class="hub-empty"><i class="fas fa-shield-check"></i>Carregando alertas…</li>
+            </ul>
+
+            <div class="hub-panel-head" style="margin-top:22px">
+                <div>
+                    <h3><i class="fas fa-stream" style="color:var(--wms-primary)"></i> Últimas movimentações</h3>
+                    <small>Atividade recente no armazém</small>
+                </div>
+            </div>
+            <ul class="hub-feed" id="hubFeed">
+                <li class="hub-empty" style="border:none"><i class="fas fa-hourglass-half"></i>Carregando…</li>
+            </ul>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    const fmtInt = (v) => {
+        const n = Number(v || 0);
+        return Number.isFinite(n) ? n.toLocaleString('pt-BR') : '0';
+    };
+    const fmtNum = (v, d = 2) => {
+        const n = Number(v || 0);
+        return Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '0,00';
+    };
+    const ageFromIso = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const diffMin = Math.max(0, (Date.now() - d.getTime()) / 60000);
+        if (diffMin < 60) return `${Math.round(diffMin)} min`;
+        const h = diffMin / 60;
+        if (h < 48) return `${Math.round(h)} h`;
+        return `${Math.round(h / 24)} d`;
+    };
+
+    // --------- Donut canvas ---------
+    function drawDonut(canvas, percent) {
+        if (!canvas || !canvas.getContext) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const size = canvas.clientWidth || 230;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, size, size);
+
+        const cx = size / 2;
+        const cy = size / 2;
+        const r = size / 2 - 14;
+        const start = -Math.PI / 2;
+        const pct = Math.max(0, Math.min(100, percent));
+        const end = start + (pct / 100) * Math.PI * 2;
+
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 16;
+
+        // track
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // gradient
+        const grad = ctx.createLinearGradient(0, 0, size, size);
+        if (pct >= 80) { grad.addColorStop(0, '#34d399'); grad.addColorStop(1, '#22d3ee'); }
+        else if (pct >= 60) { grad.addColorStop(0, '#60a5fa'); grad.addColorStop(1, '#22d3ee'); }
+        else if (pct >= 40) { grad.addColorStop(0, '#f59e0b'); grad.addColorStop(1, '#fbbf24'); }
+        else { grad.addColorStop(0, '#ef4444'); grad.addColorStop(1, '#f97316'); }
+
+        ctx.strokeStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, start, end);
+        ctx.stroke();
+    }
+
+    function computeHealth(cards) {
+        if (!cards) return 0;
+        const pend = Number(cards.pendentes_enderecamento || 0);
+        const end = Number(cards.itens_enderecados || 0);
+        const alertas = Number(cards.alertas_abertos || 0);
+        const diverg = Number(cards.divergencias_abertas || 0);
+        const falhas = Number(cards.integracoes_falha || 0);
+        const idade = Number(cards.idade_media_pendente_horas || 0);
+        const total = pend + end || 1;
+        let score = 100;
+        score -= Math.min(30, (pend / total) * 100 * 0.6);
+        score -= Math.min(20, alertas * 3);
+        score -= Math.min(20, diverg * 2.5);
+        score -= Math.min(15, falhas * 4);
+        score -= Math.min(15, idade * 0.5);
+        return Math.max(0, Math.min(100, Math.round(score)));
+    }
+
+    // --------- Render ---------
+    function renderKpis(cards) {
+        if (!cards) return;
+        $('[data-kpi="pendentes"]').textContent = fmtInt(cards.pendentes_enderecamento);
+        $('[data-kpi="enderecados"]').textContent = fmtInt(cards.itens_enderecados);
+        $('[data-kpi="movimentacoes_24h"]').textContent = fmtInt(cards.movimentacoes_24h);
+        $('[data-kpi="alertas_abertos"]').textContent = fmtInt(cards.alertas_abertos);
+        $('[data-kpi="divergencias_abertas"]').textContent = fmtInt(cards.divergencias_abertas);
+        $('[data-kpi="integracoes_pendentes"]').textContent = fmtInt(cards.integracoes_pendentes);
+
+        const idade = Number(cards.idade_media_pendente_horas || 0);
+        $('[data-kpi-delta="idade_media"]').textContent = `Idade média: ${fmtNum(idade, 1)} h`;
+        $('[data-kpi-delta="idade_media"]').classList.toggle('warn', idade >= 12);
+        $('[data-kpi-delta="idade_media"]').classList.toggle('down', idade >= 24);
+
+        $('[data-kpi-delta="saldo"]').textContent = `Saldo total: ${fmtNum(cards.saldo_enderecado, 2)}`;
+
+        const sev = $('[data-kpi-delta="severidade"]');
+        if (Number(cards.alertas_abertos) > 0) {
+            sev.textContent = `${cards.alertas_abertos} ativo(s)`;
+            sev.classList.add('warn');
+        } else {
+            sev.textContent = 'Sem alertas ativos';
+            sev.classList.remove('warn');
+        }
+
+        $('[data-kpi-delta="fila"]').textContent = `Sucesso 24h: ${fmtInt(cards.integracoes_sucesso_24h)}`;
+
+        // module pills
+        $('#modPendCount').textContent = `${fmtInt(cards.pendentes_enderecamento)} pend.`;
+        $('#modGovCount').textContent = `${fmtInt(cards.alertas_abertos)} alertas`;
+    }
+
+    function renderDepositos(lista) {
+        const root = $('#hubDepositos');
+        if (!root) return;
+        if (!Array.isArray(lista) || lista.length === 0) {
+            root.innerHTML = '<div class="hub-empty"><i class="fas fa-warehouse"></i>Nenhum depósito configurado.</div>';
+            return;
+        }
+        root.innerHTML = lista.map(d => {
+            const pct = Number(d.ocupacao_percentual || 0);
+            const cls = pct >= 90 ? 'danger' : (pct >= 70 ? 'warn' : '');
+            const criticos = Number(d.localizacoes_criticas || 0);
+            return `
+                <div class="hub-dep-row">
+                    <div>
+                        <div class="hub-dep-code">${(d.deposito_codigo || '').toString().toUpperCase()}</div>
+                        <div class="hub-dep-name">${d.deposito_nome || ''}</div>
+                    </div>
+                    <div>
+                        <div class="hub-dep-bar-wrap"><div class="hub-dep-bar ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
+                        <div class="hub-dep-name" style="margin-top:6px">
+                            Capacidade ${fmtNum(d.capacidade_ocupada, 0)} / ${fmtNum(d.capacidade_total, 0)}
+                            ${criticos ? `• <span style="color:#b91c1c;font-weight:700">${criticos} crítica(s)</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="hub-dep-percent">${fmtNum(pct, 1)}%</div>
+                </div>`;
+        }).join('');
+    }
+
+    function renderPrioridades(prior) {
+        const ref = prior || {};
+        ['Critica', 'Alta', 'Media', 'Baixa'].forEach(k => {
+            const el = document.querySelector(`.hub-priority strong[data-p="${k}"]`);
+            if (el) el.textContent = fmtInt(ref[k] || 0);
+        });
+    }
+
+    function renderAlertas(lista) {
+        const root = $('#hubAlerts');
+        if (!root) return;
+        if (!Array.isArray(lista) || lista.length === 0) {
+            root.innerHTML = '<li class="hub-empty"><i class="fas fa-shield-check"></i>Nenhum alerta operacional aberto.</li>';
+            return;
+        }
+        root.innerHTML = lista.slice(0, 6).map(a => `
+            <li class="hub-alert" data-sev="${a.severidade || 'BAIXA'}">
+                <span class="hub-alert-dot"></span>
+                <div class="hub-alert-body">
+                    <strong>${a.tipo || 'Alerta'}${a.referencia ? ` · ${a.referencia}` : ''}</strong>
+                    <small>${a.descricao || ''}</small>
+                </div>
+                <span class="hub-alert-age">${ageFromIso(a.criado_em)}</span>
+            </li>`).join('');
+    }
+
+    function renderFeed(lista) {
+        const root = $('#hubFeed');
+        if (!root) return;
+        if (!Array.isArray(lista) || lista.length === 0) {
+            root.innerHTML = '<li class="hub-empty" style="border:none"><i class="fas fa-stream"></i>Sem movimentações recentes.</li>';
+            return;
+        }
+        const iconFor = (t) => {
+            if (t === 'Separacao') return 'fas fa-hand-paper';
+            if (t === 'Transferencia Deposito') return 'fas fa-exchange-alt';
+            if (t === 'Devolucao') return 'fas fa-undo-alt';
+            if (t === 'EstornoEnderecamento') return 'fas fa-undo';
+            if (t === 'Reposicionamento') return 'fas fa-route';
+            if (t === 'CadastroEstoqueInicial') return 'fas fa-seedling';
+            return 'fas fa-box';
+        };
+        root.innerHTML = lista.slice(0, 8).map(m => {
+            const tipo = m.tipo_movimentacao || m.tipo || 'Movimentação';
+            return `
+            <li>
+                <span class="hub-feed-ico" data-t="${tipo}"><i class="${iconFor(tipo)}"></i></span>
+                <div class="hub-feed-body">
+                    <strong>${tipo}${m.numero_nota ? ` · NF ${m.numero_nota}` : ''}</strong>
+                    <small>${m.usuario || '—'} · ${fmtNum(m.qtd_movimentada || m.qtd || 0, 2)} un.</small>
+                </div>
+                <span class="hub-feed-when">${ageFromIso(m.data_movimentacao || m.data)}</span>
+            </li>`;
+        }).join('');
+    }
+
+    // --------- Load ---------
+    async function loadHub() {
+        try {
+            const resp = await fetch('/api/wms/hub-resumo', { credentials: 'same-origin' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+
+            renderKpis(data.cards || {});
+            renderDepositos(data.ocupacao_por_deposito || []);
+            renderPrioridades(data.prioridades || data.prioridades_pendentes || {});
+            renderAlertas(data.alertas || []);
+            renderFeed(data.movimentacoes_recentes || []);
+
+            const health = computeHealth(data.cards);
+            const el = $('#hubHealthValue');
+            if (el) el.textContent = `${health}%`;
+            drawDonut($('#hubHeroDial'), health);
+        } catch (err) {
+            console.error('Erro ao carregar hub WMS', err);
+            const el = $('#hubHealthValue');
+            if (el) el.textContent = '—';
+            const alertBox = $('#hubAlerts');
+            if (alertBox) alertBox.innerHTML = '<li class="hub-empty"><i class="fas fa-triangle-exclamation" style="color:#dc2626"></i>Falha ao carregar dados do WMS.</li>';
+        }
+    }
+
+    // Lightweight extras: counts from other endpoints
+    async function loadExtras() {
+        try {
+            const resp = await fetch('/api/wms/dashboard', { credentials: 'same-origin' });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const r = data.resumo || {};
+            if ($('#modSkuCount')) $('#modSkuCount').textContent = `${fmtInt(r.skus_unicos)} SKUs`;
+            if ($('#modLocCount')) $('#modLocCount').textContent = `${fmtInt(r.localizacoes_ativas)} locais`;
+        } catch (_) {}
+    }
+
+    document.getElementById('btnHubRefresh')?.addEventListener('click', () => {
+        loadHub();
+        loadExtras();
+    });
+
+    window.addEventListener('resize', () => {
+        const canvas = $('#hubHeroDial');
+        if (!canvas) return;
+        const value = parseInt(($('#hubHealthValue')?.textContent || '0').replace('%', ''), 10);
+        drawDonut(canvas, isNaN(value) ? 0 : value);
+    });
+
+    // auto refresh a cada 60s
+    loadHub();
+    loadExtras();
+    setInterval(() => { loadHub(); loadExtras(); }, 60000);
+})();
+</script>
+{% endblock %}

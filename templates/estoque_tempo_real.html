@@ -155,6 +155,7 @@
         </div>
         <div class="toolbar">
             <button class="btn primary" onclick="carregarEstoque()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+            <button class="btn" id="btnSyncErp" onclick="sincronizarErp()" title="Busca estoque e endereços atualizados do ERP"><i class="fas fa-cloud-download-alt"></i> Sincronizar ERP</button>
             <a class="btn" href="/wms"><i class="fas fa-warehouse"></i> Cockpit WMS</a>
             <a class="btn" href="/admin/wms-governanca"><i class="fas fa-sliders-h"></i> Governança</a>
         </div>
@@ -456,6 +457,30 @@ function trocarView(view) {
     document.getElementById('viewTabela').style.display = view === 'tabela' ? '' : 'none';
     document.getElementById('tabLayout').className = 'view-tab' + (view === 'layout' ? ' active' : '');
     document.getElementById('tabTabela').className = 'view-tab' + (view === 'tabela' ? ' active' : '');
+}
+
+// ─── Sincronizar com ERP ─────────────────────────────────────────────────────
+
+async function sincronizarErp() {
+    const btn = document.getElementById('btnSyncErp');
+    if (!btn) return;
+    const htmlOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sincronizando...';
+    try {
+        const data = await fetchJson('/api/wms/erp-sync', { method: 'POST' });
+        const r = data.resultado || {};
+        showToast(
+            `Sincronizado: ${r.total_itens_erp || 0} itens ERP | ${r.enderecados || 0} endereçados | ${r.divergencias || 0} divergências`,
+            'ok'
+        );
+        await carregarEstoque();
+    } catch (e) {
+        showToast('Erro ao sincronizar com ERP: ' + e.message, 'err');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = htmlOriginal;
+    }
 }
 
 // ─── Init ────────────────────────────────────────────────────────────────────

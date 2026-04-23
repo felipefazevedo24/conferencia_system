@@ -28,6 +28,8 @@ def register_error_handlers(app):
 
     @app.errorhandler(500)
     def handle_internal_error(err):
+        import traceback
+        traceback.print_exc()
         if request.path.startswith("/api") or request.path == "/validar":
-            return jsonify({"error": "Erro interno do servidor"}), 500
+            return jsonify({"error": "Erro interno do servidor", "details": str(err)}), 500
         return render_template("acesso_negado.html", user=""), 500

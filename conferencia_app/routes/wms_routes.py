@@ -789,6 +789,20 @@ def listar_pendentes_enderecamento():
     return jsonify(payload), 200
 
 
+@wms_bp.route('/hub-resumo', methods=['GET'])
+@requer_wms_operacao
+def obter_hub_resumo():
+    """Agrega cockpit operacional + alertas + resumo denso para a landing do WMS."""
+    cockpit = WMSService.obter_cockpit_operacional()
+    painel = WMSService.obter_painel_governanca()
+    denso = WMSService.obter_denso_armazem()
+
+    cockpit['alertas'] = painel.get('alertas', [])
+    cockpit['divergencias'] = painel.get('divergencias', [])
+    cockpit['resumo_denso'] = denso
+    return jsonify(cockpit), 200
+
+
 @wms_bp.route('/cockpit', methods=['GET'])
 @requer_wms_operacao
 def obter_cockpit_wms():
@@ -1449,7 +1463,7 @@ def estoque_tempo_real():
 # ============================================================================
 
 @wms_bp.route('/erp-sync', methods=['POST'])
-@requer_admin
+@requer_wms_operacao
 def executar_sync_erp():
     """Executa sincronização completa do estoque ERP → WMS"""
     from ..services.erp_sync_service import ERPSyncService

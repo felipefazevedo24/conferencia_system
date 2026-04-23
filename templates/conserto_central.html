@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Central de Estoque{% endblock %}
+{% block title %}Central de Conserto{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -293,31 +293,6 @@
         background: #b63a3a;
     }
 
-    .conserto-debug {
-        margin-top: 16px;
-        background: rgba(5, 15, 24, 0.42);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 14px;
-        padding: 14px;
-    }
-
-    .conserto-debug h4 {
-        margin: 0 0 10px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-    }
-
-    .conserto-debug-log {
-        max-height: 180px;
-        overflow: auto;
-        font-family: Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        color: #d8e4ef;
-    }
-
     @media (max-width: 980px) {
         .conserto-hero {
             grid-template-columns: 1fr;
@@ -333,48 +308,36 @@
 
 {% block content %}
 <div class="page-header-erp">
-    <h2>Central de Estoque</h2>
+    <h2>Central de Conserto</h2>
 </div>
 
 <div class="conserto-shell">
     <section class="conserto-hero">
         <article class="conserto-card conserto-summary">
-            <h2>Meu em poder de terceiros</h2>
+            <h2>Controle de estoque em conserto</h2>
             <p>Sincronize NF-es de conserto por CFOP, sugira baixas automáticas por vínculo fiscal e trate manualmente os casos sem referência.</p>
             <div class="conserto-metrics">
                 <div class="metric-box">
                     <strong id="metric-saldos">0</strong>
-                    <span>Registros em aberto</span>
+                    <span>Saldos em aberto</span>
                 </div>
                 <div class="metric-box">
                     <strong id="metric-quantidade">0</strong>
-                    <span>Qtd em terceiros</span>
+                    <span>Quantidade pendente</span>
                 </div>
                 <div class="metric-box">
                     <strong id="metric-baixas">0</strong>
-                    <span>Aguardando autorizacao</span>
+                    <span>Baixas pendentes</span>
                 </div>
             </div>
             <div class="conserto-summary-actions">
                 <button class="btn-conserto primary inverse" id="btn-sincronizar-notas" type="button">Sincronizar notas fiscais</button>
             </div>
-            <div class="conserto-debug">
-                <h4>Debug da sincronizacao</h4>
-                <div id="debug-sync-log" class="conserto-debug-log">A sincronizacao vai considerar apenas NF-es emitidas desde 2026-03-01.</div>
-            </div>
         </article>
 
         <article class="conserto-card conserto-form-card">
-            <h3>Novo registro em estoque</h3>
+            <h3>Novo saldo de remessa</h3>
             <form id="form-criar-saldo" class="conserto-form-grid">
-                <div class="conserto-field">
-                    <label for="tipo_operacao">Tipo de operacao</label>
-                    <input id="tipo_operacao" name="tipo_operacao" list="lista-tipos-operacao" value="Conserto" required>
-                </div>
-                <div class="conserto-field">
-                    <label for="cfop_remessa">CFOP remessa</label>
-                    <input id="cfop_remessa" name="cfop_remessa" maxlength="4" value="5915" required>
-                </div>
                 <div class="conserto-field">
                     <label for="chave_nf_remessa">Chave NF remessa</label>
                     <input id="chave_nf_remessa" name="chave_nf_remessa" maxlength="44" required>
@@ -392,7 +355,7 @@
                     <input id="fornecedor_nome" name="fornecedor_nome" required>
                 </div>
                 <div class="conserto-field">
-                    <label for="produto_codigo">Código do produto</label>
+                    <label for="produto_codigo">Codigo do produto</label>
                     <input id="produto_codigo" name="produto_codigo" required>
                 </div>
                 <div class="conserto-field">
@@ -400,65 +363,36 @@
                     <input id="quantidade" name="quantidade" type="number" step="0.01" min="0.01" required>
                 </div>
                 <div class="conserto-field conserto-field-full">
-                    <label for="produto_descricao">Descrição do produto</label>
+                    <label for="produto_descricao">Descricao do produto</label>
                     <input id="produto_descricao" name="produto_descricao" required>
                 </div>
                 <div class="conserto-field conserto-field-full">
-                    <label for="tipo_controle">Controle</label>
-                    <input id="tipo_controle" name="tipo_controle" value="Meu em poder de terceiros" required>
-                </div>
-                <div class="conserto-field conserto-field-full">
-                    <button class="btn-conserto primary" id="btn-criar-saldo" type="submit">Cadastrar registro</button>
+                    <button class="btn-conserto primary" id="btn-criar-saldo" type="submit">Cadastrar saldo</button>
                 </div>
             </form>
-            <datalist id="lista-tipos-operacao">
-                <option value="Conserto"></option>
-                <option value="Industrializacao"></option>
-            </datalist>
         </article>
     </section>
 
-    <section id="tab-relatorio" class="conserto-card conserto-table-card">
-        <h3>Relatório executivo do estoque</h3>
-        <div class="conserto-table-wrap">
-            <table class="conserto-table">
-                <thead>
-                    <tr>
-                        <th>Operação</th>
-                        <th>Registros</th>
-                        <th>Qtd enviada</th>
-                        <th>Qtd baixada</th>
-                        <th>Saldo em terceiros</th>
-                    </tr>
-                </thead>
-                <tbody id="relatorio-tbody"></tbody>
-            </table>
-        </div>
-    </section>
-
     <div class="conserto-tabs">
-        <button class="conserto-tab-btn" data-tab="relatorio" type="button">Relatório</button>
         <button class="conserto-tab-btn" data-tab="estoque" type="button">Estoque em aberto</button>
-        <button class="conserto-tab-btn" data-tab="historico" type="button">Histórico de estoque</button>
-        <button class="conserto-tab-btn" data-tab="baixa" type="button">Autorizacao de baixa</button>
+        <button class="conserto-tab-btn" data-tab="historico" type="button">Historico de estoque</button>
+        <button class="conserto-tab-btn" data-tab="baixa" type="button">Confirmacao de baixa</button>
         <button class="conserto-tab-btn" data-tab="auditoria" type="button">Auditoria</button>
     </div>
 
     <section id="tab-estoque" class="conserto-card conserto-table-card">
-        <h3>Estoque em aberto</h3>
+        <h3>Saldos aguardando retorno</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
-                        <th>Controle</th>
-                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>Fornecedor</th>
                         <th>Produto</th>
                         <th>Qtd enviada</th>
                         <th>Saldo</th>
                         <th>Status</th>
-                        <th>Emissão</th>
+                        <th>Emissao</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -468,18 +402,16 @@
     </section>
 
     <section id="tab-baixa" class="conserto-card conserto-table-card">
-        <h3>Baixas aguardando autorizacao</h3>
+        <h3>Baixas pendentes de confirmação</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
-                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>NF retorno</th>
                         <th>Produto</th>
                         <th>Qtd baixada</th>
                         <th>Vinculo</th>
-                        <th>Sugestao</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -490,13 +422,11 @@
     </section>
 
     <section id="tab-historico" class="conserto-card conserto-table-card">
-        <h3>Histórico completo do estoque</h3>
+        <h3>Historico completo do estoque de conserto</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
-                        <th>Controle</th>
-                        <th>Operação</th>
                         <th>NF remessa</th>
                         <th>Fornecedor</th>
                         <th>Produto</th>
@@ -504,7 +434,7 @@
                         <th>Qtd baixada</th>
                         <th>Saldo atual</th>
                         <th>Status</th>
-                        <th>Emissão</th>
+                        <th>Emissao</th>
                         <th>Criado por</th>
                     </tr>
                 </thead>
@@ -514,14 +444,14 @@
     </section>
 
     <section id="tab-auditoria" class="conserto-card conserto-table-card">
-        <h3>Ultimas operacoes</h3>
+        <h3>Últimas operações</h3>
         <div class="conserto-table-wrap">
             <table class="conserto-table">
                 <thead>
                     <tr>
                         <th>Data</th>
-                        <th>Acao</th>
-                        <th>Referencia</th>
+                        <th>Ação</th>
+                        <th>Referência</th>
                         <th>Tipo</th>
                         <th>Usuário</th>
                         <th>Detalhes</th>
@@ -535,64 +465,30 @@
 
 <div id="modal-vinculo" class="conserto-modal">
     <div class="conserto-modal-card">
-        <h3>Vincular retorno manual</h3>
+        <h3>Vincular retorno</h3>
         <form id="form-vinculo" class="conserto-form-grid">
             <input id="modal-estoque-id" name="conserto_estoque_id" type="hidden">
-            <div class="conserto-field">
-                <label for="modal-numero">Número NF retorno</label>
-                <input id="modal-numero" name="numero_nf_retorno" required>
-            </div>
-            <div class="conserto-field">
-                <label for="modal-cfop">CFOP retorno</label>
-                <input id="modal-cfop" name="cfop_retorno" maxlength="4" placeholder="Preenchido automaticamente">
-            </div>
             <div class="conserto-field conserto-field-full">
                 <label for="modal-chave">Chave NF retorno</label>
-                <input id="modal-chave" name="chave_nf_retorno" maxlength="44" readonly>
+                <input id="modal-chave" name="chave_nf_retorno" maxlength="44" required>
             </div>
             <div class="conserto-field">
                 <label for="modal-data">Data NF retorno</label>
-                <input id="modal-data" name="data_nf_retorno" type="date" readonly>
+                <input id="modal-data" name="data_nf_retorno" type="date" required>
             </div>
             <div class="conserto-field">
                 <label for="modal-quantidade">Quantidade</label>
                 <input id="modal-quantidade" name="quantidade" type="number" step="0.01" min="0.01" required>
             </div>
             <div class="conserto-field conserto-field-full">
-                <label for="modal-observacoes">Observacoes</label>
+                <label for="modal-observacoes">Observações</label>
                 <textarea id="modal-observacoes" name="observacoes"></textarea>
             </div>
             <div class="conserto-field conserto-field-full conserto-actions">
                 <button class="btn-conserto secondary" type="button" id="btn-fechar-modal">Cancelar</button>
-                <button class="btn-conserto primary" type="submit" id="btn-vincular">Salvar vinculo</button>
+                <button class="btn-conserto primary" type="submit" id="btn-vincular">Salvar vínculo</button>
             </div>
         </form>
-    </div>
-</div>
-
-<div id="modal-detalhes-nf" class="conserto-modal">
-    <div class="conserto-modal-card" style="width:min(980px,100%); max-height:85vh; overflow:auto;">
-        <h3 id="detalhes-nf-titulo">Detalhes da NF</h3>
-        <div id="detalhes-nf-meta" style="display:grid; gap:8px; margin:14px 0 18px;"></div>
-        <div class="conserto-table-wrap">
-            <table class="conserto-table" style="min-width:720px;">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>Descrição</th>
-                        <th>Qtd enviada</th>
-                        <th>Qtd baixada</th>
-                        <th>Saldo</th>
-                        <th>Status</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="detalhes-nf-tbody"></tbody>
-            </table>
-        </div>
-        <div class="conserto-actions" style="margin-top:16px;">
-            <button class="btn-conserto secondary" type="button" id="btn-fechar-detalhes-nf">Fechar</button>
-        </div>
     </div>
 </div>
 
@@ -605,8 +501,7 @@
         tabAtiva: {{ tab_ativa|tojson }},
         saldos: [],
         baixas: [],
-        historico: [],
-        relatorio: { cards: {}, grupos_operacao: [] }
+        historico: []
     };
 
     function formatarData(valor) {
@@ -627,46 +522,6 @@
         if (!valor) return "-";
         if (valor.length <= 12) return valor;
         return `${valor.slice(0, 8)}...${valor.slice(-4)}`;
-    }
-
-    function agruparPorNota(itens, tipo) {
-        const grupos = new Map();
-        itens.forEach((item) => {
-            const chave = [
-                tipo,
-                item.numero_nf_remessa || item.numero_nf_retorno || "",
-                item.chave_nf_remessa || item.chave_nf_retorno || "",
-                item.tipo_operacao || "",
-                item.fornecedor_cnpj || ""
-            ].join("::");
-            if (!grupos.has(chave)) {
-                grupos.set(chave, {
-                    chave,
-                    tipo,
-                    numero_nf: item.numero_nf_remessa || item.numero_nf_retorno || "-",
-                    chave_nf: item.chave_nf_remessa || item.chave_nf_retorno || "",
-                    tipo_controle: item.tipo_controle || "-",
-                    tipo_operacao: item.tipo_operacao || "-",
-                    cfop_remessa: item.cfop_remessa || "-",
-                    fornecedor_nome: item.fornecedor_nome || "-",
-                    fornecedor_cnpj: item.fornecedor_cnpj || "-",
-                    data_emissao: item.data_emissao || null,
-                    status: item.status || item.status_baixa || "-",
-                    numero_nf_retorno: item.numero_nf_retorno || "-",
-                    chave_nf_retorno: item.chave_nf_retorno || "",
-                    itens: []
-                });
-            }
-            grupos.get(chave).itens.push(item);
-        });
-
-        return Array.from(grupos.values()).map((grupo) => ({
-            ...grupo,
-            quantidade_itens: grupo.itens.length,
-            quantidade_enviada: grupo.itens.reduce((acc, item) => acc + Number(item.quantidade_enviada || item.quantidade_baixada || 0), 0),
-            quantidade_baixada: grupo.itens.reduce((acc, item) => acc + Number(item.quantidade_baixada || 0), 0),
-            quantidade_saldo: grupo.itens.reduce((acc, item) => acc + Number(item.quantidade_saldo || 0), 0)
-        }));
     }
 
     function mostrarToast(mensagem, tipo = "success") {
@@ -691,59 +546,33 @@
     }
 
     function atualizarMetricas() {
-        const cards = estadoConserto.relatorio.cards || {};
-        document.getElementById("metric-saldos").textContent = formatarNumero(cards.registros_abertos || estadoConserto.saldos.length);
-        document.getElementById("metric-quantidade").textContent = formatarNumero(cards.quantidade_em_terceiros || 0);
-        document.getElementById("metric-baixas").textContent = formatarNumero(cards.baixas_pendentes || estadoConserto.baixas.length);
-    }
-
-    function renderizarRelatorio() {
-        const tbody = document.getElementById("relatorio-tbody");
-        tbody.innerHTML = "";
-
-        const grupos = estadoConserto.relatorio.grupos_operacao || [];
-        if (!grupos.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="5">Nenhuma operacao consolidada ainda.</td></tr>';
-            return;
-        }
-
-        grupos.forEach((item) => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td><strong>${item.tipo_operacao || "-"}</strong></td>
-                <td>${formatarNumero(item.registros)}</td>
-                <td>${formatarNumero(item.quantidade_enviada)}</td>
-                <td>${formatarNumero(item.quantidade_baixada)}</td>
-                <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
-            `;
-            tbody.appendChild(tr);
-        });
+        const quantidadeAberta = estadoConserto.saldos.reduce((acc, item) => acc + Number(item.quantidade_saldo || 0), 0);
+        document.getElementById("metric-saldos").textContent = formatarNumero(estadoConserto.saldos.length);
+        document.getElementById("metric-quantidade").textContent = formatarNumero(quantidadeAberta);
+        document.getElementById("metric-baixas").textContent = formatarNumero(estadoConserto.baixas.length);
     }
 
     function renderizarSaldos() {
         const tbody = document.getElementById("estoque-tbody");
         tbody.innerHTML = "";
-        const grupos = agruparPorNota(estadoConserto.saldos, "estoque");
 
-        if (!grupos.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="10">Nenhum saldo em aberto.</td></tr>';
+        if (!estadoConserto.saldos.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="8">Nenhum saldo em aberto.</td></tr>';
             return;
         }
 
-        grupos.forEach((item) => {
+        estadoConserto.saldos.forEach((item) => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
-                <td>${item.tipo_controle || "-"}</td>
-                <td><strong>${item.tipo_operacao || "-"}</strong></td>
-                <td><strong>${item.numero_nf || "-"}</strong><br><small>${abreviarChave(item.chave_nf)}</small></td>
+                <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
                 <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj}</small></td>
-                <td><strong>${item.quantidade_itens}</strong> item(ns)</td>
+                <td>${item.produto_codigo}<br><strong>${item.produto_descricao}</strong></td>
                 <td>${formatarNumero(item.quantidade_enviada)}</td>
                 <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
                 <td><span class="conserto-status status-open">${item.status}</span></td>
                 <td>${formatarData(item.data_emissao)}</td>
                 <td class="conserto-actions">
-                    <button class="btn-conserto secondary" type="button" onclick="abrirDetalhesNF('${item.chave}', 'estoque')">${item.quantidade_itens > 1 ? "Ver itens" : "Abrir item"}</button>
+                    <button class="btn-conserto secondary" type="button" onclick="abrirModalVinculo(${item.id}, ${Number(item.quantidade_saldo || 0)})">Vincular retorno</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -755,23 +584,21 @@
         tbody.innerHTML = "";
 
         if (!estadoConserto.baixas.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="9">Nenhuma baixa pendente.</td></tr>';
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="7">Nenhuma baixa pendente.</td></tr>';
             return;
         }
 
         estadoConserto.baixas.forEach((item) => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
-                <td><strong>${item.tipo_operacao || "-"}</strong><br><small>${item.cfop_remessa || "-"} -> ${item.cfop_retorno || "-"}</small></td>
                 <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
                 <td><strong>${item.numero_nf_retorno || "-"}</strong><br><small>${abreviarChave(item.chave_nf_retorno)}</small></td>
                 <td>${item.produto_codigo}<br><strong>${item.produto_descricao || ""}</strong></td>
                 <td>${formatarNumero(item.quantidade_baixada)}</td>
                 <td>${item.tipo_vinculo}</td>
-                <td>${item.observacoes || "Conciliação por referência fiscal."}</td>
                 <td><span class="conserto-status status-open">${item.status_baixa}</span></td>
                 <td class="conserto-actions">
-                    <button class="btn-conserto primary" type="button" onclick="confirmarBaixa(${item.baixa_id})">Validar conciliação</button>
+                    <button class="btn-conserto primary" type="button" onclick="confirmarBaixa(${item.baixa_id})">Confirmar baixa</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -806,7 +633,7 @@
         tbody.innerHTML = "";
 
         if (!estadoConserto.historico.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="11">Nenhum item passou pelo estoque ainda.</td></tr>';
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="9">Nenhum item passou pelo estoque de conserto ainda.</td></tr>';
             return;
         }
 
@@ -814,8 +641,6 @@
             const statusClass = Number(item.quantidade_saldo || 0) > 0 ? "status-open" : "status-done";
             const tr = document.createElement("tr");
             tr.innerHTML = `
-                <td>${item.tipo_controle || "-"}</td>
-                <td><strong>${item.tipo_operacao || "-"}</strong><br><small>CFOP ${item.cfop_remessa || "-"}</small></td>
                 <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
                 <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj || "-"}</small></td>
                 <td>${item.produto_codigo}<br><strong>${item.produto_descricao}</strong></td>
@@ -830,115 +655,6 @@
         });
     }
 
-    function abrirDetalhesNF(chaveGrupo, tipo) {
-        const origem =
-            tipo === "estoque" ? estadoConserto.saldos :
-            tipo === "baixa" ? estadoConserto.baixas :
-            estadoConserto.historico;
-        const grupo = agruparPorNota(origem, tipo).find((item) => item.chave === chaveGrupo);
-        if (!grupo) {
-            mostrarToast("Detalhes da NF não encontrados.", "error");
-            return;
-        }
-
-        document.getElementById("detalhes-nf-titulo").textContent = `NF ${grupo.numero_nf || "-"} • ${grupo.tipo_operacao || "-"}`;
-        document.getElementById("detalhes-nf-meta").innerHTML = `
-            <div><strong>Controle:</strong> ${grupo.tipo_controle || "-"}</div>
-            <div><strong>Fornecedor:</strong> ${grupo.fornecedor_nome || "-"} (${grupo.fornecedor_cnpj || "-"})</div>
-            <div><strong>Chave NF:</strong> ${grupo.chave_nf || "-"}</div>
-            <div><strong>Emissão:</strong> ${formatarData(grupo.data_emissao)}</div>
-            <div><strong>Total de itens:</strong> ${grupo.quantidade_itens}</div>
-        `;
-
-        const tbody = document.getElementById("detalhes-nf-tbody");
-        tbody.innerHTML = "";
-        grupo.itens.forEach((item) => {
-            const tr = document.createElement("tr");
-            const acoes = [];
-            if (tipo === "estoque") {
-                acoes.push(`<button class="btn-conserto secondary" type="button" onclick="abrirModalVinculo(${item.id}, ${Number(item.quantidade_saldo || 0)})">Vincular retorno</button>`);
-            }
-            if (tipo === "baixa") {
-                acoes.push(`<button class="btn-conserto primary" type="button" onclick="confirmarBaixa(${item.baixa_id})">Autorizar baixa</button>`);
-            }
-            tr.innerHTML = `
-                <td>${item.produto_codigo || "-"}</td>
-                <td><strong>${item.produto_descricao || "-"}</strong></td>
-                <td>${formatarNumero(item.quantidade_enviada || 0)}</td>
-                <td>${formatarNumero(item.quantidade_baixada || 0)}</td>
-                <td><strong>${formatarNumero(item.quantidade_saldo || 0)}</strong></td>
-                <td>${item.status || item.status_baixa || "-"}</td>
-                <td class="conserto-actions">${acoes.join("") || "-"}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.getElementById("modal-detalhes-nf").classList.add("open");
-    }
-
-    function fecharDetalhesNF() {
-        document.getElementById("modal-detalhes-nf").classList.remove("open");
-    }
-
-    function renderizarBaixas() {
-        const tbody = document.getElementById("baixas-tbody");
-        tbody.innerHTML = "";
-        const grupos = agruparPorNota(estadoConserto.baixas, "baixa");
-
-        if (!grupos.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="9">Nenhuma baixa pendente.</td></tr>';
-            return;
-        }
-
-        grupos.forEach((item) => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td><strong>${item.tipo_operacao || "-"}</strong></td>
-                <td><strong>${item.numero_nf || "-"}</strong><br><small>${abreviarChave(item.chave_nf)}</small></td>
-                <td><strong>${item.numero_nf_retorno || "-"}</strong><br><small>${abreviarChave(item.chave_nf_retorno)}</small></td>
-                <td><strong>${item.quantidade_itens}</strong> item(ns)</td>
-                <td>${formatarNumero(item.quantidade_baixada)}</td>
-                <td>${item.quantidade_itens > 1 ? "agrupado" : (item.itens[0]?.tipo_vinculo || "-")}</td>
-                <td>${item.quantidade_itens > 1 ? "Multiplos itens aguardando autorizacao." : (item.itens[0]?.observacoes || "Conciliacao por referencia fiscal.")}</td>
-                <td><span class="conserto-status status-open">${item.status}</span></td>
-                <td class="conserto-actions">
-                    <button class="btn-conserto primary" type="button" onclick="abrirDetalhesNF('${item.chave}', 'baixa')">${item.quantidade_itens > 1 ? "Autorizar itens" : "Abrir baixa"}</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function renderizarHistorico() {
-        const tbody = document.getElementById("historico-tbody");
-        tbody.innerHTML = "";
-        const grupos = agruparPorNota(estadoConserto.historico, "historico");
-
-        if (!grupos.length) {
-            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="11">Nenhum item passou pelo estoque ainda.</td></tr>';
-            return;
-        }
-
-        grupos.forEach((item) => {
-            const statusClass = Number(item.quantidade_saldo || 0) > 0 ? "status-open" : "status-done";
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${item.tipo_controle || "-"}</td>
-                <td><strong>${item.tipo_operacao || "-"}</strong></td>
-                <td><strong>${item.numero_nf || "-"}</strong><br><small>${abreviarChave(item.chave_nf)}</small></td>
-                <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj || "-"}</small></td>
-                <td><strong>${item.quantidade_itens}</strong> item(ns)</td>
-                <td>${formatarNumero(item.quantidade_enviada)}</td>
-                <td>${formatarNumero(item.quantidade_baixada)}</td>
-                <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
-                <td><span class="conserto-status ${statusClass}">${item.status}</span></td>
-                <td>${formatarData(item.data_emissao)}</td>
-                <td><button class="btn-conserto secondary" type="button" onclick="abrirDetalhesNF('${item.chave}', 'historico')">Ver detalhes</button></td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
     async function carregarSaldos() {
         const response = await fetch("/conserto/saldos_abertos");
         const data = await response.json();
@@ -947,17 +663,6 @@
         }
         estadoConserto.saldos = data;
         renderizarSaldos();
-        atualizarMetricas();
-    }
-
-    async function carregarRelatorio() {
-        const response = await fetch("/conserto/relatorio_estoque");
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error || "Falha ao carregar relatorio.");
-        }
-        estadoConserto.relatorio = data;
-        renderizarRelatorio();
         atualizarMetricas();
     }
 
@@ -992,16 +697,12 @@
     }
 
     async function recarregarTudo() {
-        await Promise.all([carregarRelatorio(), carregarSaldos(), carregarBaixas(), carregarAuditoria(), carregarHistorico()]);
+        await Promise.all([carregarSaldos(), carregarBaixas(), carregarAuditoria(), carregarHistorico()]);
     }
 
     function abrirModalVinculo(estoqueId, saldoMaximo) {
         document.getElementById("modal-estoque-id").value = estoqueId;
         const quantidade = document.getElementById("modal-quantidade");
-        document.getElementById("modal-numero").value = "";
-        document.getElementById("modal-chave").value = "";
-        document.getElementById("modal-data").value = "";
-        document.getElementById("modal-cfop").value = "";
         quantidade.value = formatarNumero(saldoMaximo).replace(".", "").replace(",", ".");
         quantidade.max = String(saldoMaximo);
         document.getElementById("modal-vinculo").classList.add("open");
@@ -1010,34 +711,6 @@
     function fecharModalVinculo() {
         document.getElementById("form-vinculo").reset();
         document.getElementById("modal-vinculo").classList.remove("open");
-    }
-
-    async function consultarRetornoManual() {
-        const numero = document.getElementById("modal-numero").value.trim();
-        const estoqueId = Number(document.getElementById("modal-estoque-id").value);
-        if (!numero || !estoqueId) return;
-
-        const response = await fetch("/conserto/consultar_retorno_manual", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                numero_nf_retorno: numero,
-                conserto_estoque_id: estoqueId
-            })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error || "Não foi possível consultar a NF de retorno.");
-        }
-
-        document.getElementById("modal-numero").value = data.numero_nf_retorno || numero;
-        document.getElementById("modal-chave").value = data.chave_nf_retorno || "";
-        document.getElementById("modal-data").value = String(data.data_nf_retorno || "").slice(0, 10);
-        document.getElementById("modal-cfop").value = data.cfop_retorno || "";
-        if (Number(data.quantidade || 0) > 0) {
-            document.getElementById("modal-quantidade").value = String(Number(data.quantidade || 0));
-        }
-        mostrarToast("NF consultada e preenchida automaticamente.");
     }
 
     async function confirmarBaixa(baixaId) {
@@ -1051,7 +724,7 @@
         });
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error || "Não foi possível confirmar a baixa.");
+            throw new Error(data.error || "Nao foi possivel confirmar a baixa.");
         }
         mostrarToast(data.msg || "Baixa confirmada com sucesso.");
         await recarregarTudo();
@@ -1059,10 +732,8 @@
 
     async function sincronizarNotasFiscais() {
         const btn = document.getElementById("btn-sincronizar-notas");
-        const debug = document.getElementById("debug-sync-log");
         btn.disabled = true;
         btn.textContent = "Sincronizando...";
-        debug.textContent = "Iniciando sincronizacao em segundo plano...\n";
 
         try {
             const response = await fetch("/conserto/sincronizar_notas", {
@@ -1071,36 +742,16 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Não foi possível sincronizar as notas.");
+                throw new Error(data.error || "Nao foi possivel sincronizar as notas.");
             }
-            const jobId = data.job_id;
-            let concluido = false;
 
-            while (!concluido) {
-                await new Promise((resolve) => setTimeout(resolve, 1200));
-                const statusResp = await fetch(`/conserto/sincronizar_notas/${jobId}`);
-                const statusData = await statusResp.json();
-                if (!statusResp.ok) {
-                    throw new Error(statusData.error || "Falha ao consultar status da sincronizacao.");
-                }
-
-                debug.textContent = (statusData.logs || []).join("\n");
-                debug.scrollTop = debug.scrollHeight;
-
-                if (statusData.status === "completed") {
-                    const resumo = statusData.resumo || {};
-                    mostrarToast(
-                        `Sincronizacao concluida. Saldos: ${resumo.saldos_criados || 0}, baixas: ${resumo.baixas_sugeridas || 0}, sem vinculo: ${resumo.retornos_sem_vinculo || 0}.`
-                    );
-                    await recarregarTudo();
-                    concluido = true;
-                } else if (statusData.status === "failed") {
-                    throw new Error(statusData.error || "A sincronizacao falhou.");
-                }
-            }
+            const resumo = data.resumo || {};
+            mostrarToast(
+                `Sincronizacao concluida. Saldos: ${resumo.saldos_criados || 0}, baixas: ${resumo.baixas_sugeridas || 0}, sem vinculo: ${resumo.retornos_sem_vinculo || 0}.`
+            );
+            await recarregarTudo();
         } catch (error) {
             mostrarToast(error.message, "error");
-            debug.textContent += `\nErro final: ${error.message}`;
         } finally {
             btn.disabled = false;
             btn.textContent = "Sincronizar notas fiscais";
@@ -1113,22 +764,9 @@
 
     document.getElementById("btn-sincronizar-notas").addEventListener("click", sincronizarNotasFiscais);
     document.getElementById("btn-fechar-modal").addEventListener("click", fecharModalVinculo);
-    document.getElementById("btn-fechar-detalhes-nf").addEventListener("click", fecharDetalhesNF);
-    document.getElementById("modal-numero").addEventListener("change", async () => {
-        try {
-            await consultarRetornoManual();
-        } catch (error) {
-            mostrarToast(error.message, "error");
-        }
-    });
     document.getElementById("modal-vinculo").addEventListener("click", (event) => {
         if (event.target.id === "modal-vinculo") {
             fecharModalVinculo();
-        }
-    });
-    document.getElementById("modal-detalhes-nf").addEventListener("click", (event) => {
-        if (event.target.id === "modal-detalhes-nf") {
-            fecharDetalhesNF();
         }
     });
 
@@ -1141,9 +779,6 @@
         try {
             const form = event.currentTarget;
             const payload = {
-                tipo_operacao: form.tipo_operacao.value.trim(),
-                tipo_controle: form.tipo_controle.value.trim(),
-                cfop_remessa: form.cfop_remessa.value.trim(),
                 chave_nf_remessa: form.chave_nf_remessa.value.trim(),
                 data_emissao: form.data_emissao.value,
                 fornecedor_cnpj: form.fornecedor_cnpj.value.replace(/\D/g, ""),
@@ -1160,13 +795,10 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Não foi possível cadastrar o saldo.");
+                throw new Error(data.error || "Nao foi possivel cadastrar o saldo.");
             }
 
             form.reset();
-            form.tipo_operacao.value = "Conserto";
-            form.cfop_remessa.value = "5915";
-            form.tipo_controle.value = "Meu em poder de terceiros";
             mostrarToast(data.msg || "Saldo cadastrado com sucesso.");
             await recarregarTudo();
             ativarTab("estoque");
@@ -1186,13 +818,8 @@
 
         try {
             const form = event.currentTarget;
-            if (!form.chave_nf_retorno.value.trim()) {
-                await consultarRetornoManual();
-            }
             const payload = {
                 conserto_estoque_id: Number(form.conserto_estoque_id.value),
-                numero_nf_retorno: form.numero_nf_retorno.value.trim(),
-                cfop_retorno: form.cfop_retorno.value.trim(),
                 chave_nf_retorno: form.chave_nf_retorno.value.trim(),
                 data_nf_retorno: form.data_nf_retorno.value,
                 quantidade: Number(form.quantidade.value),
@@ -1206,7 +833,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error || "Não foi possível vincular o retorno.");
+                throw new Error(data.error || "Nao foi possivel vincular o retorno.");
             }
 
             fecharModalVinculo();
@@ -1222,7 +849,7 @@
     });
 
     (async function initConserto() {
-        ativarTab(estadoConserto.tabAtiva || "relatorio");
+        ativarTab(estadoConserto.tabAtiva || "estoque");
         try {
             await recarregarTudo();
         } catch (error) {

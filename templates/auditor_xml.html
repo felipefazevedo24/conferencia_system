@@ -3,28 +3,29 @@
 {% block title %}Compras | Auditor XML{% endblock %}
 
 {% block extra_head %}
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="/static/css/recebimento_sap.css">
 
 <style>
+    /* Mantido: alias usados pelo HTML gerado via innerHTML (vinc-*, pedido-result,
+       inconsistencias, sug-*, etc). O chrome da página foi migrado para rec-*. */
     :root {
-        --sap-blue: #3b82f6;
-        --sap-hover: #2563eb;
-        --erp-bg: #f4f6f9;
-        --border-color: #e2e8f0;
-        --text-main: #1e293b;
-        --text-muted: #64748b;
-        --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
-        --success-erp: #10b981;
-        --danger-erp: #ef4444;
-        --warning-erp: #f59e0b;
-        --radius: 18px;
+        --sap-blue: var(--rec-blue-600);
+        --sap-hover: var(--rec-blue-700);
+        --erp-bg: var(--rec-bg);
+        --border-color: var(--rec-border);
+        --text-main: var(--rec-ink-900);
+        --text-muted: var(--rec-ink-500);
+        --card-shadow: var(--rec-shadow-1);
+        --success-erp: var(--rec-green-600);
+        --danger-erp: var(--rec-red-600);
+        --warning-erp: var(--rec-amber-600);
+        --radius: var(--rec-radius-md);
     }
 
-    body { 
-        background-color: var(--erp-bg) !important; 
-        color: var(--text-main); 
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+    body {
+        background-color: var(--rec-bg) !important;
+        color: var(--rec-ink-900);
+        font-family: var(--rec-font-ui);
         font-size: 14px;
         line-height: 1.5;
     }
@@ -504,104 +505,102 @@
 {% endblock %}
 
 {% block content %}
-<div class="wrap" style="padding:24px; max-width:1600px; margin:0 auto; background:#f4f6f9 !important; min-height:100vh;">
-    <div class="header" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:28px 32px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-            <h1 style="margin:0; font-size:24px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:14px;">
-                <span style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px;"><i class="fas fa-clipboard-check"></i></span>
-                Auditor de Compras
-            </h1>
-            <p style="margin:8px 0 0 0; color:#64748b; font-size:14px; font-weight:600;">Gerenciamento fiscal e validação de Notas Fiscais importadas.</p>
-        </div>
-        <div style="display:flex; gap:10px;">
-            <a class="btn" href="/upload" style="border:1px solid #e2e8f0; background:#fff; color:#475569; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-decoration:none; display:inline-flex; align-items:center; gap:8px;"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
-            <button class="btn primary" onclick="carregarNotas()" style="background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; border:none; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; display:inline-flex; align-items:center; gap:8px;"><i class="fas fa-sync"></i> Sincronizar</button>
-        </div>
-    </div>
+<div class="rec-shell">
 
-    <!-- KPI Dashboard Cards -->
-    <section id="kpi-dashboard" class="kpi-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
-        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
-            <div class="kpi-icon pendentes" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-hourglass-half"></i></div>
-            <div class="kpi-info">
-                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Pendentes</span>
-                <strong class="kpi-value" id="kpi-pendentes" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
+    <!-- PAGE HEADER -->
+    <header class="rec-page-header">
+        <div class="rec-page-header__left">
+            <div class="rec-page-header__icon"><i class="fas fa-clipboard-check"></i></div>
+            <div>
+                <h1 class="rec-page-header__title">Auditor de Compras</h1>
+                <p class="rec-page-header__sub">Validação fiscal e vinculação de Notas Fiscais importadas.</p>
             </div>
         </div>
-        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
-            <div class="kpi-icon auditadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-search"></i></div>
-            <div class="kpi-info">
-                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Auditadas</span>
-                <strong class="kpi-value" id="kpi-auditadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
-            </div>
+        <div class="rec-page-header__right">
+            <a class="rec-btn" href="/upload"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
+            <button class="rec-btn rec-btn--primary" type="button" onclick="carregarNotas()"><i class="fas fa-sync"></i> Sincronizar</button>
         </div>
-        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
-            <div class="kpi-icon aprovadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-check-circle"></i></div>
-            <div class="kpi-info">
-                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Aprovadas</span>
-                <strong class="kpi-value" id="kpi-aprovadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
-            </div>
+    </header>
+
+    <!-- KPI DASHBOARD -->
+    <section id="kpi-dashboard" class="rec-kpi-grid">
+        <div class="rec-kpi rec-kpi--warning">
+            <span class="rec-kpi__icon"><i class="fas fa-hourglass-half"></i></span>
+            <span class="rec-kpi__label">Pendentes</span>
+            <span class="rec-kpi__value" id="kpi-pendentes">--</span>
+            <span class="rec-kpi__hint">Aguardando auditoria</span>
         </div>
-        <div class="kpi-card" style="padding:20px; border-radius:18px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); display:flex; align-items:center; gap:16px;">
-            <div class="kpi-icon recusadas" style="width:54px; height:54px; border-radius:14px; background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%); display:flex; align-items:center; justify-content:center; font-size:22px; color:#fff;"><i class="fas fa-times-circle"></i></div>
-            <div class="kpi-info">
-                <span class="kpi-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#64748b; font-weight:700;">Recusadas</span>
-                <strong class="kpi-value" id="kpi-recusadas" style="display:block; margin-top:6px; font-size:28px; line-height:1; font-weight:900; color:#1e293b;">--</strong>
-            </div>
+        <div class="rec-kpi rec-kpi--primary">
+            <span class="rec-kpi__icon"><i class="fas fa-search"></i></span>
+            <span class="rec-kpi__label">Auditadas</span>
+            <span class="rec-kpi__value" id="kpi-auditadas">--</span>
+            <span class="rec-kpi__hint">Em análise fiscal</span>
+        </div>
+        <div class="rec-kpi rec-kpi--success">
+            <span class="rec-kpi__icon"><i class="fas fa-check-circle"></i></span>
+            <span class="rec-kpi__label">Aprovadas</span>
+            <span class="rec-kpi__value" id="kpi-aprovadas">--</span>
+            <span class="rec-kpi__hint">Liberadas no período</span>
+        </div>
+        <div class="rec-kpi rec-kpi--danger">
+            <span class="rec-kpi__icon"><i class="fas fa-times-circle"></i></span>
+            <span class="rec-kpi__label">Recusadas</span>
+            <span class="rec-kpi__value" id="kpi-recusadas">--</span>
+            <span class="rec-kpi__hint">Com decisão de recusa</span>
         </div>
     </section>
 
-    <div id="msg" class="msg"></div>
+    <div id="msg" class="msg" role="status"></div>
+
+    <!-- MODAIS (classe modal-overlay preservada pelo JS legado) -->
     <div id="modalOverlay" class="modal-overlay">
         <div class="modal-card">
             <i class="fas fa-exclamation-triangle modal-icon"></i>
             <h4>Confirmar ação</h4>
             <p id="confirmText"></p>
             <div class="modal-actions">
-                <button class="btn success" type="button" onclick="responderConfirmacao(true)"><i class="fas fa-check"></i> Confirmar</button>
-                <button class="btn" type="button" onclick="responderConfirmacao(false)"><i class="fas fa-times"></i> Cancelar</button>
+                <button class="rec-btn rec-btn--success" type="button" onclick="responderConfirmacao(true)"><i class="fas fa-check"></i> Confirmar</button>
+                <button class="rec-btn" type="button" onclick="responderConfirmacao(false)"><i class="fas fa-times"></i> Cancelar</button>
             </div>
         </div>
     </div>
 
     <div id="diagOverlay" class="modal-overlay">
-        <div class="modal-card" style="max-width: 760px; text-align:left;">
-            <i class="fas fa-triangle-exclamation modal-icon" style="color:#ef4444;"></i>
+        <div class="modal-card" style="max-width:760px; text-align:left;">
+            <i class="fas fa-triangle-exclamation modal-icon" style="color:var(--rec-red-600);"></i>
             <h4 style="text-align:center;">Inconsistências no XML detectadas</h4>
             <p style="text-align:center;">Revise os pontos abaixo e registre a decisão fiscal.</p>
-            <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid #fee2e2; border-radius:10px; background:#fff7f7; padding:12px;"></div>
+            <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid var(--rec-red-100); border-radius:var(--rec-radius); background:#fff7f7; padding:12px;"></div>
             <div style="margin-top:12px;">
-                <label for="diagJustificativa" style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Justificativa para recusa (mín. 5 caracteres)</label>
-                <textarea id="diagJustificativa" class="input" rows="3" style="resize:none;" placeholder="Descreva o motivo da recusa..."></textarea>
+                <label for="diagJustificativa" class="rec-label">Justificativa para recusa (mín. 5 caracteres)</label>
+                <textarea id="diagJustificativa" class="rec-textarea" rows="3" placeholder="Descreva o motivo da recusa..."></textarea>
             </div>
-            <div id="diagMsg" style="display:none; margin-top:10px; padding:10px 12px; border-radius:8px; font-size:12px; font-weight:700;"></div>
+            <div id="diagMsg" style="display:none; margin-top:10px; padding:10px 12px; border-radius:var(--rec-radius); font-size:12px; font-weight:600;"></div>
             <div class="modal-actions" style="margin-top:16px;">
-                <button class="btn success" type="button" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
-                <button class="btn" style="background:#fff1f2; color:#991b1b; border-color:#fecaca;" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
-                <button class="btn" type="button" onclick="fecharDiagnostico()"><i class="fas fa-xmark"></i> Fechar</button>
+                <button class="rec-btn rec-btn--success" type="button" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                <button class="rec-btn rec-btn--danger" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                <button class="rec-btn" type="button" onclick="fecharDiagnostico()"><i class="fas fa-xmark"></i> Fechar</button>
             </div>
         </div>
     </div>
 
     <div id="vinculacaoOverlay" class="modal-overlay" onclick="if(event.target===this)fecharModalVinculacao()">
         <div class="vinculacao-overlay-card">
-            <div style="background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding:20px; color:#fff;">
-                <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:10px;">
+            <div style="padding:18px 22px; background:var(--rec-blue-700); color:#fff;">
+                <h3 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;">
                     <i class="fas fa-link"></i> Vincular Linhas do Pedido
                 </h3>
-                <p style="margin:8px 0 0 0; font-size:13px; font-weight:500; opacity:0.95;">
-                    Selecione qual linha do Pedido corresponde a cada linha do XML abaixo
-                </p>
+                <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Selecione qual linha do pedido de compra corresponde a cada linha do XML.</p>
             </div>
             <div style="padding:20px; max-height:62vh; overflow-y:auto;">
                 <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
             </div>
-            <div style="padding:16px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
-                <button id="btnConfirmarDivergencia" class="btn" type="button" onclick="confirmarVinculacaoComDivergencia()" style="display:none; background:#fffbeb; color:#92400e; border-color:#fcd34d;">
-                    <i class="fas fa-triangle-exclamation"></i> Confirmar vinculação mesmo com divergência de valor
+            <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
+                <button id="btnConfirmarDivergencia" class="rec-btn rec-btn--warning" type="button" onclick="confirmarVinculacaoComDivergencia()" style="display:none;">
+                    <i class="fas fa-triangle-exclamation"></i> Confirmar mesmo com divergência
                 </button>
-                <button class="btn" onclick="fecharModalVinculacao()" style="background:#fff;"><i class="fas fa-times"></i> Fechar</button>
-                <button class="btn success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
+                <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
+                <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
             </div>
         </div>
     </div>
@@ -614,136 +613,146 @@
         </div>
     </div>
 
-    <div class="layout" style="display:grid; grid-template-columns:1.2fr 1fr; gap:24px; align-items:start;">
-        <section class="card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:24px;">
-            <h3 style="margin:0 0 20px 0; font-size:12px; color:#3b82f6; font-weight:800; display:flex; align-items:center; gap:10px; padding-bottom:14px; border-bottom:1px solid #f1f5f9; text-transform:uppercase; letter-spacing:0.08em;"><i class="fas fa-stream"></i> Fila de Auditoria</h3>
-            <div class="toolbar" style="display:flex; gap:10px; margin-bottom:20px;">
-                <div style="position:relative; flex:1;">
-                    <i class="fas fa-search" style="position:absolute; left:14px; top:14px; color:#94a3b8;"></i>
-                    <input id="filtro" class="input" style="padding-left:40px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; font-size:13px; font-weight:600; color:#1e293b;" placeholder="Pesquisar NF, fornecedor ou pedido..." oninput="renderNotas()" />
+    <!-- LAYOUT MASTER-DETAIL -->
+    <div class="rec-split">
+
+        <!-- FILA -->
+        <section class="rec-card">
+            <div class="rec-card__head">
+                <div>
+                    <h2 class="rec-card__title"><i class="fas fa-stream"></i> Fila de Auditoria</h2>
+                    <p class="rec-card__sub">NFs importadas aguardando decisão fiscal.</p>
                 </div>
-                <button class="btn" onclick="carregarNotas()" style="border:1px solid #e2e8f0; background:#fff; color:#475569; border-radius:12px; padding:11px 18px; font-size:12px; font-weight:700; text-transform:uppercase;">Atualizar</button>
+                <div class="rec-card__actions">
+                    <button class="rec-btn rec-btn--sm" type="button" onclick="carregarNotas()"><i class="fas fa-rotate"></i> Atualizar</button>
+                </div>
             </div>
-            
-            <div class="table-wrap" style="border:1px solid #e2e8f0; border-radius:16px; overflow:hidden; background:#fff;">
-                <table>
+            <div class="rec-card__body">
+                <div class="rec-input-group" style="width:100%;">
+                    <input id="filtro" class="rec-input" style="flex:1;" placeholder="Pesquisar NF, fornecedor ou pedido..." oninput="renderNotas()" />
+                </div>
+            </div>
+            <div class="rec-table-wrap">
+                <table class="rec-table">
                     <thead>
-                        <tr style="background:#f8fafc;">
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">NF / Data</th>
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Fornecedor</th>
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Status Auditoria</th>
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Decisão Fiscal</th>
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:left; letter-spacing:0.08em;">Status Fluxo</th>
-                            <th style="padding:14px 16px; font-size:10px; text-transform:uppercase; color:#64748b; font-weight:800; text-align:center; letter-spacing:0.08em;">Ação</th>
+                        <tr>
+                            <th>NF / Data</th>
+                            <th>Fornecedor</th>
+                            <th>Status Auditoria</th>
+                            <th>Decisão Fiscal</th>
+                            <th>Status Fluxo</th>
+                            <th class="actions">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyNotas">
-                        <tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">
-                            <i class="fas fa-spinner fa-spin fa-2x"></i><br><br>Carregando registros...
-                        </td></tr>
+                        <tr><td colspan="6"><div class="rec-empty"><i class="fas fa-spinner fa-spin"></i><strong>Carregando registros…</strong><span>Consultando auditoria fiscal.</span></div></td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <section class="card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); padding:24px; position:sticky; top:18px;">
-            <h3 style="margin:0 0 20px 0; font-size:12px; color:#3b82f6; font-weight:800; display:flex; align-items:center; gap:10px; padding-bottom:14px; border-bottom:1px solid #f1f5f9; text-transform:uppercase; letter-spacing:0.08em;"><i class="fas fa-info-circle"></i> Detalhes da Operação</h3>
-            
-            <div id="detalheVazio" style="padding:60px 20px; color:#94a3b8; text-align:center; border:2px dashed #e2e8f0; border-radius:18px; background:#f8fafc;">
-                <i class="fas fa-mouse-pointer fa-3x" style="margin-bottom:15px; opacity:0.3;"></i>
-                <p style="font-weight:600;">Selecione um registro na lista ao lado para iniciar a auditoria fiscal.</p>
+        <!-- DETALHES -->
+        <section class="rec-card rec-split__sticky">
+            <div class="rec-card__head">
+                <div>
+                    <h2 class="rec-card__title"><i class="fas fa-info-circle"></i> Detalhes da Operação</h2>
+                    <p class="rec-card__sub">Selecione uma NF na fila para iniciar a auditoria.</p>
+                </div>
             </div>
-
-            <div id="detalheWrap" style="display:none;">
-                <div class="detail-grid">
-                    <div class="box"><label>Número NF</label><span id="dNota">---</span></div>
-                    <div class="box"><label>Status Fluxo</label><span id="dStatusFluxo">---</span></div>
-                    <div class="box"><label>Fornecedor</label><span id="dFornecedor">---</span></div>
-                    <div class="box"><label>Status Auditoria</label><span id="dStatusAuditoria">---</span></div>
-                    <div class="box"><label>CNPJ Destinatário</label><span id="dCnpjDestinatario">---</span></div>
-                    <div class="box"><label>Decisão Fiscal</label><span id="dDecisaoFiscal">---</span></div>
+            <div class="rec-card__body">
+                <div id="detalheVazio" class="rec-empty" style="padding:40px 20px;">
+                    <i class="fas fa-hand-pointer"></i>
+                    <strong>Nenhuma NF selecionada</strong>
+                    <span>Escolha um registro na fila ao lado para iniciar a auditoria fiscal.</span>
                 </div>
 
-                <div style="display: grid; gap: 15px;">
-                    <div class="box">
-                        <label>Pedido(s) de Compra (Vínculo ERP)</label>
-                        <div style="display:flex; gap:8px; margin-top:5px;">
-                            <input id="pedidoCompra" class="input" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
-                            <button type="button" class="btn" style="white-space:nowrap;" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
-                        </div>
-                        <div id="pedidoResult" class="pedido-result"></div>
-                        <div id="pedidoCompareWrap" style="display:none;"></div>
-                        <div id="sugestoesVinculacaoWrap" style="display:none; margin-top:15px; border:1px solid #dbeafe; border-radius:8px; background:#f0f9ff; padding:14px;">
-                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-                                <i class="fas fa-lightbulb" style="color:#0284c7; font-size:14px;"></i>
-                                <strong style="color:#0c4a6e; font-size:13px;">Sugestões de Vinculação</strong>
-                                <span id="sugestoesConfianca" style="font-size:11px; color:#64748b;"></span>
+                <div id="detalheWrap" style="display:none;">
+                    <div class="detail-grid">
+                        <div class="box"><label>Número NF</label><span id="dNota">---</span></div>
+                        <div class="box"><label>Status Fluxo</label><span id="dStatusFluxo">---</span></div>
+                        <div class="box"><label>Fornecedor</label><span id="dFornecedor">---</span></div>
+                        <div class="box"><label>Status Auditoria</label><span id="dStatusAuditoria">---</span></div>
+                        <div class="box"><label>CNPJ Destinatário</label><span id="dCnpjDestinatario">---</span></div>
+                        <div class="box"><label>Decisão Fiscal</label><span id="dDecisaoFiscal">---</span></div>
+                    </div>
+
+                    <div class="rec-stack-3" style="margin-top:14px;">
+                        <div class="box">
+                            <label>Pedido(s) de Compra (Vínculo ERP)</label>
+                            <div class="rec-input-group" style="margin-top:6px;">
+                                <input id="pedidoCompra" class="rec-input" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
+                                <button type="button" class="rec-btn" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
                             </div>
-                            <div id="listasugestoes" style="display:flex; flex-direction:column; gap:8px;"></div>
-                            <p style="margin:10px 0 0 0; font-size:11px; color:#475569; text-transform:none; font-weight:400;">
-                                💡 <strong>Dica:</strong> Clique em uma sugestão (verde = confiança alta) para vincular. Você também pode desvincular após salvar.
+                            <div id="pedidoResult" class="pedido-result"></div>
+                            <div id="pedidoCompareWrap" style="display:none;"></div>
+                            <div id="sugestoesVinculacaoWrap" style="display:none; margin-top:12px; border:1px solid var(--rec-blue-100); border-radius:var(--rec-radius); background:var(--rec-blue-050); padding:12px;">
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                                    <i class="fas fa-lightbulb" style="color:var(--rec-blue-600); font-size:13px;"></i>
+                                    <strong style="color:var(--rec-blue-700); font-size:12px;">Sugestões de Vinculação</strong>
+                                    <span id="sugestoesConfianca" class="rec-muted" style="font-size:11px;"></span>
+                                </div>
+                                <div id="listasugestoes" class="rec-stack-2"></div>
+                                <p class="rec-muted" style="margin:10px 0 0; font-size:11px;">
+                                    Clique em uma sugestão (verde = confiança alta) para vincular. Também é possível desvincular após salvar.
+                                </p>
+                            </div>
+                            <div class="rec-stack-2" style="margin-top:12px;">
+                                <label class="rec-check"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
+                                <label class="rec-check"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
+                                <label class="rec-check"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
+                            </div>
+                            <p class="rec-muted" style="margin:8px 0 0; font-size:11px;">
+                                Quando marcado, após a liberação no Auditor XML a NF pula a conferência física e vai direto para Documento de Entrada (como concluída).
                             </p>
                         </div>
-                        <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
-                            <input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente
-                        </label>
-                        <label style="display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
-                            <input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa
-                        </label>
-                        <label style="display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:#334155; text-transform:none; font-weight:700;">
-                            <input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística
-                        </label>
-                        <p style="margin:8px 0 0; font-size:11px; color:#475569; line-height:1.45;">
-                            Quando marcado, após a liberação no Auditor XML a NF pula a conferência física e vai direto para Documento de Entrada (como concluída).
+                        <div class="box">
+                            <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
+                            <textarea id="justificativaFiscal" class="rec-textarea" rows="2" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+                        </div>
+                        <div class="box">
+                            <label>Observações do Auditor Fiscal</label>
+                            <textarea id="obsFiscal" class="rec-textarea" rows="3" placeholder="Descreva observações relevantes..."></textarea>
+                        </div>
+                    </div>
+
+                    <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
+
+                    <div id="decisaoInconsistenciaBox" class="box" style="display:none; border:1px solid var(--rec-red-100); background:#fff7f7;">
+                        <label>Decisão da Inconsistência Fiscal</label>
+                        <p class="rec-muted" style="margin:6px 0 12px; color:var(--rec-red-700);">
+                            Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.
                         </p>
+                        <div class="rec-row-3">
+                            <button class="rec-btn rec-btn--success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                            <button class="rec-btn rec-btn--danger" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                        </div>
                     </div>
-                    <div class="box">
-                        <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
-                        <textarea id="justificativaFiscal" class="input" rows="2" style="margin-top: 5px; resize: none;" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+
+                    <div class="actions" style="margin-top:14px;">
+                        <button class="rec-btn rec-btn--warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                        <button class="rec-btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
+                        <button class="rec-btn" style="background:var(--rec-amber-100); color:var(--rec-amber-700); border-color:#f3cfa0;" onclick="retirarNotaDoAuditor()"><i class="fas fa-arrow-rotate-left"></i> Retirar do Auditor</button>
+                        <button class="rec-btn rec-btn--success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
                     </div>
-                    <div class="box">
-                        <label>Observações do Auditor Fiscal</label>
-                        <textarea id="obsFiscal" class="input" rows="3" style="margin-top: 5px; resize: none;" placeholder="Descreva observações relevantes..."></textarea>
+
+                    <h3 class="rec-card__title" style="margin:22px 0 10px;"><i class="fas fa-th-list"></i> Itens do Documento</h3>
+                    <div class="rec-table-wrap rec-table-wrap--bordered" style="max-height:300px;">
+                        <table class="rec-table rec-table--compact">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descrição</th>
+                                    <th>CFOP</th>
+                                    <th>NCM</th>
+                                    <th>CST ICMS</th>
+                                    <th>CST PIS</th>
+                                    <th>CST COFINS</th>
+                                    <th class="num">Qtd</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyItens"></tbody>
+                        </table>
                     </div>
-                </div>
-
-                <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
-
-                <div id="decisaoInconsistenciaBox" class="box" style="display:none; border:1px solid #fecaca; background:#fff7f7;">
-                    <label>Decisão da Inconsistência Fiscal</label>
-                    <p style="margin:8px 0 14px; color:#7f1d1d; font-size:13px;">
-                        Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.
-                    </p>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="btn success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
-                        <button class="btn" style="background:#fff1f2; color:#991b1b; border-color:#fecaca;" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
-                    </div>
-                </div>
-
-                <div class="actions">
-                    <button class="btn warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
-                    <button class="btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
-                    <button class="btn" style="background:#fff7ed; color:#9a3412; border-color:#fdba74;" onclick="retirarNotaDoAuditor()"><i class="fas fa-arrow-rotate-left"></i> Retirar do Auditor</button>
-                    <button class="btn success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
-                </div>
-
-                <h3 style="margin-top:30px; border-bottom: none;"><i class="fas fa-th-list"></i> Itens do Documento</h3>
-                <div class="table-wrap" style="max-height: 300px;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Descrição</th>
-                                <th>CFOP</th>
-                                <th>NCM</th>
-                                <th>CST ICMS</th>
-                                <th>CST PIS</th>
-                                <th>CST COFINS</th>
-                                <th style="text-align:right;">Qtd</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyItens"></tbody>
-                    </table>
                 </div>
             </div>
         </section>

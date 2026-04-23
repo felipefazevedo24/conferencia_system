@@ -3,7 +3,14 @@ from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
-from .models import AgendamentoMotorista, AgendamentoVeiculo, DepositoWMS, Usuario
+from .models import (
+    AgendamentoMotorista,
+    AgendamentoVeiculo,
+    DepositoWMS,
+    FacilitiesColaborador,
+    FacilitiesEpiMaterial,
+    Usuario,
+)
 
 
 DEFAULT_ADMIN_USERNAME = "ADMIN"
@@ -715,6 +722,185 @@ def initialize_database(app: Flask) -> None:
             _ensure_expedicao_conferencia_simples_schema()
         except Exception:
             pass
+
+        try:
+            _ensure_facilities_extra_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_facilities_seed()
+        except Exception:
+            pass
+
+
+def _ensure_facilities_extra_columns() -> None:
+    """Adiciona colunas Fase 2+3 (estoque, retirada, evidencia, auditoria, cancelamento)."""
+    from sqlalchemy import text
+
+    additions = {
+        "facilities_colaborador": [
+            ("email", "VARCHAR(160)"),
+        ],
+        "facilities_epi_material": [
+            ("numero_ca", "VARCHAR(20)"),
+            ("qtd_estoque", "INTEGER NOT NULL DEFAULT 0"),
+            ("qtd_minima", "INTEGER NOT NULL DEFAULT 0"),
+        ],
+        "facilities_epi_solicitacao": [
+            ("motivo_recusa", "TEXT"),
+            ("retirado_em", "DATETIME"),
+            ("retirado_por", "VARCHAR(100)"),
+            ("numero_ca_entregue", "VARCHAR(20)"),
+            ("assinatura_path", "VARCHAR(500)"),
+            ("solicitante_id", "INTEGER"),
+            ("liberador_id", "INTEGER"),
+            ("liberado_em", "DATETIME"),
+            ("liberado_por_username", "VARCHAR(100)"),
+            ("cancelado_em", "DATETIME"),
+            ("cancelado_por", "VARCHAR(100)"),
+            ("motivo_cancelamento", "TEXT"),
+            ("proxima_troca_em", "DATE"),
+            ("lembrete_retirada_enviado_em", "DATETIME"),
+        ],
+        "facilities_limpeza": [
+            ("concluido_em", "DATETIME"),
+            ("concluido_por", "VARCHAR(100)"),
+            ("evidencia_foto_path", "VARCHAR(500)"),
+            ("template_id", "INTEGER"),
+            ("checklist_status_json", "TEXT"),
+        ],
+    }
+
+    is_mysql = db.engine.dialect.name == "mysql"
+    for tabela, cols in additions.items():
+        if not _has_table(tabela):
+            continue
+        existentes = _get_column_names(tabela)
+        for nome, tipo in cols:
+            if nome in existentes:
+                continue
+            tipo_db = tipo
+            if is_mysql:
+                tipo_db = tipo_db.replace("DATETIME", "DATETIME NULL").replace(" DATE", " DATE NULL")
+            with db.engine.connect() as conn:
+                conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {nome} {tipo_db}"))
+                conn.commit()
+
+
+DEFAULT_EPI_MATERIAIS = [
+    # (codigo_interno, nome, tipo)
+    ("EPI-001", "Capacete de Seguranca", "epi"),
+    ("EPI-002", "Oculos de Protecao Incolor", "epi"),
+    ("EPI-003", "Oculos de Protecao Escuro", "epi"),
+    ("EPI-004", "Luva de Vaqueta", "epi"),
+    ("EPI-005", "Luva Nitrilica", "epi"),
+    ("EPI-006", "Luva Latex", "epi"),
+    ("EPI-007", "Protetor Auricular de Insercao", "epi"),
+    ("EPI-008", "Protetor Auricular Concha", "epi"),
+    ("EPI-009", "Mascara PFF2", "epi"),
+    ("EPI-010", "Mascara Descartavel", "epi"),
+    ("EPI-011", "Botina de Seguranca com Biqueira", "epi"),
+    ("EPI-012", "Bota de PVC Cano Longo", "epi"),
+    ("EPI-013", "Cinto de Seguranca Paraquedista", "epi"),
+    ("EPI-014", "Protetor Facial", "epi"),
+    ("UNI-001", "Camisa Manga Curta", "uniforme"),
+    ("UNI-002", "Camisa Manga Longa", "uniforme"),
+    ("UNI-003", "Calca Operacional", "uniforme"),
+    ("UNI-004", "Jaqueta de Frio", "uniforme"),
+    ("UNI-005", "Colete Refletivo", "uniforme"),
+    ("UNI-006", "Avental de Raspa", "uniforme"),
+]
+
+
+def _ensure_facilities_seed() -> None:
+    """Popula catalogo EPI padrao e sincroniza colaboradores com tabela Usuario."""
+    if not _has_table("facilities_epi_material") or not _has_table("facilities_colaborador"):
+        return
+
+    # 1) Catalogo EPI/Uniforme
+    existentes = {m.codigo_interno for m in FacilitiesEpiMaterial.query.all()}
+    novos = 0
+    for codigo, nome, tipo in DEFAULT_EPI_MATERIAIS:
+        if codigo in existentes:
+            continue
+        db.session.add(FacilitiesEpiMaterial(codigo_interno=codigo, nome=nome, tipo=tipo, ativo=True))
+        novos += 1
+    if novos:
+        db.session.commit()
+
+    # 2) Sincronizar colaboradores a partir de Usuario (solicitante por padrao;
+    # admins viram gestor automaticamente). Nao sobrescreve nivel_acesso se ja existir.
+    usuarios = Usuario.query.all()
+    nomes_existentes = {c.nome.strip().lower(): c for c in FacilitiesColaborador.query.all()}
+    criados = 0
+    for u in usuarios:
+        if not u.username:
+            continue
+        chave = u.username.strip().lower()
+        role = (u.role or "").strip().lower()
+        nivel = "gestor" if role == "admin" else "solicitante"
+        if chave in nomes_existentes:
+            colab = nomes_existentes[chave]
+            # promove a gestor se virar admin e ainda nao for
+            if nivel == "gestor" and colab.nivel_acesso != "gestor":
+                colab.nivel_acesso = "gestor"
+            continue
+        db.session.add(FacilitiesColaborador(
+            nome=u.username,
+            cargo=u.role or "",
+            setor="",
+            telefone="",
+            nivel_acesso=nivel,
+            ativo=True,
+        ))
+        criados += 1
+    if criados:
+        db.session.commit()
+
+    # 3) Seed ciclos de troca (NR-6) baseado em palavras-chave
+    _seed_ciclos_troca_epi()
+
+
+DEFAULT_CICLOS_TROCA = [
+    # (palavra_chave, meses_validade, descricao)
+    ("BOTINA", 6, "Botina de seguranca - troca semestral"),
+    ("BOTA", 6, "Bota - troca semestral"),
+    ("CAPACETE", 24, "Capacete - troca a cada 2 anos"),
+    ("OCULOS", 12, "Oculos de protecao - troca anual"),
+    ("PROTETOR AURICULAR", 3, "Protetor auricular de insercao - troca trimestral"),
+    ("PROTETOR FACIAL", 12, "Protetor facial - troca anual"),
+    ("LUVA", 1, "Luva - troca mensal"),
+    ("MASCARA", 1, "Mascara descartavel - uso diario"),
+    ("CINTO", 12, "Cinto de seguranca - troca anual"),
+    ("AVENTAL", 12, "Avental de raspa - troca anual"),
+    ("CAMISETA", 6, "Camiseta - troca semestral"),
+    ("CAMISA", 6, "Camisa - troca semestral"),
+    ("CALCA", 6, "Calca - troca semestral"),
+    ("JAQUETA", 24, "Jaqueta - troca bienal"),
+    ("COLETE", 12, "Colete refletivo - troca anual"),
+]
+
+
+def _seed_ciclos_troca_epi() -> None:
+    """Popula ciclos padrao (idempotente)."""
+    from .models import FacilitiesEpiCicloTroca
+    if not _has_table("facilities_epi_ciclo_troca"):
+        return
+    existentes = {(c.palavra_chave or "").upper() for c in FacilitiesEpiCicloTroca.query.all()}
+    novos = 0
+    for palavra, meses, desc in DEFAULT_CICLOS_TROCA:
+        if palavra.upper() in existentes:
+            continue
+        db.session.add(FacilitiesEpiCicloTroca(
+            palavra_chave=palavra,
+            meses_validade=meses,
+            descricao=desc,
+            ativo=True,
+        ))
+        novos += 1
+    if novos:
+        db.session.commit()
 
 
 def _ensure_usuario_email_column() -> None:

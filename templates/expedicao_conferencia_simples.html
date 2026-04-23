@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Expedição - Conferência{% endblock %}
-{% block shell_title %}Expedição{% endblock %}
+{% block title %}Registro de Expedição{% endblock %}
+{% block shell_title %}Registro de Expedição{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -139,9 +139,9 @@
             <div>
                 <h1 style="margin:0; font-size:24px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:14px;">
                     <span style="width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px;"><i class="fas fa-truck-loading"></i></span>
-                    Conferência Cega - Expedição
+                    Registro de Expedição
                 </h1>
-                <p style="margin:8px 0 0 0; color:#64748b; font-size:14px; font-weight:500;">As NFs que você emitiu aparecem automaticamente abaixo. O conferente adiciona as fotos e marca como expedido.</p>
+                <p style="margin:8px 0 0 0; color:#64748b; font-size:14px; font-weight:500;">Registro de expedição de mercadorias.</p>
             </div>
         </div>
     </div>
@@ -171,7 +171,7 @@
 
 
 
-    <section class="exp-grid" style="display:grid; grid-template-columns:1.15fr 0.85fr; gap:24px; align-items:start;">
+    <section class="exp-grid" style="display:grid; grid-template-columns:1fr; gap:24px; align-items:start;">
         <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
             <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
                 <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Nova conferência</span>
@@ -263,34 +263,6 @@
                         <button class="exp-btn" type="submit" id="btn-salvar-conferencia">Salvar conferência</button>
                     </div>
                 </form>
-            </div>
-        </section>
-
-        <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
-            <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
-                <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Fluxo</span>
-                <h2 style="margin:0; font-size:20px; color:#1e293b; font-weight:800;">Como funciona</h2>
-                <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">Só o essencial para a equipe operar sem desviar para outro painel.</p>
-            </div>
-            <div class="exp-body" style="padding:24px 28px;">
-                <div class="exp-steps" style="display:grid; gap:14px;">
-                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
-                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">1</span>
-                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">NFs emitidas aparecem automaticamente</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">As notas que você emitiu chegam da Consyste com status Pendente.</p></div>
-                    </div>
-                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
-                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">2</span>
-                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Conferente adiciona fotos</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Clique em "Completar conferência" no histórico e anexe as fotos da carga.</p></div>
-                    </div>
-                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
-                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">3</span>
-                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Corrija dados se necessário</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Se a NF foi digitada antes do Consyste, o sistema mantém a NF do conferente.</p></div>
-                    </div>
-                    <div class="exp-step" style="padding:18px 20px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); display:flex; align-items:flex-start; gap:14px;">
-                        <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0;">4</span>
-                        <div><strong style="display:block; margin-bottom:6px; font-size:14px; color:#1e293b; font-weight:700;">Marque como expedido</strong><p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">Quando a saída acontecer, atualize o status no histórico.</p></div>
-                    </div>
-                </div>
             </div>
         </section>
     </section>
@@ -1020,7 +992,10 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
                     </div>
                     <div class="exp-field">
                         <label for="compl-nf">Nº NF${wasExp ? ' (não editável)' : ' (corrigir se necessário)'}</label>
-                        <input id="compl-nf" name="numero_nf" type="text" value="${nf || ""}" placeholder="Manter ou corrigir" ${wasExp ? 'readonly' : ''}>
+                        <div style="display:flex; gap:6px;">
+                            <input id="compl-nf" name="numero_nf" type="text" value="${nf || ""}" placeholder="Manter ou corrigir" ${wasExp ? 'readonly' : ''} style="flex:1;">
+                            ${wasExp ? '' : '<button type="button" class="exp-btn-secondary" id="compl-btn-consultar-nf" style="white-space:nowrap;">Consultar NF</button>'}
+                        </div>
                     </div>
                     <div class="exp-field">
                         <label for="compl-cliente">Nome do cliente</label>
@@ -1094,6 +1069,35 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
     complGaleria.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
     document.getElementById("compl-cancelar").addEventListener("click", () => { document.getElementById("completar-overlay")?.remove(); });
 
+    const btnConsultarCompl = document.getElementById("compl-btn-consultar-nf");
+    if (btnConsultarCompl) {
+        btnConsultarCompl.addEventListener("click", async () => {
+            const nfInput = document.getElementById("compl-nf");
+            const clienteInput = document.getElementById("compl-cliente");
+            const numero = (nfInput.value || "").trim();
+            if (!numero) { showToast("Informe o número da NF.", "error"); return; }
+            btnConsultarCompl.disabled = true;
+            const textoOriginal = btnConsultarCompl.textContent;
+            btnConsultarCompl.textContent = "Consultando...";
+            try {
+                const resp = await fetch(`/api/expedicao/conferencia-simples/consultar-nf?numero_nf=${encodeURIComponent(numero)}`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || "Erro ao consultar.");
+                if (data.encontrada && data.nome_cliente) {
+                    clienteInput.value = data.nome_cliente;
+                    showToast(`NF encontrada: ${data.nome_cliente}`);
+                } else {
+                    showToast(data.warning || "NF não encontrada. Preencha o cliente manualmente.", "error");
+                }
+            } catch (err) {
+                showToast(err.message, "error");
+            } finally {
+                btnConsultarCompl.disabled = false;
+                btnConsultarCompl.textContent = textoOriginal;
+            }
+        });
+    }
+
     complForm.addEventListener("submit", async e => {
         e.preventDefault();
         if (!complFotos.length && !isEditing) { showToast("Inclua pelo menos uma foto.", "error"); return; }
@@ -1102,10 +1106,11 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
         try {
             const fd = new FormData(complForm);
             complFotos.forEach(f => fd.append("fotos", f));
+            if (wasExp) { fd.append("manter_pendente", "1"); }
             const resp = await fetch(`/api/expedicao/conferencia-simples/${completarConferenciaId}/completar`, { method: "POST", body: fd });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || "Erro ao completar.");
-            showToast("Conferência completada com sucesso.");
+            showToast(wasExp ? "Edição salva. Registro permanece pendente de expedição." : "Conferência completada com sucesso.");
             document.getElementById("completar-overlay")?.remove();
             loadHistorico();
         } catch (err) {

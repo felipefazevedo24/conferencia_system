@@ -16,7 +16,7 @@ class Usuario(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(160), unique=True, nullable=True, index=True)
     password = db.Column(db.String(255), nullable=True)
-    role = db.Column(db.String(20), default="Conferente")
+    role = db.Column(db.String(20), default="Logística")
 
 
 class PermissaoAcesso(db.Model):
@@ -771,3 +771,218 @@ class DepositoWMS(db.Model):
     descricao = db.Column(db.String(300))
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     data_criacao = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+# ============================================================================
+# MODELOS FACILITIES - GESTÃO DE OBRAS, EPI, LIMPEZA
+# ============================================================================
+
+class FacilitiesColaborador(db.Model):
+    """Colaboradores internos (para solicitações - não precisa login no sistema)"""
+    __tablename__ = "facilities_colaborador"
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False, index=True)
+    cargo = db.Column(db.String(80))
+    setor = db.Column(db.String(80), index=True)
+    telefone = db.Column(db.String(20))
+    email = db.Column(db.String(160), index=True)
+    nivel_acesso = db.Column(db.String(20), nullable=False, default="solicitante", index=True)  # solicitante|gestor
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FacilitiesProjeto(db.Model):
+    """Projetos/Obras para acompanhamento"""
+    __tablename__ = "facilities_projeto"
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(150), nullable=False, index=True)
+    cliente_nome = db.Column(db.String(150))
+    cliente_telefone = db.Column(db.String(20))
+    cliente_endereco = db.Column(db.String(300))
+    observacoes = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, default="Em andamento", index=True)  # Em andamento|Pausado|Concluído
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    tarefas = db.relationship("FacilitiesTarefa", backref="projeto", lazy=True)
+
+
+class FacilitiesTarefa(db.Model):
+    """Tarefas de um projeto/obra"""
+    __tablename__ = "facilities_tarefa"
+    id = db.Column(db.Integer, primary_key=True)
+    projeto_id = db.Column(db.Integer, db.ForeignKey("facilities_projeto.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(150), nullable=False)
+    local = db.Column(db.String(100))  # sala, ambiente
+    descricao = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, default="nao_planejado", index=True)  # nao_planejado|planejado|em_andamento|pausado|concluido
+    observacao = db.Column(db.Text)
+    impedimento = db.Column(db.Text)
+    foto_path = db.Column(db.String(500))
+    data_inicio_prevista = db.Column(db.Date)
+    data_fim_prevista = db.Column(db.Date)
+    atualizado_em = db.Column(db.DateTime)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FacilitiesLimpeza(db.Model):
+    """Cronograma de limpeza"""
+    __tablename__ = "facilities_limpeza"
+    id = db.Column(db.Integer, primary_key=True)
+    colaborador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)
+    titulo = db.Column(db.String(150), nullable=False)
+    local = db.Column(db.String(150))
+    data_agendada = db.Column(db.Date, nullable=False, index=True)
+    hora_inicio = db.Column(db.String(5))  # HH:MM
+    hora_fim = db.Column(db.String(5))
+    observacoes = db.Column(db.Text)
+    concluido = db.Column(db.Boolean, nullable=False, default=False)
+    concluido_em = db.Column(db.DateTime)
+    concluido_por = db.Column(db.String(100))
+    evidencia_foto_path = db.Column(db.String(500))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    colaborador = db.relationship("FacilitiesColaborador", backref="limpezas")
+
+
+class FacilitiesEpiMaterial(db.Model):
+    """Catálogo de EPIs e Uniformes disponíveis"""
+    __tablename__ = "facilities_epi_material"
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_interno = db.Column(db.String(30), nullable=False, index=True)
+    nome = db.Column(db.String(150), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False, default="epi", index=True)  # epi|uniforme
+    numero_ca = db.Column(db.String(20))  # Certificado de Aprovação (NR-6)
+    qtd_estoque = db.Column(db.Integer, nullable=False, default=0)
+    qtd_minima = db.Column(db.Integer, nullable=False, default=0)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FacilitiesEpiSolicitacao(db.Model):
+    """Solicitações de EPI/Uniforme"""
+    __tablename__ = "facilities_epi_solicitacao"
+    id = db.Column(db.Integer, primary_key=True)
+    colaborador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), nullable=False, index=True)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)  # quem abriu a solicitação
+    liberador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)  # gestor que aprovou/negou
+    tipo = db.Column(db.String(20), nullable=False, default="epi", index=True)  # epi|uniforme
+    codigo_item = db.Column(db.String(30), nullable=False, index=True)
+    nome_item = db.Column(db.String(150), nullable=False)
+    tamanho = db.Column(db.String(20))
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+    motivo = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="solicitado", index=True)  # solicitado|liberado|retirado|negado|cancelado
+    motivo_recusa = db.Column(db.Text)
+    solicitado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    liberado_em = db.Column(db.DateTime)
+    liberado_por_username = db.Column(db.String(100))  # auditoria: quem clicou aprovar/negar
+    retirado_em = db.Column(db.DateTime)
+    retirado_por = db.Column(db.String(100))  # username de quem entregou
+    numero_ca_entregue = db.Column(db.String(20))
+    assinatura_path = db.Column(db.String(500))  # PNG da assinatura digital
+    cancelado_em = db.Column(db.DateTime)
+    cancelado_por = db.Column(db.String(100))
+    motivo_cancelamento = db.Column(db.Text)
+    proxima_troca_em = db.Column(db.Date, index=True)  # calculado na retirada (vencimento do EPI)
+    lembrete_retirada_enviado_em = db.Column(db.DateTime)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    colaborador = db.relationship("FacilitiesColaborador", foreign_keys=[colaborador_id], backref="solicitacoes_epi")
+    solicitante = db.relationship("FacilitiesColaborador", foreign_keys=[solicitante_id])
+    liberador = db.relationship("FacilitiesColaborador", foreign_keys=[liberador_id])
+
+
+class FacilitiesEpiCicloTroca(db.Model):
+    """Ciclo de troca (validade) padrao por tipo/codigo de EPI em meses.
+    Ex: 'BOTINA' = 6 meses, codigo_interno='25-01-00001' = 12 meses."""
+    __tablename__ = "facilities_epi_ciclo_troca"
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_interno = db.Column(db.String(30), index=True)
+    palavra_chave = db.Column(db.String(100), index=True)  # match no nome_item (case-insensitive)
+    meses_validade = db.Column(db.Integer, nullable=False, default=6)
+    descricao = db.Column(db.String(200))
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FacilitiesAuditLog(db.Model):
+    """Log de auditoria para acoes administrativas no modulo Facilities."""
+    __tablename__ = "facilities_audit_log"
+    id = db.Column(db.Integer, primary_key=True)
+    ts = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    usuario = db.Column(db.String(100), index=True)
+    entidade = db.Column(db.String(40), nullable=False, index=True)  # epi_solicitacao|limpeza|projeto|tarefa|material|colaborador
+    entidade_id = db.Column(db.Integer, index=True)
+    acao = db.Column(db.String(40), nullable=False, index=True)  # criar|aprovar|negar|retirar|cancelar|concluir|editar|excluir
+    detalhes = db.Column(db.Text)
+    ip = db.Column(db.String(45))
+
+
+class FacilitiesLimpezaTemplate(db.Model):
+    """Template de limpeza recorrente (ex: 'Banheiro - diario'). Usado para gerar agendamentos em lote."""
+    __tablename__ = "facilities_limpeza_template"
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(150), nullable=False)
+    local = db.Column(db.String(150))
+    recorrencia = db.Column(db.String(20), nullable=False, default="diaria", index=True)  # diaria|semanal|quinzenal|mensal
+    dias_semana = db.Column(db.String(20))  # "1,2,3,4,5" (0=domingo)
+    hora_inicio = db.Column(db.String(5))
+    hora_fim = db.Column(db.String(5))
+    colaborador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)
+    checklist_json = db.Column(db.Text)  # JSON array de strings
+    qr_code = db.Column(db.String(40), unique=True, index=True)  # token QR do ambiente
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    colaborador = db.relationship("FacilitiesColaborador")
+
+
+class FacilitiesProjetoTarefa(db.Model):
+    """Tarefas em estilo kanban para projetos Facilities."""
+    __tablename__ = "facilities_projeto_tarefa"
+    id = db.Column(db.Integer, primary_key=True)
+    projeto_id = db.Column(db.Integer, db.ForeignKey("facilities_projeto.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, default="nao_planejado", index=True)
+    ordem = db.Column(db.Integer, nullable=False, default=0)
+    responsavel_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)
+    data_inicio = db.Column(db.Date)
+    data_fim = db.Column(db.Date)
+    impedimento = db.Column(db.Text)
+    impedimento_em = db.Column(db.DateTime)
+    foto_path = db.Column(db.String(500))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime)
+    concluido_em = db.Column(db.DateTime)
+
+    projeto = db.relationship("FacilitiesProjeto", backref="tarefas_kanban")
+    responsavel = db.relationship("FacilitiesColaborador")
+
+
+class EmailNFEnviado(db.Model):
+    """Log/idempotencia de envio de NF-e (XML + DANFE) por e-mail ao cliente/destinatario."""
+    __tablename__ = "email_nf_enviado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nf = db.Column(db.String(60), nullable=False, index=True)
+    chave_acesso = db.Column(db.String(44), index=True)
+    destinatario_email = db.Column(db.String(200), nullable=False, index=True)
+    destinatario_nome = db.Column(db.String(200))
+    destinatario_cnpj = db.Column(db.String(20), index=True)
+    cc_emails = db.Column(db.String(500))
+    assunto = db.Column(db.String(300))
+    fonte_email = db.Column(db.String(20))  # Manual | Cadastro | XML
+    origem = db.Column(db.String(20), nullable=False, default="Manual", index=True)  # Manual | Auto | Sync
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente | Enviado | Falha
+    tentativas = db.Column(db.Integer, nullable=False, default=0)
+    erro_mensagem = db.Column(db.String(800))
+    anexou_xml = db.Column(db.Boolean, nullable=False, default=False)
+    anexou_pdf = db.Column(db.Boolean, nullable=False, default=False)
+    conferencia_id = db.Column(db.Integer, index=True)
+    faturamento_id = db.Column(db.Integer, index=True)
+    disparado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    enviado_em = db.Column(db.DateTime)
+
+

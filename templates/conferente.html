@@ -3,18 +3,20 @@
 {% block title %}Conferência de Materiais{% endblock %}
 
 {% block extra_head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}">
     <style>
-        :root { 
-            --pending-yellow: #2a84cf; 
-            --sap-blue: #0f62c9;
-            --sap-hover: #0b4d9f;
-            --erp-bg: #eef4f9;
-            --border-color: #d7e2ec;
-            --header-bg: #12314e;
-            --success-erp: #196f46;
-            --danger-erp: #b74040;
-            --warning-erp: #256fa9;
-            --card-shadow: 0 12px 28px rgba(26, 49, 74, 0.1);
+        :root {
+            /* Alias p/ design system unificado Columbia (recebimento_sap.css) */
+            --pending-yellow: var(--rec-blue-500);
+            --sap-blue: var(--rec-blue-600);
+            --sap-hover: var(--rec-blue-700);
+            --erp-bg: var(--rec-bg);
+            --border-color: var(--rec-border);
+            --header-bg: var(--rec-blue-800);
+            --success-erp: var(--rec-green-600);
+            --danger-erp: var(--rec-red-600);
+            --warning-erp: var(--rec-amber-500);
+            --card-shadow: var(--rec-shadow-2);
         }
 
         /* === DASHBOARD RESUMO === */

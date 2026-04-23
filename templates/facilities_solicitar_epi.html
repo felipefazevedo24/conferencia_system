@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solicitar EPI/Uniforme | Columbia Sync</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#f0f4f8,#e2e8f0);min-height:100vh;padding:20px;color:#1e293b}
+        .shell{max-width:760px;margin:0 auto}
+        .hero{background:linear-gradient(135deg,#059669,#10b981 50%,#34d399);border-radius:24px;padding:28px 32px;color:#fff;margin-bottom:20px;box-shadow:0 12px 40px rgba(5,150,105,.25);display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+        .hero-text{flex:1;min-width:220px}
+        .hero h1{font-size:28px;font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+        .hero p{opacity:.92;font-size:14px}
+        .hero-gestor{background:rgba(255,255,255,.16);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:10px}
+        .hero-gestor i{font-size:18px}
+        .hero-gestor strong{display:block;font-size:14px;font-weight:700}
+        .panel{background:#fff;border-radius:18px;padding:22px 24px;box-shadow:0 8px 24px rgba(18,40,58,.05);margin-bottom:16px}
+        .panel-title{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+        .panel-title .idx{width:26px;height:26px;border-radius:50%;background:#10b981;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+        .form-group{margin-bottom:14px;position:relative}
+        .form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+        .form-control,.form-select{width:100%;padding:11px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;background:#f8fafc;transition:all .15s;font-family:inherit}
+        .form-control:focus,.form-select:focus{outline:none;border-color:#10b981;background:#fff;box-shadow:0 0 0 3px rgba(16,185,129,.12)}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        @media (max-width:560px){.form-row{grid-template-columns:1fr}}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .15s;font-family:inherit}
+        .btn-primary{background:linear-gradient(135deg,#059669,#10b981);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.25);width:100%;padding:14px}
+        .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 20px rgba(16,185,129,.32)}
+        .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+        .btn-ghost{background:transparent;color:#0f172a;border:1px solid #e2e8f0;padding:8px 14px;font-size:13px}
+        .btn-ghost:hover{background:#f1f5f9}
+        .btn-link{background:transparent;color:#059669;border:none;padding:0;font-weight:600;font-size:13px;cursor:pointer}
+        .btn-link:hover{text-decoration:underline}
+        .sugestoes{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;z-index:50;display:none;margin-top:4px}
+        .sugestoes.show{display:block}
+        .sugestoes .item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px}
+        .sugestoes .item:last-child{border-bottom:none}
+        .sugestoes .item:hover{background:#f0fdf4}
+        .sugestoes .item small{color:#64748b;display:block;margin-top:2px;font-size:12px}
+        .sugestoes .empty{padding:14px;color:#64748b;font-size:13px;text-align:center}
+        .ben-chip{display:flex;align-items:center;gap:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:12px 14px;margin-top:8px}
+        .ben-chip .avt{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+        .ben-chip .info{flex:1}
+        .ben-chip .info strong{display:block;color:#065f46;font-size:14px}
+        .ben-chip .info small{color:#059669;font-size:12px}
+        .ben-chip .btn-x{background:transparent;border:none;color:#dc2626;cursor:pointer;padding:6px;border-radius:6px}
+        .ben-chip .btn-x:hover{background:#fee2e2}
+        .ben-novo{background:#fffbeb;border:1px dashed #fcd34d;border-radius:12px;padding:14px;margin-top:8px;display:none}
+        .ben-novo.show{display:block}
+        .ben-novo-title{font-size:13px;color:#92400e;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+        .status-card{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px;margin-top:16px;display:none}
+        .status-card.show{display:block}
+        .status-card h3{color:#15803d;font-size:15px;font-weight:700;margin-bottom:4px}
+        .status-card p{color:#166534;font-size:13px}
+        .toast-container{position:fixed;top:20px;right:20px;z-index:9999}
+        .toast{background:#fff;border-radius:12px;padding:12px 18px;box-shadow:0 12px 40px rgba(0,0,0,.12);border-left:4px solid #10b981;transform:translateX(120%);opacity:0;transition:all .3s;margin-bottom:8px;font-size:14px}
+        .toast.show{transform:translateX(0);opacity:1}
+        .toast.error{border-left-color:#ef4444}
+        .sol-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+        .sol-item .info{flex:1;min-width:0}
+        .sol-item .info strong{display:block;color:#1e293b;font-size:14px}
+        .sol-item .info span{color:#64748b;font-size:12px}
+        .sol-item .info .ben{color:#059669;font-size:12px;font-weight:600}
+        .badge{display:inline-flex;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+        .badge.solicitado{background:#fef3c7;color:#b45309}
+        .badge.liberado,.badge.retirado{background:#d1fae5;color:#059669}
+        .badge.negado{background:#fee2e2;color:#dc2626}
+        .empty-list{text-align:center;color:#64748b;font-size:13px;padding:20px}
+        .help{font-size:12px;color:#64748b;margin-top:6px}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="hero">
+            <div class="hero-text">
+                <h1><i class="fas fa-hard-hat"></i> Solicitar EPI/Uniforme</h1>
+                <p>Registre a solicitacao em nome do funcionario. O pedido sera avaliado pela gestao de Facilities.</p>
+            </div>
+            <div class="hero-gestor">
+                <i class="fas fa-user-shield"></i>
+                <div>
+                    <span style="opacity:.8">Solicitado por</span>
+                    <strong id="gestorNome">...</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title"><span class="idx">1</span> Para qual funcionario?</h2>
+            <div class="form-group">
+                <label class="form-label" for="buscaFuncionario">Busque pelo nome</label>
+                <input type="text" id="buscaFuncionario" class="form-control" placeholder="Digite o nome do funcionario..." autocomplete="off">
+                <div class="sugestoes" id="sugestoesFuncionario"></div>
+                <p class="help">Se o funcionario nao existe, voce pode cadastrar agora mesmo.</p>
+            </div>
+            <div id="beneficiarioChip" class="ben-chip" style="display:none">
+                <div class="avt" id="benIniciais">?</div>
+                <div class="info">
+                    <strong id="benNome">-</strong>
+                    <small id="benSetor">-</small>
+                </div>
+                <button type="button" class="btn-x" onclick="limparBeneficiario()" title="Trocar funcionario"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="historicoBeneficiario" style="margin-top:10px"></div>
+            <div id="beneficiarioNovo" class="ben-novo">
+                <div class="ben-novo-title"><i class="fas fa-user-plus"></i> Cadastrar novo funcionario</div>
+                <div class="form-row">
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label class="form-label">Nome completo</label>
+                        <input type="text" id="novoNome" class="form-control" placeholder="Ex: Jose Silva">
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label class="form-label">Setor (opcional)</label>
+                        <input type="text" id="novoSetor" class="form-control" placeholder="Ex: Producao">
+                    </div>
+                </div>
+                <button type="button" class="btn btn-ghost" onclick="usarNovoFuncionario()"><i class="fas fa-check"></i> Usar este funcionario</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title"><span class="idx">2</span> O que precisa?</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Tipo</label>
+                    <select id="selTipo" class="form-select" onchange="carregarMateriais()">
+                        <option value="epi">EPI - Equipamento de Protecao</option>
+                        <option value="uniforme">Uniforme</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantidade</label>
+                    <input type="number" id="txtQuantidade" class="form-control" value="1" min="1">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Item *</label>
+                <select id="selItem" class="form-select">
+                    <option value="">-- Selecione --</option>
+                </select>
+                <p class="help" id="helpEstoque">Catalogo sincronizado do estoque.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tamanho</label>
+                <input type="text" id="txtTamanho" class="form-control" placeholder="Ex: M, 42, GG">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Motivo (opcional)</label>
+                <textarea id="txtMotivo" class="form-control" rows="2" placeholder="Descreva o motivo da solicitacao"></textarea>
+            </div>
+            <button id="btnSolicitar" class="btn btn-primary" onclick="enviarSolicitacao()">
+                <i class="fas fa-paper-plane"></i> Enviar solicitacao
+            </button>
+            <div id="statusCard" class="status-card">
+                <h3><i class="fas fa-check-circle"></i> Solicitacao enviada!</h3>
+                <p>O pedido foi registrado e os gestores foram notificados.</p>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title"><i class="fas fa-list-check"></i> Minhas solicitacoes recentes</h2>
+            <div id="listaSolicitacoes">
+                <div class="empty-list">Carregando...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        let materiais = [];
+        let colaboradores = [];
+        let beneficiario = null; // {id?, nome, setor?}
+        let euSouColaborador = null;
+        let debounceBusca = null;
+
+        async function init() {
+            await carregarPerfilGestor();
+            await carregarColaboradores();
+            await carregarMateriais();
+            await carregarMinhasSolicitacoes();
+            bindBusca();
+        }
+
+        async function carregarPerfilGestor() {
+            try {
+                const r = await fetch('/api/facilities/me');
+                const d = await r.json();
+                euSouColaborador = d.colaborador;
+                const nome = (d.colaborador && d.colaborador.nome) || d.username || 'Usuario';
+                document.getElementById('gestorNome').textContent = nome;
+            } catch (e) {
+                document.getElementById('gestorNome').textContent = 'Usuario';
+            }
+        }
+
+        async function carregarColaboradores() {
+            try {
+                const r = await fetch('/api/facilities/colaboradores');
+                const d = await r.json();
+                colaboradores = d.rows || [];
+            } catch (e) { colaboradores = []; }
+        }
+
+        async function carregarMateriais() {
+            const tipo = document.getElementById('selTipo').value;
+            const help = document.getElementById('helpEstoque');
+            help.textContent = 'Carregando catalogo...';
+            try {
+                const r = await fetch(`/api/facilities/epi-materiais?tipo=${tipo}`);
+                const d = await r.json();
+                materiais = d.rows || [];
+                const sel = document.getElementById('selItem');
+                sel.innerHTML = '<option value="">-- Selecione --</option>';
+                materiais.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.codigo_interno;
+                    opt.dataset.nome = m.nome;
+                    opt.textContent = m.label + (m.abaixo_minimo ? ' (baixo estoque)' : '');
+                    sel.appendChild(opt);
+                });
+                help.textContent = d.fonte === 'erp'
+                    ? `${materiais.length} itens do estoque ERP.`
+                    : `${materiais.length} itens (catalogo local).`;
+            } catch (e) {
+                help.textContent = 'Falha ao carregar catalogo.';
+            }
+        }
+
+        function bindBusca() {
+            const input = document.getElementById('buscaFuncionario');
+            const lista = document.getElementById('sugestoesFuncionario');
+            input.addEventListener('input', () => {
+                clearTimeout(debounceBusca);
+                debounceBusca = setTimeout(() => filtrarFuncionarios(input.value.trim()), 120);
+            });
+            input.addEventListener('focus', () => {
+                if (input.value.trim().length >= 1) filtrarFuncionarios(input.value.trim());
+            });
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#buscaFuncionario') && !e.target.closest('#sugestoesFuncionario')) {
+                    lista.classList.remove('show');
+                }
+            });
+        }
+
+        function filtrarFuncionarios(termo) {
+            const lista = document.getElementById('sugestoesFuncionario');
+            const novoBox = document.getElementById('beneficiarioNovo');
+            novoBox.classList.remove('show');
+            if (termo.length < 1) { lista.classList.remove('show'); return; }
+            const t = termo.toLowerCase();
+            const hits = colaboradores.filter(c => (c.nome || '').toLowerCase().includes(t)).slice(0, 10);
+            if (hits.length === 0) {
+                lista.innerHTML = `<div class="empty">Nenhum funcionario encontrado.<br><button type="button" class="btn-link" onclick="abrirCadastroNovo('${termo.replace(/'/g, "&#39;")}')"><i class="fas fa-user-plus"></i> Cadastrar "${termo}"</button></div>`;
+            } else {
+                lista.innerHTML = hits.map(c => `
+                    <div class="item" onclick='selecionarFuncionario(${JSON.stringify(c)})'>
+                        <strong>${c.nome}</strong>
+                        <small>${[c.cargo, c.setor].filter(Boolean).join(' - ') || 'Sem cargo'}</small>
+                    </div>`).join('');
+            }
+            lista.classList.add('show');
+        }
+
+        function selecionarFuncionario(c) {
+            beneficiario = { id: c.id, nome: c.nome, setor: c.setor || c.cargo || '' };
+            document.getElementById('sugestoesFuncionario').classList.remove('show');
+            document.getElementById('beneficiarioNovo').classList.remove('show');
+            document.getElementById('buscaFuncionario').value = '';
+            renderBeneficiario();
+            carregarMinhasSolicitacoes();
+            carregarHistoricoEpi(c.id);
+        }
+
+        async function carregarHistoricoEpi(colaboradorId) {
+            const box = document.getElementById('historicoBeneficiario');
+            if (!box) return;
+            box.innerHTML = '<small style="color:#64748b">Carregando histórico...</small>';
+            try {
+                const r = await fetch(`/api/facilities/colaboradores/${colaboradorId}/historico-epi`);
+                if (!r.ok) { box.innerHTML = ''; return; }
+                const d = await r.json();
+                const rows = d.rows || [];
+                if (!rows.length) { box.innerHTML = '<small style="color:#64748b"><i class="fas fa-info-circle"></i> Sem retiradas anteriores.</small>'; return; }
+                const vencidos = rows.filter(x => x.vencido).length;
+                const proximos = rows.filter(x => x.vence_em_30d).length;
+                const ultima = rows[0];
+                let html = `<div style="background:#f1f5f9;border-radius:10px;padding:10px 12px;font-size:12px">`;
+                html += `<b>Última retirada:</b> ${ultima.nome_item}`;
+                if (ultima.retirado_em) html += ` em ${ultima.retirado_em}`;
+                if (ultima.proxima_troca_em) html += ` · Próx. troca: <b>${ultima.proxima_troca_em}</b>`;
+                if (vencidos || proximos) {
+                    html += `<div style="margin-top:4px">`;
+                    if (vencidos) html += `<span style="color:#dc2626;font-weight:700">${vencidos} vencido(s)</span> `;
+                    if (proximos) html += `<span style="color:#b45309;font-weight:700">${proximos} vence(m) em 30d</span>`;
+                    html += `</div>`;
+                }
+                html += `</div>`;
+                box.innerHTML = html;
+            } catch (e) { box.innerHTML = ''; }
+        }
+
+        function abrirCadastroNovo(nome) {
+            document.getElementById('beneficiarioNovo').classList.add('show');
+            document.getElementById('sugestoesFuncionario').classList.remove('show');
+            document.getElementById('novoNome').value = nome;
+            document.getElementById('novoSetor').value = '';
+            document.getElementById('novoNome').focus();
+        }
+
+        function usarNovoFuncionario() {
+            const nome = document.getElementById('novoNome').value.trim();
+            const setor = document.getElementById('novoSetor').value.trim();
+            if (!nome) return showToast('Informe o nome do funcionario.', 'error');
+            beneficiario = { nome, setor };
+            document.getElementById('beneficiarioNovo').classList.remove('show');
+            document.getElementById('buscaFuncionario').value = '';
+            renderBeneficiario();
+        }
+
+        function renderBeneficiario() {
+            const chip = document.getElementById('beneficiarioChip');
+            const busca = document.getElementById('buscaFuncionario');
+            if (!beneficiario) { chip.style.display = 'none'; busca.style.display = 'block'; return; }
+            document.getElementById('benNome').textContent = beneficiario.nome;
+            document.getElementById('benSetor').textContent = beneficiario.setor || (beneficiario.id ? 'Funcionario cadastrado' : 'Novo cadastro');
+            const iniciais = beneficiario.nome.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+            document.getElementById('benIniciais').textContent = iniciais || '?';
+            chip.style.display = 'flex';
+            busca.style.display = 'none';
+        }
+
+        function limparBeneficiario() {
+            beneficiario = null;
+            renderBeneficiario();
+            const hist = document.getElementById('historicoBeneficiario');
+            if (hist) hist.innerHTML = '';
+            document.getElementById('buscaFuncionario').value = '';
+            document.getElementById('buscaFuncionario').focus();
+        }
+
+        async function enviarSolicitacao() {
+            if (!beneficiario) return showToast('Selecione o funcionario beneficiario.', 'error');
+            const selItem = document.getElementById('selItem');
+            const codigo_item = selItem.value;
+            const nome_item = selItem.options[selItem.selectedIndex]?.dataset?.nome || selItem.options[selItem.selectedIndex]?.textContent || '';
+            if (!codigo_item) return showToast('Selecione um item.', 'error');
+
+            const payload = {
+                tipo: document.getElementById('selTipo').value,
+                codigo_item,
+                nome_item,
+                tamanho: document.getElementById('txtTamanho').value.trim(),
+                quantidade: parseInt(document.getElementById('txtQuantidade').value) || 1,
+                motivo: document.getElementById('txtMotivo').value.trim(),
+            };
+            if (beneficiario.id) payload.colaborador_id = beneficiario.id;
+            else { payload.beneficiario_nome = beneficiario.nome; payload.beneficiario_setor = beneficiario.setor || ''; }
+
+            const btn = document.getElementById('btnSolicitar');
+            btn.disabled = true;
+            try {
+                const r = await fetch('/api/facilities/epi-solicitacoes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const d = await r.json();
+                if (!r.ok) { showToast(d.error || 'Erro ao enviar.', 'error'); return; }
+                showToast('Solicitacao enviada!', 'success');
+                document.getElementById('statusCard').classList.add('show');
+                // Atualiza id do beneficiario caso tenha sido criado agora
+                if (d.beneficiario && d.beneficiario.id) {
+                    beneficiario.id = d.beneficiario.id;
+                    await carregarColaboradores();
+                }
+                // Reseta so os campos do item (mantem beneficiario para proxima solicitacao do mesmo funcionario)
+                document.getElementById('selItem').value = '';
+                document.getElementById('txtTamanho').value = '';
+                document.getElementById('txtQuantidade').value = '1';
+                document.getElementById('txtMotivo').value = '';
+                carregarMinhasSolicitacoes();
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function carregarMinhasSolicitacoes() {
+            const lista = document.getElementById('listaSolicitacoes');
+            try {
+                const r = await fetch('/api/facilities/epi-solicitacoes?mine=1');
+                const d = await r.json();
+                if (!d.rows?.length) {
+                    lista.innerHTML = '<div class="empty-list">Voce ainda nao abriu nenhuma solicitacao.</div>';
+                    return;
+                }
+                lista.innerHTML = d.rows.map(s => {
+                    const statusLabel = {solicitado:'Aguardando',liberado:'Liberado',retirado:'Retirado',negado:'Negado',cancelado:'Cancelada'}[s.status] || s.status;
+                    const recusa = (s.status === 'negado' && s.motivo_recusa)
+                        ? `<div style="font-size:12px;color:#dc2626;margin-top:4px"><i class="fas fa-info-circle"></i> ${s.motivo_recusa}</div>` : '';
+                    const cancelBtn = (s.status === 'solicitado')
+                        ? `<button class="btn-link" style="color:#dc2626;margin-left:8px" onclick="cancelarMinha(${s.id})"><i class="fas fa-times"></i> Cancelar</button>` : '';
+                    const proxima = s.proxima_troca_em
+                        ? `<div style="font-size:11px;color:#059669;margin-top:2px"><i class="fas fa-clock"></i> Próx. troca: ${s.proxima_troca_em}</div>` : '';
+                    return `
+                    <div class="sol-item">
+                        <div class="info">
+                            <strong>${s.nome_item}${s.tamanho ? ' - ' + s.tamanho : ''} (x${s.quantidade})</strong>
+                            <span class="ben"><i class="fas fa-user"></i> ${s.colaborador_nome}${s.colaborador_setor ? ' - ' + s.colaborador_setor : ''}</span>
+                            <span>${s.solicitado_em}</span>
+                            ${proxima}
+                            ${recusa}
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                          <span class="badge ${s.status}">${statusLabel}</span>
+                          ${cancelBtn}
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                lista.innerHTML = '<div class="empty-list">Erro ao carregar.</div>';
+            }
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle';
+            toast.innerHTML = `<i class="fas fa-${icon}"></i> ${msg}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        async function cancelarMinha(id) {
+            const motivo = prompt('Motivo do cancelamento (opcional):') || '';
+            if (!confirm('Confirma cancelar esta solicitação?')) return;
+            try {
+                const r = await fetch(`/api/facilities/epi-solicitacoes/${id}/cancelar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ motivo })
+                });
+                const d = await r.json();
+                if (r.ok) { showToast('Solicitação cancelada.', 'success'); carregarMinhasSolicitacoes(); }
+                else showToast(d.error || 'Erro ao cancelar.', 'error');
+            } catch (e) { showToast('Falha de rede.', 'error'); }
+        }
+        window.cancelarMinha = cancelarMinha;
+
+        init();
+    </script>
+</body>
+</html>

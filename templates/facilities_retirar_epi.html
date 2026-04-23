@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Retirar EPI #{{ solicitacao.id }}{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;margin:24px auto;padding:0 16px">
+  <div class="card" style="padding:20px">
+    <h2 style="margin:0 0 8px">Retirar EPI</h2>
+    <p style="color:#666;margin:0 0 16px">
+      Solicitação <b>#{{ solicitacao.id }}</b> ·
+      <b>{{ solicitacao.colaborador.nome if solicitacao.colaborador else '?' }}</b>
+      ({{ solicitacao.colaborador.setor if solicitacao.colaborador else '-' }})
+    </p>
+
+    {% if solicitacao.status != 'liberado' %}
+      <div style="padding:14px;background:#fff3cd;border:1px solid #ffeeba;border-radius:6px;margin-bottom:16px">
+        Esta solicitação está com status <b>{{ solicitacao.status }}</b>.
+        Apenas itens <b>liberados</b> podem ser retirados.
+      </div>
+    {% endif %}
+
+    <dl style="display:grid;grid-template-columns:180px 1fr;gap:6px 12px;margin:0 0 20px">
+      <dt>Item:</dt><dd><b>{{ solicitacao.nome_item }}</b> ({{ solicitacao.codigo_item }})</dd>
+      <dt>Quantidade:</dt><dd>{{ solicitacao.quantidade }}</dd>
+      <dt>Tamanho:</dt><dd>{{ solicitacao.tamanho or '-' }}</dd>
+      <dt>Liberado em:</dt><dd>{{ solicitacao.liberado_em.strftime('%d/%m/%Y %H:%M') if solicitacao.liberado_em else '-' }}</dd>
+    </dl>
+
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-weight:600;margin-bottom:4px">Número do CA (NR-6):</label>
+      <input id="ca" type="text" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px"
+             placeholder="Ex.: 12345" value="{{ solicitacao.numero_ca_entregue or '' }}">
+    </div>
+
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-weight:600;margin-bottom:4px">Assinatura do colaborador:</label>
+      <div style="border:1px dashed #999;border-radius:6px;background:#fff">
+        <canvas id="sig" width="600" height="180" style="display:block;width:100%;height:180px;touch-action:none"></canvas>
+      </div>
+      <button type="button" id="btn-limpar" class="btn" style="margin-top:6px">Limpar</button>
+    </div>
+
+    <button id="btn-confirmar" class="btn btn-primary" style="width:100%;padding:12px;font-weight:700"
+            {% if solicitacao.status != 'liberado' %}disabled{% endif %}>
+      Confirmar Retirada
+    </button>
+
+    <p id="msg" style="margin-top:12px;font-weight:600"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+(function(){
+  const canvas = document.getElementById('sig');
+  function resize(){
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    pad.clear();
+  }
+  const pad = new SignaturePad(canvas, { penColor: '#111' });
+  window.addEventListener('resize', resize); resize();
+
+  document.getElementById('btn-limpar').onclick = () => pad.clear();
+
+  document.getElementById('btn-confirmar').onclick = async () => {
+    const msg = document.getElementById('msg');
+    msg.textContent = '';
+    if (pad.isEmpty()) { msg.style.color='#b00'; msg.textContent='Assine antes de confirmar.'; return; }
+    const ca = document.getElementById('ca').value.trim();
+    const b64 = pad.toDataURL('image/png');
+    try {
+      const r = await fetch('/api/facilities/epi-solicitacoes/{{ solicitacao.id }}/retirar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ numero_ca: ca, assinatura_base64: b64 })
+      });
+      const j = await r.json();
+      if (!r.ok) { msg.style.color='#b00'; msg.textContent = j.error || 'Erro ao retirar.'; return; }
+      msg.style.color='#0a7'; msg.textContent = 'Retirada confirmada! Próxima troca: ' + (j.proxima_troca_em || '-');
+      document.getElementById('btn-confirmar').disabled = true;
+      setTimeout(()=>{ window.location.href='/api/facilities/epi-solicitacoes/{{ solicitacao.id }}/ficha-pdf'; }, 1200);
+    } catch(e){ msg.style.color='#b00'; msg.textContent = 'Falha de rede.'; }
+  };
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{# =========================================================
+   Macros compartilhados do módulo Recebimento (SAP/Fiori).
+   Import:  {% import "recebimento/_macros.html" as rec %}
+   Requer:  <link rel="stylesheet" href="/static/css/recebimento_sap.css">
+   ========================================================= #}
+
+{# ---------- PAGE HEADER ---------- #}
+{%- macro page_header(icon, title, subtitle=None, right=None) -%}
+<header class="rec-page-header">
+    <div class="rec-page-header__left">
+        <div class="rec-page-header__icon"><i class="fas {{ icon }}"></i></div>
+        <div>
+            <h1 class="rec-page-header__title">{{ title }}</h1>
+            {% if subtitle %}<p class="rec-page-header__sub">{{ subtitle }}</p>{% endif %}
+        </div>
+    </div>
+    {% if right %}<div class="rec-page-header__right">{{ right|safe }}</div>{% endif %}
+</header>
+{%- endmacro -%}
+
+{# ---------- KPI CARD ---------- #}
+{%- macro kpi(id, label, value="0", icon="fa-chart-simple", tone="primary", hint=None) -%}
+<div class="rec-kpi rec-kpi--{{ tone }}">
+    <span class="rec-kpi__icon"><i class="fas {{ icon }}"></i></span>
+    <span class="rec-kpi__label">{{ label }}</span>
+    <span class="rec-kpi__value" id="{{ id }}">{{ value }}</span>
+    {% if hint %}<span class="rec-kpi__hint">{{ hint }}</span>{% endif %}
+</div>
+{%- endmacro -%}
+
+{# ---------- CARD WRAPPER ---------- #}
+{%- macro card_open(title=None, icon=None, subtitle=None, actions=None, flush=False) -%}
+<section class="rec-card">
+    {% if title or actions %}
+    <div class="rec-card__head">
+        {% if title %}
+        <div>
+            <h2 class="rec-card__title">
+                {% if icon %}<i class="fas {{ icon }}"></i>{% endif %}{{ title }}
+            </h2>
+            {% if subtitle %}<p class="rec-card__sub">{{ subtitle }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if actions %}<div class="rec-card__actions">{{ actions|safe }}</div>{% endif %}
+    </div>
+    {% endif %}
+    <div class="rec-card__body{% if flush %} rec-card__body--flush{% endif %}">
+{%- endmacro -%}
+
+{%- macro card_close() -%}
+    </div>
+</section>
+{%- endmacro -%}
+
+{# ---------- EMPTY STATE ---------- #}
+{%- macro empty(icon="fa-inbox", title="Nada por aqui", text="Ajuste os filtros ou aguarde novos dados.") -%}
+<div class="rec-empty">
+    <i class="fas {{ icon }}"></i>
+    <strong>{{ title }}</strong>
+    <span>{{ text }}</span>
+</div>
+{%- endmacro -%}
+
+{# ---------- LINHAS SKELETON ---------- #}
+{%- macro skeleton_rows(cols=4, rows=4) -%}
+{% for _ in range(rows) %}
+<tr class="rec-skeleton-row">
+    {% for _c in range(cols) %}<td><span class="rec-skeleton" style="width:{{ 60 + (loop.index0 * 8) % 40 }}%"></span></td>{% endfor %}
+</tr>
+{% endfor %}
+{%- endmacro -%}
+
+{# ---------- TOAST STACK (inclua uma vez por página) ---------- #}
+{%- macro toast_stack(stack_id="rec-toast-stack") -%}
+<div class="rec-toast-stack" id="{{ stack_id }}" aria-live="polite" aria-atomic="true"></div>
+{%- endmacro -%}
