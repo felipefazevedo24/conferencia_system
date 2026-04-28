@@ -18,6 +18,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
@@ -146,6 +147,23 @@ def _parse_dest_email_do_xml(xml_bytes: bytes | None) -> tuple[str, str, str]:
         or ""
     ).strip()
     return email, nome, cnpj
+
+
+def _parse_cfops_do_xml(xml_bytes: bytes | None) -> set[str]:
+    """Retorna o conjunto de CFOPs (4 digitos) presentes nos itens da NF-e."""
+    if not xml_bytes:
+        return set()
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return set()
+    ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+    cfops: set[str] = set()
+    for el in root.findall(".//nfe:det/nfe:prod/nfe:CFOP", ns):
+        valor = (el.text or "").strip()
+        if valor:
+            cfops.add(valor[:4])
+    return cfops
 
 
 def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | None:
@@ -291,37 +309,151 @@ def _montar_corpo_html(numero_nf: str, chave: str, dest_nome: str, emit_nome: st
     aviso_teste = ""
     if modo_teste:
         aviso_teste = f"""
-        <div style="margin-top:16px;padding:12px 16px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px">
-          <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatario)'}</strong>.
-          Em producao, envie ao destinatario real desligando <code>NFE_EMAIL_MODO_TESTE</code>.
-        </div>"""
+        <tr><td style="padding:0 32px">
+          <div style="margin-top:8px;padding:12px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-family:Arial,Helvetica,sans-serif">
+            <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatário)'}</strong>.
+          </div>
+        </td></tr>"""
 
+    dest_nome_exib = (dest_nome or "").upper() or "—"
+    emit_nome_exib = (emit_nome or "COLUMBIA MACHINE BRASIL").upper()
     chave_fmt = " ".join([chave[i:i + 4] for i in range(0, len(chave), 4)]) if chave else ""
     consulta_url = f"https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=XbSeqxE8pl8=&nfe={chave}"
 
     return f"""\
-    <html><body style="font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;padding:24px;margin:0">
-      <div style="max-width:620px;margin:auto;background:#fff;border-radius:14px;padding:28px;box-shadow:0 8px 28px rgba(15,23,42,0.08)">
-        <div style="border-left:4px solid #155eef;padding-left:14px;margin-bottom:18px">
-          <h2 style="margin:0 0 4px;color:#0f172a;font-size:20px">NF-e emitida &mdash; {emit_nome or 'Columbia'}</h2>
-          <p style="margin:0;color:#64748b;font-size:13px">Segue em anexo a NF-e e o DANFE para seus registros.</p>
-        </div>
-        <table style="width:100%;font-size:14px;color:#1e293b;border-collapse:collapse">
-          <tr><td style="padding:6px 0;color:#64748b;width:120px">Destinatario</td><td><strong>{dest_nome or '&mdash;'}</strong></td></tr>
-          <tr><td style="padding:6px 0;color:#64748b">Numero da NF</td><td><strong>{numero_nf}</strong></td></tr>
-          <tr><td style="padding:6px 0;color:#64748b">Chave de acesso</td><td style="font-family:Consolas,monospace;font-size:12px">{chave_fmt}</td></tr>
-        </table>
-        <div style="margin-top:22px">
-          <a href="{consulta_url}" style="display:inline-block;padding:10px 18px;background:#155eef;color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700">
-            Consultar NF-e na SEFAZ
-          </a>
-        </div>
-        {aviso_teste}
-        <p style="margin-top:26px;font-size:11.5px;color:#94a3b8">
-          E-mail automatico enviado pelo sistema Columbia Sync. Em caso de divergencia, responda para seu contato comercial.
-        </p>
-      </div>
-    </body></html>"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <meta name="color-scheme" content="light only"/>
+      <meta name="supported-color-schemes" content="light"/>
+      <title>Nota Fiscal Eletrônica</title>
+      <style>
+        :root {{ color-scheme: light only; supported-color-schemes: light; }}
+      </style>
+    </head>
+    <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#f1f5f9" style="background:#f1f5f9;padding:28px 12px">
+        <tr><td align="center">
+          <table role="presentation" width="640" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="max-width:640px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px">
+
+            <!-- Header azul solido -->
+            <tr>
+              <td bgcolor="#1e3a8a" style="background-color:#1e3a8a;padding:20px 28px;border-top-left-radius:10px;border-top-right-radius:10px">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td width="64" valign="middle" style="padding-right:14px">
+                      <img src="https://www.columbiamachine.com.br/img/columbia_logo.png" alt="Columbia" width="56" height="56" style="display:block;width:56px;height:56px;border:0;outline:none;background:#ffffff;border-radius:8px;padding:6px">
+                    </td>
+                    <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;color:#ffffff;line-height:1.3">
+                      Nota Fiscal Eletrônica
+                    </td>
+                    <td align="right" valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#ffffff;font-weight:700">
+                      Série/Número 1/{numero_nf}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" style="padding-top:4px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#bfdbfe">
+                      Emitida por {emit_nome_exib}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Intro -->
+            <tr>
+              <td style="padding:24px 28px 10px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1e293b">
+                Esta mensagem refere-se à Nota Fiscal Eletrônica Nacional
+                <strong style="color:#0f172a">Série/Número 1/{numero_nf}</strong>, emitida para:
+              </td>
+            </tr>
+
+            <!-- Destinatario -->
+            <tr>
+              <td style="padding:6px 28px 0">
+                <table width="100%" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+                  <tr>
+                    <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif">
+                      <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#475569;font-weight:700">Razão Social</div>
+                      <div style="margin-top:4px;font-size:15px;font-weight:700;color:#0f172a;line-height:1.4">{dest_nome_exib}</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Chave -->
+            <tr>
+              <td style="padding:14px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#475569;font-weight:700">Chave de acesso</div>
+                <div style="margin-top:6px;padding:11px 14px;background:#f1f5f9;color:#0f172a;border:1px solid #e2e8f0;border-radius:6px;font-family:Consolas,'Courier New',monospace;font-size:12.5px;word-break:break-all;letter-spacing:0.5px">
+                  NFe {chave_fmt}
+                </div>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr>
+              <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                <table cellpadding="0" cellspacing="0">
+                  <tr><td bgcolor="#1e3a8a" style="border-radius:6px;background-color:#1e3a8a">
+                    <a href="{consulta_url}" style="display:inline-block;padding:10px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
+                      Consultar NF-e na SEFAZ
+                    </a>
+                  </td></tr>
+                </table>
+                <div style="margin-top:10px;font-size:12px;color:#475569">
+                  Ou acesse diretamente:
+                  <a href="http://www.nfe.fazenda.gov.br/portal" style="color:#1d4ed8;text-decoration:underline">www.nfe.fazenda.gov.br/portal</a>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Anexos -->
+            <tr>
+              <td style="padding:22px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">
+                  <tr>
+                    <td style="padding-top:14px;font-size:13px;color:#334155;line-height:1.6">
+                      <strong style="color:#0f172a">Anexos:</strong> XML da NF-e e DANFE (PDF) seguem anexados para seus registros.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Mensagem institucional -->
+            <tr>
+              <td style="padding:16px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                <p style="margin:0;font-size:13px;line-height:1.65;color:#475569;font-style:italic">
+                  Agradecemos a confiança em nossos serviços e reiteramos nossa satisfação com esta parceria.
+                  Permanecemos à disposição para eventuais dúvidas.
+                </p>
+              </td>
+            </tr>
+
+            {aviso_teste}
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:20px 28px 24px;font-family:Arial,Helvetica,sans-serif">
+                <div style="border-top:1px solid #e2e8f0;padding-top:14px;font-size:12px;color:#475569;line-height:1.6">
+                  Este e-mail foi enviado automaticamente pelo Sistema de Nota Fiscal Eletrônica (NF-e) da
+                  <strong style="color:#334155">{emit_nome_exib}</strong>. Em caso de divergência, responda a este e-mail ou contate seu representante comercial.
+                </div>
+                <div style="margin-top:10px;font-size:11px;color:#64748b;font-style:italic">
+                  powered by <strong style="color:#1e3a8a;font-style:normal">Columbia Sync</strong>
+                </div>
+              </td>
+            </tr>
+
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>"""
 
 
 def _send_async(app, msg, smtp_server, smtp_port, sender, password, log_id):
@@ -369,13 +501,72 @@ def enviar_nfe_por_email(
     if not nota:
         return {"sucesso": False, "erro": "NF nao encontrada na Consyste.", "numero_nf": numero_nf}
 
+    # Roteamento por CFOP: se algum item da NF tiver CFOP na lista de CFOPs
+    # especiais configurada, o destinatario do XML/cadastro e ignorado e o
+    # e-mail vai exclusivamente para a lista NFE_EMAIL_DESTINATARIOS_ESPECIAIS.
+    cfops_cfg_raw = str(app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS") or "")
+    cfops_especiais = {
+        c.strip() for c in re.split(r"[,;\s]+", cfops_cfg_raw) if c.strip().isdigit()
+    }
+    cfops_da_nota: set[str] = set()
+    cfop_match: list[str] = []
+    if cfops_especiais:
+        cfops_da_nota = _parse_cfops_do_xml(nota.xml_bytes)
+        cfop_match = sorted(cfops_da_nota & cfops_especiais)
+
+    rota_especial_emails: list[str] = []
+    if cfop_match:
+        destinos_raw = str(app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS") or "")
+        for e in re.split(r"[,;\s]+", destinos_raw):
+            e = e.strip()
+            if _valido_email(e) and e not in rota_especial_emails:
+                rota_especial_emails.append(e)
+        if not rota_especial_emails:
+            app.logger.warning(
+                "NF-e %s casou CFOP especial %s mas NFE_EMAIL_DESTINATARIOS_ESPECIAIS esta vazio; envio segue fluxo normal.",
+                nota.numero, cfop_match,
+            )
+
     # Destinatario
     resolvido = resolver_destinatario(nota.numero, nota.chave, override_email)
     destino_real = resolvido["email"]
     fonte = resolvido["fonte_email"]
 
+    # Modo teste: redireciona
+    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
+    destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
+
+    # CC: combina lista explicita + config global. Em modo teste, ignora CC
+    # para evitar que varios e-mails de cobranca caiam pra outras pessoas durante testes.
+    cc_final: list[str] = []
+    if not modo_teste:
+        if cc_emails:
+            cc_final.extend([e.strip() for e in cc_emails if _valido_email(str(e).strip())])
+        cc_config_raw = str(app.config.get("NFE_EMAIL_CC") or "")
+        for e in re.split(r"[,;\s]+", cc_config_raw):
+            e = e.strip()
+            if _valido_email(e) and e not in cc_final:
+                cc_final.append(e)
+
+    # Fallback: sem destinatario principal, mas ha CC -> usa o primeiro CC como principal.
+    # O restante continua em copia. Mantem a nota como "enviada" em vez de ficar pendente.
+    if not destino_real and cc_final:
+        destino_real = cc_final.pop(0)
+        fonte = "CC"
+
+    # Override por CFOP: substitui completamente destinatario e CC pela lista
+    # configurada (primeiro vira TO, demais ficam em CC). O cliente NAO recebe.
+    if rota_especial_emails:
+        destino_real = rota_especial_emails[0]
+        cc_final = list(rota_especial_emails[1:])
+        fonte = "CFOP"
+        app.logger.info(
+            "NF-e %s roteada por CFOP %s -> %s (CC=%s)",
+            nota.numero, cfop_match, destino_real, cc_final,
+        )
+
     if not destino_real:
-        # Sem e-mail: em modo Auto aguarda intervencao manual; caso contrario, falha.
+        # Sem e-mail e sem CC: em modo Auto aguarda intervencao manual; caso contrario, falha.
         status_pend = "AguardandoManual" if origem in ("Auto", "Scheduler") else "Falha"
         log = EmailNFEnviado(
             numero_nf=nota.numero,
@@ -396,9 +587,6 @@ def enviar_nfe_por_email(
         return {"sucesso": False, "erro": "Nenhum e-mail disponivel.", "log_id": log.id,
                 "numero_nf": nota.numero, "status": status_pend}
 
-    # Modo teste: redireciona
-    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
-    destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
     destino_efetivo = destino_teste if (modo_teste and _valido_email(destino_teste)) else destino_real
 
     # Config SMTP
@@ -414,18 +602,6 @@ def enviar_nfe_por_email(
     assunto_base = f"NF-e {nota.numero} - {(nota.emit_nome or sender_name)}"
     assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base
 
-    # CC: combina lista explicita + config global. Em modo teste, ignora CC
-    # para evitar que varios e-mails de cobranca caiam pra outras pessoas durante testes.
-    cc_final: list[str] = []
-    if not modo_teste:
-        if cc_emails:
-            cc_final.extend([e.strip() for e in cc_emails if _valido_email(str(e).strip())])
-        cc_config_raw = str(app.config.get("NFE_EMAIL_CC") or "")
-        for e in re.split(r"[,;\s]+", cc_config_raw):
-            e = e.strip()
-            if _valido_email(e) and e not in cc_final:
-                cc_final.append(e)
-
     msg = MIMEMultipart("mixed")
     msg["Subject"] = assunto
     msg["From"] = f"{sender_name} <{sender}>"
@@ -437,8 +613,8 @@ def enviar_nfe_por_email(
         nota.numero, nota.chave, nota.dest_nome, nota.emit_nome, modo_teste, destino_real,
     )
     alt = MIMEMultipart("alternative")
-    alt.attach(MIMEText(f"NF-e {nota.numero} em anexo. Destinatario: {nota.dest_nome}", "plain"))
-    alt.attach(MIMEText(corpo_html, "html"))
+    alt.attach(MIMEText(f"NF-e {nota.numero} em anexo. Destinatário: {nota.dest_nome}", "plain", "utf-8"))
+    alt.attach(MIMEText(corpo_html, "html", "utf-8"))
     msg.attach(alt)
 
     anexou_xml = False

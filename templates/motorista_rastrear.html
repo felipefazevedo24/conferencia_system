@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Viagem {{ viagem.codigo }}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #fff; overflow: hidden; }
+    .app { display: flex; flex-direction: column; height: 100dvh; padding: 18px; overflow: hidden; }
+    .header { text-align: center; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .kicker { font-size: 11px; font-weight: 800; color: #34d399; text-transform: uppercase; letter-spacing: 1.5px; }
+    .codigo { font-family: "Courier New", monospace; font-size: 22px; font-weight: 800; color: #fff; margin-top: 4px; }
+    .titulo { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+    .veiculo { font-size: 12px; color: #cbd5e1; margin-top: 8px; }
+
+    .main { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 22px; padding: 18px 0; }
+    .status-ring {
+        width: 200px; height: 200px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        background: radial-gradient(circle at 50% 40%, #064e3b, #0f172a 70%);
+        border: 4px solid #1f2937; position: relative; transition: all .3s;
+    }
+    .status-ring.on { border-color: #10b981; box-shadow: 0 0 30px rgba(16,185,129,.45); }
+    .status-ring.on::after {
+        content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 4px solid #10b981;
+        animation: pulse 2s infinite; opacity: 0;
+    }
+    @keyframes pulse { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.25); opacity: 0; } }
+    .status-icon { font-size: 64px; color: #64748b; }
+    .status-ring.on .status-icon { color: #34d399; }
+    .status-label { text-align: center; }
+    .status-label .big { font-size: 20px; font-weight: 800; color: #fff; }
+    .status-label .sm { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+
+    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 360px; }
+    .metric { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 10px 12px; text-align: center; }
+    .metric .lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+    .metric .val { font-size: 16px; color: #fff; font-weight: 800; margin-top: 3px; font-family: "Courier New", monospace; }
+
+    .footer { padding-top: 14px; }
+    .btn { width: 100%; padding: 18px; border: none; border-radius: 14px; font-size: 16px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all .2s; }
+    .btn-start { background: linear-gradient(135deg, #10b981, #047857); color: #fff; box-shadow: 0 8px 20px rgba(16,185,129,.3); }
+    .btn-stop { background: linear-gradient(135deg, #dc2626, #991b1b); color: #fff; }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .5; }
+
+    .alert { background: rgba(220, 38, 38, .15); border: 1px solid #dc2626; color: #fca5a5; padding: 12px; border-radius: 10px; font-size: 13px; margin-top: 12px; text-align: center; }
+    .alert.warn { background: rgba(245, 158, 11, .15); border-color: #f59e0b; color: #fde68a; }
+    .alert.ok { background: rgba(16, 185, 129, .15); border-color: #10b981; color: #6ee7b7; }
+
+    .finalizada { text-align: center; padding: 40px 20px; }
+    .finalizada i { font-size: 56px; color: #34d399; margin-bottom: 12px; }
+    .finalizada h2 { font-size: 20px; color: #fff; }
+    .finalizada p { color: #94a3b8; margin-top: 6px; font-size: 14px; }
+
+    /* Tabs / paginas */
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 14px; background: rgba(255,255,255,.05); padding: 4px; border-radius: 12px; }
+    .tab-btn { padding: 10px; border: 0; background: transparent; color: #94a3b8; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .tab-btn.active { background: #10b981; color: #fff; box-shadow: 0 4px 12px rgba(16,185,129,.35); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: flex; flex-direction: column; gap: 16px; }
+
+    /* Próxima parada (destaque) */
+    .prox-card { background: linear-gradient(135deg, #047857, #065f46); border-radius: 18px; padding: 18px; border: 2px solid #10b981; box-shadow: 0 8px 24px rgba(16,185,129,.25); }
+    .prox-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .prox-head .badge { background: #fff; color: #047857; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; letter-spacing: 1px; text-transform: uppercase; }
+    .prox-head .count { margin-left: auto; font-size: 12px; color: #a7f3d0; font-weight: 700; }
+    .prox-nome { font-size: 19px; font-weight: 800; color: #fff; line-height: 1.25; }
+    .prox-end { font-size: 13.5px; color: #d1fae5; margin-top: 6px; line-height: 1.4; }
+    .prox-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .prox-chip { background: rgba(255,255,255,.15); color: #fff; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+    .prox-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .prox-btn { border: 0; padding: 13px 10px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .prox-btn.navegar { background: #fff; color: #047857; }
+    .prox-btn.cheguei { background: #f59e0b; color: #111; }
+    .prox-btn.concluir { background: #ef4444; color: #fff; grid-column: 1 / -1; }
+    .prox-btn:active { transform: scale(.97); }
+    .prox-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* Lista de paradas */
+    .paradas-list { display: flex; flex-direction: column; gap: 8px; }
+    .parada-item { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+    .parada-item.ok { opacity: .55; }
+    .parada-seq { min-width: 28px; height: 28px; border-radius: 50%; background: #334155; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .parada-item.ok .parada-seq { background: #10b981; }
+    .parada-info { flex: 1; min-width: 0; }
+    .parada-nome { font-size: 13px; font-weight: 700; color: #fff; }
+    .parada-end { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+    .parada-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: #1e293b; color: #94a3b8; text-transform: uppercase; margin-top: 4px; display: inline-block; }
+    .parada-status.ok { background: #065f46; color: #6ee7b7; }
+    .parada-status.em { background: #92400e; color: #fde68a; }
+
+    .empty-paradas { text-align: center; padding: 30px 20px; color: #64748b; }
+    .empty-paradas i { font-size: 32px; margin-bottom: 8px; }
+
+    /* Modal conclusão parada */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 100; }
+    .modal-overlay.show { display: flex; }
+    .modal-card { background: #1e293b; border-radius: 16px; padding: 20px; width: 100%; max-width: 380px; border: 1px solid rgba(255,255,255,.1); }
+    .modal-card h3 { font-size: 16px; margin-bottom: 12px; color: #fff; }
+    .modal-card label { font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; display: block; margin: 10px 0 4px; }
+    .modal-card select, .modal-card textarea, .modal-card input { width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,.1); color: #fff; padding: 10px; border-radius: 8px; font-size: 13px; font-family: inherit; }
+    .modal-card textarea { resize: vertical; min-height: 70px; }
+    .modal-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+    .modal-foot button { padding: 12px; border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    .modal-foot .cancel { background: #475569; color: #fff; }
+    .modal-foot .ok { background: #10b981; color: #fff; }
+</style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <div class="kicker"><i class="fa-solid fa-route"></i> Em rota</div>
+        <div class="codigo">{{ viagem.codigo }}</div>
+        {% if viagem.titulo %}<div class="titulo">{{ viagem.titulo }}</div>{% endif %}
+        <div class="veiculo"><i class="fa-solid fa-truck"></i> {{ veiculo_label }}</div>
+    </div>
+
+    {% if viagem.status in ('Concluida', 'Cancelada') %}
+    <div class="main">
+        <div class="finalizada">
+            <i class="fa-solid fa-flag-checkered"></i>
+            <h2>Viagem {{ 'concluída' if viagem.status == 'Concluida' else 'cancelada' }}</h2>
+            <p>Você já pode fechar esta tela.</p>
+        </div>
+    </div>
+    {% else %}
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="paradas"><i class="fa-solid fa-flag"></i> Paradas</button>
+        <button class="tab-btn" data-tab="gps"><i class="fa-solid fa-satellite-dish"></i> GPS</button>
+    </div>
+
+    <!-- TAB PARADAS -->
+    <div class="tab-pane active" id="tab-paradas" style="flex:1;overflow-y:auto;padding-top:14px">
+        <div id="prox-container"></div>
+        <div style="margin-top:6px">
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px">Todas as paradas</div>
+            <div class="paradas-list" id="lista-paradas"></div>
+        </div>
+    </div>
+
+    <!-- TAB GPS -->
+    <div class="tab-pane" id="tab-gps">
+        <div class="main">
+            <div class="status-ring" id="ring"><i class="fa-solid fa-satellite-dish status-icon"></i></div>
+            <div class="status-label">
+                <div class="big" id="status-big">Pronto para iniciar</div>
+                <div class="sm" id="status-sm">Toque no botão abaixo quando começar a dirigir</div>
+            </div>
+            <div class="metric-row">
+                <div class="metric"><div class="lbl">Pontos enviados</div><div class="val" id="m-pts">0</div></div>
+                <div class="metric"><div class="lbl">Velocidade</div><div class="val" id="m-vel">—</div></div>
+                <div class="metric"><div class="lbl">Última posição</div><div class="val" id="m-ts">—</div></div>
+                <div class="metric"><div class="lbl">Precisão</div><div class="val" id="m-prec">—</div></div>
+            </div>
+            <div id="alert-box"></div>
+        </div>
+        <div class="footer">
+            <button class="btn btn-start" id="btn"><i class="fa-solid fa-play"></i> Iniciar rastreamento</button>
+            <div style="text-align:center;font-size:11px;color:#64748b;margin-top:10px">
+                Mantenha esta tela aberta. Permita localização e não feche o navegador.
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Concluir parada -->
+    <div class="modal-overlay" id="modal-concluir">
+        <div class="modal-card">
+            <h3>Concluir parada</h3>
+            <label>Resultado</label>
+            <select id="mc-resultado">
+                <option value="Entregue">Entregue</option>
+                <option value="Coletado">Coletado</option>
+                <option value="Recusado">Recusado pelo destinatário</option>
+                <option value="AusenciaRecebedor">Ausência do recebedor</option>
+                <option value="Outros">Outros</option>
+            </select>
+            <label>Observação (opcional)</label>
+            <textarea id="mc-obs" placeholder="Detalhes, problemas, número da NF entregue..."></textarea>
+            <div class="modal-foot">
+                <button class="cancel" onclick="fecharConcluir()">Cancelar</button>
+                <button class="ok" id="mc-ok">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+const VIAGEM_ID = {{ viagem.id }};
+const TOKEN = "{{ token }}";
+const PING_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/ping`;
+const STATUS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/status`;
+const PARADAS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/paradas`;
+const VIAGEM_STATUS = "{{ viagem.status }}";
+
+const INTERVALO_MIN_MS = 15000;   // 15s
+const DIST_MIN_M = 20;            // 20m
+
+let watchId = null;
+let wakeLock = null;
+let pontos = 0;
+let ultLat = null, ultLng = null, ultTs = 0;
+let filaOffline = [];
+let inicializado = false;
+let paradasCache = [];
+let paradaConcluindo = null;
+
+const $ = id => document.getElementById(id);
+
+function dist(a, b, c, d) {
+    const R = 6371000, toR = x => x * Math.PI / 180;
+    const dLat = toR(c-a), dLng = toR(d-b);
+    const x = Math.sin(dLat/2)**2 + Math.cos(toR(a))*Math.cos(toR(c))*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(x));
+}
+
+function alertar(txt, tipo='') {
+    const box = $('alert-box');
+    if (!txt) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="alert ${tipo}">${txt}</div>`;
+}
+
+async function enviarPing(payload) {
+    try {
+        const r = await fetch(PING_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        const data = await r.json();
+        if (data.status && (data.status === 'Concluida' || data.status === 'Cancelada')) {
+            parar();
+            alertar('Viagem finalizada pelo sistema. Pode fechar esta tela.', 'ok');
+            setTimeout(() => location.reload(), 1500);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        filaOffline.push(payload);
+        if (filaOffline.length > 500) filaOffline = filaOffline.slice(-500);
+        alertar('Sem conexão. Guardando pontos para enviar depois.', 'warn');
+        return false;
+    }
+}
+
+async function drenarFila() {
+    if (!filaOffline.length) return;
+    const batch = filaOffline.splice(0);
+    for (const p of batch) {
+        const ok = await enviarPing(p);
+        if (!ok) { filaOffline = batch.concat(filaOffline); return; }
+    }
+    alertar('');
+}
+
+function onPos(pos) {
+    const agora = Date.now();
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    const d = (ultLat != null) ? dist(ultLat, ultLng, lat, lng) : Infinity;
+    if (agora - ultTs < INTERVALO_MIN_MS && d < DIST_MIN_M) return;
+    ultTs = agora; ultLat = lat; ultLng = lng;
+
+    const velKmh = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
+    const payload = {
+        latitude: lat, longitude: lng,
+        velocidade_kmh: velKmh,
+        rumo: pos.coords.heading,
+        precisao_m: pos.coords.accuracy,
+    };
+
+    pontos++;
+    $('m-pts').textContent = pontos;
+    $('m-vel').textContent = velKmh != null ? velKmh.toFixed(0) + ' km/h' : '—';
+    $('m-ts').textContent = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    $('m-prec').textContent = pos.coords.accuracy ? pos.coords.accuracy.toFixed(0) + ' m' : '—';
+    enviarPing(payload).then(ok => { if (ok) drenarFila(); });
+}
+
+function onErr(err) {
+    let msg = 'Erro de GPS.';
+    if (err.code === 1) msg = 'Permissão de localização negada. Toque nas configurações do site e libere o GPS.';
+    else if (err.code === 2) msg = 'GPS indisponível. Verifique se está ligado.';
+    else if (err.code === 3) msg = 'GPS demorando a responder...';
+    alertar(msg, 'warn');
+}
+
+async function pedirWakeLock() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }
+    catch(e) {}
+}
+
+async function iniciar() {
+    if (!navigator.geolocation) { alertar('Seu navegador não suporta GPS.'); return; }
+    try {
+        await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy: true, timeout: 10000}));
+    } catch(e) { onErr(e); return; }
+    watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
+    pedirWakeLock();
+    $('ring').classList.add('on');
+    $('status-big').textContent = 'Rastreando';
+    $('status-sm').textContent = 'Mantenha a tela aberta até o final da viagem';
+    const b = $('btn');
+    b.className = 'btn btn-stop';
+    b.innerHTML = '<i class="fa-solid fa-stop"></i> Parar rastreamento';
+    alertar('');
+    inicializado = true;
+}
+
+function parar() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
+    $('ring').classList.remove('on');
+    $('status-big').textContent = 'Parado';
+    $('status-sm').textContent = 'Rastreamento pausado';
+    const b = $('btn');
+    b.className = 'btn btn-start';
+    b.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar rastreamento';
+    inicializado = false;
+}
+
+const btn = $('btn');
+if (btn) btn.addEventListener('click', () => { inicializado ? parar() : iniciar(); });
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && inicializado && !wakeLock) pedirWakeLock();
+    if (!document.hidden) drenarFila();
+});
+
+// confere status a cada 60s (se viagem concluída lá, para daqui)
+setInterval(async () => {
+    try {
+        const r = await fetch(STATUS_URL);
+        const d = await r.json();
+        if (d.sucesso && (d.status === 'Concluida' || d.status === 'Cancelada')) {
+            parar();
+            location.reload();
+        }
+    } catch(e) {}
+}, 60000);
+
+// ============================ TABS ============================
+document.querySelectorAll('.tab-btn').forEach(b => {
+    b.addEventListener('click', () => {
+        const tab = b.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+    });
+});
+
+// ============================ PARADAS ============================
+function labelTipo(t) {
+    return ({COLETA:'Coleta', ENTREGA:'Entrega', PARADA:'Parada', ABASTECIMENTO:'Abastecimento', REFEICAO:'Refeição'})[t] || t;
+}
+function formatHora(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+async function carregarParadas() {
+    try {
+        const r = await fetch(PARADAS_URL);
+        const d = await r.json();
+        if (!d.sucesso) return;
+        paradasCache = d.paradas || [];
+        renderProxima();
+        renderLista();
+    } catch(e) { console.error(e); }
+}
+
+function renderProxima() {
+    const box = $('prox-container');
+    if (!box) return;
+    const pendentes = paradasCache.filter(p => p.status !== 'Concluida' && p.status !== 'Nao_realizada' && p.status !== 'Cancelada');
+    if (!pendentes.length) {
+        box.innerHTML = `<div class="prox-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border-color:#475569">
+            <div class="prox-head"><span class="badge" style="background:#475569;color:#fff">✓ Concluído</span></div>
+            <div class="prox-nome">Todas as paradas foram realizadas</div>
+            <div class="prox-end">Você pode retornar à base. Boa viagem!</div>
+        </div>`;
+        return;
+    }
+    const p = pendentes[0];
+    const total = paradasCache.length;
+    const idx = paradasCache.findIndex(x => x.id === p.id) + 1;
+    const hora = formatHora(p.previsao_chegada);
+    const navUrl = (p.latitude && p.longitude)
+        ? `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}&travelmode=driving`
+        : (p.endereco ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent((p.endereco||'')+', '+(p.cidade||'')+'/'+(p.uf||''))}` : null);
+    const chegou = p.status === 'EmAndamento';
+    box.innerHTML = `
+        <div class="prox-card">
+            <div class="prox-head">
+                <span class="badge">Próxima parada</span>
+                <span class="count">${idx}/${total}</span>
+            </div>
+            <div class="prox-nome">${p.parceiro_nome || 'Parada ' + idx}</div>
+            <div class="prox-end"><i class="fa-solid fa-location-dot"></i> ${p.endereco || '—'} ${p.cidade ? '· ' + p.cidade + '/' + (p.uf||'') : ''}</div>
+            <div class="prox-meta">
+                <span class="prox-chip"><i class="fa-solid fa-tag"></i> ${labelTipo(p.tipo)}</span>
+                ${hora ? `<span class="prox-chip"><i class="fa-solid fa-clock"></i> Prev. ${hora}</span>` : ''}
+                ${chegou ? `<span class="prox-chip" style="background:#f59e0b;color:#111"><i class="fa-solid fa-location-crosshairs"></i> No local</span>` : ''}
+            </div>
+            <div class="prox-actions">
+                ${navUrl ? `<a class="prox-btn navegar" href="${navUrl}" target="_blank" rel="noopener"><i class="fa-solid fa-diamond-turn-right"></i> Navegar</a>` : `<button class="prox-btn navegar" disabled>Sem GPS</button>`}
+                ${chegou
+                    ? `<button class="prox-btn concluir" onclick="abrirConcluir(${p.id}, '${p.tipo}')"><i class="fa-solid fa-flag-checkered"></i> Concluir parada</button>`
+                    : `<button class="prox-btn cheguei" onclick="marcarChegada(${p.id})"><i class="fa-solid fa-location-crosshairs"></i> Cheguei</button>`}
+            </div>
+        </div>
+    `;
+}
+
+function renderLista() {
+    const box = $('lista-paradas');
+    if (!box) return;
+    if (!paradasCache.length) {
+        box.innerHTML = `<div class="empty-paradas"><i class="fa-regular fa-folder-open"></i><div>Nenhuma parada planejada</div></div>`;
+        return;
+    }
+    box.innerHTML = paradasCache.map(p => {
+        const ok = p.status === 'Concluida';
+        const em = p.status === 'EmAndamento';
+        const statusLabel = ok ? 'Concluída' : em ? 'No local' : p.status === 'Nao_realizada' ? 'Não realizada' : 'Pendente';
+        const cls = ok ? 'ok' : em ? 'em' : '';
+        return `<div class="parada-item ${ok ? 'ok' : ''}">
+            <div class="parada-seq">${p.sequencia}</div>
+            <div class="parada-info">
+                <div class="parada-nome">${p.parceiro_nome || 'Parada ' + p.sequencia}</div>
+                <div class="parada-end">${p.endereco || ''} ${p.cidade ? '· ' + p.cidade + '/' + (p.uf||'') : ''}</div>
+                <span class="parada-status ${cls}">${statusLabel}</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function _obterPos() {
+    return new Promise(res => {
+        if (!navigator.geolocation) return res(null);
+        navigator.geolocation.getCurrentPosition(
+            p => res({latitude: p.coords.latitude, longitude: p.coords.longitude}),
+            () => res(null),
+            {timeout: 4000, maximumAge: 20000}
+        );
+    });
+}
+
+async function marcarChegada(pid) {
+    const pos = await _obterPos();
+    try {
+        const r = await fetch(`/motorista/viagem/${VIAGEM_ID}/${TOKEN}/parada/${pid}/chegar`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(pos || {})
+        });
+        const d = await r.json();
+        if (!d.sucesso) { alert(d.msg || 'Erro ao registrar chegada.'); return; }
+        await carregarParadas();
+    } catch(e) { alert('Sem conexão. Tente novamente.'); }
+}
+
+function abrirConcluir(pid, tipo) {
+    paradaConcluindo = pid;
+    $('mc-resultado').value = tipo === 'COLETA' ? 'Coletado' : 'Entregue';
+    $('mc-obs').value = '';
+    $('modal-concluir').classList.add('show');
+}
+function fecharConcluir() { $('modal-concluir').classList.remove('show'); paradaConcluindo = null; }
+
+$('mc-ok')?.addEventListener('click', async () => {
+    if (!paradaConcluindo) return;
+    const pos = await _obterPos();
+    const body = {
+        resultado: $('mc-resultado').value,
+        observacao: $('mc-obs').value.trim(),
+        ...(pos || {}),
+    };
+    try {
+        const r = await fetch(`/motorista/viagem/${VIAGEM_ID}/${TOKEN}/parada/${paradaConcluindo}/concluir`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (!d.sucesso) { alert(d.msg || 'Erro ao concluir parada.'); return; }
+        fecharConcluir();
+        await carregarParadas();
+    } catch(e) { alert('Sem conexão. Tente novamente.'); }
+});
+
+// Carrega paradas e atualiza a cada 30s
+if (VIAGEM_STATUS !== 'Concluida' && VIAGEM_STATUS !== 'Cancelada') {
+    carregarParadas();
+    setInterval(carregarParadas, 30000);
+}
+</script>
+</body>
+</html>

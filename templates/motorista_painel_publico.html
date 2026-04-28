@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0f62c9">
+<title>Minhas Viagens — {{ motorista.nome }}</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/css/recebimento_sap.css">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+:root{--azul:#0f62c9;--azul-deep:#084ea5;--amber:#f59e0b;--green:#16a34a;--red:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;padding:0;font-family:"IBM Plex Sans","Segoe UI",Roboto,sans-serif;background:#f1f6fb;color:#0f172a;padding-bottom:28px}
+header.mot-top{background:linear-gradient(135deg,var(--azul-deep),var(--azul));color:#fff;padding:18px 18px 22px;position:sticky;top:0;z-index:10;box-shadow:0 4px 14px rgba(15,98,201,.25)}
+header.mot-top h1{margin:0;font-size:18px;font-weight:700;font-family:"Space Grotesk","IBM Plex Sans",sans-serif;letter-spacing:-.02em}
+header.mot-top .saud{margin:2px 0 0;font-size:13px;opacity:.92}
+header.mot-top .refresh{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;backdrop-filter:blur(8px)}
+header.mot-top .refresh:active{transform:scale(.92)}
+.metricas{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.metricas .m{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px;text-align:center;backdrop-filter:blur(6px)}
+.metricas .m strong{display:block;font-size:22px;font-weight:800;font-family:"Space Grotesk",sans-serif}
+.metricas .m span{font-size:10px;opacity:.85;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.content{padding:14px 14px 0}
+.state{text-align:center;padding:40px 20px;color:#64748b;font-size:14px;background:#fff;border-radius:14px;border:2px dashed #d6e2ef;margin-top:14px}
+.state.error{border-color:#fecaca;background:#fef2f2;color:#dc2626}
+.viagem{background:#fff;border-radius:14px;padding:16px;margin-top:12px;border:1px solid #d6e2ef;box-shadow:0 2px 8px rgba(15,98,201,.05)}
+.viagem .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.viagem h3{margin:0;font-size:17px;font-weight:800;font-family:"Space Grotesk",sans-serif;color:#0f2439}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;letter-spacing:.02em}
+.chip.blue{background:#e0efff;color:#0f62c9}
+.chip.amber{background:#fef3c7;color:#b45309}
+.chip.slate{background:#e2e8f0;color:#475569}
+.chip.green{background:#d1fae5;color:#065f46}
+.chip.red{background:#fee2e2;color:#991b1b}
+.info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px;font-size:13px}
+.info-grid .lab{color:#60758d;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;display:block}
+.info-grid .val{display:block;font-weight:700;color:#0f172a;margin-top:1px}
+.paradas{margin-top:12px;padding-top:12px;border-top:1px dashed #d6e2ef}
+.paradas ol{margin:0;padding-left:20px;font-size:13.5px;line-height:1.7}
+.paradas li{margin-bottom:2px}
+.paradas li span.tipo{color:#8096af;font-size:11px;margin-left:4px;font-weight:600}
+.abrir{display:block;width:100%;margin-top:12px;padding:13px;background:linear-gradient(135deg,var(--azul),var(--azul-deep));color:#fff;border:none;border-radius:12px;font-weight:700;font-size:15px;box-shadow:0 4px 14px rgba(15,98,201,.25);cursor:pointer;text-decoration:none;text-align:center}
+.abrir:active{transform:scale(.98);filter:brightness(.95)}
+.abrir i{margin-right:6px}
+.hist-wrap{margin-top:22px}
+.hist-wrap h2{font-size:14px;font-weight:800;color:#60758d;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px;display:flex;align-items:center;gap:6px}
+.hist{background:#fff;border:1px solid #e2e9f1;border-radius:10px;padding:10px 14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.hist strong{color:#0f172a}
+.hist span.data{color:#16a34a;font-weight:600;font-size:12px}
+.offline-banner{position:fixed;bottom:0;left:0;right:0;background:#fee2e2;color:#991b1b;text-align:center;padding:8px;font-size:13px;font-weight:600;display:none;z-index:20}
+.offline-banner.show{display:block}
+@media(min-width:700px){
+    body{padding:0}
+    .content{max-width:720px;margin:0 auto}
+    header.mot-top{max-width:720px;margin:0 auto;border-radius:0 0 16px 16px}
+}
+</style>
+</head>
+<body>
+<header class="mot-top">
+    <h1><i class="fa-solid fa-route" style="margin-right:6px;opacity:.9"></i> Minhas Viagens</h1>
+    <p class="saud">Olá, <strong>{{ motorista.nome }}</strong></p>
+    <button class="refresh" onclick="loadViagens()" title="Atualizar"><i class="fa-solid fa-rotate"></i></button>
+    <div class="metricas">
+        <div class="m"><strong id="mLib">0</strong><span>Liberadas</span></div>
+        <div class="m"><strong id="mAnd">0</strong><span>Em rota</span></div>
+        <div class="m"><strong id="mHoje">0</strong><span>Hoje</span></div>
+    </div>
+</header>
+<div class="content">
+    <div id="state" class="state">Carregando viagens...</div>
+    <div id="lista"></div>
+    <div class="hist-wrap" id="histWrap" style="display:none">
+        <h2><i class="fa-solid fa-clock-rotate-left"></i> Histórico recente</h2>
+        <div id="hist"></div>
+    </div>
+</div>
+<div class="offline-banner" id="offline"><i class="fa-solid fa-wifi" style="margin-right:6px"></i> Sem conexão — exibindo últimos dados</div>
+
+<script>
+const TOKEN = {{ token|tojson }};
+const MID = {{ motorista.id }};
+const API = `/motorista/painel/${MID}/${TOKEN}/viagens`;
+const CACHE_KEY = `motpainel:${MID}`;
+
+const fmtDT=s=>{if(!s)return '—';try{const d=new Date(s);return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return s;}};
+const fmtData=s=>{if(!s)return '—';try{const d=new Date(s);return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});}catch(e){return s;}};
+
+function statusChip(s){
+    const map={Planejada:['Planejada','slate'],EmAndamento:['Em rota','blue']};
+    const [lbl,cls]=map[s]||[s,'slate'];
+    return `<span class="chip ${cls}">${lbl}</span>`;
+}
+
+function renderViagem(v){
+    const paradas=v.paradas||[];
+    const n=paradas.length;
+    const destBadge=v.destino_unico
+        ? `<span class="chip amber"><i class="fa-solid fa-location-dot"></i> Destino único</span>`
+        : `<span class="chip blue"><i class="fa-solid fa-route"></i> ${n} parada${n!==1?'s':''}</span>`;
+    const km=v.km_previsto?Number(v.km_previsto).toFixed(1)+' km':(v.km_estimado?Number(v.km_estimado).toFixed(1)+' km':'—');
+    const veic=v.veiculo_nome||v.veiculo_placa||'—';
+    const listParadas=paradas.slice(0,3).map((p,i)=>`<li>${p.parceiro_nome||p.tipo||'Parada'}<span class="tipo">${p.tipo||''}</span></li>`).join('');
+    const maisParadas=n>3?`<li style="color:#8096af;font-style:italic">+${n-3} parada(s)...</li>`:'';
+    const link=v.motorista_link||`/motorista/viagem/${v.id}`;
+    return `<article class="viagem">
+        <div class="head">
+            <div>
+                <h3>${v.codigo||('Viagem #'+v.id)}</h3>
+                <div class="chips">${statusChip(v.status)} ${destBadge}</div>
+            </div>
+        </div>
+        <div class="info-grid">
+            <div><span class="lab">Veículo</span><span class="val">${veic}</span></div>
+            <div><span class="lab">Saída prevista</span><span class="val">${fmtDT(v.saida_prevista)}</span></div>
+            <div><span class="lab">KM previsto</span><span class="val">${km}</span></div>
+            <div><span class="lab">Liberada em</span><span class="val">${fmtDT(v.liberada_em)}</span></div>
+        </div>
+        ${n?`<div class="paradas"><ol>${listParadas}${maisParadas}</ol></div>`:''}
+        <a href="${link}" class="abrir"><i class="fa-solid fa-arrow-right"></i> Abrir viagem</a>
+    </article>`;
+}
+
+function renderHist(v){
+    return `<div class="hist"><div><strong>${v.codigo||('Viagem #'+v.id)}</strong> — ${(v.paradas||[]).length} parada(s)</div><span class="data">${fmtData(v.retorno_real||v.liberada_em)}</span></div>`;
+}
+
+function aplicar(d){
+    const viagens=d.viagens||[];
+    const hist=d.historico||[];
+    const planejadas=viagens.filter(v=>v.status==='Planejada').length;
+    const emRota=viagens.filter(v=>v.status==='EmAndamento').length;
+    const hojeIso=new Date().toISOString().slice(0,10);
+    const concHoje=hist.filter(v=>(v.retorno_real||'').slice(0,10)===hojeIso).length;
+    document.getElementById('mLib').textContent=planejadas;
+    document.getElementById('mAnd').textContent=emRota;
+    document.getElementById('mHoje').textContent=concHoje;
+    const lista=document.getElementById('lista');
+    const state=document.getElementById('state');
+    if(!viagens.length){
+        lista.innerHTML='';
+        state.className='state';
+        state.textContent='Nenhuma viagem liberada no momento. Aguarde o gestor liberar sua próxima rota.';
+    } else {
+        state.style.display='none';
+        lista.innerHTML=viagens.map(renderViagem).join('');
+    }
+    if(hist.length){
+        document.getElementById('histWrap').style.display='block';
+        document.getElementById('hist').innerHTML=hist.slice(0,8).map(renderHist).join('');
+    }
+}
+
+async function loadViagens(){
+    const state=document.getElementById('state');
+    state.style.display='block';state.className='state';state.textContent='Carregando viagens...';
+    try{
+        const r=await fetch(API,{cache:'no-store'});
+        const d=await r.json();
+        if(!r.ok)throw new Error(d.erro||'Falha');
+        localStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),data:d}));
+        document.getElementById('offline').classList.remove('show');
+        aplicar(d);
+    }catch(e){
+        // fallback offline
+        const c=localStorage.getItem(CACHE_KEY);
+        if(c){
+            try{const parsed=JSON.parse(c);aplicar(parsed.data);document.getElementById('offline').classList.add('show');return;}catch(_){}
+        }
+        state.className='state error';state.textContent='Erro ao carregar. Verifique sua conexão.';
+    }
+}
+
+loadViagens();
+setInterval(()=>{if(document.visibilityState==='visible')loadViagens();},45000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadViagens();});
+
+// Tenta instalar service worker (PWA)
+if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>

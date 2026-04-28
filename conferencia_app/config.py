@@ -124,6 +124,12 @@ class Config:
     NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
     # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
     NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")
+    # Roteamento por CFOP: quando algum item da NF tiver um destes CFOPs, o envio
+    # NAO vai para o destinatario do XML/cadastro - vai para a lista
+    # NFE_EMAIL_DESTINATARIOS_ESPECIAIS (ex: remessa/conserto/devolucao tratados
+    # internamente pelo financeiro/fiscal). Ambas as listas sao separadas por virgula.
+    NFE_EMAIL_CFOPS_ESPECIAIS = os.environ.get("NFE_EMAIL_CFOPS_ESPECIAIS", "")
+    NFE_EMAIL_DESTINATARIOS_ESPECIAIS = os.environ.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", "")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))

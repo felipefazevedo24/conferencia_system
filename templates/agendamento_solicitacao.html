@@ -5,7 +5,15 @@
 {% block shell_subtitle %}Pagina simples para abrir demandas e acompanhar seu status.{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/recebimento_sap.css">
 <style>
+/* Padronização visual Transporte */
+:root{--font-display:var(--rec-font-display);--font-ui:var(--rec-font-ui)}
+body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !important;color:var(--rec-ink-900)}
+.rq-panel{border-color:var(--rec-border) !important}
+.rq-title,[class*="rq-title"]{font-family:var(--rec-font-display) !important;color:var(--rec-ink-900) !important}
+.rq-copy,[class*="rq-copy"]{color:var(--rec-ink-500) !important}
+.btn-primary{background:var(--rec-blue-600) !important;border-color:var(--rec-blue-600) !important;box-shadow:0 4px 12px rgba(15,98,201,.2) !important}
 .rq-shell{max-width:1420px;margin:0 auto;display:grid;gap:20px;padding:10px}
 .rq-panel{border:1px solid rgba(18,40,58,.08);border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(18,40,58,.04);transition:box-shadow .3s ease}
 .rq-panel:hover{box-shadow:0 12px 32px rgba(18,40,58,.08)}
@@ -311,7 +319,7 @@ dispGrid.innerHTML=d.veiculos.map(v=>{
 }).join('');}
 
 /* ── Minhas solicitações com stepper e chips ── */
-async function loadMinhasSolicitacoes(){setMine('Atualizando suas solicitações...');const r=await fetch('/api/logistica/agendamento-veiculos/minhas-solicitacoes');const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao carregar solicitações.','error');return setMine(d.error||'Falha ao carregar solicitações.',true);}showToast('Solicitações atualizadas.','success');setMine('');
+async function loadMinhasSolicitacoes(){setMine('Atualizando suas solicitações...');const r=await fetch('/api/logistica/agendamento-veiculos/minhas-solicitacoes');const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao carregar solicitações.','error');return setMine(d.error||'Falha ao carregar solicitações.',true);}setMine('');
 myList.innerHTML=d.rows?.length?d.rows.map(s=>{
     const chips=(s.itens||[]).map(it=>`<span class="rq-chip"><i class="fas fa-box"></i>${it.descricao||'Item'}${it.quantidade?`<span class="chip-qty">${it.quantidade} ${it.unidade||''}</span>`:''}</span>`).join('');
     return`<article class="rq-card">

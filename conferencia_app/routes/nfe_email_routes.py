@@ -163,6 +163,22 @@ def api_nfe_email_config():
                 parcial["NFE_EMAIL_POLL_INTERVAL_SECONDS"] = int(payload["poll_intervalo"])
             except (TypeError, ValueError):
                 pass
+        if "cfops_especiais" in payload:
+            valor = payload["cfops_especiais"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(c).strip() for c in valor if str(c).strip()])
+            # Mantem apenas digitos por CFOP (CFOPs sao 4 digitos)
+            import re as _re
+            cfops = [
+                c for c in _re.split(r"[,;\s]+", str(valor or ""))
+                if c and c.strip().isdigit()
+            ]
+            parcial["NFE_EMAIL_CFOPS_ESPECIAIS"] = ", ".join(cfops)
+        if "destinatarios_especiais" in payload:
+            valor = payload["destinatarios_especiais"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
+            parcial["NFE_EMAIL_DESTINATARIOS_ESPECIAIS"] = str(valor or "").strip()
         salvar_persistido(parcial)
 
         # Se ligou/desligou auto_enabled, garante que o scheduler esta na situacao correta
@@ -180,6 +196,8 @@ def api_nfe_email_config():
         "auto_desde": current_app.config.get("NFE_EMAIL_AUTO_DESDE"),
         "cc": current_app.config.get("NFE_EMAIL_CC", ""),
         "poll_intervalo": int(current_app.config.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", 300)),
+        "cfops_especiais": current_app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS", ""),
+        "destinatarios_especiais": current_app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", ""),
     })
 
 

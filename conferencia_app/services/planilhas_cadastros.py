@@ -74,18 +74,28 @@ def _carregar_planilha(path: str, tipo: str) -> dict[str, dict[str, str]]:
         if not headers:
             return {}
 
-        if tipo == "clientes":
+        if tipo == "unico":
+            # Formato "cadastros email.xlsx": tipo, codigo, fantasia, razao_social, cnpj, fone, e_mail
+            col_cnpj = _localizar_col(headers, "cnpj", "CNPJ / CPF", "CNPJ/CPF", "*C.N.P.J/CPF")
+            col_nome = _localizar_col(headers, "razao_social", "Razão Social", "*Nome", "Nome", "fantasia")
+            col_email_1 = _localizar_col(headers, "e_mail", "email", "E-mail")
+            col_email_2 = _localizar_col(headers, "E-mail para Envio DANFE", "E-mail de Entrega")
+            col_email_3 = None
+            col_tipo = _localizar_col(headers, "tipo")
+        elif tipo == "clientes":
             col_cnpj = _localizar_col(headers, "CNPJ / CPF", "CNPJ/CPF", "*C.N.P.J/CPF", "CNPJ")
             col_nome = _localizar_col(headers, "*Nome", "Nome", "R. Social")
             col_email_1 = _localizar_col(headers, "E-mail de Entrega")
             col_email_2 = _localizar_col(headers, "E-mail para Envio DANFE")
             col_email_3 = _localizar_col(headers, "E-mail")
+            col_tipo = None
         else:  # fornecedores
             col_cnpj = _localizar_col(headers, "*C.N.P.J/CPF", "CNPJ/CPF", "CNPJ / CPF", "CNPJ")
             col_nome = _localizar_col(headers, "*Nome", "Nome", "*Razão Social", "Razão Social")
             col_email_1 = _localizar_col(headers, "E-mail para Envio DANFE")
             col_email_2 = _localizar_col(headers, "E-mail")
             col_email_3 = None
+            col_tipo = None
 
         if col_cnpj is None:
             return {}
@@ -105,9 +115,16 @@ def _carregar_planilha(path: str, tipo: str) -> dict[str, dict[str, str]]:
             email = _primeiro_email_valido(*emails)
             if not email:
                 continue
+            sub = ""
+            if col_tipo is not None and col_tipo < len(row) and row[col_tipo]:
+                sub = str(row[col_tipo]).strip().lower()
             # primeiro registro com email prevalece (evita substituir por duplicata sem e-mail)
             if cnpj not in resultado:
-                resultado[cnpj] = {"email": email, "nome": nome, "origem": tipo}
+                resultado[cnpj] = {
+                    "email": email,
+                    "nome": nome,
+                    "origem": sub or tipo,
+                }
         return resultado
     finally:
         wb.close()
@@ -141,16 +158,22 @@ def _raiz_workspace() -> str:
         return os.getcwd()
 
 
+_ARQUIVOS_BUSCA = (
+    # (nome_arquivo, tipo) - tentados em ordem; primeiro hit vence
+    ("cadastros email.xlsx", "unico"),
+    ("cadastros_email.xlsx", "unico"),
+    ("clientes.xlsx", "clientes"),
+    ("fornecedores.xlsx", "fornecedores"),
+)
+
+
 def buscar_email_por_cnpj(cnpj: str) -> dict[str, str]:
-    """Procura em clientes.xlsx e fornecedores.xlsx (nesta ordem). Retorna {}."""
+    """Procura em cadastros email.xlsx, clientes.xlsx e fornecedores.xlsx (ordem). Retorna {}."""
     cnpj = _somente_digitos(cnpj)
     if not cnpj:
         return {}
     raiz = _raiz_workspace()
-    for arquivo, tipo in (
-        ("clientes.xlsx", "clientes"),
-        ("fornecedores.xlsx", "fornecedores"),
-    ):
+    for arquivo, tipo in _ARQUIVOS_BUSCA:
         dados = _cache_get(os.path.join(raiz, arquivo), tipo)
         hit = dados.get(cnpj)
         if hit:
@@ -162,7 +185,7 @@ def estatisticas_planilhas() -> dict:
     """Util para debug/tela de configuracao."""
     raiz = _raiz_workspace()
     out = {"raiz": raiz, "arquivos": []}
-    for arquivo, tipo in (("clientes.xlsx", "clientes"), ("fornecedores.xlsx", "fornecedores")):
+    for arquivo, tipo in _ARQUIVOS_BUSCA:
         path = os.path.join(raiz, arquivo)
         existe = os.path.exists(path)
         dados = _cache_get(path, tipo) if existe else {}

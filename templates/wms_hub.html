@@ -5,8 +5,8 @@
 {% block shell_subtitle %}Visão integrada de armazenagem, movimentação e governança.{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_hub.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}?v={{ asset_version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_hub.css') }}?v={{ asset_version }}">
 {% endblock %}
 
 {% block content %}

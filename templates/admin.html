@@ -3,7 +3,7 @@
 {% block title %}Pré-Nota | Captura de Documentos{% endblock %}
 
 {% block extra_head %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
     <style>
         :root {
             /* Alias p/ design system unificado (paleta Columbia em recebimento_sap.css) */

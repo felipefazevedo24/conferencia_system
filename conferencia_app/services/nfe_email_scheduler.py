@@ -51,9 +51,15 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                 timeout=30,
             )
         except Exception as exc:
-            app.logger.error("Scheduler NF-e: falha Consyste: %s", exc)
+            import requests as _rq
+            if isinstance(exc, (_rq.exceptions.ConnectionError, _rq.exceptions.Timeout)):
+                app.logger.warning("Scheduler NF-e: sem conectividade com Consyste (%s)", exc.__class__.__name__)
+                msg = f"Consyste offline: {exc.__class__.__name__}"
+            else:
+                app.logger.error("Scheduler NF-e: falha Consyste: %s", exc)
+                msg = f"Consyste erro: {exc}"
             _set_status(last_run=datetime.now(), last_status="erro",
-                        last_message=f"Consyste erro: {exc}")
+                        last_message=msg)
             return {"ok": False, "erro": str(exc)}
 
         if not ok:

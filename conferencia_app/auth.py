@@ -43,6 +43,9 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_AGENDAMENTO": "Logistica > Gestao de Rotas",
     "PAGE_LOGISTICA_SOLICITACAO": "Logistica > Solicitar Coleta/Entrega",
     "PAGE_LOGISTICA_MOTORISTA": "Logistica > Painel do Motorista",  # motorista
+    "PAGE_LOGISTICA_RASTREAMENTO": "Logistica > Rastreamento de Veiculos",
+    "PAGE_LOGISTICA_FROTA": "Logistica > Gestao de Frota",
+    "PAGE_LOGISTICA_VIAGEM": "Logistica > Gestao de Viagens",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestao (Admin)",
 }
 
@@ -69,6 +72,9 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_EXPEDICAO_ROMANEIO",
         "PAGE_LOGISTICA_AGENDAMENTO",
         "PAGE_LOGISTICA_SOLICITACAO",
+        "PAGE_LOGISTICA_RASTREAMENTO",
+        "PAGE_LOGISTICA_FROTA",
+        "PAGE_LOGISTICA_VIAGEM",
     },
     "Portaria": {
         "PAGE_PORTARIA",

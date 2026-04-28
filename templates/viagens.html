@@ -1,0 +1,1137 @@
+{% extends "base.html" %}
+
+{% block title %}Logística - Gestão de Viagens{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+    :root {
+        --doc-bg: var(--rec-bg);
+        --doc-card: var(--rec-surface);
+        --doc-ink: var(--rec-ink-700);
+        --doc-muted: var(--rec-ink-500);
+        --doc-border: var(--rec-border);
+        --doc-primary: var(--rec-blue-600);
+        --doc-primary-soft: var(--rec-blue-050);
+        --doc-success: var(--rec-green-600);
+        --doc-success-soft: var(--rec-green-100);
+        --doc-warning: var(--rec-amber-500);
+        --doc-warning-soft: var(--rec-amber-100);
+        --doc-danger: var(--rec-red-600);
+        --doc-danger-soft: var(--rec-red-100);
+        --doc-emerald: #059669;
+        --doc-emerald-soft: #d1fae5;
+        --doc-shadow: var(--rec-shadow-1);
+    }
+    body { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; }
+    .doc-entry-shell { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    .doc-entry-hero {
+        background: radial-gradient(circle at 20% 20%, rgba(5,150,105,.14), transparent 45%),
+                    linear-gradient(135deg, #ffffff 0%, #ecfdf5 100%);
+        border: 1px solid var(--doc-border);
+        border-bottom: 3px solid var(--doc-emerald);
+        border-radius: 22px;
+        padding: 24px 28px;
+        margin-bottom: 18px;
+        box-shadow: var(--doc-shadow);
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
+    }
+    .doc-kicker { font-size: 11px; font-weight: 800; color: var(--doc-emerald); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .doc-title { margin: 0; font-size: 23px; font-weight: 800; color: #0f172a; }
+    .doc-subtitle { margin: 6px 0 0; color: var(--doc-muted); font-size: 13.5px; max-width: 720px; }
+    .doc-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .doc-btn { border: none; padding: 9px 16px; border-radius: 9px; font-weight: 700; font-size: 12.5px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: filter .15s, transform .15s; }
+    .doc-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .doc-btn-primary { background: linear-gradient(135deg, #059669, #065f46); color: #fff; }
+    .doc-btn-secondary { background: #fff; color: var(--doc-emerald); border: 1.5px solid var(--doc-emerald); }
+    .doc-btn-outline { background: #fff; color: var(--doc-primary); border: 1.5px solid var(--doc-primary); }
+    .doc-btn-success { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; }
+    .doc-btn-warning { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
+    .doc-btn-danger { background: linear-gradient(135deg, #dc2626, #991b1b); color: #fff; }
+    .doc-btn-sm { padding: 6px 10px; font-size: 11.5px; }
+    .doc-btn-ghost { background: transparent; color: var(--doc-muted); padding: 5px 9px; font-size: 11.5px; border: 1px solid transparent; }
+    .doc-btn-ghost:hover { color: var(--doc-primary); background: var(--doc-primary-soft); }
+
+    .doc-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .doc-kpi-card { padding: 16px; border-radius: 14px; background: linear-gradient(135deg, #fff, #f8fafc); border: 1px solid var(--doc-border); box-shadow: var(--doc-shadow); display: flex; align-items: center; gap: 14px; }
+    .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+    .doc-kpi-icon.primary { background: linear-gradient(135deg, #059669, #065f46); }
+    .doc-kpi-icon.info { background: linear-gradient(135deg, #155eef, #0b2a6b); }
+    .doc-kpi-icon.warn { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .doc-kpi-icon.slate { background: linear-gradient(135deg, #64748b, #334155); }
+    .doc-kpi-label { font-size: 10.5px; font-weight: 700; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .doc-kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+    .doc-kpi-foot { font-size: 11px; color: var(--doc-muted); margin-top: 2px; }
+
+    .doc-workspace { display: grid; grid-template-columns: 420px 1fr; gap: 16px; align-items: flex-start; }
+    @media (max-width: 1200px) { .doc-workspace { grid-template-columns: 1fr; } }
+
+    .doc-panel { background: var(--doc-card); border: 1px solid var(--doc-border); border-radius: 14px; box-shadow: var(--doc-shadow); overflow: hidden; }
+    .doc-panel-head { padding: 12px 16px; border-bottom: 1px solid var(--doc-border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(180deg, #f8fafc, #fff); flex-wrap: wrap; gap: 8px; }
+    .doc-panel-title { font-size: 12.5px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: .5px; display: flex; align-items: center; gap: 8px; }
+    .doc-panel-count { background: var(--doc-emerald-soft); color: var(--doc-emerald); padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+
+    .doc-filters { padding: 12px 16px; border-bottom: 1px solid var(--doc-border); display: flex; gap: 8px; flex-wrap: wrap; background: #fcfcfd; }
+    .doc-filters select, .doc-filters input { padding: 7px 10px; border: 1.5px solid var(--doc-border); border-radius: 7px; font-size: 12px; flex: 1; min-width: 120px; }
+
+    .viagem-list { max-height: 76vh; overflow-y: auto; display: flex; flex-direction: column; }
+    .viagem-card { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .15s; display: block; }
+    .viagem-card:hover { background: #f8fafc; }
+    .viagem-card.selected { background: var(--doc-emerald-soft); border-left: 3px solid var(--doc-emerald); padding-left: 13px; }
+    .vc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+    .vc-code { font-family: "Courier New", monospace; font-weight: 800; font-size: 13px; color: var(--doc-emerald); }
+    .vc-titulo { font-size: 13.5px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .vc-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--doc-muted); }
+    .vc-meta i { color: var(--doc-emerald); margin-right: 3px; }
+
+    .doc-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .doc-chip.planejada { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .doc-chip.em-andamento { background: var(--doc-warning-soft); color: var(--doc-warning); }
+    .doc-chip.concluida { background: var(--doc-emerald-soft); color: var(--doc-emerald); }
+    .doc-chip.cancelada { background: var(--doc-danger-soft); color: var(--doc-danger); }
+    .doc-chip.info { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .doc-chip.ok { background: var(--doc-success-soft); color: var(--doc-success); }
+    .doc-chip.warn { background: var(--doc-warning-soft); color: var(--doc-warning); }
+    .doc-chip.danger { background: var(--doc-danger-soft); color: var(--doc-danger); }
+    .doc-chip.slate { background: #f1f5f9; color: #475569; }
+
+    .detalhe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 16px; }
+    @media (max-width: 900px) { .detalhe-grid { grid-template-columns: 1fr; } }
+    .detalhe-item { font-size: 12.5px; }
+    .detalhe-item label { display: block; font-size: 10.5px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+    .detalhe-item value, .detalhe-item .v { display: block; font-weight: 700; color: #0f172a; }
+
+    #map-viagem { height: 360px; width: 100%; }
+    .mini-map-wrapper { border-top: 1px solid var(--doc-border); }
+
+    /* Paradas */
+    .paradas-list { padding: 0; }
+    .parada-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; align-items: flex-start; }
+    .parada-row:last-child { border-bottom: none; }
+    .parada-seq { width: 28px; height: 28px; border-radius: 50%; background: var(--doc-primary-soft); color: var(--doc-primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+    .parada-row.concluida .parada-seq { background: var(--doc-emerald-soft); color: var(--doc-emerald); }
+    .parada-row.em-andamento .parada-seq { background: var(--doc-warning-soft); color: var(--doc-warning); }
+    .parada-row.nao-realizada .parada-seq { background: var(--doc-danger-soft); color: var(--doc-danger); }
+    .parada-titulo { font-size: 13.5px; font-weight: 700; color: #0f172a; }
+    .parada-ender { font-size: 12px; color: var(--doc-muted); margin-top: 2px; }
+    .parada-meta { margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--doc-muted); }
+    .parada-acoes { display: flex; gap: 6px; flex-direction: column; }
+
+    /* Timeline */
+    .timeline { padding: 12px 16px; max-height: 420px; overflow-y: auto; }
+    .tl-item { display: grid; grid-template-columns: 36px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px dashed #e2e8f0; }
+    .tl-item:last-child { border-bottom: none; }
+    .tl-icon { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; background: var(--doc-muted); align-self: flex-start; }
+    .tl-icon.success { background: var(--doc-emerald); }
+    .tl-icon.info { background: var(--doc-primary); }
+    .tl-icon.warning { background: var(--doc-warning); }
+    .tl-icon.danger { background: var(--doc-danger); }
+    .tl-titulo { font-size: 13px; font-weight: 700; color: #0f172a; }
+    .tl-desc { font-size: 11.5px; color: var(--doc-muted); margin-top: 2px; }
+    .tl-hora { font-size: 10.5px; color: var(--doc-muted); font-weight: 700; }
+
+    .doc-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: none; z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+    .doc-modal-overlay.show { display: flex; }
+    .doc-modal { background: #fff; border-radius: 14px; max-width: 680px; width: 100%; box-shadow: 0 24px 48px rgba(0,0,0,.25); overflow: hidden; max-height: 92vh; display: flex; flex-direction: column; }
+    .doc-modal.large { max-width: 980px; }
+    .doc-modal-head { padding: 14px 18px; border-bottom: 1px solid var(--doc-border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #065f46, #059669); color: #fff; }
+    .doc-modal-head h3 { margin: 0; font-size: 14.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+    .doc-modal-close { background: transparent; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; }
+    .doc-modal-body { padding: 18px; overflow-y: auto; }
+    .doc-modal-foot { padding: 12px 18px; border-top: 1px solid var(--doc-border); display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+
+    .doc-form-block { margin-bottom: 12px; }
+    .doc-form-label { font-size: 11px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; display: block; }
+    .doc-input, .doc-select, .doc-textarea { width: 100%; padding: 9px 12px; border: 1.5px solid var(--doc-border); border-radius: 7px; font-size: 13px; background: #fff; font-family: inherit; }
+    .doc-textarea { resize: vertical; min-height: 68px; }
+    .doc-input:focus, .doc-select:focus, .doc-textarea:focus { border-color: var(--doc-emerald); outline: none; box-shadow: 0 0 0 3px rgba(5,150,105,.18); }
+    .doc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .doc-form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    .sol-pick-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--doc-border); border-radius: 8px; padding: 6px; background: #fafbff; }
+    .sol-pick { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; align-items: center; font-size: 12px; }
+    .sol-pick:hover { background: #eef3ff; }
+    .sol-pick.selected { background: var(--doc-emerald-soft); }
+    .sol-pick code { font-family: "Courier New", monospace; color: var(--doc-primary); font-weight: 800; font-size: 11.5px; }
+
+    .doc-empty { text-align: center; padding: 36px 20px; color: var(--doc-muted); }
+    .doc-empty i { font-size: 36px; color: #cbd5e1; margin-bottom: 8px; }
+
+    .doc-feedback { position: fixed; top: 20px; right: 20px; padding: 14px 18px; border-radius: 12px; background: #fff; border-left: 4px solid var(--doc-primary); box-shadow: 0 10px 24px rgba(0,0,0,.15); z-index: 2100; display: none; max-width: 380px; }
+    .doc-feedback.show { display: block; animation: slideIn .3s ease; }
+    .doc-feedback.success { border-left-color: var(--doc-success); }
+    .doc-feedback.error { border-left-color: var(--doc-danger); }
+    @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .relatorio-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 16px; background: #f8fafc; border-bottom: 1px solid var(--doc-border); }
+    .relatorio-stat { background: #fff; border: 1px solid var(--doc-border); border-radius: 8px; padding: 10px 12px; }
+    .relatorio-stat label { display: block; font-size: 10px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+    .relatorio-stat value, .relatorio-stat .v { display: block; font-size: 16px; font-weight: 800; color: #0f172a; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="doc-entry-shell">
+    <div class="doc-entry-hero">
+        <div>
+            <div class="doc-kicker"><i class="fa-solid fa-route"></i> Logística · Gestão de Viagens</div>
+            <h1 class="doc-title">Viagens</h1>
+            <p class="doc-subtitle">Planeje, execute e consolide cada viagem. Rastreamento por viagem com paradas, GPS, ocorrências, abastecimento e relatório final.</p>
+        </div>
+        <div class="doc-hero-actions">
+            <a href="/logistica/frota" class="doc-btn doc-btn-outline"><i class="fa-solid fa-truck-field"></i> Frota</a>
+            <a href="/logistica/rastreamento" class="doc-btn doc-btn-outline"><i class="fa-solid fa-location-crosshairs"></i> Mapa</a>
+            <button class="doc-btn doc-btn-outline" onclick="abrirModalImportarRota()"><i class="fa-solid fa-map-marked-alt"></i> Importar Rota</button>
+            <button class="doc-btn doc-btn-primary" onclick="abrirModalNova()"><i class="fa-solid fa-plus"></i> Nova viagem</button>
+        </div>
+    </div>
+
+    <div class="doc-kpi-grid" id="kpi-grid"></div>
+
+    <div class="doc-workspace">
+        <!-- COLUNA ESQUERDA: lista -->
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-list"></i> Viagens <span class="doc-panel-count" id="viagem-count">0</span></div>
+                <button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="carregarLista()"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+            <div class="doc-filters">
+                <select id="f-status">
+                    <option value="">Todos status</option>
+                    <option value="Planejada">Planejada</option>
+                    <option value="EmAndamento">Em andamento</option>
+                    <option value="Concluida">Concluída</option>
+                    <option value="Cancelada">Cancelada</option>
+                </select>
+                <select id="f-veiculo"><option value="">Todos veículos</option></select>
+            </div>
+            <div class="viagem-list" id="viagem-list"></div>
+        </div>
+
+        <!-- COLUNA DIREITA: detalhe -->
+        <div id="detalhe-container">
+            <div class="doc-panel">
+                <div class="doc-empty" style="padding:80px 20px">
+                    <i class="fa-solid fa-route"></i>
+                    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:4px">Selecione uma viagem</div>
+                    <div style="margin-top:4px">ou clique em "Nova viagem" para criar.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Nova viagem -->
+<div class="doc-modal-overlay" id="modal-nova">
+    <div class="doc-modal large">
+        <div class="doc-modal-head"><h3>Nova viagem</h3><button class="doc-modal-close" onclick="fecharModal('modal-nova')">&times;</button></div>
+        <form id="form-nova">
+            <div class="doc-modal-body">
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo *</label>
+                        <select name="veiculo_id" class="doc-select" required id="nova-veiculo"></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Motorista</label>
+                        <select name="motorista_id" class="doc-select" id="nova-motorista"><option value="">—</option></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Tipo</label>
+                        <select name="tipo" class="doc-select">
+                            <option value="MISTA">Mista</option>
+                            <option value="COLETA">Coleta</option>
+                            <option value="ENTREGA">Entrega</option>
+                            <option value="TRANSFERENCIA">Transferência</option>
+                            <option value="OUTRO">Outro</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Título</label>
+                    <input type="text" name="titulo" class="doc-input" placeholder="Ex: Rota SP-Campinas">
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Saída prevista</label>
+                        <input type="datetime-local" name="saida_prevista" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Retorno previsto</label>
+                        <input type="datetime-local" name="retorno_previsto" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">KM previsto (total)</label>
+                        <input type="text" name="km_previsto" class="doc-input" placeholder="Ex: 180">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Origem</label>
+                        <input type="text" name="origem_label" class="doc-input" placeholder="Ex: Hortolândia-SP">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Paradas / Solicitações pendentes</label>
+                    <div class="sol-pick-list" id="sol-pick-list"></div>
+                    <div style="font-size:11.5px;color:var(--doc-muted);margin-top:6px">Clique nas solicitações que farão parte da viagem. Você também pode adicionar paradas livres depois.</div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Observação</label>
+                    <textarea name="observacao" class="doc-textarea"></textarea>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-nova')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-primary"><i class="fa-solid fa-save"></i> Criar viagem</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Importar Rota Planejada -->
+<div class="doc-modal-overlay" id="modal-importar-rota">
+    <div class="doc-modal large">
+        <div class="doc-modal-head">
+            <h3><i class="fa-solid fa-map-marked-alt"></i> Importar rota planejada</h3>
+            <button class="doc-modal-close" onclick="fecharModal('modal-importar-rota')">&times;</button>
+        </div>
+        <div class="doc-modal-body">
+            <div style="font-size:12px;color:var(--doc-muted);margin-bottom:12px">
+                Selecione a data para ver as rotas montadas em <strong>Gestão de Rotas</strong>. Cada rota pode ser convertida em uma viagem com todas as paradas já preenchidas.
+            </div>
+            <div class="doc-form-row">
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Data</label>
+                    <input type="date" id="rota-data" class="doc-input" onchange="carregarRotasPlanejadas()">
+                </div>
+                <div class="doc-form-block" style="display:flex;align-items:flex-end">
+                    <button type="button" class="doc-btn doc-btn-outline" onclick="carregarRotasPlanejadas()">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                    </button>
+                </div>
+            </div>
+            <div id="rotas-planejadas-list" style="margin-top:12px"></div>
+        </div>
+        <div class="doc-modal-foot">
+            <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-importar-rota')">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Iniciar -->
+<div class="doc-modal-overlay" id="modal-iniciar">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Iniciar viagem</h3><button class="doc-modal-close" onclick="fecharModal('modal-iniciar')">&times;</button></div>
+        <form id="form-iniciar">
+            <div class="doc-modal-body">
+                <div class="doc-form-block">
+                    <label class="doc-form-label">KM inicial (odômetro)</label>
+                    <input type="number" name="km_inicial" class="doc-input" required>
+                </div>
+                <div style="font-size:12.5px;color:var(--doc-muted)">A posição atual será capturada automaticamente se o navegador permitir.</div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-iniciar')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-success"><i class="fa-solid fa-play"></i> Iniciar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Concluir -->
+<div class="doc-modal-overlay" id="modal-concluir">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Concluir viagem</h3><button class="doc-modal-close" onclick="fecharModal('modal-concluir')">&times;</button></div>
+        <form id="form-concluir">
+            <div class="doc-modal-body">
+                <div class="doc-form-block">
+                    <label class="doc-form-label">KM final (odômetro)</label>
+                    <input type="number" name="km_final" class="doc-input" required>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-concluir')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-primary"><i class="fa-solid fa-flag-checkered"></i> Concluir</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Cancelar -->
+<div class="doc-modal-overlay" id="modal-cancelar">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Cancelar viagem</h3><button class="doc-modal-close" onclick="fecharModal('modal-cancelar')">&times;</button></div>
+        <form id="form-cancelar">
+            <div class="doc-modal-body">
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Motivo *</label>
+                    <textarea name="motivo" class="doc-textarea" required></textarea>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-cancelar')">Voltar</button>
+                <button type="submit" class="doc-btn doc-btn-danger"><i class="fa-solid fa-ban"></i> Cancelar viagem</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Ocorrência -->
+<div class="doc-modal-overlay" id="modal-ocorrencia">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Registrar ocorrência</h3><button class="doc-modal-close" onclick="fecharModal('modal-ocorrencia')">&times;</button></div>
+        <form id="form-ocorrencia" enctype="multipart/form-data">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Tipo *</label>
+                        <select name="tipo" class="doc-select">
+                            <option value="OCORRENCIA">Ocorrência</option>
+                            <option value="OBSERVACAO">Observação</option>
+                            <option value="PARADA_EXTRA">Parada extra</option>
+                            <option value="FOTO">Foto</option>
+                        </select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Severidade</label>
+                        <select name="severidade" class="doc-select">
+                            <option value="info">Informativo</option>
+                            <option value="success">Sucesso</option>
+                            <option value="warning">Atenção</option>
+                            <option value="danger">Grave</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Título *</label>
+                    <input type="text" name="titulo" class="doc-input" required>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Descrição</label>
+                    <textarea name="descricao" class="doc-textarea"></textarea>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Foto (opcional)</label>
+                    <input type="file" name="foto" class="doc-input" accept="image/*">
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-ocorrencia')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-primary"><i class="fa-solid fa-save"></i> Registrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Nova parada -->
+<div class="doc-modal-overlay" id="modal-parada">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Adicionar parada</h3><button class="doc-modal-close" onclick="fecharModal('modal-parada')">&times;</button></div>
+        <form id="form-parada">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Tipo</label>
+                        <select name="tipo" class="doc-select">
+                            <option value="ENTREGA">Entrega</option>
+                            <option value="COLETA">Coleta</option>
+                            <option value="PARADA">Parada</option>
+                            <option value="ABASTECIMENTO">Abastecimento</option>
+                            <option value="REFEICAO">Refeição</option>
+                        </select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Cliente/Parceiro</label>
+                        <input type="text" name="parceiro_nome" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Endereço</label>
+                    <input type="text" name="endereco" class="doc-input">
+                </div>
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Cidade</label>
+                        <input type="text" name="cidade" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">UF</label>
+                        <input type="text" name="uf" class="doc-input" maxlength="2">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Previsão chegada</label>
+                        <input type="datetime-local" name="previsao_chegada" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Latitude</label>
+                        <input type="text" name="latitude" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Longitude</label>
+                        <input type="text" name="longitude" class="doc-input">
+                    </div>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-parada')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-primary"><i class="fa-solid fa-plus"></i> Adicionar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Concluir parada -->
+<div class="doc-modal-overlay" id="modal-parada-concluir">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Concluir parada</h3><button class="doc-modal-close" onclick="fecharModal('modal-parada-concluir')">&times;</button></div>
+        <form id="form-parada-concluir" enctype="multipart/form-data">
+            <div class="doc-modal-body">
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Resultado</label>
+                    <select name="resultado" class="doc-select">
+                        <option value="Entregue">Entregue</option>
+                        <option value="Coletado">Coletado</option>
+                        <option value="Recusado">Recusado</option>
+                        <option value="AusenciaRecebedor">Ausência do recebedor</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Observação</label>
+                    <textarea name="observacao" class="doc-textarea"></textarea>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Foto comprovante (opcional)</label>
+                    <input type="file" name="foto" class="doc-input" accept="image/*">
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-parada-concluir')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-success"><i class="fa-solid fa-check"></i> Concluir parada</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="doc-feedback" id="feedback">
+    <div style="font-weight:800;color:#0f172a;font-size:13px;margin-bottom:4px" id="feedback-title"></div>
+    <div style="color:var(--doc-muted);font-size:12.5px" id="feedback-message"></div>
+</div>
+
+<script>
+// -------------------- util
+const fmtDate = s => { if (!s) return '—'; try { const d = new Date(s); return d.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return s; } };
+const fmtDateShort = s => { if (!s) return '—'; try { const d = new Date(s); return d.toLocaleDateString('pt-BR'); } catch(e) { return s; } };
+const fmtHour = s => { if (!s) return '—'; try { const d = new Date(s); return d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}); } catch(e) { return s; } };
+const fmtMoney = n => (Number(n)||0).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+const fmtNum = (n, d=1) => (Number(n)||0).toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtDuracao = m => { m = parseInt(m||0); if (!m) return '—'; const h = Math.floor(m/60); const mm = m%60; return `${h}h${String(mm).padStart(2,'0')}`; };
+
+function toast(msg, tipo='success', titulo='') {
+    const el = document.getElementById('feedback');
+    el.className = 'doc-feedback show ' + tipo;
+    document.getElementById('feedback-title').textContent = titulo || (tipo === 'error' ? 'Erro' : 'Sucesso');
+    document.getElementById('feedback-message').textContent = msg;
+    setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+async function apiGet(url) {
+    const r = await fetch(url, {credentials: 'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+}
+async function apiSend(url, method, body) {
+    const opts = {method, credentials: 'same-origin'};
+    if (body instanceof FormData) { opts.body = body; }
+    else { opts.headers = {'Content-Type': 'application/json'}; opts.body = JSON.stringify(body || {}); }
+    const r = await fetch(url, opts);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.sucesso === false) throw new Error(data.msg || 'Erro');
+    return data;
+}
+
+async function obterPosicaoAtual() {
+    return new Promise(resolve => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude, precisao_m: pos.coords.accuracy, velocidade_kmh: pos.coords.speed ? pos.coords.speed * 3.6 : null}),
+            _ => resolve(null),
+            {enableHighAccuracy: true, timeout: 4000, maximumAge: 20000}
+        );
+    });
+}
+
+// -------------------- estado
+let auxiliares = {veiculos: [], motoristas: [], solicitacoes: []};
+let viagemSelecionadaId = null;
+let viagemSelecionada = null;
+let mapView = null;
+let mapLayer = null;
+let solSelecionadas = new Set();
+
+// -------------------- kpis / dashboard
+async function carregarKPIs() {
+    const d = await apiGet('/api/viagem/dashboard');
+    const k = d.kpis;
+    document.getElementById('kpi-grid').innerHTML = `
+        <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><i class="fa-solid fa-truck-moving"></i></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon info"><i class="fa-solid fa-calendar-day"></i></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
+}
+
+// -------------------- lista
+async function carregarLista() {
+    const params = new URLSearchParams();
+    const st = document.getElementById('f-status').value;
+    const ve = document.getElementById('f-veiculo').value;
+    if (st) params.set('status', st);
+    if (ve) params.set('veiculo_id', ve);
+    const data = await apiGet('/api/viagem/lista?' + params.toString());
+    document.getElementById('viagem-count').textContent = data.length;
+    const box = document.getElementById('viagem-list');
+    if (!data.length) { box.innerHTML = '<div class="doc-empty" style="padding:40px 20px"><i class="fa-regular fa-folder-open"></i><div style="font-weight:700;color:#0f172a">Nenhuma viagem</div><div>Crie uma nova viagem para começar.</div></div>'; return; }
+    box.innerHTML = data.map(v => `
+        <div class="viagem-card ${v.id === viagemSelecionadaId ? 'selected' : ''}" onclick="abrirDetalhe(${v.id})">
+            <div class="vc-top">
+                <span class="vc-code">${v.codigo}</span>
+                <span class="doc-chip ${v.status.toLowerCase().replace('em', 'em-')}">${v.status === 'EmAndamento' ? 'Em andamento' : v.status}</span>
+            </div>
+            <div class="vc-titulo">${v.titulo || v.tipo}</div>
+            <div class="vc-meta">
+                <span><i class="fa-solid fa-truck"></i>${v.veiculo_label}</span>
+                <span><i class="fa-solid fa-user"></i>${v.motorista_nome || '—'}</span>
+                <span><i class="fa-solid fa-flag"></i>${v.qtd_paradas_ok}/${v.qtd_paradas}</span>
+                ${v.saida_prevista ? `<span><i class="fa-regular fa-clock"></i>${fmtDate(v.saida_prevista)}</span>` : ''}
+            </div>
+        </div>`).join('');
+}
+
+// -------------------- detalhe
+async function abrirDetalhe(id) {
+    viagemSelecionadaId = id;
+    try {
+        const v = await apiGet('/api/viagem/' + id);
+        viagemSelecionada = v;
+        renderDetalhe(v);
+        document.querySelectorAll('.viagem-card').forEach(c => c.classList.remove('selected'));
+        const card = document.querySelector(`.viagem-card[onclick*="abrirDetalhe(${id})"]`);
+        if (card) card.classList.add('selected');
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderDetalhe(v) {
+    const cont = document.getElementById('detalhe-container');
+    const acoes = renderAcoes(v);
+    cont.innerHTML = `
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title">
+                    <i class="fa-solid fa-route"></i>
+                    <span style="font-family:'Courier New',monospace;color:var(--doc-emerald)">${v.codigo}</span>
+                    <span class="doc-chip ${v.status.toLowerCase().replace('em','em-')}">${v.status === 'EmAndamento' ? 'Em andamento' : v.status}</span>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">${acoes}</div>
+            </div>
+            ${v.status === 'Concluida' ? renderRelatorio(v) : ''}
+            <div class="detalhe-grid">
+                <div class="detalhe-item"><label>Título</label><div class="v">${v.titulo || '—'}</div></div>
+                <div class="detalhe-item"><label>Tipo</label><div class="v">${v.tipo}</div></div>
+                <div class="detalhe-item"><label>Veículo</label><div class="v">${v.veiculo_label}</div></div>
+                <div class="detalhe-item"><label>Motorista</label><div class="v">${v.motorista_nome || '—'}</div></div>
+                <div class="detalhe-item"><label>Saída prevista / real</label><div class="v">${fmtDate(v.saida_prevista)} → ${fmtDate(v.saida_real)}</div></div>
+                <div class="detalhe-item"><label>Retorno previsto / real</label><div class="v">${fmtDate(v.retorno_previsto)} → ${fmtDate(v.retorno_real)}</div></div>
+                <div class="detalhe-item"><label>KM inicial / final</label><div class="v">${v.km_inicial ?? '—'} → ${v.km_final ?? '—'}</div></div>
+                <div class="detalhe-item"><label>Duração</label><div class="v">${fmtDuracao(v.tempo_total_min)}</div></div>
+                ${v.observacao ? `<div class="detalhe-item" style="grid-column:1/-1"><label>Observação</label><div class="v">${v.observacao}</div></div>` : ''}
+                ${v.motivo_cancelamento ? `<div class="detalhe-item" style="grid-column:1/-1"><label>Motivo cancelamento</label><div class="v" style="color:var(--doc-danger)">${v.motivo_cancelamento}</div></div>` : ''}
+            </div>
+            <div class="mini-map-wrapper"><div id="map-viagem"></div></div>
+        </div>
+
+        <div class="doc-panel" style="margin-top:14px">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title">
+                    <i class="fa-solid fa-flag"></i> Paradas
+                    <span class="doc-panel-count">${v.paradas.length}</span>
+                    ${v.paradas.length >= 2 ? `<span title="Sequência otimizada automaticamente pelo sistema (menor distância)" style="margin-left:8px;display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;letter-spacing:.5px"><i class="fa-solid fa-wand-magic-sparkles"></i> IA</span>` : ''}
+                </div>
+                ${v.status !== 'Concluida' && v.status !== 'Cancelada' ? `<button class="doc-btn doc-btn-outline doc-btn-sm" onclick="abrirModalParada()"><i class="fa-solid fa-plus"></i> Parada</button>` : ''}
+            </div>
+            <div class="paradas-list">${renderParadas(v)}</div>
+        </div>
+
+        <div class="doc-panel" style="margin-top:14px">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-timeline"></i> Linha do tempo <span class="doc-panel-count">${v.eventos.length}</span></div>
+                ${v.status === 'EmAndamento' ? `<button class="doc-btn doc-btn-warning doc-btn-sm" onclick="abrirModalOcorrencia()"><i class="fa-solid fa-triangle-exclamation"></i> Registrar ocorrência</button>` : ''}
+            </div>
+            <div class="timeline">${renderTimeline(v)}</div>
+        </div>
+    `;
+    setTimeout(() => renderMapa(v), 50);
+}
+
+function renderAcoes(v) {
+    const acoes = [];
+    if (v.motorista_link) {
+        acoes.push(`<button class="doc-btn doc-btn-outline doc-btn-sm" onclick="abrirLinkMotorista()" title="Link/QR para o celular do motorista"><i class="fa-solid fa-mobile-screen"></i> App motorista</button>`);
+    }
+    if (v.status === 'Planejada') {
+        // Liberar / Revogar
+        if (!v.liberada && v.paradas && v.paradas.length > 0) {
+            acoes.push(`<button class="doc-btn doc-btn-primary doc-btn-sm" onclick="liberarViagem()" title="Liberar viagem para o motorista ver no painel dele"><i class="fa-solid fa-paper-plane"></i> Liberar p/ motorista</button>`);
+        } else if (v.liberada) {
+            const chip = v.destino_unico
+                ? `<span class="doc-chip info" title="Destino único confirmado pelo gestor" style="margin-right:6px"><i class="fa-solid fa-location-dot"></i> Destino único</span>`
+                : `<span class="doc-chip ok" title="Liberada em ${v.liberada_em || ''} por ${v.liberada_por || ''}" style="margin-right:6px"><i class="fa-solid fa-circle-check"></i> Liberada</span>`;
+            acoes.push(chip);
+            acoes.push(`<button class="doc-btn doc-btn-outline doc-btn-sm" style="background:#25d366;color:#fff;border-color:#25d366" onclick="notificarWhatsApp()" title="Notificar motorista pelo WhatsApp"><i class="fa-brands fa-whatsapp"></i> Avisar no WhatsApp</button>`);
+            acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="revogarLiberacao()" title="Revogar liberação — motorista deixa de ver"><i class="fa-solid fa-rotate-left"></i> Revogar</button>`);
+        }
+        acoes.push(`<button class="doc-btn doc-btn-success doc-btn-sm" onclick="iniciarViagem()"><i class="fa-solid fa-play"></i> Iniciar</button>`);
+        acoes.push(`<button class="doc-btn doc-btn-danger doc-btn-sm" onclick="cancelarViagem()"><i class="fa-solid fa-ban"></i> Cancelar</button>`);
+        acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="excluirViagem()"><i class="fa-solid fa-trash"></i></button>`);
+    } else if (v.status === 'EmAndamento') {
+        acoes.push(renderGpsChip(v));
+        acoes.push(`<button class="doc-btn doc-btn-success doc-btn-sm" onclick="concluirViagem()"><i class="fa-solid fa-flag-checkered"></i> Concluir</button>`);
+        acoes.push(`<button class="doc-btn doc-btn-danger doc-btn-sm" onclick="cancelarViagem()"><i class="fa-solid fa-ban"></i> Cancelar</button>`);
+    } else if (v.status === 'Cancelada') {
+        acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="excluirViagem()"><i class="fa-solid fa-trash"></i> Excluir</button>`);
+    }
+    return acoes.join('');
+}
+
+function abrirLinkMotorista() {
+    if (!viagemSelecionada?.motorista_link) return;
+    const link = viagemSelecionada.motorista_link;
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
+    const html = `
+        <div class="doc-modal-overlay show" id="modal-link-mot" onclick="if(event.target===this)this.remove()">
+            <div class="doc-modal">
+                <div class="doc-modal-head"><h3><i class="fa-solid fa-mobile-screen"></i> Link do motorista</h3><button class="doc-modal-close" onclick="document.getElementById('modal-link-mot').remove()">&times;</button></div>
+                <div class="doc-modal-body" style="text-align:center">
+                    <p style="font-size:13px;color:var(--doc-muted);margin-bottom:14px">O motorista abre este link no celular, toca em <b>"Iniciar rastreamento"</b> e deixa a tela aberta. A posição será enviada automaticamente.</p>
+                    <img src="${qr}" alt="QR code" style="border:1px solid var(--doc-border);border-radius:10px;padding:8px;background:#fff">
+                    <div style="margin-top:14px"><input type="text" value="${link}" readonly class="doc-input" id="inp-link-mot" onclick="this.select()"></div>
+                    <button class="doc-btn doc-btn-primary" style="margin-top:10px" onclick="navigator.clipboard.writeText('${link}');toast('Link copiado.')"><i class="fa-solid fa-copy"></i> Copiar link</button>
+                    <a class="doc-btn doc-btn-secondary" style="margin-top:10px;margin-left:6px" href="https://wa.me/?text=${encodeURIComponent('Link de rastreamento da viagem ' + viagemSelecionada.codigo + ': ' + link)}" target="_blank"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+                </div>
+            </div>
+        </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function renderRelatorio(v) {
+    return `<div class="relatorio-stats">
+        <div class="relatorio-stat"><label>KM percorrido</label><div class="v">${fmtNum(v.km_percorrido, 1)} km</div></div>
+        <div class="relatorio-stat"><label>Duração</label><div class="v">${fmtDuracao(v.tempo_total_min)}</div></div>
+        <div class="relatorio-stat"><label>Paradas</label><div class="v">${v.qtd_paradas_ok}/${v.qtd_paradas}</div></div>
+        <div class="relatorio-stat"><label>Litros abastecidos</label><div class="v">${fmtNum(v.total_litros, 2)}</div></div>
+        <div class="relatorio-stat"><label>Gasto combustível</label><div class="v">${fmtMoney(v.total_gasto)}</div></div>
+        <div class="relatorio-stat"><label>Pontos GPS</label><div class="v">${v.qtd_pontos_gps}</div></div>
+    </div>`;
+}
+
+function renderParadas(v) {
+    if (!v.paradas.length) return '<div class="doc-empty"><i class="fa-regular fa-flag"></i><div>Nenhuma parada cadastrada</div></div>';
+    return v.paradas.map(p => {
+        const stClass = {
+            'Pendente': '',
+            'EmAndamento': 'em-andamento',
+            'Concluida': 'concluida',
+            'Nao_realizada': 'nao-realizada',
+            'Cancelada': 'nao-realizada',
+        }[p.status] || '';
+        const acoes = [];
+        if (v.status === 'EmAndamento') {
+            if (p.status === 'Pendente') {
+                acoes.push(`<button class="doc-btn doc-btn-outline doc-btn-sm" onclick="paradaChegar(${p.id})"><i class="fa-solid fa-location-dot"></i> Cheguei</button>`);
+            }
+            if (p.status === 'EmAndamento' || p.status === 'Pendente') {
+                acoes.push(`<button class="doc-btn doc-btn-success doc-btn-sm" onclick="paradaConcluir(${p.id})"><i class="fa-solid fa-check"></i> Concluir</button>`);
+                acoes.push(`<button class="doc-btn doc-btn-danger doc-btn-sm" onclick="paradaNaoRealizada(${p.id})"><i class="fa-solid fa-xmark"></i></button>`);
+            }
+        }
+        if (v.status === 'Planejada') {
+            acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="paradaExcluir(${p.id})"><i class="fa-solid fa-trash"></i></button>`);
+        }
+        return `<div class="parada-row ${stClass}">
+            <div class="parada-seq">${p.sequencia}</div>
+            <div>
+                <div class="parada-titulo">${p.parceiro_nome || p.tipo} <span class="doc-chip slate">${p.tipo}</span> ${p.status !== 'Pendente' ? `<span class="doc-chip ${p.status === 'Concluida' ? 'ok' : (p.status === 'Nao_realizada' ? 'danger' : 'warn')}">${p.status.replace('_',' ')}</span>` : ''}</div>
+                <div class="parada-ender">${[p.endereco, p.cidade, p.uf].filter(Boolean).join(' · ') || '—'}</div>
+                <div class="parada-meta">
+                    ${p.previsao_chegada ? `<span><i class="fa-regular fa-clock"></i> prev: ${fmtHour(p.previsao_chegada)}</span>` : ''}
+                    ${p.chegada_real ? `<span><i class="fa-solid fa-location-dot"></i> chegou: ${fmtHour(p.chegada_real)}</span>` : ''}
+                    ${p.saida_real ? `<span><i class="fa-solid fa-arrow-right"></i> saiu: ${fmtHour(p.saida_real)}</span>` : ''}
+                    ${p.resultado ? `<span class="doc-chip info">${p.resultado}</span>` : ''}
+                </div>
+                ${p.observacao ? `<div style="font-size:11.5px;color:var(--doc-muted);margin-top:4px"><i>"${p.observacao}"</i></div>` : ''}
+            </div>
+            <div class="parada-acoes">${acoes.join('')}</div>
+        </div>`;
+    }).join('');
+}
+
+function renderTimeline(v) {
+    if (!v.eventos.length) return '<div class="doc-empty"><i class="fa-regular fa-file-lines"></i><div>Sem eventos</div></div>';
+    const icons = { INICIO: 'fa-play', FIM: 'fa-flag-checkered', CHEGADA: 'fa-location-dot', SAIDA_PARADA: 'fa-arrow-right', ABASTECIMENTO: 'fa-gas-pump', OCORRENCIA: 'fa-triangle-exclamation', FOTO: 'fa-camera', PARADA_EXTRA: 'fa-flag', OBSERVACAO: 'fa-note-sticky', CHECKLIST: 'fa-clipboard-check' };
+    return v.eventos.slice().reverse().map(e => `
+        <div class="tl-item">
+            <div class="tl-icon ${e.severidade}"><i class="fa-solid ${icons[e.tipo] || 'fa-circle'}"></i></div>
+            <div>
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+                    <div class="tl-titulo">${e.titulo}</div>
+                    <div class="tl-hora">${fmtDate(e.registrado_em)}</div>
+                </div>
+                ${e.descricao ? `<div class="tl-desc">${e.descricao}</div>` : ''}
+                ${e.foto_path ? `<a href="/instance/${e.foto_path}" target="_blank" style="font-size:11px;color:var(--doc-primary);font-weight:700"><i class="fa-solid fa-paperclip"></i> foto</a>` : ''}
+                ${e.registrado_por ? `<div style="font-size:10.5px;color:var(--doc-muted);margin-top:2px">por ${e.registrado_por}</div>` : ''}
+            </div>
+        </div>`).join('');
+}
+
+function renderMapa(v) {
+    const el = document.getElementById('map-viagem');
+    if (!el) return;
+    if (mapView) { mapView.remove(); mapView = null; }
+    const pts = v.posicoes || [];
+    const paradas = (v.paradas || []).filter(p => p.latitude && p.longitude);
+    const centro = pts.length ? [pts[pts.length-1].lat, pts[pts.length-1].lng]
+                  : paradas.length ? [paradas[0].latitude, paradas[0].longitude]
+                  : [v.origem_lat || -22.8531, v.origem_lng || -47.2158];
+    mapView = L.map(el).setView(centro, pts.length || paradas.length ? 11 : 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(mapView);
+    // Rota GPS
+    if (pts.length >= 2) {
+        const coords = pts.map(p => [p.lat, p.lng]);
+        L.polyline(coords, {color: '#059669', weight: 4, opacity: 0.85}).addTo(mapView);
+        L.circleMarker(coords[0], {radius: 7, color: '#059669', fillColor: '#fff', fillOpacity: 1, weight: 3}).bindPopup('Início').addTo(mapView);
+        L.circleMarker(coords[coords.length-1], {radius: 8, color: '#dc2626', fillColor: '#fff', fillOpacity: 1, weight: 3}).bindPopup('Última posição').addTo(mapView);
+    }
+    // Paradas
+    paradas.forEach(p => {
+        const cor = p.status === 'Concluida' ? '#059669' : (p.status === 'Nao_realizada' ? '#dc2626' : '#155eef');
+        L.marker([p.latitude, p.longitude], {
+            icon: L.divIcon({
+                className: 'parada-marker',
+                html: `<div style="background:${cor};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)">${p.sequencia}</div>`,
+                iconSize: [28, 28], iconAnchor: [14, 14],
+            })
+        }).bindPopup(`<strong>${p.parceiro_nome || p.tipo}</strong><br>${p.endereco || ''}<br><small>${p.status}</small>`).addTo(mapView);
+    });
+    if (pts.length || paradas.length) {
+        const bounds = L.latLngBounds([]);
+        pts.forEach(p => bounds.extend([p.lat, p.lng]));
+        paradas.forEach(p => bounds.extend([p.latitude, p.longitude]));
+        if (bounds.isValid()) mapView.fitBounds(bounds, {padding: [25, 25], maxZoom: 14});
+    }
+    setTimeout(() => mapView.invalidateSize(), 200);
+}
+
+// -------------------- ações viagem
+function iniciarViagem() { document.forms['form-iniciar'].reset(); document.getElementById('modal-iniciar').classList.add('show'); }
+document.getElementById('form-iniciar').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const pos = await obterPosicaoAtual();
+    const payload = {km_inicial: f.get('km_inicial'), latitude: pos?.latitude, longitude: pos?.longitude};
+    try { await apiSend(`/api/viagem/${viagemSelecionadaId}/iniciar`, 'POST', payload); toast('Viagem iniciada.'); fecharModal('modal-iniciar'); abrirDetalhe(viagemSelecionadaId); carregarLista(); carregarKPIs(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+function concluirViagem() { document.forms['form-concluir'].reset(); document.getElementById('modal-concluir').classList.add('show'); }
+document.getElementById('form-concluir').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const pos = await obterPosicaoAtual();
+    try { await apiSend(`/api/viagem/${viagemSelecionadaId}/concluir`, 'POST', {km_final: f.get('km_final'), latitude: pos?.latitude, longitude: pos?.longitude}); toast('Viagem concluída.'); fecharModal('modal-concluir'); abrirDetalhe(viagemSelecionadaId); carregarLista(); carregarKPIs(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+function cancelarViagem() { document.forms['form-cancelar'].reset(); document.getElementById('modal-cancelar').classList.add('show'); }
+document.getElementById('form-cancelar').addEventListener('submit', async e => {
+    e.preventDefault();
+    try { await apiSend(`/api/viagem/${viagemSelecionadaId}/cancelar`, 'POST', {motivo: e.target.motivo.value}); toast('Viagem cancelada.'); fecharModal('modal-cancelar'); abrirDetalhe(viagemSelecionadaId); carregarLista(); carregarKPIs(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+async function excluirViagem() {
+    if (!confirm('Excluir esta viagem e todos os seus eventos/paradas?')) return;
+    try { await apiSend(`/api/viagem/${viagemSelecionadaId}`, 'DELETE'); toast('Viagem excluída.'); viagemSelecionadaId = null; document.getElementById('detalhe-container').innerHTML = '<div class="doc-panel"><div class="doc-empty" style="padding:80px 20px"><i class="fa-solid fa-route"></i><div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:4px">Selecione uma viagem</div></div></div>'; carregarLista(); carregarKPIs(); }
+    catch(err) { toast(err.message, 'error'); }
+}
+
+async function liberarViagem() {
+    const v = viagemSelecionada;
+    if (!v) return;
+    const n = (v.paradas || []).length;
+    let destinoUnico = false;
+    if (n === 1) {
+        if (!confirm('Esta viagem tem apenas 1 destino.\n\nConfirma que NÃO haverá outros destinos e pode ser liberada para o motorista?')) return;
+        destinoUnico = true;
+    } else {
+        if (!confirm(`Liberar viagem com ${n} paradas para o motorista?\n\nApós liberar, se você adicionar ou remover paradas, a liberação será revogada automaticamente.`)) return;
+    }
+    try {
+        const r = await apiSend(`/api/viagem/${viagemSelecionadaId}/liberar`, 'POST', {destino_unico: destinoUnico});
+        toast(destinoUnico ? 'Viagem liberada (destino único) ✓' : 'Viagem liberada para o motorista ✓', 'success');
+        abrirDetalhe(viagemSelecionadaId);
+    } catch(err) { toast(err.message, 'error'); }
+}
+
+async function revogarLiberacao() {
+    if (!confirm('Revogar a liberação? O motorista deixará de ver esta viagem até você liberar novamente.')) return;
+    try {
+        await apiSend(`/api/viagem/${viagemSelecionadaId}/revogar-liberacao`, 'POST', {});
+        toast('Liberação revogada.', 'success');
+        abrirDetalhe(viagemSelecionadaId);
+    } catch(err) { toast(err.message, 'error'); }
+}
+
+async function notificarWhatsApp() {
+    const v = viagemSelecionada;
+    if (!v || !v.motorista_id) { toast('Viagem sem motorista.', 'error'); return; }
+    try {
+        const r = await fetch(`/api/viagem/motorista/${v.motorista_id}/painel-link`);
+        const d = await r.json();
+        if (!r.ok || !d.sucesso) throw new Error(d.msg || 'Falha');
+        const n = (v.paradas || []).length;
+        const paradas = (v.paradas || []).slice(0, 5).map((p, i) => `${i+1}. ${p.parceiro_nome || p.tipo || 'Parada'}`).join('\n');
+        const mais = n > 5 ? `\n(+${n-5} parada(s))` : '';
+        const saida = v.saida_prevista ? new Date(v.saida_prevista).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'horário a definir';
+        const texto = `🚚 *Viagem ${v.codigo || '#'+v.id} liberada*\n\n`
+            + `Saída prevista: ${saida}\n`
+            + `Veículo: ${v.veiculo_nome || v.veiculo_placa || '—'}\n\n`
+            + (n ? `*Roteiro:*\n${paradas}${mais}\n\n` : '')
+            + `Abra seu painel:\n${d.url}`;
+        const fone = (d.motorista.telefone || '').replace(/\D/g, '');
+        if (!fone) { toast('Motorista sem telefone. Copiando link...', 'info'); navigator.clipboard.writeText(texto); return; }
+        const foneBr = fone.startsWith('55') ? fone : '55' + fone;
+        const wa = `https://wa.me/${foneBr}?text=${encodeURIComponent(texto)}`;
+        window.open(wa, '_blank', 'noopener');
+        toast('Abrindo WhatsApp...', 'success');
+    } catch(e) { toast(e.message || 'Falha ao gerar link.', 'error'); }
+}
+
+// -------------------- indicador GPS (alimentado pelo Locartrack)
+function renderGpsChip(v) {
+    const ult = (v.posicoes || []).slice(-1)[0];
+    if (!ult) return `<span class="doc-chip warn" title="Aguardando 1ª posição do Locartrack"><i class="fa-solid fa-satellite-dish"></i> Aguardando GPS</span>`;
+    const ts = new Date(ult.ts);
+    const min = Math.floor((Date.now() - ts.getTime()) / 60000);
+    if (min <= 3) return `<span class="doc-chip ok" title="Última posição ${fmtDate(ult.ts)} via Locartrack"><i class="fa-solid fa-satellite-dish"></i> GPS ao vivo</span>`;
+    if (min <= 15) return `<span class="doc-chip warn" title="Última posição ${fmtDate(ult.ts)} via Locartrack"><i class="fa-solid fa-satellite-dish"></i> GPS há ${min}min</span>`;
+    return `<span class="doc-chip danger" title="Última posição ${fmtDate(ult.ts)} via Locartrack"><i class="fa-solid fa-triangle-exclamation"></i> GPS desatualizado</span>`;
+}
+
+// -------------------- ocorrência
+function abrirModalOcorrencia() { document.forms['form-ocorrencia'].reset(); document.getElementById('modal-ocorrencia').classList.add('show'); }
+document.getElementById('form-ocorrencia').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const pos = await obterPosicaoAtual();
+    if (pos) { fd.set('latitude', pos.latitude); fd.set('longitude', pos.longitude); }
+    try { await apiSend(`/api/viagem/${viagemSelecionadaId}/eventos`, 'POST', fd); toast('Ocorrência registrada.'); fecharModal('modal-ocorrencia'); abrirDetalhe(viagemSelecionadaId); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- paradas (adicionar, chegar, concluir, não realizada)
+function abrirModalParada() { document.forms['form-parada'].reset(); document.getElementById('modal-parada').classList.add('show'); }
+document.getElementById('form-parada').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = Object.fromEntries(f.entries());
+    try {
+        const r = await apiSend(`/api/viagem/${viagemSelecionadaId}/paradas`, 'POST', payload);
+        if (r.otimizacao) toast(`Parada adicionada. ✨ IA reordenou a rota (~${r.otimizacao.distancia_km} km).`);
+        else toast('Parada adicionada.');
+        fecharModal('modal-parada');
+        abrirDetalhe(viagemSelecionadaId);
+    } catch(err) { toast(err.message, 'error'); }
+});
+
+async function paradaChegar(pid) {
+    const pos = await obterPosicaoAtual();
+    try { await apiSend(`/api/viagem/paradas/${pid}/chegar`, 'POST', pos || {}); toast('Chegada registrada.'); abrirDetalhe(viagemSelecionadaId); }
+    catch(e) { toast(e.message, 'error'); }
+}
+
+let paradaConcluirId = null;
+function paradaConcluir(pid) { paradaConcluirId = pid; document.forms['form-parada-concluir'].reset(); document.getElementById('modal-parada-concluir').classList.add('show'); }
+document.getElementById('form-parada-concluir').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const pos = await obterPosicaoAtual();
+    if (pos) { fd.set('latitude', pos.latitude); fd.set('longitude', pos.longitude); }
+    try { await apiSend(`/api/viagem/paradas/${paradaConcluirId}/concluir`, 'POST', fd); toast('Parada concluída.'); fecharModal('modal-parada-concluir'); abrirDetalhe(viagemSelecionadaId); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+async function paradaNaoRealizada(pid) {
+    const motivo = prompt('Motivo (recusado, ausência, etc):');
+    if (!motivo) return;
+    try { await apiSend(`/api/viagem/paradas/${pid}/nao-realizada`, 'POST', {motivo}); toast('Parada marcada como não realizada.'); abrirDetalhe(viagemSelecionadaId); }
+    catch(e) { toast(e.message, 'error'); }
+}
+async function paradaExcluir(pid) {
+    if (!confirm('Remover esta parada?')) return;
+    try {
+        const r = await apiSend(`/api/viagem/paradas/${pid}`, 'DELETE');
+        if (r && r.liberacao_revogada) toast('Parada removida. ⚠️ Liberação revogada — libere novamente quando a viagem estiver pronta.', 'info');
+        else toast('Parada removida.');
+        abrirDetalhe(viagemSelecionadaId);
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+// -------------------- nova viagem
+async function abrirModalNova() {
+    document.forms['form-nova'].reset();
+    solSelecionadas.clear();
+    await carregarAuxiliares();
+    document.getElementById('modal-nova').classList.add('show');
+}
+
+// -------------------- importar rota planejada
+async function abrirModalImportarRota() {
+    const dt = document.getElementById('rota-data');
+    if (!dt.value) {
+        const hoje = new Date();
+        dt.value = hoje.toISOString().slice(0, 10);
+    }
+    document.getElementById('modal-importar-rota').classList.add('show');
+    await carregarRotasPlanejadas();
+}
+async function carregarRotasPlanejadas() {
+    const data = document.getElementById('rota-data').value;
+    const box = document.getElementById('rotas-planejadas-list');
+    box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--doc-muted);font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> Carregando...</div>';
+    try {
+        const res = await apiGet(`/api/viagem/rotas-planejadas?data=${encodeURIComponent(data || '')}`);
+        if (!res.rotas || !res.rotas.length) {
+            box.innerHTML = '<div class="doc-empty" style="padding:30px 20px"><i class="fa-regular fa-calendar-xmark"></i><div style="font-weight:700;color:#0f172a">Nenhuma rota planejada</div><div>Não há solicitações alocadas a veículos para a data escolhida.</div></div>';
+            return;
+        }
+        box.innerHTML = res.rotas.map(r => {
+            const paradasHtml = r.solicitacoes.map(s => {
+                const hora = s.previsao ? new Date(s.previsao).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}) : '—';
+                return `<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;background:#f8fafc;border-radius:6px;margin-top:4px;font-size:11.5px">
+                    <span class="doc-chip slate" style="min-width:52px;text-align:center">${hora}</span>
+                    <code style="font-size:11px">${s.codigo || '—'}</code>
+                    <strong>${s.parceiro_nome}</strong>
+                    <span style="color:var(--doc-muted)">· ${s.tipo} · ${s.cidade || ''}/${s.uf || ''}</span>
+                </div>`;
+            }).join('');
+            return `<div style="border:1px solid var(--doc-border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fff">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <div>
+                        <div style="font-weight:700;color:#0f172a;font-size:14px"><i class="fa-solid fa-truck"></i> ${r.veiculo_label}</div>
+                        <div style="font-size:12px;color:var(--doc-muted);margin-top:2px">
+                            <i class="fa-solid fa-id-card"></i> ${r.motorista_nome || 'Sem motorista'}
+                            · <i class="fa-solid fa-location-dot"></i> ${r.solicitacoes.length} parada(s)
+                        </div>
+                    </div>
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="importarRota(${r.veiculo_id}, '${data}')">
+                        <i class="fa-solid fa-file-import"></i> Criar viagem
+                    </button>
+                </div>
+                <div style="margin-top:10px">${paradasHtml}</div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        box.innerHTML = `<div style="padding:20px;text-align:center;color:#b91c1c">${e.message}</div>`;
+    }
+}
+async function importarRota(veiculoId, data) {
+    if (!confirm('Criar uma viagem a partir desta rota planejada? Todas as paradas serão importadas.')) return;
+    try {
+        const res = await apiSend('/api/viagem/importar-rota', 'POST', {veiculo_id: veiculoId, data: data});
+        if (!res.sucesso) { toast(res.msg || 'Falha ao importar.', 'error'); return; }
+        const extra = res.otimizacao ? ` ✨ IA reordenou por proximidade (~${res.otimizacao.distancia_km} km).` : '';
+        toast(`Viagem ${res.viagem.codigo} criada com ${res.paradas_importadas} parada(s).${extra}`, 'success');
+        fecharModal('modal-importar-rota');
+        await carregarLista();
+        await carregarKPIs();
+        abrirDetalhe(res.viagem.id);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function otimizarRota(vid) {
+    if (!confirm('Reordenar automaticamente as paradas pendentes pela menor distância entre elas?')) return;
+    try {
+        const res = await apiSend(`/api/viagem/${vid}/otimizar-rota`, 'POST', {});
+        toast(res.msg || 'Rota otimizada.', 'success');
+        await abrirDetalhe(vid);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function carregarAuxiliares() {
+    auxiliares = await apiGet('/api/viagem/auxiliares');
+    // veículos (formulário e filtro)
+    const opVeic = auxiliares.veiculos.map(v => `<option value="${v.id}">${v.label}</option>`).join('');
+    document.getElementById('nova-veiculo').innerHTML = opVeic;
+    document.getElementById('f-veiculo').innerHTML = '<option value="">Todos veículos</option>' + opVeic;
+    // motoristas
+    document.getElementById('nova-motorista').innerHTML = '<option value="">—</option>' + auxiliares.motoristas.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+    // solicitações
+    const sb = document.getElementById('sol-pick-list');
+    if (!auxiliares.solicitacoes.length) { sb.innerHTML = '<div style="padding:16px;text-align:center;color:var(--doc-muted);font-size:12px">Nenhuma solicitação pendente.</div>'; return; }
+    sb.innerHTML = auxiliares.solicitacoes.map(s => `
+        <div class="sol-pick" data-id="${s.id}" onclick="toggleSol(${s.id})">
+            <input type="checkbox" ${solSelecionadas.has(s.id) ? 'checked' : ''} onclick="event.stopPropagation();toggleSol(${s.id})">
+            <div><code>${s.codigo || '—'}</code> · <strong>${s.parceiro_nome}</strong> · ${s.tipo} · ${s.cidade}/${s.uf} ${s.documento_numero ? '· '+s.documento_numero : ''}</div>
+            <span class="doc-chip slate">${s.status}</span>
+        </div>`).join('');
+}
+function toggleSol(id) {
+    if (solSelecionadas.has(id)) solSelecionadas.delete(id); else solSelecionadas.add(id);
+    document.querySelectorAll('.sol-pick').forEach(el => {
+        const sid = parseInt(el.dataset.id);
+        el.classList.toggle('selected', solSelecionadas.has(sid));
+        const cb = el.querySelector('input[type=checkbox]');
+        if (cb) cb.checked = solSelecionadas.has(sid);
+    });
+}
+document.getElementById('form-nova').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = Object.fromEntries(f.entries());
+    payload.solicitacao_ids = Array.from(solSelecionadas);
+    try {
+        const r = await apiSend('/api/viagem', 'POST', payload);
+        if (r.otimizacao) toast(`Viagem criada. ✨ IA sugeriu a sequência ideal (~${r.otimizacao.distancia_km} km).`);
+        else toast('Viagem criada.');
+        fecharModal('modal-nova');
+        await carregarLista();
+        abrirDetalhe(r.viagem.id);
+        carregarKPIs();
+    } catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- modais
+function fecharModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.doc-modal-overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); });
+});
+
+// filtros
+document.getElementById('f-status').addEventListener('change', carregarLista);
+document.getElementById('f-veiculo').addEventListener('change', carregarLista);
+
+// -------------------- init
+(async () => {
+    try { await carregarAuxiliares(); await carregarKPIs(); await carregarLista(); }
+    catch(e) { toast(e.message, 'error'); }
+})();
+
+// auto-refresh a cada 30s (para pegar novas posições do Locartrack)
+setInterval(() => { carregarKPIs(); carregarLista(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
+</script>
+{% endblock %}

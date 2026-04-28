@@ -46,11 +46,18 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             )
             return {"ok": True, "resultado": resultado}
         except Exception as exc:
-            app.logger.error("Scheduler ERP Sync: falha: %s", exc)
+            # erro de rede/DNS: log curto; outros erros: completo
+            import requests as _rq
+            if isinstance(exc, (_rq.exceptions.ConnectionError, _rq.exceptions.Timeout)):
+                app.logger.warning("Scheduler ERP Sync: sem conectividade com ERP (%s)", exc.__class__.__name__)
+                msg = f"sem conectividade: {exc.__class__.__name__}"
+            else:
+                app.logger.error("Scheduler ERP Sync: falha: %s", exc)
+                msg = f"Erro: {exc}"
             _set_status(
                 last_run=datetime.now(),
                 last_status="erro",
-                last_message=f"Erro: {exc}",
+                last_message=msg,
             )
             return {"ok": False, "erro": str(exc)}
 

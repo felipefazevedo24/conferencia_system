@@ -201,7 +201,7 @@
         .map-stats { grid-template-columns: 1fr 1fr; }
     }
 </style>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wms_pro.css') }}?v={{ asset_version }}">
 {% endblock %}
 
 {% block content %}

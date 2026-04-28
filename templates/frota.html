@@ -1,0 +1,995 @@
+{% extends "base.html" %}
+
+{% block title %}Logística - Gestão de Frota{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
+<style>
+    :root {
+        --doc-bg: var(--rec-bg);
+        --doc-card: var(--rec-surface);
+        --doc-ink: var(--rec-ink-700);
+        --doc-muted: var(--rec-ink-500);
+        --doc-border: var(--rec-border);
+        --doc-primary: var(--rec-blue-600);
+        --doc-primary-soft: var(--rec-blue-050);
+        --doc-success: var(--rec-green-600);
+        --doc-success-soft: var(--rec-green-100);
+        --doc-warning: var(--rec-amber-500);
+        --doc-warning-soft: var(--rec-amber-100);
+        --doc-danger: var(--rec-red-600);
+        --doc-danger-soft: var(--rec-red-100);
+        --doc-shadow: var(--rec-shadow-1);
+    }
+    body { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; }
+    .doc-entry-shell { max-width: 1500px; margin: 0 auto; padding: 24px; }
+    .doc-entry-hero {
+        background: radial-gradient(circle at 20% 20%, rgba(245,158,11,.14), transparent 45%),
+                    linear-gradient(135deg, #ffffff 0%, #fef8ec 100%);
+        border: 1px solid var(--doc-border);
+        border-bottom: 3px solid var(--doc-warning);
+        border-radius: 22px;
+        padding: 26px 30px;
+        margin-bottom: 20px;
+        box-shadow: var(--doc-shadow);
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;
+    }
+    .doc-kicker { font-size: 11px; font-weight: 800; color: var(--doc-warning); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .doc-title { margin: 0; font-size: 24px; font-weight: 800; color: #0f172a; }
+    .doc-subtitle { margin: 6px 0 0; color: var(--doc-muted); font-size: 14px; max-width: 720px; }
+    .doc-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .doc-btn { border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: filter .15s, transform .15s; }
+    .doc-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .doc-btn-primary { background: linear-gradient(135deg, #155eef, #0b2a6b); color: #fff; }
+    .doc-btn-secondary { background: #fff; color: var(--doc-primary); border: 1.5px solid var(--doc-primary); }
+    .doc-btn-success { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; }
+    .doc-btn-warning { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
+    .doc-btn-danger { background: linear-gradient(135deg, #dc2626, #991b1b); color: #fff; }
+    .doc-btn-sm { padding: 6px 10px; font-size: 11.5px; }
+    .doc-btn-ghost { background: transparent; color: var(--doc-muted); padding: 6px 10px; font-size: 11.5px; }
+    .doc-btn-ghost:hover { color: var(--doc-primary); }
+
+    .doc-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .doc-kpi-card { padding: 16px; border-radius: 14px; background: linear-gradient(135deg, #fff, #f8fafc); border: 1px solid var(--doc-border); box-shadow: var(--doc-shadow); display: flex; align-items: center; gap: 14px; }
+    .doc-kpi-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+    .doc-kpi-icon.primary { background: linear-gradient(135deg, #155eef, #0b2a6b); }
+    .doc-kpi-icon.warning { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .doc-kpi-icon.danger { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .doc-kpi-icon.success { background: linear-gradient(135deg, #16a34a, #15803d); }
+    .doc-kpi-icon.slate { background: linear-gradient(135deg, #64748b, #334155); }
+    .doc-kpi-label { font-size: 10.5px; font-weight: 700; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .doc-kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+    .doc-kpi-foot { font-size: 11px; color: var(--doc-muted); margin-top: 2px; }
+
+    .doc-tabs { display: flex; gap: 6px; border-bottom: 2px solid var(--doc-border); margin-bottom: 18px; flex-wrap: wrap; }
+    .doc-tab { background: transparent; border: none; padding: 10px 18px; font-weight: 700; font-size: 13px; color: var(--doc-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: 8px; }
+    .doc-tab.active { color: var(--doc-warning); border-bottom-color: var(--doc-warning); background: linear-gradient(180deg, rgba(245,158,11,.07), transparent); }
+    .doc-tab:hover:not(.active) { color: #0f172a; }
+    .doc-tab-badge { background: var(--doc-danger-soft); color: var(--doc-danger); padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
+
+    .doc-panel { background: var(--doc-card); border: 1px solid var(--doc-border); border-radius: 16px; box-shadow: var(--doc-shadow); overflow: hidden; margin-bottom: 20px; }
+    .doc-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--doc-border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(180deg, #f8fafc, #fff); flex-wrap: wrap; gap: 10px; }
+    .doc-panel-title { font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: .5px; display: flex; align-items: center; gap: 10px; }
+    .doc-panel-count { background: var(--doc-primary-soft); color: var(--doc-primary); padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .doc-panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .doc-table-wrapper { overflow-x: auto; }
+    .doc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .doc-table th { text-align: left; padding: 10px 14px; background: #f8fafc; color: var(--doc-muted); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--doc-border); white-space: nowrap; }
+    .doc-table td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; color: #0f172a; vertical-align: middle; }
+    .doc-table tr:hover td { background: #fafbff; }
+    .doc-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .doc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .doc-chip.ok { background: var(--doc-success-soft); color: var(--doc-success); }
+    .doc-chip.warn { background: var(--doc-warning-soft); color: var(--doc-warning); }
+    .doc-chip.danger { background: var(--doc-danger-soft); color: var(--doc-danger); }
+    .doc-chip.info { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .doc-chip.slate { background: #f1f5f9; color: #475569; }
+
+    .doc-empty { text-align: center; padding: 48px 20px; color: var(--doc-muted); }
+    .doc-empty i { font-size: 40px; color: #cbd5e1; margin-bottom: 10px; }
+    .doc-empty-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+
+    .alert-list { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
+    .alert-item { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--doc-border); border-radius: 12px; background: #fff; border-left: 4px solid var(--doc-muted); }
+    .alert-item.sev-danger { border-left-color: var(--doc-danger); background: linear-gradient(90deg, #fef2f2, #fff); }
+    .alert-item.sev-warning { border-left-color: var(--doc-warning); background: linear-gradient(90deg, #fffbeb, #fff); }
+    .alert-item.sev-info { border-left-color: var(--doc-primary); }
+    .alert-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; background: var(--doc-muted); }
+    .alert-item.sev-danger .alert-icon { background: var(--doc-danger); }
+    .alert-item.sev-warning .alert-icon { background: var(--doc-warning); }
+    .alert-item.sev-info .alert-icon { background: var(--doc-primary); }
+    .alert-title { font-weight: 800; color: #0f172a; font-size: 13px; }
+    .alert-desc { font-size: 12px; color: var(--doc-muted); margin-top: 2px; }
+    .alert-date { font-size: 11.5px; color: var(--doc-muted); font-weight: 700; white-space: nowrap; }
+
+    .doc-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: none; z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+    .doc-modal-overlay.show { display: flex; }
+    .doc-modal { background: #fff; border-radius: 16px; max-width: 640px; width: 100%; box-shadow: 0 24px 48px rgba(0,0,0,.25); overflow: hidden; max-height: 90vh; display: flex; flex-direction: column; }
+    .doc-modal.large { max-width: 860px; }
+    .doc-modal-head { padding: 16px 20px; border-bottom: 1px solid var(--doc-border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #b45309, #f59e0b); color: #fff; }
+    .doc-modal-head h3 { margin: 0; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+    .doc-modal-close { background: transparent; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; }
+    .doc-modal-body { padding: 20px; overflow-y: auto; }
+    .doc-modal-foot { padding: 14px 20px; border-top: 1px solid var(--doc-border); display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+
+    .doc-form-block { margin-bottom: 14px; }
+    .doc-form-label { font-size: 11.5px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; display: block; }
+    .doc-form-help { font-size: 11.5px; color: var(--doc-muted); margin-top: 4px; }
+    .doc-input, .doc-select, .doc-textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--doc-border); border-radius: 8px; font-size: 13px; background: #fff; font-family: inherit; }
+    .doc-textarea { resize: vertical; min-height: 70px; }
+    .doc-input:focus, .doc-select:focus, .doc-textarea:focus { border-color: var(--doc-warning); outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,.18); }
+    .doc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .doc-form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    .doc-feedback { position: fixed; top: 20px; right: 20px; padding: 14px 18px; border-radius: 12px; background: #fff; border-left: 4px solid var(--doc-primary); box-shadow: 0 10px 24px rgba(0,0,0,.15); z-index: 2100; display: none; max-width: 380px; }
+    .doc-feedback.show { display: block; animation: slideIn .3s ease; }
+    .doc-feedback.success { border-left-color: var(--doc-success); }
+    .doc-feedback.error { border-left-color: var(--doc-danger); }
+    .doc-feedback-title { font-weight: 800; color: #0f172a; font-size: 13px; margin-bottom: 4px; }
+    .doc-feedback-message { color: var(--doc-muted); font-size: 12.5px; }
+    @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .checklist-item-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--doc-border); border-radius: 10px; margin-bottom: 6px; background: #fff; }
+    .checklist-item-row.nok { border-color: var(--doc-danger); background: #fef2f2; }
+    .checklist-item-row.atn { border-color: var(--doc-warning); background: #fffbeb; }
+    .checklist-status-btn { border: 1.5px solid var(--doc-border); background: #fff; padding: 5px 10px; border-radius: 8px; font-weight: 800; font-size: 11.5px; cursor: pointer; }
+    .checklist-status-btn.active.ok { background: var(--doc-success); color: #fff; border-color: var(--doc-success); }
+    .checklist-status-btn.active.atn { background: var(--doc-warning); color: #fff; border-color: var(--doc-warning); }
+    .checklist-status-btn.active.nok { background: var(--doc-danger); color: #fff; border-color: var(--doc-danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="doc-entry-shell">
+    <div class="doc-entry-hero">
+        <div>
+            <div class="doc-kicker"><i class="fa-solid fa-truck-field"></i> Logística · Gestão de Frota</div>
+            <h1 class="doc-title">Gestão de Frota</h1>
+            <p class="doc-subtitle">Controle de documentos (CRLV, seguro, CNH), manutenção preventiva e corretiva, abastecimento com cálculo de consumo, multas e checklist diário de saída.</p>
+        </div>
+        <div class="doc-hero-actions">
+            <a href="/logistica/rastreamento" class="doc-btn doc-btn-secondary"><i class="fa-solid fa-location-crosshairs"></i> Rastreamento</a>
+            <a href="/logistica/agendamento" class="doc-btn doc-btn-secondary"><i class="fa-solid fa-calendar-day"></i> Rotas</a>
+            <button class="doc-btn doc-btn-warning" onclick="recarregarTudo()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="doc-kpi-grid" id="kpi-grid"></div>
+
+    <!-- Tabs -->
+    <div class="doc-tabs" id="tabs">
+        <button class="doc-tab active" data-tab="dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</button>
+        <button class="doc-tab" data-tab="documentos"><i class="fa-solid fa-file-contract"></i> Documentos</button>
+        <button class="doc-tab" data-tab="manutencoes"><i class="fa-solid fa-wrench"></i> Manutenção</button>
+        <button class="doc-tab" data-tab="abastecimentos"><i class="fa-solid fa-gas-pump"></i> Abastecimento</button>
+        <button class="doc-tab" data-tab="multas"><i class="fa-solid fa-triangle-exclamation"></i> Multas</button>
+        <button class="doc-tab" data-tab="checklist"><i class="fa-solid fa-clipboard-check"></i> Checklist</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="tab-panel" id="tab-dashboard">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-bell"></i> Alertas de vencimento <span class="doc-panel-count" id="alertas-count">0</span></div>
+            </div>
+            <div id="alertas-list" class="alert-list"></div>
+        </div>
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-chart-line"></i> Consumo médio por veículo <span class="doc-panel-count">Últimos 90 dias</span></div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Veículo</th><th>Placa</th><th class="num">KM rodados</th><th class="num">Litros</th><th class="num">Km/L</th><th class="num">R$/Km</th><th class="num">Gasto total</th></tr></thead>
+                    <tbody id="consumo-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- DOCUMENTOS -->
+    <div class="tab-panel" id="tab-documentos" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-file-contract"></i> Documentos <span class="doc-panel-count" id="doc-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalDoc()"><i class="fa-solid fa-plus"></i> Novo documento</button>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Tipo</th><th>Veículo/Motorista</th><th>Número</th><th>Vencimento</th><th>Situação</th><th></th></tr></thead>
+                    <tbody id="doc-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MANUTENCOES -->
+    <div class="tab-panel" id="tab-manutencoes" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-wrench"></i> Manutenções <span class="doc-panel-count" id="manut-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalManut()"><i class="fa-solid fa-plus"></i> Nova manutenção</button>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Data</th><th>Veículo</th><th>Tipo</th><th>Descrição</th><th class="num">KM</th><th class="num">Custo</th><th>Próxima</th><th>Status</th><th></th></tr></thead>
+                    <tbody id="manut-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ABASTECIMENTOS -->
+    <div class="tab-panel" id="tab-abastecimentos" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-gas-pump"></i> Abastecimentos <span class="doc-panel-count" id="abast-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalAbast()"><i class="fa-solid fa-plus"></i> Novo abastecimento</button>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Data</th><th>Veículo</th><th>Motorista</th><th class="num">KM</th><th class="num">Litros</th><th class="num">R$/L</th><th class="num">Total</th><th>Posto</th><th>Cheio?</th><th></th></tr></thead>
+                    <tbody id="abast-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MULTAS -->
+    <div class="tab-panel" id="tab-multas" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-triangle-exclamation"></i> Multas <span class="doc-panel-count" id="multa-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalMulta()"><i class="fa-solid fa-plus"></i> Nova multa</button>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Data</th><th>Auto</th><th>Veículo</th><th>Motorista</th><th>Descrição</th><th class="num">Valor</th><th class="num">Pontos</th><th>Vencimento</th><th>Status</th><th></th></tr></thead>
+                    <tbody id="multa-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHECKLIST -->
+    <div class="tab-panel" id="tab-checklist" style="display:none">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-clipboard-check"></i> Checklist diário <span class="doc-panel-count" id="check-count">0</span></div>
+                <div class="doc-panel-actions">
+                    <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirModalChecklist()"><i class="fa-solid fa-plus"></i> Novo checklist</button>
+                </div>
+            </div>
+            <div class="doc-table-wrapper">
+                <table class="doc-table">
+                    <thead><tr><th>Data</th><th>Veículo</th><th>Motorista</th><th class="num">KM</th><th>Status</th><th>Itens NOK</th><th>Observação</th><th></th></tr></thead>
+                    <tbody id="check-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Documento -->
+<div class="doc-modal-overlay" id="modal-doc">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Novo documento</h3><button class="doc-modal-close" onclick="fecharModal('modal-doc')">&times;</button></div>
+        <form id="form-doc" enctype="multipart/form-data">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Tipo *</label>
+                        <select name="tipo" class="doc-select" required>
+                            <option value="CRLV">CRLV</option>
+                            <option value="SEGURO">Seguro</option>
+                            <option value="IPVA">IPVA</option>
+                            <option value="LICENCIAMENTO">Licenciamento</option>
+                            <option value="CNH">CNH</option>
+                            <option value="OUTRO">Outro</option>
+                        </select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Número</label>
+                        <input type="text" name="numero" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo</label>
+                        <select name="veiculo_id" class="doc-select" data-cad="veiculo"><option value="">—</option></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Motorista</label>
+                        <select name="motorista_id" class="doc-select" data-cad="motorista"><option value="">—</option></select>
+                    </div>
+                </div>
+                <div class="doc-form-help">Vincule a um veículo OU motorista (pelo menos um).</div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Emitido em</label>
+                        <input type="date" name="emitido_em" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Vencimento</label>
+                        <input type="date" name="vencimento" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Anexo (PDF/JPG)</label>
+                    <input type="file" name="anexo" class="doc-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Observação</label>
+                    <textarea name="observacao" class="doc-textarea"></textarea>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-doc')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-warning"><i class="fa-solid fa-save"></i> Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Manutenção -->
+<div class="doc-modal-overlay" id="modal-manut">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Nova manutenção</h3><button class="doc-modal-close" onclick="fecharModal('modal-manut')">&times;</button></div>
+        <form id="form-manut" enctype="multipart/form-data">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo *</label>
+                        <select name="veiculo_id" class="doc-select" data-cad="veiculo" required></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Tipo *</label>
+                        <select name="tipo" class="doc-select" required>
+                            <option value="PREVENTIVA">Preventiva</option>
+                            <option value="CORRETIVA">Corretiva</option>
+                            <option value="REVISAO">Revisão</option>
+                            <option value="TROCA_OLEO">Troca de óleo</option>
+                            <option value="PNEUS">Pneus</option>
+                            <option value="FREIOS">Freios</option>
+                            <option value="OUTRO">Outro</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Data *</label>
+                        <input type="date" name="data" class="doc-input" required>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">KM atual</label>
+                        <input type="number" name="km_atual" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Custo (R$)</label>
+                        <input type="text" name="custo" class="doc-input" placeholder="0,00">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Descrição *</label>
+                    <textarea name="descricao" class="doc-textarea" required></textarea>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Fornecedor</label>
+                        <input type="text" name="fornecedor" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">NF / Recibo</label>
+                        <input type="text" name="nota_fiscal" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Próxima manutenção (data)</label>
+                        <input type="date" name="proxima_data" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Próxima manutenção (KM)</label>
+                        <input type="number" name="proxima_km" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Status</label>
+                        <select name="status" class="doc-select">
+                            <option value="Realizada">Realizada</option>
+                            <option value="Agendada">Agendada</option>
+                            <option value="Cancelada">Cancelada</option>
+                        </select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Anexo</label>
+                        <input type="file" name="anexo" class="doc-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    </div>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-manut')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-warning"><i class="fa-solid fa-save"></i> Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Abastecimento -->
+<div class="doc-modal-overlay" id="modal-abast">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Novo abastecimento</h3><button class="doc-modal-close" onclick="fecharModal('modal-abast')">&times;</button></div>
+        <form id="form-abast">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo *</label>
+                        <select name="veiculo_id" class="doc-select" data-cad="veiculo" required></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Motorista</label>
+                        <select name="motorista_id" class="doc-select" data-cad="motorista"><option value="">—</option></select>
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Data/hora *</label>
+                        <input type="datetime-local" name="data" class="doc-input" required>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">KM atual *</label>
+                        <input type="number" name="km_atual" class="doc-input" required>
+                    </div>
+                </div>
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Litros *</label>
+                        <input type="text" name="litros" class="doc-input" required placeholder="0,00">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">R$ / Litro</label>
+                        <input type="text" name="valor_litro" class="doc-input" placeholder="0,000">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Total (R$)</label>
+                        <input type="text" name="valor_total" class="doc-input" placeholder="0,00">
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Combustível</label>
+                        <select name="combustivel" class="doc-select">
+                            <option value="Diesel">Diesel</option>
+                            <option value="Gasolina">Gasolina</option>
+                            <option value="Etanol">Etanol</option>
+                            <option value="Flex">Flex</option>
+                        </select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Posto</label>
+                        <input type="text" name="posto" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+                        <input type="checkbox" name="tanque_cheio" checked> Tanque cheio
+                    </label>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Observação</label>
+                    <textarea name="observacao" class="doc-textarea"></textarea>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-abast')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-warning"><i class="fa-solid fa-save"></i> Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Multa -->
+<div class="doc-modal-overlay" id="modal-multa">
+    <div class="doc-modal">
+        <div class="doc-modal-head"><h3>Nova multa</h3><button class="doc-modal-close" onclick="fecharModal('modal-multa')">&times;</button></div>
+        <form id="form-multa" enctype="multipart/form-data">
+            <div class="doc-modal-body">
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo *</label>
+                        <select name="veiculo_id" class="doc-select" data-cad="veiculo" required></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Motorista</label>
+                        <select name="motorista_id" class="doc-select" data-cad="motorista"><option value="">—</option></select>
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Auto de infração</label>
+                        <input type="text" name="auto_infracao" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Data/hora *</label>
+                        <input type="datetime-local" name="data_infracao" class="doc-input" required>
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Local</label>
+                    <input type="text" name="local" class="doc-input">
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Descrição *</label>
+                    <textarea name="descricao" class="doc-textarea" required></textarea>
+                </div>
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Valor (R$)</label>
+                        <input type="text" name="valor" class="doc-input" placeholder="0,00">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Pontos</label>
+                        <input type="number" name="pontos" class="doc-input" value="0">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Gravidade</label>
+                        <select name="gravidade" class="doc-select">
+                            <option value="">—</option>
+                            <option value="Leve">Leve</option>
+                            <option value="Media">Média</option>
+                            <option value="Grave">Grave</option>
+                            <option value="Gravissima">Gravíssima</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="doc-form-row">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Vencimento</label>
+                        <input type="date" name="vencimento" class="doc-input">
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Status</label>
+                        <select name="status" class="doc-select">
+                            <option value="Pendente">Pendente</option>
+                            <option value="Paga">Paga</option>
+                            <option value="Recorrida">Recorrida</option>
+                            <option value="Cancelada">Cancelada</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Anexo</label>
+                    <input type="file" name="anexo" class="doc-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-multa')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-warning"><i class="fa-solid fa-save"></i> Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Checklist -->
+<div class="doc-modal-overlay" id="modal-checklist">
+    <div class="doc-modal large">
+        <div class="doc-modal-head"><h3>Checklist diário de saída</h3><button class="doc-modal-close" onclick="fecharModal('modal-checklist')">&times;</button></div>
+        <form id="form-checklist">
+            <div class="doc-modal-body">
+                <div class="doc-form-row-3">
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Veículo *</label>
+                        <select name="veiculo_id" class="doc-select" data-cad="veiculo" required></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">Motorista</label>
+                        <select name="motorista_id" class="doc-select" data-cad="motorista"><option value="">—</option></select>
+                    </div>
+                    <div class="doc-form-block">
+                        <label class="doc-form-label">KM atual</label>
+                        <input type="number" name="km_atual" class="doc-input">
+                    </div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Itens <span class="doc-form-help" style="margin:0 0 0 8px;display:inline">OK = verde, Atenção = amarelo, NOK = vermelho (bloqueia saída)</span></label>
+                    <div id="checklist-itens"></div>
+                </div>
+                <div class="doc-form-block">
+                    <label class="doc-form-label">Observações</label>
+                    <textarea name="observacao" class="doc-textarea"></textarea>
+                </div>
+            </div>
+            <div class="doc-modal-foot">
+                <button type="button" class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-checklist')">Cancelar</button>
+                <button type="submit" class="doc-btn doc-btn-warning"><i class="fa-solid fa-save"></i> Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="doc-feedback" id="feedback">
+    <div class="doc-feedback-title" id="feedback-title"></div>
+    <div class="doc-feedback-message" id="feedback-message"></div>
+</div>
+
+<script>
+// -------------------- util
+const fmtDate = s => { if (!s) return '—'; try { const [y,m,d] = s.split('T')[0].split('-'); return `${d}/${m}/${y}`; } catch(e) { return s; } };
+const fmtDateTime = s => { if (!s) return '—'; try { const d = new Date(s); return d.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return s; } };
+const fmtMoney = n => (Number(n)||0).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+const fmtNum = (n, d=1) => (Number(n)||0).toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d});
+
+function toast(msg, tipo='success', titulo='') {
+    const el = document.getElementById('feedback');
+    el.className = 'doc-feedback show ' + tipo;
+    document.getElementById('feedback-title').textContent = titulo || (tipo === 'error' ? 'Erro' : 'Sucesso');
+    document.getElementById('feedback-message').textContent = msg;
+    setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+async function apiGet(url) {
+    const r = await fetch(url, {credentials: 'same-origin'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+}
+async function apiSend(url, method, body) {
+    const opts = {method, credentials: 'same-origin'};
+    if (body instanceof FormData) { opts.body = body; }
+    else { opts.headers = {'Content-Type': 'application/json'}; opts.body = JSON.stringify(body || {}); }
+    const r = await fetch(url, opts);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.sucesso === false) throw new Error(data.msg || 'Erro na requisição');
+    return data;
+}
+
+// -------------------- estado
+let cadastros = {veiculos: [], motoristas: []};
+let itensTemplate = [];
+
+// -------------------- tabs
+document.getElementById('tabs').addEventListener('click', e => {
+    const btn = e.target.closest('[data-tab]');
+    if (!btn) return;
+    document.querySelectorAll('.doc-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+    document.getElementById('tab-' + tab).style.display = '';
+    if (tab === 'documentos') carregarDocumentos();
+    else if (tab === 'manutencoes') carregarManutencoes();
+    else if (tab === 'abastecimentos') carregarAbastecimentos();
+    else if (tab === 'multas') carregarMultas();
+    else if (tab === 'checklist') carregarChecklist();
+});
+
+// -------------------- cadastros
+async function carregarCadastros() {
+    const data = await apiGet('/api/frota/cadastros');
+    cadastros = data;
+    document.querySelectorAll('select[data-cad]').forEach(sel => {
+        const tipo = sel.dataset.cad;
+        const required = sel.required;
+        const lista = tipo === 'veiculo' ? data.veiculos : data.motoristas;
+        const opcoes = [(!required ? '<option value="">—</option>' : '')].concat(
+            lista.map(x => `<option value="${x.id}">${x.label}</option>`)
+        );
+        sel.innerHTML = opcoes.join('');
+    });
+}
+
+// -------------------- dashboard
+async function carregarDashboard() {
+    const data = await apiGet('/api/frota/dashboard');
+    renderKpis(data.kpis);
+    renderAlertas(data.alertas);
+    renderConsumo(data.frota);
+}
+function renderKpis(k) {
+    const tpl = [
+        {icon:'primary', fa:'fa-truck-field', label:'Veículos ativos', value:k.veiculos_ativos, foot:k.motoristas_ativos + ' motoristas'},
+        {icon:'danger', fa:'fa-file-circle-exclamation', label:'Docs vencidos', value:k.docs_vencidos, foot:k.docs_vencendo_30d + ' vencem em 30d'},
+        {icon:'warning', fa:'fa-wrench', label:'Manutenções', value:k.manut_atrasadas, foot:k.manut_proximas_30d + ' próximas em 30d'},
+        {icon:'danger', fa:'fa-triangle-exclamation', label:'Multas pendentes', value:k.multas_pendentes, foot:fmtMoney(k.multas_valor_pendente)},
+        {icon:'success', fa:'fa-clipboard-check', label:'Checklists hoje', value:k.checklists_hoje, foot:k.veiculos_sem_checklist_hoje + ' veículos sem checklist'},
+    ];
+    document.getElementById('kpi-grid').innerHTML = tpl.map(t => `
+        <div class="doc-kpi-card">
+            <div class="doc-kpi-icon ${t.icon}"><i class="fa-solid ${t.fa}"></i></div>
+            <div>
+                <div class="doc-kpi-label">${t.label}</div>
+                <div class="doc-kpi-value">${t.value}</div>
+                <div class="doc-kpi-foot">${t.foot}</div>
+            </div>
+        </div>`).join('');
+}
+function renderAlertas(lista) {
+    document.getElementById('alertas-count').textContent = lista.length;
+    const box = document.getElementById('alertas-list');
+    if (!lista.length) { box.innerHTML = '<div class="doc-empty"><i class="fa-regular fa-circle-check"></i><div class="doc-empty-title">Nenhum alerta</div><div>Tudo em dia na frota.</div></div>'; return; }
+    box.innerHTML = lista.map(a => `
+        <div class="alert-item sev-${a.severidade}">
+            <div class="alert-icon"><i class="fa-solid fa-${a.categoria === 'Documento' ? 'file-contract' : 'wrench'}"></i></div>
+            <div>
+                <div class="alert-title">${a.categoria} · ${a.titulo}</div>
+                <div class="alert-desc">${a.descricao}</div>
+            </div>
+            <div class="alert-date">${fmtDate(a.data)}</div>
+        </div>`).join('');
+}
+function renderConsumo(frota) {
+    const tb = document.getElementById('consumo-tbody');
+    if (!frota.length) { tb.innerHTML = '<tr><td colspan="7" class="doc-empty" style="padding:24px">Sem veículos cadastrados.</td></tr>'; return; }
+    tb.innerHTML = frota.map(f => {
+        const c = f.consumo || {};
+        return `<tr>
+            <td><strong>${f.nome_exibicao}</strong> <span class="doc-chip slate">${f.codigo || ''}</span></td>
+            <td>${f.placa || '—'}</td>
+            <td class="num">${fmtNum(c.km, 1)}</td>
+            <td class="num">${fmtNum(c.litros, 2)}</td>
+            <td class="num">${c.consumo_kml != null ? fmtNum(c.consumo_kml, 2) : '—'}</td>
+            <td class="num">${c.custo_km != null ? fmtMoney(c.custo_km) : '—'}</td>
+            <td class="num">${fmtMoney(c.gasto || 0)}</td>
+        </tr>`;
+    }).join('');
+}
+
+// -------------------- documentos
+async function carregarDocumentos() {
+    const data = await apiGet('/api/frota/documentos');
+    document.getElementById('doc-count').textContent = data.length;
+    const tb = document.getElementById('doc-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="6" class="doc-empty" style="padding:32px">Nenhum documento cadastrado.</td></tr>'; return; }
+    tb.innerHTML = data.map(d => {
+        const cls = d.status === 'Vencido' ? 'danger' : (d.status === 'Vence em breve' ? 'warn' : (d.status === 'OK' ? 'ok' : 'slate'));
+        const vinculo = d.veiculo_id ? d.veiculo_label : d.motorista_label;
+        const anexo = d.anexo_path ? `<a href="/instance/${d.anexo_path}" target="_blank" class="doc-btn-ghost"><i class="fa-solid fa-paperclip"></i></a>` : '';
+        return `<tr>
+            <td><span class="doc-chip info">${d.tipo}</span></td>
+            <td>${vinculo}</td>
+            <td>${d.numero || '—'}</td>
+            <td>${fmtDate(d.vencimento)} ${d.dias_para_vencer != null ? `<small style="color:var(--doc-muted)">(${d.dias_para_vencer >= 0 ? 'em ' + d.dias_para_vencer + ' d' : 'há ' + Math.abs(d.dias_para_vencer) + ' d'})</small>` : ''}</td>
+            <td><span class="doc-chip ${cls}">${d.status}</span></td>
+            <td style="text-align:right">${anexo}<button class="doc-btn doc-btn-ghost" onclick="excluirDoc(${d.id})"><i class="fa-solid fa-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+async function excluirDoc(id) {
+    if (!confirm('Excluir este documento?')) return;
+    try { await apiSend('/api/frota/documentos/' + id, 'DELETE'); toast('Documento excluído.'); carregarDocumentos(); carregarDashboard(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('form-doc').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try { await apiSend('/api/frota/documentos', 'POST', fd); toast('Documento cadastrado.'); fecharModal('modal-doc'); e.target.reset(); carregarDocumentos(); carregarDashboard(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- manutenções
+async function carregarManutencoes() {
+    const data = await apiGet('/api/frota/manutencoes');
+    document.getElementById('manut-count').textContent = data.length;
+    const tb = document.getElementById('manut-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="9" class="doc-empty" style="padding:32px">Nenhuma manutenção registrada.</td></tr>'; return; }
+    tb.innerHTML = data.map(m => {
+        const stCls = m.status === 'Realizada' ? 'ok' : (m.status === 'Agendada' ? 'info' : 'slate');
+        const proxCls = m.dias_para_proxima != null ? (m.dias_para_proxima < 0 ? 'danger' : (m.dias_para_proxima <= 30 ? 'warn' : 'slate')) : 'slate';
+        return `<tr>
+            <td>${fmtDate(m.data)}</td>
+            <td>${m.veiculo_label}</td>
+            <td><span class="doc-chip info">${m.tipo}</span></td>
+            <td>${m.descricao}</td>
+            <td class="num">${m.km_atual ? m.km_atual.toLocaleString('pt-BR') : '—'}</td>
+            <td class="num">${fmtMoney(m.custo)}</td>
+            <td>${m.proxima_data ? `<span class="doc-chip ${proxCls}">${fmtDate(m.proxima_data)}</span>` : (m.proxima_km ? `KM ${m.proxima_km.toLocaleString('pt-BR')}` : '—')}</td>
+            <td><span class="doc-chip ${stCls}">${m.status}</span></td>
+            <td style="text-align:right"><button class="doc-btn doc-btn-ghost" onclick="excluirManut(${m.id})"><i class="fa-solid fa-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+async function excluirManut(id) {
+    if (!confirm('Excluir esta manutenção?')) return;
+    try { await apiSend('/api/frota/manutencoes/' + id, 'DELETE'); toast('Manutenção excluída.'); carregarManutencoes(); carregarDashboard(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('form-manut').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try { await apiSend('/api/frota/manutencoes', 'POST', fd); toast('Manutenção registrada.'); fecharModal('modal-manut'); e.target.reset(); carregarManutencoes(); carregarDashboard(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- abastecimentos
+async function carregarAbastecimentos() {
+    const data = await apiGet('/api/frota/abastecimentos');
+    document.getElementById('abast-count').textContent = data.length;
+    const tb = document.getElementById('abast-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="10" class="doc-empty" style="padding:32px">Nenhum abastecimento registrado.</td></tr>'; return; }
+    tb.innerHTML = data.map(a => `<tr>
+        <td>${fmtDateTime(a.data)}</td>
+        <td>${a.veiculo_label}</td>
+        <td>${a.motorista_label}</td>
+        <td class="num">${a.km_atual ? a.km_atual.toLocaleString('pt-BR') : '—'}</td>
+        <td class="num">${fmtNum(a.litros, 2)}</td>
+        <td class="num">${fmtMoney(a.valor_litro)}</td>
+        <td class="num"><strong>${fmtMoney(a.valor_total)}</strong></td>
+        <td>${a.posto || '—'}</td>
+        <td>${a.tanque_cheio ? '<span class="doc-chip ok">Sim</span>' : '<span class="doc-chip slate">Não</span>'}</td>
+        <td style="text-align:right"><button class="doc-btn doc-btn-ghost" onclick="excluirAbast(${a.id})"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>`).join('');
+}
+async function excluirAbast(id) {
+    if (!confirm('Excluir este abastecimento?')) return;
+    try { await apiSend('/api/frota/abastecimentos/' + id, 'DELETE'); toast('Abastecimento excluído.'); carregarAbastecimentos(); carregarDashboard(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('form-abast').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = Object.fromEntries(f.entries());
+    payload.tanque_cheio = f.get('tanque_cheio') === 'on';
+    try { await apiSend('/api/frota/abastecimentos', 'POST', payload); toast('Abastecimento registrado.'); fecharModal('modal-abast'); e.target.reset(); carregarAbastecimentos(); carregarDashboard(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- multas
+async function carregarMultas() {
+    const data = await apiGet('/api/frota/multas');
+    document.getElementById('multa-count').textContent = data.length;
+    const tb = document.getElementById('multa-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="10" class="doc-empty" style="padding:32px">Nenhuma multa registrada.</td></tr>'; return; }
+    tb.innerHTML = data.map(m => {
+        const stCls = m.status === 'Paga' ? 'ok' : (m.status === 'Pendente' ? 'warn' : 'slate');
+        return `<tr>
+            <td>${fmtDateTime(m.data_infracao)}</td>
+            <td>${m.auto_infracao || '—'}</td>
+            <td>${m.veiculo_label}</td>
+            <td>${m.motorista_label}</td>
+            <td>${m.descricao}</td>
+            <td class="num">${fmtMoney(m.valor)}</td>
+            <td class="num">${m.pontos}</td>
+            <td>${fmtDate(m.vencimento)}</td>
+            <td><span class="doc-chip ${stCls}">${m.status}</span></td>
+            <td style="text-align:right"><button class="doc-btn doc-btn-ghost" onclick="excluirMulta(${m.id})"><i class="fa-solid fa-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+async function excluirMulta(id) {
+    if (!confirm('Excluir esta multa?')) return;
+    try { await apiSend('/api/frota/multas/' + id, 'DELETE'); toast('Multa excluída.'); carregarMultas(); carregarDashboard(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('form-multa').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try { await apiSend('/api/frota/multas', 'POST', fd); toast('Multa registrada.'); fecharModal('modal-multa'); e.target.reset(); carregarMultas(); carregarDashboard(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- checklist
+async function carregarTemplateChecklist() {
+    const data = await apiGet('/api/frota/checklist/template');
+    itensTemplate = data.itens;
+}
+function renderChecklistItens() {
+    const box = document.getElementById('checklist-itens');
+    box.innerHTML = itensTemplate.map((item, i) => `
+        <div class="checklist-item-row" data-idx="${i}" data-status="OK">
+            <div><strong>${item}</strong></div>
+            <div style="display:flex;gap:4px">
+                <button type="button" class="checklist-status-btn active ok" data-set="OK">OK</button>
+                <button type="button" class="checklist-status-btn atn" data-set="ATENCAO">Atenção</button>
+                <button type="button" class="checklist-status-btn nok" data-set="NAO_OK">NOK</button>
+            </div>
+            <input type="text" class="doc-input" placeholder="Observação" style="width:180px">
+        </div>`).join('');
+    box.querySelectorAll('.checklist-item-row').forEach(row => {
+        row.querySelectorAll('.checklist-status-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                row.querySelectorAll('.checklist-status-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                row.dataset.status = btn.dataset.set;
+                row.classList.remove('nok', 'atn');
+                if (btn.dataset.set === 'NAO_OK') row.classList.add('nok');
+                if (btn.dataset.set === 'ATENCAO') row.classList.add('atn');
+            });
+        });
+    });
+}
+async function carregarChecklist() {
+    const data = await apiGet('/api/frota/checklist');
+    document.getElementById('check-count').textContent = data.length;
+    const tb = document.getElementById('check-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="8" class="doc-empty" style="padding:32px">Nenhum checklist registrado.</td></tr>'; return; }
+    tb.innerHTML = data.map(c => {
+        const stCls = c.status_geral === 'OK' ? 'ok' : (c.status_geral === 'ATENCAO' ? 'warn' : 'danger');
+        const nok = (c.itens || []).filter(i => i.status === 'NAO_OK').map(i => i.item).join(', ') || '—';
+        return `<tr>
+            <td>${fmtDateTime(c.data)}</td>
+            <td>${c.veiculo_label}</td>
+            <td>${c.motorista_label}</td>
+            <td class="num">${c.km_atual ? c.km_atual.toLocaleString('pt-BR') : '—'}</td>
+            <td><span class="doc-chip ${stCls}">${c.status_geral}</span></td>
+            <td style="color:var(--doc-danger);font-size:12px">${nok}</td>
+            <td>${c.observacao || '—'}</td>
+            <td style="text-align:right"><button class="doc-btn doc-btn-ghost" onclick="excluirCheck(${c.id})"><i class="fa-solid fa-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+async function excluirCheck(id) {
+    if (!confirm('Excluir este checklist?')) return;
+    try { await apiSend('/api/frota/checklist/' + id, 'DELETE'); toast('Checklist excluído.'); carregarChecklist(); carregarDashboard(); }
+    catch(e) { toast(e.message, 'error'); }
+}
+document.getElementById('form-checklist').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const itens = [];
+    document.querySelectorAll('#checklist-itens .checklist-item-row').forEach(row => {
+        const idx = parseInt(row.dataset.idx);
+        itens.push({item: itensTemplate[idx], status: row.dataset.status, obs: row.querySelector('input[type=text]').value.trim()});
+    });
+    const payload = {
+        veiculo_id: f.get('veiculo_id'),
+        motorista_id: f.get('motorista_id') || null,
+        km_atual: f.get('km_atual'),
+        observacao: f.get('observacao'),
+        itens,
+    };
+    try { await apiSend('/api/frota/checklist', 'POST', payload); toast('Checklist registrado.'); fecharModal('modal-checklist'); e.target.reset(); carregarChecklist(); carregarDashboard(); }
+    catch(err) { toast(err.message, 'error'); }
+});
+
+// -------------------- modais
+function abrirModal(id) { document.getElementById(id).classList.add('show'); }
+function fecharModal(id) { document.getElementById(id).classList.remove('show'); }
+function abrirModalDoc() { abrirModal('modal-doc'); }
+function abrirModalManut() { const f = document.forms['form-manut']; if (f && f.data) f.data.valueAsDate = new Date(); abrirModal('modal-manut'); }
+function abrirModalAbast() {
+    const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.forms['form-abast'].data.value = now.toISOString().slice(0,16);
+    abrirModal('modal-abast');
+}
+function abrirModalMulta() {
+    const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.forms['form-multa'].data_infracao.value = now.toISOString().slice(0,16);
+    abrirModal('modal-multa');
+}
+function abrirModalChecklist() { renderChecklistItens(); abrirModal('modal-checklist'); }
+
+document.querySelectorAll('.doc-modal-overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); });
+});
+
+// -------------------- reload
+function recarregarTudo() {
+    carregarDashboard();
+    const ativa = document.querySelector('.doc-tab.active')?.dataset.tab;
+    if (ativa === 'documentos') carregarDocumentos();
+    else if (ativa === 'manutencoes') carregarManutencoes();
+    else if (ativa === 'abastecimentos') carregarAbastecimentos();
+    else if (ativa === 'multas') carregarMultas();
+    else if (ativa === 'checklist') carregarChecklist();
+}
+
+// -------------------- init
+(async () => {
+    try {
+        await carregarCadastros();
+        await carregarTemplateChecklist();
+        await carregarDashboard();
+    } catch (e) { toast(e.message, 'error'); }
+})();
+</script>
+{% endblock %}

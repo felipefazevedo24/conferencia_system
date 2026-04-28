@@ -352,6 +352,63 @@ a:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 
+/* Subgrupos dentro de um painel (ex: Logistica > Recebimento/Expedicao/WMS) */
+#sidebar-wrapper .submenu-subgroup {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    display: grid;
+    gap: 4px;
+}
+#sidebar-wrapper .submenu-subgroup:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+#sidebar-wrapper .submenu-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+    background: transparent;
+    border: 0;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: color .2s ease;
+}
+#sidebar-wrapper .submenu-subtitle:hover {
+    color: rgba(255, 255, 255, 0.85);
+}
+#sidebar-wrapper .submenu-subtitle i.submenu-icon {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+}
+#sidebar-wrapper .submenu-subtitle .submenu-chevron {
+    margin-left: auto;
+    font-size: 9px;
+    opacity: .55;
+    transition: transform .2s ease;
+}
+#sidebar-wrapper .submenu-subgroup.collapsed .submenu-chevron {
+    transform: rotate(-90deg);
+}
+#sidebar-wrapper .submenu-subgroup .submenu-items {
+    display: grid;
+    gap: 4px;
+    overflow: hidden;
+    max-height: 1000px;
+    transition: max-height .25s ease;
+}
+#sidebar-wrapper .submenu-subgroup.collapsed .submenu-items {
+    max-height: 0;
+}
+
 .sidebar-footer {
     display: grid;
     gap: 12px;

@@ -3,7 +3,7 @@
 {% block title %}Fiscal - Documento de Entrada{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
 <style>
     :root {
         --doc-bg: var(--rec-bg);

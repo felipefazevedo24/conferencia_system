@@ -559,6 +559,225 @@ class AgendamentoSolicitacaoHistorico(db.Model):
 
 
 # ============================================================================
+# VIAGENS - rastreamento consolidado por viagem (paradas, GPS, eventos)
+# ============================================================================
+
+class Viagem(db.Model):
+    __tablename__ = "viagem"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(30), unique=True, index=True)  # VG-2026-0001
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    motorista_nome = db.Column(db.String(160))
+    tipo = db.Column(db.String(20), nullable=False, default="MISTA", index=True)  # COLETA|ENTREGA|MISTA|TRANSFERENCIA|OUTRO
+    status = db.Column(db.String(20), nullable=False, default="Planejada", index=True)  # Planejada|EmAndamento|Concluida|Cancelada
+    titulo = db.Column(db.String(200))
+    observacao = db.Column(db.String(600))
+    # Previsão
+    saida_prevista = db.Column(db.DateTime, index=True)
+    retorno_previsto = db.Column(db.DateTime)
+    km_previsto = db.Column(db.Float)
+    # Execução
+    saida_real = db.Column(db.DateTime, index=True)
+    retorno_real = db.Column(db.DateTime, index=True)
+    km_inicial = db.Column(db.Integer)
+    km_final = db.Column(db.Integer)
+    # Origem/Destino resumidos
+    origem_label = db.Column(db.String(200))
+    origem_lat = db.Column(db.Float)
+    origem_lng = db.Column(db.Float)
+    destino_label = db.Column(db.String(200))
+    destino_lat = db.Column(db.Float)
+    destino_lng = db.Column(db.Float)
+    # Totais (calculados ao concluir)
+    km_percorrido = db.Column(db.Float, default=0)
+    total_litros = db.Column(db.Float, default=0)
+    total_gasto = db.Column(db.Float, default=0)
+    tempo_total_min = db.Column(db.Integer, default=0)
+    # Auditoria
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    iniciado_por = db.Column(db.String(100))
+    concluido_por = db.Column(db.String(100))
+    cancelado_por = db.Column(db.String(100))
+    motivo_cancelamento = db.Column(db.String(500))
+    # Liberacao para motorista (gate do gestor)
+    liberada = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    liberada_em = db.Column(db.DateTime)
+    liberada_por = db.Column(db.String(100))
+    destino_unico = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class ViagemParada(db.Model):
+    """Paradas da viagem - cada parada pode ser livre ou atrelada a uma solicitacao."""
+    __tablename__ = "viagem_parada"
+
+    id = db.Column(db.Integer, primary_key=True)
+    viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), nullable=False, index=True)
+    sequencia = db.Column(db.Integer, nullable=False, default=1)
+    solicitacao_id = db.Column(db.Integer, db.ForeignKey("agendamento_solicitacao.id"), index=True)
+    tipo = db.Column(db.String(20), nullable=False, default="ENTREGA")  # COLETA|ENTREGA|PARADA|ABASTECIMENTO|REFEICAO
+    parceiro_nome = db.Column(db.String(200))
+    endereco = db.Column(db.String(400))
+    cidade = db.Column(db.String(100))
+    uf = db.Column(db.String(2))
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+    previsao_chegada = db.Column(db.DateTime)
+    chegada_real = db.Column(db.DateTime)
+    saida_real = db.Column(db.DateTime)
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente|EmAndamento|Concluida|Nao_realizada|Cancelada
+    resultado = db.Column(db.String(30))  # Entregue|Coletado|Recusado|AusenciaRecebedor|Outros
+    observacao = db.Column(db.String(500))
+    assinatura_path = db.Column(db.String(400))  # foto/assinatura digital
+    foto_paths = db.Column(db.Text)  # json lista
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ViagemPosicao(db.Model):
+    """Breadcrumb GPS - ponto de posicionamento registrado durante a viagem."""
+    __tablename__ = "viagem_posicao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), nullable=False, index=True)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    velocidade_kmh = db.Column(db.Float)
+    rumo = db.Column(db.Float)  # graus (0-360)
+    precisao_m = db.Column(db.Float)
+    bateria_pct = db.Column(db.Integer)
+    registrado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    origem = db.Column(db.String(20), default="manual")  # manual|gps|locartrack|motorista_app
+
+
+class ViagemEvento(db.Model):
+    """Timeline de eventos da viagem (inicio, chegada, abastecimento, ocorrencia, foto)."""
+    __tablename__ = "viagem_evento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), nullable=False, index=True)
+    parada_id = db.Column(db.Integer, db.ForeignKey("viagem_parada.id"), index=True)
+    tipo = db.Column(db.String(30), nullable=False, index=True)  # INICIO|FIM|CHEGADA|SAIDA_PARADA|ABASTECIMENTO|OCORRENCIA|FOTO|PARADA_EXTRA|OBSERVACAO|CHECKLIST
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.String(800))
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+    km = db.Column(db.Integer)
+    foto_path = db.Column(db.String(400))
+    severidade = db.Column(db.String(20), default="info")  # info|warning|danger|success
+    registrado_por = db.Column(db.String(100))
+    registrado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+# ============================================================================
+# GESTAO DE FROTA - documentos, manutencao, abastecimento, multas, checklist
+# ============================================================================
+
+class FrotaDocumento(db.Model):
+    """Documentos do veiculo (CRLV, seguro, licenciamento) ou motorista (CNH)."""
+    __tablename__ = "frota_documento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Exatamente um dos dois deve estar preenchido
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    tipo = db.Column(db.String(40), nullable=False, index=True)  # CRLV|SEGURO|IPVA|LICENCIAMENTO|CNH|OUTRO
+    numero = db.Column(db.String(80))
+    emitido_em = db.Column(db.Date)
+    vencimento = db.Column(db.Date, index=True)
+    observacao = db.Column(db.String(500))
+    anexo_path = db.Column(db.String(400))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FrotaManutencao(db.Model):
+    """Registro de manutencao (preventiva/corretiva) com alerta de proxima."""
+    __tablename__ = "frota_manutencao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(40), nullable=False, index=True)  # PREVENTIVA|CORRETIVA|REVISAO|TROCA_OLEO|PNEUS|FREIOS|OUTRO
+    data = db.Column(db.Date, nullable=False, index=True)
+    km_atual = db.Column(db.Integer)
+    custo = db.Column(db.Float, default=0)
+    fornecedor = db.Column(db.String(160))
+    nota_fiscal = db.Column(db.String(80))
+    descricao = db.Column(db.String(500), nullable=False)
+    # Alerta de proxima manutencao
+    proxima_data = db.Column(db.Date, index=True)
+    proxima_km = db.Column(db.Integer)
+    status = db.Column(db.String(20), nullable=False, default="Realizada", index=True)  # Realizada|Agendada|Cancelada
+    anexo_path = db.Column(db.String(400))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FrotaAbastecimento(db.Model):
+    """Registro de abastecimento para calcular consumo medio (km/l) e custo/km."""
+    __tablename__ = "frota_abastecimento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), index=True)
+    data = db.Column(db.DateTime, nullable=False, index=True)
+    km_atual = db.Column(db.Integer, nullable=False)
+    litros = db.Column(db.Float, nullable=False)
+    valor_litro = db.Column(db.Float, nullable=False, default=0)
+    valor_total = db.Column(db.Float, nullable=False, default=0)
+    combustivel = db.Column(db.String(20), default="Diesel")  # Diesel|Gasolina|Etanol|Flex
+    posto = db.Column(db.String(160))
+    tanque_cheio = db.Column(db.Boolean, nullable=False, default=True)
+    observacao = db.Column(db.String(400))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FrotaMulta(db.Model):
+    """Multa/infracao de transito."""
+    __tablename__ = "frota_multa"
+
+    id = db.Column(db.Integer, primary_key=True)
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    auto_infracao = db.Column(db.String(80), index=True)
+    data_infracao = db.Column(db.DateTime, nullable=False, index=True)
+    local = db.Column(db.String(300))
+    descricao = db.Column(db.String(500), nullable=False)
+    valor = db.Column(db.Float, nullable=False, default=0)
+    pontos = db.Column(db.Integer, nullable=False, default=0)
+    gravidade = db.Column(db.String(20))  # Leve|Media|Grave|Gravissima
+    vencimento = db.Column(db.Date, index=True)
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)  # Pendente|Paga|Recorrida|Cancelada
+    anexo_path = db.Column(db.String(400))
+    observacao = db.Column(db.String(400))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class FrotaChecklistDiario(db.Model):
+    """Checklist de saida (pneus, farol, freio, documentos, etc.)."""
+    __tablename__ = "frota_checklist_diario"
+
+    id = db.Column(db.Integer, primary_key=True)
+    veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
+    motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
+    viagem_id = db.Column(db.Integer, db.ForeignKey("viagem.id"), index=True)
+    data = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    km_atual = db.Column(db.Integer)
+    itens_json = db.Column(db.Text, nullable=False)  # [{"item":"Pneus","status":"OK"|"ATENCAO"|"NAO_OK","obs":""}, ...]
+    status_geral = db.Column(db.String(20), nullable=False, default="OK", index=True)  # OK|ATENCAO|BLOQUEADO
+    observacao = db.Column(db.String(500))
+    foto_paths = db.Column(db.Text)  # lista json de paths
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+# ============================================================================
 # MODELOS WMS - WAREHOUSE MANAGEMENT SYSTEM
 # ============================================================================
 

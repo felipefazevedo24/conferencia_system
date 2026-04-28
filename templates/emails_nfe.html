@@ -66,8 +66,123 @@
   }
   .sugestao-box strong { color: #155eef; }
 
+  /* ===== Painel de configuracao (estilo ERP/SAP) ===== */
+  .cfg-panel {
+    background: #fff; border: 1px solid #dbe4ec; border-radius: 16px;
+    box-shadow: 0 10px 24px rgba(18, 38, 58, 0.06); margin-bottom: 16px; overflow: hidden;
+  }
+  .cfg-panel-head {
+    background: linear-gradient(135deg, #0b2a6b 0%, #155eef 100%);
+    color: #fff; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .cfg-panel-head h3 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #fff; }
+  .cfg-panel-head .cfg-sub { margin: 2px 0 0; font-size: 12px; color: #c7d2fe; font-weight: 500; }
+  .cfg-panel-head .cfg-badge {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+    padding: 6px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff;
+  }
+
+  .cfg-body { padding: 18px 22px; }
+  .cfg-section { border-top: 1px solid #e2e8f0; padding: 16px 0; }
+  .cfg-section:first-child { border-top: 0; padding-top: 0; }
+  .cfg-section:last-child { padding-bottom: 0; }
+  .cfg-section-title {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;
+    color: #0b2a6b; margin: 0 0 4px; display: flex; align-items: center; gap: 8px;
+  }
+  .cfg-section-title::before {
+    content: ""; width: 4px; height: 14px; background: #155eef; border-radius: 2px;
+  }
+  .cfg-section-desc { font-size: 12px; color: #64748b; margin: 0 0 14px; }
+
+  .cfg-row {
+    display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start;
+    padding: 10px 0; border-bottom: 1px dashed #e2e8f0;
+  }
+  .cfg-row:last-child { border-bottom: 0; }
+  .cfg-row-label {
+    font-size: 13px; font-weight: 700; color: #1e293b; padding-top: 8px;
+  }
+  .cfg-row-label small { display: block; font-weight: 500; color: #64748b; font-size: 11.5px; margin-top: 3px; }
+  .cfg-row-control { display: flex; flex-direction: column; gap: 4px; }
+  .cfg-row-control input[type=email],
+  .cfg-row-control input[type=text],
+  .cfg-row-control input[type=date],
+  .cfg-row-control input[type=number],
+  .cfg-row-control select {
+    padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cfg-row-control input:focus,
+  .cfg-row-control select:focus {
+    outline: 0; border-color: #155eef; box-shadow: 0 0 0 3px rgba(21,94,239,0.15);
+  }
+  .cfg-hint { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+
+  /* Toggle switch */
+  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .switch-slot {
+    width: 44px; height: 24px; background: #cbd5e1; border-radius: 999px; position: relative;
+    transition: background .2s;
+  }
+  .switch-slot::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+    background: #fff; border-radius: 50%; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .switch input:checked + .switch-slot { background: #155eef; }
+  .switch input:checked + .switch-slot::after { left: 22px; }
+  .switch-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+  .switch-label.off { color: #64748b; }
+
+  /* Chip input (CC padrao) */
+  .chips-input {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    min-height: 42px; transition: border-color .15s, box-shadow .15s;
+  }
+  .chips-input:focus-within { border-color: #155eef; box-shadow: 0 0 0 3px rgba(21,94,239,0.15); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px;
+    background: #eef3ff; color: #0b2a6b; border: 1px solid #bfdbfe; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+  }
+  .chip button {
+    border: 0; background: rgba(11,42,107,0.1); color: #0b2a6b; width: 18px; height: 18px;
+    border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; padding: 0;
+  }
+  .chip button:hover { background: #ef4444; color: #fff; }
+  .chips-input input {
+    flex: 1; min-width: 180px; border: 0; outline: 0; font-size: 13px; padding: 4px 6px;
+  }
+
+  .cfg-footer {
+    border-top: 1px solid #e2e8f0; padding: 14px 22px; background: #f8fafc;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .cfg-footer-status { font-size: 12px; color: #475569; }
+  .cfg-footer-status strong { color: #0b2a6b; }
+  .cfg-footer-actions { display: flex; gap: 8px; }
+  .btn-primary-lg {
+    background: linear-gradient(135deg, #155eef 0%, #0b2a6b 100%); color: #fff;
+    border: 0; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 13px;
+    cursor: pointer; box-shadow: 0 4px 12px rgba(21,94,239,0.3);
+    transition: transform .1s, box-shadow .1s;
+  }
+  .btn-primary-lg:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(21,94,239,0.4); }
+  .btn-primary-lg:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .cfg-saved-flash {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7;
+    font-size: 11.5px; font-weight: 700; opacity: 0; transition: opacity .3s;
+  }
+  .cfg-saved-flash.show { opacity: 1; }
+
   @media (max-width: 900px) {
     .form-grid, .form-grid.narrow { grid-template-columns: 1fr 1fr; }
+    .cfg-row { grid-template-columns: 1fr; gap: 8px; }
+    .cfg-row-label { padding-top: 0; }
   }
 </style>
 {% endblock %}
@@ -85,53 +200,182 @@
   </div>
 
   {% if session.get('role') == 'Admin' %}
-  <div class="card">
-    <h3>Configuracao</h3>
-    <div class="form-grid narrow">
-      <label>
-        Modo teste
-        <select id="cfg-modo-teste">
-          <option value="true">Ligado (seguro)</option>
-          <option value="false">Desligado (envia ao cliente)</option>
-        </select>
-      </label>
-      <label>
-        E-mail de teste (destino)
-        <input id="cfg-destino-teste" type="email" placeholder="seu@email.com">
-      </label>
-      <label>
-        Envio automatico (polling)
-        <select id="cfg-auto-enabled">
-          <option value="true">Ligado</option>
-          <option value="false">Desligado</option>
-        </select>
-      </label>
-      <label>
-        Enviar autom. no faturamento
-        <select id="cfg-auto">
-          <option value="true">Ligado</option>
-          <option value="false">Desligado</option>
-        </select>
-      </label>
-      <label>
-        Auto apenas desde (NFs novas)
-        <input id="cfg-auto-desde" type="date">
-      </label>
-      <label>
-        Intervalo polling (segundos)
-        <input id="cfg-poll" type="number" min="60" step="30">
-      </label>
-      <label style="grid-column: span 3">
-        Sempre enviar em copia (CC - separados por virgula)
-        <input id="cfg-cc" type="text" placeholder="financeiro@empresa.com, fiscal@empresa.com">
-      </label>
-      <label>&nbsp;
-        <button class="btn" onclick="salvarConfig()">Salvar</button>
-      </label>
+  <div class="cfg-panel">
+    <div class="cfg-panel-head">
+      <div>
+        <h3>Configuração de envio de NF-e</h3>
+        <p class="cfg-sub">Parâmetros globais do motor de e-mails automáticos e manuais.</p>
+      </div>
+      <div id="cfg-badge-env" class="cfg-badge">—</div>
     </div>
-    <div id="cfg-scheduler-status" style="margin-top:10px;font-size:12px;color:#64748b">&mdash;</div>
-    <div style="margin-top:8px">
-      <button class="btn ghost" onclick="rodarAgora()">Rodar ciclo agora</button>
+
+    <div class="cfg-body">
+
+      <!-- Seção: Ambiente -->
+      <section class="cfg-section">
+        <h4 class="cfg-section-title">Ambiente de envio</h4>
+        <p class="cfg-section-desc">Controla se os e-mails vão para o cliente real ou para um endereço de teste.</p>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Modo teste
+            <small>Quando ligado, todos os envios são redirecionados ao e-mail de teste.</small>
+          </div>
+          <div class="cfg-row-control">
+            <label class="switch">
+              <input type="checkbox" id="cfg-modo-teste-chk">
+              <span class="switch-slot"></span>
+              <span class="switch-label" id="cfg-modo-teste-lbl">Desligado</span>
+            </label>
+            <span class="cfg-hint">Recomenda-se manter ligado em homologação.</span>
+          </div>
+        </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            E-mail de teste
+            <small>Destino único quando o modo teste está ativo.</small>
+          </div>
+          <div class="cfg-row-control">
+            <input id="cfg-destino-teste" type="email" placeholder="seu@email.com">
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção: Automação -->
+      <section class="cfg-section">
+        <h4 class="cfg-section-title">Automação</h4>
+        <p class="cfg-section-desc">Agendador periódico que verifica novas NFs e dispara e-mails automaticamente.</p>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Envio automático (polling)
+            <small>Scheduler em background verifica NFs novas e envia.</small>
+          </div>
+          <div class="cfg-row-control">
+            <label class="switch">
+              <input type="checkbox" id="cfg-auto-enabled-chk">
+              <span class="switch-slot"></span>
+              <span class="switch-label" id="cfg-auto-enabled-lbl">Desligado</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Envio no faturamento
+            <small>Dispara e-mail assim que a NF é marcada como faturada no sistema.</small>
+          </div>
+          <div class="cfg-row-control">
+            <label class="switch">
+              <input type="checkbox" id="cfg-auto-chk">
+              <span class="switch-slot"></span>
+              <span class="switch-label" id="cfg-auto-lbl">Desligado</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Considerar NFs a partir de
+            <small>O scheduler só envia NFs emitidas desta data em diante.</small>
+          </div>
+          <div class="cfg-row-control">
+            <input id="cfg-auto-desde" type="date">
+          </div>
+        </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Intervalo de verificação
+            <small>De quanto em quanto tempo o agendador executa (segundos).</small>
+          </div>
+          <div class="cfg-row-control">
+            <input id="cfg-poll" type="number" min="60" step="30" style="max-width:180px">
+            <span class="cfg-hint">Mínimo 60s. Padrão 300s (5 minutos).</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção: CC padrão -->
+      <section class="cfg-section">
+        <h4 class="cfg-section-title">Cópia fixa (CC padrão)</h4>
+        <p class="cfg-section-desc">
+          Esses e-mails receberão <strong>cópia automática</strong> em todos os envios de NF-e.
+          Digite um e-mail e pressione <kbd>Enter</kbd> ou vírgula para adicionar.
+        </p>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            E-mails em cópia
+            <small>Financeiro, fiscal, comercial etc.</small>
+          </div>
+          <div class="cfg-row-control">
+            <div class="chips-input" id="cfg-cc-chips" onclick="document.getElementById('cfg-cc-new').focus()">
+              <input id="cfg-cc-new" type="email" placeholder="adicionar e-mail..." onkeydown="onCcKeyDown(event)" onblur="onCcBlur(event)">
+            </div>
+            <span class="cfg-hint">Em modo teste, a cópia é desabilitada para evitar disparos acidentais.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção: Roteamento por CFOP -->
+      <section class="cfg-section">
+        <h4 class="cfg-section-title">Roteamento por CFOP</h4>
+        <p class="cfg-section-desc">
+          Quando algum item da NF-e tiver um destes CFOPs (ex.: remessa para conserto, devolução, transferência),
+          o e-mail <strong>NÃO vai para o cliente</strong>. Ele é redirecionado para a lista de destinatários
+          internos abaixo. Útil para 5902/1902 (remessa/retorno conserto), 5124/5125 (industrialização) e similares.
+        </p>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            CFOPs que disparam o roteamento
+            <small>Pressione <kbd>Enter</kbd> ou vírgula para adicionar. Apenas dígitos (4 caracteres).</small>
+          </div>
+          <div class="cfg-row-control">
+            <div class="chips-input" id="cfg-cfop-chips" onclick="document.getElementById('cfg-cfop-new').focus()">
+              <input id="cfg-cfop-new" type="text" inputmode="numeric" maxlength="4" placeholder="ex: 5902" onkeydown="onCfopKeyDown(event)" onblur="onCfopBlur(event)">
+            </div>
+            <span class="cfg-hint">Sugestões: 5902, 1902, 5124, 5125, 5410.</span>
+          </div>
+        </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Destinatários internos
+            <small>Recebem a NF-e quando algum CFOP acima é detectado. Primeiro vira destinatário principal; demais entram em cópia.</small>
+          </div>
+          <div class="cfg-row-control">
+            <div class="chips-input" id="cfg-dest-esp-chips" onclick="document.getElementById('cfg-dest-esp-new').focus()">
+              <input id="cfg-dest-esp-new" type="email" placeholder="adicionar e-mail..." onkeydown="onDestEspKeyDown(event)" onblur="onDestEspBlur(event)">
+            </div>
+            <span class="cfg-hint">Se a lista estiver vazia, o roteamento é ignorado e a NF segue o fluxo normal.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção: Agendador / status -->
+      <section class="cfg-section">
+        <h4 class="cfg-section-title">Status do agendador</h4>
+        <div id="cfg-scheduler-status" style="font-size:12.5px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-family:Consolas,monospace">
+          Carregando...
+        </div>
+        <div style="margin-top:10px">
+          <button class="btn ghost" onclick="rodarAgora()">Executar ciclo agora</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="cfg-footer">
+      <div class="cfg-footer-status">
+        <span id="cfg-saved-flash" class="cfg-saved-flash">✓ Salvo com sucesso</span>
+        <span id="cfg-dirty-flag" style="display:none;color:#b45309;font-weight:600">● Alterações não salvas</span>
+      </div>
+      <div class="cfg-footer-actions">
+        <button class="btn ghost" onclick="carregarConfig()">Recarregar</button>
+        <button id="cfg-save-btn" class="btn-primary-lg" onclick="salvarConfig()">Salvar configuração</button>
+      </div>
     </div>
   </div>
   {% endif %}
@@ -221,27 +465,224 @@
 </div>
 
 <script>
+// ===== Config (estilo ERP) =====
+const CC_STATE = { emails: [] };
+const CFOP_STATE = { cfops: [] };
+const DEST_ESP_STATE = { emails: [] };
+let CFG_DIRTY = false;
+
+function emailValido(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim()); }
+
+function marcarDirty() {
+  CFG_DIRTY = true;
+  const f = document.getElementById('cfg-dirty-flag');
+  const s = document.getElementById('cfg-saved-flash');
+  if (f) f.style.display = 'inline';
+  if (s) s.classList.remove('show');
+}
+function limparDirty() {
+  CFG_DIRTY = false;
+  const f = document.getElementById('cfg-dirty-flag');
+  if (f) f.style.display = 'none';
+}
+
+function bindSwitch(chkId, lblId, onCls='', offCls='off') {
+  const chk = document.getElementById(chkId);
+  const lbl = document.getElementById(lblId);
+  if (!chk || !lbl) return;
+  const sync = () => {
+    lbl.textContent = chk.checked ? 'Ligado' : 'Desligado';
+    lbl.classList.toggle('off', !chk.checked);
+  };
+  chk.addEventListener('change', () => { sync(); marcarDirty(); });
+  sync();
+}
+
+function renderChipsCC() {
+  const wrap = document.getElementById('cfg-cc-chips');
+  if (!wrap) return;
+  // Remove chips antigos (mantém o input)
+  wrap.querySelectorAll('.chip').forEach(c => c.remove());
+  const input = document.getElementById('cfg-cc-new');
+  CC_STATE.emails.forEach((em, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${em} <button type="button" title="Remover" onclick="removerCc(${idx})">&times;</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+
+function adicionarCc(valorRaw) {
+  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
+  if (!v) return false;
+  if (!emailValido(v)) { alert('E-mail inválido: ' + v); return false; }
+  if (CC_STATE.emails.includes(v)) return false;
+  CC_STATE.emails.push(v);
+  renderChipsCC();
+  marcarDirty();
+  return true;
+}
+function removerCc(idx) {
+  CC_STATE.emails.splice(idx, 1);
+  renderChipsCC();
+  marcarDirty();
+}
+function onCcKeyDown(ev) {
+  const inp = ev.target;
+  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';') {
+    ev.preventDefault();
+    if (adicionarCc(inp.value)) inp.value = '';
+  } else if (ev.key === 'Backspace' && !inp.value && CC_STATE.emails.length) {
+    CC_STATE.emails.pop();
+    renderChipsCC();
+    marcarDirty();
+  }
+}
+function onCcBlur(ev) {
+  const v = ev.target.value.trim();
+  if (v) { if (adicionarCc(v)) ev.target.value = ''; }
+}
+
+// ----- Chips de CFOP -----
+function renderChipsCfop() {
+  const wrap = document.getElementById('cfg-cfop-chips');
+  if (!wrap) return;
+  wrap.querySelectorAll('.chip').forEach(c => c.remove());
+  const input = document.getElementById('cfg-cfop-new');
+  CFOP_STATE.cfops.forEach((cf, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${cf} <button type="button" title="Remover" onclick="removerCfop(${idx})">&times;</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+function adicionarCfop(valorRaw) {
+  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
+  if (!v) return false;
+  if (!/^\d{4}$/.test(v)) { alert('CFOP deve ter exatamente 4 dígitos: ' + v); return false; }
+  if (CFOP_STATE.cfops.includes(v)) return false;
+  CFOP_STATE.cfops.push(v);
+  renderChipsCfop();
+  marcarDirty();
+  return true;
+}
+function removerCfop(idx) {
+  CFOP_STATE.cfops.splice(idx, 1);
+  renderChipsCfop();
+  marcarDirty();
+}
+function onCfopKeyDown(ev) {
+  const inp = ev.target;
+  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';' || ev.key === ' ') {
+    ev.preventDefault();
+    if (adicionarCfop(inp.value)) inp.value = '';
+  } else if (ev.key === 'Backspace' && !inp.value && CFOP_STATE.cfops.length) {
+    CFOP_STATE.cfops.pop();
+    renderChipsCfop();
+    marcarDirty();
+  }
+}
+function onCfopBlur(ev) {
+  const v = ev.target.value.trim();
+  if (v) { if (adicionarCfop(v)) ev.target.value = ''; }
+}
+
+// ----- Chips de destinatários especiais (roteamento por CFOP) -----
+function renderChipsDestEsp() {
+  const wrap = document.getElementById('cfg-dest-esp-chips');
+  if (!wrap) return;
+  wrap.querySelectorAll('.chip').forEach(c => c.remove());
+  const input = document.getElementById('cfg-dest-esp-new');
+  DEST_ESP_STATE.emails.forEach((em, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${em} <button type="button" title="Remover" onclick="removerDestEsp(${idx})">&times;</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+function adicionarDestEsp(valorRaw) {
+  const v = String(valorRaw || '').trim().replace(/[,;]+$/,'');
+  if (!v) return false;
+  if (!emailValido(v)) { alert('E-mail inválido: ' + v); return false; }
+  if (DEST_ESP_STATE.emails.includes(v)) return false;
+  DEST_ESP_STATE.emails.push(v);
+  renderChipsDestEsp();
+  marcarDirty();
+  return true;
+}
+function removerDestEsp(idx) {
+  DEST_ESP_STATE.emails.splice(idx, 1);
+  renderChipsDestEsp();
+  marcarDirty();
+}
+function onDestEspKeyDown(ev) {
+  const inp = ev.target;
+  if (ev.key === 'Enter' || ev.key === ',' || ev.key === ';') {
+    ev.preventDefault();
+    if (adicionarDestEsp(inp.value)) inp.value = '';
+  } else if (ev.key === 'Backspace' && !inp.value && DEST_ESP_STATE.emails.length) {
+    DEST_ESP_STATE.emails.pop();
+    renderChipsDestEsp();
+    marcarDirty();
+  }
+}
+function onDestEspBlur(ev) {
+  const v = ev.target.value.trim();
+  if (v) { if (adicionarDestEsp(v)) ev.target.value = ''; }
+}
+
 async function carregarConfig() {
   try {
     const r = await fetch('/api/nfe/email/config');
     if (!r.ok) return;
     const c = await r.json();
+
     const pill = document.getElementById('teste-pill');
+    const badge = document.getElementById('cfg-badge-env');
     if (c.modo_teste) {
-      pill.textContent = 'MODO TESTE ligado - envios redirecionados para ' + (c.destino_teste || '?');
-      pill.classList.remove('off');
+      if (pill) { pill.textContent = 'MODO TESTE - redirecionando para ' + (c.destino_teste || '?'); pill.classList.remove('off'); }
+      if (badge) badge.textContent = 'HOMOLOGAÇÃO';
     } else {
-      pill.textContent = 'MODO PRODUCAO - envios reais aos clientes';
-      pill.classList.add('off');
+      if (pill) { pill.textContent = 'MODO PRODUÇÃO - envios reais aos clientes'; pill.classList.add('off'); }
+      if (badge) badge.textContent = 'PRODUÇÃO';
     }
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-    set('cfg-modo-teste', c.modo_teste ? 'true' : 'false');
-    set('cfg-destino-teste', c.destino_teste || '');
-    set('cfg-auto', c.auto_no_faturamento ? 'true' : 'false');
-    set('cfg-auto-enabled', c.auto_enabled ? 'true' : 'false');
-    set('cfg-auto-desde', c.auto_desde || '');
-    set('cfg-cc', c.cc || '');
-    set('cfg-poll', c.poll_intervalo || 300);
+
+    const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+
+    setChk('cfg-modo-teste-chk', c.modo_teste);
+    setVal('cfg-destino-teste', c.destino_teste || '');
+    setChk('cfg-auto-enabled-chk', c.auto_enabled);
+    setChk('cfg-auto-chk', c.auto_no_faturamento);
+    setVal('cfg-auto-desde', c.auto_desde || '');
+    setVal('cfg-poll', c.poll_intervalo || 300);
+
+    // CC -> chips
+    CC_STATE.emails = String(c.cc || '')
+      .split(/[,;\s]+/).map(s => s.trim()).filter(s => s && emailValido(s));
+    renderChipsCC();
+
+    // CFOPs especiais -> chips
+    CFOP_STATE.cfops = String(c.cfops_especiais || '')
+      .split(/[,;\s]+/).map(s => s.trim()).filter(s => /^\d{4}$/.test(s));
+    renderChipsCfop();
+
+    // Destinatarios especiais -> chips
+    DEST_ESP_STATE.emails = String(c.destinatarios_especiais || '')
+      .split(/[,;\s]+/).map(s => s.trim()).filter(s => s && emailValido(s));
+    renderChipsDestEsp();
+
+    // Sync labels dos switches
+    ['cfg-modo-teste','cfg-auto-enabled','cfg-auto'].forEach(prefix => {
+      const chk = document.getElementById(prefix + '-chk');
+      const lbl = document.getElementById(prefix + '-lbl');
+      if (chk && lbl) {
+        lbl.textContent = chk.checked ? 'Ligado' : 'Desligado';
+        lbl.classList.toggle('off', !chk.checked);
+      }
+    });
+
+    limparDirty();
     carregarSchedulerStatus();
   } catch (e) { console.warn(e); }
 }
@@ -254,27 +695,64 @@ async function carregarSchedulerStatus() {
     const el = document.getElementById('cfg-scheduler-status');
     if (!el) return;
     const lastRun = s.last_run ? new Date(s.last_run).toLocaleString('pt-BR') : 'nunca';
-    const estado = s.rodando ? 'rodando' : 'parado';
-    el.textContent = `Scheduler ${estado} | Ultima execucao: ${lastRun} | ${s.last_message || ''}`;
+    const estado = s.rodando
+      ? '<span style="color:#047857;font-weight:700">● RODANDO</span>'
+      : '<span style="color:#b91c1c;font-weight:700">● PARADO</span>';
+    el.innerHTML = `${estado} &nbsp;|&nbsp; Última execução: <strong>${lastRun}</strong>` +
+                   (s.last_message ? `<br><span style="color:#64748b">${s.last_message}</span>` : '');
   } catch (e) { /* silencioso */ }
 }
 
 async function salvarConfig() {
+  // Se houver e-mail digitado mas não confirmado no chip, adiciona
+  const pend = document.getElementById('cfg-cc-new');
+  if (pend && pend.value.trim()) { if (adicionarCc(pend.value)) pend.value = ''; }
+  const pendCfop = document.getElementById('cfg-cfop-new');
+  if (pendCfop && pendCfop.value.trim()) { if (adicionarCfop(pendCfop.value)) pendCfop.value = ''; }
+  const pendDest = document.getElementById('cfg-dest-esp-new');
+  if (pendDest && pendDest.value.trim()) { if (adicionarDestEsp(pendDest.value)) pendDest.value = ''; }
+
+  const btn = document.getElementById('cfg-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
   const body = {
-    modo_teste: document.getElementById('cfg-modo-teste').value === 'true',
-    destino_teste: document.getElementById('cfg-destino-teste').value,
-    auto_no_faturamento: document.getElementById('cfg-auto').value === 'true',
-    auto_enabled: document.getElementById('cfg-auto-enabled').value === 'true',
+    modo_teste: document.getElementById('cfg-modo-teste-chk').checked,
+    destino_teste: document.getElementById('cfg-destino-teste').value.trim(),
+    auto_no_faturamento: document.getElementById('cfg-auto-chk').checked,
+    auto_enabled: document.getElementById('cfg-auto-enabled-chk').checked,
     auto_desde: document.getElementById('cfg-auto-desde').value,
-    cc: document.getElementById('cfg-cc').value,
+    cc: CC_STATE.emails.join(', '),
     poll_intervalo: parseInt(document.getElementById('cfg-poll').value || '300', 10),
+    cfops_especiais: CFOP_STATE.cfops.join(', '),
+    destinatarios_especiais: DEST_ESP_STATE.emails.join(', '),
   };
-  const r = await fetch('/api/nfe/email/config', {
-    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
-  });
-  if (r.ok) { await carregarConfig(); alert('Configuracao salva.'); }
-  else alert('Falha ao salvar.');
+  try {
+    const r = await fetch('/api/nfe/email/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await carregarConfig();
+    const flash = document.getElementById('cfg-saved-flash');
+    if (flash) { flash.classList.add('show'); setTimeout(() => flash.classList.remove('show'), 2500); }
+  } catch (e) {
+    alert('Falha ao salvar: ' + e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar configuração'; }
+  }
 }
+
+// Marca dirty quando qualquer campo textual muda
+document.addEventListener('input', (ev) => {
+  const t = ev.target;
+  if (!t || !t.id) return;
+  if (['cfg-destino-teste','cfg-auto-desde','cfg-poll'].includes(t.id)) marcarDirty();
+});
+// Bind dos switches assim que o DOM carrega
+document.addEventListener('DOMContentLoaded', () => {
+  bindSwitch('cfg-modo-teste-chk','cfg-modo-teste-lbl');
+  bindSwitch('cfg-auto-enabled-chk','cfg-auto-enabled-lbl');
+  bindSwitch('cfg-auto-chk','cfg-auto-lbl');
+});
 
 async function rodarAgora() {
   const r = await fetch('/api/nfe/email/scheduler/run-now', {method: 'POST'});

@@ -5,7 +5,15 @@
 {% block shell_subtitle %}Visualize suas viagens e finalize entregas/coletas.{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/recebimento_sap.css">
 <style>
+/* Padronização visual Transporte */
+:root{--font-display:var(--rec-font-display);--font-ui:var(--rec-font-ui)}
+body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !important;color:var(--rec-ink-900)}
+.mot-panel{border-color:var(--rec-border) !important}
+.mot-title,[class*="mot-title"]{font-family:var(--rec-font-display) !important;color:var(--rec-ink-900) !important}
+.mot-copy,[class*="mot-copy"]{color:var(--rec-ink-500) !important}
+.btn-primary{background:var(--rec-blue-600) !important;border-color:var(--rec-blue-600) !important}
 .mot-shell{max-width:1200px;margin:0 auto;display:grid;gap:18px}
 .mot-panel{border:1px solid rgba(18,40,58,.12);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#f5f8fb 100%);box-shadow:0 16px 32px rgba(18,40,58,.08);padding:22px;display:grid;gap:16px}
 .mot-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
@@ -57,161 +65,114 @@
         <div class="mot-top">
             <div>
                 <h1 class="mot-title">Minhas viagens</h1>
-                <p class="mot-copy">Bem-vindo, <strong id="motNome">{{ user }}</strong>. Veja abaixo suas viagens programadas.</p>
+                <p class="mot-copy">Bem-vindo, <strong id="motNome">{{ user }}</strong>. Aqui aparecem apenas as viagens que o gestor liberou para você.</p>
             </div>
             <button class="btn btn-primary" type="button" onclick="loadViagens()"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
         <div id="motMetrics" class="mot-metrics"></div>
     </section>
 
-    <section class="mot-panel">
+    <section class="mot-panel" id="motListaWrap">
         <div id="motState" class="mot-state">Carregando viagens...</div>
-        <div style="overflow-x:auto">
-            <table class="mot-table" id="motTable" style="display:none">
-                <thead>
-                    <tr>
-                        <th>Código</th>
-                        <th>Tipo</th>
-                        <th>Status</th>
-                        <th>Parceiro</th>
-                        <th>Documento</th>
-                        <th>Destino</th>
-                        <th>Saída prevista</th>
-                        <th>Veiculo</th>
-                        <th>KM est.</th>
-                        <th>Rota</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody id="motBody"></tbody>
-            </table>
-        </div>
+        <div id="motLista" style="display:grid;gap:14px"></div>
     </section>
-</div>
 
-<div class="modal fade" id="iniciarModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-play text-primary"></i> Iniciar viagem</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body">
-                <p>Confirma que está <strong>iniciando</strong> esta viagem agora?</p>
-                <p id="iniciarInfo" class="text-muted"></p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-                <button class="btn btn-primary" type="button" id="iniciarBtn"><i class="fas fa-play"></i> Iniciar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="confirmarModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-flag-checkered text-success"></i> Finalizar viagem</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body">
-                <p>Confirma que <strong>finalizou</strong> esta viagem?</p>
-                <p id="confirmarInfo" class="text-muted"></p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-                <button class="btn btn-success" type="button" id="confirmarBtn"><i class="fas fa-check"></i> Finalizar</button>
-            </div>
-        </div>
-    </div>
+    <section class="mot-panel" id="motHistWrap" style="display:none">
+        <h3 style="margin:0 0 10px;font-family:var(--rec-font-display);color:#12283a;font-size:18px"><i class="fas fa-clock-rotate-left" style="color:#60758d;margin-right:6px"></i> Histórico recente</h3>
+        <div id="motHist" style="display:grid;gap:8px"></div>
+    </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const iniciarModal=new bootstrap.Modal(document.getElementById('iniciarModal'));
-const confirmarModal=new bootstrap.Modal(document.getElementById('confirmarModal'));
 const motState=document.getElementById('motState');
-const motTable=document.getElementById('motTable');
-const motBody=document.getElementById('motBody');
+const motLista=document.getElementById('motLista');
+const motHistWrap=document.getElementById('motHistWrap');
+const motHist=document.getElementById('motHist');
 const motMetrics=document.getElementById('motMetrics');
-const iniciarBtn=document.getElementById('iniciarBtn');
-const confirmarBtn=document.getElementById('confirmarBtn');
-const iniciarInfo=document.getElementById('iniciarInfo');
-const confirmarInfo=document.getElementById('confirmarInfo');
-let pendingId=null;
-let pendingAction=null;
 
-const statusBadge=s=>({Pendente:'b-slate',EmAnalise:'b-blue',Alocada:'b-gold',EmAndamento:'b-blue',EmRota:'b-green',Concluida:'b-green',Cancelada:'b-red'}[s]||'b-slate');
+const statusBadge=s=>({Planejada:'b-slate',EmAndamento:'b-blue',Concluida:'b-green',Cancelada:'b-red'}[s]||'b-slate');
+const statusLabel=s=>({Planejada:'Planejada',EmAndamento:'Em rota',Concluida:'Concluída',Cancelada:'Cancelada'}[s]||s);
 
 function setState(msg,err){motState.textContent=msg;motState.classList.toggle('error',!!err);motState.style.display='block';}
+function fmtDT(s){if(!s)return '---';try{const d=new Date(s);return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return s;}}
+
+function viagemCard(v){
+    const paradas=v.paradas||[];
+    const n=paradas.length;
+    const destinoBadge = v.destino_unico
+        ? `<span class="mot-badge b-gold"><i class="fas fa-location-dot"></i> Destino único</span>`
+        : `<span class="mot-badge b-blue"><i class="fas fa-route"></i> ${n} parada${n>1?'s':''}</span>`;
+    const statusB=`<span class="mot-badge ${statusBadge(v.status)}">${statusLabel(v.status)}</span>`;
+    const veic=v.veiculo_nome||v.veiculo_placa||'---';
+    const km=v.km_previsto?Number(v.km_previsto).toFixed(1)+' km':(v.km_estimado?Number(v.km_estimado).toFixed(1)+' km':'---');
+    const saida=fmtDT(v.saida_prevista);
+    const link=v.motorista_link||`/motorista/viagem/${v.id}`;
+    const resumoParadas=paradas.slice(0,3).map((p,i)=>`<li>${i+1}. ${p.parceiro_nome||p.tipo||'Parada'} <span style="color:#8096af;font-size:12px">${p.tipo||''}</span></li>`).join('');
+    const maisParadas=n>3?`<li style="color:#60758d;font-style:italic">+${n-3} parada(s)...</li>`:'';
+    return `<article class="mot-viagem-card" style="border:1px solid #d6e2ef;border-radius:14px;padding:18px;background:#fff;box-shadow:0 1px 3px rgba(15,98,201,0.04)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+            <div>
+                <div style="font-family:var(--rec-font-display);font-size:20px;font-weight:700;color:#0f2439">${v.codigo||('Viagem #'+v.id)}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${statusB} ${destinoBadge}</div>
+            </div>
+            <a href="${link}" class="btn btn-primary" style="background:#0f62c9;border-color:#0f62c9"><i class="fas fa-arrow-right"></i> Abrir viagem</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px;font-size:14px">
+            <div><span style="color:#60758d;font-size:12px;display:block">Veículo</span><strong>${veic}</strong></div>
+            <div><span style="color:#60758d;font-size:12px;display:block">Saída prevista</span><strong>${saida}</strong></div>
+            <div><span style="color:#60758d;font-size:12px;display:block">KM previsto</span><strong>${km}</strong></div>
+            <div><span style="color:#60758d;font-size:12px;display:block">Liberada em</span><strong>${fmtDT(v.liberada_em)}</strong></div>
+        </div>
+        ${n?`<div style="margin-top:12px;padding-top:12px;border-top:1px dashed #d6e2ef"><span style="color:#60758d;font-size:12px;display:block;margin-bottom:6px">Roteiro</span><ol style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.7">${resumoParadas}${maisParadas}</ol></div>`:''}
+    </article>`;
+}
+
+function histCard(v){
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid #e2e9f1;border-radius:10px;background:#f7fafd;font-size:13.5px">
+        <div><strong>${v.codigo||('Viagem #'+v.id)}</strong> <span style="color:#60758d">— ${(v.paradas||[]).length} parada(s) · ${v.veiculo_nome||'---'}</span></div>
+        <span style="color:#1e7a3d;font-weight:600">${fmtDT(v.retorno_real||v.liberada_em)}</span>
+    </div>`;
+}
 
 async function loadViagens(){
     setState('Carregando viagens...');
-    motTable.style.display='none';
-    const r=await fetch('/api/logistica/motorista/minhas-viagens');
-    const d=await r.json();
-    if(!r.ok)return setState(d.error||'Falha ao carregar viagens.',true);
-    if(d.motorista)document.getElementById('motNome').textContent=d.motorista.nome;
-    const viagens=d.viagens||[];
-    const ativas=viagens.filter(v=>v.status!=='Concluida'&&v.status!=='Cancelada');
-    const emRota=viagens.filter(v=>v.status==='EmRota');
-    const concluidas=viagens.filter(v=>v.status==='Concluida');
-    motMetrics.innerHTML=[
-        ['Aguardando início',ativas.filter(v=>v.status==='Alocada'||v.status==='EmAndamento').length],
-        ['Em rota',emRota.length],
-        ['Concluídas',concluidas.length],
-        ['Total',viagens.length]
-    ].map(([l,v])=>`<article class="mot-metric"><span>${l}</span><strong>${v}</strong></article>`).join('');
-    if(!viagens.length){setState('Nenhuma viagem atribuída a você.');return;}
-    motBody.innerHTML=viagens.map(v=>{
-        const canStart=v.status==='Alocada'||v.status==='EmAndamento';
-        const canFinish=v.status==='EmRota';
-        const info=`${v.codigo} — ${(v.parceiro_nome||'').replace(/'/g,"\\'")}`;
-        let actions='';
-        if(canStart) actions=`<button class="btn btn-primary btn-sm" onclick="pedirIniciar(${v.id},'${info}')"><i class="fas fa-play"></i> Iniciar</button>`;
-        else if(canFinish) actions=`<button class="btn btn-success btn-sm" onclick="pedirFinalizar(${v.id},'${info}')"><i class="fas fa-flag-checkered"></i> Finalizar</button>`;
-        else if(v.status==='Concluida') actions='<span class="mot-badge b-green"><i class="fas fa-check"></i> OK</span>';
-        return `<tr>
-            <td><strong>${v.codigo}</strong></td>
-            <td>${v.tipo_label}</td>
-            <td><span class="mot-badge ${statusBadge(v.status)}">${v.status_label}</span></td>
-            <td>${v.parceiro_nome||'---'}</td>
-            <td>${v.documento_tipo} ${v.documento_numero||'---'}</td>
-            <td>${v.endereco_formatado||'---'}</td>
-            <td>${v.data_hora_saida_prevista_label||'---'}</td>
-            <td>${v.veiculo?.nome||'---'}</td>
-            <td>${v.km_estimado?Number(v.km_estimado).toFixed(1)+' km':'---'}</td>
-            <td>${v.google_maps_url?`<a href="${v.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="fas fa-map-location-dot"></i></a>`:''}</td>
-            <td>${actions}</td>
-        </tr>`;
-    }).join('');
-    motTable.style.display='table';
-    setState(`${viagens.length} viagem(ns) encontrada(s).`);
+    motLista.innerHTML='';
+    try{
+        const r=await fetch('/api/viagem/motorista/minhas');
+        const d=await r.json();
+        if(!r.ok){setState(d.erro||d.error||'Falha ao carregar viagens.',true);return;}
+        if(d.motorista)document.getElementById('motNome').textContent=d.motorista.nome;
+        const viagens=d.viagens||[];
+        const historico=d.historico||[];
+        const emRota=viagens.filter(v=>v.status==='EmAndamento').length;
+        const planejadas=viagens.filter(v=>v.status==='Planejada').length;
+        const hojeIso=new Date().toISOString().slice(0,10);
+        const concHoje=historico.filter(v=>(v.retorno_real||'').slice(0,10)===hojeIso).length;
+        motMetrics.innerHTML=[
+            ['Liberadas p/ mim',viagens.length],
+            ['Aguardando início',planejadas],
+            ['Em rota agora',emRota],
+            ['Concluídas hoje',concHoje]
+        ].map(([l,v])=>`<article class="mot-metric"><span>${l}</span><strong>${v}</strong></article>`).join('');
+        if(!viagens.length){
+            setState('Nenhuma viagem liberada para você no momento. Aguarde o gestor liberar sua próxima rota.');
+        } else {
+            motState.style.display='none';
+            motLista.innerHTML=viagens.map(viagemCard).join('');
+        }
+        if(historico.length){
+            motHistWrap.style.display='block';
+            motHist.innerHTML=historico.slice(0,10).map(histCard).join('');
+        } else {
+            motHistWrap.style.display='none';
+        }
+    }catch(e){setState('Erro de rede ao carregar viagens.',true);}
 }
 
-function pedirIniciar(id,info){pendingId=id;pendingAction='iniciar';iniciarInfo.textContent=info;iniciarModal.show();}
-function pedirFinalizar(id,info){pendingId=id;pendingAction='finalizar';confirmarInfo.textContent=info;confirmarModal.show();}
-
-iniciarBtn.addEventListener('click',async()=>{
-    if(!pendingId)return;
-    iniciarBtn.disabled=true;
-    const r=await fetch(`/api/logistica/motorista/iniciar/${pendingId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-    const d=await r.json();
-    iniciarBtn.disabled=false;
-    if(!r.ok){setState(d.error||'Falha ao iniciar viagem.',true);iniciarModal.hide();return;}
-    iniciarModal.hide();
-    pendingId=null;
-    await loadViagens();
-});
-
-confirmarBtn.addEventListener('click',async()=>{
-    if(!pendingId)return;
-    confirmarBtn.disabled=true;
-    const r=await fetch(`/api/logistica/motorista/finalizar/${pendingId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-    const d=await r.json();
-    confirmarBtn.disabled=false;
-    if(!r.ok){setState(d.error||'Falha ao finalizar viagem.',true);confirmarModal.hide();return;}
-    confirmarModal.hide();
-    pendingId=null;
-    await loadViagens();
-});
-
 loadViagens();
+// Auto-refresh a cada 60s (só quando a aba está visível)
+setInterval(()=>{if(document.visibilityState==='visible')loadViagens();},60000);
 </script>
 {% endblock %}

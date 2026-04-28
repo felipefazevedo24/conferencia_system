@@ -5,7 +5,56 @@
 {% block shell_subtitle %}Painel logístico com tabela de solicitações, agenda e motoristas.{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/recebimento_sap.css">
 <style>
+/* ══════════════════════════════════════════════════════════════════════════
+   Padronização visual Transporte — alinhada ao padrão "doc-*" da Gestão de Frota
+   Hero em gradiente claro com borda inferior âmbar, abas âmbar, tipografia Plex.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+    --font-display:var(--rec-font-display);--font-ui:var(--rec-font-ui);
+    --frota-amber:#f59e0b;--frota-amber-deep:#b45309;--frota-amber-soft:#fef3c7;
+    --frota-ink:#0f172a;--frota-muted:#64748b;--frota-border:#e2e8f0;
+}
+body{font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,var(--rec-font-ui),sans-serif !important;background-color:var(--rec-bg) !important;color:var(--frota-ink)}
+.rt-title,.rt-metric strong{font-family:var(--rec-font-display) !important}
+.rt-copy{color:var(--frota-muted) !important}
+.rt-panel{border-color:var(--frota-border) !important;border-radius:16px !important}
+
+/* Hero estilo "doc-entry-hero" da Frota: gradiente claro + borda inferior âmbar */
+.rt-hero{
+    background:radial-gradient(circle at 20% 20%,rgba(245,158,11,.14),transparent 45%),
+              linear-gradient(135deg,#ffffff 0%,#fef8ec 100%) !important;
+    border:1px solid var(--frota-border) !important;
+    border-bottom:3px solid var(--frota-amber) !important;
+    border-radius:22px !important;
+    color:var(--frota-ink) !important;
+    box-shadow:0 4px 16px rgba(15,23,42,.06) !important;
+    padding:26px 30px !important;
+}
+.rt-hero::before,.rt-hero::after{display:none !important}
+.rt-hero .rt-title{color:var(--frota-ink) !important;text-shadow:none !important;font-size:24px !important;font-weight:800 !important}
+.rt-hero .rt-title i{color:var(--frota-amber) !important;opacity:1 !important}
+.rt-hero .rt-copy{color:var(--frota-muted) !important;text-shadow:none !important;font-size:14px !important}
+.rt-hero .btn{background:#fff !important;border:1.5px solid var(--frota-amber) !important;color:var(--frota-amber-deep) !important;backdrop-filter:none !important;border-radius:10px !important;font-weight:700}
+.rt-hero .btn:hover{background:var(--frota-amber-soft) !important;transform:translateY(-1px);box-shadow:none !important}
+.rt-hero .btn-primary{background:linear-gradient(135deg,var(--frota-amber),var(--frota-amber-deep)) !important;color:#fff !important;border:none !important;box-shadow:0 4px 12px rgba(245,158,11,.25) !important}
+.rt-hero .btn-primary:hover{background:linear-gradient(135deg,var(--frota-amber-deep),#7c2d12) !important;filter:brightness(1.05)}
+
+/* Abas no tom âmbar (Frota) */
+.rt-tab.active{color:var(--frota-amber-deep) !important;background:#fff !important;box-shadow:0 4px 12px rgba(15,23,42,.06) !important;border-bottom:3px solid var(--frota-amber) !important}
+.rt-tab.active .tab-count{background:linear-gradient(135deg,var(--frota-amber),var(--frota-amber-deep)) !important;color:#fff !important;box-shadow:0 2px 8px rgba(245,158,11,.25) !important}
+
+/* Hover de linha: traço âmbar */
+.erp-table tbody tr:hover{box-shadow:inset 4px 0 0 var(--frota-amber) !important;background:#fffbeb !important}
+
+/* Botões primários globais seguindo o padrão Frota */
+.btn-primary{background:linear-gradient(135deg,#155eef,#0b2a6b) !important;box-shadow:0 4px 12px rgba(21,94,239,.2) !important;border:none !important}
+.btn-primary:hover{filter:brightness(1.05);transform:translateY(-1px)}
+
+/* KPI cards com tom amber para slate/gold */
+.rt-metric.tone-gold i{color:var(--frota-amber-deep) !important;background:var(--frota-amber-soft) !important}
+.rt-metric.tone-gold::before{background:rgba(245,158,11,.06) !important}
 .rt-shell{max-width:1800px;margin:0 auto;display:grid;gap:20px;padding:10px 20px}
 .rt-panel{border:1px solid rgba(18,40,58,.08);border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(18,40,58,.04);transition:box-shadow .3s ease}
 .rt-panel:hover{box-shadow:0 12px 32px rgba(18,40,58,.08)}
@@ -502,7 +551,6 @@ async function loadDashboard(){
     motoristaOptions();
     state.page=1;
     renderTable(state.allCards);
-    showToast('Painel atualizado.','success');
 }
 
 async function loadAgenda(){
@@ -522,8 +570,36 @@ async function loadMotoristas(){
     motoristaState.textContent=`${state.motoristas.length} motorista(s) ativo(s).`;motoristaState.classList.remove('error');
     motoristaList.innerHTML=state.motoristas.length?state.motoristas.map(m=>{
         const initials=(m.nome||'??').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-        return`<article class="rt-driver"><div class="rt-driver-avatar">${initials}</div><div class="rt-driver-info"><strong>${m.nome}</strong><p><i class="fas fa-phone" style="font-size:10px;color:#94a3b8"></i> ${m.telefone||'Sem telefone'}${m.cnh?' &middot; <i class="fas fa-id-card" style="font-size:10px;color:#94a3b8"></i> CNH '+m.cnh:''}</p>${m.observacoes?`<p>${m.observacoes}</p>`:''}</div><button class="btn btn-outline-secondary btn-sm" type="button" onclick="openMotoristaModal(${m.id})"><i class="fas fa-pen"></i></button></article>`;
+        return`<article class="rt-driver"><div class="rt-driver-avatar">${initials}</div><div class="rt-driver-info"><strong>${m.nome}</strong><p><i class="fas fa-phone" style="font-size:10px;color:#94a3b8"></i> ${m.telefone||'Sem telefone'}${m.cnh?' &middot; <i class="fas fa-id-card" style="font-size:10px;color:#94a3b8"></i> CNH '+m.cnh:''}</p>${m.observacoes?`<p>${m.observacoes}</p>`:''}</div><div style="display:flex;gap:4px;flex-shrink:0"><button class="btn btn-outline-primary btn-sm" type="button" onclick="abrirCompartilhar(${m.id})" title="Compartilhar painel com o motorista"><i class="fas fa-share-nodes"></i></button><button class="btn btn-outline-secondary btn-sm" type="button" onclick="openMotoristaModal(${m.id})" title="Editar"><i class="fas fa-pen"></i></button></div></article>`;
     }).join(''):'<div class="rt-empty"><i class="fas fa-user-slash"></i><p>Nenhum motorista cadastrado. Cadastre usuários com cargo Motorista na gestão de acessos.</p></div>';
+}
+
+// --------- Compartilhar painel do motorista (WhatsApp + QR + copiar)
+async function abrirCompartilhar(mid){
+    try{
+        const r=await fetch(`/api/viagem/motorista/${mid}/painel-link`);
+        const d=await r.json();
+        if(!r.ok||!d.sucesso)throw new Error(d.msg||'Falha ao gerar link.');
+        const html=`
+<div class="modal fade show" id="modalShare" style="display:block;background:rgba(15,23,42,.5)" tabindex="-1" onclick="if(event.target===this)document.getElementById('modalShare').remove()">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-share-nodes" style="color:#f59e0b"></i> Painel do motorista — ${d.motorista.nome}</h5><button type="button" class="btn-close" onclick="document.getElementById('modalShare').remove()"></button></div>
+    <div class="modal-body" style="text-align:center">
+      <p style="font-size:13px;color:#64748b;margin:0 0 12px">Envie este link ao motorista. Ele abre no celular e toca em <b>"Adicionar à tela inicial"</b> para virar um app permanente — nunca mais precisa de login.</p>
+      <img src="${d.qr}" alt="QR" style="border:1px solid #e2e8f0;border-radius:12px;padding:8px;background:#fff;max-width:260px;width:100%">
+      <div style="margin:12px 0">
+        <input id="shareUrl" value="${d.url}" readonly style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;font-size:13px;font-family:monospace">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+        <button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('shareUrl').value);showToast('Link copiado ✓','success')"><i class="fas fa-copy"></i> Copiar link</button>
+        ${d.whatsapp?`<a class="btn btn-success" href="${d.whatsapp}" target="_blank" rel="noopener" style="background:#25d366;border-color:#25d366"><i class="fab fa-whatsapp"></i> Enviar no WhatsApp</a>`:`<button class="btn btn-outline-secondary" disabled title="Cadastre um telefone no motorista"><i class="fab fa-whatsapp"></i> WhatsApp (sem telefone)</button>`}
+      </div>
+      <p style="font-size:11px;color:#94a3b8;margin:14px 0 0"><i class="fas fa-shield-halved"></i> Link permanente e único — funciona off-line após a primeira abertura (PWA).</p>
+    </div>
+  </div></div>
+</div>`;
+        document.body.insertAdjacentHTML('beforeend',html);
+    }catch(e){showToast(e.message||'Falha ao compartilhar.','error');}
 }
 
 async function openDetalhe(id){
@@ -553,9 +629,69 @@ function openCancelarModal(id){detalheModal.hide();cancelarSolicitacaoId.value=i
 function openMotoristaModal(id=''){const m=state.motoristas.find(i=>String(i.id)===String(id));if(!m)return;motoristaId.value=m.id;motoristaNome.value=m.nome||'';motoristaTelefone.value=m.telefone||'';motoristaCnh.value=m.cnh||'';motoristaObservacoes.value=m.observacoes||'';motoristaAtivo.checked=!!m.ativo;motoristaModal.show();}
 
 async function updateStatus(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alterar status.','error');return setBoard(d.error||'Falha ao alterar status.',true);}showToast(`Status atualizado para ${STEP_LABELS[status]||status}.`,'success');detalheModal.hide();await refreshAll();}
-async function refreshAll(){await loadDashboard();await loadAgenda();await loadMotoristas();}
+async function refreshAll(){await Promise.all([loadDashboard(),loadAgenda(),loadMotoristas()]);}
 
-alocarForm.addEventListener('submit',async e=>{e.preventDefault();const dept=document.getElementById('alocarDepartamento').value;if(!dept){showToast('Selecione o departamento solicitante.','error');return;}const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:state.geo?.lat||'',origem_longitude:state.geo?.lng||'',departamento_solicitante:dept};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${alocarSolicitacaoId.value}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alocar.','error');return setBoard(d.error||'Falha ao alocar.',true);}showToast('Rota alocada com sucesso!','success');alocarModal.hide();await refreshAll();});
+// --------- Fluxo unificado: após alocar, perguntar se monta viagem
+async function abrirMontarViagem(sid,mid,vid){
+    // busca viagens Planejadas desse motorista para permitir anexar
+    let existentes=[];
+    try{
+        const r=await fetch(`/api/viagem/planejadas-do-motorista/${mid}`);
+        if(r.ok){const d=await r.json();existentes=d.viagens||[];}
+    }catch(_){}
+    const optsExistentes=existentes.length
+        ? `<select id="vgAnexar" class="form-select" style="margin-top:6px">${existentes.map(v=>`<option value="${v.id}">${v.codigo||('#'+v.id)} — ${v.paradas_qtd||0} parada(s) · ${v.saida_prevista?new Date(v.saida_prevista).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'sem data'}</option>`).join('')}</select>`
+        : `<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;font-style:italic">Nenhuma viagem aberta para este motorista.</p>`;
+    const html=`
+<div class="modal fade show" id="mvModal" style="display:block;background:rgba(15,23,42,.55)" onclick="if(event.target===this)document.getElementById('mvModal').remove()">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content" style="border-radius:18px;border:none">
+    <div class="modal-header" style="border-bottom:1px solid #f1f5f9"><h5 class="modal-title"><i class="fas fa-route" style="color:#f59e0b"></i> Solicitação alocada — montar viagem?</h5><button type="button" class="btn-close" onclick="document.getElementById('mvModal').remove()"></button></div>
+    <div class="modal-body" style="padding:20px">
+      <p style="font-size:13px;color:#475569;margin:0 0 16px">Motorista e veículo foram alocados. O motorista <b>não vê esta corrida</b> até você criar uma Viagem e <b>liberar</b>.</p>
+      <div style="display:grid;gap:10px">
+        <button class="btn btn-primary" style="justify-content:flex-start;padding:14px;font-size:14px" onclick="criarViagemAgora(${sid})">
+            <i class="fas fa-plus-circle" style="font-size:18px"></i>
+            <div style="text-align:left;margin-left:6px"><b>Nova viagem só com esta parada</b><div style="font-size:12px;opacity:.9;font-weight:400">Cria imediatamente e leva você para a tela de liberação</div></div>
+        </button>
+        <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fafbff">
+            <b style="font-size:13px;color:#0f172a"><i class="fas fa-plus" style="color:#155eef;margin-right:6px"></i>Adicionar a viagem existente do motorista</b>
+            ${optsExistentes}
+            ${existentes.length?`<button class="btn btn-outline-primary btn-sm" style="margin-top:8px" onclick="anexarAViagem(${sid},document.getElementById('vgAnexar').value)"><i class="fas fa-link"></i> Anexar a esta viagem</button>`:''}
+        </div>
+        <button class="btn btn-outline-secondary" style="padding:12px" onclick="document.getElementById('mvModal').remove()">
+            <i class="fas fa-clock"></i> Depois — só alocar por enquanto
+        </button>
+      </div>
+      <p style="font-size:11px;color:#94a3b8;margin:14px 0 0;text-align:center"><i class="fas fa-lightbulb"></i> Depois de criar/anexar, clique em "Liberar p/ motorista" na tela de Viagens para enviar.</p>
+    </div>
+  </div></div>
+</div>`;
+    document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function criarViagemAgora(sid){
+    try{
+        const r=await fetch(`/api/viagem/nova-de-solicitacao/${sid}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        const d=await r.json();
+        if(!r.ok||!d.sucesso)throw new Error(d.msg||'Falha');
+        showToast(`Viagem ${d.viagem.codigo} criada ✓ — clique para liberar`,'success',6000);
+        document.getElementById('mvModal')?.remove();
+        setTimeout(()=>{window.top.location.href='/logistica/viagens?vid='+d.viagem.id;},700);
+    }catch(e){showToast(e.message||'Falha ao criar viagem.','error');}
+}
+
+async function anexarAViagem(sid,vid){
+    if(!vid)return;
+    try{
+        const r=await fetch(`/api/viagem/${vid}/anexar-solicitacao/${sid}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        const d=await r.json();
+        if(!r.ok||!d.sucesso)throw new Error(d.msg||'Falha');
+        showToast(d.liberacao_revogada?'Parada anexada. ⚠️ Liberação revogada — libere novamente.':'Parada anexada à viagem ✓','success');
+        document.getElementById('mvModal')?.remove();
+    }catch(e){showToast(e.message||'Falha ao anexar.','error');}
+}
+
+alocarForm.addEventListener('submit',async e=>{e.preventDefault();const dept=document.getElementById('alocarDepartamento').value;if(!dept){showToast('Selecione o departamento solicitante.','error');return;}const sid=alocarSolicitacaoId.value;const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:state.geo?.lat||'',origem_longitude:state.geo?.lng||'',departamento_solicitante:dept};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alocar.','error');return setBoard(d.error||'Falha ao alocar.',true);}showToast('Rota alocada com sucesso!','success');alocarModal.hide();await refreshAll();if(payload.veiculo_id && payload.motorista_id){setTimeout(()=>abrirMontarViagem(sid,payload.motorista_id,payload.veiculo_id),400);}});
 cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao cancelar.','error');return setBoard(d.error||'Falha ao cancelar.',true);}showToast('Cancelamento solicitado. Aguardando aprovação do solicitante.','info',5000);cancelarModal.hide();detalheModal.hide();await refreshAll();});
 motoristaForm.addEventListener('submit',async e=>{e.preventDefault();const payload={id:motoristaId.value||'',nome:motoristaNome.value.trim(),telefone:motoristaTelefone.value.trim(),cnh:motoristaCnh.value.trim(),observacoes:motoristaObservacoes.value.trim(),ativo:motoristaAtivo.checked};const r=await fetch('/api/logistica/agendamento-veiculos/motoristas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar motorista.','error');motoristaState.textContent=d.error||'Falha ao salvar motorista.';motoristaState.classList.add('error');return;}showToast('Motorista salvo com sucesso!','success');motoristaModal.hide();await loadMotoristas();await loadDashboard();});
 if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>state.geo={lat:p.coords.latitude,lng:p.coords.longitude},()=>{},{enableHighAccuracy:true,timeout:8000,maximumAge:300000});}

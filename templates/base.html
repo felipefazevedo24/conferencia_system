@@ -11,9 +11,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/ui_erp.css">
+    <link rel="stylesheet" href="/static/css/ui_erp.css?v={{ asset_version }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_head %}{% endblock %}
+    {% if request.args.get('embed') == '1' %}
+    <style id="embed-mode">
+        #sidebar-wrapper,.top-nav,.app-footer,#shell-backdrop{display:none !important}
+        #page-content-wrapper{margin-left:0 !important;padding:0 !important}
+        #wrapper{display:block !important}
+        .content-body{padding:10px 14px !important}
+        body{background:var(--rec-bg,#f1f6fb) !important}
+    </style>
+    {% endif %}
 </head>
 <body>
 <div id="wrapper">
@@ -71,51 +80,82 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
+                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS')
+                    or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO')
+                    or can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA')
+                    or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
+                    or can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_FROTA') or can_access('PAGE_LOGISTICA_RASTREAMENTO')
+                    or can_access('PAGE_CONSERTO') %}
                 <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-recebimento" aria-expanded="true">
-                        <span class="nav-group-title"><i class="fas fa-box-open"></i><span>Recebimento</span></span>
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
+                        <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
-                    <div class="submenu-panel open" id="menu-recebimento">
-                        {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
-                        {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
-                        {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
-                        {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
+                    <div class="submenu-panel open" id="menu-logistica">
 
-                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
-                <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-expedicao" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-truck-loading"></i><span>Expedição</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
-                    </button>
-                    <div class="submenu-panel" id="menu-expedicao">
-                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
-                        {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
-                        {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
-                {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-                <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-wms" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-warehouse"></i><span>WMS</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
-                    </button>
-                    <div class="submenu-panel" id="menu-wms">
-                        {% if can_access('PAGE_WMS') %}
-                        <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-compass"></i> Central WMS</a>
-                        <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
-                        <a href="/wms/estoque" class="list-group-item list-group-item-action"><i class="fas fa-cubes"></i> Estoque Tempo Real</a>
+                        {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
+                        <div class="submenu-subgroup" data-subgroup="recebimento">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-box-open submenu-icon"></i> Recebimento <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
+                                {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
+                                {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
+                            </div>
+                        </div>
                         {% endif %}
-                        {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
-                        {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governança WMS</a>{% endif %}
+
+                        {% if can_access('PAGE_CONSERTO') %}
+                        <div class="submenu-subgroup" data-subgroup="estoque">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-boxes-stacked submenu-icon"></i> Estoque <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                <a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
+                        <div class="submenu-subgroup" data-subgroup="expedicao">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-truck-loading submenu-icon"></i> Expedição <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
+                                {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
+                                {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+                        <div class="submenu-subgroup" data-subgroup="wms">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-warehouse submenu-icon"></i> WMS <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                {% if can_access('PAGE_WMS') %}
+                                <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-compass"></i> Central WMS</a>
+                                <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
+                                <a href="/wms/estoque" class="list-group-item list-group-item-action"><i class="fas fa-cubes"></i> Estoque Tempo Real</a>
+                                {% endif %}
+                                {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
+                                {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governança WMS</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
+                            or can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_FROTA') or can_access('PAGE_LOGISTICA_RASTREAMENTO') %}
+                        <div class="submenu-subgroup" data-subgroup="transporte">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-truck-fast submenu-icon"></i> Transporte &amp; Frota <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                {% if can_access('PAGE_LOGISTICA_VIAGEM') %}<a href="/logistica/viagens" class="list-group-item list-group-item-action"><i class="fas fa-route"></i> Gestão de Viagens</a>{% endif %}
+                                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_FROTA') %}<a href="/logistica/operacao" class="list-group-item list-group-item-action"><i class="fas fa-layer-group"></i> Rotas &amp; Frota</a>{% endif %}
+                                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<a href="/logistica/solicitar-transporte" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-plus"></i> Solicitar Transporte</a>{% endif %}
+                                {% if can_access('PAGE_LOGISTICA_RASTREAMENTO') %}<a href="/logistica/rastreamento" class="list-group-item list-group-item-action"><i class="fas fa-location-crosshairs"></i> Rastreamento</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
                     </div>
                 </div>
+                {% endif %}
+
                 {% endif %}
 
                 {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}
@@ -131,22 +171,6 @@
                         {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}<a href="/boletos" class="list-group-item list-group-item-action" target="_blank"><i class="fas fa-barcode"></i> Consulta de Boletos (Cliente)</a>{% endif %}
                     </div>
                 </div>
-                {% endif %}
-
-                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA') %}
-                <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-route"></i><span>Logistica</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
-                    </button>
-                    <div class="submenu-panel" id="menu-logistica">
-                        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a href="/logistica/agendamento-veiculos" class="list-group-item list-group-item-action"><i class="fas fa-map-marked-alt"></i> Gestao de Rotas</a>{% endif %}
-                        {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<a href="/logistica/solicitar-transporte" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-plus"></i> Solicitar Transporte</a>{% endif %}
-                        {% if can_access('PAGE_LOGISTICA_MOTORISTA') %}<a href="/logistica/painel-motorista" class="list-group-item list-group-item-action"><i class="fas fa-id-card"></i> Painel do Motorista</a>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
                 {% endif %}
 
                 <div class="menu-item">
@@ -278,6 +302,27 @@ document.addEventListener("DOMContentLoaded", function () {
 
             button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
             target.classList.toggle("open", shouldOpen);
+        });
+    });
+
+    // Subgrupos colapsáveis (Recebimento/Expedição/WMS/Transporte dentro de Logística)
+    const SUBGROUP_KEY = "sidebar:subgroups:collapsed:v1";
+    let collapsedSubs = [];
+    try { collapsedSubs = JSON.parse(localStorage.getItem(SUBGROUP_KEY) || "[]") || []; } catch (_) { collapsedSubs = []; }
+    document.querySelectorAll(".submenu-subgroup[data-subgroup]").forEach(sg => {
+        const key = sg.getAttribute("data-subgroup");
+        if (collapsedSubs.includes(key)) sg.classList.add("collapsed");
+        const btn = sg.querySelector("[data-subgroup-toggle]");
+        if (!btn) return;
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            sg.classList.toggle("collapsed");
+            try {
+                const current = Array.from(document.querySelectorAll(".submenu-subgroup.collapsed[data-subgroup]"))
+                    .map(el => el.getAttribute("data-subgroup"));
+                localStorage.setItem(SUBGROUP_KEY, JSON.stringify(current));
+            } catch (_) {}
         });
     });
 

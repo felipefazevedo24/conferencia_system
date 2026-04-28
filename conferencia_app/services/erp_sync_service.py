@@ -369,6 +369,14 @@ class ERPSyncService:
             evento.payload_json = json.dumps(resultado, ensure_ascii=False, default=str)
             db.session.commit()
 
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            # Falha de rede/DNS: log curto sem traceback (ambiente offline ou endpoint fora do ar)
+            logger.warning("ERP Sync: sem conectividade (%s)", exc.__class__.__name__)
+            resultado["erro"] = f"sem conectividade: {exc.__class__.__name__}"
+            evento.status = "Falha"
+            evento.ultima_erro = str(exc)[:500]
+            db.session.commit()
+            raise
         except Exception as exc:
             logger.exception("Erro na sincronização ERP→WMS")
             resultado["erro"] = str(exc)

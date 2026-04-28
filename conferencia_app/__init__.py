@@ -26,6 +26,9 @@ from .routes.conserto_routes import conserto_bp
 from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
 from .routes.page_routes import page_bp
+from .routes.rastreamento_routes import rastreamento_bp
+from .routes.frota_routes import frota_bp
+from .routes.viagem_routes import viagem_bp, motorista_bp
 from .routes.wms_routes import wms_bp
 
 
@@ -49,6 +52,10 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(boleto_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
+    app.register_blueprint(rastreamento_bp)
+    app.register_blueprint(frota_bp)
+    app.register_blueprint(viagem_bp)
+    app.register_blueprint(motorista_bp)
 
     register_error_handlers(app)
 
@@ -87,6 +94,23 @@ def create_app(test_config=None) -> Flask:
             "can_access": lambda key: has_permission(key),
             "access_permissions": perms,
         }
+
+    @app.context_processor
+    def inject_asset_version():
+        # Cache-busting baseado no mtime mais recente da pasta static/css.
+        # Garante que deploys de produção (PythonAnywhere) sirvam a versão
+        # atualizada de qualquer CSS sem depender de Ctrl+F5 dos usuários.
+        try:
+            css_dir = os.path.join(app.static_folder, "css")
+            mtimes = []
+            for root_, _dirs, files in os.walk(css_dir):
+                for fn in files:
+                    if fn.endswith(".css"):
+                        mtimes.append(os.path.getmtime(os.path.join(root_, fn)))
+            asset_version = str(int(max(mtimes))) if mtimes else str(int(time.time()))
+        except Exception:
+            asset_version = str(int(time.time()))
+        return {"asset_version": asset_version}
 
     initialize_database(app)
 

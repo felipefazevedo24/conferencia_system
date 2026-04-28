@@ -221,6 +221,48 @@ HOME_MODULES = [
         "metric_key": "agendamento_ativo",
     },
     {
+        "id": "logistica_rastreamento",
+        "title": "Rastreamento de Veículos",
+        "subtitle": "Mapa ao vivo",
+        "description": "Acompanhe em mapa onde estão os veículos da frota e abra o portal Locartrack com um clique.",
+        "href": "/logistica/rastreamento",
+        "icon": "fa-location-crosshairs",
+        "permission": "PAGE_LOGISTICA_RASTREAMENTO",
+        "section": "Logística",
+        "tone": "cyan",
+        "priority": 86,
+        "keywords": ["rastreamento", "gps", "locartrack", "mapa", "veiculo", "frota"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
+        "id": "logistica_frota",
+        "title": "Gestão de Frota",
+        "subtitle": "Documentos, manutenção e consumo",
+        "description": "Controle documentos, manutenções, abastecimentos, multas e checklist diário dos veículos.",
+        "href": "/logistica/frota",
+        "icon": "fa-truck-field",
+        "permission": "PAGE_LOGISTICA_FROTA",
+        "section": "Logística",
+        "tone": "amber",
+        "priority": 85,
+        "keywords": ["frota", "manutenção", "abastecimento", "multa", "cnh", "crlv", "checklist"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
+        "id": "logistica_viagem",
+        "title": "Gestão de Viagens",
+        "subtitle": "Rastreamento ponta-a-ponta",
+        "description": "Planeje, acompanhe em tempo real e consolide cada viagem: paradas, GPS, ocorrências, abastecimento e relatório final.",
+        "href": "/logistica/viagens",
+        "icon": "fa-route",
+        "permission": "PAGE_LOGISTICA_VIAGEM",
+        "section": "Logística",
+        "tone": "emerald",
+        "priority": 88,
+        "keywords": ["viagem", "rota", "entrega", "coleta", "rastreamento", "gps", "timeline", "motorista"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
         "id": "expedicao_conferencia",
         "title": "Registro de Expedição",
         "subtitle": "Saída",
@@ -763,6 +805,21 @@ def agendamento_veiculos_page():
     )
 
 
+@page_bp.route("/logistica/operacao")
+def logistica_operacao_page():
+    # Pagina unificada: acessivel se o usuario tiver QUALQUER uma das permissoes
+    from conferencia_app.auth import has_permission
+    if not (has_permission("PAGE_LOGISTICA_AGENDAMENTO") or has_permission("PAGE_LOGISTICA_FROTA") or has_permission("PAGE_LOGISTICA_VIAGEM")):
+        from flask import abort
+        abort(403)
+    return render_template(
+        "logistica_operacao.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
 @page_bp.route("/expedicao/admin")
 @permission_required("PAGE_EXPEDICAO_ADMIN")
 def expedicao_admin_page():
@@ -770,12 +827,43 @@ def expedicao_admin_page():
 
 
 @page_bp.route("/logistica/painel-motorista")
-@permission_required("PAGE_LOGISTICA_MOTORISTA")
 def painel_motorista_page():
+    # Rota legada. O painel antigo (login + sessão) foi substituído por link público
+    # permanente HMAC compartilhado via WhatsApp/QR pelo gestor.
+    from flask import redirect
+    return redirect("/logistica/operacao#frota", code=302)
+
+
+@page_bp.route("/logistica/rastreamento")
+@permission_required("PAGE_LOGISTICA_RASTREAMENTO")
+def rastreamento_page():
     return render_template(
-        "agendamento_motorista.html",
+        "rastreamento.html",
         user=session["username"],
         user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
+@page_bp.route("/logistica/frota")
+@permission_required("PAGE_LOGISTICA_FROTA")
+def frota_page():
+    return render_template(
+        "frota.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
+@page_bp.route("/logistica/viagens")
+@permission_required("PAGE_LOGISTICA_VIAGEM")
+def viagens_page():
+    return render_template(
+        "viagens.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
     )
 
 

@@ -4819,7 +4819,15 @@ def listar_concluidas():
     for nota in notas_db:
         numero_nota = nota[0]
         resumo_divergencia = _summarize_divergencia_nota(numero_nota)
-        motivo = resumo_divergencia["detalhe_divergencia"] if resumo_divergencia["divergencia"] == "Sim" else ""
+        # Exibe pendência tanto pra divergência ativa quanto pra resolvida (histórico visível).
+        if resumo_divergencia["divergencia"] == "Sim":
+            motivo = resumo_divergencia["detalhe_divergencia"]
+        elif resumo_divergencia.get("tentativas_invalidas", 0) > 0:
+            motivo = resumo_divergencia["detalhe_divergencia"] or (
+                f"{resumo_divergencia['tentativas_invalidas']} tentativa(s) com divergência antes de conferir corretamente."
+            )
+        else:
+            motivo = ""
         itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
         exige_codigo_material_remessa = bool(nota[3]) and _remessa_exige_codigo_material(itens_nota)
 
@@ -4830,7 +4838,9 @@ def listar_concluidas():
 
         pendencias = []
         if motivo:
-            pendencias.append({"tipo": "divergencia", "titulo": "Divergência", "severidade": "warning", "descricao": motivo})
+            severidade = "warning" if resumo_divergencia["divergencia_status"] == "Ativa" else "info"
+            titulo = "Divergência" if resumo_divergencia["divergencia_status"] == "Ativa" else "Divergência resolvida"
+            pendencias.append({"tipo": "divergencia", "titulo": titulo, "severidade": severidade, "descricao": motivo})
         if bool(nota[3]) and exige_codigo_material_remessa:
             pendencias.append({"tipo": "remessa", "titulo": "Código material", "severidade": "warning", "descricao": "Remessa de industrialização exige código do material por item."})
         if not pedido_compra or pedido_compra == "---":
@@ -5066,8 +5076,15 @@ def estornar_conferencia_recebimento():
 
     # Verifica se há checklist para estornar
     checklist = ChecklistRecebimento.query.filter_by(numero_nota=numero_nota).first()
-    if not checklist:
+
+    # Recupera itens da nota para reset; se nada existir, bloqueia.
+    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not checklist and not any((i.fim_conferencia or i.qtd_conferida or (i.status or "") == "Concluído") for i in itens_nota):
         return jsonify({"sucesso": False, "msg": "Não há conferência registrada para esta NF."}), 404
+
+    # Não permite estornar se já foi lançada no ERP.
+    if any((i.status or "") == "Lançado" or i.data_lancamento for i in itens_nota):
+        return jsonify({"sucesso": False, "msg": "NF já foi lançada. Estorne o lançamento fiscal primeiro."}), 400
 
     # Cria log de reversão da conferência
     db.session.add(
@@ -5078,11 +5095,30 @@ def estornar_conferencia_recebimento():
         )
     )
 
-    # Remove o checklist de recebimento
-    db.session.delete(checklist)
+    # Remove o checklist de recebimento (se existir)
+    if checklist:
+        db.session.delete(checklist)
+
+    # Reseta os itens da NF para voltar à conferência cega.
+    # Mantém LogTentativaConferencia e LogDivergencia como histórico/auditoria.
+    for item in itens_nota:
+        item.status = "Pendente"
+        item.qtd_conferida = 0
+        item.usuario_conferencia = None
+        item.inicio_conferencia = None
+        item.fim_conferencia = None
+        item.auditor_status = "NaoAuditado"
+        item.auditor_decisao = "PendenteDecisao"
+        item.auditor_diagnostico = None
+        item.auditor_inconsistencias = None
+        item.auditor_justificativa = None
+        item.auditor_observacao = None
+        item.auditor_usuario = None
+        item.auditor_data = None
+
     db.session.commit()
 
-    return jsonify({"sucesso": True, "msg": "Conferência estornada com sucesso."})
+    return jsonify({"sucesso": True, "msg": "Conferência estornada. NF voltou para a fila de conferência cega."})
 
 
 @api_bp.route("/api/notas_lancadas")
