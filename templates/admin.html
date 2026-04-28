@@ -838,6 +838,45 @@
     </div>
 </div>
 
+<!-- Modal: Aprovar Devolucao Total -->
+<div id="modal-aprovar-devolucao" class="modal-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); align-items:center; justify-content:center; padding:24px;">
+    <div class="modal-sap" style="border-radius: 22px; overflow: hidden; border: none; max-width: 580px; width: 100%; box-shadow: 0 25px 80px rgba(0,0,0,0.5); background:#fff;">
+        <div class="modal-head" style="background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%); padding: 20px 26px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; background: rgba(255,255,255,0.15); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-undo-alt" style="font-size: 18px; color: #fff;"></i>
+                </div>
+                <div>
+                    <span style="letter-spacing: 0.5px; font-size: 14px; font-weight: 800; color: #fff;">Aprovar Devolução Total</span>
+                    <div style="font-size: 11px; color: rgba(255,255,255,0.85); margin-top: 2px;">NF <span id="modal-aprov-dev-numero" style="font-weight:800">—</span></div>
+                </div>
+            </div>
+            <button type="button" onclick="fecharModalAprovarDevolucao()" style="color: #fff; background: rgba(255,255,255,0.15); border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 10px; font-size: 20px;">&times;</button>
+        </div>
+        <div class="modal-body" style="margin:0; border:none; padding: 22px 26px 16px; background:#f8fafc;">
+            <div id="modal-aprov-dev-motivo-original" style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:#334155;">
+                <div style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin-bottom:4px;">Motivo do conferente</div>
+                <div id="modal-aprov-dev-motivo-text" style="line-height:1.4;">—</div>
+            </div>
+            <label for="modal-aprov-dev-obs" style="display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#475569; margin-bottom:6px;">
+                Observação do admin (opcional)
+            </label>
+            <textarea id="modal-aprov-dev-obs" rows="4" maxlength="500" placeholder="Detalhe a aprovação, contato com fornecedor, instruções etc."
+                style="width:100%; padding:12px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:13px; font-family:inherit; resize:vertical; box-sizing:border-box; background:#fff; color:#0f172a;"></textarea>
+            <div style="font-size:11px; color:#64748b; margin-top:6px;">Limite 500 caracteres. A devolução é manifestada como Operação Não Realizada e enviada à Consyste.</div>
+            <div id="modal-aprov-dev-erro" style="display:none; margin-top:12px; padding:10px 12px; border-radius:10px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; font-size:12px; font-weight:600;"></div>
+        </div>
+        <div style="padding: 16px 24px; background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); border-top: 1px solid #cbd5e1; display: flex; justify-content: flex-end; gap:8px;">
+            <button type="button" class="btn-sap" style="background: #64748b; color: #fff; padding: 10px 18px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer;" onclick="fecharModalAprovarDevolucao()">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+            <button type="button" id="modal-aprov-dev-btn" class="btn-sap btn-primary-sap" style="background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); color: #fff; padding: 10px 20px; border-radius: 10px; font-weight: 800; border: none; cursor: pointer;" onclick="confirmarAprovarDevolucao()">
+                <i class="fas fa-check"></i> Confirmar aprovação
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -2060,29 +2099,92 @@
                 <td style="font-size:11px;">${item.motivo}</td>
                 <td style="font-size:11px;">${item.data}</td>
                 <td style="text-align:center;">
-                    <button class="btn-sap btn-primary-sap" style="padding:5px 12px; font-size:10px; background:var(--danger-erp);" onclick="aprovarSolicitacaoDevolução(${item.id}, '${item.numero}')">Aprovar</button>
+                    <button class="btn-sap btn-primary-sap" style="padding:5px 12px; font-size:10px; background:var(--danger-erp);" data-aprov-dev-id="${item.id}" data-aprov-dev-numero="${escapeHtml(item.numero)}" data-aprov-dev-motivo="${escapeHtml(item.motivo || '')}">Aprovar</button>
                 </td>
             </tr>
         `).join('');
+        // Bind via dataset (evita problemas de escape em onclick inline)
+        tbody.querySelectorAll('button[data-aprov-dev-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                abrirModalAprovarDevolucao(
+                    parseInt(btn.dataset.aprovDevId, 10),
+                    btn.dataset.aprovDevNumero,
+                    btn.dataset.aprovDevMotivo,
+                );
+            });
+        });
         return lista;
     }
 
-    async function aprovarSolicitacaoDevolução(solicitacaoId, numeroNota) {
-        const observacao = prompt(`Aprovar devolução total da NF ${numeroNota}. Observação do admin (opcional):`, '') || '';
-        const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ solicitacao_id: solicitacaoId, observacao_admin: observacao })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            alert(data.msg || data.error || 'Falha ao aprovar devolução.');
-            return;
+    let _aprovDevState = { solicitacaoId: null, numero: '', enviando: false };
+
+    function abrirModalAprovarDevolucao(solicitacaoId, numeroNota, motivoConferente) {
+        _aprovDevState = { solicitacaoId, numero: numeroNota, enviando: false };
+        document.getElementById('modal-aprov-dev-numero').textContent = numeroNota || '—';
+        document.getElementById('modal-aprov-dev-motivo-text').textContent = motivoConferente || '(sem motivo registrado)';
+        const obs = document.getElementById('modal-aprov-dev-obs');
+        if (obs) { obs.value = ''; }
+        const err = document.getElementById('modal-aprov-dev-erro');
+        if (err) { err.style.display = 'none'; err.textContent = ''; }
+        const btn = document.getElementById('modal-aprov-dev-btn');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Confirmar aprovação'; }
+        const overlay = document.getElementById('modal-aprovar-devolucao');
+        overlay.style.display = 'flex';
+        setTimeout(() => obs && obs.focus(), 50);
+    }
+
+    function fecharModalAprovarDevolucao() {
+        if (_aprovDevState.enviando) return;
+        const overlay = document.getElementById('modal-aprovar-devolucao');
+        overlay.style.display = 'none';
+        _aprovDevState = { solicitacaoId: null, numero: '', enviando: false };
+    }
+
+    async function confirmarAprovarDevolucao() {
+        if (_aprovDevState.enviando || !_aprovDevState.solicitacaoId) return;
+        const obsEl = document.getElementById('modal-aprov-dev-obs');
+        const errEl = document.getElementById('modal-aprov-dev-erro');
+        const btn = document.getElementById('modal-aprov-dev-btn');
+        const observacao = (obsEl?.value || '').trim();
+
+        _aprovDevState.enviando = true;
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando à Consyste...'; }
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+        try {
+            const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    solicitacao_id: _aprovDevState.solicitacaoId,
+                    observacao_admin: observacao,
+                }),
+            });
+            const data = await parseResponseSafe(res);
+            if (!res.ok) {
+                const detalhe = data?.msg || data?.error || `HTTP ${res.status}`;
+                if (errEl) {
+                    errEl.style.display = 'block';
+                    errEl.textContent = detalhe;
+                }
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Tentar novamente'; }
+                _aprovDevState.enviando = false;
+                return;
+            }
+            const numero = _aprovDevState.numero;
+            fecharModalAprovarDevolucao();
+            showStatus(data.msg || `NF ${numero} aprovada para devolução.`, 'success');
+            await carregarSolicitacoesDevolucao();
+            await carregarPendentesParaExclusao();
+            await carregarPainelGerencial();
+        } catch (e) {
+            if (errEl) {
+                errEl.style.display = 'block';
+                errEl.textContent = 'Falha de comunicação: ' + (e?.message || e);
+            }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Tentar novamente'; }
+            _aprovDevState.enviando = false;
         }
-        showStatus(data.msg || `NF ${numeroNota} aprovada para devolução.`);
-        await carregarSolicitacoesDevolucao();
-        await carregarPendentesParaExclusao();
-        await carregarPainelGerencial();
     }
 
     function badgeAuditoria(st) {
@@ -2159,6 +2261,18 @@
     document.addEventListener('DOMContentLoaded', async () => {
         carregarDashboardKpis();
         await carregarPainelGerencial(true);
+    });
+
+    // ESC fecha modal de aprovação de devolução
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Escape') return;
+        const overlay = document.getElementById('modal-aprovar-devolucao');
+        if (overlay && overlay.style.display === 'flex') fecharModalAprovarDevolucao();
+    });
+    // Clique no overlay (fora do conteúdo) fecha modal
+    document.addEventListener('click', (ev) => {
+        const overlay = document.getElementById('modal-aprovar-devolucao');
+        if (overlay && ev.target === overlay) fecharModalAprovarDevolucao();
     });
 </script>
 {% endblock %}
