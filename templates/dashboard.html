@@ -2,7 +2,7 @@
 
 {% block title %}Dashboard{% endblock %}
 {% block shell_title %}Dashboard{% endblock %}
-{% block shell_subtitle %}Visão gerencial com a mesma linguagem visual do Columbia Sync.{% endblock %}
+{% block shell_subtitle %}Cockpit operacional em padrao ERP.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -28,6 +28,138 @@
         display: grid;
         gap: 28px;
         padding-bottom: 24px;
+    }
+
+    .dashboard-command {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(196, 211, 226, 0.9);
+    }
+    .dashboard-command-copy {
+        display: grid;
+        gap: 4px;
+    }
+    .dashboard-command-copy strong {
+        color: var(--dash-ink);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+    }
+    .dashboard-command-copy span {
+        color: var(--dash-ink-soft);
+        font-size: 11.5px;
+        line-height: 1.5;
+    }
+    .dashboard-command-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .command-chip {
+        min-height: 38px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--dash-ink-soft);
+        padding: 0 14px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
+    }
+    .command-chip:hover {
+        transform: translateY(-1px);
+        border-color: rgba(15, 98, 201, 0.22);
+        color: var(--dash-ink);
+    }
+    .command-chip.is-active {
+        background: linear-gradient(135deg, #1f77dc 0%, var(--dash-accent) 100%);
+        border-color: #0d56ac;
+        color: #fff;
+        box-shadow: 0 10px 18px rgba(15, 98, 201, 0.16);
+    }
+    .command-chip.is-soft-active {
+        border-color: rgba(15, 98, 201, 0.3);
+        color: var(--dash-accent);
+        background: rgba(15, 98, 201, 0.08);
+    }
+
+    .section-rail {
+        position: sticky;
+        top: 70px;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--dash-border);
+        border-radius: 18px;
+        box-shadow: var(--dash-shadow);
+        backdrop-filter: blur(8px);
+    }
+    .section-rail-group,
+    .section-rail-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .section-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--dash-ink-soft);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
+    }
+    .section-pill:hover {
+        transform: translateY(-1px);
+        border-color: rgba(15, 98, 201, 0.22);
+        color: var(--dash-ink);
+    }
+    .section-pill.is-active {
+        background: rgba(15, 98, 201, 0.1);
+        border-color: rgba(15, 98, 201, 0.24);
+        color: var(--dash-accent);
+    }
+    .section-pill i { font-size: 12px; }
+    .section-utility {
+        min-height: 34px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: #fff;
+        color: var(--dash-ink-soft);
+        padding: 0 12px;
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: border-color .18s ease, color .18s ease, background .18s ease;
+    }
+    .section-utility:hover {
+        border-color: rgba(15, 98, 201, 0.22);
+        color: var(--dash-ink);
     }
 
     /* Hero / cabeçalho */
@@ -96,6 +228,45 @@
         letter-spacing: 0;
         text-transform: none;
     }
+    .cat-band__title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+        flex: 1;
+    }
+    .cat-band__meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .cat-band__toggle {
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: #fff;
+        color: var(--dash-ink-soft);
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: border-color .18s ease, color .18s ease, background .18s ease;
+    }
+    .cat-band__toggle:hover {
+        border-color: rgba(15, 98, 201, 0.22);
+        color: var(--dash-ink);
+    }
+    .cat-band.is-collapsed [data-band-content] {
+        display: none !important;
+    }
+    .cat-band.is-hidden {
+        display: none !important;
+    }
 
     /* Sub-titulo de section dentro da banda (uma camada abaixo da categoria) */
     .dashboard-section { display: grid; gap: 14px; }
@@ -146,6 +317,9 @@
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 12px;
+    }
+    .overview-grid-secondary {
+        margin-top: 12px;
     }
     .overview-card, .kpi-card {
         position: relative;
@@ -204,6 +378,58 @@
     }
     .overview-panels, .charts-container {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .overview-category-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+    }
+    .overview-category {
+        display: grid;
+        gap: 12px;
+    }
+    .overview-category.full {
+        grid-column: 1 / -1;
+    }
+    .overview-panel.overview-category.full > .chart-title {
+        display: none;
+    }
+    .overview-category-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .overview-category-copy {
+        display: grid;
+        gap: 4px;
+    }
+    .overview-category-copy strong {
+        color: var(--dash-ink);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+    }
+    .overview-category-copy span {
+        color: var(--dash-ink-soft);
+        font-size: 11.5px;
+        line-height: 1.45;
+    }
+    .overview-category-tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(15, 98, 201, 0.18);
+        background: rgba(15, 98, 201, 0.08);
+        color: var(--dash-accent);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
     }
     .overview-mini-grid {
         display: grid;
@@ -323,6 +549,54 @@
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.08em;
+    }
+
+    .dashboard-details {
+        border: 1px solid var(--dash-border);
+        border-radius: var(--dash-radius);
+        background: #fff;
+        box-shadow: var(--dash-shadow);
+        overflow: hidden;
+    }
+    .dashboard-details + .dashboard-details,
+    .overview-grid + .dashboard-details,
+    .dashboard-details + .overview-category-grid,
+    .dashboard-details + .overview-panel {
+        margin-top: 14px;
+    }
+    .dashboard-details > summary {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+        color: var(--dash-ink);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        list-style: none;
+        background: var(--dash-bg-soft);
+        border-bottom: 1px solid transparent;
+    }
+    .dashboard-details > summary::-webkit-details-marker { display: none; }
+    .dashboard-details > summary::before {
+        content: "\f078";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        color: var(--dash-accent);
+        font-size: 11px;
+        transition: transform .18s ease;
+    }
+    .dashboard-details[open] > summary {
+        border-bottom-color: var(--dash-border);
+    }
+    .dashboard-details[open] > summary::before {
+        transform: rotate(180deg);
+    }
+    .dashboard-details-body {
+        padding: 16px;
     }
 
     /* ============== CHARTS ============== */
@@ -506,12 +780,658 @@
     @media (max-width: 1200px) {
         .overview-grid, .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .ops-grid, .overview-panels, .charts-container { grid-template-columns: 1fr; }
+        .overview-category-grid { grid-template-columns: 1fr; }
+        .section-rail { top: 62px; }
     }
     @media (max-width: 760px) {
         .dashboard-hero, .overview-toolbar, .sla-columns { display: grid; grid-template-columns: 1fr; }
         .overview-grid, .kpi-grid, .menu-grid, .process-grid, .process-kpi { grid-template-columns: 1fr; }
         .process-row { grid-template-columns: 1fr; }
         .cat-band { padding: 18px 16px; }
+        .section-rail,
+        .dashboard-command {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        .cat-band__head,
+        .cat-band__title,
+        .cat-band__meta {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        .cat-band__meta {
+            justify-content: stretch;
+            margin-left: 0;
+        }
+    }
+
+    /* ============================================================
+       ERP cockpit override - visual SAP/Protheus
+       ============================================================ */
+    :root {
+        --dash-radius: 4px;
+        --dash-radius-lg: 4px;
+        --dash-border: #c9d3df;
+        --dash-shadow: none;
+        --dash-shadow-lg: none;
+        --dash-bg-card: #fff;
+        --dash-bg-soft: #f5f7f9;
+        --dash-ink: #1d2b3a;
+        --dash-ink-soft: #5f6f80;
+        --dash-accent: #0a6ed1;
+    }
+    .main-content {
+        background: #eef2f5;
+    }
+    .dashboard-shell {
+        max-width: none;
+        gap: 10px;
+        padding: 0 10px 14px;
+    }
+    .dashboard-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px 18px;
+        align-items: center;
+        padding: 10px 14px;
+        border-radius: 0;
+        border: 1px solid var(--dash-border);
+        border-top: 3px solid #0a6ed1;
+        background: #fff;
+        box-shadow: none;
+    }
+    .dashboard-hero-copy {
+        gap: 1px;
+    }
+    .dashboard-hero-copy .eyebrow {
+        color: #506273;
+        font-size: 10px;
+        letter-spacing: .08em;
+    }
+    .dashboard-hero-copy h1 {
+        font-size: 18px;
+        line-height: 1.2;
+        letter-spacing: 0;
+        font-weight: 700;
+    }
+    .dashboard-hero-copy p {
+        max-width: none;
+        font-size: 12px;
+        line-height: 1.35;
+        color: #5f6f80;
+    }
+    .dashboard-toolbar {
+        justify-content: flex-end;
+    }
+    .op-filter {
+        min-height: 32px;
+        min-width: 168px;
+        border-radius: 3px;
+        padding: 5px 9px;
+        font-size: 12px;
+        background: #fff;
+    }
+    .dashboard-command {
+        grid-column: 1 / -1;
+        margin: 0;
+        padding: 8px 0 0;
+        border-top: 1px solid #dbe3eb;
+    }
+    .dashboard-command-copy {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .dashboard-command-copy strong {
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .dashboard-command-copy span {
+        font-size: 11px;
+    }
+    .command-chip,
+    .section-pill,
+    .section-utility,
+    .btn-op {
+        min-height: 30px;
+        border-radius: 3px;
+        padding: 0 10px;
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .command-chip.is-active,
+    .btn-op.primary {
+        background: #0a6ed1;
+        border-color: #0854a0;
+        box-shadow: none;
+    }
+    .command-chip.is-soft-active,
+    .section-pill.is-active {
+        background: #e5f0fa;
+        border-color: #0a6ed1;
+        color: #0a6ed1;
+    }
+    .section-rail {
+        top: 58px;
+        z-index: 6;
+        padding: 6px 8px;
+        border-radius: 0;
+        background: #fff;
+        border: 1px solid var(--dash-border);
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+    .section-rail-group,
+    .section-rail-actions {
+        gap: 4px;
+    }
+    .cat-band {
+        gap: 0;
+        padding: 0;
+        border-radius: 0;
+        border: 1px solid var(--dash-border);
+        background: #fff;
+        box-shadow: none;
+    }
+    .cat-band__head {
+        min-height: 38px;
+        padding: 0 12px;
+        gap: 8px;
+        border-bottom: 1px solid var(--dash-border);
+        background: #f7f9fb;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0;
+    }
+    .cat-band__head i {
+        width: 24px;
+        height: 24px;
+        border-radius: 3px;
+        background: #e5f0fa;
+        color: #0a6ed1;
+        font-size: 12px;
+    }
+    .cat-band__head .cat-sub {
+        font-size: 11px;
+        font-weight: 500;
+        color: #687888;
+    }
+    [data-band-content] {
+        padding: 12px;
+    }
+    .overview-shell,
+    .process-wrap,
+    .ops-card,
+    .chart-box,
+    .overview-panel {
+        border-radius: 0;
+        border: 1px solid var(--dash-border);
+        box-shadow: none;
+        padding: 12px;
+    }
+    .overview-shell {
+        border: 0;
+        padding: 0;
+        background: transparent;
+    }
+    .overview-toolbar {
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        border: 1px solid var(--dash-border);
+        background: #fff;
+    }
+    .overview-heading {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0;
+    }
+    .overview-subheading {
+        max-width: none;
+        font-size: 11.5px;
+        line-height: 1.35;
+    }
+    .overview-toolbar-actions {
+        gap: 6px;
+        font-size: 11px;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+    .overview-grid,
+    .kpi-grid,
+    .process-grid {
+        gap: 8px;
+    }
+    .overview-card,
+    .kpi-card {
+        min-height: 76px;
+        padding: 10px 10px 8px 12px;
+        border-radius: 0;
+        border: 1px solid var(--dash-border);
+        box-shadow: none;
+        background: #fff;
+        transition: border-color .12s ease, background .12s ease;
+    }
+    .overview-card:hover,
+    .kpi-card:hover {
+        transform: none;
+        box-shadow: none;
+        background: #f9fbfd;
+        border-color: #8eb8df;
+    }
+    .overview-card::before,
+    .kpi-card::before {
+        width: 3px;
+    }
+    .kpi-label {
+        font-size: 10px;
+        letter-spacing: .03em;
+        font-weight: 700;
+    }
+    .kpi-value {
+        margin-top: 4px;
+        font-size: 26px;
+        letter-spacing: 0;
+        font-weight: 700;
+    }
+    .overview-foot {
+        margin-top: 2px;
+        font-size: 11px;
+    }
+    .dashboard-details {
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .dashboard-details > summary {
+        min-height: 36px;
+        padding: 0 10px;
+        background: #f7f9fb;
+        font-size: 12px;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+    .dashboard-details-body {
+        padding: 10px;
+    }
+    .overview-category-grid,
+    .charts-container,
+    .ops-grid {
+        gap: 8px;
+    }
+    .overview-category-head {
+        margin-bottom: 8px;
+    }
+    .overview-category-copy strong {
+        font-size: 12px;
+    }
+    .overview-category-copy span,
+    .overview-item-sub,
+    .overview-muted {
+        font-size: 11px;
+    }
+    .overview-category-tag,
+    .overview-badge,
+    .sla-hours,
+    .process-score {
+        min-height: 20px;
+        border-radius: 2px;
+        padding: 0 7px;
+        letter-spacing: 0;
+        font-size: 10px;
+    }
+    .overview-item,
+    .overview-mini-card,
+    .process-mini,
+    .process-kpi-item,
+    .backup-panel,
+    .ops-item {
+        border-radius: 0;
+        padding: 8px 10px;
+        background: #fff;
+    }
+    .overview-mini-card .value,
+    .process-mini .value {
+        font-size: 18px;
+        font-weight: 700;
+    }
+    .chart-box {
+        height: 238px;
+    }
+    .chart-title,
+    .ops-title,
+    .section-header {
+        margin: 0 0 8px;
+        color: #2f3f50;
+        font-size: 11px;
+        letter-spacing: .04em;
+    }
+    .section-header::before {
+        width: 3px;
+        height: 14px;
+        border-radius: 0;
+    }
+    .process-list,
+    .overview-table-wrap {
+        border-radius: 0;
+    }
+    .process-row {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+    .overview-table {
+        min-width: 960px;
+    }
+    .overview-table th,
+    .overview-table td {
+        padding: 8px 10px;
+    }
+    .menu-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px;
+    }
+    .btn-module {
+        border-radius: 0;
+        padding: 9px 10px;
+        box-shadow: none;
+        font-size: 12px;
+    }
+    .btn-module:hover {
+        transform: none;
+        box-shadow: none;
+        background: #f9fbfd;
+    }
+    .btn-module i {
+        width: 28px;
+        height: 28px;
+        border-radius: 3px;
+    }
+    .footer-status {
+        border-radius: 0;
+        padding: 8px 10px;
+        background: #fff;
+    }
+    @media (max-width: 900px) {
+        .dashboard-hero {
+            grid-template-columns: 1fr;
+        }
+        .dashboard-toolbar,
+        .section-rail-actions {
+            justify-content: flex-start;
+        }
+    }
+
+    /* Correção de direção: cockpit ERP moderno, sem cara de legado pesado */
+    :root {
+        --dash-radius: 8px;
+        --dash-radius-lg: 10px;
+        --dash-border: #d7e0ea;
+        --dash-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+        --dash-shadow-lg: 0 8px 24px rgba(15, 23, 42, .08);
+        --dash-bg-card: #fff;
+        --dash-bg-soft: #f7f9fc;
+        --dash-ink: #17212f;
+        --dash-ink-soft: #64748b;
+        --dash-accent: #0a6ed1;
+    }
+    .main-content {
+        background: #f3f6f9;
+    }
+    .dashboard-shell {
+        max-width: 1680px;
+        grid-template-columns: 236px minmax(0, 1fr);
+        align-items: start;
+        gap: 14px;
+        padding: 14px;
+    }
+    .dashboard-hero {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 16px 18px;
+        border-radius: var(--dash-radius-lg);
+        border: 1px solid var(--dash-border);
+        border-left: 5px solid #0a6ed1;
+        background: #fff;
+        box-shadow: var(--dash-shadow);
+    }
+    .dashboard-hero-copy .eyebrow {
+        color: #0a6ed1;
+        font-size: 10px;
+        letter-spacing: .12em;
+        font-weight: 800;
+    }
+    .dashboard-hero-copy h1 {
+        margin-top: 1px;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0;
+    }
+    .dashboard-hero-copy p {
+        margin-top: 3px;
+        color: #64748b;
+        font-size: 12.5px;
+    }
+    .dashboard-command {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+        padding-top: 10px;
+    }
+    .dashboard-command-copy {
+        margin-right: auto;
+    }
+    .dashboard-command-copy strong,
+    .dashboard-command-copy span {
+        font-size: 12px;
+    }
+    .command-chip,
+    .section-pill,
+    .section-utility,
+    .btn-op {
+        min-height: 34px;
+        border-radius: 7px;
+        font-size: 12px;
+    }
+    .command-chip.is-active,
+    .btn-op.primary {
+        background: #0a6ed1;
+        border-color: #0a6ed1;
+        box-shadow: none;
+    }
+    .section-rail {
+        grid-column: 1;
+        position: sticky;
+        top: 76px;
+        display: grid;
+        gap: 12px;
+        align-self: start;
+        padding: 10px;
+        border-radius: var(--dash-radius-lg);
+        background: #fff;
+        border: 1px solid var(--dash-border);
+        box-shadow: var(--dash-shadow);
+    }
+    .section-rail-group,
+    .section-rail-actions {
+        display: grid;
+        gap: 6px;
+        width: 100%;
+    }
+    .section-pill {
+        justify-content: flex-start;
+        width: 100%;
+        border-color: transparent;
+        background: transparent;
+        color: #475569;
+        padding: 0 11px;
+    }
+    .section-pill i {
+        width: 18px;
+        color: #64748b;
+    }
+    .section-pill.is-active {
+        background: #eaf3fc;
+        border-color: #b9d7f3;
+        color: #084b8a;
+    }
+    .section-pill.is-active i {
+        color: #0a6ed1;
+    }
+    .section-utility {
+        width: 100%;
+        background: #f8fafc;
+        color: #475569;
+    }
+    .cat-band {
+        grid-column: 2;
+        border-radius: var(--dash-radius-lg);
+        background: #fff;
+        border: 1px solid var(--dash-border);
+        box-shadow: var(--dash-shadow);
+        overflow: hidden;
+    }
+    .cat-band__head {
+        min-height: 46px;
+        padding: 0 16px;
+        background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+    }
+    .cat-band__head i {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: #eaf3fc;
+        color: #0a6ed1;
+    }
+    .cat-band__head .cat-sub {
+        font-size: 12px;
+        color: #64748b;
+    }
+    [data-band-content] {
+        padding: 14px;
+    }
+    .overview-toolbar {
+        padding: 12px 14px;
+        border-radius: var(--dash-radius);
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+    .overview-heading {
+        font-size: 15px;
+        font-weight: 800;
+    }
+    .overview-subheading {
+        font-size: 12px;
+    }
+    .overview-grid,
+    .kpi-grid {
+        gap: 10px;
+    }
+    .overview-card,
+    .kpi-card,
+    .overview-panel,
+    .process-wrap,
+    .chart-box,
+    .ops-card {
+        border-radius: var(--dash-radius);
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        box-shadow: none;
+    }
+    .overview-card,
+    .kpi-card {
+        min-height: 92px;
+        padding: 14px 14px 12px 16px;
+    }
+    .overview-card:hover,
+    .kpi-card:hover,
+    .btn-module:hover {
+        transform: none;
+        box-shadow: var(--dash-shadow-lg);
+        border-color: #bdd7ef;
+    }
+    .overview-card::before,
+    .kpi-card::before {
+        width: 4px;
+        border-radius: 8px 0 0 8px;
+    }
+    .kpi-label {
+        color: #64748b;
+        font-size: 10.5px;
+        letter-spacing: .06em;
+    }
+    .kpi-value {
+        color: #111827;
+        font-size: 30px;
+        font-weight: 800;
+    }
+    .overview-foot {
+        color: #64748b;
+        font-size: 11.5px;
+    }
+    .dashboard-details {
+        border-radius: var(--dash-radius);
+        border: 1px solid #e2e8f0;
+        background: #fff;
+    }
+    .dashboard-details > summary {
+        min-height: 42px;
+        padding: 0 14px;
+        background: #f8fafc;
+        font-weight: 800;
+        color: #334155;
+    }
+    .dashboard-details-body {
+        padding: 14px;
+    }
+    .overview-item,
+    .overview-mini-card,
+    .process-mini,
+    .process-kpi-item,
+    .backup-panel,
+    .ops-item,
+    .btn-module {
+        border-radius: var(--dash-radius);
+        background: #fff;
+    }
+    .chart-box {
+        height: 260px;
+    }
+    .process-list,
+    .overview-table-wrap {
+        border-radius: var(--dash-radius);
+    }
+    .btn-module i {
+        border-radius: 8px;
+    }
+    .footer-status {
+        grid-column: 1 / -1;
+        border-radius: var(--dash-radius);
+        background: #fff;
+    }
+    @media (max-width: 1100px) {
+        .dashboard-shell {
+            grid-template-columns: 1fr;
+        }
+        .section-rail,
+        .cat-band,
+        .dashboard-hero,
+        .footer-status {
+            grid-column: 1;
+        }
+        .section-rail {
+            position: static;
+        }
+        .section-rail-group,
+        .section-rail-actions {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .section-pill,
+        .section-utility {
+            width: auto;
+        }
     }
 </style>
 {% endblock %}
@@ -521,9 +1441,9 @@
     <section class="dashboard-shell">
         <section class="page-header-erp dashboard-hero">
             <div class="dashboard-hero-copy">
-                <span class="eyebrow">Visão executiva</span>
-                <h1>Dashboard do Columbia Sync</h1>
-                <p id="dashboard-subtitle">Monitoramento de recebimento e conformidade fiscal em um painel mais limpo e consistente.</p>
+                <span class="eyebrow">Cockpit operacional</span>
+                <h1>Columbia Sync</h1>
+                <p id="dashboard-subtitle">Recebimento, fiscal, WMS, expedicao e logistica.</p>
             </div>
             <div class="dashboard-toolbar">
                 <select id="op-selector" class="op-filter">
@@ -531,11 +1451,36 @@
                     <option value="expedicao">Operação: Expedição</option>
                 </select>
             </div>
+            <div class="dashboard-command">
+                <div class="dashboard-command-copy">
+                    <strong>Visao</strong>
+                    <span>Foco operacional</span>
+                </div>
+                <div class="dashboard-command-actions">
+                    <button type="button" class="command-chip is-active" id="focus-mode-toggle"><i class="fas fa-compress"></i> Foco</button>
+                    <button type="button" class="command-chip" id="show-all-toggle"><i class="fas fa-table-cells-large"></i> Tudo</button>
+                </div>
+            </div>
         </section>
 
-        <div class="cat-band" id="band-overview">
+        <nav class="section-rail" aria-label="Navegacao do dashboard">
+            <div class="section-rail-group">
+                <button type="button" class="section-pill is-active" data-target-band="band-overview"><i class="fas fa-chart-line"></i> Executiva</button>
+                <button type="button" class="section-pill" data-target-band="band-recebimento"><i class="fas fa-truck-ramp-box"></i> Recebimento</button>
+                <button type="button" class="section-pill" data-target-band="band-expedicao"><i class="fas fa-truck-fast"></i> Expedicao</button>
+                <button type="button" class="section-pill" data-target-band="band-logistica"><i class="fas fa-route"></i> Logistica</button>
+                <button type="button" class="section-pill" data-target-band="band-sla"><i class="fas fa-stopwatch"></i> SLA</button>
+                <button type="button" class="section-pill" data-target-band="band-sistema"><i class="fas fa-grip"></i> Atalhos</button>
+            </div>
+            <div class="section-rail-actions">
+                <button type="button" class="section-utility" id="expand-visible-bands">Expandir visiveis</button>
+                <button type="button" class="section-utility" id="collapse-secondary-bands">Compactar detalhes</button>
+            </div>
+        </nav>
+
+        <div class="cat-band" id="band-overview" data-band="overview">
             <div class="cat-band__head"><i class="fas fa-chart-line"></i> Visão Executiva <span class="cat-sub">Consolidado de toda a operação</span></div>
-        <section id="overview-shell" class="overview-shell dashboard-section">
+        <section id="overview-shell" class="overview-shell dashboard-section" data-band-content>
             <div class="overview-toolbar">
                 <div>
                     <div class="overview-heading">Resumo gerencial da operação</div>
@@ -557,39 +1502,76 @@
                 <div class="overview-card warning"><span class="kpi-label">NF conferidas</span><div class="kpi-value" id="ov-conferidas">0</div><div class="overview-foot" id="ov-conferidas-foot">Conferência operacional</div></div>
                 <div class="overview-card success"><span class="kpi-label">Notas lançadas</span><div class="kpi-value" id="ov-lancadas">0</div><div class="overview-foot" id="ov-lancadas-foot">Documento concluído</div></div>
                 <div class="overview-card process"><span class="kpi-label">Manifestação OK</span><div class="kpi-value" id="ov-manifest-ok">0</div><div class="overview-foot" id="ov-manifest-ok-foot">Retorno positivo do destinatário</div></div>
+            </div>
+
+            <details class="dashboard-details">
+                <summary>Indicadores complementares</summary>
+                <div class="dashboard-details-body">
+                    <div class="overview-grid overview-grid-secondary">
                 <div class="overview-card danger"><span class="kpi-label">Manifestação pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando ação</div></div>
                 <div class="overview-card danger"><span class="kpi-label">Divergências</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrências no período</div></div>
                 <div class="overview-card success"><span class="kpi-label">Enderecamentos WMS</span><div class="kpi-value" id="ov-wms-end">0</div><div class="overview-foot" id="ov-wms-end-foot">Armazenagens realizadas</div></div>
                 <div class="overview-card process"><span class="kpi-label">Movimentações WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazém</div></div>
-            </div>
-
-            <div class="overview-panels">
-                <div class="overview-panel">
-                    <div class="chart-title">Consolidado operacional <span class="overview-badge" id="overview-geral-badge">Atualizando</span></div>
-                    <div id="overview-geral" class="overview-list">
-                        <div class="overview-empty">Carregando consolidado geral...</div>
                     </div>
                 </div>
-                <div class="overview-panel">
-                    <div class="chart-title">WMS geral <span class="overview-badge" id="overview-wms-badge">Atualizando</span></div>
-                    <div id="overview-wms" class="overview-list">
-                        <div class="overview-empty">Carregando indicadores do WMS...</div>
+            </details>
+
+            <details class="dashboard-details">
+                <summary>Detalhes operacionais</summary>
+                <div class="dashboard-details-body">
+                    <div class="overview-category-grid">
+                        <div class="overview-panel overview-category">
+                            <div class="overview-category-head">
+                                <div class="overview-category-copy">
+                                    <strong>Fiscal &amp; Manifestacao</strong>
+                                    <span>Entrada, divergencias e retorno fiscal em um bloco proprio.</span>
+                                </div>
+                                <span class="overview-category-tag" id="overview-geral-badge">Atualizando</span>
+                            </div>
+                            <div id="overview-geral" class="overview-list">
+                                <div class="overview-empty">Carregando consolidado geral...</div>
+                            </div>
+                        </div>
+                        <div class="overview-panel overview-category">
+                            <div class="overview-category-head">
+                                <div class="overview-category-copy">
+                                    <strong>WMS &amp; Armazem</strong>
+                                    <span>Fila de enderecamento, saldo, alertas e movimentacao recente.</span>
+                                </div>
+                                <span class="overview-category-tag" id="overview-wms-badge">Atualizando</span>
+                            </div>
+                            <div id="overview-wms" class="overview-list">
+                                <div class="overview-empty">Carregando indicadores do WMS...</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </details>
 
-            <div class="overview-panel">
-                <div class="chart-title">Processado por usuário <span class="overview-badge" id="overview-users-badge">Atualizando</span></div>
-                <div id="overview-usuarios" class="overview-table-wrap">
-                    <div class="overview-empty">Carregando produtividade por usuário...</div>
+            <details class="dashboard-details">
+                <summary>Produtividade por usuario</summary>
+                <div class="dashboard-details-body">
+                    <div class="overview-panel overview-category full">
+                        <div class="chart-title">Processado por usuário <span class="overview-badge" id="overview-users-badge">Atualizando</span></div>
+                        <div class="overview-category-head">
+                            <div class="overview-category-copy">
+                                <strong>Produtividade por usuario</strong>
+                                <span>Quem puxou volume no periodo, separado da leitura operacional.</span>
+                            </div>
+                            <span class="overview-category-tag" id="overview-users-badge-copy">Atualizando</span>
+                        </div>
+                        <div id="overview-usuarios" class="overview-table-wrap">
+                            <div class="overview-empty">Carregando produtividade por usuário...</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </details>
         </section>
         </div><!-- /band-overview -->
 
-        <div class="cat-band" id="band-recebimento">
+        <div class="cat-band" id="band-recebimento" data-band="recebimento">
             <div class="cat-band__head"><i class="fas fa-truck-ramp-box"></i> Recebimento &amp; Fiscal <span class="cat-sub">Conferência, fluxo, SLA e fila de exceção</span></div>
-        <section id="painel-recebimento" class="dashboard-section">
+        <section id="painel-recebimento" class="dashboard-section" data-band-content>
             <div class="section-header">Indicadores de recebimento</div>
             <div class="kpi-grid">
                 <div class="kpi-card warning"><span class="kpi-label">Conferência</span><div class="kpi-value" id="qtd-estoque">0</div></div>
@@ -628,9 +1610,9 @@
 
         </div><!-- /band-recebimento -->
 
-        <div class="cat-band" id="band-expedicao" style="display:none;">
+        <div class="cat-band" id="band-expedicao" data-band="expedicao" style="display:none;">
             <div class="cat-band__head"><i class="fas fa-truck-fast"></i> Expedição <span class="cat-sub">Saída de mercadoria e conferência de carga</span></div>
-        <section id="painel-expedicao" class="dashboard-section">
+        <section id="painel-expedicao" class="dashboard-section" data-band-content>
             <div class="section-header">Indicadores de expedição</div>
             <div class="kpi-grid">
                 <div class="kpi-card warning"><div class="kpi-label">Abertas</div><div class="kpi-value" id="exp-abertas">0</div></div>
@@ -645,9 +1627,9 @@
         </section>
         </div><!-- /band-expedicao -->
 
-        <div class="cat-band" id="band-logistica">
+        <div class="cat-band" id="band-logistica" data-band="logistica">
             <div class="cat-band__head"><i class="fas fa-route"></i> Logística <span class="cat-sub">Quilometragem e alocação de motoristas</span></div>
-        <section class="dashboard-section">
+        <section class="dashboard-section" data-band-content>
             <div class="overview-shell">
                 <div class="overview-toolbar">
                     <div>
@@ -670,9 +1652,9 @@
         </section>
         </div><!-- /band-logistica -->
 
-        <div class="cat-band" id="band-sla">
+        <div class="cat-band" id="band-sla" data-band="sla">
             <div class="cat-band__head"><i class="fas fa-stopwatch"></i> SLA &amp; Backup <span class="cat-sub">Alertas de prazo e gestão de banco</span></div>
-        <section class="ops-grid" id="painel-sla">
+        <section class="ops-grid" id="painel-sla" data-band-content>
             <div class="ops-card">
                 <div class="ops-head"><h4 class="ops-title"><i class="fas fa-stopwatch"></i> Indicadores de SLA</h4></div>
                 <div class="sla-columns">
@@ -712,9 +1694,9 @@
         </section>
         </div><!-- /band-sla -->
 
-        <div class="cat-band" id="band-sistema">
+        <div class="cat-band" id="band-sistema" data-band="sistema">
             <div class="cat-band__head"><i class="fas fa-grip"></i> Atalhos do sistema <span class="cat-sub">Acesso rápido aos módulos</span></div>
-        <section class="dashboard-section">
+        <section class="dashboard-section" data-band-content>
             <div class="menu-grid">
                 <a href="/" class="btn-module"><i class="fas fa-house"></i><span>Menu principal</span></a>
                 {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="btn-module"><i class="fas fa-file-import"></i><span>Importação XML</span></a>{% endif %}
@@ -741,6 +1723,100 @@
     // --- RESTAURAÇÃO INTEGRAL DA LÓGICA (700+ LINHAS ORIGINAIS) ---
     let donutChart, barChart, expDonutChart, expBarChart;
     let operacaoAtual = 'recebimento';
+    let focusMode = true;
+    let activeBandId = 'band-overview';
+    const DASHBOARD_PREFS_KEY = 'columbia_sync_dashboard_focus_v1';
+
+    function lerPreferenciasDashboard() {
+        try {
+            const raw = localStorage.getItem(DASHBOARD_PREFS_KEY);
+            if (!raw) return;
+            const prefs = JSON.parse(raw);
+            if (prefs && typeof prefs === 'object') {
+                if (prefs.operacao === 'recebimento' || prefs.operacao === 'expedicao') {
+                    operacaoAtual = prefs.operacao;
+                }
+                if (typeof prefs.activeBandId === 'string' && prefs.activeBandId) {
+                    activeBandId = prefs.activeBandId;
+                }
+            }
+        } catch (error) {}
+        focusMode = true;
+    }
+
+    function salvarPreferenciasDashboard() {
+        try {
+            localStorage.setItem(DASHBOARD_PREFS_KEY, JSON.stringify({
+                operacao: operacaoAtual,
+                focusMode,
+                activeBandId,
+            }));
+        } catch (error) {}
+    }
+
+    function operacaoPermiteBanda(bandId) {
+        if (operacaoAtual === 'expedicao') {
+            return !['band-recebimento', 'band-sla'].includes(bandId);
+        }
+        return bandId !== 'band-expedicao';
+    }
+
+    function bandasVisiveisPorOperacao() {
+        return ['band-overview', 'band-recebimento', 'band-expedicao', 'band-logistica', 'band-sla', 'band-sistema']
+            .filter((bandId) => operacaoPermiteBanda(bandId));
+    }
+
+    function atualizarBotoesFoco() {
+        document.getElementById('focus-mode-toggle')?.classList.toggle('is-active', focusMode);
+        document.getElementById('show-all-toggle')?.classList.toggle('is-soft-active', !focusMode);
+        document.querySelectorAll('.section-pill[data-target-band]').forEach((button) => {
+            button.classList.toggle('is-active', button.dataset.targetBand === activeBandId);
+        });
+    }
+
+    function aplicarVisibilidadeDasBandas() {
+        const bandasPermitidas = new Set(bandasVisiveisPorOperacao());
+        document.querySelectorAll('.cat-band[id^="band-"]').forEach((band) => {
+            const bandId = band.id;
+            const permitida = bandasPermitidas.has(bandId);
+            const visivel = permitida && (!focusMode || bandId === 'band-overview' || bandId === activeBandId);
+            band.classList.toggle('is-hidden', !visivel);
+        });
+
+        document.querySelectorAll('.section-pill[data-target-band]').forEach((button) => {
+            const permitida = bandasPermitidas.has(button.dataset.targetBand || '');
+            button.hidden = !permitida;
+        });
+    }
+
+    function setBandCollapsed(bandId, collapsed) {
+        const band = document.getElementById(bandId);
+        if (!band) return;
+        band.classList.toggle('is-collapsed', collapsed);
+    }
+
+    function expandirBandasVisiveis() {
+        document.querySelectorAll('.cat-band[id^="band-"]:not(.is-hidden)').forEach((band) => {
+            band.classList.remove('is-collapsed');
+        });
+    }
+
+    function compactarBandasSecundarias() {
+        document.querySelectorAll('.cat-band[id^="band-"]:not(.is-hidden)').forEach((band) => {
+            const deveColapsar = band.id !== 'band-overview' && band.id !== activeBandId;
+            band.classList.toggle('is-collapsed', deveColapsar);
+        });
+    }
+
+    function ativarBanda(bandId) {
+        activeBandId = bandId;
+        if (focusMode) {
+            aplicarVisibilidadeDasBandas();
+            compactarBandasSecundarias();
+        }
+        atualizarBotoesFoco();
+        salvarPreferenciasDashboard();
+    }
 
     function escapeHtml(value) {
         return String(value ?? '')
@@ -1013,6 +2089,7 @@
     function renderOverviewUsuarios(consolidado) {
         const container = document.getElementById('overview-usuarios');
         const badge = document.getElementById('overview-users-badge');
+        const badgeCopy = document.getElementById('overview-users-badge-copy');
         if (!container) return;
 
         const usuarios = Array.isArray(consolidado?.por_usuario) ? consolidado.por_usuario : [];
@@ -1021,6 +2098,7 @@
         if (!usuarios.length) {
             container.innerHTML = '<div class="overview-empty">Nenhuma produtividade por usuário encontrada no período selecionado.</div>';
             if (badge) badge.innerText = '0 ativos';
+            if (badgeCopy) badgeCopy.innerText = '0 ativos';
             return;
         }
 
@@ -1075,6 +2153,7 @@
         `;
 
         if (badge) badge.innerText = `${formatarNumero(totais.usuarios_ativos || usuarios.length)} ativos`;
+        if (badgeCopy) badgeCopy.innerText = `${formatarNumero(totais.usuarios_ativos || usuarios.length)} ativos`;
     }
 
     async function carregarVisaoGeralConsolidada() {
@@ -1082,7 +2161,7 @@
         const dias = Number(periodoSelecionado?.value || 30);
 
         const [consolidado, wmsCockpit, expedicao] = await Promise.all([
-            fetchJsonSafe(`/api/admin/dashboard_consolidado?dias=${dias}`),
+            fetchJsonSafe(`/api/upload/dashboard_consolidado?dias=${dias}`),
             fetchJsonSafe('/api/wms/cockpit'),
             fetchJsonSafe('/api/expedicao/dashboard'),
         ]);
@@ -1229,7 +2308,26 @@
         document.getElementById('band-recebimento').style.display = isExp ? 'none' : '';
         document.getElementById('band-expedicao').style.display = isExp ? '' : 'none';
         document.getElementById('band-sla').style.display = isExp ? 'none' : '';
-        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Monitoramento operacional da expedição' : 'Monitoramento de recebimento e conformidade fiscal';
+        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal, WMS e conformidade.';
+    }
+
+    function aplicarFiltroOperacaoV2() {
+        const isExp = operacaoAtual === 'expedicao';
+        document.getElementById('band-recebimento').style.display = isExp ? 'none' : '';
+        document.getElementById('band-expedicao').style.display = isExp ? '' : 'none';
+        document.getElementById('band-sla').style.display = isExp ? 'none' : '';
+        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal, WMS e conformidade.';
+        if (!operacaoPermiteBanda(activeBandId)) {
+            activeBandId = isExp ? 'band-expedicao' : 'band-recebimento';
+        }
+        aplicarVisibilidadeDasBandas();
+        if (focusMode) {
+            compactarBandasSecundarias();
+        } else {
+            expandirBandasVisiveis();
+        }
+        atualizarBotoesFoco();
+        salvarPreferenciasDashboard();
     }
 
     function baixarBackup() { window.location.href = '/api/admin/backup_db'; }
@@ -1264,9 +2362,41 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('op-selector').addEventListener('change', (e) => {
-            operacaoAtual = e.target.value;
-            aplicarFiltroOperacao();
+        lerPreferenciasDashboard();
+
+        const opSelector = document.getElementById('op-selector');
+        if (opSelector) {
+            opSelector.value = operacaoAtual;
+            opSelector.addEventListener('change', (e) => {
+                operacaoAtual = e.target.value;
+                aplicarFiltroOperacaoV2();
+            });
+        }
+
+        document.getElementById('focus-mode-toggle')?.addEventListener('click', () => {
+            focusMode = true;
+            aplicarFiltroOperacaoV2();
+        });
+        document.getElementById('show-all-toggle')?.addEventListener('click', () => {
+            focusMode = false;
+            aplicarFiltroOperacaoV2();
+        });
+        document.getElementById('expand-visible-bands')?.addEventListener('click', () => {
+            expandirBandasVisiveis();
+        });
+        document.getElementById('collapse-secondary-bands')?.addEventListener('click', () => {
+            compactarBandasSecundarias();
+        });
+        document.querySelectorAll('.section-pill[data-target-band]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const target = button.dataset.targetBand;
+                if (!target) return;
+                if (!focusMode) {
+                    focusMode = true;
+                }
+                ativarBanda(target);
+                document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
         });
         document.getElementById('overview-period').addEventListener('change', () => {
             carregarVisaoGeralConsolidada();
@@ -1278,7 +2408,7 @@
         carregarPainelProcesso();
         carregarExpedicaoDashboard();
         carregarMotoristaKm();
-        aplicarFiltroOperacao();
+        aplicarFiltroOperacaoV2();
         document.getElementById('motorista-km-period').addEventListener('change', () => carregarMotoristaKm());
         setInterval(carregarVisaoGeralConsolidada, 30000);
         setInterval(atualizarStats, 15000);

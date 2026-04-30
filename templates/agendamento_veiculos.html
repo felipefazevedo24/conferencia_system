@@ -267,7 +267,7 @@ body{font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,var(--rec-font-ui),
         <div class="rt-top">
             <div class="rt-filters">
                 <input id="boardSearch" class="form-control" placeholder="Buscar parceiro, documento ou cidade" style="max-width:260px">
-                <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option></select>
+                <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option><option value="AVULSA">Avulsa</option></select>
                 <select id="boardStatus" class="form-select" style="max-width:170px"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Alocada">Alocada</option><option value="EmAndamento">Em andamento</option><option value="EmRota">Em rota</option><option value="Concluida">Concluída</option></select>
                 <select id="boardPrioridade" class="form-select" style="max-width:150px"><option value="">Prioridade</option><option value="Critica">Crítica</option><option value="Alta">Alta</option><option value="Media">Média</option><option value="Baixa">Baixa</option></select>
                 <button class="btn btn-outline-secondary" type="button" onclick="loadDashboard()"><i class="fas fa-filter"></i></button>
@@ -337,7 +337,7 @@ body{font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,var(--rec-font-ui),
 
 <div class="modal fade" id="detalheModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Detalhe da solicitação</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="detalheBody"></div></div></div></div>
 <div class="modal fade" id="alocarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Alocar rota</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="alocarForm" class="rt-form"><div class="modal-body"><input type="hidden" id="alocarSolicitacaoId"><div class="mb-3"><label class="form-label">Departamento solicitante <span class="text-danger">*</span></label><select id="alocarDepartamento" class="form-select" required><option value="">Selecione o departamento...</option><option value="COMPRAS">COMPRAS</option><option value="ASSISTÊNCIA TÉCNICA">ASSISTÊNCIA TÉCNICA</option><option value="ENGENHARIA/PCP">ENGENHARIA/PCP</option><option value="LOGÍSTICA">LOGÍSTICA</option><option value="FACILITIES">FACILITIES</option></select></div><div class="mb-3"><label class="form-label">Veículo</label><select id="alocarVeiculo" class="form-select"></select></div><div class="mb-3"><label class="form-label">Motorista</label><select id="alocarMotorista" class="form-select"><option value="">Sem motorista definido</option></select></div><div class="mb-3"><label class="form-label">Saída planejada</label><input id="alocarSaida" type="datetime-local" class="form-control"></div><div><label class="form-label">Observações</label><textarea id="alocarObservacao" class="form-control" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
-<div class="modal fade" id="cancelarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Solicitar cancelamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="cancelarForm"><div class="modal-body"><input type="hidden" id="cancelarSolicitacaoId"><label class="form-label">Motivo</label><textarea id="cancelarMotivo" class="form-control" rows="4" required></textarea></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-danger" type="submit">Solicitar cancelamento</button></div></form></div></div></div>
+<div class="modal fade" id="cancelarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="cancelarTitulo">Solicitar cancelamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="cancelarForm"><div class="modal-body"><input type="hidden" id="cancelarSolicitacaoId"><label class="form-label">Motivo</label><textarea id="cancelarMotivo" class="form-control" rows="4" required></textarea></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-danger" id="cancelarSubmit" type="submit">Solicitar cancelamento</button></div></form></div></div></div>
 <div class="modal fade" id="motoristaModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Editar motorista</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="motoristaForm" class="rt-form"><div class="modal-body"><input type="hidden" id="motoristaId"><div class="mb-3"><label class="form-label">Nome</label><input id="motoristaNome" class="form-control" required></div><div class="mb-3"><label class="form-label">Telefone</label><input id="motoristaTelefone" class="form-control"></div><div class="mb-3"><label class="form-label">CNH</label><input id="motoristaCnh" class="form-control"></div><div class="mb-3"><label class="form-label">Observações</label><textarea id="motoristaObservacoes" class="form-control" rows="3"></textarea></div><div class="form-check"><input id="motoristaAtivo" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="motoristaAtivo">Motorista ativo</label></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
 {% endblock %}
 
@@ -365,6 +365,8 @@ const alocarObservacao=document.getElementById('alocarObservacao');
 const cancelarForm=document.getElementById('cancelarForm');
 const cancelarSolicitacaoId=document.getElementById('cancelarSolicitacaoId');
 const cancelarMotivo=document.getElementById('cancelarMotivo');
+const cancelarTitulo=document.getElementById('cancelarTitulo');
+const cancelarSubmit=document.getElementById('cancelarSubmit');
 const motoristaForm=document.getElementById('motoristaForm');
 const motoristaState=document.getElementById('motoristaState');
 const motoristaList=document.getElementById('motoristaList');
@@ -446,11 +448,34 @@ function metrics(r={},m=[]){
         {label:'Alocadas',value:r.alocadas||0,icon:'fa-truck',tone:'tone-gold'},
         {label:'Em andamento',value:r.em_andamento||0,icon:'fa-spinner',tone:'tone-blue'},
         {label:'Em rota',value:r.em_rota||0,icon:'fa-route',tone:'tone-green'},
+        {label:'Cancel. pendentes',value:r.cancelamentos_pendentes||0,icon:'fa-user-check',tone:'tone-red'},
         {label:'Concluídas',value:r.concluidas||0,icon:'fa-circle-check',tone:'tone-green'},
         {label:'Atrasadas',value:r.atrasadas||0,icon:'fa-triangle-exclamation',tone:'tone-red'},
         {label:'Motoristas',value:r.motoristas_ativos||m.length||0,icon:'fa-id-card',tone:'tone-blue'},
     ];
     document.getElementById('metricGrid').innerHTML=cards.map(c=>`<article class="rt-metric ${c.tone}"><i class="fas ${c.icon}"></i><span>${c.label}</span><strong>${c.value}</strong></article>`).join('');
+}
+
+function statusOperacional(c){
+    if(c.cancelamento_pendente)return {label:'Aguard. aprovacao cancel.',cls:'b-red'};
+    return {label:c.status_label,cls:badge('status',c.status)};
+}
+
+function proximaAcao(s){
+    if(s.cancelamento_pendente)return 'Aguardando o solicitante aprovar ou rejeitar o cancelamento.';
+    if(s.status==='Pendente'||s.status==='EmAnalise')return 'Logistica deve alocar veiculo, motorista e horario.';
+    if(s.status==='Alocada')return s.motorista?.nome?'Pronta para montar ou liberar viagem.':'Defina motorista se a rota exigir execucao acompanhada.';
+    if(s.status==='EmAndamento')return 'Viagem iniciada. Acompanhe execucao e ajustes necessarios.';
+    if(s.status==='EmRota')return 'Motorista em rota. Proximo passo e concluir ao retornar.';
+    if(s.status==='Concluida')return 'Fluxo finalizado.';
+    if(s.status==='Cancelada')return 'Solicitacao cancelada.';
+    return 'Acompanhe o proximo evento no historico.';
+}
+
+function timeline(s){
+    const eventos=[...(s.historico||[])].reverse();
+    if(!eventos.length)return '<div class="rt-empty"><i class="fas fa-clock-rotate-left"></i><p>Sem historico registrado.</p></div>';
+    return `<div class="rt-history mt-3">${eventos.map(i=>`<div class="rt-card"><strong><i class="fas fa-clock-rotate-left" style="color:#94a3b8;font-size:12px;margin-right:4px"></i>${i.criado_em} &middot; ${i.evento}</strong><p>${i.usuario||'Sistema'}${i.status_anterior||i.status_novo?` &middot; ${i.status_anterior||'---'} -> ${i.status_novo||'---'}`:''}</p>${i.detalhe?`<p>${i.detalhe}</p>`:''}</div>`).join('')}</div>`;
 }
 
 function sortCards(cards){
@@ -485,10 +510,11 @@ function renderTable(cards){
         const canAlocar=c.status==='Pendente'||c.status==='EmAnalise';
         const canRota=c.veiculo&&(c.status==='Alocada'||c.status==='EmAndamento');
         const canConcluir=c.status==='EmRota'||c.status==='EmAndamento'||c.status==='Alocada';
+        const st=statusOperacional(c);
         return `<tr onclick="openDetalhe(${c.id})">
             <td><strong>${c.codigo}</strong></td>
             <td><span class="rt-badge b-blue">${c.tipo_label}</span></td>
-            <td><span class="rt-badge ${badge('status',c.status)}">${c.status_label}</span>${c.cancelamento_pendente?'<span class="rt-badge b-red" style="margin-left:4px">Cancel. pendente</span>':''}${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
+            <td><span class="rt-badge ${st.cls}">${st.label}</span>${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
             <td><span class="rt-badge ${badge('priority',c.prioridade)}">${c.prioridade_label}</span></td>
             <td title="${c.parceiro_razao_social||''}">${c.parceiro_nome||'---'}</td>
             <td>${c.documento_tipo} ${c.documento_numero||'---'}</td>
@@ -504,7 +530,7 @@ function renderTable(cards){
                 ${canAlocar?`<button class="btn btn-outline-primary btn-sm" onclick="openAlocarModal(${c.id})" title="Alocar"><i class="fas fa-truck"></i></button>`:''}
                 ${canRota?`<button class="btn btn-outline-success btn-sm" onclick="updateStatus(${c.id},'EmRota')" title="Em rota"><i class="fas fa-road"></i></button>`:''}
                 ${canConcluir&&state.userRole==='Admin'?`<button class="btn btn-success btn-sm" onclick="updateStatus(${c.id},'Concluida')" title="Concluir"><i class="fas fa-check"></i></button>`:''}
-                ${c.status!=='Concluida'&&c.status!=='Cancelada'?`<button class="btn btn-outline-danger btn-sm" onclick="openCancelarModal(${c.id})" title="Solicitar cancelamento"><i class="fas fa-xmark"></i></button>`:''}
+                ${c.status!=='Concluida'&&c.status!=='Cancelada'&&!c.cancelamento_pendente?`<button class="btn btn-outline-danger btn-sm" onclick="openCancelarModal(${c.id})" title="${state.userRole==='Admin'?'Cancelar direto':'Solicitar cancelamento'}"><i class="fas fa-xmark"></i></button>`:''}
                 ${c.cancelamento_pendente?'<span class="rt-badge b-red" style="font-size:9px">Aguard. solicitante</span>':''}
                 </div>
             </td>
@@ -606,26 +632,28 @@ async function openDetalhe(id){
     const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}`);
     const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao abrir detalhe.','error');return;}const s=d.solicitacao;
     const chips=(s.itens||[]).map(i=>`<span class="rt-chip"><i class="fas fa-box"></i>${i.descricao||'Item'}${i.quantidade?`<span class="chip-qty">${i.quantidade} ${i.unidade||''}</span>`:''}</span>`).join('');
+    const st=statusOperacional(s);
     detalheBody.innerHTML=`
         ${buildStepper(s.status)}
         <div class="rt-split" style="margin-top:16px">
-            <div class="rt-mini"><span><i class="fas fa-file-lines"></i> ${s.tipo_label} &middot; ${s.status_label}${s.cancelamento_pendente?' &middot; <span class="rt-badge b-red">Cancel. pendente</span>':''}</span><strong>${s.parceiro_nome} &middot; ${s.documento_tipo} ${s.documento_numero}</strong><p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p><p><i class="fas fa-tag" style="color:#94a3b8"></i> Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
+            <div class="rt-mini"><span><i class="fas fa-file-lines"></i> ${s.tipo_label} &middot; <span class="rt-badge ${st.cls}">${st.label}</span></span><strong>${s.parceiro_nome} &middot; ${s.documento_tipo} ${s.documento_numero}</strong><p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p><p><i class="fas fa-tag" style="color:#94a3b8"></i> Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
             <div class="rt-mini"><span><i class="fas fa-truck-fast"></i> Execução</span><strong>${s.veiculo?.nome||'Sem veículo'}${s.motorista?.nome?' &middot; '+s.motorista.nome:''}</strong>${s.departamento_solicitante?`<p><i class="fas fa-building" style="color:#94a3b8"></i> Depto: ${s.departamento_solicitante}</p>`:''}<p><i class="fas fa-clock" style="color:#94a3b8"></i> Saída: ${s.data_hora_saida_prevista_label||'---'}</p><p><i class="fas fa-road" style="color:#94a3b8"></i> ${s.km_estimado?`Estimativa: ${km(s.km_estimado)}`:'Estimativa de km indisponível'}${s.km_estimado_retorno?' &middot; '+km(s.km_estimado_retorno)+' ida e volta':''}</p>${s.google_maps_url?`<p><a href="${s.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" style="margin-top:6px"><i class="fas fa-map-location-dot"></i> Abrir rota</a></p>`:''}</div>
         </div>
         ${s.cancelamento_pendente?`<div class="rt-mini mt-3" style="border-color:#9f2f2f;background:rgba(176,56,56,.04)"><span style="color:#9f2f2f"><i class="fas fa-triangle-exclamation"></i> Cancelamento solicitado por ${s.cancelamento_solicitado_por}</span><p>${s.cancelamento_motivo_pendente||'Sem motivo'}</p><p style="font-size:11px;color:#667e92">Aguardando aprovação do solicitante.</p></div>`:''}
+        <div class="rt-mini mt-3" style="border-left:4px solid #155eef"><span><i class="fas fa-bolt"></i> Proxima acao</span><p>${proximaAcao(s)}</p></div>
         <div class="rt-inline mt-3">
             <button class="btn btn-outline-primary btn-sm" type="button" onclick="openAlocarModal(${s.id})"><i class="fas fa-truck"></i> Alocar</button>
             <button class="btn btn-outline-success btn-sm" type="button" onclick="updateStatus(${s.id},'EmRota')" ${!s.veiculo?'disabled title="Aloque um veículo antes"':''}><i class="fas fa-road"></i> Em rota</button>
             ${state.userRole==='Admin'?`<button class="btn btn-success btn-sm" type="button" onclick="updateStatus(${s.id},'Concluida')"><i class="fas fa-check"></i> Concluir</button>`:''}
-            <button class="btn btn-outline-danger btn-sm" type="button" onclick="openCancelarModal(${s.id})"><i class="fas fa-xmark"></i> Cancelar</button>
+            ${s.status!=='Concluida'&&s.status!=='Cancelada'&&!s.cancelamento_pendente?`<button class="btn btn-outline-danger btn-sm" type="button" onclick="openCancelarModal(${s.id})"><i class="fas fa-xmark"></i> ${state.userRole==='Admin'?'Cancelar direto':'Solicitar cancelamento'}</button>`:''}
         </div>
         <div class="rt-mini mt-3"><span><i class="fas fa-boxes-stacked"></i> Itens</span>${chips?`<div class="rt-chips">${chips}</div>`:`<p>Sem itens registrados.</p>`}</div>
-        <div class="rt-history mt-3">${(s.historico||[]).map(i=>`<div class="rt-card"><strong><i class="fas fa-clock-rotate-left" style="color:#94a3b8;font-size:12px;margin-right:4px"></i>${i.criado_em} &middot; ${i.evento}</strong><p>${i.usuario}</p>${i.detalhe?`<p>${i.detalhe}</p>`:''}</div>`).join('')||'<div class="rt-empty"><i class="fas fa-clock-rotate-left"></i><p>Sem histórico registrado.</p></div>'}</div>`;
+        <div class="rt-mini mt-3"><span><i class="fas fa-timeline"></i> Linha do tempo</span>${timeline(s)}</div>`;
     detalheModal.show();
 }
 
 function openAlocarModal(id,code=''){alocarSolicitacaoId.value=id;document.getElementById('alocarDepartamento').value='';motoristaOptions();if(code){const o=[...alocarVeiculo.options].find(i=>i.text.includes(code));if(o)alocarVeiculo.value=o.value;}alocarModal.show();}
-function openCancelarModal(id){detalheModal.hide();cancelarSolicitacaoId.value=id;cancelarMotivo.value='';setTimeout(()=>cancelarModal.show(),300);}
+function openCancelarModal(id){detalheModal.hide();cancelarSolicitacaoId.value=id;cancelarMotivo.value='';const admin=state.userRole==='Admin';cancelarTitulo.textContent=admin?'Cancelar solicitacao':'Solicitar cancelamento';cancelarSubmit.textContent=admin?'Cancelar direto':'Solicitar cancelamento';setTimeout(()=>cancelarModal.show(),300);}
 function openMotoristaModal(id=''){const m=state.motoristas.find(i=>String(i.id)===String(id));if(!m)return;motoristaId.value=m.id;motoristaNome.value=m.nome||'';motoristaTelefone.value=m.telefone||'';motoristaCnh.value=m.cnh||'';motoristaObservacoes.value=m.observacoes||'';motoristaAtivo.checked=!!m.ativo;motoristaModal.show();}
 
 async function updateStatus(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alterar status.','error');return setBoard(d.error||'Falha ao alterar status.',true);}showToast(`Status atualizado para ${STEP_LABELS[status]||status}.`,'success');detalheModal.hide();await refreshAll();}
@@ -692,7 +720,7 @@ async function anexarAViagem(sid,vid){
 }
 
 alocarForm.addEventListener('submit',async e=>{e.preventDefault();const dept=document.getElementById('alocarDepartamento').value;if(!dept){showToast('Selecione o departamento solicitante.','error');return;}const sid=alocarSolicitacaoId.value;const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:state.geo?.lat||'',origem_longitude:state.geo?.lng||'',departamento_solicitante:dept};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alocar.','error');return setBoard(d.error||'Falha ao alocar.',true);}showToast('Rota alocada com sucesso!','success');alocarModal.hide();await refreshAll();if(payload.veiculo_id && payload.motorista_id){setTimeout(()=>abrirMontarViagem(sid,payload.motorista_id,payload.veiculo_id),400);}});
-cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao cancelar.','error');return setBoard(d.error||'Falha ao cancelar.',true);}showToast('Cancelamento solicitado. Aguardando aprovação do solicitante.','info',5000);cancelarModal.hide();detalheModal.hide();await refreshAll();});
+cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao cancelar.','error');return setBoard(d.error||'Falha ao cancelar.',true);}showToast(d.mensagem||'Cancelamento solicitado. Aguardando aprovação do solicitante.','info',5000);cancelarModal.hide();detalheModal.hide();await refreshAll();});
 motoristaForm.addEventListener('submit',async e=>{e.preventDefault();const payload={id:motoristaId.value||'',nome:motoristaNome.value.trim(),telefone:motoristaTelefone.value.trim(),cnh:motoristaCnh.value.trim(),observacoes:motoristaObservacoes.value.trim(),ativo:motoristaAtivo.checked};const r=await fetch('/api/logistica/agendamento-veiculos/motoristas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar motorista.','error');motoristaState.textContent=d.error||'Falha ao salvar motorista.';motoristaState.classList.add('error');return;}showToast('Motorista salvo com sucesso!','success');motoristaModal.hide();await loadMotoristas();await loadDashboard();});
 if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>state.geo={lat:p.coords.latitude,lng:p.coords.longitude},()=>{},{enableHighAccuracy:true,timeout:8000,maximumAge:300000});}
 agendaData.value=new Date().toISOString().slice(0,10);refreshAll();

@@ -2097,6 +2097,9 @@ def test_completa_registro_expedicao_com_orcamento_e_os(tmp_path):
         assert registro.ordem_compra is None
         assert registro.nome_cliente == "Cliente Manual"
         assert registro.placa == "DEF5678"
+        assert registro.status == "Pendente de expedição"
+        assert registro.expedido_at is None
+        assert registro.expedido_by is None
 
 
 def test_completar_registro_expedicao_bloqueia_multiplas_nfs_com_cnpj_diferente(tmp_path):

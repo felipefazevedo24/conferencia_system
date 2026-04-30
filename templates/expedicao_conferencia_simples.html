@@ -1106,11 +1106,11 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
         try {
             const fd = new FormData(complForm);
             complFotos.forEach(f => fd.append("fotos", f));
-            if (wasExp) { fd.append("manter_pendente", "1"); }
+            if (isEditing || wasExp) { fd.append("manter_pendente", "1"); }
             const resp = await fetch(`/api/expedicao/conferencia-simples/${completarConferenciaId}/completar`, { method: "POST", body: fd });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || "Erro ao completar.");
-            showToast(wasExp ? "Edição salva. Registro permanece pendente de expedição." : "Conferência completada com sucesso.");
+            showToast(isEditing || wasExp ? "Edição salva. Registro permanece pendente de expedição." : "Conferência salva como pendente de expedição.");
             document.getElementById("completar-overlay")?.remove();
             loadHistorico();
         } catch (err) {

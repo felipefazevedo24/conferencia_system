@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - dependencia opcional em alguns ambientes
     load_workbook = None
 
 
-TIPOS_SOLICITACAO = ("COLETA", "ENTREGA")
+TIPOS_SOLICITACAO = ("COLETA", "ENTREGA", "AVULSA")
 STATUS_SOLICITACAO = ("Pendente", "EmAnalise", "Alocada", "EmRota", "Concluida", "Cancelada")
 PRIORIDADES_SOLICITACAO = ("Baixa", "Media", "Alta", "Critica")
 STATUS_ATIVOS = {"Pendente", "EmAnalise", "Alocada", "EmRota"}

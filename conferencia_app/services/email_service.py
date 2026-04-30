@@ -129,3 +129,53 @@ def enviar_email_solicitacao_epi(
     )
     thread.daemon = True
     thread.start()
+
+
+def enviar_email_agendamento_update(
+    destinatario_email: str,
+    assunto: str,
+    titulo: str,
+    linhas: list[tuple[str, str]],
+    url: str,
+):
+    """Notifica solicitante sobre atualizacoes da solicitacao de transporte."""
+    app = current_app._get_current_object()
+    smtp_server = app.config.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = app.config.get("MAIL_SMTP_PORT", 587)
+    sender = app.config.get("MAIL_SENDER", "")
+    password = app.config.get("MAIL_PASSWORD", "")
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+
+    if not destinatario_email:
+        return
+    if not sender or not password:
+        app.logger.warning("E-mail nao configurado. Pulando notificacao de agendamento.")
+        return
+
+    rows = "".join(
+        f'<tr><td style="padding:6px 12px 6px 0;font-weight:bold;color:#334155;width:150px;">{label}</td><td style="padding:6px 0;color:#0f172a;">{value or "-"}</td></tr>'
+        for label, value in (linhas or [])
+    )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = assunto
+    msg["From"] = f"{sender_name} <{sender}>"
+    msg["To"] = destinatario_email
+    html = f"""\
+    <html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:20px;">
+      <div style="max-width:600px;margin:auto;background:#fff;border-radius:10px;padding:24px;box-shadow:0 2px 10px rgba(15,23,42,.08);">
+        <h2 style="margin:0 0 8px;color:#0f62c9;">{titulo}</h2>
+        <p style="margin:0 0 18px;color:#64748b;font-size:14px;">Atualizacao automatica da sua solicitacao de transporte.</p>
+        <table style="width:100%;font-size:14px;border-collapse:collapse;">{rows}</table>
+        <a href="{url}" style="display:inline-block;margin-top:20px;padding:10px 18px;background:#0f62c9;color:#fff;text-decoration:none;border-radius:7px;font-size:14px;">Abrir minhas solicitacoes</a>
+        <p style="margin-top:22px;font-size:12px;color:#94a3b8;">Este e um e-mail automatico. Nao responda.</p>
+      </div>
+    </body></html>
+    """
+    msg.attach(MIMEText(html, "html"))
+    thread = threading.Thread(
+        target=_send_async,
+        args=(app, msg, smtp_server, smtp_port, sender, password),
+    )
+    thread.daemon = True
+    thread.start()

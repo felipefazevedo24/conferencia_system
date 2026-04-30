@@ -8,7 +8,7 @@
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #fff; overflow: hidden; }
-    .app { display: flex; flex-direction: column; height: 100dvh; padding: 18px; overflow: hidden; }
+    .app { display: flex; flex-direction: column; height: 100dvh; padding: 18px 18px 108px; overflow: hidden; }
     .header { text-align: center; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,.1); }
     .kicker { font-size: 11px; font-weight: 800; color: #34d399; text-transform: uppercase; letter-spacing: 1.5px; }
     .codigo { font-family: "Courier New", monospace; font-size: 22px; font-weight: 800; color: #fff; margin-top: 4px; }
@@ -44,6 +44,17 @@
     .btn-stop { background: linear-gradient(135deg, #dc2626, #991b1b); color: #fff; }
     .btn:active { transform: scale(.97); }
     .btn:disabled { opacity: .5; }
+    .tracking-dock {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        background: linear-gradient(180deg, rgba(15,23,42,.72), #0f172a 30%);
+        border-top: 1px solid rgba(255,255,255,.1);
+        backdrop-filter: blur(14px);
+    }
+    .tracking-dock-inner { max-width: 460px; margin: 0 auto; display: grid; gap: 7px; }
+    .tracking-dock-status { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; color: #94a3b8; }
+    .tracking-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #64748b; box-shadow: 0 0 0 4px rgba(100,116,139,.12); margin-right: 5px; }
+    .tracking-dot.on { background: #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.18); }
 
     .alert { background: rgba(220, 38, 38, .15); border: 1px solid #dc2626; color: #fca5a5; padding: 12px; border-radius: 10px; font-size: 13px; margin-top: 12px; text-align: center; }
     .alert.warn { background: rgba(245, 158, 11, .15); border-color: #f59e0b; color: #fde68a; }
@@ -132,6 +143,16 @@
         <button class="tab-btn" data-tab="gps"><i class="fa-solid fa-satellite-dish"></i> GPS</button>
     </div>
 
+    <div class="tracking-dock">
+        <div class="tracking-dock-inner">
+            <div class="tracking-dock-status">
+                <span><span class="tracking-dot" id="dock-dot"></span><span id="dock-status">Rastreamento parado</span></span>
+                <span id="dock-points">0 pontos</span>
+            </div>
+            <button class="btn btn-start" id="btn-dock"><i class="fa-solid fa-play"></i> Iniciar rastreamento</button>
+        </div>
+    </div>
+
     <!-- TAB PARADAS -->
     <div class="tab-pane active" id="tab-paradas" style="flex:1;overflow-y:auto;padding-top:14px">
         <div id="prox-container"></div>
@@ -192,6 +213,7 @@
 const VIAGEM_ID = {{ viagem.id }};
 const TOKEN = "{{ token }}";
 const PING_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/ping`;
+const START_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/iniciar`;
 const STATUS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/status`;
 const PARADAS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/paradas`;
 const VIAGEM_STATUS = "{{ viagem.status }}";
@@ -269,6 +291,8 @@ function onPos(pos) {
 
     pontos++;
     $('m-pts').textContent = pontos;
+    const dockPoints = $('dock-points');
+    if (dockPoints) dockPoints.textContent = `${pontos} ponto${pontos === 1 ? '' : 's'}`;
     $('m-vel').textContent = velKmh != null ? velKmh.toFixed(0) + ' km/h' : '—';
     $('m-ts').textContent = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
     $('m-prec').textContent = pos.coords.accuracy ? pos.coords.accuracy.toFixed(0) + ' m' : '—';
@@ -288,19 +312,60 @@ async function pedirWakeLock() {
     catch(e) {}
 }
 
+function setBotaoRastreamento(ativo) {
+    const html = ativo
+        ? '<i class="fa-solid fa-stop"></i> Parar rastreamento'
+        : '<i class="fa-solid fa-play"></i> Iniciar rastreamento';
+    ['btn', 'btn-dock'].forEach(id => {
+        const b = $(id);
+        if (!b) return;
+        b.className = ativo ? 'btn btn-stop' : 'btn btn-start';
+        b.innerHTML = html;
+    });
+    const dot = $('dock-dot');
+    if (dot) dot.classList.toggle('on', ativo);
+    const ds = $('dock-status');
+    if (ds) ds.textContent = ativo ? 'Rastreamento ativo' : 'Rastreamento parado';
+}
+
+async function iniciarViagemSeNecessario(pos) {
+    try {
+        const r = await fetch(START_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                latitude: pos?.coords?.latitude,
+                longitude: pos?.coords?.longitude,
+                precisao_m: pos?.coords?.accuracy,
+            })
+        });
+        const d = await r.json();
+        if (!r.ok || !d.sucesso) {
+            alertar(d.msg || 'Nao foi possivel iniciar a viagem.', 'warn');
+            return false;
+        }
+        return true;
+    } catch(e) {
+        alertar('Sem conexao para iniciar a viagem. Tente novamente.', 'warn');
+        return false;
+    }
+}
+
 async function iniciar() {
     if (!navigator.geolocation) { alertar('Seu navegador não suporta GPS.'); return; }
+    let primeiraPos = null;
     try {
-        await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy: true, timeout: 10000}));
+        primeiraPos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy: true, timeout: 10000}));
     } catch(e) { onErr(e); return; }
+    const viagemOk = await iniciarViagemSeNecessario(primeiraPos);
+    if (!viagemOk) return;
     watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
+    onPos(primeiraPos);
     pedirWakeLock();
     $('ring').classList.add('on');
     $('status-big').textContent = 'Rastreando';
     $('status-sm').textContent = 'Mantenha a tela aberta até o final da viagem';
-    const b = $('btn');
-    b.className = 'btn btn-stop';
-    b.innerHTML = '<i class="fa-solid fa-stop"></i> Parar rastreamento';
+    setBotaoRastreamento(true);
     alertar('');
     inicializado = true;
 }
@@ -312,14 +377,14 @@ function parar() {
     $('ring').classList.remove('on');
     $('status-big').textContent = 'Parado';
     $('status-sm').textContent = 'Rastreamento pausado';
-    const b = $('btn');
-    b.className = 'btn btn-start';
-    b.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar rastreamento';
+    setBotaoRastreamento(false);
     inicializado = false;
 }
 
 const btn = $('btn');
 if (btn) btn.addEventListener('click', () => { inicializado ? parar() : iniciar(); });
+const btnDock = $('btn-dock');
+if (btnDock) btnDock.addEventListener('click', () => { inicializado ? parar() : iniciar(); });
 
 document.addEventListener('visibilitychange', () => {
     if (!document.hidden && inicializado && !wakeLock) pedirWakeLock();

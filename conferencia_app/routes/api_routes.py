@@ -84,6 +84,7 @@ from ..models import (
     ChecklistRecebimento,
     LocalizacaoArmazem,
     ItemWMS,
+    MovimentacaoWMS,
     BoletoContaReceber,
     LogAcessoAdministrativo,
     LogDivergencia,
@@ -6129,6 +6130,237 @@ def documento_entrada_kpis():
     )
 
 
+@api_bp.route("/api/upload/dashboard_consolidado")
+@login_required
+def upload_dashboard_consolidado():
+    try:
+        dias = int(request.args.get("dias", "30") or 30)
+    except (TypeError, ValueError):
+        dias = 30
+    dias = max(1, min(dias, 365))
+
+    corte = datetime.now() - timedelta(days=dias)
+
+    itens = (
+        ItemNota.query.filter(
+            db.or_(
+                ItemNota.data_importacao >= corte,
+                ItemNota.fim_conferencia >= corte,
+                ItemNota.data_lancamento >= corte,
+            )
+        )
+        .order_by(ItemNota.numero_nota.asc(), ItemNota.id.asc())
+        .all()
+    )
+
+    notas = {}
+    usuarios = {}
+
+    def user_bucket(nome):
+        chave = (nome or "Nao informado").strip() or "Nao informado"
+        bucket = usuarios.setdefault(
+            chave,
+            {
+                "usuario": chave,
+                "notas_importadas": 0,
+                "notas_conferidas": 0,
+                "notas_lancadas": 0,
+                "manifestacoes_sucesso": 0,
+                "manifestacoes_falha": 0,
+                "enderecamentos_wms": 0,
+                "movimentacoes_wms": 0,
+                "qtd_movimentada_wms": 0.0,
+                "qtd_armazenada_wms": 0.0,
+            },
+        )
+        return bucket
+
+    for item in itens:
+        numero = str(item.numero_nota or "").strip()
+        if not numero:
+            continue
+        notas.setdefault(numero, []).append(item)
+
+    totais = {
+        "notas_importadas": len(notas),
+        "notas_conferidas": 0,
+        "notas_lancadas": 0,
+        "notas_com_divergencia": 0,
+        "divergencias_periodo": 0,
+        "usuarios_ativos": 0,
+        "manifestacoes_sucesso": 0,
+        "manifestacoes_falha": 0,
+        "manifestacoes_pendentes": 0,
+        "enderecamentos_wms": 0,
+        "movimentacoes_wms": 0,
+    }
+
+    conferencia_por_usuario = {}
+    manifestacao_tipos = {}
+    notas_lancadas_numeros = []
+
+    for numero, lista in notas.items():
+        usuario_importacao = next((i.usuario_importacao for i in lista if i.usuario_importacao), None)
+        usuario_conferencia = next((i.usuario_conferencia for i in lista if i.usuario_conferencia), None)
+        usuario_lancamento = next((i.usuario_lancamento for i in lista if i.usuario_lancamento), None)
+
+        user_bucket(usuario_importacao)["notas_importadas"] += 1
+
+        tem_conferencia = any(i.fim_conferencia for i in lista)
+        tem_lancamento = any(i.data_lancamento for i in lista)
+        tem_divergencia = any(
+            (i.status or "").lower() in ("divergente", "divergencia", "divergência")
+            or (i.auditor_decisao or "") in ("Reprovado", "Divergente")
+            for i in lista
+        )
+
+        if tem_conferencia:
+            totais["notas_conferidas"] += 1
+            bucket_conf = user_bucket(usuario_conferencia)
+            bucket_conf["notas_conferidas"] += 1
+            conf_usuario = conferencia_por_usuario.setdefault(
+                bucket_conf["usuario"],
+                {"usuario": bucket_conf["usuario"], "notas_conferidas": 0, "notas_lancadas": 0},
+            )
+            conf_usuario["notas_conferidas"] += 1
+
+        if tem_lancamento:
+            totais["notas_lancadas"] += 1
+            notas_lancadas_numeros.append(numero)
+            bucket_lanc = user_bucket(usuario_lancamento)
+            bucket_lanc["notas_lancadas"] += 1
+            conf_usuario = conferencia_por_usuario.setdefault(
+                bucket_lanc["usuario"],
+                {"usuario": bucket_lanc["usuario"], "notas_conferidas": 0, "notas_lancadas": 0},
+            )
+            conf_usuario["notas_lancadas"] += 1
+
+        if tem_divergencia:
+            totais["notas_com_divergencia"] += 1
+
+    totais["divergencias_periodo"] = (
+        LogDivergencia.query.filter(LogDivergencia.data_erro >= corte).count()
+    )
+
+    logs_manifestacao = []
+    if notas_lancadas_numeros:
+        logs_manifestacao = (
+            LogManifestacaoDestinatario.query.filter(
+                LogManifestacaoDestinatario.numero_nota.in_(notas_lancadas_numeros),
+                LogManifestacaoDestinatario.data >= corte,
+            )
+            .order_by(LogManifestacaoDestinatario.data.desc())
+            .all()
+        )
+
+    notas_manifestadas_sucesso = set()
+    notas_manifestadas_falha = set()
+    for log in logs_manifestacao:
+        tipo = (log.manifestacao or "confirmada").strip() or "confirmada"
+        tipo_bucket = manifestacao_tipos.setdefault(tipo, {"manifestacao": tipo, "sucesso": 0, "falha": 0})
+        if (log.status or "").lower() == "sucesso":
+            tipo_bucket["sucesso"] += 1
+            notas_manifestadas_sucesso.add(str(log.numero_nota or "").strip())
+            user_bucket(log.usuario)["manifestacoes_sucesso"] += 1
+        else:
+            tipo_bucket["falha"] += 1
+            notas_manifestadas_falha.add(str(log.numero_nota or "").strip())
+            user_bucket(log.usuario)["manifestacoes_falha"] += 1
+
+    totais["manifestacoes_sucesso"] = len(notas_manifestadas_sucesso)
+    totais["manifestacoes_falha"] = len(notas_manifestadas_falha)
+    totais["manifestacoes_pendentes"] = max(
+        0, totais["notas_lancadas"] - len(notas_manifestadas_sucesso)
+    )
+
+    itens_wms_periodo = ItemWMS.query.filter(ItemWMS.data_armazenamento >= corte).all()
+    movimentacoes_wms_periodo = MovimentacaoWMS.query.filter(MovimentacaoWMS.data_movimentacao >= corte).all()
+    itens_wms_ativos = ItemWMS.query.filter_by(ativo=True).all()
+    itens_sem_endereco = [i for i in itens_wms_ativos if not i.localizacao_id]
+
+    totais["enderecamentos_wms"] = len(itens_wms_periodo)
+    totais["movimentacoes_wms"] = len(movimentacoes_wms_periodo)
+
+    for item in itens_wms_periodo:
+        bucket = user_bucket(item.usuario_armazenamento)
+        bucket["enderecamentos_wms"] += 1
+        bucket["qtd_armazenada_wms"] += float(item.qtd_recebida or 0)
+
+    for mov in movimentacoes_wms_periodo:
+        bucket = user_bucket(mov.usuario)
+        bucket["movimentacoes_wms"] += 1
+        bucket["qtd_movimentada_wms"] += float(mov.qtd_movimentada or 0)
+
+    integracoes_pendentes = WMSIntegracaoEvento.query.filter(
+        WMSIntegracaoEvento.status.in_(["Pendente", "Processando"])
+    ).count()
+    integracoes_falha = WMSIntegracaoEvento.query.filter(
+        WMSIntegracaoEvento.status.in_(["Falha", "DeadLetter"])
+    ).count()
+
+    por_usuario = []
+    for bucket in usuarios.values():
+        bucket["total_processado"] = (
+            bucket["notas_importadas"]
+            + bucket["notas_conferidas"]
+            + bucket["notas_lancadas"]
+            + bucket["manifestacoes_sucesso"]
+            + bucket["manifestacoes_falha"]
+            + bucket["enderecamentos_wms"]
+            + bucket["movimentacoes_wms"]
+        )
+        por_usuario.append(bucket)
+
+    por_usuario.sort(
+        key=lambda row: (
+            row["total_processado"],
+            row["notas_lancadas"],
+            row["notas_conferidas"],
+            row["notas_importadas"],
+        ),
+        reverse=True,
+    )
+
+    totais["usuarios_ativos"] = len([u for u in por_usuario if u["total_processado"] > 0])
+
+    return jsonify(
+        {
+            "periodo_dias": dias,
+            "totais": totais,
+            "manifestacao": {
+                "sucesso": totais["manifestacoes_sucesso"],
+                "falha": totais["manifestacoes_falha"],
+                "pendentes": totais["manifestacoes_pendentes"],
+                "tipos": sorted(
+                    manifestacao_tipos.values(),
+                    key=lambda row: (row["sucesso"] + row["falha"]),
+                    reverse=True,
+                )[:5],
+            },
+            "conferencia": {
+                "notas_conferidas": totais["notas_conferidas"],
+                "notas_com_divergencia": totais["notas_com_divergencia"],
+                "por_usuario": sorted(
+                    conferencia_por_usuario.values(),
+                    key=lambda row: (row["notas_conferidas"] + row["notas_lancadas"]),
+                    reverse=True,
+                )[:5],
+            },
+            "wms": {
+                "enderecamentos_periodo": totais["enderecamentos_wms"],
+                "movimentacoes_periodo": totais["movimentacoes_wms"],
+                "itens_ativos": len(itens_wms_ativos),
+                "saldo_total": round(sum(float(i.qtd_atual or 0) for i in itens_wms_ativos), 2),
+                "itens_sem_endereco": len(itens_sem_endereco),
+                "notas_sem_endereco": len({str(i.numero_nota or "").strip() for i in itens_sem_endereco if i.numero_nota}),
+                "integracoes_pendentes": integracoes_pendentes,
+                "integracoes_falha": integracoes_falha,
+            },
+            "por_usuario": por_usuario[:20],
+        }
+    )
+
+
 # ==============================================================================
 # EXPEDICAO CONFERENCIA SIMPLES
 # ==============================================================================
@@ -6745,7 +6977,7 @@ def decidir_estorno_conferencia_simples(estorno_id, acao):
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/completar", methods=["POST"])
 @roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def completar_registro_conferencia_simples(registro_id):
-    """Completa (expede) um registro de conferência simples."""
+    """Salva/completa dados da conferencia sem marcar como expedida."""
     registro = ExpedicaoConferenciaSimples.query.get(registro_id)
     if not registro:
         return jsonify({"error": "Registro não encontrado."}), 404
@@ -6783,12 +7015,9 @@ def completar_registro_conferencia_simples(registro_id):
         registro.numero_nf = numero_nf
     if nome_cliente:
         registro.nome_cliente = nome_cliente
-    if manter_pendente:
-        registro.status = "Pendente de expedição"
-    else:
-        registro.status = "Expedido"
-        registro.expedido_at = datetime.now()
-        registro.expedido_by = session.get("username", "desconhecido")
+    registro.status = "Pendente de expedição"
+    registro.expedido_at = None
+    registro.expedido_by = None
     registro.updated_at = datetime.now()
 
     # Salva fotos adicionais

@@ -16,7 +16,9 @@ from ..models import (
     AgendamentoSolicitacaoHistorico,
     AgendamentoSolicitacaoItem,
     AgendamentoVeiculo,
+    Usuario,
 )
+from ..services.email_service import enviar_email_agendamento_update
 from ..services.agendamento_service import (
     PRIORIDADES_SOLICITACAO,
     STATUS_ATIVOS,
@@ -46,6 +48,33 @@ from ..services.agendamento_service import (
 agendamento_bp = Blueprint("agendamento", __name__)
 
 PRIORIDADE_ORDEM = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
+
+
+def _notificar_solicitante_agendamento(row: AgendamentoSolicitacao, titulo: str, detalhe: str = "") -> None:
+    try:
+        usuario = Usuario.query.filter_by(username=row.solicitante).first()
+        if not usuario or not usuario.email:
+            return
+        veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+        url = request.url_root.rstrip("/") + "/logistica/solicitar-transporte"
+        enviar_email_agendamento_update(
+            usuario.email,
+            f"[Transporte] {titulo} - {row.codigo or 'solicitacao'}",
+            titulo,
+            [
+                ("Codigo", row.codigo or f"#{row.id}"),
+                ("Tipo", {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(row.tipo, row.tipo or "")),
+                ("Status", status_label_agendamento(row.status)),
+                ("Documento", f"{row.documento_tipo or ''} {row.documento_numero or ''}".strip()),
+                ("Veiculo", veiculo.nome_exibicao if veiculo else ""),
+                ("Motorista", row.motorista_nome or ""),
+                ("Saida", row.data_hora_saida_prevista.strftime("%d/%m/%Y %H:%M") if row.data_hora_saida_prevista else ""),
+                ("Detalhe", detalhe),
+            ],
+            url,
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao notificar solicitante da solicitacao %s", getattr(row, "id", None))
 
 
 def _json_text(payload) -> str | None:
@@ -160,7 +189,7 @@ def _serializar_solicitacao(
         "id": registro.id,
         "codigo": str(registro.codigo or f"LOG-{registro.id}").strip(),
         "tipo": str(registro.tipo or "").strip(),
-        "tipo_label": "Coleta" if str(registro.tipo or "").strip() == "COLETA" else "Entrega",
+        "tipo_label": {"COLETA": "Coleta", "ENTREGA": "Entrega", "AVULSA": "Avulsa"}.get(str(registro.tipo or "").strip(), str(registro.tipo or "").strip()),
         "status": str(registro.status or "").strip(),
         "status_label": status_label_agendamento(registro.status),
         "prioridade": str(registro.prioridade or "").strip(),
@@ -300,6 +329,7 @@ def dashboard_agendamento_veiculos():
                 "em_andamento": sum(1 for card in cards if card.get("status") == "EmAndamento"),
                 "em_rota": sum(1 for card in cards if card.get("status") == "EmRota"),
                 "concluidas": sum(1 for card in cards if card.get("status") == "Concluida"),
+                "cancelamentos_pendentes": sum(1 for card in cards if card.get("cancelamento_pendente")),
                 "atrasadas": sum(1 for card in cards if card.get("atrasada")),
                 "motoristas_ativos": len(motoristas),
             },
@@ -579,8 +609,11 @@ def criar_solicitacao_agendamento():
     if prioridade not in PRIORIDADES_SOLICITACAO:
         return jsonify({"error": "Prioridade inválida."}), 400
 
+    avulsa = payload.get("avulsa") if isinstance(payload.get("avulsa"), dict) else {}
+
     numero_oc = str(payload.get("numero_oc") or "").strip()
     numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
+    referencia_avulsa = str(payload.get("referencia_avulsa") or "").strip()
     if tipo == "COLETA" and not numero_oc:
         return jsonify({"error": "Informe a OC para a coleta."}), 400
     if tipo == "ENTREGA" and not numero_nf:
@@ -595,10 +628,36 @@ def criar_solicitacao_agendamento():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
-    parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
-    if not parceiro:
-        parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
+    observacoes_solicitante = str(payload.get("observacoes_solicitante") or "").strip()
+    if tipo == "AVULSA":
+        extras_avulsa = []
+        for label, value in [
+            ("Finalidade", avulsa.get("finalidade")),
+            ("Centro de custo", avulsa.get("centro_custo")),
+            ("Responsavel", avulsa.get("responsavel")),
+            ("Local de retirada", avulsa.get("local_retirada")),
+            ("Previsao de devolucao", avulsa.get("previsao_devolucao")),
+        ]:
+            value = str(value or "").strip()
+            if value:
+                extras_avulsa.append(f"{label}: {value}")
+        if extras_avulsa:
+            observacoes_solicitante = "\n".join([observacoes_solicitante, *extras_avulsa]).strip()
+
+    if tipo == "AVULSA":
+        consulta = {"encontrada": False, "itens": []}
+        parceiro = {
+            "nome": "Uso avulso de veículo",
+            "logradouro": "Sem destino definido",
+            "cidade": "A definir",
+            "uf": "NA",
+            "observacoes": observacoes_solicitante,
+        }
+    else:
+        consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
+        parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
+        if not parceiro:
+            parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
 
     origem_documento = "Manual"
     if tipo == "COLETA" and consulta.get("encontrada"):
@@ -617,16 +676,16 @@ def criar_solicitacao_agendamento():
         solicitante=usuario,
         criado_em=agora,
         atualizado_em=agora,
-        documento_tipo="OC" if tipo == "COLETA" else "NF",
-        documento_numero=numero_oc if tipo == "COLETA" else numero_nf,
+        documento_tipo="OC" if tipo == "COLETA" else ("NF" if tipo == "ENTREGA" else "AVULSO"),
+        documento_numero=numero_oc if tipo == "COLETA" else (numero_nf if tipo == "ENTREGA" else (referencia_avulsa or f"AVULSO-{agora.strftime('%Y%m%d%H%M')}")),
         numero_oc=numero_oc or None,
         numero_nf=numero_nf or None,
         origem_documento=origem_documento,
-        observacoes_solicitante=str(payload.get("observacoes_solicitante") or "").strip() or None,
+        observacoes_solicitante=observacoes_solicitante or None,
         observacoes_logistica=str(payload.get("observacoes_logistica") or "").strip() or None,
         payload_origem=_json_text({"request": payload, "consulta": {"encontrada": consulta.get("encontrada"), "fonte": consulta.get("fonte")}}),
     )
-    ok, msg = _aplicar_parceiro(row, parceiro, "Fornecedor" if tipo == "COLETA" else "Cliente")
+    ok, msg = _aplicar_parceiro(row, parceiro, "Fornecedor" if tipo == "COLETA" else ("Cliente" if tipo == "ENTREGA" else "Avulso"))
     if not ok:
         return jsonify({"error": msg}), 400
 
@@ -649,6 +708,11 @@ def criar_solicitacao_agendamento():
     itens = payload.get("itens")
     if not isinstance(itens, list) or not itens:
         itens = list(consulta.get("itens") or [])
+    if tipo == "AVULSA" and (
+        not isinstance(itens, list)
+        or not any(str(item.get("descricao") or "").strip() for item in itens if isinstance(item, dict))
+    ):
+        itens = [{"descricao": "Reserva avulsa de veículo", "quantidade": 1, "unidade": "UN", "volumes": 0}]
     if not isinstance(itens, list) or not itens:
         return jsonify({"error": "Adicione pelo menos 1 item para continuar."}), 400
 
@@ -660,6 +724,7 @@ def criar_solicitacao_agendamento():
         return jsonify({"error": "Adicione pelo menos 1 item válido para continuar."}), 400
     _registrar_historico(row.id, evento="CRIADA", usuario=usuario, status_novo="Pendente", detalhe=f"Solicitação criada via {row.documento_tipo} {row.documento_numero}.", payload=payload)
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Solicitacao de transporte criada", "Sua solicitacao foi enviada para a logistica.")
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row)}), 201
 
 
@@ -697,10 +762,10 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         motorista_id = int(payload.get("motorista_id")) if payload.get("motorista_id") not in (None, "") else None
     except (TypeError, ValueError):
         motorista_id = None
-    if not motorista_id:
+    if not motorista_id and str(row.tipo or "").strip() != "AVULSA":
         return jsonify({"error": "Selecione um motorista para a viagem."}), 400
-    motorista = AgendamentoMotorista.query.get(motorista_id)
-    if not motorista:
+    motorista = AgendamentoMotorista.query.get(motorista_id) if motorista_id else None
+    if motorista_id and not motorista:
         return jsonify({"error": "Selecione um motorista válido."}), 400
 
     departamento = str(payload.get("departamento_solicitante") or "").strip().upper()
@@ -778,6 +843,7 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         payload=payload,
     )
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Solicitacao de transporte alocada", detalhe)
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
 
@@ -848,6 +914,7 @@ def atualizar_status_agendamento(solicitacao_id: int):
 
     _registrar_historico(row.id, evento="STATUS_ALTERADO", usuario=session.get("username", "desconhecido"), status_anterior=status_atual, status_novo=novo_status, detalhe=observacao or f"Status alterado para {status_label_agendamento(novo_status)}.", payload=payload)
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Status da solicitacao atualizado", observacao or f"Status alterado para {status_label_agendamento(novo_status)}.")
     veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
@@ -871,12 +938,38 @@ def cancelar_solicitacao_agendamento(solicitacao_id: int):
     if not motivo:
         return jsonify({"error": "Informe o motivo do cancelamento."}), 400
 
+    usuario = session.get("username", "desconhecido")
+    status_anterior = str(row.status or "").strip()
+    if session.get("role") == "Admin":
+        row.status = "Cancelada"
+        row.cancelado_por = usuario
+        row.cancelado_em = datetime.now()
+        row.motivo_cancelamento = motivo
+        row.cancelamento_pendente = False
+        row.cancelamento_solicitado_por = None
+        row.cancelamento_motivo_pendente = None
+        row.atualizado_em = datetime.now()
+        _registrar_historico(
+            row.id,
+            evento="CANCELAMENTO_ADMIN",
+            usuario=usuario,
+            status_anterior=status_anterior,
+            status_novo="Cancelada",
+            detalhe=f"Cancelada diretamente por admin. Motivo: {motivo}",
+            payload=payload,
+        )
+        db.session.commit()
+        _notificar_solicitante_agendamento(row, "Solicitacao cancelada", f"Cancelada diretamente por admin. Motivo: {motivo}")
+        veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+        return jsonify({"sucesso": True, "mensagem": "Solicitacao cancelada diretamente pelo admin.", "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
+
     row.cancelamento_pendente = True
-    row.cancelamento_solicitado_por = session.get("username", "desconhecido")
+    row.cancelamento_solicitado_por = usuario
     row.cancelamento_motivo_pendente = motivo
     row.atualizado_em = datetime.now()
-    _registrar_historico(row.id, evento="CANCELAMENTO_SOLICITADO", usuario=session.get("username", "desconhecido"), status_anterior=str(row.status or "").strip(), detalhe=f"Cancelamento solicitado. Motivo: {motivo}", payload=payload)
+    _registrar_historico(row.id, evento="CANCELAMENTO_SOLICITADO", usuario=usuario, status_anterior=status_anterior, detalhe=f"Cancelamento solicitado. Motivo: {motivo}", payload=payload)
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Aprovacao de cancelamento solicitada", f"A logistica solicitou cancelamento. Motivo: {motivo}")
     veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
     return jsonify({"sucesso": True, "mensagem": "Cancelamento solicitado. Aguardando aprovação do solicitante.", "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
@@ -895,14 +988,18 @@ def aprovar_cancelamento_solicitacao(solicitacao_id: int):
         return jsonify({"error": "Somente o solicitante original ou admin pode aprovar."}), 403
 
     status_anterior = str(row.status or "").strip()
+    motivo_aprovado = row.cancelamento_motivo_pendente
     row.status = "Cancelada"
     row.cancelado_por = row.cancelamento_solicitado_por
     row.cancelado_em = datetime.now()
-    row.motivo_cancelamento = row.cancelamento_motivo_pendente
+    row.motivo_cancelamento = motivo_aprovado
     row.cancelamento_pendente = False
+    row.cancelamento_solicitado_por = None
+    row.cancelamento_motivo_pendente = None
     row.atualizado_em = datetime.now()
-    _registrar_historico(row.id, evento="CANCELAMENTO_APROVADO", usuario=username, status_anterior=status_anterior, status_novo="Cancelada", detalhe=f"Cancelamento aprovado por {username}. Motivo: {row.motivo_cancelamento}")
+    _registrar_historico(row.id, evento="CANCELAMENTO_APROVADO", usuario=username, status_anterior=status_anterior, status_novo="Cancelada", detalhe=f"Cancelamento aprovado por {username}. Motivo: {motivo_aprovado}")
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Cancelamento aprovado", f"Cancelamento aprovado por {username}.")
     veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
@@ -921,9 +1018,12 @@ def rejeitar_cancelamento_solicitacao(solicitacao_id: int):
         return jsonify({"error": "Somente o solicitante original ou admin pode rejeitar."}), 403
 
     row.cancelamento_pendente = False
+    row.cancelamento_solicitado_por = None
+    row.cancelamento_motivo_pendente = None
     row.atualizado_em = datetime.now()
     _registrar_historico(row.id, evento="CANCELAMENTO_REJEITADO", usuario=username, detalhe=f"Cancelamento rejeitado por {username}.")
     db.session.commit()
+    _notificar_solicitante_agendamento(row, "Cancelamento rejeitado", f"Cancelamento rejeitado por {username}.")
     veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
