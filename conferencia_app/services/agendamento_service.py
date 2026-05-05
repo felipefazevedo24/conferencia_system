@@ -962,10 +962,11 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
     if not numero_limpo:
         return {"encontrada": False, "error": "Informe o número da NF."}
 
-    indisponivel = False
+    alguma_caixa_respondeu = False
     autenticacao_falhou = False
     documento_encontrado = None
-    for caixa in ("emitidos", "todos", "recebidos"):
+    # "todos" e "recebidos" retornam HTTP 500 no ambiente atual — usamos apenas as caixas suportadas
+    for caixa in ("emitidos", "recebidos"):
         try:
             ok, status_code, payload = listar_nfes_consyste_por_caixa(
                 caixa=caixa,
@@ -974,17 +975,18 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
                 timeout=20,
             )
         except Exception:
-            indisponivel = True
+            # Falha de rede nesta caixa: não marca como indisponível, tenta a próxima
             continue
 
         if status_code in {401, 403}:
             autenticacao_falhou = True
             continue
         if not ok:
-            if status_code >= 500:
-                indisponivel = True
+            # 500 em uma caixa específica não significa que o serviço está fora —
+            # basta que pelo menos uma caixa responda com 200
             continue
 
+        alguma_caixa_respondeu = True
         documentos = payload.get("documentos") if isinstance(payload, dict) else payload
         for documento in documentos or []:
             if limpar_documento(documento.get("numero")) == numero_limpo:
@@ -1000,10 +1002,16 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
                 "numero_nf": numero_limpo,
                 "error": "A integração Consyste recusou a consulta. Confira o token configurado.",
             }
+        if not alguma_caixa_respondeu:
+            return {
+                "encontrada": False,
+                "numero_nf": numero_limpo,
+                "error": "Consyste indisponível no momento. Tente novamente ou preencha os dados manualmente.",
+            }
         return {
             "encontrada": False,
             "numero_nf": numero_limpo,
-            "error": "NF não encontrada na Consyste." if not indisponivel else "Consyste indisponível no momento.",
+            "error": f"NF {numero_limpo} não encontrada na Consyste. Verifique o número ou preencha os dados manualmente.",
         }
 
     nome_cliente = _pick(documento_encontrado, "dest_nome", "cliente_nome", "destinatario_nome", "razao_social")
