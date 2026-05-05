@@ -1293,3 +1293,10 @@ code {
         padding-right: 12px;
     }
 }
+
+/* Centraliza modais Bootstrap na área de conteúdo (ignora a sidebar de 292px) */
+@media (min-width: 901px) {
+    #wrapper:not(.toggled) .modal {
+        padding-left: 292px;
+    }
+}

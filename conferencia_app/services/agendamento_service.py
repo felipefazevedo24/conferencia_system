@@ -989,7 +989,12 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
         alguma_caixa_respondeu = True
         documentos = payload.get("documentos") if isinstance(payload, dict) else payload
         for documento in documentos or []:
-            if limpar_documento(documento.get("numero")) == numero_limpo:
+            doc_num = limpar_documento(documento.get("numero"))
+            # Compara direto e também sem zeros à esquerda (Consyste pode armazenar "000012345")
+            if doc_num == numero_limpo or (
+                doc_num and numero_limpo
+                and doc_num.lstrip("0") == numero_limpo.lstrip("0")
+            ):
                 documento_encontrado = documento
                 break
         if documento_encontrado:
