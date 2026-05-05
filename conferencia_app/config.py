@@ -115,7 +115,7 @@ class Config:
 
     # Envio automatico de NF-e emitida para cliente/destinatario
     # Em modo teste, todos os envios sao redirecionados para NFE_EMAIL_TESTE_DESTINO.
-    NFE_EMAIL_MODO_TESTE = os.environ.get("NFE_EMAIL_MODO_TESTE", "1") == "1"
+    NFE_EMAIL_MODO_TESTE = os.environ.get("NFE_EMAIL_MODO_TESTE", "0") == "1"  # padrão PRODUÇÃO
     NFE_EMAIL_TESTE_DESTINO = os.environ.get("NFE_EMAIL_TESTE_DESTINO", "felaze@colmac.com")
     NFE_EMAIL_AUTO_NO_FATURAMENTO = os.environ.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", "1") == "1"
     # Scheduler automatico de envio de NF-e emitidas (poll Consyste)

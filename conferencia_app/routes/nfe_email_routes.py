@@ -188,8 +188,14 @@ def api_nfe_email_config():
         else:
             parar_scheduler()
 
+    # Lê sempre do disco para evitar divergência entre workers (cada worker tem seu
+    # próprio app.config em memória; sem isso, o worker que não salvou devolve valores
+    # desatualizados logo após um POST de outro worker).
+    from ..services.nfe_email_config_store import carregar_persistido
+    carregar_persistido()  # sincroniza app.config deste worker com o JSON em disco
+
     return jsonify({
-        "modo_teste": bool(current_app.config.get("NFE_EMAIL_MODO_TESTE", True)),
+        "modo_teste": bool(current_app.config.get("NFE_EMAIL_MODO_TESTE", False)),
         "destino_teste": current_app.config.get("NFE_EMAIL_TESTE_DESTINO"),
         "auto_no_faturamento": bool(current_app.config.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", True)),
         "auto_enabled": bool(current_app.config.get("NFE_EMAIL_AUTO_ENABLED", True)),
