@@ -225,7 +225,7 @@
             <input type="number" id="mi-km" placeholder="Ex: 123456" inputmode="numeric" min="0" style="width:100%;padding:10px;font-size:16px;border:1px solid #334155;border-radius:10px;background:#1e293b;color:#f1f5f9;margin-bottom:8px">
             <p style="font-size:12px;color:#64748b;margin:0 0 12px">Informe o KM que aparece no painel do veículo antes de sair.</p>
             <div class="modal-foot">
-                <button class="cancel" onclick="document.getElementById('modal-km-inicial').classList.remove('show')">Cancelar</button>
+                <button class="cancel" onclick="const m=document.getElementById('modal-km-inicial');m.classList.remove('show');m.style.display='';">Cancelar</button>
                 <button class="ok" id="mi-ok"><i class="fa-solid fa-play"></i> Iniciar</button>
             </div>
         </div>
@@ -479,14 +479,10 @@ $('mi-ok')?.addEventListener('click', async () => {
         $('mi-km').focus();
         return;
     }
-    $('mi-km').style.borderColor = '';
-    const okBtn = $('mi-ok');
-    okBtn.disabled = true;
-    okBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aguarde...';
+    // Fecha o modal imediatamente — erros de GPS/servidor aparecem no alert-box
+    const modal = $('modal-km-inicial');
+    if (modal) { modal.classList.remove('show'); modal.style.display = ''; }
     await iniciar(km);
-    // fechar o modal só acontece dentro de iniciar() se tudo correu bem
-    okBtn.disabled = false;
-    okBtn.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar';
 });
 
 function abrirConcluirViagem() {
