@@ -226,7 +226,7 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
         <div class="rq-top">
             <div>
                 <h1 class="rq-title"><i class="fas fa-truck-fast" style="margin-right:10px;color:#0f766e"></i>Solicitação de Transporte</h1>
-                <p class="rq-copy">Abra coletas, entregas ou uso avulso de veículo com os dados do documento, prazo desejado e itens. A logística recebe a demanda, aloca veículo e você acompanha tudo aqui.</p>
+                <p class="rq-copy">Diga <strong>onde</strong> precisa coletar ou entregar e <strong>quando</strong>. OC e NF são opcionais — a logística completa os documentos depois.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a class="btn" href="/logistica/agendamento-veiculos"><i class="fas fa-gauge-high"></i> Ir para gestão de rotas</a>{% endif %}
@@ -234,24 +234,28 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
             </div>
         </div>
         <div class="rq-flow">
-            <div class="rq-flow-step"><i class="fas fa-file-lines"></i><div><strong>1. Documento</strong><span>OC, NF ou uso avulso</span></div></div>
-            <div class="rq-flow-step"><i class="fas fa-location-dot"></i><div><strong>2. Destino</strong><span>Parceiro e endereço</span></div></div>
-            <div class="rq-flow-step"><i class="fas fa-boxes-stacked"></i><div><strong>3. Itens</strong><span>Volumes e observações</span></div></div>
-            <div class="rq-flow-step"><i class="fas fa-route"></i><div><strong>4. Acompanhamento</strong><span>Status e rota planejada</span></div></div>
+            <div class="rq-flow-step"><i class="fas fa-location-dot"></i><div><strong>1. Onde</strong><span>Local de coleta ou entrega</span></div></div>
+            <div class="rq-flow-step"><i class="fas fa-calendar-day"></i><div><strong>2. Quando</strong><span>Data desejada</span></div></div>
+            <div class="rq-flow-step"><i class="fas fa-paper-plane"></i><div><strong>3. Enviar</strong><span>Logística cuida do resto</span></div></div>
+            <div class="rq-flow-step"><i class="fas fa-route"></i><div><strong>4. Acompanhar</strong><span>Status e rota planejada</span></div></div>
         </div>
     </section>
 
     <div class="rq-grid">
         <section class="rq-panel rq-pad">
-            <div><h2 class="panel-title">Nova solicitação</h2><p class="rq-copy">Consulte a OC no Google Sheets ou a NF no Consyste e envie a demanda para a logística.</p></div>
+            <div><h2 class="panel-title">Nova solicitação</h2><p class="rq-copy">Informe o local e a data. OC/NF e itens são opcionais — a logística completa as informações.</p></div>
             <form id="solicitacaoForm" class="rq-form">
+                <!-- Tipo + Prioridade -->
                 <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label">Tipo <span class="text-danger">*</span></label><select id="tipoSolicitacao" class="form-select" required><option value="COLETA">COLETA</option><option value="ENTREGA">ENTREGA</option><option value="AVULSA">VEICULO AVULSO</option></select></div>
+                    <div class="col-md-6"><label class="form-label">O que precisa? <span class="text-danger">*</span></label><select id="tipoSolicitacao" class="form-select" required><option value="COLETA">COLETA – buscar no fornecedor</option><option value="ENTREGA">ENTREGA – levar ao cliente</option><option value="AVULSA">VEÍCULO AVULSO – uso geral</option></select></div>
                     <div class="col-md-6"><label class="form-label">Prioridade</label><select id="prioridadeSolicitacao" class="form-select"><option value="Media">Média</option><option value="Alta">Alta</option><option value="Critica">Crítica</option><option value="Baixa">Baixa</option></select></div>
-                    <div class="col-md-7"><label class="form-label" id="documentoLabel">Ordem de Compra (OC) <span class="text-danger">*</span></label><div class="input-group"><input id="documentoInput" class="form-control" placeholder="Digite a OC" required><button class="btn btn-outline-primary" type="button" onclick="consultarDocumento()"><i class="fas fa-search"></i></button></div></div>
-                    <div class="col-md-5"><label class="form-label">Data desejada <span class="text-danger">*</span></label><input id="dataDesejada" type="datetime-local" class="form-control" title="Data em que você gostaria que a coleta/entrega acontecesse" required></div>
-                    <div class="col-md-5"><label class="form-label">Prazo limite <span class="text-danger">*</span></label><input id="prazoLimite" type="datetime-local" class="form-control" required></div>
-                    <div class="col-12"><div id="lookupState" class="rq-state">Busque o documento para puxar parceiro e itens automaticamente.</div></div>
+                </div>
+
+                <!-- Local de coleta/entrega — campo principal -->
+                <div id="localBox">
+                    <label class="form-label">Local de <span id="localTipoLabel">coleta</span> <span class="text-danger">*</span></label>
+                    <input id="localColeta" class="form-control" placeholder="Ex: Rua das Flores, 100 – Campinas/SP  ou  nome do fornecedor/cliente" required>
+                    <div style="margin-top:8px;padding:10px 12px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px"><i class="fas fa-circle-info"></i>Não sabe a OC ou NF agora? Sem problema — a logística preenche os documentos depois.</div>
                 </div>
 
                 <div id="avulsaBox" class="rq-mini" style="display:none">
@@ -265,15 +269,38 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
                     </div>
                 </div>
 
+                <!-- Quando -->
                 <div class="row g-3">
-                    <div class="col-md-6"><div class="rq-mini"><span>Parceiro</span><strong id="parceiroNome">Aguardando consulta</strong><small id="parceiroDocumento"></small></div></div>
-                    <div class="col-md-6"><div class="rq-mini"><span>Contato</span><strong id="parceiroContato">Sem contato</strong><small id="parceiroTelefone"></small></div></div>
+                    <div class="col-md-6"><label class="form-label">Quando precisa? <span class="text-danger">*</span></label><input id="dataDesejada" type="datetime-local" class="form-control" required></div>
+                    <div class="col-md-6"><label class="form-label">Prazo limite <span style="color:#94a3b8;font-size:10px;font-weight:500;margin-left:4px">auto-preenchido</span></label><input id="prazoLimite" type="datetime-local" class="form-control"></div>
+                </div>
+
+                <!-- OC / NF — opcional, accordion -->
+                <div>
+                    <button type="button" class="rq-accordion-toggle" onclick="toggleAccordion(this)">
+                        <i class="fas fa-file-invoice"></i> Pedido de Compra / NF
+                        <span style="font-size:10px;color:#94a3b8;font-weight:400;margin-left:4px">– a logística pode preencher depois</span>
+                        <i class="fas fa-chevron-down chevron"></i>
+                    </button>
+                    <div class="rq-accordion-body" id="documentoAccordion">
+                        <div class="row g-3" style="margin-top:0">
+                            <div class="col-12"><label class="form-label" id="documentoLabel">OC / NF</label><div class="input-group"><input id="documentoInput" class="form-control" placeholder="Se souber, informe aqui para puxar dados automaticamente"><button class="btn btn-outline-primary" type="button" onclick="consultarDocumento()"><i class="fas fa-search"></i> Consultar</button></div></div>
+                            <div class="col-12"><div id="lookupState" class="rq-state">Informe o documento para puxar parceiro e itens automaticamente.</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parceiro encontrado após lookup -->
+                <div class="row g-3" id="parceiroDisplay" style="display:none">
+                    <div class="col-md-6"><div class="rq-mini"><span>Parceiro encontrado</span><strong id="parceiroNome">—</strong><small id="parceiroDocumento"></small></div></div>
+                    <div class="col-md-6"><div class="rq-mini"><span>Contato</span><strong id="parceiroContato">—</strong><small id="parceiroTelefone"></small></div></div>
                 </div>
 
                 <!-- Accordion: campos manuais do parceiro -->
                 <div>
                     <button type="button" class="rq-accordion-toggle" onclick="toggleAccordion(this)">
-                        <i class="fas fa-pen-to-square"></i> Editar dados do parceiro manualmente
+                        <i class="fas fa-pen-to-square"></i> Dados do parceiro / endereço
+                        <span style="font-size:10px;color:#94a3b8;font-weight:400;margin-left:4px">– opcional</span>
                         <i class="fas fa-chevron-down chevron"></i>
                     </button>
                     <div class="rq-accordion-body" id="parceiroAccordion">
@@ -292,18 +319,28 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div><h3 class="h5 m-0">Itens</h3><p class="rq-copy">Confirme o que veio da consulta ou adicione manualmente.</p></div>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="addItemRow()"><i class="fas fa-plus"></i> Item</button>
-                </div>
-                <div class="table-responsive">
-                    <table class="rq-items">
-                        <thead><tr><th>Descrição</th><th>Qtd</th><th>Unidade</th><th>Volumes</th><th>Obs.</th><th></th></tr></thead>
-                        <tbody id="itemsBody"></tbody>
-                    </table>
+                <!-- Itens — accordion -->
+                <div>
+                    <button type="button" class="rq-accordion-toggle" onclick="toggleAccordion(this)">
+                        <i class="fas fa-boxes-stacked"></i> Itens / volumes
+                        <span style="font-size:10px;color:#94a3b8;font-weight:400;margin-left:4px">– opcional</span>
+                        <i class="fas fa-chevron-down chevron"></i>
+                    </button>
+                    <div class="rq-accordion-body" id="itensAccordion">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2" style="margin-bottom:8px">
+                            <p class="rq-copy m-0">Confirme o que veio da consulta ou adicione manualmente.</p>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="addItemRow()"><i class="fas fa-plus"></i> Item</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="rq-items">
+                                <thead><tr><th>Descrição</th><th>Qtd</th><th>Unidade</th><th>Volumes</th><th>Obs.</th><th></th></tr></thead>
+                                <tbody id="itemsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <div><label class="form-label">Observações do solicitante</label><textarea id="observacoesSolicitante" class="form-control" rows="3"></textarea></div>
+                <div><label class="form-label">Observações para a logística</label><textarea id="observacoesSolicitante" class="form-control" rows="2" placeholder="Ex.: material frágil, acesso restrito no destino..."></textarea></div>
                 <div class="d-flex gap-2 flex-wrap">
                     <button class="btn btn-primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para a logística</button>
                     <button class="btn btn-outline-secondary" type="button" onclick="resetFormState()">Limpar</button>
@@ -375,15 +412,15 @@ function buildStepper(status){
     return html;
 }
 
-const solicitacaoForm=document.getElementById('solicitacaoForm');const tipoSolicitacao=document.getElementById('tipoSolicitacao');const prioridadeSolicitacao=document.getElementById('prioridadeSolicitacao');const documentoLabel=document.getElementById('documentoLabel');const documentoInput=document.getElementById('documentoInput');const dataDesejada=document.getElementById('dataDesejada');const prazoLimite=document.getElementById('prazoLimite');const lookupState=document.getElementById('lookupState');const parceiroNome=document.getElementById('parceiroNome');const parceiroDocumento=document.getElementById('parceiroDocumento');const parceiroContato=document.getElementById('parceiroContato');const parceiroTelefone=document.getElementById('parceiroTelefone');const parceiroNomeManual=document.getElementById('parceiroNomeManual');const parceiroDocumentoManual=document.getElementById('parceiroDocumentoManual');const parceiroContatoManual=document.getElementById('parceiroContatoManual');const parceiroTelefoneManual=document.getElementById('parceiroTelefoneManual');const logradouroManual=document.getElementById('logradouroManual');const numeroManual=document.getElementById('numeroManual');const bairroManual=document.getElementById('bairroManual');const cidadeManual=document.getElementById('cidadeManual');const ufManual=document.getElementById('ufManual');const cepManual=document.getElementById('cepManual');const itemsBody=document.getElementById('itemsBody');const observacoesSolicitante=document.getElementById('observacoesSolicitante');const myState=document.getElementById('myState');const myList=document.getElementById('myList');const avulsaBox=document.getElementById('avulsaBox');const avulsaFinalidade=document.getElementById('avulsaFinalidade');const avulsaCentroCusto=document.getElementById('avulsaCentroCusto');const avulsaResponsavel=document.getElementById('avulsaResponsavel');const avulsaLocalRetirada=document.getElementById('avulsaLocalRetirada');const avulsaPrevisaoDevolucao=document.getElementById('avulsaPrevisaoDevolucao');
+const solicitacaoForm=document.getElementById('solicitacaoForm');const tipoSolicitacao=document.getElementById('tipoSolicitacao');const prioridadeSolicitacao=document.getElementById('prioridadeSolicitacao');const documentoLabel=document.getElementById('documentoLabel');const documentoInput=document.getElementById('documentoInput');const dataDesejada=document.getElementById('dataDesejada');const prazoLimite=document.getElementById('prazoLimite');const lookupState=document.getElementById('lookupState');const parceiroNome=document.getElementById('parceiroNome');const parceiroDocumento=document.getElementById('parceiroDocumento');const parceiroContato=document.getElementById('parceiroContato');const parceiroTelefone=document.getElementById('parceiroTelefone');const parceiroNomeManual=document.getElementById('parceiroNomeManual');const parceiroDocumentoManual=document.getElementById('parceiroDocumentoManual');const parceiroContatoManual=document.getElementById('parceiroContatoManual');const parceiroTelefoneManual=document.getElementById('parceiroTelefoneManual');const logradouroManual=document.getElementById('logradouroManual');const numeroManual=document.getElementById('numeroManual');const bairroManual=document.getElementById('bairroManual');const cidadeManual=document.getElementById('cidadeManual');const ufManual=document.getElementById('ufManual');const cepManual=document.getElementById('cepManual');const itemsBody=document.getElementById('itemsBody');const observacoesSolicitante=document.getElementById('observacoesSolicitante');const myState=document.getElementById('myState');const myList=document.getElementById('myList');const avulsaBox=document.getElementById('avulsaBox');const avulsaFinalidade=document.getElementById('avulsaFinalidade');const avulsaCentroCusto=document.getElementById('avulsaCentroCusto');const avulsaResponsavel=document.getElementById('avulsaResponsavel');const avulsaLocalRetirada=document.getElementById('avulsaLocalRetirada');const avulsaPrevisaoDevolucao=document.getElementById('avulsaPrevisaoDevolucao');const localColeta=document.getElementById('localColeta');const localTipoLabel=document.getElementById('localTipoLabel');const localBox=document.getElementById('localBox');const parceiroDisplay=document.getElementById('parceiroDisplay');
 const km=v=>Number.isFinite(Number(v))?`${Number(v).toFixed(1)} km`:'';const setLookup=(m,e=false)=>{lookupState.textContent=m;lookupState.classList.toggle('error',!!e);};const setMine=(m,e=false)=>{myState.textContent=m;myState.classList.toggle('error',!!e);};
 function addItemRow(item={}){const tr=document.createElement('tr');tr.innerHTML=`<td><input class="item-desc" value="${item.descricao||''}"></td><td><input class="item-qtd" value="${item.quantidade??''}"></td><td><input class="item-und" value="${item.unidade||''}"></td><td><input class="item-vol" value="${item.volumes??''}"></td><td><input class="item-obs" value="${item.observacoes||''}"></td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fas fa-trash"></i></button></td>`;itemsBody.appendChild(tr);}
-function resetLookup(){state.lookup=null;parceiroNome.textContent='Aguardando consulta';parceiroDocumento.textContent='';parceiroContato.textContent='Sem contato';parceiroTelefone.textContent='';itemsBody.innerHTML='';addItemRow();setLookup('Busque o documento para puxar parceiro e itens automaticamente.');}
-function updateDocumentoLabel(){const tipo=tipoSolicitacao.value;avulsaBox.style.display=tipo==='AVULSA'?'block':'none';if(tipo==='AVULSA'){documentoLabel.textContent='Referência interna';documentoInput.placeholder='Opcional: motivo, centro de custo, responsável';documentoInput.required=false;resetLookup();setLookup('Solicitação avulsa: preencha a finalidade e a previsão de uso do veículo.');return;}documentoLabel.textContent=tipo==='COLETA'?'Ordem de Compra (OC)':'Nota Fiscal (NF)';documentoInput.placeholder=tipo==='COLETA'?'Digite a OC':'Digite a NF';documentoInput.required=true;resetLookup();}
-function resetFormState(){solicitacaoForm.reset();tipoSolicitacao.value='COLETA';prioridadeSolicitacao.value='Media';updateDocumentoLabel();}
-function collectPartner(){return{nome:parceiroNomeManual.value.trim(),razao_social:parceiroNomeManual.value.trim(),cnpj_cpf:parceiroDocumentoManual.value.trim(),contato:parceiroContatoManual.value.trim(),telefone:parceiroTelefoneManual.value.trim(),logradouro:logradouroManual.value.trim(),numero:numeroManual.value.trim(),bairro:bairroManual.value.trim(),cidade:cidadeManual.value.trim(),uf:ufManual.value.trim(),cep:cepManual.value.trim(),observacoes:state.lookup?.warning||''};}
+function resetLookup(){state.lookup=null;if(parceiroDisplay)parceiroDisplay.style.display='none';parceiroNome.textContent='—';parceiroDocumento.textContent='';parceiroContato.textContent='—';parceiroTelefone.textContent='';itemsBody.innerHTML='';setLookup('Informe o documento para puxar parceiro e itens automaticamente.');}
+function updateDocumentoLabel(){const tipo=tipoSolicitacao.value;avulsaBox.style.display=tipo==='AVULSA'?'block':'none';if(localBox)localBox.style.display=tipo==='AVULSA'?'none':'block';if(localTipoLabel)localTipoLabel.textContent=tipo==='COLETA'?'coleta':'entrega';if(localColeta)localColeta.required=tipo!=='AVULSA';if(tipo==='AVULSA'){documentoLabel.textContent='Referência interna';documentoInput.placeholder='Opcional: motivo, centro de custo, responsável';documentoInput.required=false;resetLookup();setLookup('Solicitação avulsa: preencha a finalidade e a previsão de uso do veículo.');return;}documentoLabel.textContent=tipo==='COLETA'?'Ordem de Compra (OC)':'Nota Fiscal (NF)';documentoInput.placeholder=tipo==='COLETA'?'Se souber, informe a OC (opcional)':'Se souber, informe a NF (opcional)';documentoInput.required=false;resetLookup();}
+function resetFormState(){solicitacaoForm.reset();tipoSolicitacao.value='COLETA';prioridadeSolicitacao.value='Media';if(localColeta)localColeta.value='';if(parceiroDisplay)parceiroDisplay.style.display='none';updateDocumentoLabel();}
+function collectPartner(){const localVal=localColeta?localColeta.value.trim():'';return{nome:parceiroNomeManual.value.trim(),razao_social:parceiroNomeManual.value.trim(),cnpj_cpf:parceiroDocumentoManual.value.trim(),contato:parceiroContatoManual.value.trim(),telefone:parceiroTelefoneManual.value.trim(),logradouro:logradouroManual.value.trim()||localVal,numero:numeroManual.value.trim(),bairro:bairroManual.value.trim(),cidade:cidadeManual.value.trim(),uf:ufManual.value.trim(),cep:cepManual.value.trim(),observacoes:state.lookup?.warning||''};}
 function collectItems(){return[...document.querySelectorAll('#itemsBody tr')].map(row=>({descricao:row.querySelector('.item-desc').value.trim(),quantidade:row.querySelector('.item-qtd').value.trim(),unidade:row.querySelector('.item-und').value.trim(),volumes:row.querySelector('.item-vol').value.trim(),observacoes:row.querySelector('.item-obs').value.trim()}));}
-async function consultarDocumento(){const tipo=tipoSolicitacao.value;if(tipo==='AVULSA'){showToast('Veículo avulso não precisa consultar documento.','info');return setLookup('Solicitação avulsa pronta para envio. Use os campos de uso avulso e observações.');}const documento=documentoInput.value.trim();if(!documento){showToast('Informe o documento para consultar.','error');return setLookup('Informe o documento para consultar.',true);}const url=tipo==='COLETA'?`/api/logistica/agendamento-veiculos/referencia/oc/${encodeURIComponent(documento)}`:`/api/logistica/agendamento-veiculos/referencia/nf/${encodeURIComponent(documento)}`;setLookup('Consultando documento...');const r=await fetch(url);const d=await r.json();if(!r.ok){showToast(d.error||'Documento não localizado.','error');return setLookup(d.error||'Documento não localizado.',true);}state.lookup=d;const p=d.fornecedor||d.cliente||{};parceiroNome.textContent=p.nome||p.razao_social||'Sem nome';parceiroDocumento.textContent=p.cnpj_cpf||'';parceiroContato.textContent=p.contato||'Sem contato';parceiroTelefone.textContent=p.telefone||'';parceiroNomeManual.value=p.nome||p.razao_social||'';parceiroDocumentoManual.value=p.cnpj_cpf||'';parceiroContatoManual.value=p.contato||'';parceiroTelefoneManual.value=p.telefone||'';logradouroManual.value=p.logradouro||'';numeroManual.value=p.numero||'';bairroManual.value=p.bairro||'';cidadeManual.value=p.cidade||'';ufManual.value=p.uf||'';cepManual.value=p.cep||'';itemsBody.innerHTML='';(d.itens||[]).forEach(addItemRow);if(!d.itens?.length)addItemRow();showToast('Documento localizado e campos preenchidos.','success');setLookup(`${d.warning||'Documento localizado e campos preenchidos.'}${d.fonte?.label?` Fonte: ${d.fonte.label}.`:''}`);}
+async function consultarDocumento(){const tipo=tipoSolicitacao.value;if(tipo==='AVULSA'){showToast('Veículo avulso não precisa consultar documento.','info');return setLookup('Solicitação avulsa pronta para envio. Use os campos de uso avulso e observações.');}const documento=documentoInput.value.trim();if(!documento){showToast('Informe o documento para consultar.','error');return setLookup('Informe o documento para consultar.',true);}const url=tipo==='COLETA'?`/api/logistica/agendamento-veiculos/referencia/oc/${encodeURIComponent(documento)}`:`/api/logistica/agendamento-veiculos/referencia/nf/${encodeURIComponent(documento)}`;setLookup('Consultando documento...');const r=await fetch(url);const d=await r.json();if(!r.ok){showToast(d.error||'Documento não localizado.','error');return setLookup(d.error||'Documento não localizado.',true);}state.lookup=d;const p=d.fornecedor||d.cliente||{};parceiroNome.textContent=p.nome||p.razao_social||'Sem nome';parceiroDocumento.textContent=p.cnpj_cpf||'';parceiroContato.textContent=p.contato||'Sem contato';parceiroTelefone.textContent=p.telefone||'';parceiroNomeManual.value=p.nome||p.razao_social||'';parceiroDocumentoManual.value=p.cnpj_cpf||'';parceiroContatoManual.value=p.contato||'';parceiroTelefoneManual.value=p.telefone||'';logradouroManual.value=p.logradouro||'';numeroManual.value=p.numero||'';bairroManual.value=p.bairro||'';cidadeManual.value=p.cidade||'';ufManual.value=p.uf||'';cepManual.value=p.cep||'';itemsBody.innerHTML='';(d.itens||[]).forEach(addItemRow);if(!d.itens?.length)addItemRow();if(parceiroDisplay)parceiroDisplay.style.display='';showToast('Documento localizado e campos preenchidos.','success');setLookup(`${d.warning||'Documento localizado e campos preenchidos.'}${d.fonte?.label?` Fonte: ${d.fonte.label}.`:''}`);}
 
 /* ── Disponibilidade com ícones e cores ── */
 async function loadDisponibilidade(){const di=document.getElementById('dispDataInicio').value;const df=document.getElementById('dispDataFim').value;const dispGrid=document.getElementById('dispGrid');dispGrid.innerHTML='<div class="rq-state">Carregando disponibilidade...</div>';const p=new URLSearchParams();if(di)p.set('data_inicio',di);if(df)p.set('data_fim',df);const r=await fetch(`/api/logistica/agendamento-veiculos/disponibilidade?${p.toString()}`);const d=await r.json();if(!r.ok){dispGrid.innerHTML=`<div class="rq-state error">${d.error||'Falha ao carregar.'}</div>`;return;}if(!d.veiculos?.length){dispGrid.innerHTML='<div class="rq-empty"><i class="fas fa-truck"></i><p>Nenhum veículo cadastrado no sistema.</p></div>';return;}
@@ -419,10 +456,10 @@ myList.innerHTML=d.rows?.length?d.rows.map(s=>{
     </article>`;
 }).join(''):'<div class="rq-empty"><i class="fas fa-inbox"></i><p>Você ainda não abriu solicitações de transporte.</p></div>';}
 
-solicitacaoForm.addEventListener('submit',async e=>{e.preventDefault();const tipo=tipoSolicitacao.value;const payload={tipo,prioridade:prioridadeSolicitacao.value,data_desejada:dataDesejada.value||'',prazo_limite:prazoLimite.value||'',numero_oc:tipo==='COLETA'?documentoInput.value.trim():'',numero_nf:tipo==='ENTREGA'?documentoInput.value.trim():'',referencia_avulsa:tipo==='AVULSA'?documentoInput.value.trim():'',avulsa:{finalidade:avulsaFinalidade.value.trim(),centro_custo:avulsaCentroCusto.value.trim(),responsavel:avulsaResponsavel.value.trim(),local_retirada:avulsaLocalRetirada.value.trim(),previsao_devolucao:avulsaPrevisaoDevolucao.value},parceiro:collectPartner(),itens:tipo==='AVULSA'?[]:collectItems(),observacoes_solicitante:observacoesSolicitante.value.trim()};const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar solicitação.','error');return setLookup(d.error||'Falha ao salvar solicitação.',true);}resetFormState();showToast('Solicitação enviada com sucesso para a logística!','success',5000);setLookup('Solicitação enviada para a logística.');await loadMinhasSolicitacoes();});
+solicitacaoForm.addEventListener('submit',async e=>{e.preventDefault();const tipo=tipoSolicitacao.value;const payload={tipo,prioridade:prioridadeSolicitacao.value,data_desejada:dataDesejada.value||'',prazo_limite:prazoLimite.value||'',numero_oc:tipo==='COLETA'?documentoInput.value.trim():'',numero_nf:tipo==='ENTREGA'?documentoInput.value.trim():'',referencia_avulsa:tipo==='AVULSA'?documentoInput.value.trim():'',local_solicitante:localColeta?localColeta.value.trim():'',avulsa:{finalidade:avulsaFinalidade.value.trim(),centro_custo:avulsaCentroCusto.value.trim(),responsavel:avulsaResponsavel.value.trim(),local_retirada:avulsaLocalRetirada.value.trim(),previsao_devolucao:avulsaPrevisaoDevolucao.value},parceiro:collectPartner(),itens:tipo==='AVULSA'?[]:collectItems(),observacoes_solicitante:observacoesSolicitante.value.trim()};const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar solicitação.','error');return setLookup(d.error||'Falha ao salvar solicitação.',true);}resetFormState();showToast('Solicitação enviada com sucesso para a logística!','success',5000);setLookup('Solicitação enviada para a logística.');await loadMinhasSolicitacoes();});
 async function aprovarCancelamento(id){if(!confirm('Tem certeza que deseja aprovar o cancelamento?'))return;const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/aprovar-cancelamento`,{method:'POST',headers:{'Content-Type':'application/json'}});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao aprovar.','error');return setMine(d.error||'Falha ao aprovar.',true);}showToast('Cancelamento aprovado.','success');await loadMinhasSolicitacoes();}
 async function rejeitarCancelamento(id){if(!confirm('Tem certeza que deseja rejeitar o cancelamento?'))return;const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/rejeitar-cancelamento`,{method:'POST',headers:{'Content-Type':'application/json'}});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao rejeitar.','error');return setMine(d.error||'Falha ao rejeitar.',true);}showToast('Cancelamento rejeitado.','success');await loadMinhasSolicitacoes();}
-tipoSolicitacao.addEventListener('change',updateDocumentoLabel);resetFormState();loadMinhasSolicitacoes();
+tipoSolicitacao.addEventListener('change',updateDocumentoLabel);dataDesejada.addEventListener('change',()=>{if(dataDesejada.value&&!prazoLimite.value){const d=new Date(dataDesejada.value);d.setDate(d.getDate()+2);prazoLimite.value=d.toISOString().slice(0,16);}});resetFormState();loadMinhasSolicitacoes();
 (function(){const hoje=new Date().toISOString().slice(0,10);const di=document.getElementById('dispDataInicio');const df=document.getElementById('dispDataFim');if(di)di.value=hoje;if(df){const d=new Date();d.setDate(d.getDate()+7);df.value=d.toISOString().slice(0,10);}loadDisponibilidade();})();
 </script>
 {% endblock %}

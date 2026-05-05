@@ -2342,7 +2342,7 @@ def detalhe_nota_xml_auditor(numero_nota):
             "auditor_decisao": auditor_decisao,
             "auditor_diagnostico": itens[0].auditor_diagnostico or "",
             "auditor_justificativa": itens[0].auditor_justificativa or "",
-            "pedido_compra": itens[0].pedido_compra or "",
+            "pedido_compra": _coletar_pedidos_nota(itens),
             "material_cliente": bool(itens[0].material_cliente),
             "remessa": bool(itens[0].remessa),
             "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
@@ -2538,7 +2538,8 @@ def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str,
             atualizou = True
 
         po_pedido = str(par.get("po_pedido") or "").strip()
-        if po_pedido and item.pedido_compra != po_pedido:
+        if po_pedido and not item.pedido_compra:
+            # Só preenche se o item ainda não tem OC vinculada (preserva string com múltiplos pedidos)
             item.pedido_compra = po_pedido[:50]
             atualizou = True
 

@@ -470,15 +470,19 @@ def salvar_motoristas_endpoint():
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/referencia/oc/<numero_oc>")
-@permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def consultar_oc_agendamento_endpoint(numero_oc: str):
+    from conferencia_app.auth import has_permission
+    if not (has_permission("PAGE_LOGISTICA_SOLICITACAO") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
+        return jsonify({"error": "Acesso negado."}), 403
     resultado = consultar_oc_agendamento(numero_oc)
     return jsonify(resultado), (200 if resultado.get("encontrada") else 404)
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/referencia/nf/<numero_nf>")
-@permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def consultar_nf_agendamento_endpoint(numero_nf: str):
+    from conferencia_app.auth import has_permission
+    if not (has_permission("PAGE_LOGISTICA_SOLICITACAO") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
+        return jsonify({"error": "Acesso negado."}), 403
     resultado = consultar_nf_agendamento(numero_nf)
     return jsonify(resultado), (200 if resultado.get("encontrada") else 404)
 
@@ -598,6 +602,144 @@ def obter_solicitacao_agendamento(solicitacao_id: int):
     return jsonify({"solicitacao": _serializar_solicitacao(row, veiculo=veiculo, itens=itens, historico=historico)})
 
 
+@agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/documento", methods=["PATCH"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def atualizar_documento_solicitacao(solicitacao_id: int):
+    """Gestor informa/corrige OC ou NF — salva e enriquece automaticamente com dados do pedido."""
+    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+    if row.status in ("Cancelada",):
+        return jsonify({"error": "Não é possível editar uma solicitação cancelada."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
+
+    if not numero_oc and not numero_nf:
+        return jsonify({"error": "Informe a OC ou a NF."}), 400
+
+    usuario = session.get("username", "sistema")
+
+    # ── 1. Salva o número no registro ──────────────────────────────────────
+    if numero_oc and row.tipo == "COLETA":
+        row.numero_oc = numero_oc
+        row.documento_numero = numero_oc
+        row.documento_tipo = "OC"
+    elif numero_nf and row.tipo == "ENTREGA":
+        row.numero_nf = numero_nf
+        row.documento_numero = numero_nf
+        row.documento_tipo = "NF"
+    else:
+        # AVULSA ou campo não corresponde ao tipo — aceita o que vier
+        if numero_oc:
+            row.numero_oc = numero_oc
+            if not row.documento_numero:
+                row.documento_numero = numero_oc
+                row.documento_tipo = "OC"
+        if numero_nf:
+            row.numero_nf = numero_nf
+            if not row.documento_numero or row.documento_tipo == "OC":
+                row.documento_numero = numero_nf
+                row.documento_tipo = "NF"
+
+    # ── 2. Enriquece com dados do pedido/NF ───────────────────────────────
+    enriquecido = False
+    aviso_enriquecimento = ""
+    parceiro_nome_aplicado = ""
+    itens_aplicados = 0
+    try:
+        consulta = (
+            consultar_oc_agendamento(numero_oc) if numero_oc
+            else consultar_nf_agendamento(numero_nf)
+        )
+        if consulta.get("encontrada"):
+            # OC retorna "fornecedor"; NF retorna "cliente"
+            parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
+
+            if parceiro.get("nome"):
+                row.parceiro_nome = parceiro["nome"]
+                parceiro_nome_aplicado = parceiro["nome"]
+            if parceiro.get("razao_social"):
+                row.parceiro_razao_social = parceiro["razao_social"]
+            if parceiro.get("cnpj_cpf"):
+                row.parceiro_documento = re.sub(r"\D", "", str(parceiro["cnpj_cpf"]))
+            if parceiro.get("codigo"):
+                row.parceiro_codigo = str(parceiro["codigo"])
+            if parceiro.get("logradouro"):
+                row.logradouro = parceiro["logradouro"]
+            if parceiro.get("numero"):
+                row.numero = parceiro["numero"]
+            if parceiro.get("complemento"):
+                row.complemento = parceiro["complemento"]
+            if parceiro.get("bairro"):
+                row.bairro = parceiro["bairro"]
+            if parceiro.get("cidade"):
+                row.cidade = parceiro["cidade"]
+            if parceiro.get("uf"):
+                row.uf = str(parceiro["uf"])[:2].upper()
+            if parceiro.get("cep"):
+                row.cep = parceiro["cep"]
+            if parceiro.get("telefone") and not row.telefone:
+                row.telefone = parceiro["telefone"]
+            if parceiro.get("email") and not row.email:
+                row.email = parceiro["email"]
+
+            # Substitui itens existentes pelos do pedido/NF
+            itens_novos = consulta.get("itens") or []
+            if itens_novos:
+                AgendamentoSolicitacaoItem.query.filter_by(solicitacao_id=row.id).delete()
+                for seq, it in enumerate(itens_novos, start=1):
+                    db.session.add(AgendamentoSolicitacaoItem(
+                        solicitacao_id=row.id,
+                        sequencia=seq,
+                        codigo_item=str(it.get("codigo_item") or "").strip(),
+                        descricao=str(it.get("descricao") or f"Item {seq}").strip(),
+                        quantidade=float(it.get("quantidade") or 0.0),
+                        unidade=str(it.get("unidade") or "").strip(),
+                        volumes=float(it.get("volumes") or 0.0),
+                        observacoes=str(it.get("observacoes") or "").strip() or None,
+                    ))
+                row.qtd_itens = len(itens_novos)
+                total_vol = sum(float(i.get("volumes") or 0.0) for i in itens_novos)
+                row.resumo_itens = f"{len(itens_novos)} item(ns) / {total_vol:.0f} vol."
+                itens_aplicados = len(itens_novos)
+
+            if consulta.get("warning"):
+                aviso_enriquecimento = consulta["warning"]
+            enriquecido = True
+        else:
+            aviso_enriquecimento = consulta.get("error") or "Documento não encontrado na base de dados."
+    except Exception as exc:
+        current_app.logger.warning("Enriquecimento de documento falhou: %s", exc)
+        aviso_enriquecimento = "Número salvo, mas não foi possível buscar os dados automaticamente."
+
+    detalhe_hist = (
+        f"{'OC' if numero_oc else 'NF'} {numero_oc or numero_nf} informada pelo gestor."
+        + (" Dados aplicados automaticamente." if enriquecido else f" {aviso_enriquecimento}")
+    )
+    _registrar_historico(row.id, evento="DOCUMENTO_ATUALIZADO", usuario=usuario, detalhe=detalhe_hist)
+
+    row.atualizado_em = datetime.now()
+    db.session.commit()
+
+    itens = (
+        AgendamentoSolicitacaoItem.query
+        .filter_by(solicitacao_id=row.id)
+        .order_by(AgendamentoSolicitacaoItem.sequencia.asc())
+        .all()
+    )
+    veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+    return jsonify({
+        "sucesso": True,
+        "enriquecido": enriquecido,
+        "parceiro_nome": parceiro_nome_aplicado,
+        "itens_aplicados": itens_aplicados,
+        "aviso": aviso_enriquecimento,
+        "solicitacao": _serializar_solicitacao(row, veiculo=veiculo, itens=itens),
+    })
+
+
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def criar_solicitacao_agendamento():
@@ -614,11 +756,6 @@ def criar_solicitacao_agendamento():
     numero_oc = str(payload.get("numero_oc") or "").strip()
     numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
     referencia_avulsa = str(payload.get("referencia_avulsa") or "").strip()
-    if tipo == "COLETA" and not numero_oc:
-        return jsonify({"error": "Informe a OC para a coleta."}), 400
-    if tipo == "ENTREGA" and not numero_nf:
-        return jsonify({"error": "Informe a NF para a entrega."}), 400
-
     try:
         prazo_limite = _parse_datetime(payload.get("prazo_limite"), "o prazo")
     except ValueError as exc:
@@ -654,10 +791,29 @@ def criar_solicitacao_agendamento():
             "observacoes": observacoes_solicitante,
         }
     else:
-        consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
+        if (tipo == "COLETA" and numero_oc) or (tipo == "ENTREGA" and numero_nf):
+            consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
+        else:
+            consulta = {"encontrada": False, "itens": []}
         parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
         if not parceiro:
             parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
+        # Fallback for simplified requests where user only fills in the location
+        local_solicitante = str(payload.get("local_solicitante") or "").strip()
+        if local_solicitante and not parceiro.get("logradouro"):
+            parceiro["logradouro"] = local_solicitante
+            if not parceiro.get("cidade"):
+                parceiro["cidade"] = local_solicitante.split("/")[-1].strip() if "/" in local_solicitante else "A definir"
+            if not parceiro.get("uf"):
+                parceiro["uf"] = "--"
+        if not (parceiro.get("nome") or parceiro.get("razao_social")):
+            parceiro["nome"] = "A definir"
+        if not parceiro.get("logradouro"):
+            parceiro["logradouro"] = str(payload.get("local_solicitante") or "A definir").strip() or "A definir"
+        if not parceiro.get("cidade"):
+            parceiro["cidade"] = "A definir"
+        if not parceiro.get("uf"):
+            parceiro["uf"] = "--"
 
     origem_documento = "Manual"
     if tipo == "COLETA" and consulta.get("encontrada"):
@@ -714,7 +870,7 @@ def criar_solicitacao_agendamento():
     ):
         itens = [{"descricao": "Reserva avulsa de veículo", "quantidade": 1, "unidade": "UN", "volumes": 0}]
     if not isinstance(itens, list) or not itens:
-        return jsonify({"error": "Adicione pelo menos 1 item para continuar."}), 400
+        itens = [{"descricao": "A definir pela logística", "quantidade": 1, "unidade": "UN", "volumes": 0}]
 
     db.session.add(row)
     db.session.flush()

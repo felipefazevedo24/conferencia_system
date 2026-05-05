@@ -89,6 +89,9 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LOGISTICA_SOLICITACAO",
     },
+    "Solicitante": {
+        "PAGE_LOGISTICA_SOLICITACAO",
+    },
 }
 
 

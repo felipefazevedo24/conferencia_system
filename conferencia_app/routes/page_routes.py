@@ -208,16 +208,16 @@ HOME_MODULES = [
     },
     {
         "id": "agendamento_veiculos",
-        "title": "Gestão de Rotas",
-        "subtitle": "Planner logístico",
-        "description": "Gerencie o Kanban da logística, aloque motorista e veículo, acompanhe agenda e cadastros.",
-        "href": "/logistica/agendamento-veiculos",
+        "title": "Gestão de Viagens",
+        "subtitle": "Solicitações & planner logístico",
+        "description": "Gerencie solicitações de transporte, aloque motorista e veículo, acompanhe agenda e cadastros.",
+        "href": "/logistica/viagens?tab=solicitacoes",
         "icon": "fa-truck-fast",
         "permission": "PAGE_LOGISTICA_AGENDAMENTO",
         "section": "Logística",
-        "tone": "slate",
+        "tone": "emerald",
         "priority": 87,
-        "keywords": ["agendamento", "kanban", "veiculo", "coleta", "entrega"],
+        "keywords": ["agendamento", "kanban", "veiculo", "coleta", "entrega", "solicitacao"],
         "metric_key": "agendamento_ativo",
     },
     {
@@ -807,11 +807,16 @@ def agendamento_veiculos_page():
 
 @page_bp.route("/logistica/operacao")
 def logistica_operacao_page():
-    # Pagina unificada: acessivel se o usuario tiver QUALQUER uma das permissoes
     from conferencia_app.auth import has_permission
-    if not (has_permission("PAGE_LOGISTICA_AGENDAMENTO") or has_permission("PAGE_LOGISTICA_FROTA") or has_permission("PAGE_LOGISTICA_VIAGEM")):
+    has_agend = has_permission("PAGE_LOGISTICA_AGENDAMENTO")
+    has_viagem = has_permission("PAGE_LOGISTICA_VIAGEM")
+    has_frota = has_permission("PAGE_LOGISTICA_FROTA")
+    if not (has_agend or has_viagem or has_frota):
         from flask import abort
         abort(403)
+    # Rotas foi absorvida por viagens; redireciona quem não tem frota
+    if not has_frota:
+        return redirect("/logistica/viagens" + ("?tab=solicitacoes" if has_agend else ""), code=302)
     return render_template(
         "logistica_operacao.html",
         user=session["username"],
@@ -857,8 +862,11 @@ def frota_page():
 
 
 @page_bp.route("/logistica/viagens")
-@permission_required("PAGE_LOGISTICA_VIAGEM")
+@login_required
 def viagens_page():
+    from conferencia_app.auth import has_permission
+    if not (has_permission("PAGE_LOGISTICA_VIAGEM") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
+        return render_template("acesso_negado.html", user=session.get("username")), 403
     return render_template(
         "viagens.html",
         user=session["username"],

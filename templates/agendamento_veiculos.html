@@ -633,10 +633,25 @@ async function openDetalhe(id){
     const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao abrir detalhe.','error');return;}const s=d.solicitacao;
     const chips=(s.itens||[]).map(i=>`<span class="rt-chip"><i class="fas fa-box"></i>${i.descricao||'Item'}${i.quantidade?`<span class="chip-qty">${i.quantidade} ${i.unidade||''}</span>`:''}</span>`).join('');
     const st=statusOperacional(s);
+    // Verifica se falta OC ou NF
+    const faltaOcNf = !s.numero_oc && s.tipo==='COLETA' || !s.numero_nf && s.tipo==='ENTREGA';
+    const labelDocAtual = s.documento_numero && s.documento_numero!=='A definir'&&s.documento_numero!=='---'
+        ? `${s.documento_tipo} ${s.documento_numero}`
+        : `<span style="color:#f59e0b;font-weight:700"><i class="fas fa-triangle-exclamation"></i> ${s.tipo==='COLETA'?'OC':s.tipo==='ENTREGA'?'NF':'Doc.'} a definir</span>`;
+    const inputDocLabel = s.tipo==='COLETA' ? 'Número da OC' : s.tipo==='ENTREGA' ? 'Número da NF' : 'OC ou NF';
+    const inputDocField = s.tipo==='ENTREGA'
+        ? `<input id="det-numero-nf" class="form-control form-control-sm" placeholder="Ex: 12345" style="width:180px" value="${s.numero_nf&&s.numero_nf!=='A definir'?s.numero_nf:''}">`
+        : `<input id="det-numero-oc" class="form-control form-control-sm" placeholder="Ex: 4500123456" style="width:180px" value="${s.numero_oc&&s.numero_oc!=='A definir'?s.numero_oc:''}">`;
     detalheBody.innerHTML=`
         ${buildStepper(s.status)}
         <div class="rt-split" style="margin-top:16px">
-            <div class="rt-mini"><span><i class="fas fa-file-lines"></i> ${s.tipo_label} &middot; <span class="rt-badge ${st.cls}">${st.label}</span></span><strong>${s.parceiro_nome} &middot; ${s.documento_tipo} ${s.documento_numero}</strong><p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p><p><i class="fas fa-tag" style="color:#94a3b8"></i> Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
+            <div class="rt-mini"><span><i class="fas fa-file-lines"></i> ${s.tipo_label} &middot; <span class="rt-badge ${st.cls}">${st.label}</span></span><strong>${s.parceiro_nome} &middot; ${labelDocAtual}</strong>
+            ${s.status!=='Cancelada'?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap">
+                <label style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${inputDocLabel}:</label>
+                ${inputDocField}
+                <button class="btn btn-sm btn-outline-primary" style="white-space:nowrap" onclick="salvarDocumento(${s.id})"><i class="fas fa-floppy-disk"></i> Salvar</button>
+            </div>`:''}
+            <p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p><p><i class="fas fa-tag" style="color:#94a3b8"></i> Origem: ${s.origem_documento_label||s.origem_documento||'---'}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
             <div class="rt-mini"><span><i class="fas fa-truck-fast"></i> Execução</span><strong>${s.veiculo?.nome||'Sem veículo'}${s.motorista?.nome?' &middot; '+s.motorista.nome:''}</strong>${s.departamento_solicitante?`<p><i class="fas fa-building" style="color:#94a3b8"></i> Depto: ${s.departamento_solicitante}</p>`:''}<p><i class="fas fa-clock" style="color:#94a3b8"></i> Saída: ${s.data_hora_saida_prevista_label||'---'}</p><p><i class="fas fa-road" style="color:#94a3b8"></i> ${s.km_estimado?`Estimativa: ${km(s.km_estimado)}`:'Estimativa de km indisponível'}${s.km_estimado_retorno?' &middot; '+km(s.km_estimado_retorno)+' ida e volta':''}</p>${s.google_maps_url?`<p><a href="${s.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" style="margin-top:6px"><i class="fas fa-map-location-dot"></i> Abrir rota</a></p>`:''}</div>
         </div>
         ${s.cancelamento_pendente?`<div class="rt-mini mt-3" style="border-color:#9f2f2f;background:rgba(176,56,56,.04)"><span style="color:#9f2f2f"><i class="fas fa-triangle-exclamation"></i> Cancelamento solicitado por ${s.cancelamento_solicitado_por}</span><p>${s.cancelamento_motivo_pendente||'Sem motivo'}</p><p style="font-size:11px;color:#667e92">Aguardando aprovação do solicitante.</p></div>`:''}
@@ -656,6 +671,19 @@ function openAlocarModal(id,code=''){alocarSolicitacaoId.value=id;document.getEl
 function openCancelarModal(id){detalheModal.hide();cancelarSolicitacaoId.value=id;cancelarMotivo.value='';const admin=state.userRole==='Admin';cancelarTitulo.textContent=admin?'Cancelar solicitacao':'Solicitar cancelamento';cancelarSubmit.textContent=admin?'Cancelar direto':'Solicitar cancelamento';setTimeout(()=>cancelarModal.show(),300);}
 function openMotoristaModal(id=''){const m=state.motoristas.find(i=>String(i.id)===String(id));if(!m)return;motoristaId.value=m.id;motoristaNome.value=m.nome||'';motoristaTelefone.value=m.telefone||'';motoristaCnh.value=m.cnh||'';motoristaObservacoes.value=m.observacoes||'';motoristaAtivo.checked=!!m.ativo;motoristaModal.show();}
 
+async function salvarDocumento(id){
+    const ocEl=document.getElementById('det-numero-oc');
+    const nfEl=document.getElementById('det-numero-nf');
+    const numero_oc=(ocEl?.value||'').trim();
+    const numero_nf=(nfEl?.value||'').trim();
+    if(!numero_oc&&!numero_nf){showToast('Informe a OC ou a NF.','error');return;}
+    const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/documento`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero_oc,numero_nf})});
+    const d=await r.json();
+    if(!r.ok){showToast(d.error||'Falha ao salvar documento.','error');return;}
+    showToast('OC/NF salva com sucesso!','success');
+    detalheModal.hide();
+    await refreshAll();
+}
 async function updateStatus(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alterar status.','error');return setBoard(d.error||'Falha ao alterar status.',true);}showToast(`Status atualizado para ${STEP_LABELS[status]||status}.`,'success');detalheModal.hide();await refreshAll();}
 async function refreshAll(){await Promise.all([loadDashboard(),loadAgenda(),loadMotoristas()]);}
 

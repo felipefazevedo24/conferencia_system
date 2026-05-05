@@ -101,6 +101,11 @@
     .parada-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: #1e293b; color: #94a3b8; text-transform: uppercase; margin-top: 4px; display: inline-block; }
     .parada-status.ok { background: #065f46; color: #6ee7b7; }
     .parada-status.em { background: #92400e; color: #fde68a; }
+    .parada-acoes { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .parada-btn { border: 0; padding: 7px 11px; border-radius: 7px; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+    .parada-btn.cheguei { background: #f59e0b; color: #111; }
+    .parada-btn.concluir { background: #ef4444; color: #fff; }
+    .parada-btn:active { transform: scale(.96); }
 
     .empty-paradas { text-align: center; padding: 30px 20px; color: #64748b; }
     .empty-paradas i { font-size: 32px; margin-bottom: 8px; }
@@ -145,6 +150,7 @@
 
     <div class="tracking-dock">
         <div class="tracking-dock-inner">
+            <div id="dock-alert" style="display:none;background:rgba(220,38,38,.15);border:1px solid #dc2626;color:#fca5a5;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:700;text-align:center"></div>
             <div class="tracking-dock-status">
                 <span><span class="tracking-dot" id="dock-dot"></span><span id="dock-status">Rastreamento parado</span></span>
                 <span id="dock-points">0 pontos</span>
@@ -157,8 +163,11 @@
     <div class="tab-pane active" id="tab-paradas" style="flex:1;overflow-y:auto;padding-top:14px">
         <div id="prox-container"></div>
         <div style="margin-top:6px">
-            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px">Todas as paradas</div>
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px">Todas as paradas <span style="font-size:10px;color:#475569;font-weight:600;text-transform:none;letter-spacing:0">— você pode concluir em qualquer ordem</span></div>
             <div class="paradas-list" id="lista-paradas"></div>
+        </div>
+        <div style="margin-top:16px;padding:0 4px">
+            <button onclick="abrirConcluirViagem()" style="width:100%;padding:14px;background:#16a34a;color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><i class="fa-solid fa-flag-checkered"></i> Concluir viagem</button>
         </div>
     </div>
 
@@ -180,8 +189,9 @@
         </div>
         <div class="footer">
             <button class="btn btn-start" id="btn"><i class="fa-solid fa-play"></i> Iniciar rastreamento</button>
-            <div style="text-align:center;font-size:11px;color:#64748b;margin-top:10px">
-                Mantenha esta tela aberta. Permita localização e não feche o navegador.
+            <div style="text-align:center;font-size:11px;color:#64748b;margin-top:10px;line-height:1.5">
+                Mantenha esta tela aberta com a tela ligada.<br>
+                No Android: use Chrome e adicione à tela inicial para melhor desempenho em segundo plano.
             </div>
         </div>
     </div>
@@ -206,6 +216,34 @@
             </div>
         </div>
     </div>
+
+    <!-- MODAL: KM inicial -->
+    <div class="modal-overlay" id="modal-km-inicial">
+        <div class="modal-card">
+            <h3><i class="fa-solid fa-gauge-high" style="color:#f59e0b"></i> KM inicial</h3>
+            <label>Leitura do odômetro agora (km)</label>
+            <input type="number" id="mi-km" placeholder="Ex: 123456" inputmode="numeric" min="0" style="width:100%;padding:10px;font-size:16px;border:1px solid #334155;border-radius:10px;background:#1e293b;color:#f1f5f9;margin-bottom:8px">
+            <p style="font-size:12px;color:#64748b;margin:0 0 12px">Informe o KM que aparece no painel do veículo antes de sair.</p>
+            <div class="modal-foot">
+                <button class="cancel" onclick="document.getElementById('modal-km-inicial').classList.remove('show')">Cancelar</button>
+                <button class="ok" id="mi-ok"><i class="fa-solid fa-play"></i> Iniciar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: KM final / Concluir viagem -->
+    <div class="modal-overlay" id="modal-km-final">
+        <div class="modal-card">
+            <h3><i class="fa-solid fa-flag-checkered" style="color:#22c55e"></i> Concluir viagem</h3>
+            <label>Leitura do odômetro agora (km)</label>
+            <input type="number" id="mf-km" placeholder="Ex: 123789" inputmode="numeric" min="0" style="width:100%;padding:10px;font-size:16px;border:1px solid #334155;border-radius:10px;background:#1e293b;color:#f1f5f9;margin-bottom:8px">
+            <p style="font-size:12px;color:#64748b;margin:0 0 12px">Informe o KM do painel ao chegar de volta. A viagem será encerrada.</p>
+            <div class="modal-foot">
+                <button class="cancel" onclick="document.getElementById('modal-km-final').classList.remove('show')">Cancelar</button>
+                <button class="ok" id="mf-ok" style="background:#22c55e"><i class="fa-solid fa-flag-checkered"></i> Concluir</button>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 
@@ -214,6 +252,7 @@ const VIAGEM_ID = {{ viagem.id }};
 const TOKEN = "{{ token }}";
 const PING_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/ping`;
 const START_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/iniciar`;
+const CONCLUIR_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/concluir`;
 const STATUS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/status`;
 const PARADAS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/paradas`;
 const VIAGEM_STATUS = "{{ viagem.status }}";
@@ -223,6 +262,7 @@ const DIST_MIN_M = 20;            // 20m
 
 let watchId = null;
 let wakeLock = null;
+let audioCtx = null;
 let pontos = 0;
 let ultLat = null, ultLng = null, ultTs = 0;
 let filaOffline = [];
@@ -241,8 +281,14 @@ function dist(a, b, c, d) {
 
 function alertar(txt, tipo='') {
     const box = $('alert-box');
-    if (!txt) { box.innerHTML = ''; return; }
-    box.innerHTML = `<div class="alert ${tipo}">${txt}</div>`;
+    if (!txt) { if(box) box.innerHTML = ''; return; }
+    if(box) box.innerHTML = `<div class="alert ${tipo}">${txt}</div>`;
+    // também mostra no dock para ser visível em qualquer aba
+    const dockAlert = $('dock-alert');
+    if (dockAlert) {
+        if (!txt) { dockAlert.style.display = 'none'; dockAlert.textContent = ''; }
+        else { dockAlert.textContent = txt; dockAlert.style.display = 'block'; setTimeout(() => { dockAlert.style.display = 'none'; }, 6000); }
+    }
 }
 
 async function enviarPing(payload) {
@@ -308,8 +354,29 @@ function onErr(err) {
 }
 
 async function pedirWakeLock() {
-    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }
-    catch(e) {}
+    try {
+        if ('wakeLock' in navigator && (!wakeLock || wakeLock.released)) {
+            wakeLock = await navigator.wakeLock.request('screen');
+        }
+    } catch(e) {}
+}
+
+// Mantém a aba viva no Android mesmo em segundo plano, tocando áudio silencioso em loop
+function criarAudioKeepalive() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); // 1s silencioso
+        function tocar() {
+            if (!inicializado) return;
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(ctx.destination);
+            src.start();
+            src.addEventListener('ended', tocar);
+        }
+        tocar();
+        return ctx;
+    } catch(e) { return null; }
 }
 
 function setBotaoRastreamento(ativo) {
@@ -328,12 +395,13 @@ function setBotaoRastreamento(ativo) {
     if (ds) ds.textContent = ativo ? 'Rastreamento ativo' : 'Rastreamento parado';
 }
 
-async function iniciarViagemSeNecessario(pos) {
+async function iniciarViagemSeNecessario(pos, kmInicial) {
     try {
         const r = await fetch(START_URL, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
+                km_inicial: (typeof kmInicial === 'number') ? kmInicial : null,
                 latitude: pos?.coords?.latitude,
                 longitude: pos?.coords?.longitude,
                 precisao_m: pos?.coords?.accuracy,
@@ -351,17 +419,21 @@ async function iniciarViagemSeNecessario(pos) {
     }
 }
 
-async function iniciar() {
+async function iniciar(kmInicial) {
     if (!navigator.geolocation) { alertar('Seu navegador não suporta GPS.'); return; }
     let primeiraPos = null;
     try {
         primeiraPos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy: true, timeout: 10000}));
     } catch(e) { onErr(e); return; }
-    const viagemOk = await iniciarViagemSeNecessario(primeiraPos);
+    const viagemOk = await iniciarViagemSeNecessario(primeiraPos, kmInicial);
     if (!viagemOk) return;
+    // Tudo ok: fechar o modal de km inicial agora
+    const modalKm = $('modal-km-inicial');
+    if (modalKm) { modalKm.classList.remove('show'); modalKm.style.display = ''; }
     watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
     onPos(primeiraPos);
     pedirWakeLock();
+    audioCtx = criarAudioKeepalive();
     $('ring').classList.add('on');
     $('status-big').textContent = 'Rastreando';
     $('status-sm').textContent = 'Mantenha a tela aberta até o final da viagem';
@@ -374,6 +446,7 @@ function parar() {
     if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     watchId = null;
     if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
     $('ring').classList.remove('on');
     $('status-big').textContent = 'Parado';
     $('status-sm').textContent = 'Rastreamento pausado';
@@ -382,14 +455,103 @@ function parar() {
 }
 
 const btn = $('btn');
-if (btn) btn.addEventListener('click', () => { inicializado ? parar() : iniciar(); });
+if (btn) btn.addEventListener('click', () => { inicializado ? parar() : pedirKmInicialEIniciar(); });
 const btnDock = $('btn-dock');
-if (btnDock) btnDock.addEventListener('click', () => { inicializado ? parar() : iniciar(); });
+if (btnDock) btnDock.addEventListener('click', () => { inicializado ? parar() : pedirKmInicialEIniciar(); });
+
+function pedirKmInicialEIniciar() {
+    const modal = $('modal-km-inicial');
+    if (!modal) { iniciar(null); return; }
+    $('mi-km').value = '';
+    $('mi-km').style.borderColor = '';
+    const okBtn = $('mi-ok');
+    if (okBtn) { okBtn.disabled = false; okBtn.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar'; }
+    modal.classList.add('show');
+    modal.style.display = 'flex'; // força exibição mesmo em navegadores com overflow:hidden no pai
+    setTimeout(() => { const inp = $('mi-km'); if (inp) inp.focus(); }, 100);
+}
+
+$('mi-ok')?.addEventListener('click', async () => {
+    const raw = $('mi-km').value.trim();
+    const km = parseInt(raw, 10);
+    if (!raw || isNaN(km) || km < 0) {
+        $('mi-km').style.borderColor = '#ef4444';
+        $('mi-km').focus();
+        return;
+    }
+    $('mi-km').style.borderColor = '';
+    const okBtn = $('mi-ok');
+    okBtn.disabled = true;
+    okBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Aguarde...';
+    await iniciar(km);
+    // fechar o modal só acontece dentro de iniciar() se tudo correu bem
+    okBtn.disabled = false;
+    okBtn.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar';
+});
+
+function abrirConcluirViagem() {
+    const modal = $('modal-km-final');
+    if (!modal) return;
+    $('mf-km').value = '';
+    modal.classList.add('show');
+}
+
+$('mf-ok')?.addEventListener('click', async () => {
+    const km = parseInt($('mf-km').value, 10);
+    if (!$('mf-km').value.trim() || isNaN(km) || km < 0) {
+        $('mf-km').style.borderColor = '#ef4444';
+        return;
+    }
+    $('mf-km').style.borderColor = '';
+    $('mf-ok').disabled = true;
+    $('mf-ok').textContent = 'Aguarde...';
+    const pos = await _obterPos();
+    try {
+        const r = await fetch(CONCLUIR_URL, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({km_final: km, ...(pos || {})})
+        });
+        const d = await r.json();
+        if (!d.sucesso) {
+            alert(d.msg || 'Erro ao concluir a viagem.');
+            $('mf-ok').disabled = false;
+            $('mf-ok').innerHTML = '<i class="fa-solid fa-flag-checkered"></i> Concluir';
+            return;
+        }
+        parar();
+        $('modal-km-final').classList.remove('show');
+        alertar('Viagem concluída! Pode fechar esta tela.', 'ok');
+        setTimeout(() => location.reload(), 2000);
+    } catch(e) {
+        alert('Sem conexão. Tente novamente.');
+        $('mf-ok').disabled = false;
+        $('mf-ok').innerHTML = '<i class="fa-solid fa-flag-checkered"></i> Concluir';
+    }
+});
 
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && inicializado && !wakeLock) pedirWakeLock();
-    if (!document.hidden) drenarFila();
+    if (!document.hidden) {
+        drenarFila();
+        if (inicializado) {
+            // Reinicia o watchPosition — pode ter sido suspenso pelo browser em segundo plano
+            pedirWakeLock();
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
+            // Envia posição imediata ao voltar
+            navigator.geolocation.getCurrentPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 0, timeout: 10000});
+            // Reinicia áudio keepalive se o contexto foi suspenso
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+    }
 });
+
+// Watchdog: se estiver rastreando mas não receber posição por 45s, reinicia watchPosition
+setInterval(() => {
+    if (inicializado && ultTs > 0 && (Date.now() - ultTs) > 45000) {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 0, timeout: 20000});
+    }
+}, 30000);
 
 // confere status a cada 60s (se viagem concluída lá, para daqui)
 setInterval(async () => {
@@ -484,16 +646,27 @@ function renderLista() {
         return;
     }
     box.innerHTML = paradasCache.map(p => {
-        const ok = p.status === 'Concluida';
+        const ok = p.status === 'Concluida' || p.status === 'Nao_realizada' || p.status === 'Cancelada';
         const em = p.status === 'EmAndamento';
-        const statusLabel = ok ? 'Concluída' : em ? 'No local' : p.status === 'Nao_realizada' ? 'Não realizada' : 'Pendente';
-        const cls = ok ? 'ok' : em ? 'em' : '';
-        return `<div class="parada-item ${ok ? 'ok' : ''}">
+        const statusLabel = p.status === 'Concluida' ? 'Concluída' : em ? 'No local' : p.status === 'Nao_realizada' ? 'Não realizada' : p.status === 'Cancelada' ? 'Cancelada' : 'Pendente';
+        const cls = p.status === 'Concluida' ? 'ok' : em ? 'em' : '';
+        const navUrl = (p.latitude && p.longitude)
+            ? `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}&travelmode=driving`
+            : (p.endereco ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent((p.endereco||'')+', '+(p.cidade||'')+'/'+(p.uf||''))}` : null);
+        const acoes = !ok ? `<div class="parada-acoes">
+            ${navUrl ? `<a class="parada-btn" style="background:#1e293b;color:#38bdf8;border:1px solid #334155" href="${navUrl}" target="_blank" rel="noopener"><i class="fa-solid fa-diamond-turn-right"></i> Navegar</a>` : ''}
+            ${em
+                ? `<button class="parada-btn concluir" onclick="abrirConcluir(${p.id}, '${p.tipo}')"><i class="fa-solid fa-flag-checkered"></i> Concluir</button>`
+                : `<button class="parada-btn cheguei" onclick="marcarChegada(${p.id})"><i class="fa-solid fa-location-crosshairs"></i> Cheguei</button>`
+            }
+        </div>` : '';
+        return `<div class="parada-item ${p.status === 'Concluida' ? 'ok' : ''}">
             <div class="parada-seq">${p.sequencia}</div>
             <div class="parada-info">
                 <div class="parada-nome">${p.parceiro_nome || 'Parada ' + p.sequencia}</div>
                 <div class="parada-end">${p.endereco || ''} ${p.cidade ? '· ' + p.cidade + '/' + (p.uf||'') : ''}</div>
                 <span class="parada-status ${cls}">${statusLabel}</span>
+                ${acoes}
             </div>
         </div>`;
     }).join('');

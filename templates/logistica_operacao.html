@@ -2,7 +2,7 @@
 
 {% block title %}Operação Logística | Columbia Sync{% endblock %}
 {% block shell_title %}Operação Logística{% endblock %}
-{% block shell_subtitle %}Gestão unificada de rotas, viagens e frota — alterne entre as categorias.{% endblock %}
+{% block shell_subtitle %}Gestão unificada de viagens e frota — alterne entre as categorias.{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/recebimento_sap.css">
@@ -26,20 +26,14 @@
 {% block content %}
 <div class="op-shell">
     <div class="op-tabs" role="tablist">
-        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}
-        <button type="button" class="op-tab active" data-target="rotas" role="tab">
-            <i class="fas fa-map-marked-alt"></i> Rotas
-            <span class="op-tab-hint">solicitações · kanban · agenda</span>
-        </button>
-        {% endif %}
-        {% if can_access('PAGE_LOGISTICA_VIAGEM') %}
-        <button type="button" class="op-tab{% if not can_access('PAGE_LOGISTICA_AGENDAMENTO') %} active{% endif %}" data-target="viagens" role="tab">
+        {% if can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_AGENDAMENTO') %}
+        <button type="button" class="op-tab active" data-target="viagens" role="tab">
             <i class="fas fa-route"></i> Viagens
-            <span class="op-tab-hint">multi-parada · motorista · IA</span>
+            <span class="op-tab-hint">multi-parada · motorista · solicitações</span>
         </button>
         {% endif %}
         {% if can_access('PAGE_LOGISTICA_FROTA') %}
-        <button type="button" class="op-tab{% if not can_access('PAGE_LOGISTICA_AGENDAMENTO') and not can_access('PAGE_LOGISTICA_VIAGEM') %} active{% endif %}" data-target="frota" role="tab">
+        <button type="button" class="op-tab{% if not can_access('PAGE_LOGISTICA_VIAGEM') and not can_access('PAGE_LOGISTICA_AGENDAMENTO') %} active{% endif %}" data-target="frota" role="tab">
             <i class="fas fa-truck-field"></i> Frota
             <span class="op-tab-hint">veículos · abastec. · manut. · multas · checklist</span>
         </button>
@@ -48,11 +42,8 @@
 
     <div class="op-frame-wrap">
         <div class="op-loader" id="opLoader"><i class="fas fa-spinner fa-spin" style="margin-right:8px"></i> Carregando…</div>
-        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}
-        <iframe class="op-frame" id="frame-rotas" data-src="/logistica/agendamento-veiculos?embed=1" src="/logistica/agendamento-veiculos?embed=1" title="Rotas"></iframe>
-        {% endif %}
-        {% if can_access('PAGE_LOGISTICA_VIAGEM') %}
-        <iframe class="op-frame hidden" id="frame-viagens" data-src="/logistica/viagens?embed=1" title="Viagens"></iframe>
+        {% if can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_AGENDAMENTO') %}
+        <iframe class="op-frame" id="frame-viagens" data-src="/logistica/viagens?embed=1" src="/logistica/viagens?embed=1" title="Viagens"></iframe>
         {% endif %}
         {% if can_access('PAGE_LOGISTICA_FROTA') %}
         <iframe class="op-frame hidden" id="frame-frota" data-src="/logistica/frota?embed=1" title="Frota"></iframe>
@@ -63,9 +54,9 @@
 <script>
 (function(){
     const tabs=document.querySelectorAll('.op-tab');
-    const frames={rotas:document.getElementById('frame-rotas'),viagens:document.getElementById('frame-viagens'),frota:document.getElementById('frame-frota')};
+    const frames={viagens:document.getElementById('frame-viagens'),frota:document.getElementById('frame-frota')};
     const loader=document.getElementById('opLoader');
-    const loaded={rotas:!!frames.rotas,viagens:false,frota:false};
+    const loaded={viagens:!!frames.viagens,frota:false};
 
     function showLoader(){loader.classList.add('show');}
     function hideLoader(){loader.classList.remove('show');}

@@ -1597,6 +1597,9 @@ def motorista_iniciar_publico(vid: int, token: str):
         v.iniciado_por = v.motorista_nome or "motorista"
         _sync_solicitacoes_da_viagem(v, "EmRota")
         data = request.get_json(silent=True) or {}
+        km_ini = _parse_int(data.get("km_inicial"))
+        if km_ini is not None:
+            v.km_inicial = km_ini
         lat = _parse_float(data.get("latitude"))
         lng = _parse_float(data.get("longitude"))
         if lat is not None and lng is not None:
@@ -1612,9 +1615,10 @@ def motorista_iniciar_publico(vid: int, token: str):
             v.id,
             "INICIO",
             "Viagem iniciada pelo motorista",
-            descricao="Inicio registrado no app do motorista.",
+            descricao=f"Inicio registrado no app do motorista. KM inicial: {v.km_inicial or '—'}.",
             latitude=lat,
             longitude=lng,
+            km=km_ini,
             severidade="success",
         )
         db.session.commit()
@@ -1645,6 +1649,53 @@ def motorista_ping(vid: int, token: str):
     db.session.add(pos)
     db.session.commit()
     return jsonify({"sucesso": True, "status": v.status, "id": pos.id})
+
+
+@motorista_bp.route("/motorista/viagem/<int:vid>/<token>/concluir", methods=["POST"])
+def motorista_concluir_publico(vid: int, token: str):
+    v = _viagem_por_token(vid, token)
+    if not v:
+        return jsonify({"sucesso": False, "msg": "Link invalido."}), 404
+    if v.status not in ("EmAndamento", "Planejada"):
+        return jsonify({"sucesso": False, "msg": f"Viagem nao pode ser concluida (status {v.status})."}), 400
+    data = request.get_json(silent=True) or {}
+    km_fin = _parse_int(data.get("km_final"))
+    v.km_final = km_fin
+    v.retorno_real = datetime.now()
+    v.status = "Concluida"
+    v.concluido_por = v.motorista_nome or "motorista"
+    _sync_solicitacoes_da_viagem(v, "Concluida")
+
+    if v.km_inicial is not None and v.km_final is not None and v.km_final >= v.km_inicial:
+        v.km_percorrido = float(v.km_final - v.km_inicial)
+    else:
+        pts = ViagemPosicao.query.filter_by(viagem_id=vid).order_by(ViagemPosicao.registrado_em).all()
+        km = 0.0
+        for i in range(1, len(pts)):
+            km += _haversine_km(pts[i - 1].latitude, pts[i - 1].longitude, pts[i].latitude, pts[i].longitude)
+        v.km_percorrido = round(km, 2)
+
+    abs_tot = db.session.query(
+        func.coalesce(func.sum(FrotaAbastecimento.litros), 0),
+        func.coalesce(func.sum(FrotaAbastecimento.valor_total), 0),
+    ).filter(FrotaAbastecimento.viagem_id == vid).first()
+    v.total_litros = float(abs_tot[0] or 0)
+    v.total_gasto = float(abs_tot[1] or 0)
+    if v.saida_real and v.retorno_real:
+        v.tempo_total_min = int((v.retorno_real - v.saida_real).total_seconds() // 60)
+
+    lat = _parse_float(data.get("latitude"))
+    lng = _parse_float(data.get("longitude"))
+    if lat is not None and lng is not None:
+        db.session.add(ViagemPosicao(
+            viagem_id=v.id, latitude=lat, longitude=lng,
+            origem="motorista_app", registrado_em=datetime.now(),
+        ))
+    _log_evento(v.id, "FIM", "Viagem concluida pelo motorista",
+                descricao=f"KM final: {v.km_final or '—'} · percorrido: {v.km_percorrido or 0:.1f} km",
+                latitude=lat, longitude=lng, km=v.km_final, severidade="success")
+    db.session.commit()
+    return jsonify({"sucesso": True, "status": v.status})
 
 
 @motorista_bp.route("/motorista/viagem/<int:vid>/<token>/status", methods=["GET"])
