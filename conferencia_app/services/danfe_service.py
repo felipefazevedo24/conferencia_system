@@ -33,6 +33,7 @@ try:
     from brazilfiscalreport.danfe.config import FontSize as _FiscalFontSize
     from brazilfiscalreport.danfe.config import FontType as _FiscalFontType
     from brazilfiscalreport.danfe.config import FooterStamp as _FiscalFooterStamp
+    from brazilfiscalreport.danfe.config import Margins as _FiscalMargins
 except Exception:  # pragma: no cover - optional dependency
     _FiscalDanfe = None
     _FiscalDanfeConfig = None
@@ -40,6 +41,7 @@ except Exception:  # pragma: no cover - optional dependency
     _FiscalFontSize = None
     _FiscalFontType = None
     _FiscalFooterStamp = None
+    _FiscalMargins = None
 
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
@@ -1299,13 +1301,15 @@ def gerar_danfe(xml_bytes: bytes,
                 logo=logo_file,
                 invoice_display=_FiscalInvoiceDisplay.FULL_DETAILS,
                 font_type=_FiscalFontType.TIMES,
-                font_size=_FiscalFontSize.BIG,
-                footer_stamp=_FiscalFooterStamp(text=footer_text, height=6),
+                font_size=_FiscalFontSize.SMALL,
+                margins=(_FiscalMargins(top=5, right=5, bottom=8, left=5) if _FiscalMargins is not None else None),
+                footer_stamp=_FiscalFooterStamp(text=footer_text, height=4),
             ) if logo_file else _FiscalDanfeConfig(
                 invoice_display=_FiscalInvoiceDisplay.FULL_DETAILS,
                 font_type=_FiscalFontType.TIMES,
-                font_size=_FiscalFontSize.BIG,
-                footer_stamp=_FiscalFooterStamp(text=footer_text, height=6),
+                font_size=_FiscalFontSize.SMALL,
+                margins=(_FiscalMargins(top=5, right=5, bottom=8, left=5) if _FiscalMargins is not None else None),
+                footer_stamp=_FiscalFooterStamp(text=footer_text, height=4),
             )
             pdf_data = _FiscalDanfe(xml_for_engine, cfg).output()
             if pdf_data:
