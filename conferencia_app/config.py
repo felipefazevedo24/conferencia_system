@@ -136,7 +136,7 @@ class Config:
     EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "")
     # Caminho para o logotipo da empresa (relativo a /static/ ou URL completa).
     # Exemplo: "img/logo.png"  ou  "https://example.com/logo.png"
-    EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "")
+    EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "https://columbiamachine.com/wp-content/uploads/2018/12/colmac_logo-blue-1.png")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
