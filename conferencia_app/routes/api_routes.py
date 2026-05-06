@@ -118,6 +118,7 @@ from ..schemas.api_schemas import (
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
+from ..services.danfe_service import gerar_danfe, parse_nfe_xml
 from ..services.consyste_service import listar_nfes_consyste_por_caixa
 from ..services.expedicao_service import (
     list_conferencia_reports,
@@ -1731,6 +1732,56 @@ def consyste_download():
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@api_bp.route("/api/consyste/emissao/solicitar", methods=["POST"])
+
+@api_bp.route("/api/nfe/<chave>/danfe", methods=["GET"])
+@login_required
+def gerar_danfe_nfe(chave):
+    """Gera DANFE em PDF a partir do XML da NF-e buscado na Consyste."""
+    chave_limpa = re.sub(r"\D", "", str(chave or ""))
+    if len(chave_limpa) != 44:
+        return jsonify({"error": "Chave de acesso inválida (deve ter 44 dígitos)."}), 400
+
+    try:
+        ok, status_code, xml_bytes = download_documento_consyste(
+            modelo="nfe",
+            formato="xml",
+            chave=chave_limpa,
+            timeout=30,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Erro ao buscar XML na Consyste: {exc}"}), 502
+
+    if not ok or not xml_bytes:
+        return jsonify({"error": f"XML não encontrado na Consyste (HTTP {status_code})."}), 404
+
+    try:
+        logo_path = os.path.join(current_app.root_path, "..", "static", "columbia_logo.png")
+        logo_path = os.path.normpath(logo_path)
+        logo_url  = current_app.config.get("EMPRESA_LOGO_URL", "")
+        pdf_bytes = gerar_danfe(xml_bytes, logo_path=logo_path, logo_url=logo_url)
+    except Exception as exc:
+        current_app.logger.exception("Erro ao gerar DANFE: %s", exc)
+        return jsonify({"error": f"Erro ao gerar DANFE: {exc}"}), 500
+
+    nf_num = ""
+    try:
+        d = parse_nfe_xml(xml_bytes)
+        nf_num = str(d.get("nNF") or "").strip()
+    except Exception:
+        pass
+
+    filename = f"DANFE_{chave_limpa[:6]}_{nf_num}.pdf" if nf_num else f"DANFE_{chave_limpa[:10]}.pdf"
+    return current_app.response_class(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+        },
+    )
 
 
 @api_bp.route("/api/consyste/emissao/solicitar", methods=["POST"])
