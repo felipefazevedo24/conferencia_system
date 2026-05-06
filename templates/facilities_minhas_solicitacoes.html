@@ -7,8 +7,15 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh;padding:20px;color:#1e293b}
-    .shell{max-width:960px;margin:0 auto}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;min-height:100vh;color:#1e293b}
+    .fac-layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+    .sidebar{background:#0f172a;color:#e2e8f0;padding:20px 14px;position:sticky;top:0;height:100vh}
+    .brand{font-size:15px;font-weight:800;letter-spacing:.3px;padding:8px 10px;margin-bottom:16px}
+    .nav-link{display:flex;align-items:center;gap:10px;color:#cbd5e1;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:6px}
+    .nav-link:hover{background:#1e293b;color:#fff}
+    .nav-link.active{background:#1d4ed8;color:#fff}
+    .main{padding:20px}
+    .shell{max-width:980px}
     .hero{background:linear-gradient(135deg,#0284c7,#0ea5e9);border-radius:20px;padding:24px 28px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(2,132,199,.25)}
     .hero i{font-size:32px;opacity:.9}
     .hero h1{font-size:22px;font-weight:800;margin-bottom:4px}
@@ -56,10 +63,20 @@
     .toast.show{transform:translateX(0);opacity:1}
     .toast.ok{border-left-color:#22c55e}
     .toast.err{border-left-color:#ef4444}
+    @media(max-width:980px){.fac-layout{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.main{padding:14px}}
     @media(max-width:600px){.hero{flex-direction:column;text-align:center}.card{flex-direction:column}}
   </style>
 </head>
 <body>
+<div class="fac-layout">
+  <aside class="sidebar">
+    <div class="brand"><i class="fas fa-building"></i> Facilities</div>
+    <a class="nav-link" href="/facilities/solicitar-epi"><i class="fas fa-hard-hat"></i> Solicitar EPI</a>
+    <a class="nav-link active" href="/facilities/minhas-solicitacoes"><i class="fas fa-clipboard-list"></i> Minhas solicitações</a>
+    <a class="nav-link" href="/facilities/cronograma-limpeza"><i class="fas fa-broom"></i> Cronograma</a>
+    <a class="nav-link" href="/"><i class="fas fa-arrow-left"></i> Menu principal</a>
+  </aside>
+  <main class="main">
 <div class="shell">
   <div class="hero">
     <i class="fas fa-clipboard-list"></i>
@@ -92,6 +109,8 @@
   </div>
 
   <div class="card-list" id="lista"></div>
+</div>
+  </main>
 </div>
 <div class="toast-wrap" id="toastWrap"></div>
 

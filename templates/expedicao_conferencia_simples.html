@@ -380,7 +380,24 @@ const btnSalvar = document.getElementById("btn-salvar-conferencia");
 const toastEl = document.getElementById("expedicao-toast");
 const isAdmin = {{ "true" if is_admin else "false" }};
 let toastTimer = null;
-let fotosSelecionadas = [];
+
+// Fotos rascunho: [{rascunho_id, url, nome}] — persistidas no sessionStorage
+const SESSION_FOTOS_KEY = "exp_fotos_rascunho";
+let fotosRascunho = [];
+
+function salvarFotosSession() {
+    try { sessionStorage.setItem(SESSION_FOTOS_KEY, JSON.stringify(fotosRascunho)); } catch(e) {}
+}
+function restaurarFotosSession() {
+    try {
+        const raw = sessionStorage.getItem(SESSION_FOTOS_KEY);
+        if (raw) { fotosRascunho = JSON.parse(raw) || []; }
+    } catch(e) { fotosRascunho = []; }
+}
+function limparFotosSession() {
+    try { sessionStorage.removeItem(SESSION_FOTOS_KEY); } catch(e) {}
+    fotosRascunho = [];
+}
 
 function showToast(message, type = "success") {
     toastEl.textContent = message;
@@ -425,18 +442,70 @@ function resetNfState() {
 }
 
 function syncFotoFeedback() {
-    if (!fotosSelecionadas.length) {
+    if (!fotosRascunho.length) {
         fotosFeedback.textContent = "Nenhuma foto selecionada ainda.";
         return;
     }
-    fotosFeedback.textContent = `${fotosSelecionadas.length} foto(s) pronta(s) para upload.`;
+    fotosFeedback.textContent = `${fotosRascunho.length} foto(s) salva(s) no servidor.`;
 }
 
-function addFotos(files) {
-    const novasFotos = Array.from(files || []);
-    if (!novasFotos.length) return;
-    fotosSelecionadas = fotosSelecionadas.concat(novasFotos);
+function updateFotoPreview() {
+    fotosPreview.innerHTML = "";
+    syncFotoFeedback();
+    fotosRascunho.forEach((foto, idx) => {
+        const card = document.createElement("div");
+        card.className = "exp-preview-card";
+        card.style.position = "relative";
+        card.innerHTML = `<img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span>` +
+            `<button type="button" title="Remover foto" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;" data-remover-idx="${idx}">×</button>`;
+        fotosPreview.appendChild(card);
+    });
+}
+
+fotosPreview.addEventListener("click", e => {
+    const btn = e.target.closest("[data-remover-idx]");
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.removerIdx, 10);
+    fotosRascunho.splice(idx, 1);
+    salvarFotosSession();
     updateFotoPreview();
+});
+
+async function uploadFotoRascunho(file) {
+    const fd = new FormData();
+    fd.append("foto", file);
+    const resp = await fetch("/api/expedicao/conferencia-simples/foto-rascunho", { method: "POST", body: fd });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || "Falha ao enviar foto.");
+    }
+    return await resp.json(); // {rascunho_id, url}
+}
+
+async function addFotos(files) {
+    const lista = Array.from(files || []);
+    if (!lista.length) return;
+
+    fotosFeedback.textContent = `Enviando ${lista.length} foto(s)...`;
+    btnSalvar.disabled = true;
+
+    let erros = 0;
+    for (const file of lista) {
+        try {
+            const resultado = await uploadFotoRascunho(file);
+            fotosRascunho.push({ rascunho_id: resultado.rascunho_id, url: resultado.url, nome: file.name });
+            salvarFotosSession();
+            updateFotoPreview();
+        } catch (e) {
+            erros++;
+            showToast(`Erro ao enviar ${file.name}: ${e.message}`, "error");
+        }
+    }
+    if (erros === 0 && lista.length > 0) {
+        showToast(`${lista.length} foto(s) salva(s) com sucesso.`);
+    }
+    btnSalvar.disabled = false;
+    syncFotoFeedback();
 }
 
 async function consultarNf() {
@@ -479,16 +548,17 @@ async function consultarNf() {
 
 function updateFotoPreview() {
     fotosPreview.innerHTML = "";
-    if (!fotosSelecionadas.length) {
+    if (!fotosRascunho.length) {
         syncFotoFeedback();
         return;
     }
     syncFotoFeedback();
-    fotosSelecionadas.forEach(file => {
-        const url = URL.createObjectURL(file);
+    fotosRascunho.forEach((foto, idx) => {
         const card = document.createElement("div");
         card.className = "exp-preview-card";
-        card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
+        card.style.position = "relative";
+        card.innerHTML = `<img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span>` +
+            `<button type="button" title="Remover" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;" data-remover-idx="${idx}">×</button>`;
         fotosPreview.appendChild(card);
     });
 }
@@ -631,7 +701,7 @@ async function excluirConferencia(id, orcamento) {
 
 form.addEventListener("submit", async event => {
     event.preventDefault();
-    if (!fotosSelecionadas.length) {
+    if (!fotosRascunho.length) {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
     }
@@ -639,7 +709,7 @@ form.addEventListener("submit", async event => {
     btnSalvar.textContent = "Salvando...";
     try {
         const formData = new FormData(form);
-        fotosSelecionadas.forEach(file => formData.append("fotos", file));
+        fotosRascunho.forEach(f => formData.append("fotos_rascunho", f.rascunho_id));
         const response = await fetch("/api/expedicao/conferencia-simples", { method: "POST", body: formData });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Não foi possível salvar a conferência.");
@@ -648,9 +718,8 @@ form.addEventListener("submit", async event => {
         tipoReferenciaSelect.value = "Orcamento";
         toggleTipoReferencia();
         resetNfState();
-        fotosSelecionadas = [];
-        fotosPreview.innerHTML = "";
-        syncFotoFeedback();
+        limparFotosSession();
+        updateFotoPreview();
         loadHistorico();
     } catch (error) {
         showToast(error.message, "error");
@@ -662,11 +731,10 @@ form.addEventListener("submit", async event => {
 
 document.getElementById("btn-limpar-form").addEventListener("click", () => {
     resetNfState();
-    fotosSelecionadas = [];
+    limparFotosSession();
     fotosCameraInput.value = "";
     fotosGaleriaInput.value = "";
-    fotosPreview.innerHTML = "";
-    syncFotoFeedback();
+    updateFotoPreview();
 });
 btnConsultarNf.addEventListener("click", consultarNf);
 nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
@@ -1044,7 +1112,7 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
     historicoLista.prepend(wrapper);
 
     // Wire up the completar form
-    let complFotos = [];
+    let complFotos = []; // [{rascunho_id, url, nome}]
     const complForm = document.getElementById("completar-form");
     const complCamera = document.getElementById("compl-fotos-camera");
     const complGaleria = document.getElementById("compl-fotos-galeria");
@@ -1053,20 +1121,51 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
 
     function updateComplPreview() {
         complPreview.innerHTML = "";
-        complFeedback.textContent = complFotos.length ? `${complFotos.length} foto(s) pronta(s).` : "Nenhuma foto selecionada.";
-        complFotos.forEach(file => {
-            const url = URL.createObjectURL(file);
+        complFeedback.textContent = complFotos.length ? `${complFotos.length} foto(s) salva(s) no servidor.` : "Nenhuma foto selecionada.";
+        complFotos.forEach((foto, idx) => {
             const card = document.createElement("div");
             card.className = "exp-preview-card";
-            card.innerHTML = `<img src="${url}" alt="${file.name}"><span>${file.name}</span>`;
+            card.style.position = "relative";
+            card.innerHTML = `<img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span>` +
+                `<button type="button" title="Remover" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;" data-compl-remover="${idx}">×</button>`;
             complPreview.appendChild(card);
         });
     }
 
+    complPreview.addEventListener("click", e => {
+        const btn = e.target.closest("[data-compl-remover]");
+        if (!btn) return;
+        complFotos.splice(parseInt(btn.dataset.complRemover, 10), 1);
+        updateComplPreview();
+    });
+
+    async function uploadComplFoto(file) {
+        const fd = new FormData();
+        fd.append("foto", file);
+        const resp = await fetch("/api/expedicao/conferencia-simples/foto-rascunho", { method: "POST", body: fd });
+        if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || "Falha."); }
+        return await resp.json();
+    }
+
+    async function addComplFotos(files) {
+        const lista = Array.from(files || []);
+        if (!lista.length) return;
+        complFeedback.textContent = `Enviando ${lista.length} foto(s)...`;
+        for (const file of lista) {
+            try {
+                const r = await uploadComplFoto(file);
+                complFotos.push({ rascunho_id: r.rascunho_id, url: r.url, nome: file.name });
+                updateComplPreview();
+            } catch (e) {
+                showToast(`Erro ao enviar ${file.name}: ${e.message}`, "error");
+            }
+        }
+    }
+
     document.getElementById("compl-btn-camera").addEventListener("click", () => complCamera.click());
     document.getElementById("compl-btn-galeria").addEventListener("click", () => complGaleria.click());
-    complCamera.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
-    complGaleria.addEventListener("change", e => { complFotos = complFotos.concat(Array.from(e.target.files)); updateComplPreview(); e.target.value = ""; });
+    complCamera.addEventListener("change", e => { addComplFotos(e.target.files); e.target.value = ""; });
+    complGaleria.addEventListener("change", e => { addComplFotos(e.target.files); e.target.value = ""; });
     document.getElementById("compl-cancelar").addEventListener("click", () => { document.getElementById("completar-overlay")?.remove(); });
 
     const btnConsultarCompl = document.getElementById("compl-btn-consultar-nf");
@@ -1105,12 +1204,12 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
         btn.disabled = true; btn.textContent = "Salvando...";
         try {
             const fd = new FormData(complForm);
-            complFotos.forEach(f => fd.append("fotos", f));
-            if (isEditing || wasExp) { fd.append("manter_pendente", "1"); }
+            complFotos.forEach(f => fd.append("fotos_rascunho", f.rascunho_id));
+            if (wasExp) { fd.append("manter_pendente", "1"); }
             const resp = await fetch(`/api/expedicao/conferencia-simples/${completarConferenciaId}/completar`, { method: "POST", body: fd });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || "Erro ao completar.");
-            showToast(isEditing || wasExp ? "Edição salva. Registro permanece pendente de expedição." : "Conferência salva como pendente de expedição.");
+            showToast(wasExp ? "Edição salva. Registro permanece pendente de expedição." : "Conferência completada com sucesso.");
             document.getElementById("completar-overlay")?.remove();
             loadHistorico();
         } catch (err) {
@@ -1124,7 +1223,11 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
     document.getElementById("completar-form-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-document.addEventListener("DOMContentLoaded", () => { loadHistorico(); });
+document.addEventListener("DOMContentLoaded", () => {
+    restaurarFotosSession();
+    updateFotoPreview();
+    loadHistorico();
+});
 
 // Listener para upload de canhoto
 historicoLista.addEventListener("change", async event => {

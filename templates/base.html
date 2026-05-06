@@ -176,17 +176,20 @@
                 </div>
                 {% endif %}
 
+                {% if can_access('PAGE_FACILITIES_GESTOR') or can_access('PAGE_FACILITIES_ADMIN') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-facilities" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-building"></i><span>Facilities</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-facilities">
-                        <a href="/facilities/solicitar-epi" class="list-group-item list-group-item-action"><i class="fas fa-hard-hat"></i> Solicitar EPI</a>
+                        {% if can_access('PAGE_FACILITIES_GESTOR') %}<a href="/facilities/solicitar-epi" class="list-group-item list-group-item-action"><i class="fas fa-hard-hat"></i> Solicitar EPI</a>{% endif %}
+                        {% if can_access('PAGE_FACILITIES_GESTOR') %}<a href="/facilities/minhas-solicitacoes" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Minhas solicitações</a>{% endif %}
                         <a href="/facilities/cronograma-limpeza" class="list-group-item list-group-item-action"><i class="fas fa-broom"></i> Cronograma Limpeza</a>
                         {% if can_access('PAGE_FACILITIES_ADMIN') %}<a href="/facilities/admin" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Painel Admin</a>{% endif %}
                     </div>
                 </div>
+                {% endif %}
 
                 {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
                 <div class="menu-item">

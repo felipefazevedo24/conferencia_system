@@ -195,6 +195,7 @@ def page_solicitar_epi():
 
 @facilities_bp.route("/facilities/minhas-solicitacoes")
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def page_minhas_solicitacoes():
     """Tela do gestor de setor: acompanha o status das solicitacoes que ele abriu."""
     return render_template("facilities_minhas_solicitacoes.html")
@@ -270,6 +271,7 @@ def api_me():
 
 @facilities_bp.route("/api/facilities/colaboradores")
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def api_listar_colaboradores():
     """Lista colaboradores ativos para seleção em formulários"""
     rows = FacilitiesColaborador.query.filter_by(ativo=True).order_by(FacilitiesColaborador.nome).all()
@@ -432,6 +434,7 @@ def api_atualizar_epi_material(id):
 
 @facilities_bp.route("/api/facilities/epi-solicitacoes")
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def api_listar_epi_solicitacoes():
     """Lista solicitações de EPI (filtros: status, colaborador_id, solicitante_id, mine, busca, data_ini/fim, setor, tipo)"""
     status = request.args.get("status", "").lower()
@@ -603,8 +606,30 @@ def api_criar_epi_solicitacao():
     if erro:
         return jsonify({"error": erro}), 400
 
+    from ..auth import has_permission
+
     # Solicitante = colaborador do usuario logado (gestor)
     logado = _colaborador_do_usuario_logado()
+    eh_admin_facilities = bool(has_permission("PAGE_FACILITIES_ADMIN"))
+
+    if not eh_admin_facilities and not logado:
+        return jsonify({"error": "Seu usuário não está vinculado a um líder de departamento no Facilities."}), 403
+
+    # Regra de negócio: líder solicita apenas para subordinados do mesmo setor.
+    if not eh_admin_facilities and logado:
+        setor_lider = _normalizar_nome(logado.setor or "")
+        setor_beneficiario = _normalizar_nome(beneficiario.setor or "")
+        if not setor_lider:
+            return jsonify({"error": "Líder sem setor definido. Atualize seu cadastro antes de solicitar EPI."}), 400
+        if not setor_beneficiario:
+            return jsonify({"error": "O colaborador beneficiário não possui setor cadastrado."}), 400
+        if setor_lider != setor_beneficiario:
+            return jsonify({
+                "error": "Você só pode solicitar EPI para colaboradores do seu próprio setor.",
+                "setor_lider": logado.setor or "",
+                "setor_beneficiario": beneficiario.setor or "",
+            }), 403
+
     solicitante_id = logado.id if logado else None
     # solicitante_nome: garante que o nome sempre fica registrado mesmo sem FacilitiesColaborador
     solicitante_nome = (logado.nome if logado else None) or (session.get("username") or "")[:120]
@@ -641,6 +666,7 @@ def api_criar_epi_solicitacao():
 
 @facilities_bp.route("/api/facilities/epi-solicitacoes/<int:id>/cancelar", methods=["POST"])
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def api_cancelar_epi_solicitacao(id):
     """Cancela uma solicitacao em status 'solicitado'.
     Somente o solicitante (gestor que abriu) ou admin podem cancelar."""
@@ -674,6 +700,7 @@ def api_cancelar_epi_solicitacao(id):
 
 @facilities_bp.route("/api/facilities/colaboradores/<int:id>/historico-epi")
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def api_historico_epi_colaborador(id):
     """Retorna ultimas solicitacoes/retiradas do colaborador + alertas de vencimento."""
     colab = FacilitiesColaborador.query.get_or_404(id)

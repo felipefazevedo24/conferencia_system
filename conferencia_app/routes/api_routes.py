@@ -51,6 +51,7 @@ import re
 import os
 import shutil
 import tempfile
+import uuid
 from datetime import timedelta
 
 import requests
@@ -6646,6 +6647,49 @@ def consultar_nf_conferencia_simples():
         })
 
 
+@api_bp.route("/api/expedicao/conferencia-simples/foto-rascunho", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def upload_foto_rascunho_expedicao():
+    """Recebe UMA foto e salva como rascunho temporário no disco.
+    Retorna {rascunho_id, url} para o frontend manter a referência.
+    O rascunho é usado na hora de criar ou completar a conferência.
+    """
+    foto = request.files.get("foto")
+    if not foto or not foto.filename:
+        return jsonify({"error": "Arquivo não enviado."}), 400
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    rascunho_dir = os.path.join(fotos_dir, "rascunhos")
+    os.makedirs(rascunho_dir, exist_ok=True)
+
+    ext = os.path.splitext(secure_filename(foto.filename))[1].lower() or ".jpg"
+    rascunho_id = f"{uuid.uuid4().hex}{ext}"
+    caminho = os.path.join(rascunho_dir, rascunho_id)
+    foto.save(caminho)
+    return jsonify({
+        "rascunho_id": rascunho_id,
+        "url": f"/api/expedicao/conferencia-simples/foto-rascunho/{rascunho_id}",
+    })
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/foto-rascunho/<path:rascunho_id>", methods=["GET"])
+@login_required
+def servir_foto_rascunho_expedicao(rascunho_id):
+    """Serve o arquivo de rascunho para preview no frontend."""
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    rascunho_dir = os.path.join(fotos_dir, "rascunhos")
+    # Proteção contra path traversal
+    safe_id = os.path.basename(rascunho_id)
+    caminho = os.path.join(rascunho_dir, safe_id)
+    if not os.path.isfile(caminho):
+        return jsonify({"error": "Arquivo não encontrado."}), 404
+    return send_file(caminho)
+
+
 @api_bp.route("/api/expedicao/conferencia-simples/buscar-nf", methods=["POST"])
 @roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def buscar_nf_conferencia_simples():
@@ -6796,7 +6840,9 @@ def criar_registro_conferencia_simples():
     if not fotos_dir:
         fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
     os.makedirs(fotos_dir, exist_ok=True)
+    rascunho_dir = os.path.join(fotos_dir, "rascunhos")
 
+    # Fotos enviadas como arquivos (fluxo legado)
     fotos_salvas = []
     for foto in fotos_files:
         if foto and foto.filename:
@@ -6811,6 +6857,25 @@ def criar_registro_conferencia_simples():
             )
             db.session.add(foto_db)
             fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
+
+    # Fotos pré-carregadas via rascunho (upload imediato)
+    fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
+    for rascunho_id in fotos_rascunho_ids:
+        safe_id = os.path.basename(rascunho_id)
+        origem = os.path.join(rascunho_dir, safe_id)
+        if not os.path.isfile(origem):
+            continue  # Rascunho não encontrado, ignora silenciosamente
+        ext = os.path.splitext(safe_id)[1] or ".jpg"
+        nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+        destino = os.path.join(fotos_dir, nome_arquivo)
+        shutil.move(origem, destino)
+        foto_db = ExpedicaoConferenciaSimplesFoto(
+            conferencia_id=registro.id,
+            file_name=nome_arquivo,
+            file_path=destino,
+        )
+        db.session.add(foto_db)
+        fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
 
     db.session.commit()
 
@@ -7026,7 +7091,9 @@ def completar_registro_conferencia_simples(registro_id):
     if not fotos_dir:
         fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
     os.makedirs(fotos_dir, exist_ok=True)
+    rascunho_dir = os.path.join(fotos_dir, "rascunhos")
 
+    # Fotos enviadas como arquivos (fluxo legado)
     for foto in fotos_files:
         if foto and foto.filename:
             ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
@@ -7039,6 +7106,24 @@ def completar_registro_conferencia_simples(registro_id):
                 file_path=caminho,
             )
             db.session.add(foto_db)
+
+    # Fotos pré-carregadas via rascunho (upload imediato)
+    fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
+    for rascunho_id in fotos_rascunho_ids:
+        safe_id = os.path.basename(rascunho_id)
+        origem = os.path.join(rascunho_dir, safe_id)
+        if not os.path.isfile(origem):
+            continue
+        ext = os.path.splitext(safe_id)[1] or ".jpg"
+        nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+        destino = os.path.join(fotos_dir, nome_arquivo)
+        shutil.move(origem, destino)
+        foto_db = ExpedicaoConferenciaSimplesFoto(
+            conferencia_id=registro.id,
+            file_name=nome_arquivo,
+            file_path=destino,
+        )
+        db.session.add(foto_db)
 
     db.session.commit()
 
