@@ -173,8 +173,9 @@ def _add_months(d: date, months: int) -> date:
 
 @facilities_bp.route("/facilities/solicitar-epi")
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def page_solicitar_epi():
-    """Página para solicitar EPI/Uniforme (colaborador logado)."""
+    """Página para solicitar EPI/Uniforme — exclusivo para gestores e admins."""
     return render_template("facilities_solicitar_epi.html")
 
 
@@ -456,7 +457,7 @@ def api_listar_epi_solicitacoes():
                 "colaborador_nome": s.colaborador.nome if s.colaborador else "",
                 "colaborador_setor": (s.colaborador.setor if s.colaborador else "") or "",
                 "solicitante_id": s.solicitante_id,
-                "solicitante_nome": s.solicitante.nome if s.solicitante else "",
+                "solicitante_nome": s.solicitante_nome or (s.solicitante.nome if s.solicitante else "") or "",
                 "tipo": s.tipo,
                 "codigo_item": s.codigo_item,
                 "nome_item": s.nome_item,
@@ -520,9 +521,10 @@ def _resolver_beneficiario(data: dict):
 
 @facilities_bp.route("/api/facilities/epi-solicitacoes", methods=["POST"])
 @login_required
+@permission_required("PAGE_FACILITIES_GESTOR")
 def api_criar_epi_solicitacao():
     """Cria nova solicitacao de EPI/Uniforme.
-    Gestor logado solicita para um funcionario (beneficiario_nome ou colaborador_id).
+    Apenas gestores (PAGE_FACILITIES_GESTOR) e admins podem solicitar.
     """
     data = request.get_json() or {}
     codigo_item = (data.get("codigo_item") or "").strip()
@@ -550,10 +552,13 @@ def api_criar_epi_solicitacao():
     # Solicitante = colaborador do usuario logado (gestor)
     logado = _colaborador_do_usuario_logado()
     solicitante_id = logado.id if logado else None
+    # solicitante_nome: garante que o nome sempre fica registrado mesmo sem FacilitiesColaborador
+    solicitante_nome = (logado.nome if logado else None) or (session.get("username") or "")[:120]
 
     solicitacao = FacilitiesEpiSolicitacao(
         colaborador_id=beneficiario.id,
         solicitante_id=solicitante_id,
+        solicitante_nome=solicitante_nome,
         tipo=data.get("tipo", "epi"),
         codigo_item=codigo_item,
         nome_item=nome_item,
@@ -2006,4 +2011,26 @@ def pagina_retirar_epi(id):
     """Pagina dedicada para retirada com assinatura (signature_pad)."""
     s = FacilitiesEpiSolicitacao.query.get_or_404(id)
     return render_template("facilities_retirar_epi.html", solicitacao=s)
+
+
+# ============================================================================
+# FICHA IMPRIMÍVEL (HTML — abre nova aba, Ctrl+P para imprimir)
+# ============================================================================
+
+@facilities_bp.route("/facilities/ficha-epi/<int:id>")
+@login_required
+def pagina_ficha_epi(id):
+    """Ficha NR-6 imprimível em HTML. Disponível para qualquer status."""
+    from datetime import datetime as _dt
+    s = FacilitiesEpiSolicitacao.query.get_or_404(id)
+    assinatura_url = None
+    if s.assinatura_path:
+        assinatura_url = f"/api/facilities/epi-solicitacoes/{s.id}/assinatura"
+    agora = _dt.now().strftime("%d/%m/%Y %H:%M")
+    return render_template(
+        "facilities_ficha_epi.html",
+        sol=s,
+        assinatura_url=assinatura_url,
+        agora=agora,
+    )
 

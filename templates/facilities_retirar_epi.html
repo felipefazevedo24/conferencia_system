@@ -80,9 +80,12 @@
       });
       const j = await r.json();
       if (!r.ok) { msg.style.color='#b00'; msg.textContent = j.error || 'Erro ao retirar.'; return; }
-      msg.style.color='#0a7'; msg.textContent = 'Retirada confirmada! Próxima troca: ' + (j.proxima_troca_em || '-');
+      msg.style.color='#0a7';
+      msg.innerHTML = `Retirada confirmada! Próxima troca: ${j.proxima_troca_em || '-'} &nbsp;`
+        + `<a href="/facilities/ficha-epi/{{ solicitacao.id }}" target="_blank" `
+        + `style="display:inline-block;margin-top:8px;padding:8px 16px;background:#1e293b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none">`
+        + `🖨️ Abrir Ficha para Imprimir</a>`;
       document.getElementById('btn-confirmar').disabled = true;
-      setTimeout(()=>{ window.location.href='/api/facilities/epi-solicitacoes/{{ solicitacao.id }}/ficha-pdf'; }, 1200);
     } catch(e){ msg.style.color='#b00'; msg.textContent = 'Falha de rede.'; }
   };
 })();

@@ -1083,6 +1083,7 @@ class FacilitiesEpiSolicitacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     colaborador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), nullable=False, index=True)
     solicitante_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)  # quem abriu a solicitação
+    solicitante_nome = db.Column(db.String(120))  # sempre preenchido (fallback ao username quando sem FacilitiesColaborador)
     liberador_id = db.Column(db.Integer, db.ForeignKey("facilities_colaborador.id"), index=True)  # gestor que aprovou/negou
     tipo = db.Column(db.String(20), nullable=False, default="epi", index=True)  # epi|uniforme
     codigo_item = db.Column(db.String(30), nullable=False, index=True)

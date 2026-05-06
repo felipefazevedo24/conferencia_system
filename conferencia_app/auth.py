@@ -47,6 +47,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_FROTA": "Logistica > Gestao de Frota",
     "PAGE_LOGISTICA_VIAGEM": "Logistica > Gestao de Viagens",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestao (Admin)",
+    "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
 }
 
 

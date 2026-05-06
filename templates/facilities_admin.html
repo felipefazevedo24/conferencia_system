@@ -512,8 +512,8 @@ async function loadEpi() {
                     <button class="fac-btn fac-btn-sm fac-btn-green" title="Liberar" onclick="aprovarEpi(${s.id}, 'liberar')"><i class="fas fa-check"></i></button>
                     <button class="fac-btn fac-btn-sm fac-btn-red" title="Negar" onclick="aprovarEpi(${s.id}, 'negar')"><i class="fas fa-times"></i></button>
                 ` : ''}
-                ${s.status === 'liberado' ? `<a class="fac-btn fac-btn-sm fac-btn-blue" title="Retirar" href="/facilities/retirar/${s.id}"><i class="fas fa-hand-paper"></i></a>` : ''}
-                ${s.status === 'retirado' ? `<a class="fac-btn fac-btn-sm" title="Ficha PDF" href="/api/facilities/epi-solicitacoes/${s.id}/ficha-pdf" target="_blank"><i class="fas fa-file-pdf"></i></a>` : ''}
+                ${s.status === 'liberado' ? `<a class="fac-btn fac-btn-sm fac-btn-blue" title="Registrar Retirada" href="/facilities/retirar/${s.id}"><i class="fas fa-hand-paper"></i> Retirar</a>` : ''}
+                <a class="fac-btn fac-btn-sm" title="Ficha Imprimível" href="/facilities/ficha-epi/${s.id}" target="_blank" style="background:#f0fdf4;color:#059669"><i class="fas fa-print"></i></a>
             </td>
         </tr>
     `).join('');
