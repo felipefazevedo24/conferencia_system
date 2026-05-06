@@ -30,10 +30,16 @@ try:
     from brazilfiscalreport.danfe import Danfe as _FiscalDanfe
     from brazilfiscalreport.danfe import DanfeConfig as _FiscalDanfeConfig
     from brazilfiscalreport.danfe.config import InvoiceDisplay as _FiscalInvoiceDisplay
+    from brazilfiscalreport.danfe.config import FontSize as _FiscalFontSize
+    from brazilfiscalreport.danfe.config import FontType as _FiscalFontType
+    from brazilfiscalreport.danfe.config import FooterStamp as _FiscalFooterStamp
 except Exception:  # pragma: no cover - optional dependency
     _FiscalDanfe = None
     _FiscalDanfeConfig = None
     _FiscalInvoiceDisplay = None
+    _FiscalFontSize = None
+    _FiscalFontType = None
+    _FiscalFooterStamp = None
 
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
@@ -1181,6 +1187,9 @@ def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None, logo_url: O
     """Return a local image path optimized for FPDF image rendering."""
     logo_bytes = None
 
+    if not logo_url:
+        logo_url = "https://www.columbiamachine.com.br/img/columbia_logo.png"
+
     # Prioritize explicit URL informed by user.
     if logo_url:
         try:
@@ -1221,6 +1230,13 @@ def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None, logo_url: O
             bbox = alpha.getbbox()
             if bbox:
                 img = img.crop(bbox)
+
+            # Requested by user: use alpha mask and paint logo in Columbia blue.
+            columbia_blue = (30, 58, 95)
+            solid = _PILImage.new("RGBA", img.size, (*columbia_blue, 255))
+            solid.putalpha(img.getchannel("A"))
+            img = solid
+
             img.save(out_path, format="PNG")
             return out_path
         except Exception:
@@ -1275,19 +1291,21 @@ def gerar_danfe(xml_bytes: bytes,
         try:
             xml_for_engine = _ensure_cobr_block(xml_bytes)
             logo_file = _resolve_logo_for_fiscal_engine(logo_path=logo_path, logo_url=logo_url)
+
+            printed_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+            footer_text = f"Impresso em {printed_at} | Powered by Columbia Sync"
+
             cfg = _FiscalDanfeConfig(
                 logo=logo_file,
-                invoice_display=(
-                    _FiscalInvoiceDisplay.FULL_DETAILS
-                    if _FiscalInvoiceDisplay is not None
-                    else None
-                ),
+                invoice_display=_FiscalInvoiceDisplay.FULL_DETAILS,
+                font_type=_FiscalFontType.TIMES,
+                font_size=_FiscalFontSize.BIG,
+                footer_stamp=_FiscalFooterStamp(text=footer_text, height=6),
             ) if logo_file else _FiscalDanfeConfig(
-                invoice_display=(
-                    _FiscalInvoiceDisplay.FULL_DETAILS
-                    if _FiscalInvoiceDisplay is not None
-                    else None
-                ),
+                invoice_display=_FiscalInvoiceDisplay.FULL_DETAILS,
+                font_type=_FiscalFontType.TIMES,
+                font_size=_FiscalFontSize.BIG,
+                footer_stamp=_FiscalFooterStamp(text=footer_text, height=6),
             )
             pdf_data = _FiscalDanfe(xml_for_engine, cfg).output()
             if pdf_data:
