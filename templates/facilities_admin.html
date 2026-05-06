@@ -1,476 +1,854 @@
-{% extends "base.html" %}
-
-{% block title %}Facilities - Painel Admin | Columbia Sync{% endblock %}
-{% block shell_title %}Facilities - Painel de Gestão{% endblock %}
-{% block shell_subtitle %}Gerencie solicitações de EPI, cronograma de limpeza, projetos e colaboradores.{% endblock %}
-
-{% block extra_head %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Facilities | Columbia Machine</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-.fac-shell{max-width:1400px;margin:0 auto;display:grid;gap:20px;padding:10px}
-.fac-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
-.fac-metric{background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 12px rgba(18,40,58,.04);border-left:4px solid #3b82f6}
-.fac-metric.green{border-left-color:#22c55e}
-.fac-metric.orange{border-left-color:#f59e0b}
-.fac-metric.purple{border-left-color:#8b5cf6}
-.fac-metric h3{font-size:28px;font-weight:800;color:#0f172a;margin:0}
-.fac-metric p{font-size:13px;color:#64748b;margin:4px 0 0}
-.fac-tabs{display:flex;gap:8px;background:#fff;padding:8px;border-radius:14px;box-shadow:0 2px 8px rgba(18,40,58,.04)}
-.fac-tab{padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;color:#64748b;cursor:pointer;transition:all .2s;border:none;background:transparent}
-.fac-tab:hover{background:#f1f5f9;color:#1e293b}
-.fac-tab.active{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}
-.fac-panel{background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 24px rgba(18,40,58,.04);display:none}
-.fac-panel.active{display:block}
-.fac-table{width:100%;border-collapse:separate;border-spacing:0}
-.fac-table th{background:#f8fafc;padding:14px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0}
-.fac-table td{padding:14px 12px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#334155}
-.fac-table tr:hover td{background:#f8fafc}
-.fac-badge{display:inline-flex;padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase}
-.fac-badge.solicitado{background:#fef3c7;color:#b45309}
-.fac-badge.liberado{background:#d1fae5;color:#059669}
-.fac-badge.negado{background:#fee2e2;color:#dc2626}
-.fac-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .2s}
-.fac-btn-sm{padding:6px 12px;font-size:12px}
-.fac-btn-green{background:#d1fae5;color:#059669}.fac-btn-green:hover{background:#bbf7d0}
-.fac-btn-red{background:#fee2e2;color:#dc2626}.fac-btn-red:hover{background:#fecaca}
-.fac-btn-blue{background:#dbeafe;color:#2563eb}.fac-btn-blue:hover{background:#bfdbfe}
-.fac-btn-primary{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}.fac-btn-primary:hover{transform:translateY(-1px)}
-.fac-empty{text-align:center;padding:40px;color:#94a3b8}
-.fac-empty i{font-size:48px;margin-bottom:16px}
-.fac-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
-.fac-modal.show{display:flex}
-.fac-modal-content{background:#fff;border-radius:20px;padding:28px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto}
-.fac-modal h2{font-size:20px;font-weight:700;color:#0f172a;margin:0 0 20px}
-.fac-form-group{margin-bottom:16px}
-.fac-form-group label{display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px}
-.fac-form-group input,.fac-form-group select,.fac-form-group textarea{width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;background:#f8fafc}
-.fac-form-group input:focus,.fac-form-group select:focus,.fac-form-group textarea:focus{outline:none;border-color:#3b82f6;background:#fff}
-.fac-form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.fac-modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
+  /* ─── LAYOUT ─────────────────────────────────── */
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh;overflow-x:hidden}
+  .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{display:none}.sidebar.open{display:flex;position:fixed;inset:0;z-index:200;width:240px}}
+
+  /* ─── SIDEBAR ────────────────────────────────── */
+  .sidebar{background:#0f172a;color:#e2e8f0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .brand{padding:20px 16px 12px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:10px}
+  .brand img{height:28px;filter:brightness(0) invert(1) opacity(.9)}
+  .brand-text{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3}
+  .brand-text small{display:block;color:#64748b;font-size:11px;font-weight:400}
+  .nav-section{padding:8px 10px 2px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-top:8px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:#94a3b8;cursor:pointer;transition:all .15s;margin:2px 8px;border:none;background:transparent;width:calc(100% - 16px);text-align:left;font-size:13px;font-family:inherit;position:relative}
+  .nav-item:hover{background:#1e293b;color:#e2e8f0}
+  .nav-item.active{background:#1d4ed8;color:#fff}
+  .nav-item i{width:18px;text-align:center;font-size:14px;flex-shrink:0}
+  .nav-badge{background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto}
+  .nav-badge.warn{background:#f59e0b}
+  .nav-divider{margin:8px 16px;border-top:1px solid #1e293b}
+  .nav-back{display:flex;align-items:center;gap:8px;padding:10px 12px;color:#64748b;font-size:12px;cursor:pointer;margin:8px 8px 0;border-radius:8px;text-decoration:none;transition:color .15s}
+  .nav-back:hover{color:#94a3b8;background:#1e293b}
+
+  /* ─── MAIN ───────────────────────────────────── */
+  .main{display:flex;flex-direction:column;min-height:100vh;overflow-x:hidden}
+  .topbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(18,40,58,.04)}
+  .topbar-left{display:flex;align-items:center;gap:12px}
+  .topbar-left h1{font-size:17px;font-weight:700;color:#0f172a}
+  .topbar-left .breadcrumb{font-size:12px;color:#94a3b8}
+  .topbar-right{display:flex;align-items:center;gap:8px}
+  .topbar-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;transition:all .15s;font-family:inherit}
+  .topbar-btn-green{background:#d1fae5;color:#059669}.topbar-btn-green:hover{background:#a7f3d0}
+  .topbar-btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}.topbar-btn-ghost:hover{background:#e2e8f0}
+  .hamburger{display:none;background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:8px}
+  @media(max-width:900px){.hamburger{display:block}}
+
+  /* ─── PAGES ──────────────────────────────────── */
+  .page{display:none;padding:20px 24px 32px;animation:fadeIn .2s ease}
+  .page.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  /* ─── KPI CARDS ──────────────────────────────── */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+  .kpi{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(18,40,58,.04);border-left:4px solid #3b82f6;display:flex;flex-direction:column;gap:2px}
+  .kpi.amber{border-left-color:#f59e0b}
+  .kpi.green{border-left-color:#22c55e}
+  .kpi.purple{border-left-color:#8b5cf6}
+  .kpi.red{border-left-color:#ef4444}
+  .kpi.sky{border-left-color:#0ea5e9}
+  .kpi.teal{border-left-color:#14b8a6}
+  .kpi-val{font-size:28px;font-weight:800;color:#0f172a}
+  .kpi-lbl{font-size:12px;color:#64748b;font-weight:600}
+  .kpi-sub{font-size:11px;color:#94a3b8;margin-top:2px}
+
+  /* ─── SECTION HEADER ─────────────────────────── */
+  .sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;flex-wrap:wrap}
+  .sec-title{font-size:17px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px}
+  .sec-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+  /* ─── TABLE ──────────────────────────────────── */
+  .tbl-wrap{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(18,40,58,.04)}
+  .fac-table{width:100%;border-collapse:collapse}
+  .fac-table th{background:#f8fafc;padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+  .fac-table td{padding:13px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155;vertical-align:middle}
+  .fac-table tr:hover td{background:#fafbff}
+  .fac-table tr:last-child td{border-bottom:none}
+
+  /* ─── BADGES ─────────────────────────────────── */
+  .fac-badge{display:inline-flex;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+  .fac-badge.solicitado{background:#fef3c7;color:#b45309}
+  .fac-badge.liberado{background:#d1fae5;color:#059669}
+  .fac-badge.retirado{background:#dcfce7;color:#15803d}
+  .fac-badge.negado{background:#fee2e2;color:#dc2626}
+  .fac-badge.cancelado{background:#f1f5f9;color:#64748b}
+  .fac-badge.aberto{background:#dbeafe;color:#1d4ed8}
+  .fac-badge.em_analise{background:#fef3c7;color:#b45309}
+  .fac-badge.aprovado{background:#d1fae5;color:#065f46}
+  .fac-badge.em_execucao{background:#ede9fe;color:#6d28d9}
+  .fac-badge.concluido{background:#dcfce7;color:#14532d}
+  .fac-badge.vencido{background:#fee2e2;color:#b91c1c}
+  .fac-badge.urgente{background:#fee2e2;color:#b91c1c}
+  .fac-badge.alta{background:#fef3c7;color:#b45309}
+  .fac-badge.media{background:#dbeafe;color:#1e40af}
+  .fac-badge.baixa{background:#f1f5f9;color:#475569}
+  .fac-badge.ok-stock{background:#dcfce7;color:#15803d}
+  .fac-badge.low-stock{background:#fef9c3;color:#a16207}
+  .fac-badge.out-stock{background:#fee2e2;color:#b91c1c}
+
+  /* ─── BUTTONS ────────────────────────────────── */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;font-family:inherit;text-decoration:none}
+  .btn-sm{padding:6px 12px;font-size:12px}
+  .btn-primary{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(37,99,235,.35)}
+  .btn-green{background:#d1fae5;color:#059669}.btn-green:hover{background:#a7f3d0}
+  .btn-red{background:#fee2e2;color:#dc2626}.btn-red:hover{background:#fecaca}
+  .btn-blue{background:#dbeafe;color:#2563eb}.btn-blue:hover{background:#bfdbfe}
+  .btn-sky{background:#e0f2fe;color:#0369a1}.btn-sky:hover{background:#bae6fd}
+  .btn-ghost{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}.btn-ghost:hover{background:#f1f5f9}
+  .btn-amber{background:#fef3c7;color:#b45309}.btn-amber:hover{background:#fde68a}
+  .btn-purple{background:#ede9fe;color:#7c3aed}.btn-purple:hover{background:#ddd6fe}
+
+  /* ─── FILTERS BAR ────────────────────────────── */
+  .filter-bar{background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 2px 8px rgba(18,40,58,.04);margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .filter-bar input,.filter-bar select{padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc;font-family:inherit}
+  .filter-bar input:focus,.filter-bar select:focus{outline:none;border-color:#3b82f6}
+
+  /* ─── LOTE BAR ───────────────────────────────── */
+  .lote-bar{display:none;padding:11px 16px;background:#eff6ff;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid #bfdbfe}
+  .lote-bar span{font-size:13px;font-weight:600;color:#1e40af}
+
+  /* ─── MODAL ──────────────────────────────────── */
+  .fac-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:9000;padding:16px}
+  .fac-modal.show{display:flex}
+  .modal-box{background:#fff;border-radius:18px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.2)}
+  .modal-box h2{font-size:18px;font-weight:700;color:#0f172a;margin:0 0 18px;display:flex;align-items:center;gap:8px}
+  .fac-form-group{margin-bottom:14px}
+  .fac-form-group label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em}
+  .fac-form-group input,.fac-form-group select,.fac-form-group textarea{width:100%;padding:10px 13px;border:1px solid #e2e8f0;border-radius:9px;font-size:14px;background:#f8fafc;font-family:inherit}
+  .fac-form-group input:focus,.fac-form-group select:focus,.fac-form-group textarea:focus{outline:none;border-color:#3b82f6;background:#fff}
+  .fac-form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .fac-modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9}
+
+  /* ─── EMPTY STATE ────────────────────────────── */
+  .empty-state{text-align:center;padding:40px;color:#94a3b8}
+  .empty-state i{font-size:40px;margin-bottom:12px;display:block;opacity:.5}
+  .empty-state p{font-size:14px}
+
+  /* ─── TOAST ──────────────────────────────────── */
+  .toast-container{position:fixed;top:16px;right:16px;z-index:9999}
+  .toast{background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12);border-left:4px solid #3b82f6;margin-bottom:8px;font-size:13px;transform:translateX(110%);opacity:0;transition:all .25s;display:flex;align-items:center;gap:8px;min-width:220px}
+  .toast.show{transform:translateX(0);opacity:1}
+  .toast.success{border-left-color:#22c55e}
+  .toast.error{border-left-color:#ef4444}
+  .toast.info{border-left-color:#0ea5e9}
+
+  /* ─── DASHBOARD CARDS ────────────────────────── */
+  .dash-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:20px}
+  .dash-card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(18,40,58,.04);display:flex;flex-direction:column;gap:6px}
+  .dash-card-header{display:flex;align-items:center;justify-content:space-between}
+  .dash-card-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .dash-card-val{font-size:30px;font-weight:800;color:#0f172a;line-height:1}
+  .dash-card-label{font-size:12px;font-weight:600;color:#64748b}
+  .dash-card-trend{font-size:11px;font-weight:600;margin-top:2px}
+  .dash-quicklinks{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+  .qlink{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(18,40,58,.04);text-decoration:none;color:#334155;transition:all .15s;font-size:13px;font-weight:600;border:1px solid #f1f5f9}
+  .qlink:hover{background:#f8fafc;border-color:#e2e8f0;transform:translateY(-1px);box-shadow:0 4px 14px rgba(18,40,58,.08)}
+  .qlink i{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+
+  /* ─── ESTOQUE SPECIFIC ───────────────────────── */
+  .stock-progress{height:6px;border-radius:3px;background:#e2e8f0;overflow:hidden;margin-top:4px}
+  .stock-bar{height:100%;border-radius:3px;background:#22c55e;transition:width .3s}
+  .stock-bar.warn{background:#f59e0b}
+  .stock-bar.danger{background:#ef4444}
 </style>
-{% endblock %}
+</head>
+<body>
+<div class="layout" id="app">
 
-{% block content %}
-<div class="fac-shell">
-    <!-- Métricas -->
-    <div class="fac-metrics" id="metricsGrid">
-        <div class="fac-metric orange">
-            <h3 id="metricEpiPendentes">-</h3>
-            <p>EPIs Pendentes</p>
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="https://columbiamachine.com/wp-content/uploads/2018/12/colmac_logo-blue-1.png" alt="Columbia" onerror="this.style.display='none'">
+      <div class="brand-text">Facilities<small>Columbia Machine</small></div>
+    </div>
+    <nav style="flex:1;padding-bottom:16px">
+      <div class="nav-section">Principal</div>
+      <button class="nav-item active" onclick="nav('dashboard')" id="nav-dashboard">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+      </button>
+      <button class="nav-item" onclick="nav('epi')" id="nav-epi">
+        <i class="fas fa-hard-hat"></i> Solicitações EPI
+        <span class="nav-badge" id="nbEpi" style="display:none">0</span>
+      </button>
+      <button class="nav-item" onclick="nav('alertas')" id="nav-alertas">
+        <i class="fas fa-exclamation-triangle"></i> Alertas NR-6
+        <span class="nav-badge warn" id="nbAlertas" style="display:none">0</span>
+      </button>
+      <button class="nav-item" onclick="nav('estoque')" id="nav-estoque">
+        <i class="fas fa-boxes"></i> Estoque
+        <span class="nav-badge warn" id="nbEstoque" style="display:none">0</span>
+      </button>
+      <button class="nav-item" onclick="nav('chamados')" id="nav-chamados">
+        <i class="fas fa-ticket-alt"></i> Chamados
+        <span class="nav-badge" id="nbChamados" style="display:none">0</span>
+      </button>
+
+      <div class="nav-section">Operação</div>
+      <button class="nav-item" onclick="nav('limpeza')" id="nav-limpeza">
+        <i class="fas fa-broom"></i> Limpezas
+      </button>
+      <button class="nav-item" onclick="nav('templates')" id="nav-templates">
+        <i class="fas fa-clipboard-list"></i> Templates Limpeza
+      </button>
+      <button class="nav-item" onclick="nav('projetos')" id="nav-projetos">
+        <i class="fas fa-tasks"></i> Projetos
+      </button>
+
+      <div class="nav-section">Cadastros</div>
+      <button class="nav-item" onclick="nav('colaboradores')" id="nav-colaboradores">
+        <i class="fas fa-users"></i> Colaboradores
+      </button>
+      <button class="nav-item" onclick="nav('materiais')" id="nav-materiais">
+        <i class="fas fa-box"></i> Materiais EPI
+      </button>
+      <button class="nav-item" onclick="nav('ciclos')" id="nav-ciclos">
+        <i class="fas fa-sync-alt"></i> Ciclos NR-6
+      </button>
+
+      <div class="nav-divider"></div>
+      <button class="nav-item" onclick="nav('relatorios')" id="nav-relatorios">
+        <i class="fas fa-chart-bar"></i> Relatórios
+      </button>
+      <button class="nav-item" onclick="nav('auditoria')" id="nav-auditoria">
+        <i class="fas fa-history"></i> Auditoria
+      </button>
+      <div class="nav-divider"></div>
+      <a href="/" class="nav-back"><i class="fas fa-arrow-left"></i> Voltar ao sistema</a>
+    </nav>
+  </aside>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        <div>
+          <h1 id="topbarTitle">Dashboard</h1>
+          <div class="breadcrumb">Facilities / <span id="topbarSub">Visão Geral</span></div>
         </div>
-        <div class="fac-metric green">
-            <h3 id="metricEpiLiberados">-</h3>
-            <p>Liberados Hoje</p>
-        </div>
-        <div class="fac-metric">
-            <h3 id="metricLimpezasHoje">-</h3>
-            <p>Limpezas Hoje</p>
-        </div>
-        <div class="fac-metric purple">
-            <h3 id="metricProjetosAtivos">-</h3>
-            <p>Projetos Ativos</p>
-        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="/facilities/solicitar-epi" class="topbar-btn topbar-btn-green"><i class="fas fa-plus"></i> Nova Solicitação</a>
+        <a href="/facilities/almoxarife" class="topbar-btn topbar-btn-ghost" target="_blank"><i class="fas fa-boxes"></i> Almoxarife</a>
+        <button class="topbar-btn topbar-btn-ghost" onclick="refreshPage()"><i class="fas fa-sync"></i></button>
+      </div>
+    </header>
+
+    <!-- ─── DASHBOARD ─── -->
+    <div class="page active" id="pageDashboard">
+      <div class="dash-cards" id="dashCards">
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fef3c7;color:#d97706"><i class="fas fa-clock"></i></div></div><div class="dash-card-val" id="dEpiPend">-</div><div class="dash-card-label">EPIs Aguardando</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#d1fae5;color:#059669"><i class="fas fa-check-circle"></i></div></div><div class="dash-card-val" id="dEpiLib">-</div><div class="dash-card-label">Liberados Hoje</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fee2e2;color:#dc2626"><i class="fas fa-exclamation-circle"></i></div></div><div class="dash-card-val" id="dVencidos">-</div><div class="dash-card-label">EPIs Vencidos/Vencendo</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-ticket-alt"></i></div></div><div class="dash-card-val" id="dChamados">-</div><div class="dash-card-label">Chamados Abertos</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#ede9fe;color:#7c3aed"><i class="fas fa-boxes"></i></div></div><div class="dash-card-val" id="dEstoqBaixo">-</div><div class="dash-card-label">Itens Abaixo do Mínimo</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#f0fdf4;color:#15803d"><i class="fas fa-broom"></i></div></div><div class="dash-card-val" id="dLimpezas">-</div><div class="dash-card-label">Limpezas Hoje</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fff7ed;color:#ea580c"><i class="fas fa-tasks"></i></div></div><div class="dash-card-val" id="dProjetos">-</div><div class="dash-card-label">Projetos Ativos</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#f0f9ff;color:#0369a1"><i class="fas fa-users"></i></div></div><div class="dash-card-val" id="dColabs">-</div><div class="dash-card-label">Colaboradores Ativos</div></div>
+      </div>
+      <div class="sec-hdr"><h2 class="sec-title"><i class="fas fa-bolt" style="color:#f59e0b"></i>Acesso Rápido</h2></div>
+      <div class="dash-quicklinks">
+        <a href="/facilities/solicitar-epi" class="qlink"><i class="fas fa-plus-circle" style="background:#d1fae5;color:#059669"></i> Solicitar EPI</a>
+        <a href="/facilities/almoxarife" class="qlink" target="_blank"><i class="fas fa-boxes" style="background:#dbeafe;color:#2563eb"></i> Almoxarife</a>
+        <a href="/facilities/minhas-solicitacoes" class="qlink" target="_blank"><i class="fas fa-clipboard-list" style="background:#ede9fe;color:#7c3aed"></i> Minhas Solicits.</a>
+        <a href="/facilities/relatorio-consumo" class="qlink" target="_blank"><i class="fas fa-chart-bar" style="background:#fef3c7;color:#d97706"></i> Rel. Consumo</a>
+        <a href="/facilities/cronograma-limpeza" class="qlink" target="_blank"><i class="fas fa-calendar-alt" style="background:#f0fdf4;color:#15803d"></i> Cronograma</a>
+        <button class="qlink" onclick="nav('chamados')"><i class="fas fa-ticket-alt" style="background:#fee2e2;color:#dc2626"></i> Chamados</button>
+      </div>
+      <div style="background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(18,40,58,.04)">
+        <div class="sec-hdr"><h2 class="sec-title"><i class="fas fa-hard-hat" style="color:#f59e0b"></i> Últimas Solicitações EPI</h2></div>
+        <table class="fac-table"><thead><tr><th>Funcionário</th><th>Item</th><th>Solicitado por</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody id="dashEpiBody"></tbody></table>
+      </div>
     </div>
 
-    <!-- Tabs -->
-    <div class="fac-tabs">
-        <button class="fac-tab active" onclick="switchTab('epi')"><i class="fas fa-hard-hat"></i> Solicitações EPI <span id="badgeEpi" class="fac-badge" style="display:none"></span></button>
-        <button class="fac-tab" onclick="switchTab('alertas')"><i class="fas fa-exclamation-triangle"></i> Alertas NR-6 <span id="badgeAlertas" class="fac-badge" style="display:none"></span></button>
-        <button class="fac-tab" onclick="switchTab('limpeza')"><i class="fas fa-broom"></i> Limpezas</button>
-        <button class="fac-tab" onclick="switchTab('templates')"><i class="fas fa-clipboard-list"></i> Templates Limpeza</button>
-        <button class="fac-tab" onclick="switchTab('projetos')"><i class="fas fa-tasks"></i> Projetos</button>
-        <button class="fac-tab" onclick="switchTab('colaboradores')"><i class="fas fa-users"></i> Colaboradores</button>
-        <button class="fac-tab" onclick="switchTab('materiais')"><i class="fas fa-boxes"></i> Materiais</button>
-        <button class="fac-tab" onclick="switchTab('ciclos')"><i class="fas fa-sync-alt"></i> Ciclos de Troca</button>
-        <button class="fac-tab" onclick="switchTab('auditoria')"><i class="fas fa-history"></i> Auditoria</button>
-    </div>
-
-    <!-- Panel: EPI -->
-    <div class="fac-panel active" id="panelEpi">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Solicitações de EPI/Uniforme</h2>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <input id="filterEpiBusca" type="search" placeholder="Buscar nome/item..." class="fac-form-group" style="margin:0;width:200px" oninput="debounceEpi()">
-                <select id="filterEpiStatus" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
-                    <option value="">Todos status</option>
-                    <option value="solicitado" selected>Pendentes</option>
-                    <option value="liberado">Liberadas</option>
-                    <option value="retirado">Retiradas</option>
-                    <option value="negado">Negadas</option>
-                    <option value="cancelado">Canceladas</option>
-                </select>
-                <select id="filterEpiTipo" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
-                    <option value="">Todos tipos</option>
-                    <option value="epi">EPI</option>
-                    <option value="uniforme">Uniforme</option>
-                </select>
-                <input id="filterEpiIni" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
-                <input id="filterEpiFim" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadEpi()">
-                <button class="fac-btn" onclick="loadEpi()"><i class="fas fa-sync"></i></button>
-            </div>
+    <!-- ─── SOLICITAÇÕES EPI ─── -->
+    <div class="page" id="pageEpi">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-hard-hat" style="color:#f59e0b"></i> Solicitações EPI / Uniforme</h2>
+        <div class="sec-actions">
+          <a href="/facilities/solicitar-epi" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Nova</a>
         </div>
-        <div id="epiLoteBar" style="display:none;padding:10px;background:#eef5ff;border-radius:6px;margin-bottom:10px">
-            <span id="epiLoteCount">0 selecionadas</span>
-            <button class="fac-btn fac-btn-primary" style="margin-left:10px" onclick="acaoLote('liberar')">Liberar</button>
-            <button class="fac-btn" onclick="acaoLote('negar')">Negar</button>
-            <button class="fac-btn" onclick="acaoLote('cancelar')">Cancelar</button>
-        </div>
+      </div>
+      <div class="filter-bar">
+        <input id="filterEpiBusca" type="search" placeholder="Buscar nome/item..." style="flex:1;min-width:160px" oninput="debounceEpi()">
+        <select id="filterEpiStatus" onchange="loadEpi()">
+          <option value="">Todos status</option>
+          <option value="solicitado" selected>Pendentes</option>
+          <option value="liberado">Liberadas</option>
+          <option value="retirado">Retiradas</option>
+          <option value="negado">Negadas</option>
+          <option value="cancelado">Canceladas</option>
+        </select>
+        <select id="filterEpiTipo" onchange="loadEpi()">
+          <option value="">Todos tipos</option>
+          <option value="epi">EPI</option>
+          <option value="uniforme">Uniforme</option>
+        </select>
+        <input id="filterEpiIni" type="date" onchange="loadEpi()" title="De">
+        <input id="filterEpiFim" type="date" onchange="loadEpi()" title="Até">
+        <button class="btn btn-ghost btn-sm" onclick="loadEpi()"><i class="fas fa-sync"></i></button>
+      </div>
+      <div id="epiLoteBar" class="lote-bar" style="display:none">
+        <span id="epiLoteCount">0 selecionadas</span>
+        <button class="btn btn-green btn-sm" onclick="acaoLote('liberar')"><i class="fas fa-check"></i> Liberar</button>
+        <button class="btn btn-red btn-sm" onclick="acaoLote('negar')"><i class="fas fa-times"></i> Negar</button>
+        <button class="btn btn-ghost btn-sm" onclick="acaoLote('cancelar')"><i class="fas fa-ban"></i> Cancelar</button>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead>
-                <tr>
-                    <th style="width:28px"><input type="checkbox" id="epiSelAll" onchange="toggleSelAll(this)"></th>
-                    <th>Funcionário</th>
-                    <th>Solicitado por</th>
-                    <th>Item</th>
-                    <th>Tam.</th>
-                    <th>Qtd</th>
-                    <th>Data</th>
-                    <th>Status</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody id="epiTableBody"></tbody>
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="epiSelAll" onchange="toggleSelAll(this)"></th>
+            <th>Funcionário</th><th>Solicitado por</th><th>Item</th><th>Tam.</th><th>Qtd</th><th>Data</th><th>Status</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="epiTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Alertas NR-6 -->
-    <div class="fac-panel" id="panelAlertas">
-        <h2 style="margin:0 0 14px;font-size:18px;font-weight:700">Alertas NR-6 - Vencimentos</h2>
-        <div style="margin-bottom:12px">
-            <button class="fac-btn fac-btn-primary" onclick="enviarLembretes()"><i class="fas fa-envelope"></i> Enviar lembretes de retirada pendente</button>
+    <!-- ─── ALERTAS NR-6 ─── -->
+    <div class="page" id="pageAlertas">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i> Alertas NR-6 — Vencimentos</h2>
+        <div class="sec-actions">
+          <button class="btn btn-amber btn-sm" onclick="enviarLembretes()"><i class="fas fa-envelope"></i> Enviar Lembretes</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead><tr><th>Colaborador</th><th>Setor</th><th>Item</th><th>Retirada</th><th>Próxima Troca</th><th>Situação</th><th>Ações</th></tr></thead>
-            <tbody id="alertasTableBody"></tbody>
+          <thead><tr><th>Colaborador</th><th>Setor</th><th>Item</th><th>Retirada</th><th>Próx. Troca</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="alertasTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Templates de Limpeza -->
-    <div class="fac-panel" id="panelTemplates">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Templates de Limpeza</h2>
-            <div>
-                <button class="fac-btn" onclick="gerarLimpezasSemana()"><i class="fas fa-calendar-plus"></i> Gerar 7 dias</button>
-                <button class="fac-btn fac-btn-primary" onclick="openTemplateModal()"><i class="fas fa-plus"></i> Novo Template</button>
-            </div>
+    <!-- ─── ESTOQUE ─── -->
+    <div class="page" id="pageEstoque">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-boxes" style="color:#7c3aed"></i> Estoque EPI / Uniforme</h2>
+        <div class="sec-actions">
+          <button class="btn btn-purple btn-sm" onclick="openEstoqueModal()"><i class="fas fa-plus"></i> Novo Item</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadEstoque()"><i class="fas fa-sync"></i></button>
         </div>
+      </div>
+      <div class="filter-bar">
+        <input id="filtEstBusca" type="search" placeholder="Buscar material..." style="flex:1;min-width:160px" oninput="debounceEstoque()">
+        <select id="filtEstStatus" onchange="loadEstoque()">
+          <option value="">Todo estoque</option>
+          <option value="baixo">Abaixo do mínimo</option>
+          <option value="zerado">Sem estoque</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead><tr><th>Nome</th><th>Local</th><th>Recorrência</th><th>Horário</th><th>Responsável</th><th>QR</th><th>Ações</th></tr></thead>
-            <tbody id="templatesTableBody"></tbody>
+          <thead><tr>
+            <th>Material</th><th>Tipo</th><th>N° CA</th><th>Lote</th><th>Validade</th>
+            <th>Localização</th><th>Estoque</th><th>Mínimo</th><th>Status</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="estoqueTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Ciclos de Troca -->
-    <div class="fac-panel" id="panelCiclos">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Ciclos de Troca (NR-6)</h2>
-            <button class="fac-btn fac-btn-primary" onclick="openCicloModal()"><i class="fas fa-plus"></i> Novo Ciclo</button>
+    <!-- ─── CHAMADOS ─── -->
+    <div class="page" id="pageChamados">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-ticket-alt" style="color:#2563eb"></i> Chamados de Facilities</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openChamadoModal()"><i class="fas fa-plus"></i> Novo Chamado</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadChamados()"><i class="fas fa-sync"></i></button>
         </div>
+      </div>
+      <div class="filter-bar">
+        <input id="filtChamBusca" type="search" placeholder="Buscar chamado..." style="flex:1;min-width:160px" oninput="debounceChamados()">
+        <select id="filtChamStatus" onchange="loadChamados()">
+          <option value="">Todos status</option>
+          <option value="aberto" selected>Abertos</option>
+          <option value="em_analise">Em Análise</option>
+          <option value="aprovado">Aprovados</option>
+          <option value="em_execucao">Em Execução</option>
+          <option value="concluido">Concluídos</option>
+          <option value="cancelado">Cancelados</option>
+        </select>
+        <select id="filtChamCategoria" onchange="loadChamados()">
+          <option value="">Todas categorias</option>
+          <option value="manutencao">Manutenção</option>
+          <option value="limpeza">Limpeza</option>
+          <option value="reposicao">Reposição</option>
+          <option value="outros">Outros</option>
+        </select>
+        <select id="filtChamPrior" onchange="loadChamados()">
+          <option value="">Todas prioridades</option>
+          <option value="urgente">Urgente</option>
+          <option value="alta">Alta</option>
+          <option value="media">Média</option>
+          <option value="baixa">Baixa</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead><tr><th>Palavra-chave</th><th>Código</th><th>Validade (meses)</th><th>Descrição</th><th>Ativo</th><th>Ações</th></tr></thead>
-            <tbody id="ciclosTableBody"></tbody>
+          <thead><tr><th>#</th><th>Título</th><th>Categoria</th><th>Prioridade</th><th>Local</th><th>Aberto por</th><th>Responsável</th><th>Aberto em</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="chamadosTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Auditoria -->
-    <div class="fac-panel" id="panelAuditoria">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Log de Auditoria</h2>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <input id="auditEntidade" placeholder="entidade" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
-                <input id="auditUsuario" placeholder="usuário" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
-                <input id="auditIni" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
-                <input id="auditFim" type="date" class="fac-form-group" style="margin:0;width:auto" onchange="loadAuditoria()">
-                <button class="fac-btn" onclick="loadAuditoria()"><i class="fas fa-sync"></i></button>
-            </div>
+    <!-- ─── LIMPEZA ─── -->
+    <div class="page" id="pageLimpeza">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-broom" style="color:#0ea5e9"></i> Cronograma de Limpeza</h2>
+        <div class="sec-actions">
+          <button class="btn btn-sky btn-sm" onclick="gerarLimpezasSemana()"><i class="fas fa-calendar-plus"></i> Gerar 7 dias</button>
+          <button class="btn btn-primary btn-sm" onclick="openLimpezaModal()"><i class="fas fa-plus"></i> Nova</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead><tr><th>Quando</th><th>Usuário</th><th>Entidade</th><th>ID</th><th>Ação</th><th>Detalhes</th></tr></thead>
-            <tbody id="auditTableBody"></tbody>
+          <thead><tr><th>Data</th><th>Título</th><th>Local</th><th>Responsável</th><th>Horário</th><th>Status</th></tr></thead>
+          <tbody id="limpezaTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Limpeza -->
-    <div class="fac-panel" id="panelLimpeza">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Cronograma de Limpeza</h2>
-            <button class="fac-btn fac-btn-primary" onclick="openLimpezaModal()"><i class="fas fa-plus"></i> Nova Limpeza</button>
+    <!-- ─── TEMPLATES ─── -->
+    <div class="page" id="pageTemplates">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-clipboard-list" style="color:#0ea5e9"></i> Templates de Limpeza</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openTemplateModal()"><i class="fas fa-plus"></i> Novo Template</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead>
-                <tr>
-                    <th>Data</th>
-                    <th>Título</th>
-                    <th>Local</th>
-                    <th>Responsável</th>
-                    <th>Horário</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="limpezaTableBody"></tbody>
+          <thead><tr><th>Nome</th><th>Local</th><th>Recorrência</th><th>Horário</th><th>Responsável</th><th>QR</th><th>Ações</th></tr></thead>
+          <tbody id="templatesTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Projetos -->
-    <div class="fac-panel" id="panelProjetos">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Projetos / Obras</h2>
-            <button class="fac-btn fac-btn-primary" onclick="openProjetoModal()"><i class="fas fa-plus"></i> Novo Projeto</button>
+    <!-- ─── PROJETOS ─── -->
+    <div class="page" id="pageProjetos">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-tasks" style="color:#f59e0b"></i> Projetos / Obras</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openProjetoModal()"><i class="fas fa-plus"></i> Novo Projeto</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead>
-                <tr>
-                    <th>Código</th>
-                    <th>Nome</th>
-                    <th>Cliente</th>
-                    <th>Tarefas</th>
-                    <th>Status</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody id="projetosTableBody"></tbody>
+          <thead><tr><th>Código</th><th>Nome</th><th>Cliente</th><th>Tarefas</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="projetosTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Colaboradores -->
-    <div class="fac-panel" id="panelColaboradores">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Colaboradores</h2>
-            <button class="fac-btn fac-btn-primary" onclick="openColaboradorModal()"><i class="fas fa-plus"></i> Novo Colaborador</button>
+    <!-- ─── COLABORADORES ─── -->
+    <div class="page" id="pageColaboradores">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-users" style="color:#0ea5e9"></i> Colaboradores</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openColaboradorModal()"><i class="fas fa-user-plus"></i> Novo</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead>
-                <tr>
-                    <th>Nome</th>
-                    <th>Cargo</th>
-                    <th>Setor</th>
-                    <th>Nível</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody id="colaboradoresTableBody"></tbody>
+          <thead><tr><th>Nome</th><th>Cargo</th><th>Setor</th><th>Nível</th><th>Ações</th></tr></thead>
+          <tbody id="colaboradoresTableBody"></tbody>
         </table>
+      </div>
     </div>
 
-    <!-- Panel: Materiais -->
-    <div class="fac-panel" id="panelMateriais">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h2 style="margin:0;font-size:18px;font-weight:700">Materiais EPI/Uniforme</h2>
-            <button class="fac-btn fac-btn-primary" onclick="openMaterialModal()"><i class="fas fa-plus"></i> Novo Material</button>
+    <!-- ─── MATERIAIS ─── -->
+    <div class="page" id="pageMateriais">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-box" style="color:#059669"></i> Materiais EPI / Uniforme</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openMaterialModal()"><i class="fas fa-plus"></i> Novo Material</button>
         </div>
+      </div>
+      <div class="tbl-wrap">
         <table class="fac-table">
-            <thead>
-                <tr>
-                    <th>Código</th>
-                    <th>Nome</th>
-                    <th>Tipo</th>
-                </tr>
-            </thead>
-            <tbody id="materiaisTableBody"></tbody>
+          <thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Estoque Atual</th></tr></thead>
+          <tbody id="materiaisTableBody"></tbody>
         </table>
+      </div>
     </div>
-</div>
+
+    <!-- ─── CICLOS ─── -->
+    <div class="page" id="pageCiclos">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-sync-alt" style="color:#0ea5e9"></i> Ciclos de Troca (NR-6)</h2>
+        <div class="sec-actions">
+          <button class="btn btn-primary btn-sm" onclick="openCicloModal()"><i class="fas fa-plus"></i> Novo Ciclo</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="fac-table">
+          <thead><tr><th>Palavra-chave</th><th>Código</th><th>Validade (meses)</th><th>Descrição</th><th>Ativo</th><th>Ações</th></tr></thead>
+          <tbody id="ciclosTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── RELATÓRIOS ─── -->
+    <div class="page" id="pageRelatorios">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-chart-bar" style="color:#7c3aed"></i> Relatórios</h2>
+      </div>
+      <div class="dash-quicklinks" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+        <a href="/facilities/relatorio-consumo" class="qlink" target="_blank"><i class="fas fa-chart-pie" style="background:#ede9fe;color:#7c3aed"></i> Consumo por Setor</a>
+        <a href="/facilities/almoxarife" class="qlink" target="_blank"><i class="fas fa-boxes" style="background:#dbeafe;color:#2563eb"></i> Pendências Almoxarife</a>
+        <a href="/facilities/minhas-solicitacoes" class="qlink" target="_blank"><i class="fas fa-clipboard-list" style="background:#d1fae5;color:#059669"></i> Minhas Solicitações</a>
+      </div>
+      <div style="background:#fff;border-radius:14px;padding:24px;box-shadow:0 2px 8px rgba(18,40,58,.04);margin-top:16px">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:16px;color:#0f172a"><i class="fas fa-boxes" style="color:#7c3aed;margin-right:6px"></i>Itens de Estoque — Visão Resumida</h3>
+        <table class="fac-table"><thead><tr><th>Material</th><th>Qtd. Atual</th><th>Mínimo</th><th>Status</th></tr></thead>
+        <tbody id="relEstoqueBody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ─── AUDITORIA ─── -->
+    <div class="page" id="pageAuditoria">
+      <div class="sec-hdr">
+        <h2 class="sec-title"><i class="fas fa-history" style="color:#64748b"></i> Log de Auditoria</h2>
+        <div class="sec-actions">
+          <button class="btn btn-ghost btn-sm" onclick="loadAuditoria()"><i class="fas fa-sync"></i></button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input id="auditEntidade" placeholder="entidade" style="min-width:120px" onchange="loadAuditoria()">
+        <input id="auditUsuario" placeholder="usuário" style="min-width:120px" onchange="loadAuditoria()">
+        <input id="auditIni" type="date" onchange="loadAuditoria()">
+        <input id="auditFim" type="date" onchange="loadAuditoria()">
+      </div>
+      <div class="tbl-wrap">
+        <table class="fac-table">
+          <thead><tr><th>Quando</th><th>Usuário</th><th>Entidade</th><th>ID</th><th>Ação</th><th>Detalhes</th></tr></thead>
+          <tbody id="auditTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- ══════════ MODAIS ══════════ -->
+
+
 
 <!-- Modal: Limpeza -->
 <div class="fac-modal" id="modalLimpeza">
-    <div class="fac-modal-content">
-        <h2><i class="fas fa-broom"></i> Nova Limpeza</h2>
-        <div class="fac-form-group">
-            <label>Título *</label>
-            <input type="text" id="limpezaTitulo" placeholder="Ex: Limpeza geral escritório">
-        </div>
-        <div class="fac-form-group">
-            <label>Local</label>
-            <input type="text" id="limpezaLocal" placeholder="Ex: Sala 01">
-        </div>
-        <div class="fac-form-row">
-            <div class="fac-form-group">
-                <label>Data *</label>
-                <input type="date" id="limpezaData">
-            </div>
-            <div class="fac-form-group">
-                <label>Responsável</label>
-                <select id="limpezaColaborador"></select>
-            </div>
-        </div>
-        <div class="fac-form-row">
-            <div class="fac-form-group">
-                <label>Hora Início</label>
-                <input type="time" id="limpezaHoraInicio">
-            </div>
-            <div class="fac-form-group">
-                <label>Hora Fim</label>
-                <input type="time" id="limpezaHoraFim">
-            </div>
-        </div>
-        <div class="fac-modal-actions">
-            <button class="fac-btn" onclick="closeModal('modalLimpeza')">Cancelar</button>
-            <button class="fac-btn fac-btn-primary" onclick="salvarLimpeza()">Salvar</button>
-        </div>
+  <div class="modal-box">
+    <h2><i class="fas fa-broom"></i> Nova Limpeza</h2>
+    <div class="fac-form-group"><label>Título *</label><input type="text" id="limpezaTitulo" placeholder="Ex: Limpeza geral escritório"></div>
+    <div class="fac-form-group"><label>Local</label><input type="text" id="limpezaLocal" placeholder="Ex: Sala 01"></div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Data *</label><input type="date" id="limpezaData"></div>
+      <div class="fac-form-group"><label>Responsável</label><select id="limpezaColaborador"></select></div>
     </div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Hora Início</label><input type="time" id="limpezaHoraInicio"></div>
+      <div class="fac-form-group"><label>Hora Fim</label><input type="time" id="limpezaHoraFim"></div>
+    </div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalLimpeza')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarLimpeza()">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Projeto -->
 <div class="fac-modal" id="modalProjeto">
-    <div class="fac-modal-content">
-        <h2><i class="fas fa-tasks"></i> Novo Projeto</h2>
-        <div class="fac-form-group">
-            <label>Nome do Projeto *</label>
-            <input type="text" id="projetoNome" placeholder="Ex: Reforma sala reunião">
-        </div>
-        <div class="fac-form-group">
-            <label>Cliente</label>
-            <input type="text" id="projetoCliente" placeholder="Nome do cliente">
-        </div>
-        <div class="fac-form-group">
-            <label>Telefone</label>
-            <input type="text" id="projetoTelefone" placeholder="(00) 00000-0000">
-        </div>
-        <div class="fac-form-group">
-            <label>Observações</label>
-            <textarea id="projetoObs" rows="3" placeholder="Informações adicionais"></textarea>
-        </div>
-        <div class="fac-modal-actions">
-            <button class="fac-btn" onclick="closeModal('modalProjeto')">Cancelar</button>
-            <button class="fac-btn fac-btn-primary" onclick="salvarProjeto()">Salvar</button>
-        </div>
+  <div class="modal-box">
+    <h2><i class="fas fa-tasks"></i> Novo Projeto</h2>
+    <div class="fac-form-group"><label>Nome do Projeto *</label><input type="text" id="projetoNome" placeholder="Ex: Reforma sala reunião"></div>
+    <div class="fac-form-group"><label>Cliente</label><input type="text" id="projetoCliente" placeholder="Nome do cliente"></div>
+    <div class="fac-form-group"><label>Telefone</label><input type="text" id="projetoTelefone" placeholder="(00) 00000-0000"></div>
+    <div class="fac-form-group"><label>Observações</label><textarea id="projetoObs" rows="3"></textarea></div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalProjeto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarProjeto()">Salvar</button>
     </div>
+  </div>
 </div>
 
 <!-- Modal: Colaborador -->
 <div class="fac-modal" id="modalColaborador">
-    <div class="fac-modal-content">
-        <h2><i class="fas fa-user-plus"></i> Novo Colaborador</h2>
-        <div class="fac-form-group">
-            <label>Nome *</label>
-            <input type="text" id="colaboradorNome" placeholder="Nome completo">
-        </div>
-        <div class="fac-form-row">
-            <div class="fac-form-group">
-                <label>Cargo</label>
-                <input type="text" id="colaboradorCargo" placeholder="Ex: Auxiliar">
-            </div>
-            <div class="fac-form-group">
-                <label>Setor</label>
-                <input type="text" id="colaboradorSetor" placeholder="Ex: Produção">
-            </div>
-        </div>
-        <div class="fac-form-group">
-            <label>Nível de Acesso</label>
-            <select id="colaboradorNivel">
-                <option value="solicitante">Solicitante</option>
-                <option value="gestor">Gestor (pode aprovar)</option>
-            </select>
-        </div>
-        <div class="fac-modal-actions">
-            <button class="fac-btn" onclick="closeModal('modalColaborador')">Cancelar</button>
-            <button class="fac-btn fac-btn-primary" onclick="salvarColaborador()">Salvar</button>
-        </div>
+  <div class="modal-box">
+    <h2><i class="fas fa-user-plus"></i> Novo Colaborador</h2>
+    <div class="fac-form-group"><label>Nome *</label><input type="text" id="colaboradorNome" placeholder="Nome completo"></div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Cargo</label><input type="text" id="colaboradorCargo" placeholder="Ex: Auxiliar"></div>
+      <div class="fac-form-group"><label>Setor</label><input type="text" id="colaboradorSetor" placeholder="Ex: Produção"></div>
     </div>
+    <div class="fac-form-group"><label>Nível de Acesso</label>
+      <select id="colaboradorNivel">
+        <option value="solicitante">Solicitante</option>
+        <option value="gestor">Gestor (pode aprovar)</option>
+      </select>
+    </div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalColaborador')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarColaborador()">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Material -->
 <div class="fac-modal" id="modalMaterial">
-    <div class="fac-modal-content">
-        <h2><i class="fas fa-box"></i> Novo Material</h2>
-        <div class="fac-form-row">
-            <div class="fac-form-group">
-                <label>Código Interno *</label>
-                <input type="text" id="materialCodigo" placeholder="Ex: EPI001">
-            </div>
-            <div class="fac-form-group">
-                <label>Tipo</label>
-                <select id="materialTipo">
-                    <option value="epi">EPI</option>
-                    <option value="uniforme">Uniforme</option>
-                </select>
-            </div>
-        </div>
-        <div class="fac-form-group">
-            <label>Nome *</label>
-            <input type="text" id="materialNome" placeholder="Ex: Luva de proteção">
-        </div>
-        <div class="fac-modal-actions">
-            <button class="fac-btn" onclick="closeModal('modalMaterial')">Cancelar</button>
-            <button class="fac-btn fac-btn-primary" onclick="salvarMaterial()">Salvar</button>
-        </div>
+  <div class="modal-box">
+    <h2><i class="fas fa-box"></i> Novo Material EPI/Uniforme</h2>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Código Interno *</label><input type="text" id="materialCodigo" placeholder="Ex: EPI001"></div>
+      <div class="fac-form-group"><label>Tipo</label>
+        <select id="materialTipo"><option value="epi">EPI</option><option value="uniforme">Uniforme</option></select>
+      </div>
     </div>
+    <div class="fac-form-group"><label>Nome *</label><input type="text" id="materialNome" placeholder="Ex: Luva de proteção"></div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalMaterial')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarMaterial()">Salvar</button>
+    </div>
+  </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
+<!-- Modal: Chamado -->
+<div class="fac-modal" id="modalChamado">
+  <div class="modal-box">
+    <h2><i class="fas fa-ticket-alt"></i> Novo Chamado</h2>
+    <div class="fac-form-group"><label>Título *</label><input type="text" id="chamTitulo" placeholder="Descreva brevemente o chamado"></div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Categoria</label>
+        <select id="chamCategoria">
+          <option value="manutencao">Manutenção</option>
+          <option value="limpeza">Limpeza</option>
+          <option value="reposicao">Reposição</option>
+          <option value="outros">Outros</option>
+        </select>
+      </div>
+      <div class="fac-form-group"><label>Prioridade</label>
+        <select id="chamPrioridade">
+          <option value="baixa">Baixa</option>
+          <option value="media" selected>Média</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
+      </div>
+    </div>
+    <div class="fac-form-group"><label>Local / Área</label><input type="text" id="chamLocal" placeholder="Ex: Galpão B, Linha 3"></div>
+    <div class="fac-form-group"><label>Responsável</label><input type="text" id="chamResponsavel" placeholder="Nome ou setor responsável"></div>
+    <div class="fac-form-group"><label>Descrição Detalhada</label><textarea id="chamDescricao" rows="3" placeholder="Detalhes adicionais, equipamentos envolvidos, etc."></textarea></div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalChamado')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarChamado()">Abrir Chamado</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Estoque Item -->
+<div class="fac-modal" id="modalEstoque">
+  <div class="modal-box">
+    <h2><i class="fas fa-boxes"></i> <span id="estModalTitle">Novo Item de Estoque</span></h2>
+    <input type="hidden" id="estId">
+    <div class="fac-form-group"><label>Material EPI/Uniforme *</label>
+      <select id="estMaterialId"></select>
+    </div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>N° CA (Certificado)</label><input type="text" id="estCA" placeholder="Ex: 12345"></div>
+      <div class="fac-form-group"><label>Lote</label><input type="text" id="estLote" placeholder="Ex: 2024-01"></div>
+    </div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Validade</label><input type="date" id="estValidade"></div>
+      <div class="fac-form-group"><label>Localização</label><input type="text" id="estLocalizacao" placeholder="Ex: Prateleira A3"></div>
+    </div>
+    <div class="fac-form-row">
+      <div class="fac-form-group"><label>Quantidade em Estoque</label><input type="number" id="estQtd" min="0" value="0"></div>
+      <div class="fac-form-group"><label>Qtd. Mínima</label><input type="number" id="estQtdMin" min="0" value="5"></div>
+    </div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalEstoque')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarEstoque()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Atualizar Status Chamado -->
+<div class="fac-modal" id="modalChamadoStatus">
+  <div class="modal-box" style="max-width:400px">
+    <h2><i class="fas fa-edit"></i> Atualizar Chamado</h2>
+    <input type="hidden" id="chamStatusId">
+    <div class="fac-form-group"><label>Novo Status</label>
+      <select id="chamNovoStatus">
+        <option value="em_analise">Em Análise</option>
+        <option value="aprovado">Aprovado</option>
+        <option value="em_execucao">Em Execução</option>
+        <option value="concluido">Concluído</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+    <div class="fac-form-group"><label>Observação</label><textarea id="chamObs" rows="2" placeholder="Comentário opcional"></textarea></div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalChamadoStatus')">Cancelar</button>
+      <button class="btn btn-primary" onclick="atualizarStatusChamado()">Atualizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Baixa Estoque -->
+<div class="fac-modal" id="modalBaixaEstoque">
+  <div class="modal-box" style="max-width:400px">
+    <h2><i class="fas fa-minus-circle"></i> Dar Baixa no Estoque</h2>
+    <input type="hidden" id="baixaEstId">
+    <div id="baixaEstInfo" style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;color:#475569"></div>
+    <div class="fac-form-group"><label>Quantidade a Retirar *</label><input type="number" id="baixaQtd" min="1" value="1"></div>
+    <div class="fac-form-group"><label>Observação</label><input type="text" id="baixaObs" placeholder="Ex: Entregue para João - EPI001"></div>
+    <div class="fac-modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalBaixaEstoque')">Cancelar</button>
+      <button class="btn btn-red" onclick="confirmarBaixaEstoque()"><i class="fas fa-minus"></i> Confirmar Baixa</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
 let colaboradores = [];
+let currentPage = 'dashboard';
 
-async function init() {
-    await loadDashboard();
-    await loadColaboradores();
-    await loadEpi();
+// ─── NAVIGATION ───────────────────────────────────────────
+function nav(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const pageEl = document.getElementById('page' + page.charAt(0).toUpperCase() + page.slice(1));
+  const navEl = document.getElementById('nav-' + page);
+  if (pageEl) pageEl.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+  currentPage = page;
+  const titles = {
+    dashboard:'Dashboard', epi:'Solicitações EPI', alertas:'Alertas NR-6', estoque:'Estoque',
+    chamados:'Chamados', limpeza:'Limpeza', templates:'Templates Limpeza', projetos:'Projetos',
+    colaboradores:'Colaboradores', materiais:'Materiais EPI', ciclos:'Ciclos NR-6',
+    relatorios:'Relatórios', auditoria:'Auditoria'
+  };
+  const subs = {
+    dashboard:'Visão Geral', epi:'EPI & Uniformes', alertas:'NR-6 Vencimentos', estoque:'Controle de Estoque',
+    chamados:'Tickets de Facilities', limpeza:'Cronograma', templates:'Checklists', projetos:'Obras e Projetos',
+    colaboradores:'Cadastro', materiais:'EPI & Uniformes', ciclos:'Troca Periódica',
+    relatorios:'Análises', auditoria:'Histórico de Ações'
+  };
+  document.getElementById('topbarTitle').textContent = titles[page] || page;
+  document.getElementById('topbarSub').textContent = subs[page] || '';
+  // Load data for each page
+  if (page === 'dashboard') loadDashboard();
+  else if (page === 'epi') loadEpi();
+  else if (page === 'alertas') loadAlertas();
+  else if (page === 'estoque') loadEstoque();
+  else if (page === 'chamados') loadChamados();
+  else if (page === 'limpeza') loadLimpezas();
+  else if (page === 'templates') loadTemplates();
+  else if (page === 'projetos') loadProjetos();
+  else if (page === 'colaboradores') loadColaboradoresTable();
+  else if (page === 'materiais') loadMateriais();
+  else if (page === 'ciclos') loadCiclos();
+  else if (page === 'relatorios') loadRelatorios();
+  else if (page === 'auditoria') loadAuditoria();
 }
 
+function refreshPage() { nav(currentPage); }
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+// Close sidebar on overlay click
+document.addEventListener('click', e => {
+  const sb = document.getElementById('sidebar');
+  if (sb.classList.contains('open') && !sb.contains(e.target) && !e.target.closest('.hamburger')) {
+    sb.classList.remove('open');
+  }
+});
+
+// ─── INIT ───────────────────────────────────────────────
+async function init() {
+  await loadColaboradores();
+  await loadDashboard();
+  await loadEpi();
+  await updateBadges();
+}
+
+// ─── DASHBOARD ──────────────────────────────────────────
 async function loadDashboard() {
+  try {
     const r = await fetch('/api/facilities/dashboard');
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('metricEpiPendentes').textContent = d.epi_pendentes || 0;
-    document.getElementById('metricEpiLiberados').textContent = d.epi_liberados_hoje || 0;
-    document.getElementById('metricLimpezasHoje').textContent = d.limpezas_hoje || 0;
-    document.getElementById('metricProjetosAtivos').textContent = d.projetos_ativos || 0;
-
-    // Badges visuais nas tabs
-    const bEpi = document.getElementById('badgeEpi');
-    if (bEpi) {
-        if (d.epi_pendentes > 0) { bEpi.textContent = d.epi_pendentes; bEpi.style.display=''; }
-        else bEpi.style.display='none';
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? 0; };
+    set('dEpiPend',    d.epi_pendentes    || 0);
+    set('dEpiLib',     d.epi_liberados_hoje || 0);
+    set('dVencidos',   (d.epi_vencido || 0) + (d.epi_vence_30d || 0));
+    set('dChamados',   d.chamados_abertos || 0);
+    set('dEstoqBaixo', d.estoque_critico  || 0);
+    set('dLimpezas',   d.limpezas_hoje    || 0);
+    set('dProjetos',   d.projetos_ativos  || 0);
+    set('dColabs',     d.colaboradores    || 0);
+    // Dash quick EPI table
+    if (d.ultimas_solicitacoes) {
+      const tbody = document.getElementById('dashEpiBody');
+      if (!d.ultimas_solicitacoes.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-inbox"></i><p>Nenhuma solicitação recente</p></td></tr>';
+      } else {
+        tbody.innerHTML = d.ultimas_solicitacoes.slice(0, 8).map(s => `
+          <tr>
+            <td><strong>${s.colaborador_nome}</strong></td>
+            <td>${s.nome_item}</td>
+            <td>${s.solicitante_nome || '-'}</td>
+            <td>${s.solicitado_em}</td>
+            <td><span class="fac-badge ${s.status}">${s.status}</span></td>
+            <td>${s.status==='solicitado'?`<button class="btn btn-green btn-sm" onclick="aprovarEpi(${s.id},'liberar')"><i class="fas fa-check"></i></button><button class="btn btn-red btn-sm" onclick="aprovarEpi(${s.id},'negar')"><i class="fas fa-times"></i></button>`:''}</td>
+          </tr>`).join('');
+      }
     }
-    const bAlert = document.getElementById('badgeAlertas');
-    const totalAlert = (d.epi_vencido || 0) + (d.epi_vence_30d || 0);
-    if (bAlert) {
-        if (totalAlert > 0) { bAlert.textContent = totalAlert; bAlert.style.display=''; }
-        else bAlert.style.display='none';
-    }
+  } catch(e) { console.error('Erro loadDashboard:', e); }
 }
 
-// Polling leve para badge de pendentes (60s)
-setInterval(async () => {
-    try {
-        const r = await fetch('/api/facilities/badge');
-        if (!r.ok) return;
-        const d = await r.json();
-        const bEpi = document.getElementById('badgeEpi');
-        if (bEpi) {
-            if (d.epi_pendentes > 0) { bEpi.textContent = d.epi_pendentes; bEpi.style.display=''; }
-            else bEpi.style.display='none';
-        }
-    } catch(e){}
-}, 60000);
-
-async function loadColaboradores() {
-    const r = await fetch('/api/facilities/colaboradores');
+async function updateBadges() {
+  try {
+    const r = await fetch('/api/facilities/badge');
+    if (!r.ok) return;
     const d = await r.json();
-    colaboradores = d.rows || [];
-    // Popular selects
-    const selLimpeza = document.getElementById('limpezaColaborador');
+    const setB = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (val > 0) { el.textContent = val; el.style.display = ''; }
+      else el.style.display = 'none';
+    };
+    setB('nbEpi', d.epi_pendentes || 0);
+    setB('nbAlertas', (d.epi_vencido || 0) + (d.epi_vence_30d || 0));
+    setB('nbChamados', d.chamados_abertos || 0);
+    setB('nbEstoque', d.estoque_critico || 0);
+  } catch(e) {}
+}
+setInterval(updateBadges, 60000);
+
+// ─── COLABORADORES ──────────────────────────────────────────────────────────
+async function loadColaboradores() {
+  const r = await fetch('/api/facilities/colaboradores');
+  const d = await r.json();
+  colaboradores = d.rows || [];
+  const selLimpeza = document.getElementById('limpezaColaborador');
+  if (selLimpeza) {
     selLimpeza.innerHTML = '<option value="">-- Selecione --</option>';
     colaboradores.forEach(c => {
-        selLimpeza.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
+      selLimpeza.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
     });
-}
-
-function switchTab(tab) {
-    document.querySelectorAll('.fac-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.fac-panel').forEach(p => p.classList.remove('active'));
-    document.querySelector(`.fac-tab[onclick*="${tab}"]`).classList.add('active');
-    document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
-    
-    if (tab === 'epi') loadEpi();
-    else if (tab === 'alertas') loadAlertas();
-    else if (tab === 'limpeza') loadLimpezas();
-    else if (tab === 'templates') loadTemplates();
-    else if (tab === 'projetos') loadProjetos();
-    else if (tab === 'colaboradores') loadColaboradoresTable();
-    else if (tab === 'materiais') loadMateriais();
-    else if (tab === 'ciclos') loadCiclos();
-    else if (tab === 'auditoria') loadAuditoria();
+  }
 }
 
 // ========== EPI ==========
@@ -968,6 +1346,248 @@ async function loadAuditoria() {
     `).join('');
 }
 
+
+// ========== ESTOQUE ==========
+let _debounceEstoque = null;
+function debounceEstoque(){ clearTimeout(_debounceEstoque); _debounceEstoque = setTimeout(loadEstoque, 350); }
+
+async function loadEstoque() {
+    const busca = document.getElementById('filtEstBusca')?.value.trim() || '';
+    const status = document.getElementById('filtEstStatus')?.value || '';
+    let url = '/api/facilities/estoque';
+    const ps = new URLSearchParams();
+    if (busca)  ps.append('busca', busca);
+    if (status) ps.append('status', status);
+    if ([...ps].length) url += '?' + ps.toString();
+    const r = await fetch(url);
+    const d = await r.json();
+    const tbody = document.getElementById('estoqueTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-boxes"></i><p>Nenhum item em estoque</p></td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(item => {
+        const pct = item.qtd_minima > 0 ? Math.min(100, Math.round((item.quantidade / item.qtd_minima) * 100)) : 100;
+        const barCls = pct === 0 ? 'danger' : pct < 100 ? 'warn' : '';
+        const statusCls = item.quantidade === 0 ? 'out-stock' : item.quantidade < item.qtd_minima ? 'low-stock' : 'ok-stock';
+        const statusLbl = item.quantidade === 0 ? 'Sem Estoque' : item.quantidade < item.qtd_minima ? 'Baixo' : 'OK';
+        const venc = item.data_validade || '-';
+        return `<tr>
+            <td><strong>${item.material_nome || item.nome_item || '-'}</strong></td>
+            <td><span class="fac-badge ${item.tipo === 'epi' ? 'solicitado' : 'liberado'}">${(item.tipo||'').toUpperCase()}</span></td>
+            <td>${item.numero_ca || '-'}</td>
+            <td>${item.lote || '-'}</td>
+            <td>${venc}</td>
+            <td>${item.localizacao || '-'}</td>
+            <td>
+                <strong>${item.quantidade}</strong>
+                <div class="stock-progress"><div class="stock-bar ${barCls}" style="width:${pct}%"></div></div>
+            </td>
+            <td>${item.qtd_minima}</td>
+            <td><span class="fac-badge ${statusCls}">${statusLbl}</span></td>
+            <td>
+                <button class="btn btn-blue btn-sm" title="Editar" onclick="editEstoqueItem(${item.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-amber btn-sm" title="Dar baixa" onclick="openBaixaEstoque(${item.id}, '${(item.material_nome||'item').replace(/'/g,'')}', ${item.quantidade})"><i class="fas fa-minus"></i></button>
+                <button class="btn btn-red btn-sm" title="Excluir" onclick="delEstoqueItem(${item.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function openEstoqueModal(id) {
+    // Populate material select
+    const sel = document.getElementById('estMaterialId');
+    if (sel && colaboradores.length === 0) await loadColaboradores();
+    const mr = await fetch('/api/facilities/epi-materiais');
+    const md = await mr.json();
+    if (sel) {
+        sel.innerHTML = '<option value="">-- Selecione o Material --</option>';
+        (md.rows || []).forEach(m => sel.innerHTML += `<option value="${m.id}">${m.nome} (${m.tipo?.toUpperCase()})</option>`);
+    }
+    // Clear fields
+    document.getElementById('estId').value = '';
+    document.getElementById('estCA').value = '';
+    document.getElementById('estLote').value = '';
+    document.getElementById('estValidade').value = '';
+    document.getElementById('estLocalizacao').value = '';
+    document.getElementById('estQtd').value = '0';
+    document.getElementById('estQtdMin').value = '5';
+    document.getElementById('estModalTitle').textContent = 'Novo Item de Estoque';
+    document.getElementById('modalEstoque').classList.add('show');
+}
+
+async function editEstoqueItem(id) {
+    const r = await fetch(`/api/facilities/estoque/${id}`);
+    if (!r.ok) return showToast('Item não encontrado', 'error');
+    const d = await r.json();
+    await openEstoqueModal(id);
+    const sel = document.getElementById('estMaterialId');
+    if (sel) sel.value = d.material_id || '';
+    document.getElementById('estId').value = id;
+    document.getElementById('estCA').value = d.numero_ca || '';
+    document.getElementById('estLote').value = d.lote || '';
+    document.getElementById('estValidade').value = d.data_validade || '';
+    document.getElementById('estLocalizacao').value = d.localizacao || '';
+    document.getElementById('estQtd').value = d.quantidade || 0;
+    document.getElementById('estQtdMin').value = d.qtd_minima || 5;
+    document.getElementById('estModalTitle').textContent = 'Editar Item de Estoque';
+}
+
+async function salvarEstoque() {
+    const id = document.getElementById('estId').value;
+    const body = {
+        material_id:   document.getElementById('estMaterialId').value || null,
+        numero_ca:     document.getElementById('estCA').value.trim(),
+        lote:          document.getElementById('estLote').value.trim(),
+        data_validade: document.getElementById('estValidade').value || null,
+        localizacao:   document.getElementById('estLocalizacao').value.trim(),
+        quantidade:    parseInt(document.getElementById('estQtd').value) || 0,
+        qtd_minima:    parseInt(document.getElementById('estQtdMin').value) || 5,
+    };
+    if (!body.material_id) return showToast('Selecione o material', 'error');
+    const url = id ? `/api/facilities/estoque/${id}` : '/api/facilities/estoque';
+    const r = await fetch(url, { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (r.ok) { showToast('Estoque salvo!', 'success'); closeModal('modalEstoque'); loadEstoque(); }
+    else { const d = await r.json(); showToast(d.error || 'Erro', 'error'); }
+}
+
+async function delEstoqueItem(id) {
+    if (!confirm('Excluir item do estoque?')) return;
+    const r = await fetch(`/api/facilities/estoque/${id}`, { method: 'DELETE' });
+    if (r.ok) { showToast('Item removido', 'success'); loadEstoque(); }
+    else showToast('Erro ao remover', 'error');
+}
+
+function openBaixaEstoque(id, nome, qtd) {
+    document.getElementById('baixaEstId').value = id;
+    document.getElementById('baixaEstInfo').textContent = `${nome}  —  Estoque atual: ${qtd} un.`;
+    document.getElementById('baixaQtd').value = 1;
+    document.getElementById('baixaObs').value = '';
+    document.getElementById('modalBaixaEstoque').classList.add('show');
+}
+
+async function confirmarBaixaEstoque() {
+    const id  = document.getElementById('baixaEstId').value;
+    const qtd = parseInt(document.getElementById('baixaQtd').value) || 0;
+    const obs = document.getElementById('baixaObs').value.trim();
+    if (qtd <= 0) return showToast('Informe a quantidade', 'error');
+    const r = await fetch(`/api/facilities/estoque/${id}/baixa`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ quantidade: qtd, observacao: obs })
+    });
+    if (r.ok) { showToast('Baixa realizada!', 'success'); closeModal('modalBaixaEstoque'); loadEstoque(); }
+    else { const d = await r.json(); showToast(d.error || 'Erro', 'error'); }
+}
+
+// ========== CHAMADOS ==========
+let _debounceChamados = null;
+function debounceChamados(){ clearTimeout(_debounceChamados); _debounceChamados = setTimeout(loadChamados, 350); }
+
+async function loadChamados() {
+    const ps = new URLSearchParams();
+    const st = document.getElementById('filtChamStatus')?.value; if (st) ps.append('status', st);
+    const cat = document.getElementById('filtChamCategoria')?.value; if (cat) ps.append('categoria', cat);
+    const pr = document.getElementById('filtChamPrior')?.value; if (pr) ps.append('prioridade', pr);
+    const q = document.getElementById('filtChamBusca')?.value.trim(); if (q) ps.append('busca', q);
+    const r = await fetch('/api/facilities/chamados?' + ps.toString());
+    const d = await r.json();
+    const tbody = document.getElementById('chamadosTableBody');
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state"><i class="fas fa-ticket-alt"></i><p>Nenhum chamado encontrado</p></td></tr>';
+        return;
+    }
+    const catLabel = {manutencao:'Manutenção', limpeza:'Limpeza', reposicao:'Reposição', outros:'Outros'};
+    tbody.innerHTML = d.rows.map(c => `
+        <tr>
+            <td><code>#${c.id}</code></td>
+            <td><strong>${c.titulo}</strong>${c.descricao ? '<br><small style="color:#94a3b8;white-space:normal;max-width:200px;display:block">' + c.descricao.slice(0,60) + (c.descricao.length>60?'...':'') + '</small>' : ''}</td>
+            <td>${catLabel[c.categoria] || c.categoria || '-'}</td>
+            <td><span class="fac-badge ${c.prioridade}">${c.prioridade||'-'}</span></td>
+            <td>${c.local || '-'}</td>
+            <td>${c.aberto_por || '-'}</td>
+            <td>${c.responsavel || '-'}</td>
+            <td>${c.aberto_em || '-'}</td>
+            <td><span class="fac-badge ${(c.status||'').replace(' ','_')}">${c.status||'-'}</span></td>
+            <td>
+                <button class="btn btn-blue btn-sm" onclick="abrirStatusChamado(${c.id})"><i class="fas fa-edit"></i></button>
+            </td>
+        </tr>`).join('');
+}
+
+function openChamadoModal() {
+    document.getElementById('chamTitulo').value = '';
+    document.getElementById('chamCategoria').value = 'manutencao';
+    document.getElementById('chamPrioridade').value = 'media';
+    document.getElementById('chamLocal').value = '';
+    document.getElementById('chamResponsavel').value = '';
+    document.getElementById('chamDescricao').value = '';
+    document.getElementById('modalChamado').classList.add('show');
+}
+
+async function salvarChamado() {
+    const titulo = document.getElementById('chamTitulo').value.trim();
+    if (!titulo) return showToast('Informe o título do chamado', 'error');
+    const body = {
+        titulo,
+        categoria:   document.getElementById('chamCategoria').value,
+        prioridade:  document.getElementById('chamPrioridade').value,
+        local:       document.getElementById('chamLocal').value.trim(),
+        responsavel: document.getElementById('chamResponsavel').value.trim(),
+        descricao:   document.getElementById('chamDescricao').value.trim(),
+    };
+    const r = await fetch('/api/facilities/chamados', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (r.ok) { showToast('Chamado aberto!', 'success'); closeModal('modalChamado'); loadChamados(); updateBadges(); }
+    else { const d = await r.json(); showToast(d.error || 'Erro', 'error'); }
+}
+
+function abrirStatusChamado(id) {
+    document.getElementById('chamStatusId').value = id;
+    document.getElementById('chamNovoStatus').value = 'em_analise';
+    document.getElementById('chamObs').value = '';
+    document.getElementById('modalChamadoStatus').classList.add('show');
+}
+
+async function atualizarStatusChamado() {
+    const id = document.getElementById('chamStatusId').value;
+    const status = document.getElementById('chamNovoStatus').value;
+    const obs = document.getElementById('chamObs').value.trim();
+    const r = await fetch(`/api/facilities/chamados/${id}/status`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ status, observacao: obs })
+    });
+    if (r.ok) { showToast('Status atualizado!', 'success'); closeModal('modalChamadoStatus'); loadChamados(); updateBadges(); }
+    else { const d = await r.json(); showToast(d.error || 'Erro', 'error'); }
+}
+
+// ========== RELATÓRIOS ==========
+async function loadRelatorios() {
+    const r = await fetch('/api/facilities/estoque');
+    const d = await r.json();
+    const tbody = document.getElementById('relEstoqueBody');
+    if (!tbody) return;
+    if (!d.rows?.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Sem itens</td></tr>'; return; }
+    tbody.innerHTML = d.rows.map(item => {
+        const st = item.quantidade === 0 ? 'out-stock' : item.quantidade < item.qtd_minima ? 'low-stock' : 'ok-stock';
+        const lb = item.quantidade === 0 ? 'Sem Estoque' : item.quantidade < item.qtd_minima ? 'Baixo' : 'OK';
+        return `<tr>
+            <td>${item.material_nome || '-'}</td>
+            <td><strong>${item.quantidade}</strong></td>
+            <td>${item.qtd_minima}</td>
+            <td><span class="fac-badge ${st}">${lb}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+// ========== MODAL CLOSE ON BACKDROP ==========
+document.addEventListener('click', e => {
+    if (e.target.classList.contains('fac-modal')) {
+        e.target.classList.remove('show');
+    }
+});
+
 init();
 </script>
-{% endblock %}
+</body>
+</html>

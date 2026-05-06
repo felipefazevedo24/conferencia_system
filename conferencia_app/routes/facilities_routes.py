@@ -18,10 +18,12 @@ from ..auth import login_required, permission_required
 from ..extensions import db
 from ..models import (
     FacilitiesAuditLog,
+    FacilitiesChamado,
     FacilitiesColaborador,
     FacilitiesEpiCicloTroca,
     FacilitiesEpiMaterial,
     FacilitiesEpiSolicitacao,
+    FacilitiesEstoqueItem,
     FacilitiesLimpeza,
     FacilitiesLimpezaTemplate,
     FacilitiesProjeto,
@@ -80,6 +82,8 @@ from ..models import (
     FacilitiesLimpeza,
     FacilitiesProjeto,
     FacilitiesTarefa,
+    FacilitiesEstoqueItem,
+    FacilitiesChamado,
 )
 
 
@@ -1438,10 +1442,30 @@ def api_dashboard():
         "limpezas_pendentes": limpezas_pendentes,
         "projetos_ativos": projetos_ativos,
         "colaboradores_ativos": colaboradores_ativos,
+        "colaboradores": colaboradores_ativos,
         "materiais_estoque_baixo": materiais_estoque_baixo,
+        "estoque_critico": FacilitiesEstoqueItem.query.filter(
+            FacilitiesEstoqueItem.quantidade <= FacilitiesEstoqueItem.qtd_minima
+        ).count(),
+        "chamados_abertos": FacilitiesChamado.query.filter(
+            FacilitiesChamado.status.in_(["aberto", "em_analise", "aprovado", "em_execucao"])
+        ).count(),
         "epi_vencido": epi_vencido,
         "epi_vence_30d": epi_vence_30d,
         "retiradas_pendentes": retiradas_pendentes,
+        "ultimas_solicitacoes": [
+            {
+                "id": s.id,
+                "colaborador_nome": s.colaborador.nome if s.colaborador else "-",
+                "nome_item": s.nome_item,
+                "solicitante_nome": s.solicitante_nome or "-",
+                "solicitado_em": s.solicitado_em.strftime("%d/%m/%Y") if s.solicitado_em else "",
+                "status": s.status,
+            }
+            for s in FacilitiesEpiSolicitacao.query
+                .order_by(FacilitiesEpiSolicitacao.solicitado_em.desc())
+                .limit(10).all()
+        ],
         "top_itens": [{"nome": r.nome_item, "qtd": int(r.qtd)} for r in top_itens],
         "por_dia": por_dia,
         "tempo_medio_aprovacao_h": round(float(tempo_medio), 1) if tempo_medio else None,
@@ -1457,9 +1481,34 @@ def api_dashboard():
 def api_facilities_badge():
     """Contadores leves para alimentar badge no menu (polling)."""
     pendentes = FacilitiesEpiSolicitacao.query.filter_by(status="solicitado").count()
-    # retiradas pendentes (liberadas ha > 0d)
     retiradas = FacilitiesEpiSolicitacao.query.filter_by(status="liberado").count()
-    return jsonify({"epi_pendentes": pendentes, "retiradas_pendentes": retiradas})
+    hoje = date.today()
+    em_30 = hoje + timedelta(days=30)
+    epi_vencido = FacilitiesEpiSolicitacao.query.filter(
+        FacilitiesEpiSolicitacao.status == "retirado",
+        FacilitiesEpiSolicitacao.proxima_troca_em.isnot(None),
+        FacilitiesEpiSolicitacao.proxima_troca_em < hoje,
+    ).count()
+    epi_vence_30d = FacilitiesEpiSolicitacao.query.filter(
+        FacilitiesEpiSolicitacao.status == "retirado",
+        FacilitiesEpiSolicitacao.proxima_troca_em.isnot(None),
+        FacilitiesEpiSolicitacao.proxima_troca_em >= hoje,
+        FacilitiesEpiSolicitacao.proxima_troca_em <= em_30,
+    ).count()
+    chamados_abertos = FacilitiesChamado.query.filter(
+        FacilitiesChamado.status.in_(["aberto", "em_analise", "aprovado", "em_execucao"])
+    ).count()
+    estoque_critico = FacilitiesEstoqueItem.query.filter(
+        FacilitiesEstoqueItem.quantidade <= FacilitiesEstoqueItem.qtd_minima
+    ).count()
+    return jsonify({
+        "epi_pendentes": pendentes,
+        "retiradas_pendentes": retiradas,
+        "epi_vencido": epi_vencido,
+        "epi_vence_30d": epi_vence_30d,
+        "chamados_abertos": chamados_abertos,
+        "estoque_critico": estoque_critico,
+    })
 
 
 # ============================================================================
@@ -2184,4 +2233,250 @@ def pagina_ficha_epi(id):
         empresa_cnpj=empresa_cnpj,
         logo_url=logo_url,
     )
+
+
+# ============================================================================
+# ESTOQUE EPI / UNIFORME  (novo módulo)
+# ============================================================================
+
+@facilities_bp.route("/api/facilities/estoque", methods=["GET"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_listar_estoque():
+    busca = (request.args.get("busca") or "").strip()
+    status_filter = (request.args.get("status") or "").lower()
+
+    q = (
+        FacilitiesEstoqueItem.query
+        .join(FacilitiesEstoqueItem.material, isouter=True)
+        .order_by(FacilitiesEpiMaterial.nome.asc())
+    )
+    if busca:
+        q = q.filter(FacilitiesEpiMaterial.nome.ilike(f"%{busca}%"))
+    if status_filter == "baixo":
+        q = q.filter(
+            FacilitiesEstoqueItem.quantidade > 0,
+            FacilitiesEstoqueItem.quantidade < FacilitiesEstoqueItem.qtd_minima,
+        )
+    elif status_filter == "zerado":
+        q = q.filter(FacilitiesEstoqueItem.quantidade <= 0)
+
+    rows = q.all()
+    return jsonify({
+        "rows": [
+            {
+                "id": r.id,
+                "material_id": r.material_id,
+                "material_nome": r.material.nome if r.material else "",
+                "tipo": r.material.tipo if r.material else "",
+                "numero_ca": r.numero_ca or "",
+                "lote": r.lote or "",
+                "data_validade": r.data_validade.strftime("%Y-%m-%d") if r.data_validade else "",
+                "localizacao": r.localizacao or "",
+                "quantidade": r.quantidade,
+                "qtd_minima": r.qtd_minima,
+            }
+            for r in rows
+        ]
+    })
+
+
+@facilities_bp.route("/api/facilities/estoque/<int:id>", methods=["GET"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_obter_estoque_item(id):
+    r = FacilitiesEstoqueItem.query.get_or_404(id)
+    return jsonify({
+        "id": r.id,
+        "material_id": r.material_id,
+        "numero_ca": r.numero_ca or "",
+        "lote": r.lote or "",
+        "data_validade": r.data_validade.strftime("%Y-%m-%d") if r.data_validade else "",
+        "localizacao": r.localizacao or "",
+        "quantidade": r.quantidade,
+        "qtd_minima": r.qtd_minima,
+    })
+
+
+@facilities_bp.route("/api/facilities/estoque", methods=["POST"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_criar_estoque_item():
+    d = request.get_json() or {}
+    mat_id = d.get("material_id")
+    if not mat_id:
+        return jsonify({"error": "material_id obrigatório"}), 400
+    validade = None
+    if d.get("data_validade"):
+        try:
+            from datetime import datetime as _dt2
+            validade = _dt2.strptime(d["data_validade"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            pass
+    item = FacilitiesEstoqueItem(
+        material_id=int(mat_id),
+        numero_ca=(d.get("numero_ca") or "").strip() or None,
+        lote=(d.get("lote") or "").strip() or None,
+        data_validade=validade,
+        localizacao=(d.get("localizacao") or "").strip() or None,
+        quantidade=max(0, int(d.get("quantidade") or 0)),
+        qtd_minima=max(0, int(d.get("qtd_minima") or 5)),
+    )
+    db.session.add(item)
+    db.session.commit()
+    _audit("estoque_item", item.id, "criar", f"mat={mat_id}, qtd={item.quantidade}")
+    return jsonify({"id": item.id}), 201
+
+
+@facilities_bp.route("/api/facilities/estoque/<int:id>", methods=["PUT"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_atualizar_estoque_item(id):
+    item = FacilitiesEstoqueItem.query.get_or_404(id)
+    d = request.get_json() or {}
+    if "material_id" in d and d["material_id"]:
+        item.material_id = int(d["material_id"])
+    if "numero_ca" in d:
+        item.numero_ca = (d["numero_ca"] or "").strip() or None
+    if "lote" in d:
+        item.lote = (d["lote"] or "").strip() or None
+    if "data_validade" in d:
+        if d["data_validade"]:
+            try:
+                from datetime import datetime as _dt2
+                item.data_validade = _dt2.strptime(d["data_validade"], "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                item.data_validade = None
+        else:
+            item.data_validade = None
+    if "localizacao" in d:
+        item.localizacao = (d["localizacao"] or "").strip() or None
+    if "quantidade" in d:
+        item.quantidade = max(0, int(d["quantidade"] or 0))
+    if "qtd_minima" in d:
+        item.qtd_minima = max(0, int(d["qtd_minima"] or 5))
+    from datetime import datetime as _dt3
+    item.atualizado_em = _dt3.now()
+    db.session.commit()
+    _audit("estoque_item", item.id, "atualizar")
+    return jsonify({"id": item.id})
+
+
+@facilities_bp.route("/api/facilities/estoque/<int:id>", methods=["DELETE"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_deletar_estoque_item(id):
+    item = FacilitiesEstoqueItem.query.get_or_404(id)
+    db.session.delete(item)
+    db.session.commit()
+    _audit("estoque_item", id, "deletar")
+    return jsonify({"ok": True})
+
+
+@facilities_bp.route("/api/facilities/estoque/<int:id>/baixa", methods=["POST"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_baixa_estoque(id):
+    item = FacilitiesEstoqueItem.query.get_or_404(id)
+    d = request.get_json() or {}
+    qtd = max(1, int(d.get("quantidade") or 1))
+    if item.quantidade < qtd:
+        return jsonify({"error": f"Estoque insuficiente (disponível: {item.quantidade})"}), 400
+    item.quantidade -= qtd
+    from datetime import datetime as _dt3
+    item.atualizado_em = _dt3.now()
+    db.session.commit()
+    obs = (d.get("observacao") or "").strip() or None
+    _audit("estoque_item", item.id, "baixa", f"qtd={qtd}" + (f", obs={obs}" if obs else ""))
+    return jsonify({"ok": True, "quantidade_restante": item.quantidade})
+
+
+# ============================================================================
+# CHAMADOS DE FACILITIES  (novo módulo)
+# ============================================================================
+
+@facilities_bp.route("/api/facilities/chamados", methods=["GET"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_listar_chamados():
+    q = FacilitiesChamado.query
+    status = (request.args.get("status") or "").lower()
+    categoria = (request.args.get("categoria") or "").lower()
+    prioridade = (request.args.get("prioridade") or "").lower()
+    busca = (request.args.get("busca") or "").strip()
+
+    if status:
+        q = q.filter_by(status=status)
+    if categoria:
+        q = q.filter_by(categoria=categoria)
+    if prioridade:
+        q = q.filter_by(prioridade=prioridade)
+    if busca:
+        q = q.filter(FacilitiesChamado.titulo.ilike(f"%{busca}%"))
+
+    rows = q.order_by(FacilitiesChamado.aberto_em.desc()).limit(200).all()
+    return jsonify({
+        "rows": [
+            {
+                "id": r.id,
+                "titulo": r.titulo,
+                "descricao": r.descricao or "",
+                "categoria": r.categoria,
+                "prioridade": r.prioridade,
+                "status": r.status,
+                "local": r.local or "",
+                "aberto_por": r.aberto_por or "",
+                "responsavel": r.responsavel or "",
+                "observacao": r.observacao or "",
+                "aberto_em": r.aberto_em.strftime("%d/%m/%Y %H:%M") if r.aberto_em else "",
+                "atualizado_em": r.atualizado_em.strftime("%d/%m/%Y %H:%M") if r.atualizado_em else "",
+                "concluido_em": r.concluido_em.strftime("%d/%m/%Y") if r.concluido_em else "",
+            }
+            for r in rows
+        ]
+    })
+
+
+@facilities_bp.route("/api/facilities/chamados", methods=["POST"])
+@login_required
+def api_criar_chamado():
+    d = request.get_json() or {}
+    titulo = (d.get("titulo") or "").strip()
+    if not titulo:
+        return jsonify({"error": "titulo obrigatório"}), 400
+    chamado = FacilitiesChamado(
+        titulo=titulo,
+        descricao=(d.get("descricao") or "").strip() or None,
+        categoria=(d.get("categoria") or "outros").lower(),
+        prioridade=(d.get("prioridade") or "media").lower(),
+        status="aberto",
+        local=(d.get("local") or "").strip() or None,
+        aberto_por=session.get("username") or "anon",
+        responsavel=(d.get("responsavel") or "").strip() or None,
+    )
+    db.session.add(chamado)
+    db.session.commit()
+    _audit("chamado", chamado.id, "criar", f"{titulo[:60]}")
+    return jsonify({"id": chamado.id}), 201
+
+
+@facilities_bp.route("/api/facilities/chamados/<int:id>/status", methods=["POST"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_atualizar_status_chamado(id):
+    from datetime import datetime as _dt3
+    chamado = FacilitiesChamado.query.get_or_404(id)
+    d = request.get_json() or {}
+    novo_status = (d.get("status") or "").lower()
+    valid = {"aberto", "em_analise", "aprovado", "em_execucao", "concluido", "cancelado"}
+    if novo_status not in valid:
+        return jsonify({"error": f"status inválido: {novo_status}"}), 400
+    chamado.status = novo_status
+    chamado.observacao = (d.get("observacao") or "").strip() or chamado.observacao
+    chamado.atualizado_em = _dt3.now()
+    if novo_status in ("concluido", "cancelado") and not chamado.concluido_em:
+        chamado.concluido_em = _dt3.now()
+    db.session.commit()
+    _audit("chamado", chamado.id, f"status→{novo_status}")
+    return jsonify({"id": chamado.id, "status": chamado.status})
 

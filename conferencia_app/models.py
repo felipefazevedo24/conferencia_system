@@ -1180,6 +1180,41 @@ class FacilitiesProjetoTarefa(db.Model):
     responsavel = db.relationship("FacilitiesColaborador")
 
 
+class FacilitiesEstoqueItem(db.Model):
+    """Controle de estoque de EPIs e uniformes no almoxarifado."""
+    __tablename__ = "facilities_estoque_item"
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.Integer, db.ForeignKey("facilities_epi_material.id"), nullable=False, index=True)
+    numero_ca = db.Column(db.String(20))           # Certificado de Aprovação (NR-6)
+    lote = db.Column(db.String(50))
+    data_validade = db.Column(db.Date)
+    localizacao = db.Column(db.String(100))        # Ex: Prateleira A3
+    quantidade = db.Column(db.Integer, nullable=False, default=0)
+    qtd_minima = db.Column(db.Integer, nullable=False, default=5)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime)
+
+    material = db.relationship("FacilitiesEpiMaterial")
+
+
+class FacilitiesChamado(db.Model):
+    """Chamado de Facilities: manutenção, limpeza, reposição, etc."""
+    __tablename__ = "facilities_chamado"
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    categoria = db.Column(db.String(30), nullable=False, default="outros", index=True)  # manutencao|limpeza|reposicao|outros
+    prioridade = db.Column(db.String(15), nullable=False, default="media", index=True)  # baixa|media|alta|urgente
+    status = db.Column(db.String(20), nullable=False, default="aberto", index=True)     # aberto|em_analise|aprovado|em_execucao|concluido|cancelado
+    local = db.Column(db.String(150))
+    aberto_por = db.Column(db.String(100))         # nome ou usuario
+    responsavel = db.Column(db.String(100))        # responsável pela execução
+    observacao = db.Column(db.Text)                # última observação de atualização
+    aberto_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime)
+    concluido_em = db.Column(db.DateTime)
+
+
 class EmailNFEnviado(db.Model):
     """Log/idempotencia de envio de NF-e (XML + DANFE) por e-mail ao cliente/destinatario."""
     __tablename__ = "email_nf_enviado"
