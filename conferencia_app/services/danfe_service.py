@@ -23,9 +23,11 @@ from reportlab.pdfgen import canvas
 try:
     from brazilfiscalreport.danfe import Danfe as _FiscalDanfe
     from brazilfiscalreport.danfe import DanfeConfig as _FiscalDanfeConfig
+    from brazilfiscalreport.danfe.config import InvoiceDisplay as _FiscalInvoiceDisplay
 except Exception:  # pragma: no cover - optional dependency
     _FiscalDanfe = None
     _FiscalDanfeConfig = None
+    _FiscalInvoiceDisplay = None
 
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
@@ -1181,15 +1183,80 @@ def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None) -> Optional
     return None
 
 
+def _read_logo_bytes(logo_path: Optional[str] = None, logo_url: Optional[str] = None) -> Optional[bytes]:
+    logo = _resolve_logo_for_fiscal_engine(logo_path)
+    if logo and os.path.isfile(logo):
+        try:
+            with open(logo, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+    if logo_url:
+        try:
+            resp = _req.get(logo_url, timeout=6)
+            if resp.ok and resp.content:
+                return resp.content
+        except Exception:
+            pass
+    return None
+
+
+def _ensure_cobr_block(xml_bytes: bytes) -> bytes:
+    """Ensure <cobr/> exists so fiscal engine renders FATURA/DUPLICATAS even blank."""
+    try:
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        return xml_bytes
+
+    inf_nfe = None
+    for elem in root.iter():
+        if elem.tag.split("}")[-1] == "infNFe":
+            inf_nfe = elem
+            break
+    if inf_nfe is None:
+        return xml_bytes
+
+    has_cobr = any(ch.tag.split("}")[-1] == "cobr" for ch in list(inf_nfe))
+    if has_cobr:
+        return xml_bytes
+
+    tag = inf_nfe.tag
+    if tag.startswith("{") and "}" in tag:
+        ns = tag.split("}")[0][1:]
+        cobr_tag = f"{{{ns}}}cobr"
+    else:
+        cobr_tag = "cobr"
+    inf_nfe.append(ET.Element(cobr_tag))
+
+    try:
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        return xml_bytes
+
+
 def gerar_danfe(xml_bytes: bytes,
                 logo_path: Optional[str] = None,
                 logo_url: Optional[str] = None) -> bytes:
     """Gera DANFE em PDF priorizando engine fiscal padrão, com fallback manual."""
     if _FiscalDanfe is not None and _FiscalDanfeConfig is not None:
         try:
-            logo = _resolve_logo_for_fiscal_engine(logo_path)
-            cfg = _FiscalDanfeConfig(logo=logo) if logo else _FiscalDanfeConfig()
-            pdf_data = _FiscalDanfe(xml_bytes, cfg).output()
+            xml_for_engine = _ensure_cobr_block(xml_bytes)
+            logo_bytes = _read_logo_bytes(logo_path=logo_path, logo_url=logo_url)
+            cfg = _FiscalDanfeConfig(
+                logo=logo_bytes,
+                invoice_display=(
+                    _FiscalInvoiceDisplay.FULL_DETAILS
+                    if _FiscalInvoiceDisplay is not None
+                    else None
+                ),
+            ) if logo_bytes else _FiscalDanfeConfig(
+                invoice_display=(
+                    _FiscalInvoiceDisplay.FULL_DETAILS
+                    if _FiscalInvoiceDisplay is not None
+                    else None
+                ),
+            )
+            pdf_data = _FiscalDanfe(xml_for_engine, cfg).output()
             if pdf_data:
                 return bytes(pdf_data)
         except Exception:
