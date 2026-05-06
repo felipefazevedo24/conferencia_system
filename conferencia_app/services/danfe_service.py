@@ -19,6 +19,12 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+import tempfile
+
+try:
+    from PIL import Image as _PILImage
+except Exception:  # pragma: no cover - optional dependency
+    _PILImage = None
 
 try:
     from brazilfiscalreport.danfe import Danfe as _FiscalDanfe
@@ -1171,34 +1177,61 @@ def _gerar_danfe_manual(xml_bytes: bytes,
     return buf.getvalue()
 
 
-def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None) -> Optional[str]:
-    candidates = []
-    if logo_path:
-        candidates.append(logo_path)
-    candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "columbia_logo.png")))
-    candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")))
-    for candidate in candidates:
-        if candidate and os.path.isfile(candidate):
-            return candidate
-    return None
+def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None, logo_url: Optional[str] = None) -> Optional[str]:
+    """Return a local image path optimized for FPDF image rendering."""
+    logo_bytes = None
 
-
-def _read_logo_bytes(logo_path: Optional[str] = None, logo_url: Optional[str] = None) -> Optional[bytes]:
-    logo = _resolve_logo_for_fiscal_engine(logo_path)
-    if logo and os.path.isfile(logo):
-        try:
-            with open(logo, "rb") as f:
-                return f.read()
-        except Exception:
-            pass
+    # Prioritize explicit URL informed by user.
     if logo_url:
         try:
-            resp = _req.get(logo_url, timeout=6)
+            resp = _req.get(logo_url, timeout=10)
             if resp.ok and resp.content:
-                return resp.content
+                logo_bytes = resp.content
         except Exception:
             pass
-    return None
+
+    # Fallback to local files.
+    if logo_bytes is None:
+        candidates = []
+        if logo_path:
+            candidates.append(logo_path)
+        candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "columbia_logo.png")))
+        candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")))
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate):
+                try:
+                    with open(candidate, "rb") as f:
+                        logo_bytes = f.read()
+                    break
+                except Exception:
+                    continue
+
+    if not logo_bytes:
+        return None
+
+    # Some source logos have huge transparent margins; trim them to avoid blank area.
+    tmp_dir = tempfile.gettempdir()
+    out_path = os.path.join(tmp_dir, "columbia_logo_danfe_engine.png")
+    if _PILImage is not None:
+        try:
+            import io as _io
+
+            img = _PILImage.open(_io.BytesIO(logo_bytes)).convert("RGBA")
+            alpha = img.getchannel("A")
+            bbox = alpha.getbbox()
+            if bbox:
+                img = img.crop(bbox)
+            img.save(out_path, format="PNG")
+            return out_path
+        except Exception:
+            pass
+
+    try:
+        with open(out_path, "wb") as f:
+            f.write(logo_bytes)
+        return out_path
+    except Exception:
+        return None
 
 
 def _ensure_cobr_block(xml_bytes: bytes) -> bytes:
@@ -1241,15 +1274,15 @@ def gerar_danfe(xml_bytes: bytes,
     if _FiscalDanfe is not None and _FiscalDanfeConfig is not None:
         try:
             xml_for_engine = _ensure_cobr_block(xml_bytes)
-            logo_bytes = _read_logo_bytes(logo_path=logo_path, logo_url=logo_url)
+            logo_file = _resolve_logo_for_fiscal_engine(logo_path=logo_path, logo_url=logo_url)
             cfg = _FiscalDanfeConfig(
-                logo=logo_bytes,
+                logo=logo_file,
                 invoice_display=(
                     _FiscalInvoiceDisplay.FULL_DETAILS
                     if _FiscalInvoiceDisplay is not None
                     else None
                 ),
-            ) if logo_bytes else _FiscalDanfeConfig(
+            ) if logo_file else _FiscalDanfeConfig(
                 invoice_display=(
                     _FiscalInvoiceDisplay.FULL_DETAILS
                     if _FiscalInvoiceDisplay is not None
