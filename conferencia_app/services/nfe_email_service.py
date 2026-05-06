@@ -29,6 +29,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
+from .danfe_service import gerar_danfe
 from .planilhas_cadastros import buscar_email_por_cnpj
 
 
@@ -184,7 +185,18 @@ def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | No
         emit_cnpj=_somente_digitos(doc.get("emit_cnpj")),
     )
     nota.xml_bytes = _download_consyste(app, chave_doc, "xml")
-    nota.pdf_bytes = _download_consyste(app, chave_doc, "pdf")
+    # PDF do e-mail: preferencialmente DANFE customizado do sistema.
+    # Fallback para PDF da Consyste se a geracao local falhar.
+    if nota.xml_bytes:
+      try:
+        logo_path = os.path.normpath(os.path.join(app.root_path, "..", "static", "columbia_logo.png"))
+        logo_url = app.config.get("EMPRESA_LOGO_URL", "")
+        nota.pdf_bytes = gerar_danfe(nota.xml_bytes, logo_path=logo_path, logo_url=logo_url)
+      except Exception as exc:
+        app.logger.warning("DANFE customizado falhou para NF-e %s; usando Consyste. Erro: %s", chave_doc, exc)
+        nota.pdf_bytes = _download_consyste(app, chave_doc, "pdf")
+    else:
+      nota.pdf_bytes = _download_consyste(app, chave_doc, "pdf")
 
     email_xml, nome_xml, cnpj_xml = _parse_dest_email_do_xml(nota.xml_bytes)
     nota.dest_email_xml = email_xml

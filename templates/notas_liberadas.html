@@ -278,7 +278,6 @@
         .btn-sap { padding: 12px 20px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; text-transform: uppercase; transition: 0.2s; border: none; display: inline-flex; align-items: center; gap: 8px; }
         .btn-xml { background: #e0f2fe; color: #0369a1; }
         .btn-pdf { background: #fee2e2; color: #b91c1c; }
-        .btn-danfe { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
         .btn-proof { background: #ecfdf3; color: #166534; border: 1px solid #86efac; }
         .btn-primary { background: var(--sap-blue); color: #fff; }
         .btn-disabled { opacity: 0.55; cursor: not-allowed; filter: grayscale(0.15); }
@@ -407,7 +406,6 @@
                 <div style="display:flex; gap:12px; margin-bottom: 25px;">
                     <button id="btn-detail-xml" class="btn-sap btn-xml"><i class="fas fa-code"></i> XML</button>
                     <button id="btn-detail-pdf" class="btn-sap btn-pdf"><i class="fas fa-file-pdf"></i> PDF</button>
-                    <button id="btn-detail-danfe" class="btn-sap btn-danfe"><i class="fas fa-file-invoice"></i> DANFE</button>
                     <button id="btn-detail-comprovante" class="btn-sap btn-proof"><i class="fas fa-clipboard-check"></i> Comprovante</button>
                 </div>
                 <div id="detail-download-hint" style="display:none; margin-top:-10px; margin-bottom:18px; font-size:11px; font-weight:700; color:#9a3412; background:#fff7ed; border:1px solid #fdba74; border-radius:10px; padding:10px 12px;">
@@ -1075,7 +1073,6 @@
         const btnXml = document.getElementById('btn-detail-xml');
         const btnPdf = document.getElementById('btn-detail-pdf');
         const btnComprovante = document.getElementById('btn-detail-comprovante');
-            const btnDanfe = document.getElementById('btn-detail-danfe');
         const hint = document.getElementById('detail-download-hint');
         const podeBaixar = Boolean(CAN_DOWNLOAD_DOCUMENTS) && Boolean(detalhe.documentos_disponiveis);
         btnXml.disabled = !podeBaixar;
@@ -1087,14 +1084,6 @@
         btnXml.onclick = podeBaixar ? (() => window.open(`/api/consyste/documento?nota=${detalhe.numero}&tipo=xml`)) : null;
         btnPdf.onclick = podeBaixar ? (() => window.open(`/api/consyste/documento?nota=${detalhe.numero}&tipo=pdf`)) : null;
         btnComprovante.onclick = imprimirComprovanteEntrega;
-        // DANFE: habilitado se tiver chave de acesso (independente de documentos_disponiveis)
-        const chaveParaDanfe = detalheSelecionado.chave_acesso || '';
-        const podeDanfe = Boolean(CAN_DOWNLOAD_DOCUMENTS) && chaveParaDanfe.replace(/\D/g, '').length === 44;
-        btnDanfe.disabled = !podeDanfe;
-        btnDanfe.classList.toggle('btn-disabled', !podeDanfe);
-        btnDanfe.onclick = podeDanfe
-            ? (() => window.open(`/api/nfe/${chaveParaDanfe.replace(/\D/g, '')}/danfe`, '_blank'))
-            : null;
         hint.style.display = CAN_DOWNLOAD_DOCUMENTS ? 'none' : 'block';
         
         document.getElementById('card-detalhes-sticky').scrollTop = 0;

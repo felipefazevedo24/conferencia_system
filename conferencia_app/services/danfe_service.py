@@ -111,6 +111,11 @@ def _mod_frete(v):
 _NS = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
 
 
+def _strip_xpath_prefix(path: str) -> str:
+    clean = re.sub(r"\{[^}]+\}", "", path).lstrip("./")
+    return re.sub(r"\b\w+:", "", clean)
+
+
 def _t(node, *paths):
     if node is None:
         return ""
@@ -119,7 +124,7 @@ def _t(node, *paths):
         if r is not None and r.text:
             return r.text.strip()
         # try without namespace
-        clean = re.sub(r"\{[^}]+\}", "", path).lstrip("./")
+        clean = _strip_xpath_prefix(path)
         r = node.find(f".//{clean}")
         if r is not None and r.text:
             return r.text.strip()
@@ -132,7 +137,7 @@ def _find(node, path):
     r = node.find(path, _NS)
     if r is not None:
         return r
-    clean = re.sub(r"\{[^}]+\}", "", path).lstrip("./")
+    clean = _strip_xpath_prefix(path)
     return node.find(f".//{clean}")
 
 
@@ -142,7 +147,7 @@ def _findall(node, path):
     r = node.findall(path, _NS)
     if r:
         return r
-    clean = re.sub(r"\{[^}]+\}", "", path).lstrip("./")
+    clean = _strip_xpath_prefix(path)
     return node.findall(f".//{clean}")
 
 
@@ -233,7 +238,6 @@ def parse_nfe_xml(xml_bytes: bytes) -> dict:
                         el = (sub.find(f"{{http://www.portalfiscal.inf.br/nfe}}{tag}") or
                               sub.find(tag))
                         if el is not None and el.text:
-                            locals()[tag]  # just reference
                             if tag == "vBC":   vBC   = el.text.strip()
                             if tag == "vICMS": vICMS = el.text.strip()
                             if tag == "pICMS": pICMS = el.text.strip()
