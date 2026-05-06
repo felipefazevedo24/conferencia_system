@@ -362,7 +362,7 @@ def _rect(c, x, y, w, h, fill=None, stroke=None, lw=0.3):
 
 
 def _cell(c, x, y, w, h, label, value, lsz=5.5, vsz=7.5, bold=False,
-          bg=None, align="left", border=True):
+          bg=None, align="left", border=True, max_lines=1):
     """Labeled data cell: small gray label top-left, value bottom."""
     c.saveState()
     if bg:
@@ -382,13 +382,22 @@ def _cell(c, x, y, w, h, label, value, lsz=5.5, vsz=7.5, bold=False,
     c.setFont(FB if bold else F, vsz)
     val = _v(value)
     max_chars = max(1, int((w - 2 * pad) / (vsz * 0.55 * mm)))
-    val = val if len(val) <= max_chars else val[: max_chars - 1] + "…"
-    if align == "right":
-        c.drawRightString(x + w - pad, y + pad * 0.7, val)
-    elif align == "center":
-        c.drawCentredString(x + w / 2, y + pad * 0.7, val)
+    if max_lines <= 1:
+        val = val if len(val) <= max_chars else val[: max_chars - 1] + "…"
+        if align == "right":
+            c.drawRightString(x + w - pad, y + pad * 0.7, val)
+        elif align == "center":
+            c.drawCentredString(x + w / 2, y + pad * 0.7, val)
+        else:
+            c.drawString(x + pad, y + pad * 0.7, val)
     else:
-        c.drawString(x + pad, y + pad * 0.7, val)
+        # Wrap in 2+ lines when critical fields are long (natureza, razao social, endereco).
+        lines = textwrap.wrap(val, max_chars) or [""]
+        lines = lines[:max_lines]
+        line_h = 3.1 * mm
+        start_y = y + pad * 0.7 + (len(lines) - 1) * line_h
+        for i, line in enumerate(reversed(lines)):
+            c.drawString(x + pad, start_y - i * line_h, line)
     c.restoreState()
 
 
@@ -511,16 +520,22 @@ def _draw_header(c, d, logo_img, x, y, w, h):
     # Try to draw logo image
     if logo_img:
         try:
-            logo_draw_w = logo_col_w - 4 * mm
-            logo_draw_h = h * 0.45
-            c.drawImage(logo_img,
-                        logo_col_x + 2 * mm,
-                        logo_col_y + h * 0.52,
-                        width=logo_draw_w,
-                        height=logo_draw_h,
-                        preserveAspectRatio=True,
-                        anchor="c",
-                        mask="auto")
+            iw, ih = logo_img.getSize()
+            if iw and ih:
+                box_w = logo_col_w - 4 * mm
+                box_h = h * 0.45
+                scale = min(box_w / float(iw), box_h / float(ih))
+                dw = float(iw) * scale
+                dh = float(ih) * scale
+                dx = logo_col_x + (logo_col_w - dw) / 2
+                dy = logo_col_y + h * 0.52 + (box_h - dh) / 2
+                c.drawImage(logo_img,
+                            dx,
+                            dy,
+                            width=dw,
+                            height=dh,
+                            preserveAspectRatio=True,
+                            mask="auto")
         except Exception:
             pass
 
@@ -651,7 +666,7 @@ def _draw_nat_ie_cnpj(c, d, x, y, w, h):
     w2 = w * 0.18
     w3 = w * 0.13
     w4 = w - w1 - w2 - w3
-    _cell(c, x,          y, w1, h, "NATUREZA DA OPERAÇÃO", _v(d.get("natOp")))
+    _cell(c, x,          y, w1, h, "NATUREZA DA OPERAÇÃO", _v(d.get("natOp")), max_lines=2)
     _cell(c, x + w1,     y, w2, h, "INSCRIÇÃO ESTADUAL",   _v(d.get("emit_ie")))
     _cell(c, x + w1 + w2, y, w3, h, "IE SUB. TRIBUTÁRIA",  _v(d.get("emit_iest")))
     _cell(c, x + w1 + w2 + w3, y, w4, h, "CNPJ",           _v(d.get("emit_cnpj")),
@@ -668,7 +683,7 @@ def _draw_dest(c, d, x, y, w, row_h):
     w1  = w * 0.60
     w2  = w * 0.25
     w3  = w - w1 - w2
-    _cell(c, x,       r1y, w1, row_h, "NOME / RAZÃO SOCIAL",   _v(d.get("dest_nome")))
+    _cell(c, x,       r1y, w1, row_h, "NOME / RAZÃO SOCIAL",   _v(d.get("dest_nome")), max_lines=2)
     _cell(c, x + w1,  r1y, w2, row_h, "CNPJ / CPF",             _v(d.get("dest_cnpj")), bold=True)
     _cell(c, x + w1 + w2, r1y, w3, row_h, "DATA DE EMISSÃO",   _fmt_date(_v(d.get("dhEmi"))))
 
@@ -681,7 +696,7 @@ def _draw_dest(c, d, x, y, w, row_h):
     w2b = w * 0.20
     w2c = w * 0.18
     w2d = w - w2a - w2b - w2c
-    _cell(c, x,              r2y, w2a, row_h, "ENDEREÇO",        logr)
+    _cell(c, x,              r2y, w2a, row_h, "ENDEREÇO",        logr, max_lines=2)
     _cell(c, x + w2a,        r2y, w2b, row_h, "BAIRRO / DIST.",  _v(d.get("dest_bairro")))
     _cell(c, x + w2a + w2b,  r2y, w2c, row_h, "CEP",             _v(d.get("dest_cep")))
     _cell(c, x + w2a + w2b + w2c, r2y, w2d, row_h, "DATA SAÍDA/ENTRADA",
@@ -778,7 +793,7 @@ def _draw_transp(c, d, x, y, w, row_h):
     w1b = w * 0.18
     w1c = w * 0.25
     w1d = w - w1a - w1b - w1c
-    _cell(c, x,          r1y, w1a, row_h, "RAZÃO SOCIAL",    _v(d.get("transp_nome")))
+    _cell(c, x,          r1y, w1a, row_h, "RAZÃO SOCIAL",    _v(d.get("transp_nome")), max_lines=2)
     _cell(c, x + w1a,    r1y, w1b, row_h, "FRETE POR CONTA", _mod_frete(_v(d.get("transp_modFrete"))))
     _cell(c, x + w1a + w1b, r1y, w1c, row_h, "CNPJ / CPF",   _v(d.get("transp_cnpj")))
     _cell(c, x + w1a + w1b + w1c, r1y, w1d, row_h, "INSCRIÇÃO ESTADUAL", _v(d.get("transp_ie")))
@@ -791,7 +806,7 @@ def _draw_transp(c, d, x, y, w, row_h):
     w2d = w * 0.13
     w2e = w * 0.08
     w2f = w - w2a - w2b - w2c - w2d - w2e
-    _cell(c, x,                         r2y, w2a, row_h, "ENDEREÇO",     _v(d.get("transp_ender")))
+    _cell(c, x,                         r2y, w2a, row_h, "ENDEREÇO",     _v(d.get("transp_ender")), max_lines=2)
     _cell(c, x + w2a,                   r2y, w2b, row_h, "MUNICÍPIO",    _v(d.get("transp_mun")))
     _cell(c, x + w2a + w2b,             r2y, w2c, row_h, "UF",           _v(d.get("transp_uf")))
     _cell(c, x + w2a + w2b + w2c,       r2y, w2d, row_h, "PLACA DO VEÍC.", _v(d.get("transp_placa")))
@@ -984,11 +999,18 @@ def gerar_danfe(xml_bytes: bytes,
 
     # Load logo
     logo_img = None
-    if logo_path and os.path.isfile(logo_path):
-        try:
-            logo_img = ImageReader(logo_path)
-        except Exception:
-            pass
+    logo_candidates = []
+    if logo_path:
+        logo_candidates.append(logo_path)
+    logo_candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "columbia_logo.png")))
+    logo_candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")))
+    for candidate in logo_candidates:
+        if candidate and os.path.isfile(candidate):
+            try:
+                logo_img = ImageReader(candidate)
+                break
+            except Exception:
+                continue
     if logo_img is None and logo_url:
         try:
             resp = _req.get(logo_url, timeout=6)
@@ -1000,7 +1022,7 @@ def gerar_danfe(xml_bytes: bytes,
     # ── Layout constants ──
     x   = LM
     w   = CWT
-    ROW = 10 * mm   # standard cell row height
+    ROW = 11 * mm   # standard cell row height
     DUP_H = 12 * mm  # fatura height (body only)
 
     # Fixed section heights
