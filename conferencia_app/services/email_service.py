@@ -179,3 +179,137 @@ def enviar_email_agendamento_update(
     )
     thread.daemon = True
     thread.start()
+
+
+def enviar_email_retorno_epi(
+    destinatario_email: str,
+    gestor_nome: str,
+    colaborador_nome: str,
+    item_nome: str,
+    quantidade: int,
+    acao: str,          # "liberado" | "negado"
+    motivo_recusa: str,
+    url_ficha: str,
+):
+    """Notifica o gestor de setor quando sua solicitacao de EPI foi aprovada ou negada."""
+    app = current_app._get_current_object()
+    smtp_server = app.config.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
+    smtp_port   = app.config.get("MAIL_SMTP_PORT", 587)
+    sender      = app.config.get("MAIL_SENDER", "")
+    password    = app.config.get("MAIL_PASSWORD", "")
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+
+    if not destinatario_email or not sender or not password:
+        app.logger.warning("E-mail retorno EPI: nao configurado ou sem destinatario.")
+        return
+
+    aprovado = acao == "liberado"
+    cor       = "#059669" if aprovado else "#dc2626"
+    icone     = "✅" if aprovado else "❌"
+    titulo    = f"{icone} EPI {('Aprovado' if aprovado else 'Negado')} — {item_nome}"
+    subtitulo = (
+        f"Sua solicitação para <b>{colaborador_nome}</b> foi <b>{'APROVADA' if aprovado else 'NEGADA'}</b>."
+    )
+    extras = ""
+    if not aprovado and motivo_recusa:
+        extras = f'<tr><td style="padding:6px 0;font-weight:bold;color:#b91c1c;vertical-align:top">Motivo da recusa:</td><td style="padding:6px 0;color:#b91c1c">{motivo_recusa}</td></tr>'
+    botao = ""
+    if aprovado and url_ficha:
+        botao = f'<a href="{url_ficha}" style="display:inline-block;margin-top:18px;padding:10px 22px;background:{cor};color:#fff;text-decoration:none;border-radius:6px;font-size:14px;">Abrir Ficha para Imprimir</a>'
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = titulo
+    msg["From"]    = f"{sender_name} <{sender}>"
+    msg["To"]      = destinatario_email
+
+    html = f"""\
+    <html><body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px;">
+      <div style="max-width:560px;margin:auto;background:#fff;border-radius:8px;padding:24px;border-top:4px solid {cor}">
+        <h2 style="color:{cor};margin:0 0 8px;">{titulo}</h2>
+        <p style="color:#555;font-size:14px;margin:0 0 16px;">{subtitulo}</p>
+        <table style="width:100%;font-size:14px;color:#333;border-collapse:collapse;">
+          <tr><td style="padding:6px 0;font-weight:bold;width:160px">Gestor solicitante:</td><td style="padding:6px 0">{gestor_nome}</td></tr>
+          <tr><td style="padding:6px 0;font-weight:bold">Colaborador:</td><td style="padding:6px 0">{colaborador_nome}</td></tr>
+          <tr><td style="padding:6px 0;font-weight:bold">Item:</td><td style="padding:6px 0">{item_nome}</td></tr>
+          <tr><td style="padding:6px 0;font-weight:bold">Quantidade:</td><td style="padding:6px 0">{quantidade}</td></tr>
+          {extras}
+        </table>
+        {botao}
+        <p style="margin-top:24px;font-size:12px;color:#999;">Este é um e-mail automático. Não responda.</p>
+      </div>
+    </body></html>
+    """
+    msg.attach(MIMEText(html, "html"))
+    thread = threading.Thread(
+        target=_send_async,
+        args=(app, msg, smtp_server, smtp_port, sender, password),
+    )
+    thread.daemon = True
+    thread.start()
+
+
+def enviar_email_vencimento_epi(
+    destinatario_email: str,
+    gestor_nome: str,
+    itens: list,   # lista de dicts: {colaborador, item, proxima_troca, dias_restantes}
+    url_admin: str,
+):
+    """Alerta o gestor sobre EPIs prestes a vencer ou já vencidos no seu setor."""
+    app = current_app._get_current_object()
+    smtp_server = app.config.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
+    smtp_port   = app.config.get("MAIL_SMTP_PORT", 587)
+    sender      = app.config.get("MAIL_SENDER", "")
+    password    = app.config.get("MAIL_PASSWORD", "")
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+
+    if not destinatario_email or not sender or not password or not itens:
+        return
+
+    linhas = ""
+    for it in itens:
+        dias = it.get("dias_restantes", 0)
+        cor_linha = "#b91c1c" if dias < 0 else ("#b45309" if dias <= 15 else "#555")
+        situacao  = "VENCIDO" if dias < 0 else f"vence em {dias}d"
+        linhas += (
+            f'<tr>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">{it.get("colaborador","")}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">{it.get("item","")}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">{it.get("proxima_troca","")}</td>'
+            f'<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;color:{cor_linha};font-weight:700">{situacao}</td>'
+            f'</tr>'
+        )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[Facilities] Alertas NR-6 — {len(itens)} EPI(s) com vencimento próximo"
+    msg["From"]    = f"{sender_name} <{sender}>"
+    msg["To"]      = destinatario_email
+
+    html = f"""\
+    <html><body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px;">
+      <div style="max-width:680px;margin:auto;background:#fff;border-radius:8px;padding:24px;border-top:4px solid #f59e0b">
+        <h2 style="color:#b45309;margin:0 0 8px;">⚠️ Alertas NR-6 — Vencimento de EPIs</h2>
+        <p style="color:#555;font-size:14px;margin:0 0 16px;">Olá {gestor_nome}, os EPIs abaixo precisam de atenção.</p>
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <thead><tr style="background:#1e293b;color:#fff">
+            <th style="padding:8px">Colaborador</th>
+            <th style="padding:8px">Item</th>
+            <th style="padding:8px">Próx. Troca</th>
+            <th style="padding:8px">Situação</th>
+          </tr></thead>
+          <tbody>{linhas}</tbody>
+        </table>
+        <a href="{url_admin}" style="display:inline-block;margin-top:18px;padding:10px 22px;background:#f59e0b;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;">
+          Abrir Painel Facilities
+        </a>
+        <p style="margin-top:24px;font-size:12px;color:#999;">Este é um e-mail automático. Não responda.</p>
+      </div>
+    </body></html>
+    """
+    msg.attach(MIMEText(html, "html"))
+    thread = threading.Thread(
+        target=_send_async,
+        args=(app, msg, smtp_server, smtp_port, sender, password),
+    )
+    thread.daemon = True
+    thread.start()
+

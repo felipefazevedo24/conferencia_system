@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minhas Solicitações EPI | Columbia Sync</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh;padding:20px;color:#1e293b}
+    .shell{max-width:960px;margin:0 auto}
+    .hero{background:linear-gradient(135deg,#0284c7,#0ea5e9);border-radius:20px;padding:24px 28px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(2,132,199,.25)}
+    .hero i{font-size:32px;opacity:.9}
+    .hero h1{font-size:22px;font-weight:800;margin-bottom:4px}
+    .hero p{opacity:.88;font-size:13px}
+    .hero a{background:rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;margin-top:8px;border:1px solid rgba(255,255,255,.3)}
+    .hero a:hover{background:rgba(255,255,255,.28)}
+    .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+    .stat{background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:0 2px 8px rgba(18,40,58,.04)}
+    .stat .num{font-size:26px;font-weight:800}
+    .stat .lbl{font-size:12px;color:#64748b;font-weight:600;margin-top:2px}
+    .filters{background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 2px 8px rgba(18,40,58,.04);margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .filters input,.filters select{padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none}
+    .btn-sky{background:#e0f2fe;color:#0369a1}.btn-sky:hover{background:#bae6fd}
+    .btn-red{background:#fee2e2;color:#991b1b}.btn-red:hover{background:#fecaca}
+    .btn-sm{padding:5px 10px;font-size:12px}
+    .card-list{display:grid;gap:12px}
+    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(18,40,58,.04);border-left:4px solid #e2e8f0;display:flex;gap:14px;align-items:flex-start;transition:box-shadow .15s}
+    .card:hover{box-shadow:0 4px 16px rgba(18,40,58,.08)}
+    .card.status-solicitado{border-left-color:#f59e0b}
+    .card.status-liberado{border-left-color:#3b82f6}
+    .card.status-retirado{border-left-color:#22c55e}
+    .card.status-negado{border-left-color:#ef4444}
+    .card.status-cancelado{border-left-color:#94a3b8}
+    .card-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .card.status-solicitado .card-icon{background:#fef3c7;color:#d97706}
+    .card.status-liberado .card-icon{background:#dbeafe;color:#1d4ed8}
+    .card.status-retirado .card-icon{background:#dcfce7;color:#15803d}
+    .card.status-negado .card-icon{background:#fee2e2;color:#dc2626}
+    .card.status-cancelado .card-icon{background:#f1f5f9;color:#64748b}
+    .card-body{flex:1}
+    .card-title{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:3px}
+    .card-meta{font-size:12px;color:#64748b;margin-bottom:8px}
+    .card-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase}
+    .badge-solicitado{background:#fef3c7;color:#92400e}
+    .badge-liberado{background:#dbeafe;color:#1e3a8a}
+    .badge-retirado{background:#dcfce7;color:#14532d}
+    .badge-negado{background:#fee2e2;color:#7f1d1d}
+    .badge-cancelado{background:#f1f5f9;color:#475569}
+    .empty{text-align:center;padding:50px;color:#94a3b8;background:#fff;border-radius:14px}
+    .empty i{font-size:44px;margin-bottom:14px;display:block;opacity:.5}
+    .toast-wrap{position:fixed;top:16px;right:16px;z-index:9999}
+    .toast{background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12);border-left:4px solid #0ea5e9;margin-bottom:8px;font-size:13px;transform:translateX(110%);opacity:0;transition:all .25s}
+    .toast.show{transform:translateX(0);opacity:1}
+    .toast.ok{border-left-color:#22c55e}
+    .toast.err{border-left-color:#ef4444}
+    @media(max-width:600px){.hero{flex-direction:column;text-align:center}.card{flex-direction:column}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="hero">
+    <i class="fas fa-clipboard-list"></i>
+    <div style="flex:1">
+      <h1>Minhas Solicitações de EPI</h1>
+      <p>Acompanhe o status de todas as solicitações que você criou.</p>
+      <a href="/facilities/solicitar-epi"><i class="fas fa-plus"></i> Nova Solicitação</a>
+    </div>
+  </div>
+
+  <div class="stat-row" id="statRow">
+    <div class="stat"><div class="num" id="sTot">-</div><div class="lbl">Total</div></div>
+    <div class="stat"><div class="num" id="sPend" style="color:#d97706">-</div><div class="lbl">Aguardando</div></div>
+    <div class="stat"><div class="num" id="sLib" style="color:#1d4ed8">-</div><div class="lbl">Liberados</div></div>
+    <div class="stat"><div class="num" id="sRet" style="color:#15803d">-</div><div class="lbl">Retirados</div></div>
+    <div class="stat"><div class="num" id="sNeg" style="color:#dc2626">-</div><div class="lbl">Negados</div></div>
+  </div>
+
+  <div class="filters">
+    <input id="busca" type="search" placeholder="Buscar colaborador ou item..." style="flex:1;min-width:180px" oninput="debounce()">
+    <select id="filtroStatus" onchange="renderList()">
+      <option value="">Todos os status</option>
+      <option value="solicitado">Aguardando</option>
+      <option value="liberado">Liberado</option>
+      <option value="retirado">Retirado</option>
+      <option value="negado">Negado</option>
+      <option value="cancelado">Cancelado</option>
+    </select>
+    <button class="btn btn-sky" onclick="load()"><i class="fas fa-sync"></i> Atualizar</button>
+  </div>
+
+  <div class="card-list" id="lista"></div>
+</div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+  let _allRows = [];
+  let _timer = null;
+
+  const ICONS = {
+    solicitado: 'fa-clock',
+    liberado: 'fa-check-circle',
+    retirado: 'fa-box-open',
+    negado: 'fa-times-circle',
+    cancelado: 'fa-ban',
+  };
+
+  function debounce(){ clearTimeout(_timer); _timer = setTimeout(renderList, 300); }
+
+  async function load() {
+    const r = await fetch('/api/facilities/epi-solicitacoes?mine=1&limit=200');
+    const d = await r.json();
+    _allRows = d.rows || [];
+    updateStats(_allRows);
+    renderList();
+  }
+
+  function updateStats(rows) {
+    document.getElementById('sTot').textContent = rows.length;
+    document.getElementById('sPend').textContent = rows.filter(r => r.status === 'solicitado').length;
+    document.getElementById('sLib').textContent = rows.filter(r => r.status === 'liberado').length;
+    document.getElementById('sRet').textContent = rows.filter(r => r.status === 'retirado').length;
+    document.getElementById('sNeg').textContent = rows.filter(r => r.status === 'negado').length;
+  }
+
+  function renderList() {
+    const busca = document.getElementById('busca').value.trim().toLowerCase();
+    const statusFiltro = document.getElementById('filtroStatus').value;
+    let rows = _allRows.filter(r => {
+      if (statusFiltro && r.status !== statusFiltro) return false;
+      if (busca && !`${r.colaborador_nome} ${r.nome_item}`.toLowerCase().includes(busca)) return false;
+      return true;
+    });
+
+    const el = document.getElementById('lista');
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty"><i class="fas fa-search"></i>Nenhuma solicitação encontrada.</div>';
+      return;
+    }
+
+    el.innerHTML = rows.map(s => {
+      const icon = ICONS[s.status] || 'fa-question-circle';
+      const acoes = buildActions(s);
+      const troca = s.proxima_troca_em ? `<span title="Próxima troca">🔄 ${s.proxima_troca_em}</span>  ` : '';
+      const motivo = s.motivo ? `<span title="Motivo">📋 ${s.motivo}</span>  ` : '';
+      return `
+        <div class="card status-${s.status}">
+          <div class="card-icon"><i class="fas ${icon}"></i></div>
+          <div class="card-body">
+            <div class="card-title">${s.nome_item} × ${s.quantidade} — ${s.colaborador_nome}</div>
+            <div class="card-meta">
+              ${s.colaborador_setor ? `<span>🏭 ${s.colaborador_setor}</span>  ` : ''}
+              ${motivo}${troca}
+              <span>📅 Solicitado em ${s.criado_em || '-'}</span>
+              ${s.status === 'retirado' ? `  <span>✅ Retirado em ${s.retirado_em || '-'}</span>` : ''}
+              ${s.status === 'negado' && s.motivo_negacao ? `  <span style="color:#dc2626">❌ ${s.motivo_negacao}</span>` : ''}
+            </div>
+            <div class="card-actions">
+              <span class="badge badge-${s.status}">${s.status}</span>
+              ${acoes}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function buildActions(s) {
+    let a = '';
+    if (s.status !== 'cancelado' && s.status !== 'negado' && s.status !== 'retirado') {
+      a += `<button class="btn btn-red btn-sm" onclick="cancelar(${s.id})"><i class="fas fa-ban"></i> Cancelar</button>`;
+    }
+    if (s.status === 'liberado') {
+      a += `<a class="btn btn-sm" href="/facilities/retirar/${s.id}" style="background:#dcfce7;color:#15803d"><i class="fas fa-hand-paper"></i> Retirar</a>`;
+    }
+    a += `<a class="btn btn-sm btn-sky" href="/facilities/ficha-epi/${s.id}" target="_blank"><i class="fas fa-print"></i> Ficha</a>`;
+    return a;
+  }
+
+  async function cancelar(id) {
+    if (!confirm('Cancelar esta solicitação?')) return;
+    const r = await fetch(`/api/facilities/epi-solicitacoes/${id}/cancelar`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Solicitação cancelada.', 'ok'); load(); }
+    else { toast(d.erro || 'Falha ao cancelar.', 'err'); }
+  }
+
+  function toast(msg, tipo='ok') {
+    const w = document.getElementById('toastWrap');
+    const d = document.createElement('div');
+    d.className = `toast ${tipo}`;
+    d.textContent = msg;
+    w.appendChild(d);
+    requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('show')));
+    setTimeout(() => { d.classList.remove('show'); setTimeout(() => d.remove(), 300); }, 3500);
+  }
+
+  load();
+</script>
+</body>
+</html>

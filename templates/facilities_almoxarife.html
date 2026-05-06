@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Almoxarifado EPI | Columbia Sync</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh;padding:20px;color:#1e293b}
+    .shell{max-width:1000px;margin:0 auto}
+    .hero{background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:20px;padding:24px 28px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(29,78,216,.25)}
+    .hero i{font-size:36px;opacity:.9}
+    .hero h1{font-size:24px;font-weight:800;margin-bottom:4px}
+    .hero p{opacity:.88;font-size:13px}
+    .counter{background:rgba(255,255,255,.18);border-radius:10px;padding:8px 16px;font-size:22px;font-weight:800;text-align:center;min-width:70px}
+    .counter small{display:block;font-size:11px;font-weight:600;opacity:.9}
+    .filters{background:#fff;border-radius:14px;padding:14px 18px;box-shadow:0 2px 8px rgba(18,40,58,.04);margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .filters input,.filters select{padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc}
+    .filters input:focus,.filters select:focus{outline:none;border-color:#3b82f6}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s}
+    .btn-blue{background:#dbeafe;color:#1d4ed8}.btn-blue:hover{background:#bfdbfe}
+    .btn-green{background:#d1fae5;color:#059669}.btn-green:hover{background:#a7f3d0}
+    .btn-sm{padding:6px 12px;font-size:12px}
+    .table-wrap{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(18,40,58,.04);overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    th{background:#f8fafc;padding:12px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #e2e8f0}
+    td{padding:13px 14px;border-bottom:1px solid #f1f5f9;font-size:14px}
+    tr:hover td{background:#fafbff}
+    .badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase}
+    .badge-liberado{background:#d1fae5;color:#065f46}
+    .empty{text-align:center;padding:40px;color:#94a3b8}
+    .empty i{font-size:40px;margin-bottom:12px;display:block}
+    .toast-wrap{position:fixed;top:16px;right:16px;z-index:9999}
+    .toast{background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.12);border-left:4px solid #3b82f6;margin-bottom:8px;font-size:13px;transform:translateX(110%);opacity:0;transition:all .25s}
+    .toast.show{transform:translateX(0);opacity:1}
+    .toast.ok{border-left-color:#22c55e}
+    .toast.err{border-left-color:#ef4444}
+    .motivo-tag{display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="hero">
+    <i class="fas fa-boxes"></i>
+    <div style="flex:1">
+      <h1>Almoxarifado — Entregas Pendentes</h1>
+      <p>Itens aprovados aguardando entrega física ao colaborador. Clique em "Entregar" para registrar com assinatura.</p>
+    </div>
+    <div class="counter">
+      <span id="cntPendente">-</span>
+      <small>pendentes</small>
+    </div>
+  </div>
+
+  <div class="filters">
+    <input id="busca" type="search" placeholder="Buscar colaborador ou item..." style="flex:1;min-width:200px" oninput="debounce()">
+    <select id="filtroSetor" onchange="load()"><option value="">Todos setores</option></select>
+    <button class="btn btn-blue" onclick="load()"><i class="fas fa-sync"></i> Atualizar</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Setor</th>
+          <th>Item</th>
+          <th>Tam.</th>
+          <th>Qtd</th>
+          <th>Solicitado por</th>
+          <th>Liberado em</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+  let _timer = null;
+  function debounce(){ clearTimeout(_timer); _timer = setTimeout(load, 350); }
+
+  async function load() {
+    const busca = document.getElementById('busca').value.trim();
+    const setor = document.getElementById('filtroSetor').value;
+    const params = new URLSearchParams({ status: 'liberado', limit: 200 });
+    if (busca) params.set('busca', busca);
+    if (setor) params.set('setor', setor);
+    const r = await fetch('/api/facilities/epi-solicitacoes?' + params);
+    const d = await r.json();
+    renderRows(d.rows || []);
+    populaSetores(d.rows || []);
+    document.getElementById('cntPendente').textContent = (d.rows || []).length;
+  }
+
+  function populaSetores(rows) {
+    const sel = document.getElementById('filtroSetor');
+    const atual = sel.value;
+    const setores = [...new Set(rows.map(r => r.colaborador_setor).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">Todos setores</option>' + setores.map(s => `<option value="${s}" ${s===atual?'selected':''}>${s}</option>`).join('');
+  }
+
+  function renderRows(rows) {
+    const tb = document.getElementById('tbody');
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="9"><div class="empty"><i class="fas fa-check-circle" style="color:#22c55e"></i>Nenhuma entrega pendente!</div></td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(s => `
+      <tr>
+        <td><strong>${s.colaborador_nome}</strong></td>
+        <td>${s.colaborador_setor || '-'}</td>
+        <td>
+          <strong>${s.nome_item}</strong><br>
+          <small style="color:#64748b">${s.codigo_item}</small>
+          ${s.motivo ? `<div class="motivo-tag" title="${s.motivo}">📋 ${s.motivo}</div>` : ''}
+        </td>
+        <td>${s.tamanho || '-'}</td>
+        <td style="text-align:center;font-weight:700">${s.quantidade}</td>
+        <td>${s.solicitante_nome || '-'}</td>
+        <td><small>${s.liberado_em || '-'}</small></td>
+        <td><span class="badge badge-liberado">Liberado</span></td>
+        <td>
+          <a href="/facilities/retirar/${s.id}" class="btn btn-green btn-sm"><i class="fas fa-hand-paper"></i> Entregar</a>
+          <a href="/facilities/ficha-epi/${s.id}" target="_blank" class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;margin-top:4px"><i class="fas fa-print"></i> Ficha</a>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function toast(msg, tipo='ok') {
+    const w = document.getElementById('toastWrap');
+    const d = document.createElement('div');
+    d.className = `toast ${tipo}`;
+    d.textContent = msg;
+    w.appendChild(d);
+    requestAnimationFrame(() => { requestAnimationFrame(() => d.classList.add('show')); });
+    setTimeout(() => { d.classList.remove('show'); setTimeout(() => d.remove(), 300); }, 3500);
+  }
+
+  load();
+  setInterval(load, 60000); // atualiza a cada 1 min automaticamente
+</script>
+</body>
+</html>

@@ -88,16 +88,26 @@ facilities_bp = Blueprint("facilities", __name__)
 
 def _colaborador_do_usuario_logado():
     """Retorna o FacilitiesColaborador vinculado ao usuário logado (por username == nome).
+    Usa matching robusto (sem acentos, case-insensitive) para evitar falhas por variações.
     Retorna None se não houver correspondência."""
     username = (session.get("username") or "").strip()
     if not username:
         return None
-    # case-insensitive match
-    return (
+    # Tenta match exato case-insensitive
+    resultado = (
         FacilitiesColaborador.query
         .filter(db.func.lower(FacilitiesColaborador.nome) == username.lower())
         .first()
     )
+    if resultado:
+        return resultado
+    # Fallback: matching normalizado (remove acentos)
+    username_norm = _normalizar_nome(username)
+    todos = FacilitiesColaborador.query.all()
+    for c in todos:
+        if _normalizar_nome(c.nome) == username_norm:
+            return c
+    return None
 
 
 def _audit(entidade: str, entidade_id, acao: str, detalhes: str = "") -> None:
@@ -177,6 +187,29 @@ def _add_months(d: date, months: int) -> date:
 def page_solicitar_epi():
     """Página para solicitar EPI/Uniforme — exclusivo para gestores e admins."""
     return render_template("facilities_solicitar_epi.html")
+
+
+@facilities_bp.route("/facilities/minhas-solicitacoes")
+@login_required
+def page_minhas_solicitacoes():
+    """Tela do gestor de setor: acompanha o status das solicitacoes que ele abriu."""
+    return render_template("facilities_minhas_solicitacoes.html")
+
+
+@facilities_bp.route("/facilities/almoxarife")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def page_almoxarife():
+    """Tela do almoxarife: apenas itens LIBERADOS aguardando entrega fisica."""
+    return render_template("facilities_almoxarife.html")
+
+
+@facilities_bp.route("/facilities/relatorio-consumo")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def page_relatorio_consumo():
+    """Relatório de consumo de EPI/Uniforme por setor."""
+    return render_template("facilities_relatorio_consumo.html")
 
 
 @facilities_bp.route("/facilities/cronograma-limpeza")
@@ -482,9 +515,19 @@ def api_listar_epi_solicitacoes():
     })
 
 
+def _normalizar_nome(s: str) -> str:
+    """Remove acentos, converte para minúsculas e colapsa espaços.
+    Usado para comparação fuzzy de nomes de colaboradores."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return " ".join(s.lower().split())
+
+
 def _resolver_beneficiario(data: dict):
     """Resolve ou cria FacilitiesColaborador beneficiario a partir do payload.
     Aceita colaborador_id, beneficiario_id (ambos FK) ou beneficiario_nome (texto livre).
+    Matching robusto: ignora acentos, caixa e espaços duplicados para evitar duplicatas.
     Retorna (colaborador, erro_msg). colaborador=None implica erro."""
     colaborador_id = data.get("colaborador_id") or data.get("beneficiario_id")
     if colaborador_id:
@@ -497,7 +540,7 @@ def _resolver_beneficiario(data: dict):
     if not nome:
         return None, "Informe o funcionario beneficiario da solicitacao."
 
-    # Busca case-insensitive (evita duplicar)
+    # Busca exata case-insensitive
     existente = (
         FacilitiesColaborador.query
         .filter(db.func.lower(FacilitiesColaborador.nome) == nome.lower())
@@ -507,7 +550,14 @@ def _resolver_beneficiario(data: dict):
     if existente:
         return existente, None
 
-    # Cria novo colaborador
+    # Busca fuzzy: normaliza acentos e espaços (evita "JOAO SILVA" vs "João Silva")
+    nome_norm = _normalizar_nome(nome)
+    todos = FacilitiesColaborador.query.filter_by(ativo=True).all()
+    for c in todos:
+        if _normalizar_nome(c.nome) == nome_norm:
+            return c, None
+
+    # Nenhum match — cria novo colaborador
     novo = FacilitiesColaborador(
         nome=nome,
         setor=(data.get("beneficiario_setor") or "").strip() or None,
@@ -734,7 +784,48 @@ def api_aprovar_epi_solicitacao(id):
     db.session.commit()
     _audit("epi_solicitacao", solicitacao.id, acao,
            f"motivo_recusa={solicitacao.motivo_recusa or '-'}")
+
+    # Notifica gestor de setor (quem solicitou) sobre o resultado
+    try:
+        _notificar_gestor_retorno_epi(solicitacao, acao)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao notificar gestor retorno EPI: %s", exc)
+
     return jsonify({"id": solicitacao.id, "status": solicitacao.status})
+
+
+def _notificar_gestor_retorno_epi(solicitacao: "FacilitiesEpiSolicitacao", acao: str) -> None:
+    """Envia e-mail ao gestor de setor que abriu a solicitacao informando aprovacao/negacao."""
+    from ..services.email_service import enviar_email_retorno_epi
+
+    # Determina e-mail do solicitante
+    email_destino = None
+    if solicitacao.solicitante and solicitacao.solicitante.email:
+        email_destino = solicitacao.solicitante.email
+    if not email_destino:
+        return  # sem e-mail cadastrado, não envia
+
+    gestor_nome = (
+        solicitacao.solicitante_nome
+        or (solicitacao.solicitante.nome if solicitacao.solicitante else None)
+        or "Gestor"
+    )
+    colaborador_nome = solicitacao.colaborador.nome if solicitacao.colaborador else "?"
+    try:
+        url_ficha = url_for("facilities.pagina_ficha_epi", id=solicitacao.id, _external=True)
+    except Exception:
+        url_ficha = f"/facilities/ficha-epi/{solicitacao.id}"
+
+    enviar_email_retorno_epi(
+        destinatario_email=email_destino,
+        gestor_nome=gestor_nome,
+        colaborador_nome=colaborador_nome,
+        item_nome=solicitacao.nome_item,
+        quantidade=solicitacao.quantidade,
+        acao=acao,
+        motivo_recusa=solicitacao.motivo_recusa or "",
+        url_ficha=url_ficha,
+    )
 
 
 @facilities_bp.route("/api/facilities/epi-solicitacoes/acao-lote", methods=["POST"])
@@ -1625,6 +1716,106 @@ def api_listar_audit_log():
 
 
 # ============================================================================
+# RELATÓRIO DE CONSUMO POR SETOR
+# ============================================================================
+
+@facilities_bp.route("/api/facilities/relatorio-consumo")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_relatorio_consumo():
+    """Consumo de EPI/Uniforme agrupado por setor nos últimos N dias.
+    Query params: dias (default 90), tipo (epi|uniforme|'')
+    """
+    dias  = request.args.get("dias", 90, type=int)
+    tipo  = (request.args.get("tipo") or "").lower()
+    desde = datetime.now() - timedelta(days=max(1, dias))
+
+    q = (
+        FacilitiesEpiSolicitacao.query
+        .filter(FacilitiesEpiSolicitacao.status == "retirado")
+        .filter(FacilitiesEpiSolicitacao.retirado_em >= desde)
+    )
+    if tipo in ("epi", "uniforme"):
+        q = q.filter_by(tipo=tipo)
+
+    sols = q.all()
+
+    # Agrupa por setor
+    from collections import defaultdict
+    por_setor: dict = defaultdict(lambda: {"quantidade": 0, "itens": defaultdict(int)})
+    for s in sols:
+        setor = (s.colaborador.setor if s.colaborador and s.colaborador.setor else "Sem setor")
+        por_setor[setor]["quantidade"] += s.quantidade or 1
+        por_setor[setor]["itens"][s.nome_item] += s.quantidade or 1
+
+    resultado = []
+    for setor, dados in sorted(por_setor.items(), key=lambda x: -x[1]["quantidade"]):
+        top_itens = sorted(dados["itens"].items(), key=lambda x: -x[1])[:5]
+        resultado.append({
+            "setor": setor,
+            "quantidade_total": dados["quantidade"],
+            "top_itens": [{"nome": n, "qtd": q} for n, q in top_itens],
+        })
+
+    return jsonify({
+        "periodo_dias": dias,
+        "desde": desde.strftime("%d/%m/%Y"),
+        "total_retiradas": len(sols),
+        "por_setor": resultado,
+    })
+
+
+# ============================================================================
+# RELATÓRIO DE CONSUMO POR SETOR
+# ============================================================================
+
+@facilities_bp.route("/api/facilities/relatorio-consumo")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_relatorio_consumo():
+    """Consumo de EPI/Uniforme agrupado por setor nos últimos N dias.
+    Query params: dias (default 90), tipo (epi|uniforme|'')
+    """
+    dias  = request.args.get("dias", 90, type=int)
+    tipo  = (request.args.get("tipo") or "").lower()
+    desde = datetime.now() - timedelta(days=max(1, dias))
+
+    q = (
+        FacilitiesEpiSolicitacao.query
+        .filter(FacilitiesEpiSolicitacao.status == "retirado")
+        .filter(FacilitiesEpiSolicitacao.retirado_em >= desde)
+    )
+    if tipo in ("epi", "uniforme"):
+        q = q.filter_by(tipo=tipo)
+
+    sols = q.all()
+
+    # Agrupa por setor
+    from collections import defaultdict
+    por_setor: dict = defaultdict(lambda: {"quantidade": 0, "itens": defaultdict(int)})
+    for s in sols:
+        setor = (s.colaborador.setor if s.colaborador and s.colaborador.setor else "Sem setor")
+        por_setor[setor]["quantidade"] += s.quantidade or 1
+        por_setor[setor]["itens"][s.nome_item] += s.quantidade or 1
+
+    resultado = []
+    for setor, dados in sorted(por_setor.items(), key=lambda x: -x[1]["quantidade"]):
+        top_itens = sorted(dados["itens"].items(), key=lambda x: -x[1])[:5]
+        resultado.append({
+            "setor": setor,
+            "quantidade_total": dados["quantidade"],
+            "top_itens": [{"nome": n, "qtd": q} for n, q in top_itens],
+        })
+
+    return jsonify({
+        "periodo_dias": dias,
+        "desde": desde.strftime("%d/%m/%Y"),
+        "total_retiradas": len(sols),
+        "por_setor": resultado,
+    })
+
+
+# ============================================================================
 # CICLOS DE TROCA EPI (CRUD)
 # ============================================================================
 
@@ -2022,15 +2213,25 @@ def pagina_retirar_epi(id):
 def pagina_ficha_epi(id):
     """Ficha NR-6 imprimível em HTML. Disponível para qualquer status."""
     from datetime import datetime as _dt
+    from flask import current_app
     s = FacilitiesEpiSolicitacao.query.get_or_404(id)
     assinatura_url = None
     if s.assinatura_path:
         assinatura_url = f"/api/facilities/epi-solicitacoes/{s.id}/assinatura"
     agora = _dt.now().strftime("%d/%m/%Y %H:%M")
+    empresa_nome = current_app.config.get("EMPRESA_NOME", "Columbia")
+    empresa_cnpj = current_app.config.get("EMPRESA_CNPJ", "")
+    logo_url = current_app.config.get("EMPRESA_LOGO_URL", "")
+    # Se for um caminho relativo (sem http), prefixamos /static/
+    if logo_url and not logo_url.startswith("http"):
+        logo_url = f"/static/{logo_url.lstrip('/')}"
     return render_template(
         "facilities_ficha_epi.html",
         sol=s,
         assinatura_url=assinatura_url,
         agora=agora,
+        empresa_nome=empresa_nome,
+        empresa_cnpj=empresa_cnpj,
+        logo_url=logo_url,
     )
 

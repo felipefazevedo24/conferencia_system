@@ -78,10 +78,16 @@
 
   <!-- Cabeçalho -->
   <div class="hdr">
-    <div class="hdr-logo">Columbia<span>Sync</span></div>
+    <div class="hdr-logo">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="{{ empresa_nome }}" style="max-height:48px;max-width:160px;object-fit:contain;display:block">
+      {% else %}
+        {{ empresa_nome }}<span>Sync</span>
+      {% endif %}
+    </div>
     <div class="hdr-titulo">
       <h1>Ficha de Controle de EPI — NR-6</h1>
-      <small>Nº {{ sol.id }}</small>
+      <small>Nº {{ sol.id }}{% if empresa_cnpj %} · CNPJ {{ empresa_cnpj }}{% endif %}</small>
     </div>
     <div class="hdr-emissao">
       Emitida em: {{ agora }}<br>
@@ -221,7 +227,7 @@
   </div>
 
   <div class="footer">
-    Gerado automaticamente pelo sistema Columbia Sync · Ficha EPI #{{ sol.id }} · {{ agora }}
+    Gerado automaticamente pelo sistema {{ empresa_nome }} · Ficha EPI #{{ sol.id }} · {{ agora }}
   </div>
 
 </div>

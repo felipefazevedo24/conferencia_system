@@ -143,4 +143,12 @@ def create_app(test_config=None) -> Flask:
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler ERP Sync")
 
+    # Scheduler Facilities: alertas de vencimento NR-6 (diário às 08:00)
+    if not app.config.get("TESTING"):
+        try:
+            from .services.facilities_scheduler import iniciar_scheduler as iniciar_facilities_nr6
+            iniciar_facilities_nr6(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Facilities NR-6")
+
     return app

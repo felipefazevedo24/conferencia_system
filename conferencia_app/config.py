@@ -131,6 +131,13 @@ class Config:
     NFE_EMAIL_CFOPS_ESPECIAIS = os.environ.get("NFE_EMAIL_CFOPS_ESPECIAIS", "")
     NFE_EMAIL_DESTINATARIOS_ESPECIAIS = os.environ.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", "")
 
+    # Identidade da empresa — exibida em documentos impressos como a Ficha EPI NR-6
+    EMPRESA_NOME = os.environ.get("EMPRESA_NOME", "Columbia")
+    EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "")
+    # Caminho para o logotipo da empresa (relativo a /static/ ou URL completa).
+    # Exemplo: "img/logo.png"  ou  "https://example.com/logo.png"
+    EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "")
+
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
     LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
