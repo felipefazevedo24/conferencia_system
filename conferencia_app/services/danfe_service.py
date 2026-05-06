@@ -20,6 +20,13 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
+try:
+    from brazilfiscalreport.danfe import Danfe as _FiscalDanfe
+    from brazilfiscalreport.danfe import DanfeConfig as _FiscalDanfeConfig
+except Exception:  # pragma: no cover - optional dependency
+    _FiscalDanfe = None
+    _FiscalDanfeConfig = None
+
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
 CB2  = colors.HexColor("#2563eb")   # Columbia Blue accent
@@ -986,9 +993,9 @@ def _draw_page_border(c):
     c.restoreState()
 
 
-def gerar_danfe(xml_bytes: bytes,
-                logo_path: Optional[str] = None,
-                logo_url:  Optional[str] = None) -> bytes:
+def _gerar_danfe_manual(xml_bytes: bytes,
+                        logo_path: Optional[str] = None,
+                        logo_url:  Optional[str] = None) -> bytes:
     """Gera DANFE em PDF a partir de bytes do XML NF-e. Retorna bytes do PDF."""
     d   = parse_nfe_xml(xml_bytes)
     buf = io.BytesIO()
@@ -1160,3 +1167,32 @@ def gerar_danfe(xml_bytes: bytes,
 
     cv.save()
     return buf.getvalue()
+
+
+def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None) -> Optional[str]:
+    candidates = []
+    if logo_path:
+        candidates.append(logo_path)
+    candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "columbia_logo.png")))
+    candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")))
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def gerar_danfe(xml_bytes: bytes,
+                logo_path: Optional[str] = None,
+                logo_url: Optional[str] = None) -> bytes:
+    """Gera DANFE em PDF priorizando engine fiscal padrão, com fallback manual."""
+    if _FiscalDanfe is not None and _FiscalDanfeConfig is not None:
+        try:
+            logo = _resolve_logo_for_fiscal_engine(logo_path)
+            cfg = _FiscalDanfeConfig(logo=logo) if logo else _FiscalDanfeConfig()
+            pdf_data = _FiscalDanfe(xml_bytes, cfg).output()
+            if pdf_data:
+                return bytes(pdf_data)
+        except Exception:
+            # fallback para o renderer manual já existente
+            pass
+    return _gerar_danfe_manual(xml_bytes, logo_path=logo_path, logo_url=logo_url)
