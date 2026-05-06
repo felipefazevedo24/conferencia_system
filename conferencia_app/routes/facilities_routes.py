@@ -1766,56 +1766,6 @@ def api_relatorio_consumo():
 
 
 # ============================================================================
-# RELATÓRIO DE CONSUMO POR SETOR
-# ============================================================================
-
-@facilities_bp.route("/api/facilities/relatorio-consumo")
-@login_required
-@permission_required("PAGE_FACILITIES_ADMIN")
-def api_relatorio_consumo():
-    """Consumo de EPI/Uniforme agrupado por setor nos últimos N dias.
-    Query params: dias (default 90), tipo (epi|uniforme|'')
-    """
-    dias  = request.args.get("dias", 90, type=int)
-    tipo  = (request.args.get("tipo") or "").lower()
-    desde = datetime.now() - timedelta(days=max(1, dias))
-
-    q = (
-        FacilitiesEpiSolicitacao.query
-        .filter(FacilitiesEpiSolicitacao.status == "retirado")
-        .filter(FacilitiesEpiSolicitacao.retirado_em >= desde)
-    )
-    if tipo in ("epi", "uniforme"):
-        q = q.filter_by(tipo=tipo)
-
-    sols = q.all()
-
-    # Agrupa por setor
-    from collections import defaultdict
-    por_setor: dict = defaultdict(lambda: {"quantidade": 0, "itens": defaultdict(int)})
-    for s in sols:
-        setor = (s.colaborador.setor if s.colaborador and s.colaborador.setor else "Sem setor")
-        por_setor[setor]["quantidade"] += s.quantidade or 1
-        por_setor[setor]["itens"][s.nome_item] += s.quantidade or 1
-
-    resultado = []
-    for setor, dados in sorted(por_setor.items(), key=lambda x: -x[1]["quantidade"]):
-        top_itens = sorted(dados["itens"].items(), key=lambda x: -x[1])[:5]
-        resultado.append({
-            "setor": setor,
-            "quantidade_total": dados["quantidade"],
-            "top_itens": [{"nome": n, "qtd": q} for n, q in top_itens],
-        })
-
-    return jsonify({
-        "periodo_dias": dias,
-        "desde": desde.strftime("%d/%m/%Y"),
-        "total_retiradas": len(sols),
-        "por_setor": resultado,
-    })
-
-
-# ============================================================================
 # CICLOS DE TROCA EPI (CRUD)
 # ============================================================================
 
