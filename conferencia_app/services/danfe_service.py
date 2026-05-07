@@ -36,12 +36,6 @@ try:
     from brazilfiscalreport.danfe.config import FooterStamp as _FiscalFooterStamp
     from brazilfiscalreport.danfe.config import Margins as _FiscalMargins
     from brazilfiscalreport.danfe.danfe import extract_text as _FiscalExtractText
-    from brazilfiscalreport.danfe.danfe_block import DanfeBlock as _FiscalDanfeBlock
-    from brazilfiscalreport.danfe.danfe_basic_field import DanfeBasicField as _FiscalDanfeBasicField
-    from brazilfiscalreport.danfe.danfe_conf import DEFAULT_HEIGHT_FONT_CONTENT as _FiscalDefaultHeightFontContent
-    from brazilfiscalreport.danfe.danfe_conf import HEIGHT_FONT_BLOCK_DESC as _FiscalHeightFontBlockDesc
-    from brazilfiscalreport.danfe.models import BaseFieldInfo as _FiscalBaseFieldInfo
-    from fpdf.enums import MethodReturnValue as _FiscalMethodReturnValue
 except Exception:  # pragma: no cover - optional dependency
     _FiscalDanfe = None
     _FiscalDanfeConfig = None
@@ -51,12 +45,6 @@ except Exception:  # pragma: no cover - optional dependency
     _FiscalFooterStamp = None
     _FiscalMargins = None
     _FiscalExtractText = None
-    _FiscalDanfeBlock = None
-    _FiscalDanfeBasicField = None
-    _FiscalDefaultHeightFontContent = None
-    _FiscalHeightFontBlockDesc = None
-    _FiscalBaseFieldInfo = None
-    _FiscalMethodReturnValue = None
 
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
@@ -81,52 +69,7 @@ CWT = RM - LM        # total content width
 _FISCO_LABEL = "Observações destinadas ao Fisco:"
 
 
-if _FiscalDanfeBasicField is not None and _FiscalDanfe is not None:
-    class _ColumbiaInfoComplementaresField(_FiscalDanfeBasicField):
-        def render(self):
-            super(_FiscalDanfeBasicField, self).render()
-            pdf = self.pdf
-
-            pdf.set_xy(x=self.x, y=self.y)
-
-            font_size_desc = pdf.get_font_size("FONT_SIZE_DESC")
-            h_font_desc = pdf.get_font_size("H_FONT_DESC")
-            font_size_cont = pdf.get_font_size("FONT_SIZE_CONT", True)
-
-            pdf.set_font(pdf.default_font, "", font_size_desc)
-            pdf.cell(
-                w=self.w,
-                h=h_font_desc,
-                text=self.description,
-                new_x="LEFT",
-                new_y="NEXT",
-                align="L",
-            )
-
-            pdf.set_font(pdf.default_font, "", font_size_cont)
-            self._content_lines = pdf.multi_cell(
-                w=self.w,
-                h=_FiscalDefaultHeightFontContent,
-                text=self.content or "",
-                align="L",
-                output=_FiscalMethodReturnValue.LINES,
-            )
-            content_height = self.h - h_font_desc
-            self._max_content_lines = int(content_height // _FiscalDefaultHeightFontContent)
-
-            pdf.set_xy(x=self.x, y=self.y + h_font_desc)
-            for line in self._content_lines[: self._max_content_lines]:
-                pdf.set_font(pdf.default_font, "", font_size_cont)
-                pdf.cell(
-                    w=self.w,
-                    h=_FiscalDefaultHeightFontContent,
-                    text=line,
-                    new_x="LEFT",
-                    new_y="NEXT",
-                    align="L",
-                )
-
-
+if _FiscalDanfe is not None:
     class _ColumbiaFiscalDanfe(_FiscalDanfe):
         def _get_additional_data_content(self):
             fisco = _FiscalExtractText(self.inf_adic, "infAdFisco")
@@ -148,55 +91,6 @@ if _FiscalDanfeBasicField is not None and _FiscalDanfe is not None:
                 linhas = [linha.replace(";", "\n") if linha else "" for linha in partes]
                 return "\n".join(linhas)
             return "\n".join(partes).strip()
-
-        def _draw_additional_data(self, additional_data, continuation_height=None):
-            block_adic = _FiscalDanfeBlock(
-                description="DADOS ADICIONAIS",
-                pdf=self,
-            )
-            height = (
-                continuation_height - _FiscalHeightFontBlockDesc if continuation_height else 20
-            )
-            block_adic.rows_heights = (height,)
-
-            if not continuation_height:
-                block_adic.add_field(
-                    _ColumbiaInfoComplementaresField(
-                        w=block_adic.w - 70,
-                        h=height,
-                        description="INFORMAÇÕES COMPLEMENTARES",
-                        content=additional_data,
-                        type="info_complementares",
-                        pdf=self,
-                    )
-                )
-                block_adic.add_field(
-                    _FiscalDanfeBasicField(
-                        w=70,
-                        h=height,
-                        description="RESERVADO AO FISCO",
-                        content="",
-                        pdf=self,
-                    )
-                )
-            else:
-                block_adic.add_field(
-                    _ColumbiaInfoComplementaresField(
-                        w=block_adic.w,
-                        h=height,
-                        description="CONTINUAÇÃO INFORMAÇÕES COMPLEMENTARES",
-                        content=additional_data,
-                        type="info_complementares",
-                        pdf=self,
-                    )
-                )
-
-            block_adic.render()
-
-            add_data_field = block_adic.fields[0]
-            add_data_lines = add_data_field.get_content_lines()
-            max_add_data_lines = add_data_field.get_max_content_lines()
-            return add_data_lines, max_add_data_lines
 
 
 # ─── Format Helpers ───────────────────────────────────────────────────────────
