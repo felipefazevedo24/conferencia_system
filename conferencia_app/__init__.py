@@ -143,6 +143,14 @@ def create_app(test_config=None) -> Flask:
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler ERP Sync")
 
+    # Scheduler de lancamento automatico via ERP (Postgres tcompras)
+    if app.config.get("ERP_LANCAMENTO_AUTO_ENABLED") and not app.config.get("TESTING"):
+        try:
+            from .services.erp_lancamento_scheduler import iniciar_scheduler as iniciar_erp_lancamento
+            iniciar_erp_lancamento(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler ERP Lancamento")
+
     # Scheduler Facilities: alertas de vencimento NR-6 (diário às 08:00)
     if not app.config.get("TESTING"):
         try:

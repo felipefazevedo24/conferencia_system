@@ -1,7 +1,7 @@
 """Add BofA fields to boleto_conta_receber
 
 Revision ID: 20260409_add_bofa_fields
-Revises: 20260331_add_log_evento_fiscal
+Revises: 20260331_add_log_evento_fiscal_nota
 Create Date: 2026-04-09 10:00:00.000000
 
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20260409_add_bofa_fields"
-down_revision = "20260331_add_log_evento_fiscal"
+down_revision = "20260331_add_log_evento_fiscal_nota"
 branch_labels = None
 depends_on = None
 

@@ -81,6 +81,9 @@ class ItemNota(db.Model):
     auditor_observacao = db.Column(db.String(500))
     auditor_usuario = db.Column(db.String(100))
     auditor_data = db.Column(db.DateTime)
+    # Data de emissao da NF (dhEmi do XML). Usada para integracao com ERP
+    # (matching n_nf + dt_nf na tabela tcompras do Postgres).
+    data_emissao = db.Column(db.DateTime, nullable=True, index=True)
 
 
 class LogDivergencia(db.Model):

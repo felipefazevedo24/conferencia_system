@@ -4901,6 +4901,26 @@ def listar_concluidas():
             if not bool(nota[2]) and not bool(nota[3]):
                 pendencias.append({"tipo": "pedido", "titulo": "Sem pedido", "severidade": "info", "descricao": "NF conferida sem pedido de compra vinculado."})
 
+        try:
+            from ..services.erp_lancamento_service import obter_status_consulta as _erp_status_consulta
+            _erp_status = _erp_status_consulta(numero_nota)
+        except Exception:
+            _erp_status = None
+        if _erp_status:
+            verificada_em = _erp_status.get("verificada_em")
+            descricao = _erp_status.get("motivo") or "Aguardando lançamento no ERP"
+            if verificada_em:
+                try:
+                    descricao = f"{descricao} (verificado {verificada_em.strftime('%d/%m %H:%M')})"
+                except Exception:
+                    pass
+            pendencias.append({
+                "tipo": "erp_lancamento",
+                "titulo": "ERP",
+                "severidade": "info",
+                "descricao": descricao,
+            })
+
         lista.append(
             {
                 "numero": numero_nota,

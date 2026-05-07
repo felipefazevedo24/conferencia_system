@@ -71,6 +71,21 @@ class Config:
     ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
     ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
 
+    # Integracao automatica de lancamento ERP (Postgres tcompras).
+    # Cada ciclo procura, na tcompras, NFs com (n_nf, dt_nf) iguais aos itens
+    # com status="Concluido" sem numero_lancamento e marca como "Lancado"
+    # gravando o codigo retornado em numero_lancamento.
+    # Credenciais sensiveis: preferir instance/erp_lancamento_config.json (gitignored).
+    ERP_LANCAMENTO_AUTO_ENABLED = os.environ.get("ERP_LANCAMENTO_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    ERP_LANCAMENTO_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_LANCAMENTO_POLL_INTERVAL_SECONDS", "300"))
+    ERP_LANCAMENTO_PG_HOST = os.environ.get("ERP_LANCAMENTO_PG_HOST", "")
+    ERP_LANCAMENTO_PG_PORT = int(os.environ.get("ERP_LANCAMENTO_PG_PORT", "5432"))
+    ERP_LANCAMENTO_PG_DB = os.environ.get("ERP_LANCAMENTO_PG_DB", "")
+    ERP_LANCAMENTO_PG_USER = os.environ.get("ERP_LANCAMENTO_PG_USER", "")
+    ERP_LANCAMENTO_PG_PASSWORD = os.environ.get("ERP_LANCAMENTO_PG_PASSWORD", "")
+    ERP_LANCAMENTO_PG_TABLE = os.environ.get("ERP_LANCAMENTO_PG_TABLE", "tcompras")
+    ERP_LANCAMENTO_USUARIO = os.environ.get("ERP_LANCAMENTO_USUARIO", "ERP")
+
     BOLETO_PROVIDER = str(os.environ.get("BOLETO_PROVIDER", "BB")).strip().upper() or "BB"
     BOLETO_BANK_LABEL = str(os.environ.get("BOLETO_BANK_LABEL", "Banco do Brasil")).strip() or "Banco do Brasil"
 

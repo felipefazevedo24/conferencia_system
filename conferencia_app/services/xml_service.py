@@ -205,6 +205,25 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
         txt_total = f"R$ {v_nf.text}" if v_nf is not None else "---"
         txt_imposto = f"R$ {v_icms.text}" if v_icms is not None else "---"
 
+        # Data de emissao da NF (dhEmi). Usada para integracao com ERP (tcompras.dt_nf).
+        data_emissao = None
+        dh_emi_raw = _txt(root, ".//nfe:ide/nfe:dhEmi", ns, "").strip()
+        if not dh_emi_raw:
+            dh_emi_raw = _txt(root, ".//nfe:ide/nfe:dEmi", ns, "").strip()
+        if dh_emi_raw:
+            try:
+                # dhEmi formato: 2026-04-15T10:30:00-03:00 (ou com Z).
+                texto = dh_emi_raw.replace("Z", "")
+                # Remove timezone (-03:00 / +00:00) se presente nos ultimos 6 chars.
+                if len(texto) >= 6 and texto[-6] in "+-" and texto[-3] == ":":
+                    texto = texto[:-6]
+                data_emissao = datetime.fromisoformat(texto)
+            except Exception:
+                try:
+                    data_emissao = datetime.strptime(dh_emi_raw[:10], "%Y-%m-%d")
+                except Exception:
+                    data_emissao = None
+
         det_pag_list = root.findall(".//nfe:pag/nfe:detPag", ns)
         pagamento_xml = len(det_pag_list) > 0
         tipos_pagamento = []
@@ -310,6 +329,7 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     usuario_importacao=user,
                     valor_total=txt_total,
                     valor_imposto=txt_imposto,
+                    data_emissao=data_emissao,
                 )
             )
 
