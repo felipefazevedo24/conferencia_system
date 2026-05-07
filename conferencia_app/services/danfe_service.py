@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Optional
 
 import requests as _req
+from flask import current_app
 from reportlab.graphics.barcode import code128
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -34,6 +35,13 @@ try:
     from brazilfiscalreport.danfe.config import FontType as _FiscalFontType
     from brazilfiscalreport.danfe.config import FooterStamp as _FiscalFooterStamp
     from brazilfiscalreport.danfe.config import Margins as _FiscalMargins
+    from brazilfiscalreport.danfe.danfe import extract_text as _FiscalExtractText
+    from brazilfiscalreport.danfe.danfe_block import DanfeBlock as _FiscalDanfeBlock
+    from brazilfiscalreport.danfe.danfe_basic_field import DanfeBasicField as _FiscalDanfeBasicField
+    from brazilfiscalreport.danfe.danfe_conf import DEFAULT_HEIGHT_FONT_CONTENT as _FiscalDefaultHeightFontContent
+    from brazilfiscalreport.danfe.danfe_conf import HEIGHT_FONT_BLOCK_DESC as _FiscalHeightFontBlockDesc
+    from brazilfiscalreport.danfe.models import BaseFieldInfo as _FiscalBaseFieldInfo
+    from fpdf.enums import MethodReturnValue as _FiscalMethodReturnValue
 except Exception:  # pragma: no cover - optional dependency
     _FiscalDanfe = None
     _FiscalDanfeConfig = None
@@ -42,6 +50,13 @@ except Exception:  # pragma: no cover - optional dependency
     _FiscalFontType = None
     _FiscalFooterStamp = None
     _FiscalMargins = None
+    _FiscalExtractText = None
+    _FiscalDanfeBlock = None
+    _FiscalDanfeBasicField = None
+    _FiscalDefaultHeightFontContent = None
+    _FiscalHeightFontBlockDesc = None
+    _FiscalBaseFieldInfo = None
+    _FiscalMethodReturnValue = None
 
 # ─── Design Tokens ────────────────────────────────────────────────────────────
 CB   = colors.HexColor("#1e3a5f")   # Columbia Navy
@@ -62,6 +77,126 @@ RM  = PW - 8 * mm    # right boundary
 TM  = PH - 8 * mm    # top boundary (pt from bottom)
 BM  = 8 * mm         # bottom boundary
 CWT = RM - LM        # total content width
+
+_FISCO_LABEL = "Observações destinadas ao Fisco:"
+
+
+if _FiscalDanfeBasicField is not None and _FiscalDanfe is not None:
+    class _ColumbiaInfoComplementaresField(_FiscalDanfeBasicField):
+        def render(self):
+            super(_FiscalDanfeBasicField, self).render()
+            pdf = self.pdf
+
+            pdf.set_xy(x=self.x, y=self.y)
+
+            font_size_desc = pdf.get_font_size("FONT_SIZE_DESC")
+            h_font_desc = pdf.get_font_size("H_FONT_DESC")
+            font_size_cont = pdf.get_font_size("FONT_SIZE_CONT", True)
+
+            pdf.set_font(pdf.default_font, "", font_size_desc)
+            pdf.cell(
+                w=self.w,
+                h=h_font_desc,
+                text=self.description,
+                new_x="LEFT",
+                new_y="NEXT",
+                align="L",
+            )
+
+            pdf.set_font(pdf.default_font, "", font_size_cont)
+            self._content_lines = pdf.multi_cell(
+                w=self.w,
+                h=_FiscalDefaultHeightFontContent,
+                text=self.content or "",
+                align="L",
+                output=_FiscalMethodReturnValue.LINES,
+            )
+            content_height = self.h - h_font_desc
+            self._max_content_lines = int(content_height // _FiscalDefaultHeightFontContent)
+
+            pdf.set_xy(x=self.x, y=self.y + h_font_desc)
+            for line in self._content_lines[: self._max_content_lines]:
+                pdf.set_font(pdf.default_font, "", font_size_cont)
+                pdf.cell(
+                    w=self.w,
+                    h=_FiscalDefaultHeightFontContent,
+                    text=line,
+                    new_x="LEFT",
+                    new_y="NEXT",
+                    align="L",
+                )
+
+
+    class _ColumbiaFiscalDanfe(_FiscalDanfe):
+        def _get_additional_data_content(self):
+            fisco = _FiscalExtractText(self.inf_adic, "infAdFisco")
+            obs = _FiscalExtractText(self.inf_adic, "infCpl")
+            _, cpl, cpl_truncado = self._get_dest_end_text(self.dest)
+            if cpl_truncado:
+                extra = f"Complemento do destinatário: {cpl}."
+                obs = f"{obs} {extra}".strip() if obs else extra
+
+            partes = []
+            if obs:
+                partes.append(" ".join(re.split(r"\s+", obs.strip(), flags=re.UNICODE)))
+            if fisco:
+                partes.append("")
+                partes.append(_FISCO_LABEL)
+                partes.append(" ".join(re.split(r"\s+", fisco.strip(), flags=re.UNICODE)))
+
+            if self.infcpl_semicolon_newline:
+                linhas = [linha.replace(";", "\n") if linha else "" for linha in partes]
+                return "\n".join(linhas)
+            return "\n".join(partes).strip()
+
+        def _draw_additional_data(self, additional_data, continuation_height=None):
+            block_adic = _FiscalDanfeBlock(
+                description="DADOS ADICIONAIS",
+                pdf=self,
+            )
+            height = (
+                continuation_height - _FiscalHeightFontBlockDesc if continuation_height else 20
+            )
+            block_adic.rows_heights = (height,)
+
+            if not continuation_height:
+                block_adic.add_field(
+                    _ColumbiaInfoComplementaresField(
+                        w=block_adic.w - 70,
+                        h=height,
+                        description="INFORMAÇÕES COMPLEMENTARES",
+                        content=additional_data,
+                        type="info_complementares",
+                        pdf=self,
+                    )
+                )
+                block_adic.add_field(
+                    _FiscalDanfeBasicField(
+                        w=70,
+                        h=height,
+                        description="RESERVADO AO FISCO",
+                        content="",
+                        pdf=self,
+                    )
+                )
+            else:
+                block_adic.add_field(
+                    _ColumbiaInfoComplementaresField(
+                        w=block_adic.w,
+                        h=height,
+                        description="CONTINUAÇÃO INFORMAÇÕES COMPLEMENTARES",
+                        content=additional_data,
+                        type="info_complementares",
+                        pdf=self,
+                    )
+                )
+
+            block_adic.render()
+
+            add_data_field = block_adic.fields[0]
+            add_data_lines = add_data_field.get_content_lines()
+            max_add_data_lines = add_data_field.get_max_content_lines()
+            return add_data_lines, max_add_data_lines
 
 
 # ─── Format Helpers ───────────────────────────────────────────────────────────
@@ -980,14 +1115,39 @@ def _draw_dados_adicionais(c, d, x, y, w, h):
     total_h = 5 * mm + h
     _sec(c, x, y + total_h - 5 * mm, w, 5 * mm, "DADOS ADICIONAIS")
     mid = w * 0.72
+    inf_cpl = _v(d.get("infCpl"))
+    inf_fisco = _v(d.get("infFisco"))
+
     # Informações complementares
     _rect(c, x, y, mid, h, stroke=BDR, lw=0.3)
-    c.saveState()
-    c.setFont(F, 5.5)
-    c.setFillColor(CGR)
-    c.drawString(x + 1.5 * mm, y + h - 4 * mm, "INFORMAÇÕES COMPLEMENTARES")
-    c.restoreState()
-    _multiline(c, x, y, mid, h - 5 * mm, _v(d.get("infCpl")), size=6.5)
+    if inf_fisco:
+        fisco_box_h = max(12 * mm, min(h * 0.38, 22 * mm))
+        info_h = max(8 * mm, h - fisco_box_h)
+
+        c.saveState()
+        c.setFont(F, 5.5)
+        c.setFillColor(CGR)
+        c.drawString(x + 1.5 * mm, y + h - 4 * mm, "INFORMAÇÕES COMPLEMENTARES")
+        c.restoreState()
+        _multiline(c, x, y + fisco_box_h, mid, info_h - 5 * mm, inf_cpl, size=6.5)
+
+        destaque_y = y
+        destaque_h = fisco_box_h
+        _rect(c, x + 1.2 * mm, destaque_y + 1.2 * mm, mid - 2.4 * mm, destaque_h - 2.4 * mm, fill=CLG, stroke=CB2, lw=0.9)
+        c.saveState()
+        c.setFont(FB, 6)
+        c.setFillColor(CB)
+        c.drawString(x + 3 * mm, destaque_y + destaque_h - 4.8 * mm, "OBSERVAÇÕES DESTINADAS AO FISCO")
+        c.restoreState()
+        _multiline(c, x + 1.8 * mm, destaque_y + 1.5 * mm, mid - 3.6 * mm, destaque_h - 7.5 * mm, inf_fisco, font=FB, size=6.5, pad=1.0)
+    else:
+        c.saveState()
+        c.setFont(F, 5.5)
+        c.setFillColor(CGR)
+        c.drawString(x + 1.5 * mm, y + h - 4 * mm, "INFORMAÇÕES COMPLEMENTARES")
+        c.restoreState()
+        _multiline(c, x, y, mid, h - 5 * mm, inf_cpl, size=6.5)
+
     # Reservado ao fisco
     _rect(c, x + mid, y, w - mid, h, stroke=BDR, lw=0.3)
     c.saveState()
@@ -995,7 +1155,6 @@ def _draw_dados_adicionais(c, d, x, y, w, h):
     c.setFillColor(CGR)
     c.drawString(x + mid + 1.5 * mm, y + h - 4 * mm, "RESERVADO AO FISCO")
     c.restoreState()
-    _multiline(c, x + mid, y, w - mid, h - 5 * mm, _v(d.get("infFisco")), size=6.5)
     return total_h
 
 
@@ -1020,27 +1179,14 @@ def _gerar_danfe_manual(xml_bytes: bytes,
     cv.setAuthor("Columbia Machine Brasil")
     cv.setSubject("Documento Auxiliar da Nota Fiscal Eletrônica")
 
-    # Load logo
+    # Load logo using the same processed asset used by the fiscal engine path.
     logo_img = None
-    logo_candidates = []
-    if logo_path:
-        logo_candidates.append(logo_path)
-    logo_candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "columbia_logo.png")))
-    logo_candidates.append(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")))
-    for candidate in logo_candidates:
-        if candidate and os.path.isfile(candidate):
-            try:
-                logo_img = ImageReader(candidate)
-                break
-            except Exception:
-                continue
-    if logo_img is None and logo_url:
+    logo_file = _resolve_logo_for_fiscal_engine(logo_path=logo_path, logo_url=logo_url)
+    if logo_file:
         try:
-            resp = _req.get(logo_url, timeout=6)
-            if resp.ok:
-                logo_img = ImageReader(io.BytesIO(resp.content))
+            logo_img = ImageReader(logo_file)
         except Exception:
-            pass
+            logo_img = None
 
     # ── Layout constants ──
     x   = LM
@@ -1233,8 +1379,8 @@ def _resolve_logo_for_fiscal_engine(logo_path: Optional[str] = None, logo_url: O
             if bbox:
                 img = img.crop(bbox)
 
-            # Requested by user: use alpha mask and paint logo in Columbia blue.
-            columbia_blue = (30, 58, 95)
+            # Usa a mascara alfa da logo original e aplica a cor institucional.
+            columbia_blue = (0, 102, 179)
             solid = _PILImage.new("RGBA", img.size, (*columbia_blue, 255))
             solid.putalpha(img.getchannel("A"))
             img = solid
@@ -1285,13 +1431,87 @@ def _ensure_cobr_block(xml_bytes: bytes) -> bytes:
         return xml_bytes
 
 
+def _prepare_infadic_for_display(xml_bytes: bytes) -> bytes:
+    """Move a observacao do fisco para o bloco complementar com separacao visual.
+
+    Mantem o layout da engine fiscal, mas garante que o texto saia como:
+    infCpl
+
+    Observações destinadas ao Fisco:
+    infAdFisco
+    """
+    try:
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        return xml_bytes
+
+    inf_nfe = None
+    for elem in root.iter():
+        if elem.tag.split("}")[-1] == "infNFe":
+            inf_nfe = elem
+            break
+    if inf_nfe is None:
+        return xml_bytes
+
+    inf_adic = None
+    for child in list(inf_nfe):
+        if child.tag.split("}")[-1] == "infAdic":
+            inf_adic = child
+            break
+    if inf_adic is None:
+        return xml_bytes
+
+    inf_cpl_node = None
+    inf_fisco_node = None
+    for child in list(inf_adic):
+        local_name = child.tag.split("}")[-1]
+        if local_name == "infCpl":
+            inf_cpl_node = child
+        elif local_name == "infAdFisco":
+            inf_fisco_node = child
+
+    inf_cpl = (inf_cpl_node.text or "").strip() if inf_cpl_node is not None and inf_cpl_node.text else ""
+    inf_fisco = (inf_fisco_node.text or "").strip() if inf_fisco_node is not None and inf_fisco_node.text else ""
+    if not inf_fisco:
+        return xml_bytes
+
+    partes = []
+    if inf_cpl:
+        partes.append(inf_cpl)
+    partes.append("Observações destinadas ao Fisco:")
+    partes.append(inf_fisco)
+    texto_final = "\n\n".join(partes[:1] + ["\n".join(partes[1:])]) if inf_cpl else "\n".join(partes)
+
+    if inf_cpl_node is None:
+        tag = inf_adic.tag
+        if tag.startswith("{") and "}" in tag:
+            ns = tag.split("}")[0][1:]
+            inf_cpl_node = ET.SubElement(inf_adic, f"{{{ns}}}infCpl")
+        else:
+            inf_cpl_node = ET.SubElement(inf_adic, "infCpl")
+    inf_cpl_node.text = texto_final
+
+    if inf_fisco_node is not None:
+        inf_fisco_node.text = ""
+
+    try:
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        return xml_bytes
+
+
 def gerar_danfe(xml_bytes: bytes,
                 logo_path: Optional[str] = None,
                 logo_url: Optional[str] = None) -> bytes:
-    """Gera DANFE em PDF priorizando engine fiscal padrão, com fallback manual."""
-    if _FiscalDanfe is not None and _FiscalDanfeConfig is not None:
+    """Gera DANFE em PDF.
+
+    Por padrão usa a engine fiscal aprovada para o layout principal da NF.
+    O renderer manual permanece apenas como fallback em caso de falha.
+    """
+    prefer_fiscal_engine = bool(current_app.config.get("DANFE_PREFER_FISCAL_ENGINE", True))
+    if prefer_fiscal_engine and _FiscalDanfe is not None and _FiscalDanfeConfig is not None:
         try:
-            xml_for_engine = _ensure_cobr_block(xml_bytes)
+            xml_for_engine = _prepare_infadic_for_display(_ensure_cobr_block(xml_bytes))
             logo_file = _resolve_logo_for_fiscal_engine(logo_path=logo_path, logo_url=logo_url)
 
             printed_at = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1311,7 +1531,8 @@ def gerar_danfe(xml_bytes: bytes,
                 margins=(_FiscalMargins(top=5, right=5, bottom=8, left=5) if _FiscalMargins is not None else None),
                 footer_stamp=_FiscalFooterStamp(text=footer_text, height=4),
             )
-            pdf_data = _FiscalDanfe(xml_for_engine, cfg).output()
+            fiscal_danfe_cls = _ColumbiaFiscalDanfe if _ColumbiaFiscalDanfe is not None else _FiscalDanfe
+            pdf_data = fiscal_danfe_cls(xml_for_engine, cfg).output()
             if pdf_data:
                 return bytes(pdf_data)
         except Exception:

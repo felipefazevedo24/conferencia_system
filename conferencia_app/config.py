@@ -131,12 +131,15 @@ class Config:
     NFE_EMAIL_CFOPS_ESPECIAIS = os.environ.get("NFE_EMAIL_CFOPS_ESPECIAIS", "")
     NFE_EMAIL_DESTINATARIOS_ESPECIAIS = os.environ.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", "")
 
+    # DANFE: usa por padrão a engine fiscal aprovada para o layout principal da NF.
+    DANFE_PREFER_FISCAL_ENGINE = os.environ.get("DANFE_PREFER_FISCAL_ENGINE", "1") == "1"
+
     # Identidade da empresa — exibida em documentos impressos como a Ficha EPI NR-6
     EMPRESA_NOME = os.environ.get("EMPRESA_NOME", "Columbia")
     EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "")
     # Caminho para o logotipo da empresa (relativo a /static/ ou URL completa).
     # Exemplo: "img/logo.png"  ou  "https://example.com/logo.png"
-    EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "https://columbiamachine.com/wp-content/uploads/2018/12/colmac_logo-blue-1.png")
+    EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "https://www.columbiamachine.com.br/img/columbia_logo.png")
 
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")))
     SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
