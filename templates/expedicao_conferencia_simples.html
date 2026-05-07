@@ -146,31 +146,6 @@
         </div>
     </div>
 
-    <!-- BUSCA RÁPIDA DE NF -->
-    <section class="exp-card" id="busca-nf-section" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden; margin-bottom:24px;">
-        <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
-            <div>
-                <h2 style="margin:0; font-size:18px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:12px;">
-                    <span style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;"><i class="fas fa-search"></i></span>
-                    Buscar NF
-                </h2>
-                <p style="margin:6px 0 0;font-size:12px;color:#64748b;font-weight:500;">Digite o número da NF para iniciar a conferência automaticamente</p>
-            </div>
-        </div>
-        <div class="exp-body" style="padding:24px 28px;">
-            <div style="display:flex;gap:12px;align-items:flex-end;">
-                <div class="exp-field" style="flex:1;margin:0;">
-                    <label for="busca-nf-input" style="font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Número da NF</label>
-                    <input id="busca-nf-input" type="text" placeholder="Ex: 10500" style="font-size:16px;padding:12px 16px;min-height:50px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;color:#1e293b;font-weight:600;" inputmode="numeric">
-                </div>
-                <button class="exp-btn" type="button" id="btn-buscar-nf" style="min-height:50px;padding:0 28px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);color:#fff;border:none;border-radius:14px;cursor:pointer;">Buscar</button>
-            </div>
-            <div id="busca-nf-resultado" style="margin-top:12px;display:none;"></div>
-        </div>
-    </section>
-
-
-
     <section class="exp-grid" style="display:grid; grid-template-columns:1fr; gap:24px; align-items:start;">
         <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
             <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
@@ -482,6 +457,34 @@ async function uploadFotoRascunho(file) {
     return await resp.json(); // {rascunho_id, url}
 }
 
+async function prepararArquivoImagem(file) {
+    if (!file || !(file.type || "").startsWith("image/")) return file;
+    const limiteBytes = 2 * 1024 * 1024;
+    if (file.size <= limiteBytes) return file;
+
+    try {
+        const bitmap = await createImageBitmap(file);
+        const maxLado = 1920;
+        const escala = Math.min(1, maxLado / Math.max(bitmap.width, bitmap.height));
+        const largura = Math.max(1, Math.round(bitmap.width * escala));
+        const altura = Math.max(1, Math.round(bitmap.height * escala));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = largura;
+        canvas.height = altura;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0, largura, altura);
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+        if (!blob) return file;
+
+        const nomeBase = (file.name || "foto").replace(/\.[^.]+$/, "");
+        return new File([blob], `${nomeBase}.jpg`, { type: "image/jpeg" });
+    } catch (e) {
+        return file;
+    }
+}
+
 async function addFotos(files) {
     const lista = Array.from(files || []);
     if (!lista.length) return;
@@ -492,8 +495,9 @@ async function addFotos(files) {
     let erros = 0;
     for (const file of lista) {
         try {
-            const resultado = await uploadFotoRascunho(file);
-            fotosRascunho.push({ rascunho_id: resultado.rascunho_id, url: resultado.url, nome: file.name });
+            const arquivoUpload = await prepararArquivoImagem(file);
+            const resultado = await uploadFotoRascunho(arquivoUpload);
+            fotosRascunho.push({ rascunho_id: resultado.rascunho_id, url: resultado.url, nome: arquivoUpload.name || file.name });
             salvarFotosSession();
             updateFotoPreview();
         } catch (e) {
@@ -582,7 +586,12 @@ function renderHistorico(data) {
         const finalizado = registro.status_slug === "finalizado";
         const badgeClass = pending ? "pending" : (aguardando ? "pending" : (expedido ? "expedido" : "done"));
         const fotosHtml = (registro.fotos || []).length
-            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `<a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>`).join("")}</div>`
+            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `
+                <div style="position:relative;">
+                    <a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>
+                    ${isAdmin ? `<button class="exp-btn-secondary" type="button" data-action="delete-foto" data-id="${registro.id}" data-foto-id="${foto.id}" style="position:absolute;top:6px;right:6px;min-height:28px;padding:0 10px;border-color:#ef4444;color:#ef4444;background:#fff;">Excluir</button>` : ""}
+                </div>
+            `).join("")}</div>`
             : `<div class="exp-caption">Sem fotos anexadas.</div>`;
         
         // Título baseado no tipo de referência
@@ -607,6 +616,7 @@ function renderHistorico(data) {
                     <div style="display:flex;gap:10px;align-items:center;">
                         <a href="${registro.canhoto_url}" target="_blank"><img src="${registro.canhoto_url}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:2px solid #22c55e;" alt="Canhoto"></a>
                         <span style="font-size:12px;color:#166534;">Anexado em ${registro.canhoto_uploaded_at || "---"} por ${registro.canhoto_uploaded_by || "---"}</span>
+                        ${isAdmin ? `<button class="exp-btn-secondary" type="button" data-action="delete-canhoto" data-id="${registro.id}" style="min-height:32px;padding:0 10px;border-color:#ef4444;color:#ef4444;background:#fff;">Excluir canhoto</button>` : ""}
                     </div>
                 </div>`;
         }
@@ -699,6 +709,38 @@ async function excluirConferencia(id, orcamento) {
     }
 }
 
+async function excluirFotoRegistro(registroId, fotoId) {
+    const confirmado = window.confirm("Deseja excluir esta foto da conferência?");
+    if (!confirmado) return;
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${registroId}/foto/${fotoId}`, {
+            method: "DELETE",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível excluir a foto.");
+        showToast("Foto excluída com sucesso.");
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+async function excluirCanhotoRegistro(registroId) {
+    const confirmado = window.confirm("Deseja excluir o canhoto deste registro?");
+    if (!confirmado) return;
+    try {
+        const response = await fetch(`/api/expedicao/conferencia-simples/${registroId}/canhoto`, {
+            method: "DELETE",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível excluir o canhoto.");
+        showToast("Canhoto excluído com sucesso.");
+        loadHistorico();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
 form.addEventListener("submit", async event => {
     event.preventDefault();
     if (!fotosRascunho.length) {
@@ -766,6 +808,18 @@ historicoLista.addEventListener("click", event => {
     const deleteButton = event.target.closest("[data-action='delete']");
     if (deleteButton) {
         excluirConferencia(deleteButton.dataset.id, deleteButton.dataset.orcamento);
+        return;
+    }
+
+    const deleteFotoButton = event.target.closest("[data-action='delete-foto']");
+    if (deleteFotoButton) {
+        excluirFotoRegistro(deleteFotoButton.dataset.id, deleteFotoButton.dataset.fotoId);
+        return;
+    }
+
+    const deleteCanhotoButton = event.target.closest("[data-action='delete-canhoto']");
+    if (deleteCanhotoButton) {
+        excluirCanhotoRegistro(deleteCanhotoButton.dataset.id);
         return;
     }
 
@@ -886,102 +940,6 @@ async function decidirEstorno(acao) {
         btnR.disabled = false;
     }
 }
-
-/* ========== BUSCA RÁPIDA DE NF ========== */
-const buscaNfInput = document.getElementById("busca-nf-input");
-const btnBuscarNf = document.getElementById("btn-buscar-nf");
-const buscaNfResultado = document.getElementById("busca-nf-resultado");
-
-async function buscarNfRapida() {
-    const numero = (buscaNfInput.value || "").replace(/\D/g, "").trim();
-    if (!numero) {
-        buscaNfInput.focus();
-        return;
-    }
-    btnBuscarNf.disabled = true;
-    btnBuscarNf.textContent = "Buscando...";
-    buscaNfResultado.style.display = "block";
-    buscaNfResultado.innerHTML = `<div style="padding:10px;color:#64748b;">Buscando NF ${numero} na Consyste...</div>`;
-
-    try {
-        const response = await fetch("/api/expedicao/conferencia-simples/buscar-nf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ numero_nf: numero }),
-        });
-        const data = await response.json();
-
-        if (data.error) {
-            buscaNfResultado.innerHTML = `<div class="empty-state" style="padding:12px;"><strong style="color:#ef4444;">${data.error}</strong></div>`;
-            return;
-        }
-
-        if (data.ja_existe) {
-            buscaNfResultado.innerHTML = `
-                <div style="padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #f59e0b;">
-                    <strong style="color:#b45309;">⚠ NF ${numero} já possui conferência</strong>
-                    <p style="margin:6px 0 0;font-size:13px;color:#78350f;">ID: ${data.conferencia_id} — Status: ${data.status || "---"}</p>
-                </div>`;
-            return;
-        }
-
-        if (data.encontrada && data.conferencia_criada) {
-            buscaNfResultado.innerHTML = `
-                <div style="padding:12px;background:#d1fae5;border-radius:8px;border:1px solid #10b981;">
-                    <strong style="color:#065f46;">✅ Conferência criada para NF ${numero}</strong>
-                    <p style="margin:6px 0 0;font-size:13px;color:#064e3b;">Status: Pendente de expedição. Acesse o histórico abaixo para completar.</p>
-                </div>`;
-            buscaNfInput.value = "";
-            loadHistorico();
-            return;
-        }
-
-        if (!data.encontrada) {
-            /* NF não encontrada - oferecer opções */
-            buscaNfResultado.innerHTML = `
-                <div style="padding:14px;background:#fef2f2;border-radius:8px;border:1px solid #ef4444;">
-                    <strong style="color:#991b1b;">NF ${numero} não encontrada na Consyste</strong>
-                    <p style="margin:8px 0 12px;font-size:13px;color:#7f1d1d;">O que deseja fazer?</p>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                        <button class="exp-btn" onclick="incluirManualComNf('${numero}')" style="background:#2563eb;">Incluir manualmente</button>
-                        <button class="exp-btn-secondary" onclick="corrigirNumeroNf()" style="min-height:36px;">Corrigir número</button>
-                    </div>
-                </div>`;
-            return;
-        }
-    } catch (error) {
-        buscaNfResultado.innerHTML = `<div class="empty-state" style="padding:12px;"><strong style="color:#ef4444;">Erro: ${error.message}</strong></div>`;
-    } finally {
-        btnBuscarNf.disabled = false;
-        btnBuscarNf.textContent = "Buscar";
-    }
-}
-
-function incluirManualComNf(numero) {
-    /* Preenche o formulário manual e rola até ele */
-    const nfField = document.getElementById("numero_nf");
-    if (nfField) nfField.value = numero;
-    buscaNfResultado.style.display = "none";
-    buscaNfInput.value = "";
-    const form = document.getElementById("expedicao-form");
-    if (form) form.scrollIntoView({ behavior: "smooth", block: "center" });
-    const orcField = document.getElementById("orcamento");
-    if (orcField) orcField.focus();
-    showToast(`NF ${numero} preenchida no formulário. Complete os dados e salve.`);
-}
-
-function corrigirNumeroNf() {
-    buscaNfResultado.style.display = "none";
-    buscaNfInput.value = "";
-    buscaNfInput.focus();
-}
-
-btnBuscarNf.addEventListener("click", buscarNfRapida);
-buscaNfInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); buscarNfRapida(); }
-});
-
-
 
 /* ========== ROMANEIO ========== */
 let romaneioRegistros = [];
@@ -1153,8 +1111,9 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
         complFeedback.textContent = `Enviando ${lista.length} foto(s)...`;
         for (const file of lista) {
             try {
-                const r = await uploadComplFoto(file);
-                complFotos.push({ rascunho_id: r.rascunho_id, url: r.url, nome: file.name });
+                const arquivoUpload = await prepararArquivoImagem(file);
+                const r = await uploadComplFoto(arquivoUpload);
+                complFotos.push({ rascunho_id: r.rascunho_id, url: r.url, nome: arquivoUpload.name || file.name });
                 updateComplPreview();
             } catch (e) {
                 showToast(`Erro ao enviar ${file.name}: ${e.message}`, "error");
@@ -1236,9 +1195,10 @@ historicoLista.addEventListener("change", async event => {
     const registroId = input.getAttribute("data-id");
     const file = input.files?.[0];
     if (!file) return;
-    
+
     const formData = new FormData();
-    formData.append("canhoto", file);
+    const arquivoUpload = await prepararArquivoImagem(file);
+    formData.append("canhoto", arquivoUpload);
     
     try {
         showToast("Enviando foto do canhoto...");

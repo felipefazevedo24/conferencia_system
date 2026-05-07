@@ -6928,6 +6928,10 @@ def criar_registro_conferencia_simples():
         db.session.add(foto_db)
         fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
 
+    if not fotos_salvas:
+        db.session.rollback()
+        return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
+
     db.session.commit()
 
     return jsonify({
@@ -7144,6 +7148,8 @@ def completar_registro_conferencia_simples(registro_id):
     os.makedirs(fotos_dir, exist_ok=True)
     rascunho_dir = os.path.join(fotos_dir, "rascunhos")
 
+    fotos_adicionadas = 0
+
     # Fotos enviadas como arquivos (fluxo legado)
     for foto in fotos_files:
         if foto and foto.filename:
@@ -7157,6 +7163,7 @@ def completar_registro_conferencia_simples(registro_id):
                 file_path=caminho,
             )
             db.session.add(foto_db)
+            fotos_adicionadas += 1
 
     # Fotos pré-carregadas via rascunho (upload imediato)
     fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
@@ -7175,6 +7182,12 @@ def completar_registro_conferencia_simples(registro_id):
             file_path=destino,
         )
         db.session.add(foto_db)
+        fotos_adicionadas += 1
+
+    total_fotos = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count() + fotos_adicionadas
+    if total_fotos <= 0:
+        db.session.rollback()
+        return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
 
     db.session.commit()
 
@@ -7279,6 +7292,70 @@ def obter_foto_conferencia_simples(registro_id, foto_id):
         return jsonify({"error": "Arquivo não encontrado."}), 404
 
     return send_file(caminho)
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_foto_conferencia_simples(registro_id, foto_id):
+    """Exclui uma foto de um registro de conferência simples."""
+    foto = ExpedicaoConferenciaSimplesFoto.query.filter_by(
+        id=foto_id,
+        conferencia_id=registro_id,
+    ).first()
+    if not foto:
+        return jsonify({"error": "Foto não encontrada."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(fotos_dir, foto.file_name, foto.file_path)
+    if caminho and os.path.exists(caminho):
+        try:
+            os.remove(caminho)
+        except Exception:
+            pass
+
+    db.session.delete(foto)
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/canhoto", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_canhoto_conferencia_simples(registro_id):
+    """Exclui o canhoto de um registro de conferência simples."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+    if not registro.canhoto_file_name:
+        return jsonify({"error": "Canhoto não anexado."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(
+        fotos_dir, registro.canhoto_file_name, registro.canhoto_file_path
+    )
+    if caminho and os.path.exists(caminho):
+        try:
+            os.remove(caminho)
+        except Exception:
+            pass
+
+    registro.canhoto_file_name = None
+    registro.canhoto_file_path = None
+    registro.canhoto_uploaded_at = None
+    registro.canhoto_uploaded_by = None
+    registro.finalizado_at = None
+    registro.finalizado_by = None
+    if registro.status == "Finalizado":
+        registro.status = "Expedido"
+    registro.updated_at = datetime.now()
+
+    db.session.commit()
+    return jsonify({"sucesso": True})
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>", methods=["DELETE"])
