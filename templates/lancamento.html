@@ -1139,6 +1139,7 @@
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
             <button class="doc-btn doc-btn-secondary" type="button" onclick="limparFiltros()" style="border:1px solid #e2e8f0; border-radius:14px; padding:11px 16px; font-size:12px; font-weight:800; text-transform:uppercase; cursor:pointer; background:#fff; color:#1e293b;"><i class="fas fa-eraser"></i> Limpar</button>
+            <button id="btn-sincronizar-erp" class="doc-btn doc-btn-secondary" type="button" onclick="sincronizarErpLancamento()" title="Consulta o ERP agora e lança automaticamente as NFs já registradas" style="border:1px solid #c7d2fe; border-radius:14px; padding:11px 16px; font-size:12px; font-weight:800; text-transform:uppercase; cursor:pointer; background:#eef2ff; color:#3730a3;"><i class="fas fa-cloud-arrow-down"></i> Sincronizar ERP</button>
             <button class="doc-btn doc-btn-secondary" type="button" onclick="carregarPainel(true)" style="border:1px solid #e2e8f0; border-radius:14px; padding:11px 16px; font-size:12px; font-weight:800; text-transform:uppercase; cursor:pointer; background:#fff; color:#1e293b;"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </section>
@@ -1665,6 +1666,40 @@
         document.getElementById('filtro-fornecedor').value = '';
         document.getElementById('filtro-etapa').value = '';
         renderizarLista();
+    }
+
+    async function sincronizarErpLancamento() {
+        const btn = document.getElementById('btn-sincronizar-erp');
+        if (!btn) return;
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sincronizando...';
+        try {
+            const resp = await fetch('/api/fiscal/erp_lancamento/sincronizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            const dados = await resp.json().catch(() => null);
+            if (!resp.ok || !dados || dados.sucesso === false) {
+                const msg = (dados && dados.msg) || 'Falha ao sincronizar com o ERP.';
+                alert(msg);
+                return;
+            }
+            const r = dados.resultado || {};
+            const partes = [];
+            if (typeof r.lancadas === 'number') partes.push(`${r.lancadas} lançada(s)`);
+            if (typeof r.candidatas === 'number') partes.push(`${r.candidatas} consultada(s)`);
+            if (r.mensagem) partes.push(r.mensagem);
+            alert('Sincronização ERP concluída.\n' + partes.join(' · '));
+            await carregarPainel(true);
+        } catch (err) {
+            console.error('[sincronizar ERP]', err);
+            alert('Erro ao sincronizar com o ERP: ' + (err && err.message ? err.message : err));
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
     }
 
     async function carregarPainel(forcarDetalhes = false) {

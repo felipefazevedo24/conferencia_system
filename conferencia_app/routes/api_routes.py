@@ -5084,6 +5084,21 @@ def processar_fila_integracao_wms():
     return jsonify({"sucesso": True, "resultado": resultado})
 
 
+@api_bp.route("/api/fiscal/erp_lancamento/sincronizar", methods=["POST"])
+@roles_required("Fiscal", "Admin")
+def fiscal_erp_lancamento_sincronizar():
+    """Dispara um ciclo manual de consulta ao ERP para lancar NFs concluidas."""
+    try:
+        from ..services.erp_lancamento_service import executar_ciclo
+    except Exception as exc:
+        return jsonify({"sucesso": False, "msg": f"Servico indisponivel: {exc}"}), 500
+    try:
+        resultado = executar_ciclo()
+    except Exception as exc:
+        return jsonify({"sucesso": False, "msg": str(exc)}), 500
+    return jsonify({"sucesso": True, "resultado": resultado})
+
+
 @api_bp.route("/api/fiscal/estornar_lancamento", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def estornar_lancamento_fiscal():
