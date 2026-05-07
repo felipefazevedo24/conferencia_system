@@ -203,6 +203,37 @@ def _enfileirar_wms_se_disponivel(numero_nota: str, usuario: str) -> None:
         logger.exception("Falha ao enfileirar integracao WMS para NF %s", numero_nota)
 
 
+def _manifestar_se_disponivel(numero_nota: str, usuario: str) -> dict[str, Any]:
+    """Chama a manifestacao SEFAZ (via Consyste) igual o fluxo manual."""
+    try:
+        from ..routes.api_routes import _manifestar_confirmacao_operacao  # type: ignore
+    except Exception as exc:
+        logger.warning("Manifestacao indisponivel: %s", exc)
+        return {"sucesso": False, "msg": "manifestacao_indisponivel"}
+    try:
+        return _manifestar_confirmacao_operacao(numero_nota, usuario) or {"sucesso": False}
+    except Exception as exc:
+        logger.exception("Falha na manifestacao SEFAZ para NF %s", numero_nota)
+        return {"sucesso": False, "msg": str(exc)[:200]}
+
+
+def _reverter_lancamento_local(numero_nota: str) -> None:
+    """Reverte um lancamento aplicado localmente quando a manifestacao falha."""
+    try:
+        ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
+            {
+                "status": "Concluído",
+                "usuario_lancamento": None,
+                "data_lancamento": None,
+                "numero_lancamento": None,
+            }
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("Falha ao reverter lancamento local da NF %s", numero_nota)
+
+
 def executar_ciclo() -> dict[str, Any]:
     """Executa um ciclo de consulta no ERP e aplica os lancamentos encontrados."""
     resumo: dict[str, Any] = {
@@ -270,11 +301,37 @@ def executar_ciclo() -> dict[str, Any]:
         try:
             atualizadas = _aplicar_lancamento_local(n_nf, codigo, usuario, dt_nf_erp)
             if atualizadas > 0:
+                # Commit do lancamento antes de chamar a SEFAZ (a manifestacao
+                # consulta o numero_nota com status=Lancado).
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    logger.exception("Falha no commit do lancamento NF %s", n_nf)
+                    resumo["erros"] += 1
+                    continue
+
+                # Manifestacao SEFAZ (Confirmacao da Operacao) - mesmo fluxo manual.
+                manifest = _manifestar_se_disponivel(n_nf, usuario)
+                if not manifest.get("sucesso"):
+                    msg = manifest.get("msg") or "falha desconhecida"
+                    logger.warning(
+                        "ERP Lancamento: manifestacao falhou para NF %s (%s); revertendo lancamento.",
+                        n_nf, msg,
+                    )
+                    _reverter_lancamento_local(n_nf)
+                    _registrar_status(
+                        str(n_nf),
+                        f"Lançado no ERP, mas manifestação SEFAZ falhou: {msg}",
+                    )
+                    resumo["erros"] += 1
+                    continue
+
                 total_lancadas += 1
                 _limpar_status(n_nf)
                 _enfileirar_wms_se_disponivel(n_nf, usuario)
                 logger.info(
-                    "ERP Lancamento: NF %s lancada automaticamente (codigo=%s, %d itens).",
+                    "ERP Lancamento: NF %s lancada automaticamente (codigo=%s, %d itens, manifestada).",
                     n_nf,
                     codigo,
                     atualizadas,
