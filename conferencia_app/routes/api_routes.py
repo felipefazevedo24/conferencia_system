@@ -55,7 +55,7 @@ import uuid
 from datetime import timedelta
 
 import requests
-from flask import Blueprint, Response, current_app, jsonify, request, send_file, session
+from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
 from sqlalchemy import func, or_
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -125,6 +125,14 @@ from ..services.expedicao_service import (
     parse_conferencia_report,
     resolve_report_image_path,
     validate_blind_conference,
+)
+from ..services.expedicao_photo_storage import (
+    decode_drive_rascunho,
+    delete_drive_url,
+    encode_drive_rascunho,
+    is_external_url,
+    upload_to_drive,
+    using_drive,
 )
 from ..services.xml_service import process_xml_and_store
 from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf, formatar_codigo_material_padrao
@@ -6477,6 +6485,9 @@ def _resolver_foto_expedicao(fotos_dir, file_name, file_path=None):
     if not file_name and not file_path:
         return None
 
+    if is_external_url(file_path):
+        return file_path
+
     if file_path and os.path.exists(file_path):
         return file_path
 
@@ -6500,6 +6511,12 @@ def _resolver_foto_expedicao(fotos_dir, file_name, file_path=None):
             pass
 
     return None
+
+
+def _foto_expedicao_url(registro_id, foto):
+    if is_external_url(foto.file_path):
+        return foto.file_path
+    return f"/api/expedicao/conferencia-simples/{registro_id}/foto/{foto.id}"
 
 
 @api_bp.route("/api/expedicao/conferencia-simples")
@@ -6546,7 +6563,7 @@ def listar_registros_conferencia_simples():
             fotos.append({
                 "id": f.id,
                 "nome": f.file_name,
-                "url": f"/api/expedicao/conferencia-simples/{reg.id}/foto/{f.id}",
+                "url": _foto_expedicao_url(reg.id, f),
                 "disponivel": bool(caminho_resolvido),
             })
         estornos = ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=reg.id).all()
@@ -6733,6 +6750,53 @@ def consultar_nf_conferencia_simples():
         })
 
 
+def _consultar_nf_emitida_exp_conferencia(numero_nf: str) -> dict:
+    """Compatibilidade para fluxos/testes que consultam uma NF emitida por numero."""
+    numero = str(numero_nf or "").strip()
+    if not numero:
+        return {"encontrada": False}
+    ok, _status_code, data = listar_nfes_consyste_por_caixa(
+        caixa="emitidos",
+        q=f"numero:{numero}",
+        timeout=15,
+    )
+    documentos = []
+    if ok and isinstance(data, dict):
+        documentos = data.get("documentos") or data.get("documents") or data.get("results") or []
+        if isinstance(documentos, dict):
+            documentos = [documentos]
+    doc = None
+    for item in documentos:
+        if str(item.get("numero") or item.get("nNF") or "").strip() == numero:
+            doc = item
+            break
+    if doc is None and documentos:
+        doc = documentos[0]
+    if not doc:
+        return {"encontrada": False}
+    return {
+        "encontrada": True,
+        "numero_nf": numero,
+        "nome_cliente": (
+            doc.get("dest_nome")
+            or (doc.get("destinatario") or {}).get("razao_social")
+            or (doc.get("destinatario") or {}).get("nome")
+            or (doc.get("dest") or {}).get("xNome")
+            or doc.get("cliente")
+            or ""
+        ),
+        "cnpj_cliente": (
+            doc.get("dest_cnpj")
+            or (doc.get("destinatario") or {}).get("cnpj")
+            or (doc.get("destinatario") or {}).get("cpf")
+            or (doc.get("dest") or {}).get("CNPJ")
+            or ""
+        ),
+        "documento_id": doc.get("id") or doc.get("_id") or "",
+        "chave": doc.get("chave") or doc.get("chNFe") or "",
+    }
+
+
 @api_bp.route("/api/expedicao/conferencia-simples/foto-rascunho", methods=["POST"])
 @roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def upload_foto_rascunho_expedicao():
@@ -6752,6 +6816,20 @@ def upload_foto_rascunho_expedicao():
 
     ext = os.path.splitext(secure_filename(foto.filename))[1].lower() or ".jpg"
     rascunho_id = f"{uuid.uuid4().hex}{ext}"
+
+    if using_drive():
+        nome_arquivo = f"rascunho_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{rascunho_id}"
+        try:
+            stored = upload_to_drive(foto, nome_arquivo)
+        except Exception as exc:
+            current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
+            return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+        return jsonify({
+            "rascunho_id": encode_drive_rascunho(stored.file_id or "", stored.file_name),
+            "url": stored.url,
+            "external": True,
+        })
+
     caminho = os.path.join(rascunho_dir, rascunho_id)
     foto.save(caminho)
     return jsonify({
@@ -6773,6 +6851,8 @@ def servir_foto_rascunho_expedicao(rascunho_id):
     caminho = os.path.join(rascunho_dir, safe_id)
     if not os.path.isfile(caminho):
         return jsonify({"error": "Arquivo não encontrado."}), 404
+    if is_external_url(caminho):
+        return redirect(caminho)
     return send_file(caminho)
 
 
@@ -6934,23 +7014,50 @@ def criar_registro_conferencia_simples():
         if foto and foto.filename:
             ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
             nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
-            caminho = os.path.join(fotos_dir, nome_arquivo)
-            foto.save(caminho)
+            if using_drive():
+                try:
+                    stored = upload_to_drive(foto, nome_arquivo)
+                    caminho = stored.file_path
+                    foto_url = stored.url
+                except Exception as exc:
+                    db.session.rollback()
+                    current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
+                    return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+            else:
+                caminho = os.path.join(fotos_dir, nome_arquivo)
+                foto.save(caminho)
+                foto_url = ""
             foto_db = ExpedicaoConferenciaSimplesFoto(
                 conferencia_id=registro.id,
                 file_name=nome_arquivo,
                 file_path=caminho,
             )
             db.session.add(foto_db)
-            fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
+            if not foto_url:
+                foto_url = f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"
+            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
 
     # Fotos pré-carregadas via rascunho (upload imediato)
     fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
+    rascunhos_perdidos = []
     for rascunho_id in fotos_rascunho_ids:
+        drive_ref = decode_drive_rascunho(rascunho_id)
+        if drive_ref:
+            file_id, nome_arquivo = drive_ref
+            foto_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600"
+            foto_db = ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id,
+                file_name=nome_arquivo,
+                file_path=foto_url,
+            )
+            db.session.add(foto_db)
+            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
+            continue
         safe_id = os.path.basename(rascunho_id)
         origem = os.path.join(rascunho_dir, safe_id)
         if not os.path.isfile(origem):
-            continue  # Rascunho não encontrado, ignora silenciosamente
+            rascunhos_perdidos.append(safe_id)
+            continue
         ext = os.path.splitext(safe_id)[1] or ".jpg"
         nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
         destino = os.path.join(fotos_dir, nome_arquivo)
@@ -6962,6 +7069,10 @@ def criar_registro_conferencia_simples():
         )
         db.session.add(foto_db)
         fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
+
+    if rascunhos_perdidos:
+        db.session.rollback()
+        return jsonify({"error": "Uma ou mais fotos expiraram antes de salvar. Selecione as fotos novamente."}), 400
 
     if not fotos_salvas:
         db.session.rollback()
@@ -7146,7 +7257,10 @@ def completar_registro_conferencia_simples(registro_id):
         transportadora = str(request.form.get("transportadora") or "").strip()
         placa = str(request.form.get("placa") or "").strip().upper()
         motorista = str(request.form.get("motorista") or "").strip()
+        tipo_referencia = str(request.form.get("tipo_referencia") or registro.tipo_referencia or "Orcamento").strip()
         orcamento = str(request.form.get("orcamento") or "").strip()
+        numero_os = str(request.form.get("numero_os") or "").strip()
+        ordem_compra = str(request.form.get("ordem_compra") or "").strip()
         numero_nf = str(request.form.get("numero_nf") or "").strip()
         nome_cliente = str(request.form.get("nome_cliente") or "").strip()
         manter_pendente = str(request.form.get("manter_pendente") or "").strip() in ("1", "true", "True")
@@ -7156,7 +7270,10 @@ def completar_registro_conferencia_simples(registro_id):
         transportadora = str(payload.get("transportadora") or "").strip()
         placa = str(payload.get("placa") or "").strip().upper()
         motorista = str(payload.get("motorista") or "").strip()
+        tipo_referencia = str(payload.get("tipo_referencia") or registro.tipo_referencia or "Orcamento").strip()
         orcamento = str(payload.get("orcamento") or "").strip()
+        numero_os = str(payload.get("numero_os") or "").strip()
+        ordem_compra = str(payload.get("ordem_compra") or "").strip()
         numero_nf = str(payload.get("numero_nf") or "").strip()
         nome_cliente = str(payload.get("nome_cliente") or "").strip()
         manter_pendente = bool(payload.get("manter_pendente"))
@@ -7165,8 +7282,14 @@ def completar_registro_conferencia_simples(registro_id):
     registro.transportadora = transportadora or registro.transportadora
     registro.placa = placa or registro.placa
     registro.motorista = motorista or registro.motorista
+    if tipo_referencia:
+        registro.tipo_referencia = tipo_referencia
     if orcamento:
         registro.orcamento = orcamento
+    if numero_os:
+        registro.numero_os = numero_os
+    if ordem_compra:
+        registro.ordem_compra = ordem_compra
     if numero_nf:
         registro.numero_nf = numero_nf
     if nome_cliente:
@@ -7184,28 +7307,56 @@ def completar_registro_conferencia_simples(registro_id):
     rascunho_dir = os.path.join(fotos_dir, "rascunhos")
 
     fotos_adicionadas = 0
+    fotos_salvas = []
 
     # Fotos enviadas como arquivos (fluxo legado)
     for foto in fotos_files:
         if foto and foto.filename:
             ext = os.path.splitext(secure_filename(foto.filename))[1] or ".jpg"
             nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
-            caminho = os.path.join(fotos_dir, nome_arquivo)
-            foto.save(caminho)
+            if using_drive():
+                try:
+                    stored = upload_to_drive(foto, nome_arquivo)
+                    caminho = stored.file_path
+                    foto_url = stored.url
+                except Exception as exc:
+                    db.session.rollback()
+                    current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
+                    return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+            else:
+                caminho = os.path.join(fotos_dir, nome_arquivo)
+                foto.save(caminho)
+                foto_url = ""
             foto_db = ExpedicaoConferenciaSimplesFoto(
                 conferencia_id=registro.id,
                 file_name=nome_arquivo,
                 file_path=caminho,
             )
             db.session.add(foto_db)
+            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url or f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
             fotos_adicionadas += 1
 
     # Fotos pré-carregadas via rascunho (upload imediato)
     fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
+    rascunhos_perdidos = []
     for rascunho_id in fotos_rascunho_ids:
+        drive_ref = decode_drive_rascunho(rascunho_id)
+        if drive_ref:
+            file_id, nome_arquivo = drive_ref
+            foto_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600"
+            foto_db = ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id,
+                file_name=nome_arquivo,
+                file_path=foto_url,
+            )
+            db.session.add(foto_db)
+            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
+            fotos_adicionadas += 1
+            continue
         safe_id = os.path.basename(rascunho_id)
         origem = os.path.join(rascunho_dir, safe_id)
         if not os.path.isfile(origem):
+            rascunhos_perdidos.append(safe_id)
             continue
         ext = os.path.splitext(safe_id)[1] or ".jpg"
         nome_arquivo = f"reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
@@ -7217,7 +7368,12 @@ def completar_registro_conferencia_simples(registro_id):
             file_path=destino,
         )
         db.session.add(foto_db)
+        fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
         fotos_adicionadas += 1
+
+    if rascunhos_perdidos:
+        db.session.rollback()
+        return jsonify({"error": "Uma ou mais fotos expiraram antes de salvar. Selecione as fotos novamente."}), 400
 
     total_fotos = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro.id).count() + fotos_adicionadas
     if total_fotos <= 0:
@@ -7230,9 +7386,16 @@ def completar_registro_conferencia_simples(registro_id):
         "sucesso": True,
         "registro": {
             "id": registro.id,
+            "tipo_referencia": registro.tipo_referencia,
+            "orcamento": registro.orcamento,
+            "numero_os": registro.numero_os,
+            "ordem_compra": registro.ordem_compra or "",
+            "numero_nf": registro.numero_nf,
+            "nome_cliente": registro.nome_cliente,
             "status": registro.status,
             "expedido_at": registro.expedido_at.strftime("%d/%m/%Y %H:%M") if registro.expedido_at else None,
             "expedido_by": registro.expedido_by,
+            "fotos": fotos_salvas,
         }
     })
 
@@ -7259,8 +7422,16 @@ def upload_canhoto_conferencia_simples(registro_id):
 
     ext = os.path.splitext(secure_filename(canhoto.filename))[1] or ".jpg"
     nome_arquivo = f"canhoto_{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
-    caminho = os.path.join(fotos_dir, nome_arquivo)
-    canhoto.save(caminho)
+    if using_drive():
+        try:
+            stored = upload_to_drive(canhoto, nome_arquivo)
+            caminho = stored.file_path
+        except Exception as exc:
+            current_app.logger.exception("Falha ao enviar canhoto de expedicao para Drive")
+            return jsonify({"error": f"Falha ao enviar canhoto para o Drive: {exc}"}), 502
+    else:
+        caminho = os.path.join(fotos_dir, nome_arquivo)
+        canhoto.save(caminho)
 
     registro.canhoto_file_name = nome_arquivo
     registro.canhoto_file_path = caminho
@@ -7304,6 +7475,8 @@ def obter_canhoto_conferencia_simples(registro_id):
     if not caminho:
         return jsonify({"error": "Arquivo não encontrado."}), 404
 
+    if is_external_url(caminho):
+        return redirect(caminho)
     return send_file(caminho)
 
 
@@ -7326,6 +7499,8 @@ def obter_foto_conferencia_simples(registro_id, foto_id):
     if not caminho:
         return jsonify({"error": "Arquivo não encontrado."}), 404
 
+    if is_external_url(caminho):
+        return redirect(caminho)
     return send_file(caminho)
 
 
@@ -7345,7 +7520,12 @@ def excluir_foto_conferencia_simples(registro_id, foto_id):
         fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
 
     caminho = _resolver_foto_expedicao(fotos_dir, foto.file_name, foto.file_path)
-    if caminho and os.path.exists(caminho):
+    if is_external_url(caminho):
+        try:
+            delete_drive_url(caminho)
+        except Exception:
+            current_app.logger.warning("Nao foi possivel excluir foto do Drive: %s", caminho)
+    elif caminho and os.path.exists(caminho):
         try:
             os.remove(caminho)
         except Exception:
@@ -7373,7 +7553,12 @@ def excluir_canhoto_conferencia_simples(registro_id):
     caminho = _resolver_foto_expedicao(
         fotos_dir, registro.canhoto_file_name, registro.canhoto_file_path
     )
-    if caminho and os.path.exists(caminho):
+    if is_external_url(caminho):
+        try:
+            delete_drive_url(caminho)
+        except Exception:
+            current_app.logger.warning("Nao foi possivel excluir canhoto do Drive: %s", caminho)
+    elif caminho and os.path.exists(caminho):
         try:
             os.remove(caminho)
         except Exception:
@@ -7409,7 +7594,12 @@ def excluir_registro_conferencia_simples(registro_id):
     fotos = ExpedicaoConferenciaSimplesFoto.query.filter_by(conferencia_id=registro_id).all()
     for foto in fotos:
         caminho = _resolver_foto_expedicao(fotos_dir, foto.file_name, foto.file_path)
-        if caminho and os.path.exists(caminho):
+        if is_external_url(caminho):
+            try:
+                delete_drive_url(caminho)
+            except Exception:
+                current_app.logger.warning("Nao foi possivel excluir foto do Drive: %s", caminho)
+        elif caminho and os.path.exists(caminho):
             try:
                 os.remove(caminho)
             except Exception:

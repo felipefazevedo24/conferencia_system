@@ -584,6 +584,12 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             ("updated_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN updated_at DATETIME"),
             ("expedido_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN expedido_at DATETIME"),
             ("expedido_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN expedido_by VARCHAR(100)"),
+            ("canhoto_file_name", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_file_name VARCHAR(260)"),
+            ("canhoto_file_path", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_file_path VARCHAR(500)"),
+            ("canhoto_uploaded_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_uploaded_at DATETIME"),
+            ("canhoto_uploaded_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_uploaded_by VARCHAR(100)"),
+            ("finalizado_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN finalizado_at DATETIME"),
+            ("finalizado_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN finalizado_by VARCHAR(100)"),
         ]
         for column_name, ddl in missing_conf_columns:
             if column_name not in cols_conf:

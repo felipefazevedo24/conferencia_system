@@ -14,6 +14,7 @@ import os
 from datetime import datetime
 from typing import Any
 
+import requests
 from flask import current_app
 
 from ..extensions import db
@@ -86,6 +87,9 @@ def _resolver_config() -> dict[str, Any]:
         "user": str(arquivo.get("user") or cfg.get("ERP_LANCAMENTO_PG_USER") or "").strip(),
         "password": str(arquivo.get("password") or cfg.get("ERP_LANCAMENTO_PG_PASSWORD") or ""),
         "table": str(arquivo.get("table") or cfg.get("ERP_LANCAMENTO_PG_TABLE") or "tcompras").strip(),
+        "api_url": str(arquivo.get("api_url") or cfg.get("ERP_LANCAMENTO_API_URL") or "").strip().rstrip("/"),
+        "api_token": str(arquivo.get("api_token") or cfg.get("ERP_LANCAMENTO_API_TOKEN") or ""),
+        "api_timeout": int(arquivo.get("api_timeout") or cfg.get("ERP_LANCAMENTO_API_TIMEOUT") or 30),
         "usuario_lancamento": str(
             arquivo.get("usuario_lancamento")
             or cfg.get("ERP_LANCAMENTO_USUARIO")
@@ -112,8 +116,7 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
 
     Quando `data_emissao` vier preenchida, restringe pela data (match exato).
     Quando vier None (NFs antigas sem dhEmi), consulta apenas por n_nf e
-    aceita o resultado somente quando houver UMA unica linha (evita ambiguidade
-    se o mesmo numero existir para fornecedores diferentes).
+    aceita linhas duplicadas quando todas apontarem para a mesma chave NF-e.
     """
     if not chaves:
         return {}
@@ -123,8 +126,32 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
         raise ValueError(f"Nome de tabela invalido: {table}")
 
     resultados: dict[str, tuple[str, Any]] = {}
-    sql_com_data = f"SELECT codigo, dt_nf FROM {table} WHERE n_nf = %s AND dt_nf::date = %s LIMIT 1"
-    sql_sem_data = f"SELECT codigo, dt_nf FROM {table} WHERE n_nf = %s LIMIT 2"
+
+    def _normalizar_linhas(rows):
+        linhas_validas = [
+            (str(row[0]).strip(), row[1], str(row[2] or "").strip())
+            for row in rows
+            if row and row[0] is not None and str(row[0]).strip()
+        ]
+        if not linhas_validas:
+            return None
+
+        chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe in linhas_validas if chv_nfe}
+        if len(chaves) == 1:
+            codigo, dt_nf, _chv_nfe = linhas_validas[0]
+            return codigo, dt_nf
+
+        assinaturas = {
+            (codigo, dt_nf.isoformat() if hasattr(dt_nf, "isoformat") else str(dt_nf))
+            for codigo, dt_nf, _chv_nfe in linhas_validas
+        }
+        if not chaves and len(assinaturas) == 1:
+            codigo, dt_nf, _chv_nfe = linhas_validas[0]
+            return codigo, dt_nf
+        return None
+
+    sql_com_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s AND dt_nf::date = %s LIMIT 50"
+    sql_sem_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s LIMIT 50"
 
     with _conectar(cfg) as conn:
         with conn.cursor() as cur:
@@ -132,24 +159,25 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                 try:
                     if data_emi is not None:
                         cur.execute(sql_com_data, (str(n_nf), data_emi.date()))
-                        row = cur.fetchone()
-                        if row and row[0] is not None:
-                            resultados[str(n_nf)] = (str(row[0]).strip(), row[1])
+                        row = _normalizar_linhas(cur.fetchall())
+                        if row:
+                            resultados[str(n_nf)] = row
                         else:
                             _registrar_status(str(n_nf), "Aguardando lançamento no ERP")
                     else:
                         cur.execute(sql_sem_data, (str(n_nf),))
                         rows = cur.fetchall()
-                        if len(rows) == 1 and rows[0][0] is not None:
-                            resultados[str(n_nf)] = (str(rows[0][0]).strip(), rows[0][1])
-                        elif len(rows) > 1:
+                        row = _normalizar_linhas(rows)
+                        if row:
+                            resultados[str(n_nf)] = row
+                        elif rows:
                             logger.warning(
                                 "ERP Lancamento: NF %s tem %d matches em %s sem data_emissao local; pulando para evitar ambiguidade.",
                                 n_nf, len(rows), table,
                             )
                             _registrar_status(
                                 str(n_nf),
-                                "Múltiplos lançamentos com esse número no ERP — confirme manualmente",
+                                "Múltiplas chaves de acesso para esse número no ERP — vincule manualmente",
                             )
                         else:
                             _registrar_status(str(n_nf), "Aguardando lançamento no ERP")
@@ -157,6 +185,96 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                     logger.warning("Erro consultando ERP n_nf=%s dt=%s: %s", n_nf, data_emi, exc)
                     continue
     return resultados
+
+
+def _dt_to_api_value(valor: datetime | None) -> str | None:
+    if valor is None:
+        return None
+    return valor.date().isoformat()
+
+
+def _parse_dt_nf_api(valor: Any) -> Any:
+    if not isinstance(valor, str) or not valor.strip():
+        return valor
+    texto = valor.strip()
+    try:
+        return datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except Exception:
+        return valor
+
+
+def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
+    """Consulta a API bridge hospedada na VM.
+
+    Contrato esperado:
+        POST {api_url}/api/erp/lancamentos
+        {"chaves": [{"n_nf": "123", "data_emissao": "2026-05-11"}]}
+
+    Resposta:
+        {
+          "resultados": {"123": {"codigo": "ABC", "dt_nf": "2026-05-11"}},
+          "status": {"123": "Aguardando lancamento no ERP"}
+        }
+    """
+    if not chaves:
+        return {}
+    if not cfg.get("api_url"):
+        raise ValueError("ERP_LANCAMENTO_API_URL nao configurada.")
+
+    url = f"{cfg['api_url']}/api/erp/lancamentos"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/ERP-Lancamento",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+
+    payload = {
+        "chaves": [
+            {"n_nf": str(n_nf), "data_emissao": _dt_to_api_value(data_emi)}
+            for n_nf, data_emi in chaves
+            if n_nf
+        ]
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise ValueError("Resposta invalida da API ERP (esperava objeto JSON).")
+
+    status_map = data.get("status") or {}
+    if isinstance(status_map, dict):
+        for n_nf, motivo in status_map.items():
+            if motivo:
+                _registrar_status(str(n_nf), str(motivo))
+
+    resultados_raw = data.get("resultados") or {}
+    resultados: dict[str, tuple[str, Any]] = {}
+    if isinstance(resultados_raw, dict):
+        for n_nf, row in resultados_raw.items():
+            if not isinstance(row, dict):
+                continue
+            codigo = str(row.get("codigo") or "").strip()
+            if codigo:
+                resultados[str(n_nf)] = (codigo, _parse_dt_nf_api(row.get("dt_nf")))
+    elif isinstance(resultados_raw, list):
+        for row in resultados_raw:
+            if not isinstance(row, dict):
+                continue
+            n_nf = str(row.get("n_nf") or "").strip()
+            codigo = str(row.get("codigo") or "").strip()
+            if n_nf and codigo:
+                resultados[n_nf] = (codigo, _parse_dt_nf_api(row.get("dt_nf")))
+
+    return resultados
+
+
+def _consultar_codigos(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
+    if cfg.get("api_url"):
+        return _consultar_codigos_via_api(cfg, chaves)
+    return _consultar_codigos_no_erp(cfg, chaves)
 
 
 def _aplicar_lancamento_local(
@@ -247,8 +365,8 @@ def executar_ciclo() -> dict[str, Any]:
     }
 
     cfg = _resolver_config()
-    if not cfg["host"] or not cfg["database"] or not cfg["user"]:
-        resumo["mensagem"] = "ERP_LANCAMENTO nao configurado (host/database/user)."
+    if not cfg.get("api_url") and (not cfg["host"] or not cfg["database"] or not cfg["user"]):
+        resumo["mensagem"] = "ERP_LANCAMENTO nao configurado (api_url ou host/database/user)."
         return resumo
     resumo["configurado"] = True
 
@@ -283,9 +401,9 @@ def executar_ciclo() -> dict[str, Any]:
     resumo["consultadas"] = len(pares)
 
     try:
-        achados = _consultar_codigos_no_erp(cfg, pares)
+        achados = _consultar_codigos(cfg, pares)
     except Exception as exc:
-        logger.exception("Erro ao consultar Postgres ERP: %s", exc)
+        logger.exception("Erro ao consultar ERP Lancamento: %s", exc)
         resumo["erros"] += 1
         resumo["mensagem"] = f"Erro de conexao com ERP: {exc}"
         return resumo

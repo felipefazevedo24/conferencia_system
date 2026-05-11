@@ -1,0 +1,184 @@
+"""API bridge para o ERP Lancamento rodar em uma VM com acesso ao Postgres.
+
+Uso local/VM:
+    set ERP_BRIDGE_TOKEN=troque-por-um-token-forte
+    set ERP_LANCAMENTO_PG_HOST=10.250.100.251
+    set ERP_LANCAMENTO_PG_DB=CPS
+    set ERP_LANCAMENTO_PG_USER=DevLeitura
+    set ERP_LANCAMENTO_PG_PASSWORD=...
+    python scripts/erp_lancamento_api_bridge.py
+
+Endpoint:
+    POST /api/erp/lancamentos
+    Authorization: Bearer <ERP_BRIDGE_TOKEN>
+"""
+from __future__ import annotations
+
+import os
+from datetime import date, datetime
+from typing import Any
+
+from flask import Flask, jsonify, request
+import psycopg2  # type: ignore
+
+
+def _env(name: str, default: str = "") -> str:
+    return str(os.environ.get(name, default) or "").strip()
+
+
+def _env_int(name: str, default: str) -> int:
+    try:
+        return int(_env(name, default))
+    except ValueError:
+        return int(default)
+
+
+def _config() -> dict[str, Any]:
+    return {
+        "host": _env("ERP_LANCAMENTO_PG_HOST"),
+        "port": _env_int("ERP_LANCAMENTO_PG_PORT", "5432"),
+        "database": _env("ERP_LANCAMENTO_PG_DB"),
+        "user": _env("ERP_LANCAMENTO_PG_USER"),
+        "password": os.environ.get("ERP_LANCAMENTO_PG_PASSWORD", ""),
+        "table": _env("ERP_LANCAMENTO_PG_TABLE", "tcompras"),
+        "connect_timeout": _env_int("ERP_BRIDGE_CONNECT_TIMEOUT", "15"),
+        "token": os.environ.get("ERP_BRIDGE_TOKEN", ""),
+    }
+
+
+def _validar_table(table: str) -> str:
+    table = str(table or "").strip()
+    if not table.replace("_", "").isalnum():
+        raise ValueError(f"Nome de tabela invalido: {table}")
+    return table
+
+
+def _conectar(cfg: dict[str, Any]):
+    return psycopg2.connect(
+        host=cfg["host"],
+        port=cfg["port"],
+        dbname=cfg["database"],
+        user=cfg["user"],
+        password=cfg["password"],
+        connect_timeout=cfg["connect_timeout"],
+    )
+
+
+def _parse_data(valor: Any) -> date | None:
+    if not valor:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    texto = str(valor).strip()
+    if not texto:
+        return None
+    return datetime.fromisoformat(texto[:10]).date()
+
+
+def _iso_dt(valor: Any) -> str | None:
+    if valor is None:
+        return None
+    if hasattr(valor, "isoformat"):
+        return valor.isoformat()
+    return str(valor)
+
+
+def _normalizar_linhas_lancamento(rows: list[tuple[Any, Any, Any]]) -> tuple[str, Any, str] | None:
+    linhas_validas = [
+        (str(row[0]).strip(), row[1], str(row[2] or "").strip())
+        for row in rows
+        if row and row[0] is not None and str(row[0]).strip()
+    ]
+    if not linhas_validas:
+        return None
+
+    chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe in linhas_validas if chv_nfe}
+    if len(chaves) == 1:
+        return linhas_validas[0]
+
+    # Fallback para bases antigas/linhas sem chave: so aceita se codigo e data tambem forem identicos.
+    assinaturas = {(codigo, _iso_dt(dt_nf)) for codigo, dt_nf, _chv_nfe in linhas_validas}
+    if not chaves and len(assinaturas) == 1:
+        return linhas_validas[0]
+    return None
+
+
+def _authorized(cfg: dict[str, Any]) -> bool:
+    token = str(cfg.get("token") or "")
+    if not token:
+        return False
+    auth = request.headers.get("Authorization", "")
+    return auth == f"Bearer {token}"
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+
+    @app.get("/health")
+    def health():
+        return jsonify({"ok": True, "service": "erp-lancamento-api-bridge"})
+
+    @app.post("/api/erp/lancamentos")
+    def consultar_lancamentos():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            table = _validar_table(cfg["table"])
+            payload = request.get_json(silent=True) or {}
+            chaves = payload.get("chaves") or []
+            if not isinstance(chaves, list):
+                return jsonify({"erro": "chaves_deve_ser_lista"}), 400
+
+            resultados: dict[str, dict[str, Any]] = {}
+            status: dict[str, str] = {}
+            sql_com_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s AND dt_nf::date = %s LIMIT 50"
+            sql_sem_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s LIMIT 50"
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    for item in chaves:
+                        if not isinstance(item, dict):
+                            continue
+                        n_nf = str(item.get("n_nf") or "").strip()
+                        if not n_nf:
+                            continue
+                        data_emissao = _parse_data(item.get("data_emissao"))
+                        if data_emissao:
+                            cur.execute(sql_com_data, (n_nf, data_emissao))
+                            row = _normalizar_linhas_lancamento(cur.fetchall())
+                            if row:
+                                resultados[n_nf] = {"codigo": row[0], "dt_nf": _iso_dt(row[1]), "chv_nfe": row[2]}
+                            else:
+                                status[n_nf] = "Aguardando lancamento no ERP"
+                        else:
+                            cur.execute(sql_sem_data, (n_nf,))
+                            rows = cur.fetchall()
+                            row = _normalizar_linhas_lancamento(rows)
+                            if row:
+                                resultados[n_nf] = {"codigo": row[0], "dt_nf": _iso_dt(row[1]), "chv_nfe": row[2]}
+                            elif rows:
+                                status[n_nf] = "Multiplas chaves de acesso para esse numero no ERP - vincule manualmente"
+                            else:
+                                status[n_nf] = "Aguardando lancamento no ERP"
+
+            return jsonify({"sucesso": True, "resultados": resultados, "status": status})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar lancamentos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    return app
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    host = _env("ERP_BRIDGE_HOST", "0.0.0.0")
+    port = _env_int("ERP_BRIDGE_PORT", "8088")
+    app.run(host=host, port=port)
