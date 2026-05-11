@@ -64,18 +64,35 @@ def is_external_url(value: str | None) -> bool:
 
 
 def _drive_credentials():
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
     from google.oauth2 import service_account
 
     scopes = ["https://www.googleapis.com/auth/drive"]
+    oauth_json = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_JSON") or "").strip()
+    oauth_file = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_FILE") or "").strip()
     raw_json = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON") or "").strip()
     file_path = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE") or "").strip()
 
+    if oauth_json:
+        creds = Credentials.from_authorized_user_info(json.loads(oauth_json), scopes=scopes)
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        return creds
+    if oauth_file:
+        creds = Credentials.from_authorized_user_file(oauth_file, scopes=scopes)
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        return creds
     if raw_json:
         info = json.loads(raw_json)
         return service_account.Credentials.from_service_account_info(info, scopes=scopes)
     if file_path:
         return service_account.Credentials.from_service_account_file(file_path, scopes=scopes)
-    raise RuntimeError("Google Drive nao configurado: informe GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON ou GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE.")
+    raise RuntimeError(
+        "Google Drive nao configurado: informe GOOGLE_DRIVE_OAUTH_TOKEN_JSON/FILE "
+        "ou GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/FILE."
+    )
 
 
 def _drive_service():
@@ -102,6 +119,7 @@ def upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = No
         body=metadata,
         media_body=media,
         fields="id,name,webViewLink",
+        supportsAllDrives=True,
     ).execute()
     file_id = created["id"]
 
@@ -110,6 +128,7 @@ def upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = No
             fileId=file_id,
             body={"type": "anyone", "role": "reader"},
             fields="id",
+            supportsAllDrives=True,
         ).execute()
 
     return StoredPhoto(
@@ -154,4 +173,4 @@ def delete_drive_url(url: str | None) -> None:
         file_id = parsed.path.split("/file/d/", 1)[1].split("/", 1)[0]
     if not file_id:
         return
-    _drive_service().files().delete(fileId=file_id).execute()
+    _drive_service().files().delete(fileId=file_id, supportsAllDrives=True).execute()

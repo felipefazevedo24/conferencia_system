@@ -144,6 +144,7 @@ def main() -> int:
     parser.add_argument("--database-url", default="", help="DATABASE_URL do app, se nao estiver exportado no console.")
     parser.add_argument("--folder-id", default="", help="ID da pasta do Google Drive.")
     parser.add_argument("--service-account-file", default="", help="Caminho do JSON da service account.")
+    parser.add_argument("--oauth-token-file", default="", help="Caminho do token OAuth da conta do Drive.")
     parser.add_argument("--delete-local", action="store_true", help="Apaga o arquivo local depois de migrar com sucesso.")
     args = parser.parse_args()
 
@@ -153,6 +154,8 @@ def main() -> int:
         os.environ["EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID"] = args.folder_id
     if args.service_account_file:
         os.environ["GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE"] = args.service_account_file
+    if args.oauth_token_file:
+        os.environ["GOOGLE_DRIVE_OAUTH_TOKEN_FILE"] = args.oauth_token_file
     os.environ.setdefault("EXPEDICAO_FOTOS_STORAGE", "drive")
 
     app = create_app()

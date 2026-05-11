@@ -11,5 +11,6 @@ PyMySQL
 psycopg2-binary
 google-api-python-client
 google-auth
+google-auth-oauthlib
 reportlab
 brazilfiscalreport
