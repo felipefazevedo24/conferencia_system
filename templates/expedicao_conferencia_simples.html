@@ -359,6 +359,7 @@ let toastTimer = null;
 // Fotos rascunho: [{rascunho_id, url, nome}] — persistidas no sessionStorage
 const SESSION_FOTOS_KEY = "exp_fotos_rascunho";
 let fotosRascunho = [];
+let filaUploadFotos = Promise.resolve();
 
 function salvarFotosSession() {
     try { sessionStorage.setItem(SESSION_FOTOS_KEY, JSON.stringify(fotosRascunho)); } catch(e) {}
@@ -510,6 +511,14 @@ async function addFotos(files) {
     }
     btnSalvar.disabled = false;
     syncFotoFeedback();
+}
+
+function enfileirarFotos(files) {
+    const lista = Array.from(files || []);
+    if (!lista.length) return;
+    filaUploadFotos = filaUploadFotos
+        .catch(() => {})
+        .then(() => addFotos(lista));
 }
 
 async function consultarNf() {
@@ -743,6 +752,7 @@ async function excluirCanhotoRegistro(registroId) {
 
 form.addEventListener("submit", async event => {
     event.preventDefault();
+    await filaUploadFotos.catch(() => {});
     if (!fotosRascunho.length) {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
@@ -783,11 +793,11 @@ nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState
 btnAbrirCamera.addEventListener("click", () => fotosCameraInput.click());
 btnEscolherFotos.addEventListener("click", () => fotosGaleriaInput.click());
 fotosCameraInput.addEventListener("change", event => {
-    addFotos(event.target.files);
+    enfileirarFotos(event.target.files);
     event.target.value = "";
 });
 fotosGaleriaInput.addEventListener("change", event => {
-    addFotos(event.target.files);
+    enfileirarFotos(event.target.files);
     event.target.value = "";
 });
 buscaHistorico.addEventListener("input", debounce(loadHistorico, 250));
@@ -1071,6 +1081,7 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
 
     // Wire up the completar form
     let complFotos = []; // [{rascunho_id, url, nome}]
+    let complFilaUploadFotos = Promise.resolve();
     const complForm = document.getElementById("completar-form");
     const complCamera = document.getElementById("compl-fotos-camera");
     const complGaleria = document.getElementById("compl-fotos-galeria");
@@ -1121,10 +1132,18 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
         }
     }
 
+    function enfileirarComplFotos(files) {
+        const lista = Array.from(files || []);
+        if (!lista.length) return;
+        complFilaUploadFotos = complFilaUploadFotos
+            .catch(() => {})
+            .then(() => addComplFotos(lista));
+    }
+
     document.getElementById("compl-btn-camera").addEventListener("click", () => complCamera.click());
     document.getElementById("compl-btn-galeria").addEventListener("click", () => complGaleria.click());
-    complCamera.addEventListener("change", e => { addComplFotos(e.target.files); e.target.value = ""; });
-    complGaleria.addEventListener("change", e => { addComplFotos(e.target.files); e.target.value = ""; });
+    complCamera.addEventListener("change", e => { enfileirarComplFotos(e.target.files); e.target.value = ""; });
+    complGaleria.addEventListener("change", e => { enfileirarComplFotos(e.target.files); e.target.value = ""; });
     document.getElementById("compl-cancelar").addEventListener("click", () => { document.getElementById("completar-overlay")?.remove(); });
 
     const btnConsultarCompl = document.getElementById("compl-btn-consultar-nf");
@@ -1158,6 +1177,7 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
 
     complForm.addEventListener("submit", async e => {
         e.preventDefault();
+        await complFilaUploadFotos.catch(() => {});
         if (!complFotos.length && !isEditing) { showToast("Inclua pelo menos uma foto.", "error"); return; }
         const btn = document.getElementById("compl-salvar");
         btn.disabled = true; btn.textContent = "Salvando...";

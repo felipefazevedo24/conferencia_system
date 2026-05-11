@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import mimetypes
 import os
 import urllib.parse
 from dataclasses import dataclass
@@ -83,7 +84,7 @@ def _drive_service():
     return build("drive", "v3", credentials=_drive_credentials(), cache_discovery=False)
 
 
-def upload_to_drive(file_storage: FileStorage, file_name: str) -> StoredPhoto:
+def upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = None) -> StoredPhoto:
     from googleapiclient.http import MediaIoBaseUpload
 
     folder_id = str(current_app.config.get("EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID") or "").strip()
@@ -91,14 +92,9 @@ def upload_to_drive(file_storage: FileStorage, file_name: str) -> StoredPhoto:
         raise RuntimeError("EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID nao configurado.")
 
     service = _drive_service()
-    try:
-        file_storage.stream.seek(0)
-    except Exception:
-        pass
-    data = file_storage.read()
     media = MediaIoBaseUpload(
         io.BytesIO(data),
-        mimetype=file_storage.mimetype or "application/octet-stream",
+        mimetype=mimetype or "application/octet-stream",
         resumable=False,
     )
     metadata: dict[str, Any] = {"name": file_name, "parents": [folder_id]}
@@ -123,6 +119,28 @@ def upload_to_drive(file_storage: FileStorage, file_name: str) -> StoredPhoto:
         provider="drive",
         file_id=file_id,
     )
+
+
+def upload_to_drive(file_storage: FileStorage, file_name: str) -> StoredPhoto:
+    try:
+        file_storage.stream.seek(0)
+    except Exception:
+        pass
+    data = file_storage.read()
+    if not data:
+        raise RuntimeError("Arquivo vazio recebido para upload no Drive.")
+    return upload_bytes_to_drive(data, file_name, file_storage.mimetype or "application/octet-stream")
+
+
+def upload_path_to_drive(path: str, file_name: str | None = None) -> StoredPhoto:
+    safe_path = os.path.abspath(path)
+    with open(safe_path, "rb") as fh:
+        data = fh.read()
+    if not data:
+        raise RuntimeError(f"Arquivo vazio: {path}")
+    final_name = file_name or os.path.basename(path)
+    mimetype = mimetypes.guess_type(final_name)[0] or "application/octet-stream"
+    return upload_bytes_to_drive(data, final_name, mimetype)
 
 
 def delete_drive_url(url: str | None) -> None:

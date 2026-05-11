@@ -3409,14 +3409,26 @@ def upload_foto_expedicao():
     if not arquivo or not file_name or not item_id or not numero_nf:
         return jsonify({"error": "arquivo, file_name, item_id e numero_nf sao obrigatorios."}), 400
 
+    extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1] or ".jpg"
+    nome_final = secure_filename(f"{file_name}_{numero_nf}_{item_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
+
+    if using_drive():
+        try:
+            stored = upload_to_drive(arquivo, nome_final)
+        except Exception as exc:
+            current_app.logger.exception("Falha ao enviar foto de faturamento expedicao para Drive")
+            return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+        return jsonify({
+            "foto_path": stored.file_path,
+            "foto_url": stored.url,
+            "storage": "drive",
+        })
+
     base_folder = os.path.join(current_app.instance_path, "expedicao_fotos")
     os.makedirs(base_folder, exist_ok=True)
-
-    extensao = os.path.splitext(secure_filename(arquivo.filename or "foto.jpg"))[1] or ".jpg"
-    nome_final = secure_filename(f"{file_name}_{numero_nf}_{item_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extensao}")
     caminho = os.path.join(base_folder, nome_final)
     arquivo.save(caminho)
-    return jsonify({"foto_path": nome_final})
+    return jsonify({"foto_path": nome_final, "storage": "local"})
 
 
 @api_bp.route("/api/expedicao/faturamento", methods=["POST"])
