@@ -25,3 +25,5 @@ instance/
 # OS
 .DS_Store
 Thumbs.db
+# Google Cloud credentials
+columbia-sync-59d7163c97b6.json
