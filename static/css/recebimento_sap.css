@@ -1243,3 +1243,196 @@ html body .doc-kpi-value {
   letter-spacing: .04em !important;
 }
 
+/* ========== CONFERENCIA CEGA - visual sobrio v2 ========== */
+.container-erp {
+  max-width: 1500px !important;
+  padding: 22px 26px !important;
+}
+
+.container-erp .module-shell {
+  background: #fff !important;
+  border: 1px solid #cfd8e3 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .07) !important;
+  padding: 20px !important;
+}
+
+.container-erp .erp-toolbar {
+  background: #f8fafc !important;
+  border: 1px solid #d7e0ea !important;
+  border-left: 5px solid #0f62c9 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  color: #0f172a !important;
+  padding: 18px 20px !important;
+  margin-bottom: 18px !important;
+}
+
+.container-erp .erp-toolbar h2 {
+  color: #0f172a !important;
+  font-size: 21px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+.container-erp .toolbar-copy {
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.container-erp .filtro-nota {
+  min-width: 300px !important;
+  height: 42px !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
+.container-erp .dashboard-resumo {
+  grid-template-columns: repeat(4, minmax(160px, 1fr)) !important;
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.container-erp .dash-card {
+  border-radius: 8px !important;
+  border: 1px solid #d7e0ea !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  padding: 16px 18px !important;
+}
+
+.container-erp .dash-card:hover {
+  transform: none !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .06) !important;
+}
+
+.container-erp .dash-icon,
+.container-erp .dash-icon.pendentes,
+.container-erp .dash-icon.em-conf,
+.container-erp .dash-icon.finalizadas,
+.container-erp .dash-icon.criticas {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  font-size: 16px !important;
+}
+
+.container-erp .dash-icon.pendentes { color: #a16207 !important; background: #fef3c7 !important; }
+.container-erp .dash-icon.em-conf { color: #0f62c9 !important; background: #eaf3ff !important; }
+.container-erp .dash-icon.finalizadas { color: #047857 !important; background: #dff8ec !important; }
+.container-erp .dash-icon.criticas { color: #b91c1c !important; background: #fee2e2 !important; }
+
+.container-erp .dash-info h4 {
+  color: #475569 !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: .08em !important;
+}
+
+.container-erp .dash-info .dash-numero {
+  color: #0f172a !important;
+  font-size: 27px !important;
+  font-weight: 800 !important;
+}
+
+.container-erp .dash-info .dash-sub {
+  color: #64748b !important;
+  font-size: 11px !important;
+}
+
+.container-erp .notas-grid {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+  gap: 14px !important;
+}
+
+.container-erp .nota-card {
+  border-radius: 8px !important;
+  border: 1px solid #d7e0ea !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  padding: 18px !important;
+}
+
+.container-erp .nota-card::before {
+  height: 4px !important;
+  background: #0f62c9 !important;
+}
+
+.container-erp .nota-card:hover {
+  transform: none !important;
+  border-color: #94a3b8 !important;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, .08) !important;
+}
+
+.container-erp .fornecedor-avatar {
+  border-radius: 8px !important;
+  background: #1e3a5f !important;
+}
+
+.container-erp .nota-card strong {
+  color: #0f172a !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+.container-erp .mini-progress,
+.container-erp .priority-track {
+  display: none !important;
+}
+
+.container-erp .priority-pill,
+.container-erp .tempo-espera {
+  border-radius: 6px !important;
+}
+
+.container-erp .empty-conferencia {
+  min-height: 330px !important;
+  border: 1px dashed #94a3b8 !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+}
+
+.container-erp .empty-conferencia-icon {
+  border-radius: 8px !important;
+  background: #eaf3ff !important;
+  color: #0f62c9 !important;
+}
+
+.container-erp .conf-panel {
+  border-radius: 8px !important;
+  border: 1px solid #cfd8e3 !important;
+  box-shadow: none !important;
+}
+
+.container-erp .conf-header {
+  background: #10263d !important;
+  padding: 18px 22px !important;
+}
+
+.container-erp .conf-header h3 {
+  font-size: 19px !important;
+  letter-spacing: 0 !important;
+}
+
+.container-erp .erp-table th {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 800 !important;
+}
+
+.container-erp .erp-table tr.contado td {
+  background: #f0fdf4 !important;
+}
+
+.container-erp .btn-sap {
+  border-radius: 7px !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+}
+
