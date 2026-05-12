@@ -70,6 +70,7 @@ from ..auth import (
 )
 from ..extensions import db
 from ..models import (
+    AvisoAtualizacao,
     ConferenciaLock,
     EtiquetaRecebimento,
     ExpedicaoConferencia,
@@ -118,6 +119,95 @@ from ..schemas.api_schemas import (
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
+
+
+def _parse_aviso_datetime(value):
+    value = (value or "").strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1]
+    return datetime.fromisoformat(value)
+
+
+def _serializar_aviso_atualizacao(aviso):
+    if not aviso:
+        return None
+    return {
+        "id": aviso.id,
+        "titulo": aviso.titulo,
+        "conteudo": aviso.conteudo,
+        "ativo": bool(aviso.ativo),
+        "exibir_ate": aviso.exibir_ate.isoformat() if aviso.exibir_ate else None,
+        "criado_por": aviso.criado_por,
+        "criado_em": aviso.criado_em.isoformat() if aviso.criado_em else None,
+        "atualizado_por": aviso.atualizado_por,
+        "atualizado_em": aviso.atualizado_em.isoformat() if aviso.atualizado_em else None,
+    }
+
+
+def _aviso_atualizacao_ativo():
+    agora = datetime.now()
+    return (
+        AvisoAtualizacao.query
+        .filter(AvisoAtualizacao.ativo.is_(True))
+        .filter(or_(AvisoAtualizacao.exibir_ate.is_(None), AvisoAtualizacao.exibir_ate >= agora))
+        .order_by(AvisoAtualizacao.atualizado_em.desc(), AvisoAtualizacao.id.desc())
+        .first()
+    )
+
+
+@api_bp.route("/api/atualizacoes/ativo")
+@login_required
+def obter_aviso_atualizacao_ativo():
+    if not session.get("show_update_notice"):
+        return jsonify({"sucesso": True, "aviso": None})
+    return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(_aviso_atualizacao_ativo())})
+
+
+@api_bp.route("/api/atualizacoes/dispensar", methods=["POST"])
+@login_required
+def dispensar_aviso_atualizacao():
+    session["show_update_notice"] = False
+    return jsonify({"sucesso": True})
+
+
+@api_bp.route("/api/admin/atualizacoes")
+@permission_required("PAGE_ADMIN_ATUALIZACOES")
+def obter_aviso_atualizacao_admin():
+    aviso = AvisoAtualizacao.query.order_by(AvisoAtualizacao.id.desc()).first()
+    return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(aviso)})
+
+
+@api_bp.route("/api/admin/atualizacoes", methods=["POST"])
+@permission_required("PAGE_ADMIN_ATUALIZACOES")
+def salvar_aviso_atualizacao_admin():
+    payload = request.get_json(silent=True) or {}
+    titulo = str(payload.get("titulo") or "").strip()
+    conteudo = str(payload.get("conteudo") or "").strip()
+    ativo = bool(payload.get("ativo", True))
+
+    if ativo and (not titulo or not conteudo):
+        return jsonify({"sucesso": False, "msg": "Informe titulo e conteudo para publicar o aviso."}), 400
+
+    try:
+        exibir_ate = _parse_aviso_datetime(payload.get("exibir_ate"))
+    except ValueError:
+        return jsonify({"sucesso": False, "msg": "Data de exibicao invalida."}), 400
+
+    aviso = AvisoAtualizacao.query.order_by(AvisoAtualizacao.id.desc()).first()
+    if not aviso:
+        aviso = AvisoAtualizacao(criado_por=session.get("username"))
+        db.session.add(aviso)
+
+    aviso.titulo = titulo or "Atualizacoes do sistema"
+    aviso.conteudo = conteudo
+    aviso.ativo = ativo
+    aviso.exibir_ate = exibir_ate
+    aviso.atualizado_por = session.get("username")
+    aviso.atualizado_em = datetime.now()
+    db.session.commit()
+    return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(aviso)})
 from ..services.danfe_service import gerar_danfe, parse_nfe_xml
 from ..services.consyste_service import listar_nfes_consyste_por_caixa
 from ..services.expedicao_service import (

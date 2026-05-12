@@ -363,6 +363,20 @@ HOME_MODULES = [
         "metric_key": "sessoes_ativas",
     },
     {
+        "id": "atualizacoes",
+        "title": "Avisos de Atualizações",
+        "subtitle": "Administração",
+        "description": "Publique novidades do sistema para aparecerem no próximo login dos usuários.",
+        "href": "/admin/atualizacoes",
+        "icon": "fa-bullhorn",
+        "permission": "PAGE_ADMIN_ATUALIZACOES",
+        "section": "Administração",
+        "tone": "navy",
+        "priority": 67,
+        "keywords": ["aviso", "atualizacao", "comunicado", "admin"],
+        "metric_key": "sessoes_ativas",
+    },
+    {
         "id": "historico",
         "title": "Logs e Auditoria",
         "subtitle": "Administração",
@@ -885,6 +899,12 @@ def expedicao_romaneio_page():
 @permission_required("PAGE_ADMIN_USUARIOS")
 def usuarios_page():
     return render_template("usuarios.html", user=session["username"])
+
+
+@page_bp.route("/admin/atualizacoes")
+@permission_required("PAGE_ADMIN_ATUALIZACOES")
+def atualizacoes_admin_page():
+    return render_template("admin_atualizacoes.html", user=session["username"])
 
 
 @page_bp.route("/admin/acessos")

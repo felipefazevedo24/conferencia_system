@@ -19,6 +19,18 @@ class Usuario(db.Model):
     role = db.Column(db.String(20), default="Logística")
 
 
+class AvisoAtualizacao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(160), nullable=False)
+    conteudo = db.Column(db.Text, nullable=False)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    exibir_ate = db.Column(db.DateTime, nullable=True, index=True)
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
 class PermissaoAcesso(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     scope_type = db.Column(db.String(10), nullable=False, index=True)  # ROLE|USER
@@ -1242,5 +1254,4 @@ class EmailNFEnviado(db.Model):
     disparado_por = db.Column(db.String(100))
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     enviado_em = db.Column(db.DateTime)
-
 

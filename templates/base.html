@@ -191,7 +191,7 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
+                {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_ATUALIZACOES') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_HISTORICO') or can_access('PAGE_ADMIN_ACESSOS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administração</span></span>
@@ -199,6 +199,7 @@
                     </button>
                     <div class="submenu-panel" id="menu-administracao">
                         {% if can_access('PAGE_ADMIN_DASHBOARD') %}<a href="/admin" class="list-group-item list-group-item-action"><i class="fas fa-chart-line"></i> Dashboard</a>{% endif %}
+                        {% if can_access('PAGE_ADMIN_ATUALIZACOES') %}<a href="/admin/atualizacoes" class="list-group-item list-group-item-action"><i class="fas fa-bullhorn"></i> Avisos de atualizações</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestão de acessos</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_HISTORICO') %}<a href="/historico" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Logs e auditoria</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_ACESSOS') %}<a href="/admin/acessos" class="list-group-item list-group-item-action"><i class="fas fa-user-clock"></i> Auditoria de acessos</a>{% endif %}
@@ -244,6 +245,35 @@
     </div>
 </div>
 
+<div class="updates-notice-overlay" id="updatesNoticeOverlay" aria-hidden="true">
+    <section class="updates-notice-dialog" role="dialog" aria-modal="true" aria-labelledby="updatesNoticeTitle">
+        <div class="updates-notice-mark"><i class="fas fa-bullhorn"></i></div>
+        <div class="updates-notice-body">
+            <span class="updates-notice-kicker">Novidades no sistema</span>
+            <h2 id="updatesNoticeTitle">Atualizações</h2>
+            <div class="updates-notice-content" id="updatesNoticeContent"></div>
+            <div class="updates-notice-meta" id="updatesNoticeMeta"></div>
+            <div class="updates-notice-actions">
+                <button type="button" id="updatesNoticeClose"><i class="fas fa-check"></i> Entendi</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+.updates-notice-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.55);backdrop-filter:blur(8px);z-index:2100}
+.updates-notice-overlay.show{display:flex}
+.updates-notice-dialog{width:min(620px,100%);display:grid;grid-template-columns:76px 1fr;gap:18px;background:#fff;border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 24px 70px rgba(15,23,42,.28);padding:24px}
+.updates-notice-mark{width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:#ecfeff;color:#0e7490;font-size:28px}
+.updates-notice-kicker{display:inline-flex;margin-bottom:8px;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.updates-notice-dialog h2{margin:0 0 12px;color:#0f172a;font-size:24px;font-weight:800;letter-spacing:0}
+.updates-notice-content{color:#334155;line-height:1.58;white-space:normal}
+.updates-notice-meta{margin-top:14px;color:#64748b;font-size:13px}
+.updates-notice-actions{margin-top:22px;display:flex;justify-content:flex-end}
+.updates-notice-actions button{border:0;border-radius:10px;background:#0f62c9;color:#fff;font-weight:800;padding:11px 18px;display:inline-flex;gap:8px;align-items:center}
+@media (max-width:640px){.updates-notice-dialog{grid-template-columns:1fr;padding:20px}.updates-notice-mark{width:52px;height:52px;font-size:22px}.updates-notice-dialog h2{font-size:21px}.updates-notice-actions button{width:100%;justify-content:center}}
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const RECENTS_KEY = "columbia_sync_home_recents";
@@ -273,6 +303,43 @@ function trackRecentLink(link, currentPath) {
         const current = JSON.parse(localStorage.getItem(RECENTS_KEY) || "[]").filter(item => item && item.href !== currentPath);
         current.unshift({ id: currentPath, title, href: currentPath, icon: iconClass });
         localStorage.setItem(RECENTS_KEY, JSON.stringify(current.slice(0, 6)));
+    } catch (_) {}
+}
+
+function escapeNoticeHtml(value) {
+    return String(value || "").replace(/[&<>"']/g, function (char) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char];
+    });
+}
+
+function formatNoticeDate(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `Disponível até ${date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`;
+}
+
+async function loadUpdateNotice() {
+    const overlay = document.getElementById("updatesNoticeOverlay");
+    if (!overlay) return;
+    try {
+        const res = await fetch("/api/atualizacoes/ativo", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.aviso) return;
+
+        document.getElementById("updatesNoticeTitle").textContent = data.aviso.titulo || "Atualizações";
+        document.getElementById("updatesNoticeContent").innerHTML = escapeNoticeHtml(data.aviso.conteudo || "").replace(/\n/g, "<br>");
+        document.getElementById("updatesNoticeMeta").textContent = formatNoticeDate(data.aviso.exibir_ate);
+        overlay.classList.add("show");
+        overlay.setAttribute("aria-hidden", "false");
+
+        const close = async () => {
+            overlay.classList.remove("show");
+            overlay.setAttribute("aria-hidden", "true");
+            try { await fetch("/api/atualizacoes/dispensar", { method: "POST", credentials: "same-origin" }); } catch (_) {}
+        };
+        document.getElementById("updatesNoticeClose").addEventListener("click", close, { once: true });
     } catch (_) {}
 }
 
@@ -361,6 +428,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     trackRecentLink(recentCandidate, currentPath);
+    loadUpdateNotice();
 });
 
 window.addEventListener("resize", function () {

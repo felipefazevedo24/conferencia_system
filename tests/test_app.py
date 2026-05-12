@@ -177,6 +177,37 @@ def test_login_success(tmp_path):
     assert response.get_json()["sucesso"] is True
 
 
+def test_aviso_atualizacao_aparece_uma_vez_por_login(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    login_admin(client)
+    salvar = client.post(
+        "/api/admin/atualizacoes",
+        json={
+            "titulo": "Novidades do sistema",
+            "conteudo": "Pedido de compra agora vem direto do ERP.",
+            "ativo": True,
+        },
+    )
+    assert salvar.status_code == 200
+
+    response = client.get("/api/atualizacoes/ativo")
+    data = response.get_json()
+    assert data["aviso"]["titulo"] == "Novidades do sistema"
+    assert "ERP" in data["aviso"]["conteudo"]
+
+    dispensar = client.post("/api/atualizacoes/dispensar")
+    assert dispensar.status_code == 200
+    response = client.get("/api/atualizacoes/ativo")
+    assert response.get_json()["aviso"] is None
+
+    client.get("/logout")
+    login_admin(client)
+    response = client.get("/api/atualizacoes/ativo")
+    assert response.get_json()["aviso"]["titulo"] == "Novidades do sistema"
+
+
 def test_login_invalid_password(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

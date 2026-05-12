@@ -87,6 +87,7 @@ def login_page():
             session["role"] = user.role
             session.permanent = True
             session["last_activity"] = datetime.now().isoformat()
+            session["show_update_notice"] = True
             # Gerar um session_id único e registrar sessão ativa
             session_id = str(uuid.uuid4())
             session["session_id"] = session_id
