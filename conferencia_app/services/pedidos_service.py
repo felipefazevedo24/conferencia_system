@@ -290,6 +290,7 @@ def _linha_postgres_to_pedido(row: dict) -> dict:
     total_item = float(row.get("total_item") or 0.0)
     fornecedor_cnpj = re.sub(r"\D", "", str(row.get("fornecedor_cnpj") or "").strip())
     cep = re.sub(r"\D", "", str(row.get("cep") or "").strip())
+    codigo_material = cod_interno if "/" in cod_interno else _formatar_codigo_material_padrao(cod_interno)
 
     linha = {
         "ordem_compra": ordem_compra,
@@ -305,10 +306,25 @@ def _linha_postgres_to_pedido(row: dict) -> dict:
         "pedido_compra": ordem_compra,
         "qtd": pendente,
         "valor_unit": preco_unitario,
-        "codigo_material": _formatar_codigo_material_padrao(cod_interno),
+        "codigo_material": codigo_material,
         "descricao_material": descricao,
         "fonte_dados": PEDIDOS_FONTE_ERP_POSTGRES,
     }
+
+    for campo in (
+        "tipo_pedido",
+        "classificacao_item",
+        "cfop_entrada_esperado",
+        "cfop_envio_origem",
+        "cod_os",
+        "cod_os_aux",
+        "cod_os_completo",
+        "grupo_serv_ter",
+        "sub_grupo_serv_ter",
+    ):
+        valor = row.get(campo)
+        if valor not in (None, ""):
+            linha[campo] = str(valor).strip()
 
     extras = {
         "fornecedor_codigo": linha["cod_fornecedor"],
@@ -339,10 +355,37 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
         return []
 
     sql = """
+        with pedidos(numero) as (
+            select unnest(%s::text[])
+        ),
+        oc_base as (
+            select
+                oc.cod_empresa,
+                oc.codigo,
+                oc.cod_fornecedor,
+                coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social) as fornecedor,
+                coalesce(nullif(oc.fornecedor_cnpj, ''), f.cgc) as fornecedor_cnpj,
+                coalesce(nullif(oc.contato_fornecedor, ''), f.contato, f.nome_vendedor) as contato,
+                coalesce(nullif(oc.fornecedor_telefone, ''), f.fone1, f.fone2) as telefone,
+                f.e_mail as email,
+                coalesce(nullif(oc.fornecedor_endeferco, ''), f.endereco) as logradouro,
+                coalesce(nullif(oc.fornecedor_numero, ''), f.numero_imovel) as numero,
+                coalesce(nullif(oc.fornecedor_complento, ''), f.endereco_complemento) as complemento,
+                coalesce(nullif(oc.fornecedor_bairro, ''), f.bairro) as bairro,
+                coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as cidade,
+                coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as uf,
+                coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as cep,
+                oc.prazo_entrega as observacoes
+            from public.tord_com oc
+            left join public.tfornece f
+              on f.cod_empresa = oc.cod_empresa
+             and f.codigo = oc.cod_fornecedor
+            join pedidos p on p.numero = oc.codigo::text
+        )
         select
             oc.codigo::text as ordem_compra,
             oc.cod_fornecedor,
-            coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social) as fornecedor,
+            oc.fornecedor,
             item.cod_interno,
             item.descricao,
             greatest(
@@ -358,27 +401,130 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
                 item.total,
                 coalesce(item.qtde_compra, item.qtde, 0) * coalesce(item.preco_unitario, 0)
             ) as total_item,
-            coalesce(nullif(oc.fornecedor_cnpj, ''), f.cgc) as fornecedor_cnpj,
-            coalesce(nullif(oc.contato_fornecedor, ''), f.contato, f.nome_vendedor) as contato,
-            coalesce(nullif(oc.fornecedor_telefone, ''), f.fone1, f.fone2) as telefone,
-            f.e_mail as email,
-            coalesce(nullif(oc.fornecedor_endeferco, ''), f.endereco) as logradouro,
-            coalesce(nullif(oc.fornecedor_numero, ''), f.numero_imovel) as numero,
-            coalesce(nullif(oc.fornecedor_complento, ''), f.endereco_complemento) as complemento,
-            coalesce(nullif(oc.fornecedor_bairro, ''), f.bairro) as bairro,
-            coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as cidade,
-            coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as uf,
-            coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as cep,
-            oc.prazo_entrega as observacoes
-        from public.tord_com oc
+            oc.fornecedor_cnpj,
+            oc.contato,
+            oc.telefone,
+            oc.email,
+            oc.logradouro,
+            oc.numero,
+            oc.complemento,
+            oc.bairro,
+            oc.cidade,
+            oc.uf,
+            oc.cep,
+            oc.observacoes,
+            'CompraFornecedor' as tipo_pedido,
+            'MaterialCompra' as classificacao_item,
+            null::text as cfop_entrada_esperado,
+            null::text as cfop_envio_origem,
+            null::text as cod_os,
+            null::text as cod_os_aux,
+            null::text as cod_os_completo,
+            null::text as grupo_serv_ter,
+            null::text as sub_grupo_serv_ter,
+            10 as ordem_tipo,
+            item.item as ordem_item
+        from oc_base oc
         join public.tord_aux item
           on item.cod_empresa = oc.cod_empresa
          and item.cod_ord_compra = oc.codigo
-        left join public.tfornece f
-          on f.cod_empresa = oc.cod_empresa
-         and f.codigo = oc.cod_fornecedor
-        where oc.codigo::text = any(%s)
-        order by oc.codigo, item.item, item.descricao
+
+        union all
+
+        select
+            oc.codigo::text as ordem_compra,
+            oc.cod_fornecedor,
+            oc.fornecedor,
+            mat.cod_interno,
+            mat.produto as descricao,
+            coalesce(mat.qtde, 0) as pendente,
+            0::double precision as preco_unitario,
+            0::double precision as vl_pendente,
+            0::double precision as total_item,
+            oc.fornecedor_cnpj,
+            oc.contato,
+            oc.telefone,
+            oc.email,
+            oc.logradouro,
+            oc.numero,
+            oc.complemento,
+            oc.bairro,
+            oc.cidade,
+            oc.uf,
+            oc.cep,
+            oc.observacoes,
+            'ServicoTerceiros' as tipo_pedido,
+            'ProducaoPropria' as classificacao_item,
+            '5902' as cfop_entrada_esperado,
+            coalesce(aux.cfop_envio_nf, '5901') as cfop_envio_origem,
+            serv.cod_os::text as cod_os,
+            serv.cod_os_aux::text as cod_os_aux,
+            serv.cod_os_completo,
+            serv.grupo_serv_ter,
+            serv.sub_grupo_serv_ter,
+            20 as ordem_tipo,
+            0 as ordem_item
+        from oc_base oc
+        join public.tord_serv serv
+          on serv.cod_empresa = oc.cod_empresa
+         and serv.cod_ordem_compra = oc.codigo
+        join public.tserv_te_mat mat
+          on mat.cod_empresa = serv.cod_empresa
+         and mat.cod_os = serv.cod_os
+         and mat.cod_os_aux = serv.cod_os_aux
+        left join public.tcom_aux_os aux
+          on aux.cod_empresa = serv.cod_empresa
+         and aux.cod_os = serv.cod_os
+         and aux.cod_os_aux = serv.cod_os_aux
+         and aux.cod_produto = mat.cod_produto
+         and coalesce(aux.cfop_envio_nf, '') <> ''
+        where coalesce(mat.cod_interno, '') <> ''
+
+        union all
+
+        select
+            oc.codigo::text as ordem_compra,
+            oc.cod_fornecedor,
+            oc.fornecedor,
+            retorno.cod_interno_retorno_indu as cod_interno,
+            retorno.produto_retorno_indu as descricao,
+            coalesce(retorno.qtde, serv.qtde, 0) as pendente,
+            coalesce(serv.vl_unitario, 0) as preco_unitario,
+            coalesce(retorno.qtde, serv.qtde, 0) * coalesce(serv.vl_unitario, 0) as vl_pendente,
+            coalesce(serv.vl_total, coalesce(retorno.qtde, serv.qtde, 0) * coalesce(serv.vl_unitario, 0)) as total_item,
+            oc.fornecedor_cnpj,
+            oc.contato,
+            oc.telefone,
+            oc.email,
+            oc.logradouro,
+            oc.numero,
+            oc.complemento,
+            oc.bairro,
+            oc.cidade,
+            oc.uf,
+            oc.cep,
+            oc.observacoes,
+            'ServicoTerceiros' as tipo_pedido,
+            'ProducaoTerceiros' as classificacao_item,
+            '5124' as cfop_entrada_esperado,
+            null::text as cfop_envio_origem,
+            serv.cod_os::text as cod_os,
+            serv.cod_os_aux::text as cod_os_aux,
+            serv.cod_os_completo,
+            serv.grupo_serv_ter,
+            serv.sub_grupo_serv_ter,
+            30 as ordem_tipo,
+            0 as ordem_item
+        from oc_base oc
+        join public.tord_serv serv
+          on serv.cod_empresa = oc.cod_empresa
+         and serv.cod_ordem_compra = oc.codigo
+        join public.tserv_te retorno
+          on retorno.cod_empresa = serv.cod_empresa
+         and retorno.cod_os = serv.cod_os
+         and retorno.cod_os_aux = serv.cod_os_aux
+        where coalesce(retorno.cod_interno_retorno_indu, '') <> ''
+        order by ordem_compra, ordem_tipo, cod_os, cod_os_aux, ordem_item, descricao
     """
 
     with _conectar_postgres_pedidos(cfg) as conn:
@@ -567,90 +713,14 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
         return []
 
     try:
-        linhas_postgres = _buscar_linhas_pedido_postgres(pedidos)
+        return _buscar_linhas_pedido_postgres(pedidos)
     except Exception:
-        linhas_postgres = []
-
-    linhas_po = list(linhas_postgres)
-    pedidos_encontrados = {str(linha.get("pedido_compra") or "").strip() for linha in linhas_postgres}
-    if linhas_postgres:
-        for pedido in pedidos_encontrados:
-            linhas_pedido = [
-                linha
-                for linha in linhas_postgres
-                if str(linha.get("pedido_compra") or "").strip() == pedido
-            ]
-            _cache_set_linhas_pedido(pedido, linhas_pedido)
-
-    if pedidos_encontrados.issuperset(pedidos):
-        return linhas_po
-
-    try:
-        rows = _carregar_rows_google_sheets()
-    except Exception:
-        rows = []
-
-    linhas_por_pedido = {}
-    header_map = _resolver_header_map_pedidos(rows)
-
-    for idx, row in enumerate(rows):
-        if idx == 0:
-            continue
-        pedido_idx = header_map.get("pedido_compra", 0)
-        pedido_row = _normalizar_numero(_valor_celula_row(row, pedido_idx))
-        if pedido_row in pedidos:
-            pedidos_encontrados.add(pedido_row)
-            _append_linha_pedido(
-                linhas_po,
-                linhas_por_pedido,
-                row,
-                pedido_row,
-                header_map=header_map,
-                fonte_dados=PEDIDOS_FONTE_GOOGLE_SHEETS,
-            )
-
-    faltantes = [p for p in pedidos if p not in pedidos_encontrados]
-    if faltantes:
-        # Fallback 1: cache local persistente (pedido pode ter sumido do Sheets apos fechamento no ERP)
-        ainda_faltantes = []
-        for pedido in faltantes:
-            linhas_cache = _cache_get_linhas_pedido(pedido)
-            if linhas_cache:
-                for linha in linhas_cache:
-                    linhas_po.append(_normalizar_linha_cache(linha, pedido))
-            else:
-                ainda_faltantes.append(pedido)
-
-        faltantes = ainda_faltantes
-
-    if faltantes:
-        rows_local = _carregar_rows_excel_local()
-        header_map_local = _resolver_header_map_pedidos(rows_local)
-        for idx, row in enumerate(rows_local):
-            if idx == 0:
-                continue
-            pedido_idx = header_map_local.get("pedido_compra", 0)
-            pedido_row = _normalizar_numero(_valor_celula_row(row, pedido_idx))
-            if pedido_row in faltantes:
-                _append_linha_pedido(
-                    linhas_po,
-                    linhas_por_pedido,
-                    row,
-                    pedido_row,
-                    header_map=header_map_local,
-                    fonte_dados=PEDIDOS_FONTE_EXCEL_LOCAL,
-                )
-
-    # Atualiza cache com o que veio do Sheets/Excel para uso futuro.
-    for pedido, linhas in linhas_por_pedido.items():
-        _cache_set_linhas_pedido(pedido, linhas)
-
-    return linhas_po
+        return []
 
 
 def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
     """
-    Compara as linhas do pedido (Google Sheets) com as linhas da NF, uma a uma
+    Compara as linhas do pedido no ERP com as linhas da NF, uma a uma
     de forma posicional.
 
     itens_nf: lista de dicts com chaves 'codigo', 'descricao', 'qtd', 'valor_unit'

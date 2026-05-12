@@ -238,68 +238,21 @@ def test_registrar_usuario_motorista_cria_cadastro_operacional(tmp_path):
         assert motorista.ativo is True
 
 
-def test_busca_linhas_pedido_extrai_metadados_do_google_sheets():
-    rows = [
-        [
-            "Ordem de Compra",
-            "Coluna B",
-            "Coluna C",
-            "Codigo Material",
-            "Descricao Material",
-            "Quantidade",
-            "Valor Unitario",
-            "Fornecedor",
-            "CNPJ Fornecedor",
-            "Contato",
-            "Telefone",
-            "Email",
-            "Endereco",
-            "Numero",
-            "Bairro",
-            "Cidade",
-            "UF",
-            "CEP",
-            "Observacoes",
-        ],
-        [
-            "OC-9001",
-            "",
-            "",
-            "123456789",
-            "Item Planilha",
-            "2",
-            "10,50",
-            "Fornecedor da Planilha",
-            "11.222.333/0001-44",
-            "Paula",
-            "(11)99999-0000",
-            "fornecedor@planilha.com",
-            "Rua Alfa",
-            "100",
-            "Centro",
-            "Campinas",
-            "SP",
-            "13000-000",
-            "Janela 08h-12h",
-        ],
-    ]
-
-    with patch("conferencia_app.services.pedidos_service._carregar_rows_google_sheets", return_value=rows), patch(
-        "conferencia_app.services.pedidos_service._carregar_rows_excel_local", return_value=[]
-    ), patch("conferencia_app.services.pedidos_service._load_pedidos_cache", return_value={}), patch(
-        "conferencia_app.services.pedidos_service._save_pedidos_cache"
-    ):
+def test_busca_linhas_pedido_nao_usa_planilha_como_fallback():
+    with patch("conferencia_app.services.pedidos_service._buscar_linhas_pedido_postgres", return_value=[]), patch(
+        "conferencia_app.services.pedidos_service._carregar_rows_google_sheets"
+    ) as carregar_sheets, patch("conferencia_app.services.pedidos_service._carregar_rows_excel_local") as carregar_excel, patch(
+        "conferencia_app.services.pedidos_service._load_pedidos_cache"
+    ) as carregar_cache:
         linhas = buscar_linhas_pedido("OC-9001")
 
-    assert len(linhas) == 1
-    assert linhas[0]["descricao_material"] == "Item Planilha"
-    assert linhas[0]["fornecedor_nome"] == "Fornecedor da Planilha"
-    assert linhas[0]["fornecedor_cnpj"] == "11222333000144"
-    assert linhas[0]["cidade"] == "Campinas"
-    assert linhas[0]["fonte_dados"] == "GoogleSheets"
+    assert linhas == []
+    carregar_sheets.assert_not_called()
+    carregar_excel.assert_not_called()
+    carregar_cache.assert_not_called()
 
 
-def test_busca_linhas_pedido_prioriza_erp_postgres():
+def test_busca_linhas_pedido_usa_erp_postgres():
     linhas_erp = [
         {
             "ordem_compra": "11560",
@@ -324,13 +277,14 @@ def test_busca_linhas_pedido_prioriza_erp_postgres():
 
     with patch("conferencia_app.services.pedidos_service._buscar_linhas_pedido_postgres", return_value=linhas_erp), patch(
         "conferencia_app.services.pedidos_service._carregar_rows_google_sheets"
-    ) as carregar_sheets, patch("conferencia_app.services.pedidos_service._save_pedidos_cache"):
+    ) as carregar_sheets, patch("conferencia_app.services.pedidos_service._save_pedidos_cache") as salvar_cache:
         linhas = buscar_linhas_pedido("11560")
 
     assert linhas == linhas_erp
     assert linhas[0]["pendente"] == 100.0
     assert linhas[0]["vl_pendente"] == 23.0
     carregar_sheets.assert_not_called()
+    salvar_cache.assert_not_called()
 
 
 def test_agendamento_cria_coleta_e_bloqueia_conflito_de_veiculo(tmp_path):

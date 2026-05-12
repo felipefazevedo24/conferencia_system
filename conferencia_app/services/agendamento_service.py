@@ -26,10 +26,10 @@ from ..models import (
 )
 from .consyste_service import listar_nfes_consyste_por_caixa
 from .pedidos_service import (
-    PEDIDOS_FONTE_GOOGLE_SHEETS,
+    PEDIDOS_FONTE_ERP_POSTGRES,
     buscar_linhas_pedido,
     label_fonte_pedidos,
-    obter_fonte_pedidos_google_sheets,
+    obter_fonte_pedidos_erp_postgres,
 )
 
 try:
@@ -732,12 +732,12 @@ def _payload_fornecedor_vazio() -> dict:
 
 def _inferir_fonte_oc(linhas: list[dict]) -> dict:
     if not linhas:
-        return obter_fonte_pedidos_google_sheets()
-    fonte_tipo = str(next((linha.get("fonte_dados") for linha in linhas if linha.get("fonte_dados")), "") or PEDIDOS_FONTE_GOOGLE_SHEETS)
-    fonte = obter_fonte_pedidos_google_sheets()
+        return obter_fonte_pedidos_erp_postgres()
+    fonte_tipo = str(next((linha.get("fonte_dados") for linha in linhas if linha.get("fonte_dados")), "") or PEDIDOS_FONTE_ERP_POSTGRES)
+    fonte = obter_fonte_pedidos_erp_postgres()
     fonte["tipo"] = fonte_tipo
     fonte["label"] = label_fonte_pedidos(fonte_tipo)
-    if fonte_tipo != PEDIDOS_FONTE_GOOGLE_SHEETS:
+    if fonte_tipo != PEDIDOS_FONTE_ERP_POSTGRES:
         fonte["url"] = ""
         fonte["csv_url"] = ""
     return fonte
@@ -774,7 +774,7 @@ def _enriquecer_parceiro_com_linha_oc(parceiro: dict, linha_referencia: dict | N
 
 def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
     numero_oc_limpo = str(numero_oc or "").strip()
-    fonte = obter_fonte_pedidos_google_sheets()
+    fonte = obter_fonte_pedidos_erp_postgres()
     if not numero_oc_limpo:
         return {"encontrada": False, "error": "Informe o número da OC."}
 
@@ -849,7 +849,7 @@ def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
 
 def consultar_oc_agendamento(numero_oc: str) -> dict:
     numero_oc_limpo = str(numero_oc or "").strip()
-    fonte = obter_fonte_pedidos_google_sheets()
+    fonte = obter_fonte_pedidos_erp_postgres()
     if not numero_oc_limpo:
         return {"encontrada": False, "error": "Informe o numero da OC.", "fonte": fonte}
 
