@@ -105,6 +105,141 @@ def _normalizar_linhas_lancamento(rows: list[tuple[Any, Any, Any]]) -> tuple[str
     return None
 
 
+PEDIDOS_SQL = """
+    with pedidos(numero) as (
+        select unnest(%s::text[])
+    ),
+    oc_base as (
+        select
+            oc.cod_empresa,
+            oc.codigo,
+            oc.cod_fornecedor,
+            coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social) as fornecedor,
+            coalesce(nullif(oc.fornecedor_cnpj, ''), f.cgc) as fornecedor_cnpj,
+            coalesce(nullif(oc.contato_fornecedor, ''), f.contato, f.nome_vendedor) as contato,
+            coalesce(nullif(oc.fornecedor_telefone, ''), f.fone1, f.fone2) as telefone,
+            f.e_mail as email,
+            coalesce(nullif(oc.fornecedor_endeferco, ''), f.endereco) as logradouro,
+            coalesce(nullif(oc.fornecedor_numero, ''), f.numero_imovel) as numero,
+            coalesce(nullif(oc.fornecedor_complento, ''), f.endereco_complemento) as complemento,
+            coalesce(nullif(oc.fornecedor_bairro, ''), f.bairro) as bairro,
+            coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as cidade,
+            coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as uf,
+            coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as cep,
+            oc.prazo_entrega as observacoes
+        from public.tord_com oc
+        left join public.tfornece f
+          on f.cod_empresa = oc.cod_empresa
+         and f.codigo = oc.cod_fornecedor
+        join pedidos p on p.numero = oc.codigo::text
+    )
+    select
+        oc.codigo::text as ordem_compra,
+        oc.cod_fornecedor,
+        oc.fornecedor,
+        item.cod_interno,
+        item.descricao,
+        greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0) as pendente,
+        coalesce(item.preco_unitario, 0) as preco_unitario,
+        greatest(coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0), 0) * coalesce(item.preco_unitario, 0) as vl_pendente,
+        coalesce(item.total, coalesce(item.qtde_compra, item.qtde, 0) * coalesce(item.preco_unitario, 0)) as total_item,
+        oc.fornecedor_cnpj, oc.contato, oc.telefone, oc.email, oc.logradouro, oc.numero, oc.complemento,
+        oc.bairro, oc.cidade, oc.uf, oc.cep, oc.observacoes,
+        'CompraFornecedor' as tipo_pedido,
+        'MaterialCompra' as classificacao_item,
+        null::text as cfop_entrada_esperado,
+        null::text as cfop_envio_origem,
+        null::text as cod_os,
+        null::text as cod_os_aux,
+        null::text as cod_os_completo,
+        null::text as grupo_serv_ter,
+        null::text as sub_grupo_serv_ter,
+        10 as ordem_tipo,
+        item.item as ordem_item
+    from oc_base oc
+    join public.tord_aux item
+      on item.cod_empresa = oc.cod_empresa
+     and item.cod_ord_compra = oc.codigo
+
+    union all
+
+    select
+        oc.codigo::text as ordem_compra,
+        oc.cod_fornecedor,
+        oc.fornecedor,
+        mat.cod_interno,
+        mat.produto as descricao,
+        coalesce(mat.qtde, 0) as pendente,
+        0::double precision as preco_unitario,
+        0::double precision as vl_pendente,
+        0::double precision as total_item,
+        oc.fornecedor_cnpj, oc.contato, oc.telefone, oc.email, oc.logradouro, oc.numero, oc.complemento,
+        oc.bairro, oc.cidade, oc.uf, oc.cep, oc.observacoes,
+        'ServicoTerceiros' as tipo_pedido,
+        'ProducaoPropria' as classificacao_item,
+        '5902' as cfop_entrada_esperado,
+        coalesce(aux.cfop_envio_nf, '5901') as cfop_envio_origem,
+        serv.cod_os::text as cod_os,
+        serv.cod_os_aux::text as cod_os_aux,
+        serv.cod_os_completo,
+        serv.grupo_serv_ter,
+        serv.sub_grupo_serv_ter,
+        20 as ordem_tipo,
+        0 as ordem_item
+    from oc_base oc
+    join public.tord_serv serv
+      on serv.cod_empresa = oc.cod_empresa
+     and serv.cod_ordem_compra = oc.codigo
+    join public.tserv_te_mat mat
+      on mat.cod_empresa = serv.cod_empresa
+     and mat.cod_os = serv.cod_os
+     and mat.cod_os_aux = serv.cod_os_aux
+    left join public.tcom_aux_os aux
+      on aux.cod_empresa = serv.cod_empresa
+     and aux.cod_os = serv.cod_os
+     and aux.cod_os_aux = serv.cod_os_aux
+     and aux.cod_produto = mat.cod_produto
+     and coalesce(aux.cfop_envio_nf, '') <> ''
+    where coalesce(mat.cod_interno, '') <> ''
+
+    union all
+
+    select
+        oc.codigo::text as ordem_compra,
+        oc.cod_fornecedor,
+        oc.fornecedor,
+        retorno.cod_interno_retorno_indu as cod_interno,
+        retorno.produto_retorno_indu as descricao,
+        coalesce(retorno.qtde, serv.qtde, 0) as pendente,
+        coalesce(serv.vl_unitario, 0) as preco_unitario,
+        coalesce(retorno.qtde, serv.qtde, 0) * coalesce(serv.vl_unitario, 0) as vl_pendente,
+        coalesce(serv.vl_total, coalesce(retorno.qtde, serv.qtde, 0) * coalesce(serv.vl_unitario, 0)) as total_item,
+        oc.fornecedor_cnpj, oc.contato, oc.telefone, oc.email, oc.logradouro, oc.numero, oc.complemento,
+        oc.bairro, oc.cidade, oc.uf, oc.cep, oc.observacoes,
+        'ServicoTerceiros' as tipo_pedido,
+        'ProducaoTerceiros' as classificacao_item,
+        '5124' as cfop_entrada_esperado,
+        null::text as cfop_envio_origem,
+        serv.cod_os::text as cod_os,
+        serv.cod_os_aux::text as cod_os_aux,
+        serv.cod_os_completo,
+        serv.grupo_serv_ter,
+        serv.sub_grupo_serv_ter,
+        30 as ordem_tipo,
+        0 as ordem_item
+    from oc_base oc
+    join public.tord_serv serv
+      on serv.cod_empresa = oc.cod_empresa
+     and serv.cod_ordem_compra = oc.codigo
+    join public.tserv_te retorno
+      on retorno.cod_empresa = serv.cod_empresa
+     and retorno.cod_os = serv.cod_os
+     and retorno.cod_os_aux = serv.cod_os_aux
+    where coalesce(retorno.cod_interno_retorno_indu, '') <> ''
+    order by ordem_compra, ordem_tipo, cod_os, cod_os_aux, ordem_item, descricao
+"""
+
+
 def _authorized(cfg: dict[str, Any]) -> bool:
     token = str(cfg.get("token") or "")
     if not token:
@@ -170,6 +305,42 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "resultados": resultados, "status": status})
         except Exception as exc:
             app.logger.exception("Falha ao consultar lancamentos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/pedidos")
+    def consultar_pedidos():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            pedidos_raw = payload.get("pedidos") or []
+            if not isinstance(pedidos_raw, list):
+                return jsonify({"erro": "pedidos_deve_ser_lista"}), 400
+
+            pedidos = []
+            vistos = set()
+            for pedido in pedidos_raw:
+                numero = str(pedido or "").strip()
+                if numero and numero not in vistos:
+                    vistos.add(numero)
+                    pedidos.append(numero)
+
+            if not pedidos:
+                return jsonify({"sucesso": True, "linhas": []})
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(PEDIDOS_SQL, (pedidos,))
+                    cols = [desc[0] for desc in cur.description]
+                    linhas = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            return jsonify({"sucesso": True, "linhas": linhas})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar pedidos no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     return app

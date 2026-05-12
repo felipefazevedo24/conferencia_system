@@ -264,6 +264,24 @@ def _carregar_config_postgres_pedidos() -> dict:
             or ""
         ),
         "connect_timeout": int(os.environ.get("PEDIDOS_ERP_CONNECT_TIMEOUT", "5") or 5),
+        "api_url": str(
+            os.environ.get("PEDIDOS_ERP_API_URL")
+            or os.environ.get("ERP_LANCAMENTO_API_URL")
+            or arquivo.get("api_url")
+            or ""
+        ).strip().rstrip("/"),
+        "api_token": str(
+            os.environ.get("PEDIDOS_ERP_API_TOKEN")
+            or os.environ.get("ERP_LANCAMENTO_API_TOKEN")
+            or arquivo.get("api_token")
+            or ""
+        ),
+        "api_timeout": int(
+            os.environ.get("PEDIDOS_ERP_API_TIMEOUT")
+            or os.environ.get("ERP_LANCAMENTO_API_TIMEOUT")
+            or arquivo.get("api_timeout")
+            or 30
+        ),
     }
 
 
@@ -351,6 +369,9 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
         return []
 
     cfg = _carregar_config_postgres_pedidos()
+    if cfg.get("api_url"):
+        return _buscar_linhas_pedido_api(cfg, pedidos)
+
     if not cfg["host"] or not cfg["database"] or not cfg["user"]:
         return []
 
@@ -532,6 +553,29 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
             cur.execute(sql, (pedidos,))
             cols = [desc[0] for desc in cur.description]
             return [_linha_postgres_to_pedido(dict(zip(cols, row))) for row in cur.fetchall()]
+
+
+def _buscar_linhas_pedido_api(cfg: dict, pedidos: list[str]) -> list:
+    url = f"{cfg['api_url']}/api/erp/pedidos"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/ERP-Pedidos",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+
+    resp = requests.post(url, headers=headers, json={"pedidos": pedidos}, timeout=cfg.get("api_timeout") or 30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API ERP Pedidos"))
+
+    linhas_raw = data.get("linhas") or []
+    if not isinstance(linhas_raw, list):
+        return []
+    return [_linha_postgres_to_pedido(linha) for linha in linhas_raw if isinstance(linha, dict)]
 
 
 def _resolver_header_map_pedidos(rows: list) -> dict[str, int]:
