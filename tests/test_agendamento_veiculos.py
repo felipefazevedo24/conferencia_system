@@ -299,6 +299,40 @@ def test_busca_linhas_pedido_extrai_metadados_do_google_sheets():
     assert linhas[0]["fonte_dados"] == "GoogleSheets"
 
 
+def test_busca_linhas_pedido_prioriza_erp_postgres():
+    linhas_erp = [
+        {
+            "ordem_compra": "11560",
+            "cod_fornecedor": "635",
+            "fornecedor": "ARTOLE PARAFUSOS LTDA",
+            "cod_interno": "19-03-00016",
+            "descricao": "PARAFUSO ALLEN",
+            "pendente": 100.0,
+            "preco_unitario": 0.23,
+            "vl_pendente": 23.0,
+            "total_item": 23.0,
+            "pedido_compra": "11560",
+            "qtd": 100.0,
+            "valor_unit": 0.23,
+            "codigo_material": "19-03-00016",
+            "descricao_material": "PARAFUSO ALLEN",
+            "fornecedor_codigo": "635",
+            "fornecedor_nome": "ARTOLE PARAFUSOS LTDA",
+            "fonte_dados": "ERPPostgres",
+        }
+    ]
+
+    with patch("conferencia_app.services.pedidos_service._buscar_linhas_pedido_postgres", return_value=linhas_erp), patch(
+        "conferencia_app.services.pedidos_service._carregar_rows_google_sheets"
+    ) as carregar_sheets, patch("conferencia_app.services.pedidos_service._save_pedidos_cache"):
+        linhas = buscar_linhas_pedido("11560")
+
+    assert linhas == linhas_erp
+    assert linhas[0]["pendente"] == 100.0
+    assert linhas[0]["vl_pendente"] == 23.0
+    carregar_sheets.assert_not_called()
+
+
 def test_agendamento_cria_coleta_e_bloqueia_conflito_de_veiculo(tmp_path):
     fornecedores = tmp_path / "fornecedores.xlsx"
     clientes = tmp_path / "clientes.xlsx"

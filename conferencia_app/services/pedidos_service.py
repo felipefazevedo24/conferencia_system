@@ -11,6 +11,7 @@ Planilha (pública):
 
 import csv
 import json
+import os
 import re
 import unicodedata
 from io import StringIO
@@ -32,6 +33,7 @@ PEDIDOS_CACHE_PATH = Path(__file__).resolve().parent.parent.parent / "instance" 
 PEDIDOS_FONTE_GOOGLE_SHEETS = "GoogleSheets"
 PEDIDOS_FONTE_CACHE_LOCAL = "CacheLocal"
 PEDIDOS_FONTE_EXCEL_LOCAL = "ExcelLocal"
+PEDIDOS_FONTE_ERP_POSTGRES = "ERPPostgres"
 
 _PEDIDOS_HEADER_ALIASES = {
     "pedido_compra": {"oc", "ordemdecompra", "numerodaoc", "numeroordemdecompra", "pedidocompra", "pedido"},
@@ -170,8 +172,18 @@ def obter_fonte_pedidos_google_sheets() -> dict:
     }
 
 
+def obter_fonte_pedidos_erp_postgres() -> dict:
+    return {
+        "tipo": PEDIDOS_FONTE_ERP_POSTGRES,
+        "label": "ERP Postgres",
+        "url": "",
+        "csv_url": "",
+    }
+
+
 def label_fonte_pedidos(fonte: str | None) -> str:
     mapping = {
+        PEDIDOS_FONTE_ERP_POSTGRES: "ERP Postgres",
         PEDIDOS_FONTE_GOOGLE_SHEETS: "Google Sheets",
         PEDIDOS_FONTE_CACHE_LOCAL: "Cache local",
         PEDIDOS_FONTE_EXCEL_LOCAL: "Excel local",
@@ -206,6 +218,174 @@ def _carregar_rows_google_sheets() -> list:
 
     reader = csv.reader(StringIO(resp.text))
     return list(reader)
+
+
+def _carregar_config_postgres_pedidos() -> dict:
+    """Resolve credenciais de leitura do ERP sem depender de contexto Flask."""
+    config_path = Path(__file__).resolve().parent.parent.parent / "instance" / "erp_lancamento_config.json"
+    arquivo = {}
+    try:
+        if config_path.exists():
+            arquivo = json.loads(config_path.read_text(encoding="utf-8")) or {}
+            if not isinstance(arquivo, dict):
+                arquivo = {}
+    except Exception:
+        arquivo = {}
+
+    return {
+        "host": str(
+            os.environ.get("PEDIDOS_ERP_PG_HOST")
+            or os.environ.get("ERP_LANCAMENTO_PG_HOST")
+            or arquivo.get("host")
+            or ""
+        ).strip(),
+        "port": int(
+            os.environ.get("PEDIDOS_ERP_PG_PORT")
+            or os.environ.get("ERP_LANCAMENTO_PG_PORT")
+            or arquivo.get("port")
+            or 5432
+        ),
+        "database": str(
+            os.environ.get("PEDIDOS_ERP_PG_DB")
+            or os.environ.get("ERP_LANCAMENTO_PG_DB")
+            or arquivo.get("database")
+            or ""
+        ).strip(),
+        "user": str(
+            os.environ.get("PEDIDOS_ERP_PG_USER")
+            or os.environ.get("ERP_LANCAMENTO_PG_USER")
+            or arquivo.get("user")
+            or ""
+        ).strip(),
+        "password": str(
+            os.environ.get("PEDIDOS_ERP_PG_PASSWORD")
+            or os.environ.get("ERP_LANCAMENTO_PG_PASSWORD")
+            or arquivo.get("password")
+            or ""
+        ),
+        "connect_timeout": int(os.environ.get("PEDIDOS_ERP_CONNECT_TIMEOUT", "5") or 5),
+    }
+
+
+def _conectar_postgres_pedidos(cfg: dict):
+    import psycopg2  # type: ignore
+
+    return psycopg2.connect(
+        host=cfg["host"],
+        port=cfg["port"],
+        dbname=cfg["database"],
+        user=cfg["user"],
+        password=cfg["password"],
+        connect_timeout=cfg.get("connect_timeout") or 5,
+    )
+
+
+def _linha_postgres_to_pedido(row: dict) -> dict:
+    ordem_compra = _normalizar_numero(row.get("ordem_compra"))
+    cod_interno = str(row.get("cod_interno") or "").strip()
+    descricao = str(row.get("descricao") or "").strip()
+    pendente = float(row.get("pendente") or 0.0)
+    preco_unitario = float(row.get("preco_unitario") or 0.0)
+    vl_pendente = float(row.get("vl_pendente") or 0.0)
+    total_item = float(row.get("total_item") or 0.0)
+    fornecedor_cnpj = re.sub(r"\D", "", str(row.get("fornecedor_cnpj") or "").strip())
+    cep = re.sub(r"\D", "", str(row.get("cep") or "").strip())
+
+    linha = {
+        "ordem_compra": ordem_compra,
+        "cod_fornecedor": str(row.get("cod_fornecedor") or "").strip(),
+        "fornecedor": str(row.get("fornecedor") or "").strip(),
+        "cod_interno": cod_interno,
+        "descricao": descricao,
+        "pendente": pendente,
+        "preco_unitario": preco_unitario,
+        "vl_pendente": vl_pendente,
+        "total_item": total_item,
+        # Compatibilidade com o contrato antigo usado pelo auditor/agendamento.
+        "pedido_compra": ordem_compra,
+        "qtd": pendente,
+        "valor_unit": preco_unitario,
+        "codigo_material": _formatar_codigo_material_padrao(cod_interno),
+        "descricao_material": descricao,
+        "fonte_dados": PEDIDOS_FONTE_ERP_POSTGRES,
+    }
+
+    extras = {
+        "fornecedor_codigo": linha["cod_fornecedor"],
+        "fornecedor_nome": linha["fornecedor"],
+        "fornecedor_cnpj": fornecedor_cnpj,
+        "contato": str(row.get("contato") or "").strip(),
+        "telefone": str(row.get("telefone") or "").strip(),
+        "email": str(row.get("email") or "").strip(),
+        "logradouro": str(row.get("logradouro") or "").strip(),
+        "numero": str(row.get("numero") or "").strip(),
+        "complemento": str(row.get("complemento") or "").strip(),
+        "bairro": str(row.get("bairro") or "").strip(),
+        "cidade": str(row.get("cidade") or "").strip(),
+        "uf": str(row.get("uf") or "").strip()[:2].upper(),
+        "cep": cep,
+        "observacoes": str(row.get("observacoes") or "").strip(),
+    }
+    linha.update({chave: valor for chave, valor in extras.items() if valor})
+    return linha
+
+
+def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
+    if not pedidos:
+        return []
+
+    cfg = _carregar_config_postgres_pedidos()
+    if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+        return []
+
+    sql = """
+        select
+            oc.codigo::text as ordem_compra,
+            oc.cod_fornecedor,
+            coalesce(nullif(oc.fornecedor, ''), f.nome, f.razao_social) as fornecedor,
+            item.cod_interno,
+            item.descricao,
+            greatest(
+                coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0),
+                0
+            ) as pendente,
+            coalesce(item.preco_unitario, 0) as preco_unitario,
+            greatest(
+                coalesce(item.qtde_compra, item.qtde, 0) - coalesce(item.qtde_entregue, 0),
+                0
+            ) * coalesce(item.preco_unitario, 0) as vl_pendente,
+            coalesce(
+                item.total,
+                coalesce(item.qtde_compra, item.qtde, 0) * coalesce(item.preco_unitario, 0)
+            ) as total_item,
+            coalesce(nullif(oc.fornecedor_cnpj, ''), f.cgc) as fornecedor_cnpj,
+            coalesce(nullif(oc.contato_fornecedor, ''), f.contato, f.nome_vendedor) as contato,
+            coalesce(nullif(oc.fornecedor_telefone, ''), f.fone1, f.fone2) as telefone,
+            f.e_mail as email,
+            coalesce(nullif(oc.fornecedor_endeferco, ''), f.endereco) as logradouro,
+            coalesce(nullif(oc.fornecedor_numero, ''), f.numero_imovel) as numero,
+            coalesce(nullif(oc.fornecedor_complento, ''), f.endereco_complemento) as complemento,
+            coalesce(nullif(oc.fornecedor_bairro, ''), f.bairro) as bairro,
+            coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as cidade,
+            coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as uf,
+            coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as cep,
+            oc.prazo_entrega as observacoes
+        from public.tord_com oc
+        join public.tord_aux item
+          on item.cod_empresa = oc.cod_empresa
+         and item.cod_ord_compra = oc.codigo
+        left join public.tfornece f
+          on f.cod_empresa = oc.cod_empresa
+         and f.codigo = oc.cod_fornecedor
+        where oc.codigo::text = any(%s)
+        order by oc.codigo, item.item, item.descricao
+    """
+
+    with _conectar_postgres_pedidos(cfg) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (pedidos,))
+            cols = [desc[0] for desc in cur.description]
+            return [_linha_postgres_to_pedido(dict(zip(cols, row))) for row in cur.fetchall()]
 
 
 def _resolver_header_map_pedidos(rows: list) -> dict[str, int]:
@@ -387,12 +567,29 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
         return []
 
     try:
+        linhas_postgres = _buscar_linhas_pedido_postgres(pedidos)
+    except Exception:
+        linhas_postgres = []
+
+    linhas_po = list(linhas_postgres)
+    pedidos_encontrados = {str(linha.get("pedido_compra") or "").strip() for linha in linhas_postgres}
+    if linhas_postgres:
+        for pedido in pedidos_encontrados:
+            linhas_pedido = [
+                linha
+                for linha in linhas_postgres
+                if str(linha.get("pedido_compra") or "").strip() == pedido
+            ]
+            _cache_set_linhas_pedido(pedido, linhas_pedido)
+
+    if pedidos_encontrados.issuperset(pedidos):
+        return linhas_po
+
+    try:
         rows = _carregar_rows_google_sheets()
     except Exception:
         rows = []
 
-    linhas_po = []
-    pedidos_encontrados = set()
     linhas_por_pedido = {}
     header_map = _resolver_header_map_pedidos(rows)
 
