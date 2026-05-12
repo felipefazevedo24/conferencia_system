@@ -290,7 +290,21 @@ def create_app() -> Flask:
                             if row:
                                 resultados[n_nf] = {"codigo": row[0], "dt_nf": _iso_dt(row[1]), "chv_nfe": row[2]}
                             else:
-                                status[n_nf] = "Aguardando lancamento no ERP"
+                                # Fallback seguro: se a dt_nf do ERP nao for a emissao
+                                # do XML, tenta por numero e aceita apenas retorno unico.
+                                cur.execute(sql_sem_data, (n_nf,))
+                                rows_sem_data = cur.fetchall()
+                                row_sem_data = _normalizar_linhas_lancamento(rows_sem_data)
+                                if row_sem_data:
+                                    resultados[n_nf] = {
+                                        "codigo": row_sem_data[0],
+                                        "dt_nf": _iso_dt(row_sem_data[1]),
+                                        "chv_nfe": row_sem_data[2],
+                                    }
+                                elif rows_sem_data:
+                                    status[n_nf] = "ERP encontrou o numero, mas com multiplas chaves/datas - confirme manualmente"
+                                else:
+                                    status[n_nf] = "Aguardando lancamento no ERP"
                         else:
                             cur.execute(sql_sem_data, (n_nf,))
                             rows = cur.fetchall()

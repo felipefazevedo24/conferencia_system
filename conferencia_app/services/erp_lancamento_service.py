@@ -163,7 +163,25 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                         if row:
                             resultados[str(n_nf)] = row
                         else:
-                            _registrar_status(str(n_nf), "Aguardando lançamento no ERP")
+                            # A data local vem do XML; em algumas bases a dt_nf do ERP
+                            # representa a entrada/lancamento. Se a data falhar, tenta
+                            # por numero e aceita apenas quando o retorno for inequivoco.
+                            cur.execute(sql_sem_data, (str(n_nf),))
+                            rows_sem_data = cur.fetchall()
+                            row_sem_data = _normalizar_linhas(rows_sem_data)
+                            if row_sem_data:
+                                resultados[str(n_nf)] = row_sem_data
+                            elif rows_sem_data:
+                                logger.warning(
+                                    "ERP Lancamento: NF %s sem match por data %s, mas com %d matches por numero; pulando por ambiguidade.",
+                                    n_nf, data_emi.date(), len(rows_sem_data),
+                                )
+                                _registrar_status(
+                                    str(n_nf),
+                                    "ERP encontrou o numero, mas com multiplas chaves/datas - confirme manualmente",
+                                )
+                            else:
+                                _registrar_status(str(n_nf), "Aguardando lancamento no ERP")
                     else:
                         cur.execute(sql_sem_data, (str(n_nf),))
                         rows = cur.fetchall()
@@ -411,6 +429,11 @@ def executar_ciclo() -> dict[str, Any]:
     resumo["encontradas"] = len(achados)
     if not achados:
         resumo["mensagem"] = "Nenhuma NF localizada na tcompras neste ciclo."
+        resumo["status_consulta"] = {
+            str(n_nf): (_STATUS_CONSULTA.get(str(n_nf), {}) or {}).get("motivo", "")
+            for n_nf, _data_emi in pares[:20]
+            if _STATUS_CONSULTA.get(str(n_nf), {}).get("motivo")
+        }
         return resumo
 
     usuario = cfg["usuario_lancamento"]

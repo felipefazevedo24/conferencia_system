@@ -1691,7 +1691,11 @@
             if (typeof r.lancadas === 'number') partes.push(`${r.lancadas} lançada(s)`);
             if (typeof r.candidatas === 'number') partes.push(`${r.candidatas} consultada(s)`);
             if (r.mensagem) partes.push(r.mensagem);
-            alert('Sincronização ERP concluída.\n' + partes.join(' · '));
+            const statusConsulta = r.status_consulta || {};
+            const detalhesStatus = Object.keys(statusConsulta).slice(0, 8)
+                .map(nf => `NF ${nf}: ${statusConsulta[nf]}`)
+                .join('\n');
+            alert('Sincronização ERP concluída.\n' + partes.join(' · ') + (detalhesStatus ? '\n\nDetalhes:\n' + detalhesStatus : ''));
             await carregarPainel(true);
         } catch (err) {
             console.error('[sincronizar ERP]', err);
