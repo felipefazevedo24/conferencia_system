@@ -122,6 +122,103 @@
     .modal-foot button { padding: 12px; border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }
     .modal-foot .cancel { background: #475569; color: #fff; }
     .modal-foot .ok { background: #10b981; color: #fff; }
+
+    /* Visual 2026: painel do motorista com leitura mais limpa no celular */
+    :root {
+        --mot-ink: #102033;
+        --mot-muted: #64758b;
+        --mot-line: #d8e3ef;
+        --mot-soft: #f3f7fb;
+        --mot-blue: #0f62c9;
+        --mot-blue-dark: #173a5e;
+        --mot-green: #0f8f5f;
+        --mot-amber: #b7791f;
+        --mot-red: #c0392b;
+    }
+    html, body { min-height: 100%; background: #edf3f9; color: var(--mot-ink); overflow: hidden; }
+    body::before { content: ""; position: fixed; inset: 0 0 auto; height: 214px; background: linear-gradient(135deg, #173a5e, #0f62c9); z-index: -1; }
+    .app { max-width: 520px; margin: 0 auto; padding: 14px 14px 112px; background: transparent; }
+    .header { text-align: left; padding: 16px; border: 1px solid rgba(216,227,239,.94); border-radius: 18px; background: rgba(255,255,255,.97); box-shadow: 0 14px 34px rgba(15,45,75,.16); }
+    .kicker { display: inline-flex; align-items: center; gap: 7px; min-height: 26px; padding: 4px 10px; border-radius: 999px; background: #e6f0fb; color: var(--mot-blue); font-size: 11px; letter-spacing: .8px; }
+    .codigo { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 25px; color: #0f2439; margin-top: 10px; letter-spacing: 0; }
+    .titulo { color: #4d6075; line-height: 1.35; }
+    .veiculo { display: inline-flex; align-items: center; gap: 7px; color: #40556d; margin-top: 11px; background: #f4f8fc; border: 1px solid #dfe8f2; border-radius: 10px; padding: 7px 9px; font-weight: 700; }
+
+    .tabs { grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.45); padding: 4px; border-radius: 14px; }
+    .tab-btn { min-height: 42px; color: #dce8f5; border-radius: 10px; font-weight: 850; }
+    .tab-btn.active { background: #fff; color: var(--mot-blue-dark); box-shadow: 0 6px 14px rgba(15,45,75,.14); }
+    .tab-pane { min-height: 0; }
+    .tab-pane.active { gap: 14px; }
+
+    .prox-card { background: #fff; border-radius: 18px; padding: 17px; border: 1px solid #cfe0f1; box-shadow: 0 12px 26px rgba(15,45,75,.1); }
+    .prox-head .badge { background: #e6f0fb; color: var(--mot-blue); border-radius: 999px; padding: 5px 9px; }
+    .prox-head .count { color: #40556d; background: #f3f7fb; border: 1px solid #dbe6f1; border-radius: 999px; padding: 4px 9px; }
+    .prox-nome { color: #0f2439; font-size: 20px; line-height: 1.2; letter-spacing: 0; }
+    .prox-end { color: #52677f; margin-top: 8px; line-height: 1.45; }
+    .prox-chip { background: #f3f7fb; color: #40556d; border: 1px solid #dbe6f1; border-radius: 999px; padding: 5px 8px; }
+    .prox-actions { gap: 9px; margin-top: 15px; }
+    .prox-btn { min-height: 46px; border-radius: 12px; text-decoration: none; }
+    .prox-btn.navegar { background: var(--mot-blue); color: #fff; }
+    .prox-btn.cheguei { background: #f8c66b; color: #2d1d03; }
+    .prox-btn.concluir { background: var(--mot-green); color: #fff; }
+
+    .paradas-list { gap: 9px; }
+    .parada-item { background: #fff; border: 1px solid var(--mot-line); border-radius: 14px; padding: 12px; box-shadow: 0 2px 10px rgba(15,45,75,.04); }
+    .parada-item.ok { opacity: .72; background: #f8fbfd; }
+    .parada-seq { min-width: 32px; height: 32px; border-radius: 10px; background: #e6f0fb; color: var(--mot-blue); }
+    .parada-item.ok .parada-seq { background: #dff7eb; color: #06633e; }
+    .parada-nome { color: #0f2439; font-size: 14px; line-height: 1.25; }
+    .parada-end { color: var(--mot-muted); margin-top: 3px; line-height: 1.35; }
+    .parada-status { background: #edf3f9; color: #52677f; border-radius: 999px; padding: 4px 7px; margin-top: 7px; letter-spacing: .3px; }
+    .parada-status.ok { background: #dff7eb; color: #06633e; }
+    .parada-status.em { background: #fff1cc; color: #8a5800; }
+    .parada-acoes { gap: 7px; margin-top: 9px; }
+    .parada-btn { border-radius: 10px; padding: 8px 11px; text-decoration: none; }
+    .parada-btn.cheguei { background: #f8c66b; color: #2d1d03; }
+    .parada-btn.concluir { background: var(--mot-green); color: #fff; }
+    .empty-paradas { background: #fff; border: 1px dashed #cfddea; border-radius: 14px; color: var(--mot-muted); }
+
+    .tracking-dock { background: rgba(255,255,255,.97); border-top: 1px solid var(--mot-line); box-shadow: 0 -10px 28px rgba(15,45,75,.12); }
+    .tracking-dock-inner { max-width: 520px; gap: 8px; }
+    .tracking-dock-status { color: #40556d; font-size: 12px; font-weight: 700; }
+    .tracking-dot { background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,.16); }
+    .tracking-dot.on { background: var(--mot-green); box-shadow: 0 0 0 4px rgba(15,143,95,.16); }
+    #dock-alert { background: #fff7ed !important; border: 1px solid #fed7aa !important; color: #9a3412 !important; }
+    .btn { min-height: 54px; border-radius: 13px; font-size: 15px; }
+    .btn-start { background: var(--mot-green); box-shadow: 0 10px 22px rgba(15,143,95,.24); }
+    .btn-stop { background: var(--mot-red); box-shadow: 0 10px 22px rgba(192,57,43,.2); }
+
+    .main { gap: 20px; }
+    .status-ring { width: 176px; height: 176px; background: #fff; border: 10px solid #e2eaf3; box-shadow: inset 0 0 0 1px #d8e3ef, 0 12px 28px rgba(18,36,57,.08); }
+    .status-ring.on { border-color: #bdebd8; box-shadow: inset 0 0 0 1px #82d7b8, 0 16px 34px rgba(15,143,95,.22); }
+    .status-ring.on::after { border: 2px solid rgba(15,143,95,.28); inset: -8px; }
+    .status-icon { color: #8aa0b8; font-size: 54px; }
+    .status-ring.on .status-icon { color: var(--mot-green); }
+    .status-label .big { color: #0f2439; }
+    .status-label .sm { color: var(--mot-muted); line-height: 1.35; }
+    .metric-row { max-width: none; }
+    .metric { background: #fff; border: 1px solid var(--mot-line); text-align: left; padding: 12px; box-shadow: 0 2px 8px rgba(15,45,75,.04); }
+    .metric .lbl { color: var(--mot-muted); font-weight: 800; }
+    .metric .val { color: #0f2439; font-family: inherit; }
+
+    .alert { background: #fef2f2; border-color: #fecaca; color: #991b1b; font-weight: 700; }
+    .alert.warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+    .alert.ok { background: #ecfdf5; border-color: #bbf7d0; color: #065f46; }
+    .finalizada { background: #fff; border: 1px solid var(--mot-line); border-radius: 18px; width: 100%; }
+    .finalizada h2 { color: #0f2439; }
+    .finalizada p { color: var(--mot-muted); }
+
+    .modal-overlay { background: rgba(15,32,51,.62); backdrop-filter: blur(8px); }
+    .modal-card { background: #fff; border: 1px solid var(--mot-line); border-radius: 18px; box-shadow: 0 24px 60px rgba(15,32,51,.24); }
+    .modal-card h3 { color: #0f2439; }
+    .modal-card label { color: var(--mot-muted); font-weight: 850; letter-spacing: .4px; }
+    .modal-card select, .modal-card textarea, .modal-card input { background: #f8fbfd; border: 1px solid #cfddea; color: #0f2439; border-radius: 11px; padding: 12px; }
+    .modal-card select:focus, .modal-card textarea:focus, .modal-card input:focus { border-color: var(--mot-blue); box-shadow: 0 0 0 3px rgba(15,98,201,.12); outline: none; }
+    .modal-card input[style], .modal-card textarea[style], .modal-card select[style] { background: #f8fbfd !important; border-color: #cfddea !important; color: #0f2439 !important; border-radius: 11px !important; }
+    .modal-foot { gap: 9px; }
+    .modal-foot button { border-radius: 11px; }
+    .modal-foot .cancel { background: #edf3f9; color: #40556d; }
+    .modal-foot .ok { background: var(--mot-green); color: #fff; }
 </style>
 </head>
 <body>
@@ -596,8 +693,8 @@ function renderProxima() {
     if (!box) return;
     const pendentes = paradasCache.filter(p => p.status !== 'Concluida' && p.status !== 'Nao_realizada' && p.status !== 'Cancelada');
     if (!pendentes.length) {
-        box.innerHTML = `<div class="prox-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border-color:#475569">
-            <div class="prox-head"><span class="badge" style="background:#475569;color:#fff">✓ Concluído</span></div>
+        box.innerHTML = `<div class="prox-card" style="background:#ffffff;border-color:#cfe0f1">
+            <div class="prox-head"><span class="badge" style="background:#dff7eb;color:#06633e">✓ Concluído</span></div>
             <div class="prox-nome">Todas as paradas foram realizadas</div>
             <div class="prox-end">Você pode retornar à base. Boa viagem!</div>
         </div>`;
@@ -650,7 +747,7 @@ function renderLista() {
             ? `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}&travelmode=driving`
             : (p.endereco ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent((p.endereco||'')+', '+(p.cidade||'')+'/'+(p.uf||''))}` : null);
         const acoes = !ok ? `<div class="parada-acoes">
-            ${navUrl ? `<a class="parada-btn" style="background:#1e293b;color:#38bdf8;border:1px solid #334155" href="${navUrl}" target="_blank" rel="noopener"><i class="fa-solid fa-diamond-turn-right"></i> Navegar</a>` : ''}
+            ${navUrl ? `<a class="parada-btn" style="background:#e6f0fb;color:#0f62c9;border:1px solid #cfe0f1" href="${navUrl}" target="_blank" rel="noopener"><i class="fa-solid fa-diamond-turn-right"></i> Navegar</a>` : ''}
             ${em
                 ? `<button class="parada-btn concluir" onclick="abrirConcluir(${p.id}, '${p.tipo}')"><i class="fa-solid fa-flag-checkered"></i> Concluir</button>`
                 : `<button class="parada-btn cheguei" onclick="marcarChegada(${p.id})"><i class="fa-solid fa-location-crosshairs"></i> Cheguei</button>`
