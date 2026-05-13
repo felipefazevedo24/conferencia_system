@@ -148,7 +148,6 @@ def _veiculo_label(v):
 
 def _checklist_liberacao(v: Viagem, paradas: list[ViagemParada] | None = None) -> dict:
     paradas = paradas if paradas is not None else ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
-    _geocodificar_paradas_sem_coord(paradas)
     motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
     bloqueios: list[str] = []
     avisos: list[str] = []
@@ -278,8 +277,6 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
         except Exception:
             out["motorista_link"] = f"/motorista/viagem/{v.id}/{_token_motorista(v.id)}"
         paradas_regs = ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
-        if _geocodificar_paradas_sem_coord(paradas_regs):
-            db.session.commit()
         out["paradas"] = [_parada_dict(p) for p in paradas_regs]
         out["checklist_liberacao"] = _checklist_liberacao(v, paradas_regs)
         out["eventos"] = [_evento_dict(e) for e in ViagemEvento.query.filter_by(viagem_id=v.id).order_by(ViagemEvento.registrado_em).all()]
@@ -661,16 +658,8 @@ def criar():
         seq += 1
 
     _log_evento(v.id, "INICIO", f"Viagem {v.codigo} criada", descricao=f"Planejada por {_user()}", severidade="info")
-    # Otimiza automaticamente se houver paradas suficientes com coordenadas
-    otim = _otimizar_paradas_viagem(v.id)
-    if otim["ok"]:
-        _log_evento(
-            v.id, "OBSERVACAO", "Rota otimizada automaticamente",
-            descricao=f"Sequencia sugerida pelo sistema: {otim['paradas_ordenadas']} parada(s), ~{otim['distancia_km']} km.",
-            severidade="info",
-        )
     db.session.commit()
-    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "otimizacao": otim if otim["ok"] else None})
+    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "otimizacao": None})
 
 
 @viagem_bp.route("/<int:vid>", methods=["PATCH"])
@@ -861,17 +850,7 @@ def criar_parada(vid: int):
     if parada.solicitacao_id:
         _sync_solicitacao_viagem(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id), v, "EmRota" if v.status == "EmAndamento" else "Alocada")
     _log_evento(vid, "PARADA_EXTRA", f"Parada adicionada: {parada.parceiro_nome or parada.endereco or parada.tipo}", parada_id=parada.id)
-    # Re-otimiza automaticamente se a viagem ainda nao iniciou
     reord = None
-    if v.status == "Planejada":
-        otim = _otimizar_paradas_viagem(vid)
-        if otim["ok"]:
-            reord = otim
-            _log_evento(
-                vid, "OBSERVACAO", "Rota reotimizada",
-                descricao=f"Nova parada inserida e sequencia recalculada (~{otim['distancia_km']} km).",
-                severidade="info",
-            )
     db.session.commit()
     return jsonify({"sucesso": True, "parada": _parada_dict(parada), "otimizacao": reord})
 
@@ -1149,9 +1128,6 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     _log_evento(vid, "PARADA_EXTRA",
                 f"Solicitação anexada: {s.parceiro_nome}",
                 parada_id=parada.id, severidade="info")
-    # re-otimiza se planejada
-    if v.status == "Planejada":
-        _otimizar_paradas_viagem(vid)
     db.session.commit()
     return jsonify({"sucesso": True, "viagem_id": vid, "liberacao_revogada": revogou})
 
@@ -1518,20 +1494,12 @@ def importar_rota():
         descricao=f"{len(sols)} parada(s) importada(s) de {dia.strftime('%d/%m/%Y')} — por {_user()}",
         severidade="info",
     )
-    # Otimiza automaticamente a ordem das paradas (IA logistica)
-    otim = _otimizar_paradas_viagem(v.id)
-    if otim["ok"]:
-        _log_evento(
-            v.id, "OBSERVACAO", "Rota otimizada automaticamente",
-            descricao=f"Sequencia sugerida pelo sistema: {otim['paradas_ordenadas']} parada(s), ~{otim['distancia_km']} km.",
-            severidade="info",
-        )
     db.session.commit()
     return jsonify({
         "sucesso": True,
         "viagem": _viagem_dict(v, detalhada=True),
         "paradas_importadas": len(sols),
-        "otimizacao": otim if otim["ok"] else None,
+        "otimizacao": None,
     })
 
 
