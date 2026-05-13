@@ -132,6 +132,20 @@ def _buscar_entrada(numero_nota: str, numero_ar: str | None = None, chave: str |
     return _entrada_local(numero_nota)
 
 
+def _buscar_entradas_recebidas_desde(app, data_minima: date) -> list[dict[str, Any]]:
+    data = _post_bridge(
+        "/api/erp/entrada-chapa-desde",
+        {
+            "data_recebimento_minima": data_minima.isoformat(),
+            "cfops": _split_lista(app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915")),
+            "controles_lote": _split_lista(app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")),
+            "limite": 500,
+        },
+    )
+    entradas = data.get("entradas") or []
+    return [entrada for entrada in entradas if isinstance(entrada, dict)]
+
+
 def _eh_entrada_chapa(entrada: dict[str, Any], app) -> tuple[bool, list[str], list[dict[str, Any]]]:
     cfops_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915")))
     controles_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")))
@@ -346,7 +360,7 @@ def notificar_entrada_chapa_lancada(
     return _run()
 
 
-def executar_varredura_entradas_chapa(usuario: str = "Sistema", origem: str = "Varredura") -> dict[str, Any]:
+def _executar_varredura_entradas_chapa_legado(usuario: str = "Sistema", origem: str = "Varredura") -> dict[str, Any]:
     """Tenta enviar avisos para NFs ja lancadas no Sync.
 
     Serve para quando a automacao e ativada depois que as NFs do dia ja foram
@@ -372,6 +386,41 @@ def executar_varredura_entradas_chapa(usuario: str = "Sistema", origem: str = "V
             origem=origem,
             assincrono=False,
         )
+        if resultado.get("sucesso") and resultado.get("log_id") and not resultado.get("ignorado"):
+            resumo["enviadas"] += 1
+        elif resultado.get("sucesso"):
+            resumo["ignoradas"] += 1
+        else:
+            resumo["falhas"] += 1
+    return resumo
+
+
+def executar_varredura_entradas_chapa(usuario: str = "Sistema", origem: str = "Varredura") -> dict[str, Any]:
+    """Envia avisos somente para entradas recebidas a partir de 13/05/2026."""
+    resumo = {"consultadas": 0, "enviadas": 0, "ignoradas": 0, "falhas": 0}
+    app = current_app._get_current_object()
+    if not app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True):
+        resumo["ignoradas"] = 1
+        return resumo
+
+    try:
+        entradas = _buscar_entradas_recebidas_desde(app, DATA_MINIMA_ENTRADA_CHAPA)
+    except Exception as exc:
+        app.logger.exception("Falha ao varrer entradas de chapa recebidas no ERP")
+        resumo["falhas"] = 1
+        resumo["erro"] = str(exc)
+        return resumo
+
+    for entrada in entradas:
+        resumo["consultadas"] += 1
+        if not _data_lancamento_valida(entrada):
+            resumo["ignoradas"] += 1
+            continue
+        eh_chapa, cfops, itens = _eh_entrada_chapa(entrada, app)
+        if not eh_chapa:
+            resumo["ignoradas"] += 1
+            continue
+        resultado = _enviar_email(app, entrada, itens, cfops, usuario, origem)
         if resultado.get("sucesso") and resultado.get("log_id") and not resultado.get("ignorado"):
             resumo["enviadas"] += 1
         elif resultado.get("sucesso"):

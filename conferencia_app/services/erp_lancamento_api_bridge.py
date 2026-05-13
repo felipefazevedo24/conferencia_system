@@ -385,6 +385,98 @@ ENTRADA_CHAPA_SQL = """
 """
 
 
+ENTRADAS_CHAPA_DESDE_SQL = """
+    select
+        c.codigo::text as codigo_lancamento,
+        coalesce(nullif(c.romaneio, ''), nullif(lot.descricao, ''), '') as numero_ar,
+        c.n_nf::text as numero_nota,
+        c.dt_nf,
+        c.dt_recebimento,
+        c.dt_lancamento,
+        coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
+        coalesce(
+            nullif(c.fornecedor, ''),
+            nullif(c.cliente, ''),
+            nullif(f.razao_social, ''),
+            nullif(f.nome, ''),
+            nullif(cli.razao_social, ''),
+            nullif(cli.nome, '')
+        ) as parceiro_nome,
+        coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, '')) as parceiro_documento,
+        coalesce(nullif(c.cfop, ''), '') as cfop_cabecalho,
+        a.numero_item,
+        coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop_item,
+        coalesce(nullif(a.descricao_cfop, ''), nullif(c.tipo_movimento, ''), nullif(c.codigo_movimentacao, '')) as natureza_operacao,
+        coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
+        coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
+        coalesce(a.qtde, 0) as quantidade,
+        coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
+        coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
+        coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
+        coalesce(nullif(a.lote, ''), nullif(lot.descricao, '')) as lote,
+        a.guid_linha
+    from public.tcompras c
+    left join public.tfornece f
+      on f.cod_empresa = c.cod_empresa
+     and f.codigo = c.cod_fornecedor
+    left join public.tcliente cli
+      on cli.cod_empresa = c.cod_empresa
+     and cli.codigo = c.cod_cliente
+    left join public.tcom_aux a
+      on a.cod_empresa = c.cod_empresa
+     and a.realciona_auto = c.codigo
+    left join public.tproduto p
+      on p.cod_empresa = a.cod_empresa
+     and p.codigo = a.cod_produto
+    left join public.tcom_aux_loteserie lot
+      on lot.cod_empresa = a.cod_empresa
+     and lot.guid_pai = a.guid_linha
+    where c.dt_recebimento::date >= %s
+      and (
+        left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = any(%s)
+        or coalesce(p.controle_lote_serie, 0)::text = any(%s)
+        or coalesce(a.tipo_controle, 0)::text = any(%s)
+      )
+    order by c.dt_recebimento desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
+    limit %s
+"""
+
+
+def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
+    if not rows:
+        return None
+    cab = rows[0]
+    itens = []
+    for row in rows:
+        if not row.get("cod_interno") and not row.get("descricao"):
+            continue
+        itens.append({
+            "numero_item": row.get("numero_item"),
+            "cfop": row.get("cfop_item") or row.get("cfop_cabecalho") or "",
+            "natureza_operacao": row.get("natureza_operacao") or "",
+            "cod_interno": row.get("cod_interno") or "",
+            "descricao": row.get("descricao") or "",
+            "quantidade": row.get("quantidade") or 0,
+            "unidade": row.get("unidade") or "",
+            "tipo_controle": row.get("tipo_controle") or 0,
+            "controle_lote_serie": row.get("controle_lote_serie") or 0,
+            "lote": row.get("lote") or "",
+        })
+    return {
+        "codigo_lancamento": cab.get("codigo_lancamento") or numero_ar,
+        "numero_ar": next((r.get("numero_ar") for r in rows if r.get("numero_ar")), ""),
+        "numero_nota": cab.get("numero_nota") or numero_nota,
+        "dt_nf": _date_to_api(cab.get("dt_nf")),
+        "dt_recebimento": _date_to_api(cab.get("dt_recebimento")),
+        "dt_lancamento": _date_to_api(cab.get("dt_lancamento")),
+        "chave_acesso": cab.get("chave_acesso") or chave,
+        "parceiro_nome": cab.get("parceiro_nome") or "",
+        "parceiro_documento": cab.get("parceiro_documento") or "",
+        "cfop_cabecalho": cab.get("cfop_cabecalho") or "",
+        "itens": itens,
+    }
+
+
 def _authorized(cfg: dict[str, Any]) -> bool:
     token = str(cfg.get("token") or "")
     if not token:
@@ -597,43 +689,60 @@ def create_app() -> Flask:
                     cols = [desc[0] for desc in cur.description]
                     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
 
-            if not rows:
-                return jsonify({"sucesso": True, "entrada": None})
-
-            cab = rows[0]
-            itens = []
-            for row in rows:
-                if not row.get("cod_interno") and not row.get("descricao"):
-                    continue
-                itens.append({
-                    "numero_item": row.get("numero_item"),
-                    "cfop": row.get("cfop_item") or row.get("cfop_cabecalho") or "",
-                    "natureza_operacao": row.get("natureza_operacao") or "",
-                    "cod_interno": row.get("cod_interno") or "",
-                    "descricao": row.get("descricao") or "",
-                    "quantidade": row.get("quantidade") or 0,
-                    "unidade": row.get("unidade") or "",
-                    "tipo_controle": row.get("tipo_controle") or 0,
-                    "controle_lote_serie": row.get("controle_lote_serie") or 0,
-                    "lote": row.get("lote") or "",
-                })
-
-            entrada = {
-                "codigo_lancamento": cab.get("codigo_lancamento") or numero_ar,
-                "numero_ar": next((r.get("numero_ar") for r in rows if r.get("numero_ar")), ""),
-                "numero_nota": cab.get("numero_nota") or numero_nota,
-                "dt_nf": _date_to_api(cab.get("dt_nf")),
-                "dt_recebimento": _date_to_api(cab.get("dt_recebimento")),
-                "dt_lancamento": _date_to_api(cab.get("dt_lancamento")),
-                "chave_acesso": cab.get("chave_acesso") or chave,
-                "parceiro_nome": cab.get("parceiro_nome") or "",
-                "parceiro_documento": cab.get("parceiro_documento") or "",
-                "cfop_cabecalho": cab.get("cfop_cabecalho") or "",
-                "itens": itens,
-            }
+            entrada = _montar_entrada_chapa(rows, numero_ar, numero_nota, chave)
             return jsonify({"sucesso": True, "entrada": entrada})
         except Exception as exc:
             app.logger.exception("Falha ao consultar entrada de chapa no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/entrada-chapa-desde")
+    def consultar_entradas_chapa_desde():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            data_minima = _parse_data_minima(payload.get("data_recebimento_minima"))
+            cfops = [str(c).strip()[:4] for c in (payload.get("cfops") or ["1901", "1915"]) if str(c).strip()]
+            controles = [str(c).strip() for c in (payload.get("controles_lote") or ["1", "3"]) if str(c).strip()]
+            if not cfops:
+                cfops = ["1901", "1915"]
+            if not controles:
+                controles = ["1", "3"]
+            try:
+                limite = int(payload.get("limite") or 500)
+            except (TypeError, ValueError):
+                limite = 500
+            limite = max(1, min(limite, 1000))
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(ENTRADAS_CHAPA_DESDE_SQL, (data_minima, cfops, controles, controles, limite))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            grupos: dict[str, list[dict[str, Any]]] = {}
+            for row in rows:
+                chave_grupo = str(row.get("codigo_lancamento") or row.get("numero_nota") or row.get("chave_acesso") or "")
+                if chave_grupo:
+                    grupos.setdefault(chave_grupo, []).append(row)
+
+            entradas = []
+            for grupo_rows in grupos.values():
+                entrada = _montar_entrada_chapa(grupo_rows)
+                if entrada:
+                    entradas.append(entrada)
+
+            return jsonify({
+                "sucesso": True,
+                "data_recebimento_minima": data_minima.isoformat(),
+                "entradas": entradas,
+            })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar entradas de chapa desde data no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     return app
