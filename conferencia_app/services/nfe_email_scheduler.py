@@ -2,7 +2,7 @@
 
 Rule of thumb:
 - Executa a cada NFE_EMAIL_POLL_INTERVAL_SECONDS.
-- Considera apenas NFs emitidas >= NFE_EMAIL_AUTO_DESDE.
+- Considera apenas NFs emitidas >= 2026-05-13, mesmo se a config pedir antes.
 - Nao reenvia: usa EmailNFEnviado (qualquer status != AguardandoManual) como dedupe.
 - Notas sem e-mail geram status AguardandoManual (para o usuario completar via tela).
 - Usa um lock para nao rodar em paralelo.
@@ -34,7 +34,7 @@ def _set_status(**kwargs):
 
 def executar_ciclo(app: Flask) -> dict[str, Any]:
     """Um ciclo de verificacao + envio. Retorna resumo."""
-    from .consyste_service import listar_nfes_consyste_por_caixa
+    from .erp_nfe_emitidas_service import listar_nfes_emitidas_erp, normalizar_data_minima
     from .nfe_email_service import enviar_nfe_por_email
     from ..models import EmailNFEnviado
 
@@ -42,32 +42,21 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
         cutoff = (app.config.get("NFE_EMAIL_AUTO_DESDE") or "").strip()
         if not cutoff:
             cutoff = date.today().isoformat()
+        cutoff = normalizar_data_minima(cutoff)
 
         try:
-            ok, status_code, payload = listar_nfes_consyste_por_caixa(
-                caixa="emitidos",
-                q=f"emitido_em:>={cutoff}",
-                campos="id,chave,numero,emitido_em,dest_cnpj,dest_nome",
-                timeout=30,
-            )
+            documentos = listar_nfes_emitidas_erp(cutoff)
         except Exception as exc:
             import requests as _rq
             if isinstance(exc, (_rq.exceptions.ConnectionError, _rq.exceptions.Timeout)):
-                app.logger.warning("Scheduler NF-e: sem conectividade com Consyste (%s)", exc.__class__.__name__)
-                msg = f"Consyste offline: {exc.__class__.__name__}"
+                app.logger.warning("Scheduler NF-e: sem conectividade com ERP bridge (%s)", exc.__class__.__name__)
+                msg = f"ERP bridge offline: {exc.__class__.__name__}"
             else:
-                app.logger.error("Scheduler NF-e: falha Consyste: %s", exc)
-                msg = f"Consyste erro: {exc}"
+                app.logger.error("Scheduler NF-e: falha ERP bridge: %s", exc)
+                msg = f"ERP bridge erro: {exc}"
             _set_status(last_run=datetime.now(), last_status="erro",
                         last_message=msg)
             return {"ok": False, "erro": str(exc)}
-
-        if not ok:
-            _set_status(last_run=datetime.now(), last_status="erro",
-                        last_message=f"Consyste status {status_code}")
-            return {"ok": False, "erro": f"Consyste status {status_code}"}
-
-        documentos = payload.get("documentos", []) if isinstance(payload, dict) else []
 
         # Dedupe: NFs que ja tem log (exceto AguardandoManual, que PODE ser reprocessada
         # se o usuario tiver preenchido o e-mail no cadastro/planilha e quiser reenvio).
@@ -87,7 +76,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             numero = str(doc.get("numero") or "").strip()
             chave = str(doc.get("chave") or "").strip()
             emitido = str(doc.get("emitido_em") or "")[:10]
-            if not numero or not chave:
+            if not numero or not chave or not doc.get("autorizada"):
                 ignoradas += 1
                 continue
             if emitido and emitido < cutoff:
@@ -125,7 +114,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
         return {
             "ok": True,
             "cutoff": cutoff,
-            "total_consyste": len(documentos),
+            "total_erp": len(documentos),
             "enviadas": enviadas,
             "pendentes": pendentes,
             "ignoradas": ignoradas,

@@ -208,8 +208,8 @@ def salvar_aviso_atualizacao_admin():
     aviso.atualizado_em = datetime.now()
     db.session.commit()
     return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(aviso)})
-from ..services.danfe_service import gerar_danfe, parse_nfe_xml
 from ..services.consyste_service import listar_nfes_consyste_por_caixa
+from ..services.danfe_service import gerar_danfe, parse_nfe_xml
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -1832,15 +1832,13 @@ def consyste_download():
         return jsonify({"error": str(exc)}), 500
 
 
-@api_bp.route("/api/consyste/emissao/solicitar", methods=["POST"])
-
 @api_bp.route("/api/nfe/<chave>/danfe", methods=["GET"])
 @login_required
 def gerar_danfe_nfe(chave):
     """Gera DANFE em PDF a partir do XML da NF-e buscado na Consyste."""
     chave_limpa = re.sub(r"\D", "", str(chave or ""))
     if len(chave_limpa) != 44:
-        return jsonify({"error": "Chave de acesso inválida (deve ter 44 dígitos)."}), 400
+        return jsonify({"error": "Chave de acesso invalida (deve ter 44 digitos)."}), 400
 
     try:
         ok, status_code, xml_bytes = download_documento_consyste(
@@ -1853,12 +1851,12 @@ def gerar_danfe_nfe(chave):
         return jsonify({"error": f"Erro ao buscar XML na Consyste: {exc}"}), 502
 
     if not ok or not xml_bytes:
-        return jsonify({"error": f"XML não encontrado na Consyste (HTTP {status_code})."}), 404
+        return jsonify({"error": f"XML nao encontrado na Consyste (HTTP {status_code})."}), 404
 
     try:
         logo_path = os.path.join(current_app.root_path, "..", "static", "columbia_logo.png")
         logo_path = os.path.normpath(logo_path)
-        logo_url  = current_app.config.get("EMPRESA_LOGO_URL", "")
+        logo_url = current_app.config.get("EMPRESA_LOGO_URL", "")
         pdf_bytes = gerar_danfe(xml_bytes, logo_path=logo_path, logo_url=logo_url)
     except Exception as exc:
         current_app.logger.exception("Erro ao gerar DANFE: %s", exc)
@@ -1866,11 +1864,10 @@ def gerar_danfe_nfe(chave):
 
     nf_num = ""
     try:
-        d = parse_nfe_xml(xml_bytes)
-        nf_num = str(d.get("nNF") or "").strip()
+        dados_xml = parse_nfe_xml(xml_bytes)
+        nf_num = str(dados_xml.get("nNF") or "").strip()
     except Exception:
         pass
-
     filename = f"DANFE_{chave_limpa[:6]}_{nf_num}.pdf" if nf_num else f"DANFE_{chave_limpa[:10]}.pdf"
     return current_app.response_class(
         pdf_bytes,
@@ -1880,7 +1877,6 @@ def gerar_danfe_nfe(chave):
             "Content-Length": str(len(pdf_bytes)),
         },
     )
-
 
 @api_bp.route("/api/consyste/emissao/solicitar", methods=["POST"])
 @permission_required("PAGE_FINANCEIRO_FATURAMENTO")

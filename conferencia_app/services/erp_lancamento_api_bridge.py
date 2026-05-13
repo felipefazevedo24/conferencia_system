@@ -15,6 +15,7 @@ Endpoint:
 from __future__ import annotations
 
 import os
+import base64
 from datetime import date, datetime
 from typing import Any
 
@@ -240,6 +241,94 @@ PEDIDOS_SQL = """
 """
 
 
+NFE_EMAIL_DATA_MINIMA = date(2026, 5, 13)
+
+
+def _date_to_api(valor: Any) -> str | None:
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.isoformat()
+    if isinstance(valor, date):
+        return valor.isoformat()
+    return str(valor)
+
+
+def _b64(valor: Any) -> str:
+    if not valor:
+        return ""
+    if isinstance(valor, memoryview):
+        valor = valor.tobytes()
+    if isinstance(valor, bytearray):
+        valor = bytes(valor)
+    if isinstance(valor, str):
+        valor = valor.encode("utf-8")
+    if not isinstance(valor, bytes):
+        return ""
+    return base64.b64encode(valor).decode("ascii")
+
+
+def _parse_data_minima(valor: Any) -> date:
+    data = _parse_data(valor) or NFE_EMAIL_DATA_MINIMA
+    return data if data >= NFE_EMAIL_DATA_MINIMA else NFE_EMAIL_DATA_MINIMA
+
+
+NFE_EMITIDAS_SQL = """
+    select
+        numero::text as numero,
+        chv_nfe as chave,
+        dt_emissao as emitido_em,
+        cod_cliente,
+        coalesce(nullif(cliente, ''), nullif(razao_social, '')) as dest_nome,
+        cgc_cpf as dest_cnpj,
+        vl_total_nf as valor,
+        modelo,
+        serie,
+        sub_serie,
+        nfe_cod_status,
+        nfe_desc_status,
+        email_danfe,
+        case when nfe_arquivo_xml is null then 0 else octet_length(nfe_arquivo_xml) end as xml_len,
+        case when pdf_danfe is null then 0 else octet_length(pdf_danfe) end as pdf_len
+    from public.tnota_fiscal
+    where dt_emissao::date >= %s
+      and coalesce(nfe, 0) = 1
+      and coalesce(modelo, '') = '55'
+    order by dt_emissao desc, numero desc
+    limit %s
+"""
+
+
+NFE_EMITIDA_SQL = """
+    select
+        numero::text as numero,
+        chv_nfe as chave,
+        dt_emissao as emitido_em,
+        cod_cliente,
+        coalesce(nullif(cliente, ''), nullif(razao_social, '')) as dest_nome,
+        cgc_cpf as dest_cnpj,
+        vl_total_nf as valor,
+        modelo,
+        serie,
+        sub_serie,
+        nfe_cod_status,
+        nfe_desc_status,
+        email_danfe,
+        nfe_arquivo_xml,
+        pdf_danfe
+    from public.tnota_fiscal
+    where dt_emissao::date >= %s
+      and coalesce(nfe, 0) = 1
+      and coalesce(modelo, '') = '55'
+      and (
+        (%s <> '' and numero::text = %s)
+        or (%s <> '' and regexp_replace(coalesce(chv_nfe, ''), '\\D', '', 'g') = %s)
+      )
+    order by dt_emissao desc, numero desc
+    limit 1
+"""
+
+
 def _authorized(cfg: dict[str, Any]) -> bool:
     token = str(cfg.get("token") or "")
     if not token:
@@ -355,6 +444,79 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "linhas": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar pedidos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/nfe-emitidas")
+    def consultar_nfe_emitidas():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            data_inicial = _parse_data_minima(payload.get("data_inicial"))
+            try:
+                limite = int(payload.get("limite") or 300)
+            except (TypeError, ValueError):
+                limite = 300
+            limite = max(1, min(limite, 1000))
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(NFE_EMITIDAS_SQL, (data_inicial, limite))
+                    cols = [desc[0] for desc in cur.description]
+                    notas = []
+                    for row in cur.fetchall():
+                        item = dict(zip(cols, row))
+                        item["emitido_em"] = _date_to_api(item.get("emitido_em"))
+                        item["autorizada"] = str(item.get("nfe_cod_status") or "").strip() == "100"
+                        notas.append(item)
+
+            return jsonify({
+                "sucesso": True,
+                "data_inicial": data_inicial.isoformat(),
+                "notas": notas,
+            })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar NF-e emitidas no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/nfe-emitida")
+    def consultar_nfe_emitida():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            data_minima = _parse_data_minima(payload.get("data_minima"))
+            numero = str(payload.get("numero") or "").strip()
+            chave = "".join(ch for ch in str(payload.get("chave") or "") if ch.isdigit())
+            if not numero and not chave:
+                return jsonify({"sucesso": False, "erro": "numero_ou_chave_obrigatorio"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(NFE_EMITIDA_SQL, (data_minima, numero, numero, chave, chave))
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({"sucesso": True, "nota": None})
+                    cols = [desc[0] for desc in cur.description]
+                    nota = dict(zip(cols, row))
+
+            xml = nota.pop("nfe_arquivo_xml", None)
+            pdf = nota.pop("pdf_danfe", None)
+            nota["emitido_em"] = _date_to_api(nota.get("emitido_em"))
+            nota["autorizada"] = str(nota.get("nfe_cod_status") or "").strip() == "100"
+            nota["xml_base64"] = _b64(xml)
+            nota["pdf_base64"] = _b64(pdf)
+            return jsonify({"sucesso": True, "nota": nota})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar NF-e emitida no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     return app

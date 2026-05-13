@@ -9,8 +9,8 @@ from sqlalchemy import desc
 from ..auth import roles_required
 from ..extensions import db
 from ..models import EmailNFEnviado
-from ..services.consyste_service import listar_nfes_consyste_por_caixa
 from ..services.nfe_email_service import enviar_nfe_por_email, resolver_destinatario
+from ..services.erp_nfe_emitidas_service import listar_nfes_emitidas_erp, normalizar_data_minima
 from ..services.planilhas_cadastros import buscar_email_por_cnpj
 
 nfe_email_bp = Blueprint("nfe_email", __name__)
@@ -152,7 +152,7 @@ def api_nfe_email_config():
         if "auto_enabled" in payload:
             parcial["NFE_EMAIL_AUTO_ENABLED"] = bool(payload["auto_enabled"])
         if "auto_desde" in payload:
-            parcial["NFE_EMAIL_AUTO_DESDE"] = str(payload["auto_desde"] or "").strip()
+            parcial["NFE_EMAIL_AUTO_DESDE"] = normalizar_data_minima(str(payload["auto_desde"] or "").strip())
         if "cc" in payload:
             valor = payload["cc"]
             if isinstance(valor, list):
@@ -199,7 +199,7 @@ def api_nfe_email_config():
         "destino_teste": current_app.config.get("NFE_EMAIL_TESTE_DESTINO"),
         "auto_no_faturamento": bool(current_app.config.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", True)),
         "auto_enabled": bool(current_app.config.get("NFE_EMAIL_AUTO_ENABLED", True)),
-        "auto_desde": current_app.config.get("NFE_EMAIL_AUTO_DESDE"),
+        "auto_desde": normalizar_data_minima(current_app.config.get("NFE_EMAIL_AUTO_DESDE")),
         "cc": current_app.config.get("NFE_EMAIL_CC", ""),
         "poll_intervalo": int(current_app.config.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", 300)),
         "cfops_especiais": current_app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS", ""),
@@ -231,7 +231,7 @@ def pagina_emails_nfe():
 @nfe_email_bp.route("/api/nfe/email/emitidas", methods=["GET"])
 @roles_required("Fiscal", "Admin", "Conferente")
 def api_nfe_email_emitidas():
-    """Lista NFs emitidas a partir de uma data (default: abril do ano corrente).
+    """Lista NFs emitidas no ERP a partir de 13/05/2026.
 
     Para cada NF retorna numero, chave, destinatario, e-mail sugerido (planilha)
     e se ja foi enviado por e-mail. O XML NAO e baixado aqui (performance);
@@ -239,25 +239,20 @@ def api_nfe_email_emitidas():
     """
     data_inicial = (request.args.get("data_inicial") or "").strip()
     if not data_inicial:
-        hoje = datetime.now()
-        data_inicial = f"{hoje.year}-04-01"
+        data_inicial = "2026-05-13"
 
     # Valida data
     try:
         datetime.strptime(data_inicial, "%Y-%m-%d")
     except ValueError:
         return jsonify({"error": "data_inicial invalida (use YYYY-MM-DD)."}), 400
+    data_inicial = normalizar_data_minima(data_inicial)
 
-    ok, status_code, payload = listar_nfes_consyste_por_caixa(
-        caixa="emitidos",
-        q=f"emitido_em:>={data_inicial}",
-        campos="id,chave,numero,emitido_em,emit_nome,emit_cnpj,dest_nome,dest_cnpj,valor",
-        timeout=30,
-    )
-    if not ok:
-        return jsonify({"error": f"Falha ao consultar Consyste (status {status_code})."}), 502
-
-    documentos = payload.get("documentos", []) if isinstance(payload, dict) else []
+    try:
+        documentos = listar_nfes_emitidas_erp(data_inicial)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao consultar NF-e emitidas no ERP")
+        return jsonify({"error": f"Falha ao consultar ERP bridge: {exc}"}), 502
 
     # Historico ja registrado (para marcar "ja enviado")
     enviados = {
@@ -310,9 +305,13 @@ def api_nfe_email_emitidas():
             "chave": chave,
             "emitido_em": emitido_em,
             "valor_total": doc.get("valor"),
-            "emit_nome": doc.get("emit_nome"),
+            "emit_nome": doc.get("emit_nome") or "COLUMBIA MACHINE BRASIL",
             "dest_nome": nome_dest,
             "dest_cnpj": cnpj_dest,
+            "autorizada": bool(doc.get("autorizada")),
+            "tem_xml": bool(doc.get("xml_len")),
+            "tem_pdf": bool(doc.get("pdf_len")),
+            "status_nfe": doc.get("nfe_desc_status") or doc.get("nfe_cod_status") or "",
             "email_sugerido": sugestao_email,
             "fonte_sugestao": sugestao_fonte,
             "ja_enviado": bool(envio),

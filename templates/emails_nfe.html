@@ -278,7 +278,7 @@
         <div class="cfg-row">
           <div class="cfg-row-label">
             Considerar NFs a partir de
-            <small>O scheduler só envia NFs emitidas desta data em diante.</small>
+            <small>O scheduler usa o ERP e nunca considera NFs anteriores a 13/05/2026.</small>
           </div>
           <div class="cfg-row-control">
             <input id="cfg-auto-desde" type="date">
@@ -396,7 +396,7 @@
   </div>
 
   <div class="card">
-    <h3>NFs emitidas (a partir de abril)</h3>
+    <h3>NFs emitidas no ERP (a partir de 13/05/2026)</h3>
     <div class="form-grid narrow" style="margin-bottom:12px">
       <label>Data inicial<input id="e-data" type="date"></label>
       <label>Filtro texto<input id="e-filtro" type="text" placeholder="cliente, numero..." oninput="filtrarEmitidas()"></label>
@@ -859,10 +859,8 @@ async function carregarHistorico() {
 // ---- NFs emitidas (lista) ----
 let EMITIDAS_CACHE = [];
 
-function defaultDataAbril() {
-  const hoje = new Date();
-  const ano = hoje.getMonth() < 3 ? hoje.getFullYear() - 1 : hoje.getFullYear();
-  return `${ano}-04-01`;
+function defaultDataInicialNfe() {
+  return '2026-05-13';
 }
 
 function fmtBR(num) {
@@ -879,11 +877,11 @@ function fmtData(iso) {
 
 async function carregarEmitidas() {
   const dataInput = document.getElementById('e-data');
-  const data = dataInput.value || defaultDataAbril();
+  const data = dataInput.value || defaultDataInicialNfe();
   dataInput.value = data;
   const resumo = document.getElementById('e-resumo');
   const tbody = document.getElementById('emit-body');
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Consultando Consyste...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">Consultando ERP...</td></tr>';
   resumo.textContent = 'Consultando...';
   try {
     const r = await fetch('/api/nfe/email/emitidas?data_inicial=' + encodeURIComponent(data));

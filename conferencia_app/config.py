@@ -140,9 +140,9 @@ class Config:
     NFE_EMAIL_MODO_TESTE = os.environ.get("NFE_EMAIL_MODO_TESTE", "0") == "1"  # padrão PRODUÇÃO
     NFE_EMAIL_TESTE_DESTINO = os.environ.get("NFE_EMAIL_TESTE_DESTINO", "felaze@colmac.com")
     NFE_EMAIL_AUTO_NO_FATURAMENTO = os.environ.get("NFE_EMAIL_AUTO_NO_FATURAMENTO", "1") == "1"
-    # Scheduler automatico de envio de NF-e emitidas (poll Consyste)
+    # Scheduler automatico de envio de NF-e emitidas (ERP via API bridge)
     NFE_EMAIL_AUTO_ENABLED = os.environ.get("NFE_EMAIL_AUTO_ENABLED", "1") == "1"
-    NFE_EMAIL_AUTO_DESDE = os.environ.get("NFE_EMAIL_AUTO_DESDE", "")  # YYYY-MM-DD; vazio = define no primeiro boot
+    NFE_EMAIL_AUTO_DESDE = os.environ.get("NFE_EMAIL_AUTO_DESDE", "2026-05-13")  # piso minimo: 2026-05-13
     NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
     # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
     NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")

@@ -2,8 +2,8 @@
 Envio automatico de NF-e emitida por e-mail ao destinatario.
 
 Fluxo:
-- Dado um numero de NF (ou chave de acesso), busca a nota na Consyste (API ja integrada).
-- Baixa XML e DANFE (PDF) via Consyste download endpoints.
+- Dado um numero de NF (ou chave de acesso), busca a NF-e emitida no ERP via API bridge.
+- Usa XML/PDF gravados no banco do ERP, sem aguardar a Consyste.
 - Resolve destinatario na ordem: 1) override manual -> 2) cadastro AgendamentoCliente ->
   3) tag <dest><email> do XML. Em ultimo caso, fica pendente.
 - Registra EmailNFEnviado e envia e-mail com XML + PDF anexados.
@@ -11,7 +11,6 @@ Fluxo:
 """
 from __future__ import annotations
 
-import os
 import re
 import smtplib
 import threading
@@ -24,12 +23,11 @@ from email.mime.text import MIMEText
 from typing import Any
 from xml.etree import ElementTree as ET
 
-import requests
 from flask import current_app
 
 from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
-from .danfe_service import gerar_danfe
+from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from .planilhas_cadastros import buscar_email_por_cnpj
 
 
@@ -44,14 +42,6 @@ def _somente_digitos(s: str | None) -> str:
 
 def _valido_email(e: str | None) -> bool:
     return bool(e and _RE_EMAIL.match(e.strip()))
-
-
-def _token_consyste(app) -> str:
-    return app.config.get("CONSYSTE_TOKEN") or ""
-
-
-def _base_consyste(app) -> str:
-    return app.config.get("CONSYSTE_API_BASE", "https://portal.consyste.com.br/api/v1").rstrip("/")
 
 
 # ---------- Dados resolvidos da NF ----------
@@ -70,64 +60,48 @@ class NotaEmitida:
     pdf_bytes: bytes | None = None
 
 
-def _buscar_documento_consyste(app, numero: str, chave: str) -> dict[str, Any] | None:
-    """Localiza doc na Consyste por chave (preferencial) ou numero."""
-    token = _token_consyste(app)
-    if not token:
-        return None
-    headers = {"X-Consyste-Auth-Token": token, "Accept": "application/json"}
-    base = _base_consyste(app)
-
-    chave_limpa = _somente_digitos(chave)
-    numero_limpo = str(numero or "").strip()
-
-    if chave_limpa and len(chave_limpa) == 44:
-        try:
-            resp = requests.get(f"{base}/nfe/{chave_limpa}", headers=headers, timeout=15)
-            if resp.ok and resp.content:
-                data = resp.json()
-                if isinstance(data, dict):
-                    return data
-        except Exception as exc:  # pragma: no cover - rede
-            app.logger.warning("Consyste lookup por chave falhou: %s", exc)
-
-    if numero_limpo:
-        # preferencia: caixa 'emitidos' (NF emitida pela empresa)
-        for filtro in ("emitidos", "todos", "recebidos"):
-            url = f"{base}/nfe/lista/{filtro}"
-            params = {"q": f"numero:{numero_limpo}", "campos": "id,chave,numero,emit_nome,emit_cnpj,dest_nome,dest_cnpj"}
-            try:
-                resp = requests.get(url, headers=headers, params=params, timeout=15)
-                if not resp.ok:
-                    continue
-                dados = resp.json() if resp.content else {}
-                lista = dados.get("documentos", []) if isinstance(dados, dict) else []
-                candidatos = [d for d in lista if str(d.get("numero", "")).strip() == numero_limpo]
-                if candidatos:
-                    return candidatos[0]
-            except Exception as exc:  # pragma: no cover - rede
-                app.logger.warning("Consyste lista %s falhou: %s", filtro, exc)
-
-    return None
-
-
-def _download_consyste(app, chave: str, formato: str) -> bytes | None:
-    token = _token_consyste(app)
-    if not token:
-        return None
-    base = _base_consyste(app)
-    headers = {
-        "X-Consyste-Auth-Token": token,
-        "Accept": "application/xml" if formato == "xml" else "application/pdf",
-    }
-    url = f"{base}/nfe/{_somente_digitos(chave)}/download.{formato}"
+def _resolver_nota_erp(numero_nf: str, chave: str | None = None) -> NotaEmitida | None:
+    app = current_app._get_current_object()
     try:
-        resp = requests.get(url, headers=headers, timeout=25)
-        if resp.ok and resp.content:
-            return resp.content
-    except Exception as exc:  # pragma: no cover - rede
-        app.logger.warning("Consyste download.%s falhou: %s", formato, exc)
-    return None
+        doc = buscar_nfe_emitida_erp(numero_nf, chave or "")
+    except Exception as exc:
+        app.logger.warning("ERP NF-e lookup falhou para %s/%s: %s", numero_nf, chave or "", exc)
+        return None
+
+    if not doc:
+        return None
+
+    chave_doc = _somente_digitos(doc.get("chave") or chave or "")
+    if len(chave_doc) != 44:
+        return None
+
+    if not doc.get("autorizada"):
+        app.logger.info("NF-e %s encontrada no ERP mas ainda nao autorizada.", doc.get("numero") or numero_nf)
+        return None
+
+    nota = NotaEmitida(
+        chave=chave_doc,
+        numero=str(doc.get("numero") or numero_nf or "").strip(),
+        dest_nome=str(doc.get("dest_nome") or "").strip(),
+        dest_cnpj=_somente_digitos(doc.get("dest_cnpj")),
+        dest_email_xml=str(doc.get("email_danfe") or "").strip(),
+        emit_nome="COLUMBIA MACHINE BRASIL",
+        emit_cnpj=_somente_digitos(app.config.get("EMPRESA_CNPJ")),
+        xml_bytes=doc.get("xml_bytes"),
+        pdf_bytes=doc.get("pdf_bytes"),
+    )
+
+    if nota.xml_bytes and not nota.pdf_bytes:
+        app.logger.warning("NF-e %s encontrada no ERP sem PDF DANFE no banco.", chave_doc)
+
+    email_xml, nome_xml, cnpj_xml = _parse_dest_email_do_xml(nota.xml_bytes)
+    if email_xml:
+        nota.dest_email_xml = email_xml
+    if not nota.dest_nome and nome_xml:
+        nota.dest_nome = nome_xml
+    if not nota.dest_cnpj and cnpj_xml:
+        nota.dest_cnpj = cnpj_xml
+    return nota
 
 
 def _parse_dest_email_do_xml(xml_bytes: bytes | None) -> tuple[str, str, str]:
@@ -168,43 +142,11 @@ def _parse_cfops_do_xml(xml_bytes: bytes | None) -> set[str]:
 
 
 def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | None:
-    app = current_app._get_current_object()
-    doc = _buscar_documento_consyste(app, numero_nf, chave or "")
-    if not doc:
-        return None
-    chave_doc = _somente_digitos(doc.get("chave") or chave or "")
-    if len(chave_doc) != 44:
-        return None
+    nota_erp = _resolver_nota_erp(numero_nf, chave)
+    if nota_erp:
+        return nota_erp
 
-    nota = NotaEmitida(
-        chave=chave_doc,
-        numero=str(doc.get("numero") or numero_nf or "").strip(),
-        dest_nome=str(doc.get("dest_nome") or "").strip(),
-        dest_cnpj=_somente_digitos(doc.get("dest_cnpj")),
-        emit_nome=str(doc.get("emit_nome") or "").strip(),
-        emit_cnpj=_somente_digitos(doc.get("emit_cnpj")),
-    )
-    nota.xml_bytes = _download_consyste(app, chave_doc, "xml")
-    # PDF do e-mail: preferencialmente DANFE customizado do sistema.
-    # Fallback para PDF da Consyste se a geracao local falhar.
-    if nota.xml_bytes:
-      try:
-        logo_path = os.path.normpath(os.path.join(app.root_path, "..", "static", "columbia_logo.png"))
-        logo_url = app.config.get("EMPRESA_LOGO_URL", "")
-        nota.pdf_bytes = gerar_danfe(nota.xml_bytes, logo_path=logo_path, logo_url=logo_url)
-      except Exception as exc:
-        app.logger.warning("DANFE customizado falhou para NF-e %s; usando Consyste. Erro: %s", chave_doc, exc)
-        nota.pdf_bytes = _download_consyste(app, chave_doc, "pdf")
-    else:
-      nota.pdf_bytes = _download_consyste(app, chave_doc, "pdf")
-
-    email_xml, nome_xml, cnpj_xml = _parse_dest_email_do_xml(nota.xml_bytes)
-    nota.dest_email_xml = email_xml
-    if not nota.dest_nome and nome_xml:
-        nota.dest_nome = nome_xml
-    if not nota.dest_cnpj and cnpj_xml:
-        nota.dest_cnpj = cnpj_xml
-    return nota
+    return None
 
 
 # ---------- Resolucao do destinatario ----------
@@ -249,7 +191,7 @@ def resolver_destinatario(numero_nf: str, chave: str | None = None, override_ema
             "dest_cnpj": "",
             "numero": numero_nf,
             "chave": chave or "",
-            "avisos": ["NF nao encontrada na Consyste."],
+            "avisos": ["NF nao encontrada/autorizada no ERP a partir de 13/05/2026."],
         }
 
     email_manual = (override_email or "").strip()
@@ -511,7 +453,7 @@ def enviar_nfe_por_email(
 
     nota = _resolver_nota(numero_nf, chave)
     if not nota:
-        return {"sucesso": False, "erro": "NF nao encontrada na Consyste.", "numero_nf": numero_nf}
+        return {"sucesso": False, "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.", "numero_nf": numero_nf}
 
     # Roteamento por CFOP: se algum item da NF tiver CFOP na lista de CFOPs
     # especiais configurada, o destinatario do XML/cadastro e ignorado e o
