@@ -122,6 +122,8 @@
     /* Paradas */
     .paradas-list { padding: 0; }
     .parada-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; align-items: flex-start; }
+    .parada-row[draggable="true"] { cursor: grab; }
+    .parada-row.dragging { opacity: .5; background: #f8fafc; }
     .parada-row:last-child { border-bottom: none; }
     .parada-seq { width: 28px; height: 28px; border-radius: 50%; background: var(--doc-primary-soft); color: var(--doc-primary); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
     .parada-row.concluida .parada-seq { background: var(--doc-emerald-soft); color: var(--doc-emerald); }
@@ -162,6 +164,21 @@
     .doc-input:focus, .doc-select:focus, .doc-textarea:focus { border-color: var(--doc-emerald); outline: none; box-shadow: 0 0 0 3px rgba(5,150,105,.18); }
     .doc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .doc-form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    .doc-entry-shell.viagens-refresh { color: #102033; }
+    .doc-entry-shell.viagens-refresh .doc-entry-hero {
+        background: linear-gradient(135deg, #ffffff 0%, #eef6ff 100%);
+        border-bottom-color: #0f62c9;
+        border-radius: 18px;
+    }
+    .doc-entry-shell.viagens-refresh .doc-kicker { color: #0f62c9; }
+    .doc-entry-shell.viagens-refresh .doc-btn-primary,
+    .doc-entry-shell.viagens-refresh .doc-kpi-icon.primary { background: linear-gradient(135deg, #0f62c9, #173a5e); }
+    .doc-entry-shell.viagens-refresh .doc-btn-secondary { color: #0f62c9; border-color: #0f62c9; }
+    .doc-entry-shell.viagens-refresh .viagem-card.selected { background: #e6f0fb; border-left-color: #0f62c9; }
+    .doc-entry-shell.viagens-refresh .vc-code,
+    .doc-entry-shell.viagens-refresh .vc-meta i { color: #0f62c9; }
+    .doc-entry-shell.viagens-refresh .doc-panel { border-radius: 12px; }
 
     .sol-pick-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--doc-border); border-radius: 8px; padding: 6px; background: #fafbff; }
     .sol-pick { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; align-items: center; font-size: 12px; }
@@ -317,7 +334,7 @@
     <button class="main-page-tab" id="tab-btn-solicitacoes" onclick="switchTab('solicitacoes')"><i class="fa-solid fa-clipboard-list"></i> Solicitações de Transporte</button>
 </div>
 <div id="pane-viagens">
-<div class="doc-entry-shell">
+<div class="doc-entry-shell viagens-refresh">
     <div class="doc-entry-hero">
         <div>
             <div class="doc-kicker"><i class="fa-solid fa-route"></i> Logística · Gestão de Viagens</div>
@@ -1125,6 +1142,7 @@ function renderDetalhe(v) {
             <div class="timeline">${renderTimeline(v)}</div>
         </div>
     `;
+    ativarDragParadasGestor();
     setTimeout(() => renderMapa(v), 50);
 }
 
@@ -1215,12 +1233,17 @@ function renderParadas(v) {
         if (v.status === 'Planejada' || (v.status === 'EmAndamento' && p.status === 'Pendente')) {
             acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="paradaExcluir(${p.id})"><i class="fa-solid fa-trash"></i></button>`);
         }
-        return `<div class="parada-row ${stClass}">
+        const podeArrastar = v.status !== 'Concluida' && v.status !== 'Cancelada';
+        const coordChip = (p.latitude && p.longitude)
+            ? `<span class="doc-chip ok"><i class="fa-solid fa-map-pin"></i> mapa</span>`
+            : `<span class="doc-chip warn"><i class="fa-solid fa-location-crosshairs"></i> sem coord.</span>`;
+        return `<div class="parada-row ${stClass}" data-parada-id="${p.id}" draggable="${podeArrastar ? 'true' : 'false'}">
             <div class="parada-seq">${p.sequencia}</div>
             <div>
                 <div class="parada-titulo">${p.parceiro_nome || p.tipo} <span class="doc-chip slate">${p.tipo}</span> ${p.status !== 'Pendente' ? `<span class="doc-chip ${p.status === 'Concluida' ? 'ok' : (p.status === 'Nao_realizada' ? 'danger' : 'warn')}">${p.status.replace('_',' ')}</span>` : ''}</div>
                 <div class="parada-ender">${[p.endereco, p.cidade, p.uf].filter(Boolean).join(' · ') || '—'}</div>
                 <div class="parada-meta">
+                    ${coordChip}
                     ${p.previsao_chegada ? `<span><i class="fa-regular fa-clock"></i> prev: ${fmtHour(p.previsao_chegada)}</span>` : ''}
                     ${p.chegada_real ? `<span><i class="fa-solid fa-location-dot"></i> chegou: ${fmtHour(p.chegada_real)}</span>` : ''}
                     ${p.saida_real ? `<span><i class="fa-solid fa-arrow-right"></i> saiu: ${fmtHour(p.saida_real)}</span>` : ''}
@@ -1249,6 +1272,43 @@ function renderTimeline(v) {
                 ${e.registrado_por ? `<div style="font-size:10.5px;color:var(--doc-muted);margin-top:2px">por ${e.registrado_por}</div>` : ''}
             </div>
         </div>`).join('');
+}
+
+function ativarDragParadasGestor() {
+    document.querySelectorAll('.paradas-list .parada-row[draggable="true"]').forEach(el => {
+        el.addEventListener('dragstart', e => {
+            el.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        el.addEventListener('dragend', async () => {
+            el.classList.remove('dragging');
+            await salvarOrdemParadasGestor();
+        });
+        el.addEventListener('dragover', e => {
+            e.preventDefault();
+            const lista = el.closest('.paradas-list');
+            const dragging = lista?.querySelector('.dragging');
+            if (!lista || !dragging || dragging === el) return;
+            const rect = el.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2;
+            lista.insertBefore(dragging, after ? el.nextSibling : el);
+        });
+    });
+}
+
+async function salvarOrdemParadasGestor() {
+    if (!viagemSelecionadaId) return;
+    const ordem = [...document.querySelectorAll('.paradas-list .parada-row')]
+        .map(el => parseInt(el.dataset.paradaId, 10))
+        .filter(Boolean);
+    if (!ordem.length) return;
+    try {
+        await apiSend(`/api/viagem/${viagemSelecionadaId}/paradas/reordenar`, 'POST', {ordem});
+        toast('Ordem da rota salva.');
+        await abrirDetalhe(viagemSelecionadaId);
+    } catch(e) {
+        toast(e.message || 'Falha ao salvar ordem.', 'error');
+    }
 }
 
 function renderMapa(v) {
@@ -1284,6 +1344,21 @@ function renderMapa(v) {
             })
         }).bindPopup(`<strong>${p.parceiro_nome || p.tipo}</strong><br>${p.endereco || ''}<br><small>${p.status}</small>`).addTo(mapView);
     });
+    if (paradas.length >= 2) {
+        L.polyline(paradas.map(p => [p.latitude, p.longitude]), {color: '#0f62c9', weight: 3, opacity: .55, dashArray: '6,8'}).addTo(mapView);
+    }
+    (v.eventos || [])
+        .filter(e => ['CHEGADA', 'SAIDA_PARADA', 'OCORRENCIA'].includes(e.tipo) && e.latitude && e.longitude)
+        .forEach(e => {
+            const cor = e.tipo === 'OCORRENCIA' ? '#dc2626' : '#f59e0b';
+            L.circleMarker([e.latitude, e.longitude], {
+                radius: 6,
+                color: '#fff',
+                fillColor: cor,
+                fillOpacity: .95,
+                weight: 2,
+            }).bindPopup(`<strong>${e.titulo}</strong><br><small>${fmtDate(e.registrado_em)}</small>${e.descricao ? '<br>' + e.descricao : ''}`).addTo(mapView);
+        });
     if (pts.length || paradas.length) {
         const bounds = L.latLngBounds([]);
         pts.forEach(p => bounds.extend([p.lat, p.lng]));

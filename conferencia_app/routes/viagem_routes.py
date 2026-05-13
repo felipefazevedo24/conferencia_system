@@ -25,6 +25,7 @@ from ..models import (
     ViagemParada,
     ViagemPosicao,
 )
+from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
 
@@ -147,6 +148,7 @@ def _veiculo_label(v):
 
 def _checklist_liberacao(v: Viagem, paradas: list[ViagemParada] | None = None) -> dict:
     paradas = paradas if paradas is not None else ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
+    _geocodificar_paradas_sem_coord(paradas)
     motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
     bloqueios: list[str] = []
     avisos: list[str] = []
@@ -372,6 +374,63 @@ def _log_evento(viagem_id, tipo, titulo, **kwargs):
     ))
 
 
+def _endereco_parada(parada: ViagemParada) -> str:
+    return montar_endereco_rota({
+        "logradouro": parada.endereco,
+        "cidade": parada.cidade,
+        "uf": parada.uf,
+    })
+
+
+def _geocodificar_parada(parada: ViagemParada) -> bool:
+    if parada.latitude is not None and parada.longitude is not None:
+        return False
+    endereco = _endereco_parada(parada)
+    if not endereco:
+        return False
+    geo = _geocode_endereco(endereco)
+    if not geo:
+        return False
+    parada.latitude = geo.get("lat")
+    parada.longitude = geo.get("lng")
+    return parada.latitude is not None and parada.longitude is not None
+
+
+def _geocodificar_paradas_sem_coord(paradas: list[ViagemParada]) -> int:
+    atualizadas = 0
+    for parada in paradas:
+        if _geocodificar_parada(parada):
+            atualizadas += 1
+    return atualizadas
+
+
+def _reordenar_paradas(viagem_id: int, ids: list[int], *, permitir_concluidas: bool = False) -> dict:
+    paradas = ViagemParada.query.filter_by(viagem_id=viagem_id).order_by(ViagemParada.sequencia).all()
+    por_id = {p.id: p for p in paradas}
+    ids_limpos: list[int] = []
+    for raw in ids:
+        pid = _parse_int(raw)
+        if pid and pid in por_id and pid not in ids_limpos:
+            ids_limpos.append(pid)
+    if not ids_limpos:
+        return {"ok": False, "msg": "Informe a ordem das paradas."}
+
+    bloqueadas = [p for p in paradas if p.status not in ("Pendente", "EmAndamento")]
+    editaveis = [p for p in paradas if permitir_concluidas or p.status in ("Pendente", "EmAndamento")]
+    editaveis_ids = {p.id for p in editaveis}
+    ordem_editavel = [por_id[pid] for pid in ids_limpos if pid in editaveis_ids]
+    ordem_editavel += [p for p in editaveis if p.id not in ids_limpos]
+
+    seq = 1
+    for parada in sorted(bloqueadas, key=lambda p: p.sequencia or 0):
+        parada.sequencia = seq
+        seq += 1
+    for parada in ordem_editavel:
+        parada.sequencia = seq
+        seq += 1
+    return {"ok": True, "paradas_ordenadas": len(ordem_editavel)}
+
+
 def _sync_solicitacao_viagem(sol: AgendamentoSolicitacao | None, v: Viagem, status: str = "Alocada") -> None:
     """Mantem a solicitacao de transporte alinhada com a viagem consolidada."""
     if not sol:
@@ -397,6 +456,9 @@ def _sync_solicitacoes_da_viagem(v: Viagem, status: str) -> None:
         ViagemParada.solicitacao_id.isnot(None),
     ).all()
     for parada in paradas:
+        if parada.status == "Nao_realizada" or (status == "Concluida" and parada.status != "Concluida"):
+            _solicitacao_volta_pendente(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id))
+            continue
         _sync_solicitacao_viagem(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id), v, status)
 
 
@@ -871,9 +933,7 @@ def parada_nao_realizada(pid: int):
     parada.observacao = motivo
     if parada.solicitacao_id:
         sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
-        if sol and str(sol.status or "").strip() not in {"Concluida", "Cancelada"}:
-            sol.status = "EmRota"
-            sol.atualizado_em = datetime.now()
+        _solicitacao_volta_pendente(sol)
     _log_evento(parada.viagem_id, "OCORRENCIA",
                 f"Parada NÃO realizada: {parada.parceiro_nome or parada.endereco}",
                 descricao=motivo, parada_id=pid, severidade="warning")
@@ -1468,6 +1528,9 @@ def _otimizar_paradas_viagem(vid: int) -> dict:
 
     sem_coord = [p for p in pendentes if p.latitude is None or p.longitude is None]
     if sem_coord:
+        _geocodificar_paradas_sem_coord(sem_coord)
+        sem_coord = [p for p in pendentes if p.latitude is None or p.longitude is None]
+    if sem_coord:
         nomes = ", ".join([p.parceiro_nome or f"Parada #{p.id}" for p in sem_coord[:3]])
         return {
             "ok": False,
@@ -1522,6 +1585,29 @@ def otimizar_rota(vid: int):
     )
     db.session.commit()
     return jsonify({"sucesso": True, **{k: v for k, v in r.items() if k != "ok"}})
+
+
+@viagem_bp.route("/<int:vid>/paradas/reordenar", methods=["POST"])
+@permission_required(PERM)
+def reordenar_paradas_gestor(vid: int):
+    v = db.session.get(Viagem, vid)
+    if not v:
+        return jsonify({"sucesso": False, "msg": "Viagem nao encontrada."}), 404
+    if v.status in ("Concluida", "Cancelada"):
+        return jsonify({"sucesso": False, "msg": "Viagem finalizada nao pode ser reordenada."}), 400
+    body = request.get_json(silent=True) or {}
+    r = _reordenar_paradas(vid, body.get("ordem") or [], permitir_concluidas=True)
+    if not r["ok"]:
+        return jsonify({"sucesso": False, "msg": r["msg"]}), 400
+    _log_evento(
+        vid,
+        "OBSERVACAO",
+        "Rota reordenada",
+        descricao=f"Gestor {_user()} reorganizou {r['paradas_ordenadas']} parada(s).",
+        severidade="info",
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
 
 
 
@@ -1733,6 +1819,28 @@ def motorista_paradas(vid: int, token: str):
     return jsonify({"sucesso": True, "viagem_status": v.status, "paradas": lista})
 
 
+@motorista_bp.route("/motorista/viagem/<int:vid>/<token>/paradas/reordenar", methods=["POST"])
+def motorista_reordenar_paradas(vid: int, token: str):
+    v = _viagem_por_token(vid, token)
+    if not v:
+        return jsonify({"sucesso": False, "msg": "Link invalido."}), 404
+    if v.status in ("Concluida", "Cancelada"):
+        return jsonify({"sucesso": False, "msg": "Viagem finalizada nao pode ser reordenada."}), 400
+    data = request.get_json(silent=True) or {}
+    r = _reordenar_paradas(vid, data.get("ordem") or [], permitir_concluidas=False)
+    if not r["ok"]:
+        return jsonify({"sucesso": False, "msg": r["msg"]}), 400
+    _log_evento(
+        vid,
+        "OBSERVACAO",
+        "Rota reorganizada pelo motorista",
+        descricao=f"{r['paradas_ordenadas']} parada(s) pendente(s) reordenada(s).",
+        severidade="info",
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True, "paradas_ordenadas": r["paradas_ordenadas"]})
+
+
 @motorista_bp.route("/motorista/viagem/<int:vid>/<token>/parada/<int:pid>/chegar", methods=["POST"])
 def motorista_chegar_parada(vid: int, token: str, pid: int):
     v = _viagem_por_token(vid, token)
@@ -1776,20 +1884,25 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
     p.saida_real = datetime.now()
     if not p.chegada_real:
         p.chegada_real = p.saida_real
-    p.status = "Concluida"
     p.resultado = (data.get("resultado") or ("Entregue" if p.tipo == "ENTREGA" else "Coletado")).strip()
     obs = (data.get("observacao") or "").strip()
     if obs:
         p.observacao = obs
+    nao_realizada = p.resultado in {"Recusado", "AusenciaRecebedor", "NaoRealizada"}
+    p.status = "Nao_realizada" if nao_realizada else "Concluida"
+    if nao_realizada and p.solicitacao_id:
+        _solicitacao_volta_pendente(db.session.get(AgendamentoSolicitacao, p.solicitacao_id))
+    elif p.solicitacao_id:
+        _sync_solicitacao_viagem(db.session.get(AgendamentoSolicitacao, p.solicitacao_id), v, "Concluida")
     _log_evento(
         vid,
-        "SAIDA_PARADA",
+        "OCORRENCIA" if nao_realizada else "SAIDA_PARADA",
         f"Parada concluída: {p.parceiro_nome or 'parada'}",
         descricao=f"Resultado: {p.resultado}. {obs}" if obs else f"Resultado: {p.resultado}",
         latitude=_parse_float(data.get("latitude")),
         longitude=_parse_float(data.get("longitude")),
         parada_id=p.id,
-        severidade="success",
+        severidade="warning" if nao_realizada else "success",
     )
     db.session.commit()
     return jsonify({"sucesso": True, "parada_id": p.id, "status": p.status})

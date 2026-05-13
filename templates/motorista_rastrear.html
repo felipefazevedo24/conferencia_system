@@ -164,8 +164,11 @@
 
     .paradas-list { gap: 9px; }
     .parada-item { background: #fff; border: 1px solid var(--mot-line); border-radius: 14px; padding: 12px; box-shadow: 0 2px 10px rgba(15,45,75,.04); }
+    .parada-item[draggable="true"] { cursor: grab; }
+    .parada-item.dragging { opacity: .48; transform: scale(.99); }
     .parada-item.ok { opacity: .72; background: #f8fbfd; }
     .parada-seq { min-width: 32px; height: 32px; border-radius: 10px; background: #e6f0fb; color: var(--mot-blue); }
+    .parada-item[draggable="true"] .parada-seq { touch-action: none; }
     .parada-item.ok .parada-seq { background: #dff7eb; color: #06633e; }
     .parada-nome { color: #0f2439; font-size: 14px; line-height: 1.25; }
     .parada-end { color: var(--mot-muted); margin-top: 3px; line-height: 1.35; }
@@ -260,7 +263,7 @@
     <div class="tab-pane active" id="tab-paradas" style="flex:1;overflow-y:auto;padding-top:14px">
         <div id="prox-container"></div>
         <div style="margin-top:6px">
-            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px">Todas as paradas <span style="font-size:10px;color:#475569;font-weight:600;text-transform:none;letter-spacing:0">— você pode concluir em qualquer ordem</span></div>
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:8px">Todas as paradas <span style="font-size:10px;color:#475569;font-weight:600;text-transform:none;letter-spacing:0">— arraste para ajustar a ordem</span></div>
             <div class="paradas-list" id="lista-paradas"></div>
         </div>
         <div style="margin-top:16px;padding:0 4px">
@@ -301,6 +304,7 @@
             <select id="mc-resultado">
                 <option value="Entregue">Entregue</option>
                 <option value="Coletado">Coletado</option>
+                <option value="NaoRealizada">N&atilde;o realizada</option>
                 <option value="Recusado">Recusado pelo destinatário</option>
                 <option value="AusenciaRecebedor">Ausência do recebedor</option>
                 <option value="Outros">Outros</option>
@@ -352,6 +356,7 @@ const START_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/iniciar`;
 const CONCLUIR_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/concluir`;
 const STATUS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/status`;
 const PARADAS_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/paradas`;
+const REORDER_URL = `/motorista/viagem/${VIAGEM_ID}/${TOKEN}/paradas/reordenar`;
 const VIAGEM_STATUS = "{{ viagem.status }}";
 
 const INTERVALO_MIN_MS = 15000;   // 15s
@@ -366,6 +371,7 @@ let filaOffline = [];
 let inicializado = false;
 let paradasCache = [];
 let paradaConcluindo = null;
+let dragParadaId = null;
 
 const $ = id => document.getElementById(id);
 
@@ -753,7 +759,8 @@ function renderLista() {
                 : `<button class="parada-btn cheguei" onclick="marcarChegada(${p.id})"><i class="fa-solid fa-location-crosshairs"></i> Cheguei</button>`
             }
         </div>` : '';
-        return `<div class="parada-item ${p.status === 'Concluida' ? 'ok' : ''}">
+        const podeArrastar = !ok;
+        return `<div class="parada-item ${p.status === 'Concluida' ? 'ok' : ''}" data-parada-id="${p.id}" draggable="${podeArrastar ? 'true' : 'false'}">
             <div class="parada-seq">${p.sequencia}</div>
             <div class="parada-info">
                 <div class="parada-nome">${p.parceiro_nome || 'Parada ' + p.sequencia}</div>
@@ -763,6 +770,73 @@ function renderLista() {
             </div>
         </div>`;
     }).join('');
+    ativarDragParadas();
+}
+
+function ativarDragParadas() {
+    document.querySelectorAll('#lista-paradas .parada-item[draggable="true"]').forEach(el => {
+        const handle = el.querySelector('.parada-seq') || el;
+        el.addEventListener('dragstart', e => {
+            dragParadaId = el.dataset.paradaId;
+            el.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            dragParadaId = null;
+            salvarOrdemParadas();
+        });
+        el.addEventListener('dragover', e => {
+            e.preventDefault();
+            const lista = $('lista-paradas');
+            const dragging = lista.querySelector('.dragging');
+            if (!dragging || dragging === el) return;
+            const rect = el.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2;
+            lista.insertBefore(dragging, after ? el.nextSibling : el);
+        });
+        handle.addEventListener('touchstart', () => {
+            dragParadaId = el.dataset.paradaId;
+            el.classList.add('dragging');
+        }, {passive: true});
+        handle.addEventListener('touchmove', e => {
+            if (!dragParadaId) return;
+            const touch = e.touches[0];
+            const alvo = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.parada-item');
+            const lista = $('lista-paradas');
+            const dragging = lista.querySelector('.dragging');
+            if (!alvo || !dragging || alvo === dragging || !lista.contains(alvo)) return;
+            const rect = alvo.getBoundingClientRect();
+            const after = touch.clientY > rect.top + rect.height / 2;
+            lista.insertBefore(dragging, after ? alvo.nextSibling : alvo);
+            e.preventDefault();
+        }, {passive: false});
+        handle.addEventListener('touchend', () => {
+            if (!dragParadaId) return;
+            el.classList.remove('dragging');
+            dragParadaId = null;
+            salvarOrdemParadas();
+        });
+    });
+}
+
+async function salvarOrdemParadas() {
+    const ordem = [...document.querySelectorAll('#lista-paradas .parada-item')]
+        .map(el => parseInt(el.dataset.paradaId, 10))
+        .filter(Boolean);
+    if (!ordem.length) return;
+    try {
+        const r = await fetch(REORDER_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ordem})
+        });
+        const d = await r.json();
+        if (!r.ok || !d.sucesso) throw new Error(d.msg || 'Falha ao salvar ordem.');
+        await carregarParadas();
+    } catch(e) {
+        alertar(e.message || 'Nao foi possivel salvar a ordem da rota.', 'warn');
+    }
 }
 
 async function _obterPos() {
