@@ -210,6 +210,13 @@ def api_nfe_email_config():
         else:
             parar_scheduler()
 
+        if parcial.get("ENTRADA_CHAPA_EMAIL_ENABLED"):
+            try:
+                from ..services.entrada_chapa_email_service import executar_varredura_entradas_chapa
+                executar_varredura_entradas_chapa(usuario=session.get("username", "Sistema"), origem="Config")
+            except Exception:
+                current_app.logger.exception("Falha ao executar varredura de aviso de chapas apos salvar config")
+
     # Lê sempre do disco para evitar divergência entre workers (cada worker tem seu
     # próprio app.config em memória; sem isso, o worker que não salvou devolve valores
     # desatualizados logo após um POST de outro worker).
@@ -247,6 +254,14 @@ def api_nfe_email_scheduler_run_now():
     from ..services.nfe_email_scheduler import executar_ciclo
     resumo = executar_ciclo(current_app._get_current_object())
     return jsonify(resumo)
+
+
+@nfe_email_bp.route("/api/nfe/email/entrada-chapa/run-now", methods=["POST"])
+@roles_required("Admin")
+def api_entrada_chapa_run_now():
+    from ..services.entrada_chapa_email_service import executar_varredura_entradas_chapa
+    resumo = executar_varredura_entradas_chapa(usuario=session.get("username", "Sistema"), origem="Manual")
+    return jsonify({"ok": True, **resumo})
 
 
 @nfe_email_bp.route("/faturamento/emails-nfe", methods=["GET"])

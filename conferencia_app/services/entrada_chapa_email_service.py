@@ -86,9 +86,12 @@ def _post_bridge(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _entrada_local(numero_nota: str) -> dict[str, Any] | None:
-    itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status="Lancado").all()
-    if not itens:
-        itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status="Lançado").all()
+    itens = (
+        ItemNota.query
+        .filter(ItemNota.numero_nota == str(numero_nota))
+        .filter(ItemNota.status.in_(["Lançado", "LanÃ§ado", "Lancado"]))
+        .all()
+    )
     if not itens:
         return None
     numero_ar = next((str(i.numero_lancamento or "").strip() for i in itens if i.numero_lancamento), "")
@@ -114,7 +117,6 @@ def _entrada_local(numero_nota: str) -> dict[str, Any] | None:
             for i in itens
         ],
     }
-
 
 def _buscar_entrada(numero_nota: str, numero_ar: str | None = None, chave: str | None = None) -> dict[str, Any] | None:
     try:
@@ -342,3 +344,38 @@ def notificar_entrada_chapa_lancada(
         threading.Thread(target=_run, daemon=True, name=f"entrada-chapa-email-{numero_nota}").start()
         return {"sucesso": True, "pendente": True}
     return _run()
+
+
+def executar_varredura_entradas_chapa(usuario: str = "Sistema", origem: str = "Varredura") -> dict[str, Any]:
+    """Tenta enviar avisos para NFs ja lancadas no Sync.
+
+    Serve para quando a automacao e ativada depois que as NFs do dia ja foram
+    lancadas. A validacao fina de data de recebimento e lote continua vindo do ERP.
+    """
+    registros = (
+        db.session.query(ItemNota.numero_nota, ItemNota.numero_lancamento, ItemNota.chave_acesso)
+        .filter(ItemNota.status.in_(["Lançado", "LanÃ§ado", "Lancado"]))
+        .filter(ItemNota.numero_lancamento.isnot(None))
+        .distinct()
+        .all()
+    )
+    resumo = {"consultadas": 0, "enviadas": 0, "ignoradas": 0, "falhas": 0}
+    for numero_nota, numero_ar, chave in registros:
+        if not numero_nota:
+            continue
+        resumo["consultadas"] += 1
+        resultado = notificar_entrada_chapa_lancada(
+            str(numero_nota),
+            numero_ar=str(numero_ar or ""),
+            chave=str(chave or ""),
+            usuario=usuario,
+            origem=origem,
+            assincrono=False,
+        )
+        if resultado.get("sucesso") and resultado.get("log_id") and not resultado.get("ignorado"):
+            resumo["enviadas"] += 1
+        elif resultado.get("sucesso"):
+            resumo["ignoradas"] += 1
+        else:
+            resumo["falhas"] += 1
+    return resumo

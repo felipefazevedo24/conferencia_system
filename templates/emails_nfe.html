@@ -419,6 +419,16 @@
             <input id="cfg-chapa-controles" type="text" placeholder="1, 3">
           </div>
         </div>
+
+        <div class="cfg-row">
+          <div class="cfg-row-label">
+            Enviar pendentes de hoje
+            <small>Procura NFs ja lancadas e envia os avisos que ainda nao foram disparados.</small>
+          </div>
+          <div class="cfg-row-control">
+            <button class="btn ghost" type="button" onclick="rodarEntradaChapaAgora()">Executar aviso de chapas agora</button>
+          </div>
+        </div>
       </section>
       <section class="cfg-section">
         <h4 class="cfg-section-title">Status do agendador</h4>
@@ -842,6 +852,16 @@ async function rodarAgora() {
     carregarSchedulerStatus();
   } else {
     alert('Erro: ' + (data.erro || 'desconhecido'));
+  }
+}
+
+async function rodarEntradaChapaAgora() {
+  const r = await fetch('/api/nfe/email/entrada-chapa/run-now', {method: 'POST'});
+  const data = await r.json();
+  if (data.ok) {
+    alert(`Aviso de chapas: ${data.enviadas} enviados, ${data.ignoradas} ignorados, ${data.falhas} falhas.`);
+  } else {
+    alert('Erro ao executar aviso de chapas.');
   }
 }
 
