@@ -214,43 +214,42 @@ def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]
         lote = item.get("lote") or entrada.get("numero_ar") or "Nao informado"
         natureza = item.get("natureza_operacao") or item.get("cfop") or "-"
         linhas.append(
-            "<tr>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(item.get('cod_interno') or '-')}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(item.get('descricao') or '-')}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_fmt_qtd(item.get('quantidade'))} {_texto(item.get('unidade') or '')}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(natureza)}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef;font-weight:700\">{_texto(lote)}</td>"
+            "<tr style=\"background:#ffffff;color:#1f2937\">"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(item.get('cod_interno') or '-')}</td>"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(item.get('descricao') or '-')}</td>"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_fmt_qtd(item.get('quantidade'))} {_texto(item.get('unidade') or '')}</td>"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(natureza)}</td>"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#0f172a;font-weight:700\">{_texto(lote)}</td>"
             "</tr>"
         )
     numero_ar = entrada.get("numero_ar") or "Nao informado"
     return f"""\
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 12px">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
-  <div style="max-width:760px;width:100%;margin:auto;background:#fff;border:1px solid #d7e0ea;border-radius:10px;overflow:hidden">
+<head><meta charset="UTF-8"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+<body style="margin:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 12px;color-scheme:light">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8"><tr><td align="center" style="background:#eef3f8">
+  <div style="max-width:760px;width:100%;margin:auto;background:#ffffff;border:1px solid #d7e0ea;border-radius:10px;overflow:hidden">
     <div style="background:#173a5e;color:#fff;padding:20px 26px">
       <div style="font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#b8d7f2;font-weight:700">Controle de aviso de recebimento</div>
-      <h2 style="margin:4px 0 0;font-size:22px;line-height:1.25">Entrada de chapa/barra lan&ccedil;ada</h2>
-      <div style="font-size:13px;color:#dbeafe;margin-top:5px">NF {_texto(entrada.get('numero_nota') or '-')} &bull; AR/Lote {_texto(numero_ar)}</div>
+      <h2 style="margin:5px 0 0;font-size:21px;line-height:1.25;color:#ffffff">RECEBIMENTO DE MATERIAIS COM CONTROLE DE LOTE</h2>
     </div>
-    <div style="padding:22px 26px">
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155">Uma nota fiscal com controle de lote foi lan&ccedil;ada no ERP e precisa de acompanhamento do recebimento.</p>
-      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0 18px;font-size:13px">
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700;width:170px">NF</td><td style="padding:10px;border:1px solid #dbe3ef">{_texto(entrada.get('numero_nota') or '-')}</td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">AR / lote</td><td style="padding:10px;border:1px solid #dbe3ef"><strong>{_texto(numero_ar)}</strong></td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Cliente/fornecedor</td><td style="padding:10px;border:1px solid #dbe3ef">{_texto(entrada.get('parceiro_nome') or '-')}</td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Data de recebimento</td><td style="padding:10px;border:1px solid #dbe3ef">{_fmt_data(entrada.get('dt_recebimento'))}</td></tr>
+    <div style="padding:22px 26px;background:#ffffff;color:#0f172a">
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155">Uma nota fiscal com controle de lote foi lan&ccedil;ada no GRV e precisa ser identificada com a etiqueta.</p>
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0 18px;font-size:13px;background:#ffffff;color:#1f2937">
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f3f7fb;color:#0f172a;font-weight:700;width:170px">NF</td><td style="padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937">{_texto(entrada.get('numero_nota') or '-')}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f3f7fb;color:#0f172a;font-weight:700">AR / lote</td><td style="padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#0f172a"><strong>{_texto(numero_ar)}</strong></td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f3f7fb;color:#0f172a;font-weight:700">Cliente/fornecedor</td><td style="padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937">{_texto(entrada.get('parceiro_nome') or '-')}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f3f7fb;color:#0f172a;font-weight:700">Data de recebimento</td><td style="padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937">{_fmt_data(entrada.get('dt_recebimento'))}</td></tr>
       </table>
-      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12.5px">
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12.5px;background:#ffffff;color:#1f2937">
         <thead>
           <tr style="background:#173a5e;color:#fff;text-align:left">
-            <th style="padding:9px;border:1px solid #173a5e">C&oacute;digo</th>
-            <th style="padding:9px;border:1px solid #173a5e">Descri&ccedil;&atilde;o</th>
-            <th style="padding:9px;border:1px solid #173a5e">Quantidade</th>
-            <th style="padding:9px;border:1px solid #173a5e">Natureza da opera&ccedil;&atilde;o</th>
-            <th style="padding:9px;border:1px solid #173a5e">AR/Lote</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">C&oacute;digo</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Descri&ccedil;&atilde;o</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Quantidade</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Natureza da opera&ccedil;&atilde;o</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">AR/Lote</th>
           </tr>
         </thead>
         <tbody>{''.join(linhas)}</tbody>
@@ -277,7 +276,7 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
     if existente and existente.status == "Enviado":
         return {"sucesso": True, "ignorado": True, "log_id": existente.id}
 
-    assunto = f"NF {numero_nota} lancada - AR {numero_ar or 'Nao informado'} - chapa/barra"
+    assunto = f"CONTROLE DE LOTE - NF {numero_nota} - AR {numero_ar or 'Nao informado'}"
     log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=datetime.now())
     log.chave_acesso = str(entrada.get("chave_acesso") or "")[:44]
     log.parceiro_nome = str(entrada.get("parceiro_nome") or "")[:220]
