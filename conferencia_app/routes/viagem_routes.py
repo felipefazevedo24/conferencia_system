@@ -278,6 +278,8 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
         except Exception:
             out["motorista_link"] = f"/motorista/viagem/{v.id}/{_token_motorista(v.id)}"
         paradas_regs = ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
+        if _geocodificar_paradas_sem_coord(paradas_regs):
+            db.session.commit()
         out["paradas"] = [_parada_dict(p) for p in paradas_regs]
         out["checklist_liberacao"] = _checklist_liberacao(v, paradas_regs)
         out["eventos"] = [_evento_dict(e) for e in ViagemEvento.query.filter_by(viagem_id=v.id).order_by(ViagemEvento.registrado_em).all()]
@@ -382,14 +384,41 @@ def _endereco_parada(parada: ViagemParada) -> str:
     })
 
 
+def _enderecos_candidatos_parada(parada: ViagemParada) -> list[str]:
+    endereco = str(parada.endereco or "").strip()
+    cidade = str(parada.cidade or "").strip()
+    uf = str(parada.uf or "").strip()
+    candidatos = [
+        _endereco_parada(parada),
+        ", ".join(p for p in [endereco, cidade, uf, "Brasil"] if p),
+        ", ".join(p for p in [endereco, cidade, "São Paulo", "Brasil"] if p and uf.upper() == "SP"),
+        ", ".join(p for p in [parada.parceiro_nome, endereco, cidade, uf, "Brasil"] if p),
+    ]
+    vistos = set()
+    saida = []
+    for candidato in candidatos:
+        candidato = " ".join(str(candidato or "").split()).strip(" ,")
+        chave = candidato.lower()
+        if candidato and chave not in vistos:
+            vistos.add(chave)
+            saida.append(candidato)
+    return saida
+
+
 def _geocodificar_parada(parada: ViagemParada) -> bool:
     if parada.latitude is not None and parada.longitude is not None:
         return False
-    endereco = _endereco_parada(parada)
-    if not endereco:
-        return False
-    geo = _geocode_endereco(endereco)
+    geo = None
+    for endereco in _enderecos_candidatos_parada(parada):
+        geo = _geocode_endereco(endereco)
+        if geo:
+            break
     if not geo:
+        current_app.logger.warning(
+            "Nao foi possivel geocodificar parada %s: %s",
+            parada.id,
+            " | ".join(_enderecos_candidatos_parada(parada)),
+        )
         return False
     parada.latitude = geo.get("lat")
     parada.longitude = geo.get("lng")
@@ -1585,6 +1614,36 @@ def otimizar_rota(vid: int):
     )
     db.session.commit()
     return jsonify({"sucesso": True, **{k: v for k, v in r.items() if k != "ok"}})
+
+
+@viagem_bp.route("/<int:vid>/geocodificar-paradas", methods=["POST"])
+@permission_required(PERM)
+def geocodificar_paradas_viagem(vid: int):
+    v = db.session.get(Viagem, vid)
+    if not v:
+        return jsonify({"sucesso": False, "msg": "Viagem nao encontrada."}), 404
+    paradas = ViagemParada.query.filter_by(viagem_id=vid).order_by(ViagemParada.sequencia).all()
+    sem_coord = [p for p in paradas if p.latitude is None or p.longitude is None]
+    atualizadas = _geocodificar_paradas_sem_coord(sem_coord)
+    if atualizadas:
+        _log_evento(
+            vid,
+            "OBSERVACAO",
+            "Coordenadas atualizadas",
+            descricao=f"{atualizadas} parada(s) receberam coordenadas pelo endereco.",
+            severidade="info",
+        )
+        db.session.commit()
+    ainda_sem = [
+        {"id": p.id, "sequencia": p.sequencia, "endereco": _endereco_parada(p)}
+        for p in paradas
+        if p.latitude is None or p.longitude is None
+    ]
+    return jsonify({
+        "sucesso": True,
+        "atualizadas": atualizadas,
+        "sem_coordenadas": ainda_sem,
+    })
 
 
 @viagem_bp.route("/<int:vid>/paradas/reordenar", methods=["POST"])

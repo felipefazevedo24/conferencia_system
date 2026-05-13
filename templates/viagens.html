@@ -165,21 +165,6 @@
     .doc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .doc-form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
-    .doc-entry-shell.viagens-refresh { color: #102033; }
-    .doc-entry-shell.viagens-refresh .doc-entry-hero {
-        background: linear-gradient(135deg, #ffffff 0%, #eef6ff 100%);
-        border-bottom-color: #0f62c9;
-        border-radius: 18px;
-    }
-    .doc-entry-shell.viagens-refresh .doc-kicker { color: #0f62c9; }
-    .doc-entry-shell.viagens-refresh .doc-btn-primary,
-    .doc-entry-shell.viagens-refresh .doc-kpi-icon.primary { background: linear-gradient(135deg, #0f62c9, #173a5e); }
-    .doc-entry-shell.viagens-refresh .doc-btn-secondary { color: #0f62c9; border-color: #0f62c9; }
-    .doc-entry-shell.viagens-refresh .viagem-card.selected { background: #e6f0fb; border-left-color: #0f62c9; }
-    .doc-entry-shell.viagens-refresh .vc-code,
-    .doc-entry-shell.viagens-refresh .vc-meta i { color: #0f62c9; }
-    .doc-entry-shell.viagens-refresh .doc-panel { border-radius: 12px; }
-
     .sol-pick-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--doc-border); border-radius: 8px; padding: 6px; background: #fafbff; }
     .sol-pick { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; align-items: center; font-size: 12px; }
     .sol-pick:hover { background: #eef3ff; }
@@ -334,7 +319,7 @@
     <button class="main-page-tab" id="tab-btn-solicitacoes" onclick="switchTab('solicitacoes')"><i class="fa-solid fa-clipboard-list"></i> Solicitações de Transporte</button>
 </div>
 <div id="pane-viagens">
-<div class="doc-entry-shell viagens-refresh">
+<div class="doc-entry-shell">
     <div class="doc-entry-hero">
         <div>
             <div class="doc-kicker"><i class="fa-solid fa-route"></i> Logística · Gestão de Viagens</div>
@@ -1687,8 +1672,14 @@ async function importarRota(veiculoId, data) {
 }
 
 async function otimizarRota(vid) {
+    return otimizarRotaComGeocode(vid);
+}
+
+async function otimizarRotaComGeocode(vid) {
     if (!confirm('Reordenar automaticamente as paradas pendentes pela menor distância entre elas?')) return;
     try {
+        const geo = await apiSend(`/api/viagem/${vid}/geocodificar-paradas`, 'POST', {});
+        if (geo.atualizadas) toast(`${geo.atualizadas} parada(s) receberam coordenadas.`, 'success');
         const res = await apiSend(`/api/viagem/${vid}/otimizar-rota`, 'POST', {});
         toast(res.msg || 'Rota otimizada.', 'success');
         await abrirDetalhe(vid);
