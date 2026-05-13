@@ -331,9 +331,11 @@ NFE_EMITIDA_SQL = """
 
 ENTRADA_CHAPA_SQL = """
     select
-        c.codigo::text as numero_ar,
+        c.codigo::text as codigo_lancamento,
+        coalesce(nullif(c.romaneio, ''), nullif(lot.descricao, ''), '') as numero_ar,
         c.n_nf::text as numero_nota,
         c.dt_nf,
+        c.dt_recebimento,
         c.dt_lancamento,
         coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
         coalesce(
@@ -348,13 +350,14 @@ ENTRADA_CHAPA_SQL = """
         coalesce(nullif(c.cfop, ''), '') as cfop_cabecalho,
         a.numero_item,
         coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop_item,
+        coalesce(nullif(a.descricao_cfop, ''), nullif(c.tipo_movimento, ''), nullif(c.codigo_movimentacao, '')) as natureza_operacao,
         coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
         coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
         coalesce(a.qtde, 0) as quantidade,
         coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
         coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
         coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
-        coalesce(nullif(a.lote, ''), '') as lote,
+        coalesce(nullif(a.lote, ''), nullif(lot.descricao, '')) as lote,
         a.guid_linha
     from public.tcompras c
     left join public.tfornece f
@@ -369,6 +372,9 @@ ENTRADA_CHAPA_SQL = """
     left join public.tproduto p
       on p.cod_empresa = a.cod_empresa
      and p.codigo = a.cod_produto
+    left join public.tcom_aux_loteserie lot
+      on lot.cod_empresa = a.cod_empresa
+     and lot.guid_pai = a.guid_linha
     where (
         (%s <> '' and c.codigo::text = %s)
         or (%s <> '' and c.n_nf::text = %s)
@@ -602,6 +608,7 @@ def create_app() -> Flask:
                 itens.append({
                     "numero_item": row.get("numero_item"),
                     "cfop": row.get("cfop_item") or row.get("cfop_cabecalho") or "",
+                    "natureza_operacao": row.get("natureza_operacao") or "",
                     "cod_interno": row.get("cod_interno") or "",
                     "descricao": row.get("descricao") or "",
                     "quantidade": row.get("quantidade") or 0,
@@ -612,9 +619,11 @@ def create_app() -> Flask:
                 })
 
             entrada = {
-                "numero_ar": cab.get("numero_ar") or numero_ar,
+                "codigo_lancamento": cab.get("codigo_lancamento") or numero_ar,
+                "numero_ar": next((r.get("numero_ar") for r in rows if r.get("numero_ar")), ""),
                 "numero_nota": cab.get("numero_nota") or numero_nota,
                 "dt_nf": _date_to_api(cab.get("dt_nf")),
+                "dt_recebimento": _date_to_api(cab.get("dt_recebimento")),
                 "dt_lancamento": _date_to_api(cab.get("dt_lancamento")),
                 "chave_acesso": cab.get("chave_acesso") or chave,
                 "parceiro_nome": cab.get("parceiro_nome") or "",

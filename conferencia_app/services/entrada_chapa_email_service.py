@@ -94,6 +94,7 @@ def _entrada_local(numero_nota: str) -> dict[str, Any] | None:
     numero_ar = next((str(i.numero_lancamento or "").strip() for i in itens if i.numero_lancamento), "")
     return {
         "numero_ar": numero_ar,
+        "codigo_lancamento": numero_ar,
         "numero_nota": str(numero_nota),
         "chave_acesso": next((i.chave_acesso for i in itens if i.chave_acesso), ""),
         "parceiro_nome": next((i.fornecedor for i in itens if i.fornecedor), ""),
@@ -101,6 +102,7 @@ def _entrada_local(numero_nota: str) -> dict[str, Any] | None:
         "itens": [
             {
                 "cfop": i.cfop or "",
+                "natureza_operacao": "",
                 "cod_interno": i.codigo or "",
                 "descricao": i.descricao or "",
                 "quantidade": i.qtd_real or 0,
@@ -171,7 +173,7 @@ def _parse_date(valor: Any) -> date | None:
 
 
 def _data_lancamento_valida(entrada: dict[str, Any]) -> bool:
-    data_ref = _parse_date(entrada.get("dt_lancamento")) or _parse_date(entrada.get("dt_nf"))
+    data_ref = _parse_date(entrada.get("dt_recebimento"))
     return bool(data_ref and data_ref >= DATA_MINIMA_ENTRADA_CHAPA)
 
 
@@ -180,46 +182,58 @@ def _fmt_data(valor: Any) -> str:
     return data.strftime("%d/%m/%Y") if data else "-"
 
 
+def _texto(valor: Any) -> str:
+    texto = str(valor or "")
+    return (
+        texto.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]) -> str:
     linhas = []
     for item in itens:
-        lote = item.get("lote") or entrada.get("numero_ar") or "-"
+        lote = item.get("lote") or entrada.get("numero_ar") or "Nao informado"
+        natureza = item.get("natureza_operacao") or item.get("cfop") or "-"
         linhas.append(
             "<tr>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('cod_interno') or '-'}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('descricao') or '-'}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_fmt_qtd(item.get('quantidade'))} {item.get('unidade') or ''}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('cfop') or '-'}</td>"
-            f"<td style=\"padding:9px;border:1px solid #dbe3ef;font-weight:700\">{lote}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(item.get('cod_interno') or '-')}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(item.get('descricao') or '-')}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_fmt_qtd(item.get('quantidade'))} {_texto(item.get('unidade') or '')}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_texto(natureza)}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef;font-weight:700\">{_texto(lote)}</td>"
             "</tr>"
         )
+    numero_ar = entrada.get("numero_ar") or "Nao informado"
     return f"""\
 <!doctype html>
 <html lang="pt-BR">
+<head><meta charset="UTF-8"></head>
 <body style="margin:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 12px">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
   <div style="max-width:760px;width:100%;margin:auto;background:#fff;border:1px solid #d7e0ea;border-radius:10px;overflow:hidden">
     <div style="background:#173a5e;color:#fff;padding:20px 26px">
       <div style="font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#b8d7f2;font-weight:700">Controle de aviso de recebimento</div>
-      <h2 style="margin:4px 0 0;font-size:22px;line-height:1.25">Entrada de chapa/barra lançada</h2>
-      <div style="font-size:13px;color:#dbeafe;margin-top:5px">NF {entrada.get('numero_nota') or '-'} &bull; AR/Lote {entrada.get('numero_ar') or '-'}</div>
+      <h2 style="margin:4px 0 0;font-size:22px;line-height:1.25">Entrada de chapa/barra lan&ccedil;ada</h2>
+      <div style="font-size:13px;color:#dbeafe;margin-top:5px">NF {_texto(entrada.get('numero_nota') or '-')} &bull; AR/Lote {_texto(numero_ar)}</div>
     </div>
     <div style="padding:22px 26px">
-      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155">Uma nota fiscal com controle de lote foi lançada no ERP e precisa de acompanhamento do recebimento.</p>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155">Uma nota fiscal com controle de lote foi lan&ccedil;ada no ERP e precisa de acompanhamento do recebimento.</p>
       <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0 18px;font-size:13px">
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700;width:170px">NF</td><td style="padding:10px;border:1px solid #dbe3ef">{entrada.get('numero_nota') or '-'}</td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">AR / lote</td><td style="padding:10px;border:1px solid #dbe3ef"><strong>{entrada.get('numero_ar') or '-'}</strong></td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Cliente/fornecedor</td><td style="padding:10px;border:1px solid #dbe3ef">{entrada.get('parceiro_nome') or '-'}</td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Data de lançamento</td><td style="padding:10px;border:1px solid #dbe3ef">{_fmt_data(entrada.get('dt_lancamento') or entrada.get('dt_nf'))}</td></tr>
-        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">CFOPs</td><td style="padding:10px;border:1px solid #dbe3ef">{', '.join(cfops) or '-'}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700;width:170px">NF</td><td style="padding:10px;border:1px solid #dbe3ef">{_texto(entrada.get('numero_nota') or '-')}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">AR / lote</td><td style="padding:10px;border:1px solid #dbe3ef"><strong>{_texto(numero_ar)}</strong></td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Cliente/fornecedor</td><td style="padding:10px;border:1px solid #dbe3ef">{_texto(entrada.get('parceiro_nome') or '-')}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Data de recebimento</td><td style="padding:10px;border:1px solid #dbe3ef">{_fmt_data(entrada.get('dt_recebimento'))}</td></tr>
       </table>
       <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12.5px">
         <thead>
           <tr style="background:#173a5e;color:#fff;text-align:left">
-            <th style="padding:9px;border:1px solid #173a5e">Código</th>
-            <th style="padding:9px;border:1px solid #173a5e">Descrição</th>
+            <th style="padding:9px;border:1px solid #173a5e">C&oacute;digo</th>
+            <th style="padding:9px;border:1px solid #173a5e">Descri&ccedil;&atilde;o</th>
             <th style="padding:9px;border:1px solid #173a5e">Quantidade</th>
-            <th style="padding:9px;border:1px solid #173a5e">CFOP</th>
+            <th style="padding:9px;border:1px solid #173a5e">Natureza da opera&ccedil;&atilde;o</th>
             <th style="padding:9px;border:1px solid #173a5e">AR/Lote</th>
           </tr>
         </thead>
@@ -234,7 +248,6 @@ def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]
 </body>
 </html>"""
 
-
 def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str], usuario: str, origem: str) -> dict:
     destinatarios = _split_emails(app.config.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS"))
     cc = _split_emails(app.config.get("ENTRADA_CHAPA_EMAIL_CC"))
@@ -243,12 +256,13 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
 
     numero_nota = str(entrada.get("numero_nota") or "").strip()
     numero_ar = str(entrada.get("numero_ar") or "").strip()
-    existente = EmailEntradaChapa.query.filter_by(numero_nota=numero_nota, numero_ar=numero_ar).first()
+    numero_ar_log = (numero_ar or "Nao informado")[:80]
+    existente = EmailEntradaChapa.query.filter_by(numero_nota=numero_nota, numero_ar=numero_ar_log).first()
     if existente and existente.status == "Enviado":
         return {"sucesso": True, "ignorado": True, "log_id": existente.id}
 
-    assunto = f"NF {numero_nota} lançada - AR {numero_ar} - chapa/barra"
-    log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar, criado_em=datetime.now())
+    assunto = f"NF {numero_nota} lancada - AR {numero_ar or 'Nao informado'} - chapa/barra"
+    log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=datetime.now())
     log.chave_acesso = str(entrada.get("chave_acesso") or "")[:44]
     log.parceiro_nome = str(entrada.get("parceiro_nome") or "")[:220]
     log.cfops = ", ".join(cfops)[:120]
@@ -277,7 +291,7 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
         msg["To"] = ", ".join(destinatarios)
         if cc:
             msg["Cc"] = ", ".join(cc)
-        msg.attach(MIMEText(f"NF {numero_nota} lançada. AR/lote: {numero_ar}.", "plain", "utf-8"))
+        msg.attach(MIMEText(f"NF {numero_nota} lancada. AR/lote: {numero_ar or 'Nao informado'}.", "plain", "utf-8"))
         msg.attach(MIMEText(_html(entrada, itens, cfops), "html", "utf-8"))
 
         with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
