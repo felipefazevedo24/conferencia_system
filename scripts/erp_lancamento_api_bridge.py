@@ -329,6 +329,56 @@ NFE_EMITIDA_SQL = """
 """
 
 
+ENTRADA_CHAPA_SQL = """
+    select
+        c.codigo::text as numero_ar,
+        c.n_nf::text as numero_nota,
+        c.dt_nf,
+        c.dt_lancamento,
+        coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
+        coalesce(
+            nullif(c.fornecedor, ''),
+            nullif(c.cliente, ''),
+            nullif(f.razao_social, ''),
+            nullif(f.nome, ''),
+            nullif(cli.razao_social, ''),
+            nullif(cli.nome, '')
+        ) as parceiro_nome,
+        coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, '')) as parceiro_documento,
+        coalesce(nullif(c.cfop, ''), '') as cfop_cabecalho,
+        a.numero_item,
+        coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop_item,
+        coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
+        coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
+        coalesce(a.qtde, 0) as quantidade,
+        coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
+        coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
+        coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
+        coalesce(nullif(a.lote, ''), '') as lote,
+        a.guid_linha
+    from public.tcompras c
+    left join public.tfornece f
+      on f.cod_empresa = c.cod_empresa
+     and f.codigo = c.cod_fornecedor
+    left join public.tcliente cli
+      on cli.cod_empresa = c.cod_empresa
+     and cli.codigo = c.cod_cliente
+    left join public.tcom_aux a
+      on a.cod_empresa = c.cod_empresa
+     and a.realciona_auto = c.codigo
+    left join public.tproduto p
+      on p.cod_empresa = a.cod_empresa
+     and p.codigo = a.cod_produto
+    where (
+        (%s <> '' and c.codigo::text = %s)
+        or (%s <> '' and c.n_nf::text = %s)
+        or (%s <> '' and regexp_replace(coalesce(c.chv_nfe, ''), '\\D', '', 'g') = %s)
+    )
+    order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
+    limit 200
+"""
+
+
 def _authorized(cfg: dict[str, Any]) -> bool:
     token = str(cfg.get("token") or "")
     if not token:
@@ -517,6 +567,64 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "nota": nota})
         except Exception as exc:
             app.logger.exception("Falha ao consultar NF-e emitida no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/entrada-chapa")
+    def consultar_entrada_chapa():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            numero_ar = str(payload.get("numero_ar") or payload.get("codigo_lancamento") or "").strip()
+            numero_nota = str(payload.get("numero_nota") or "").strip()
+            chave = "".join(ch for ch in str(payload.get("chave") or "") if ch.isdigit())
+            if not numero_ar and not numero_nota and not chave:
+                return jsonify({"sucesso": False, "erro": "numero_ar_numero_nota_ou_chave_obrigatorio"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(ENTRADA_CHAPA_SQL, (numero_ar, numero_ar, numero_nota, numero_nota, chave, chave))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            if not rows:
+                return jsonify({"sucesso": True, "entrada": None})
+
+            cab = rows[0]
+            itens = []
+            for row in rows:
+                if not row.get("cod_interno") and not row.get("descricao"):
+                    continue
+                itens.append({
+                    "numero_item": row.get("numero_item"),
+                    "cfop": row.get("cfop_item") or row.get("cfop_cabecalho") or "",
+                    "cod_interno": row.get("cod_interno") or "",
+                    "descricao": row.get("descricao") or "",
+                    "quantidade": row.get("quantidade") or 0,
+                    "unidade": row.get("unidade") or "",
+                    "tipo_controle": row.get("tipo_controle") or 0,
+                    "controle_lote_serie": row.get("controle_lote_serie") or 0,
+                    "lote": row.get("lote") or "",
+                })
+
+            entrada = {
+                "numero_ar": cab.get("numero_ar") or numero_ar,
+                "numero_nota": cab.get("numero_nota") or numero_nota,
+                "dt_nf": _date_to_api(cab.get("dt_nf")),
+                "dt_lancamento": _date_to_api(cab.get("dt_lancamento")),
+                "chave_acesso": cab.get("chave_acesso") or chave,
+                "parceiro_nome": cab.get("parceiro_nome") or "",
+                "parceiro_documento": cab.get("parceiro_documento") or "",
+                "cfop_cabecalho": cab.get("cfop_cabecalho") or "",
+                "itens": itens,
+            }
+            return jsonify({"sucesso": True, "entrada": entrada})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar entrada de chapa no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     return app

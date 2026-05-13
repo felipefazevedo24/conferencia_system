@@ -179,6 +179,28 @@ def api_nfe_email_config():
             if isinstance(valor, list):
                 valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
             parcial["NFE_EMAIL_DESTINATARIOS_ESPECIAIS"] = str(valor or "").strip()
+        if "entrada_chapa_enabled" in payload:
+            parcial["ENTRADA_CHAPA_EMAIL_ENABLED"] = bool(payload["entrada_chapa_enabled"])
+        if "entrada_chapa_destinatarios" in payload:
+            valor = payload["entrada_chapa_destinatarios"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
+            parcial["ENTRADA_CHAPA_EMAIL_DESTINATARIOS"] = str(valor or "").strip()
+        if "entrada_chapa_cc" in payload:
+            valor = payload["entrada_chapa_cc"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(e).strip() for e in valor if str(e).strip()])
+            parcial["ENTRADA_CHAPA_EMAIL_CC"] = str(valor or "").strip()
+        if "entrada_chapa_cfops" in payload:
+            valor = payload["entrada_chapa_cfops"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(c).strip() for c in valor if str(c).strip()])
+            parcial["ENTRADA_CHAPA_CFOPS"] = str(valor or "").strip()
+        if "entrada_chapa_controles" in payload:
+            valor = payload["entrada_chapa_controles"]
+            if isinstance(valor, list):
+                valor = ", ".join([str(c).strip() for c in valor if str(c).strip()])
+            parcial["ENTRADA_CHAPA_CONTROLE_LOTE_VALORES"] = str(valor or "").strip()
         salvar_persistido(parcial)
 
         # Se ligou/desligou auto_enabled, garante que o scheduler esta na situacao correta
@@ -204,6 +226,11 @@ def api_nfe_email_config():
         "poll_intervalo": int(current_app.config.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", 300)),
         "cfops_especiais": current_app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS", ""),
         "destinatarios_especiais": current_app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", ""),
+        "entrada_chapa_enabled": bool(current_app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True)),
+        "entrada_chapa_destinatarios": current_app.config.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", ""),
+        "entrada_chapa_cc": current_app.config.get("ENTRADA_CHAPA_EMAIL_CC", ""),
+        "entrada_chapa_cfops": current_app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915"),
+        "entrada_chapa_controles": current_app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3"),
     })
 
 

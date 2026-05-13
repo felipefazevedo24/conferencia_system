@@ -471,6 +471,17 @@ def executar_ciclo() -> dict[str, Any]:
                 total_lancadas += 1
                 _limpar_status(n_nf)
                 _enfileirar_wms_se_disponivel(n_nf, usuario)
+                try:
+                    from .entrada_chapa_email_service import notificar_entrada_chapa_lancada
+                    notificar_entrada_chapa_lancada(
+                        str(n_nf),
+                        numero_ar=str(codigo),
+                        usuario=usuario,
+                        origem="Auto",
+                        assincrono=False,
+                    )
+                except Exception:
+                    logger.exception("Falha ao acionar aviso de entrada de chapa NF %s", n_nf)
                 logger.info(
                     "ERP Lancamento: NF %s lancada automaticamente (codigo=%s, %d itens, manifestada).",
                     n_nf,

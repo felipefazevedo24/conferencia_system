@@ -1,0 +1,330 @@
+"""Aviso de entrada fiscal de chapas/barras com controle de lote."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import smtplib
+import threading
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+import requests
+from flask import current_app
+
+from ..extensions import db
+from ..models import EmailEntradaChapa, ItemNota
+
+DATA_MINIMA_ENTRADA_CHAPA = date(2026, 5, 13)
+
+
+def _split_lista(valor: str | None) -> list[str]:
+    itens: list[str] = []
+    for parte in re.split(r"[,;\s]+", str(valor or "")):
+        parte = parte.strip()
+        if parte and parte not in itens:
+            itens.append(parte)
+    return itens
+
+
+def _split_emails(valor: str | None) -> list[str]:
+    return [e for e in _split_lista(valor) if "@" in e and "." in e]
+
+
+def _cfg_bridge(app) -> dict[str, Any]:
+    path = Path(app.instance_path) / "erp_lancamento_config.json"
+    arquivo: dict[str, Any] = {}
+    if path.exists():
+        try:
+            arquivo = json.loads(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            arquivo = {}
+    return {
+        "api_url": str(
+            os.environ.get("ERP_LANCAMENTO_API_URL")
+            or arquivo.get("api_url")
+            or app.config.get("ERP_LANCAMENTO_API_URL")
+            or ""
+        ).strip().rstrip("/"),
+        "api_token": str(
+            os.environ.get("ERP_LANCAMENTO_API_TOKEN")
+            or arquivo.get("api_token")
+            or app.config.get("ERP_LANCAMENTO_API_TOKEN")
+            or ""
+        ),
+        "timeout": int(
+            os.environ.get("ERP_LANCAMENTO_API_TIMEOUT")
+            or arquivo.get("api_timeout")
+            or app.config.get("ERP_LANCAMENTO_API_TIMEOUT")
+            or 30
+        ),
+    }
+
+
+def _post_bridge(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    app = current_app._get_current_object()
+    cfg = _cfg_bridge(app)
+    if not cfg["api_url"]:
+        raise ValueError("ERP_LANCAMENTO_API_URL/api_url nao configurada.")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/Entrada-Chapa",
+    }
+    if cfg["api_token"]:
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    resp = requests.post(f"{cfg['api_url']}{path}", headers=headers, json=payload, timeout=cfg["timeout"])
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API ERP."))
+    return data
+
+
+def _entrada_local(numero_nota: str) -> dict[str, Any] | None:
+    itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status="Lancado").all()
+    if not itens:
+        itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status="Lançado").all()
+    if not itens:
+        return None
+    numero_ar = next((str(i.numero_lancamento or "").strip() for i in itens if i.numero_lancamento), "")
+    return {
+        "numero_ar": numero_ar,
+        "numero_nota": str(numero_nota),
+        "chave_acesso": next((i.chave_acesso for i in itens if i.chave_acesso), ""),
+        "parceiro_nome": next((i.fornecedor for i in itens if i.fornecedor), ""),
+        "cfop_cabecalho": "",
+        "itens": [
+            {
+                "cfop": i.cfop or "",
+                "cod_interno": i.codigo or "",
+                "descricao": i.descricao or "",
+                "quantidade": i.qtd_real or 0,
+                "unidade": i.unidade_comercial or "",
+                "controle_lote_serie": 0,
+                "tipo_controle": 0,
+                "lote": "",
+            }
+            for i in itens
+        ],
+    }
+
+
+def _buscar_entrada(numero_nota: str, numero_ar: str | None = None, chave: str | None = None) -> dict[str, Any] | None:
+    try:
+        data = _post_bridge(
+            "/api/erp/entrada-chapa",
+            {"numero_nota": numero_nota, "numero_ar": numero_ar or "", "chave": chave or ""},
+        )
+        entrada = data.get("entrada")
+        if isinstance(entrada, dict):
+            return entrada
+    except Exception as exc:
+        current_app.logger.warning("Entrada chapa: falha ao consultar bridge, usando dados locais: %s", exc)
+    return _entrada_local(numero_nota)
+
+
+def _eh_entrada_chapa(entrada: dict[str, Any], app) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    cfops_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915")))
+    controles_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")))
+    itens = [i for i in (entrada.get("itens") or []) if isinstance(i, dict)]
+    itens_relevantes = []
+    cfops_encontrados = set()
+
+    for item in itens:
+        cfop = str(item.get("cfop") or entrada.get("cfop_cabecalho") or "").strip()[:4]
+        controle = str(item.get("controle_lote_serie") or "").strip()
+        if cfop:
+            cfops_encontrados.add(cfop)
+        if (cfop and cfop in cfops_alvo) or (controle and controle in controles_alvo):
+            itens_relevantes.append(item)
+
+    if not itens_relevantes and str(entrada.get("cfop_cabecalho") or "").strip()[:4] in cfops_alvo:
+        itens_relevantes = itens
+
+    return bool(itens_relevantes), sorted(cfops_encontrados), itens_relevantes
+
+
+def _fmt_qtd(valor: Any) -> str:
+    try:
+        num = float(valor or 0)
+        return f"{num:,.3f}".replace(",", "X").replace(".", ",").replace("X", ".").rstrip("0").rstrip(",")
+    except Exception:
+        return str(valor or "0")
+
+
+def _parse_date(valor: Any) -> date | None:
+    if not valor:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    try:
+        return datetime.fromisoformat(str(valor)[:10]).date()
+    except Exception:
+        return None
+
+
+def _data_lancamento_valida(entrada: dict[str, Any]) -> bool:
+    data_ref = _parse_date(entrada.get("dt_lancamento")) or _parse_date(entrada.get("dt_nf"))
+    return bool(data_ref and data_ref >= DATA_MINIMA_ENTRADA_CHAPA)
+
+
+def _fmt_data(valor: Any) -> str:
+    data = _parse_date(valor)
+    return data.strftime("%d/%m/%Y") if data else "-"
+
+
+def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]) -> str:
+    linhas = []
+    for item in itens:
+        lote = item.get("lote") or entrada.get("numero_ar") or "-"
+        linhas.append(
+            "<tr>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('cod_interno') or '-'}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('descricao') or '-'}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{_fmt_qtd(item.get('quantidade'))} {item.get('unidade') or ''}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef\">{item.get('cfop') or '-'}</td>"
+            f"<td style=\"padding:9px;border:1px solid #dbe3ef;font-weight:700\">{lote}</td>"
+            "</tr>"
+        )
+    return f"""\
+<!doctype html>
+<html lang="pt-BR">
+<body style="margin:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 12px">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
+  <div style="max-width:760px;width:100%;margin:auto;background:#fff;border:1px solid #d7e0ea;border-radius:10px;overflow:hidden">
+    <div style="background:#173a5e;color:#fff;padding:20px 26px">
+      <div style="font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#b8d7f2;font-weight:700">Controle de aviso de recebimento</div>
+      <h2 style="margin:4px 0 0;font-size:22px;line-height:1.25">Entrada de chapa/barra lançada</h2>
+      <div style="font-size:13px;color:#dbeafe;margin-top:5px">NF {entrada.get('numero_nota') or '-'} &bull; AR/Lote {entrada.get('numero_ar') or '-'}</div>
+    </div>
+    <div style="padding:22px 26px">
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155">Uma nota fiscal com controle de lote foi lançada no ERP e precisa de acompanhamento do recebimento.</p>
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:14px 0 18px;font-size:13px">
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700;width:170px">NF</td><td style="padding:10px;border:1px solid #dbe3ef">{entrada.get('numero_nota') or '-'}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">AR / lote</td><td style="padding:10px;border:1px solid #dbe3ef"><strong>{entrada.get('numero_ar') or '-'}</strong></td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Cliente/fornecedor</td><td style="padding:10px;border:1px solid #dbe3ef">{entrada.get('parceiro_nome') or '-'}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">Data de lançamento</td><td style="padding:10px;border:1px solid #dbe3ef">{_fmt_data(entrada.get('dt_lancamento') or entrada.get('dt_nf'))}</td></tr>
+        <tr><td style="padding:10px;border:1px solid #dbe3ef;background:#f8fafc;font-weight:700">CFOPs</td><td style="padding:10px;border:1px solid #dbe3ef">{', '.join(cfops) or '-'}</td></tr>
+      </table>
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:12.5px">
+        <thead>
+          <tr style="background:#173a5e;color:#fff;text-align:left">
+            <th style="padding:9px;border:1px solid #173a5e">Código</th>
+            <th style="padding:9px;border:1px solid #173a5e">Descrição</th>
+            <th style="padding:9px;border:1px solid #173a5e">Quantidade</th>
+            <th style="padding:9px;border:1px solid #173a5e">CFOP</th>
+            <th style="padding:9px;border:1px solid #173a5e">AR/Lote</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(linhas)}</tbody>
+      </table>
+      <div style="margin-top:20px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;text-align:right">
+        Powered by <strong style="color:#173a5e">Columbia Sync</strong>
+      </div>
+    </div>
+  </div>
+  </td></tr></table>
+</body>
+</html>"""
+
+
+def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str], usuario: str, origem: str) -> dict:
+    destinatarios = _split_emails(app.config.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS"))
+    cc = _split_emails(app.config.get("ENTRADA_CHAPA_EMAIL_CC"))
+    if not destinatarios:
+        return {"sucesso": False, "erro": "ENTRADA_CHAPA_EMAIL_DESTINATARIOS nao configurado."}
+
+    numero_nota = str(entrada.get("numero_nota") or "").strip()
+    numero_ar = str(entrada.get("numero_ar") or "").strip()
+    existente = EmailEntradaChapa.query.filter_by(numero_nota=numero_nota, numero_ar=numero_ar).first()
+    if existente and existente.status == "Enviado":
+        return {"sucesso": True, "ignorado": True, "log_id": existente.id}
+
+    assunto = f"NF {numero_nota} lançada - AR {numero_ar} - chapa/barra"
+    log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar, criado_em=datetime.now())
+    log.chave_acesso = str(entrada.get("chave_acesso") or "")[:44]
+    log.parceiro_nome = str(entrada.get("parceiro_nome") or "")[:220]
+    log.cfops = ", ".join(cfops)[:120]
+    log.destinatarios = ", ".join(destinatarios + cc)
+    log.assunto = assunto
+    log.status = "Pendente"
+    log.erro_mensagem = None
+    log.disparado_por = usuario
+    log.origem = origem
+    if not existente:
+        db.session.add(log)
+    db.session.commit()
+
+    try:
+        sender = app.config.get("MAIL_SENDER") or ""
+        password = app.config.get("MAIL_PASSWORD") or ""
+        smtp_server = app.config.get("MAIL_SMTP_SERVER")
+        smtp_port = int(app.config.get("MAIL_SMTP_PORT", 587))
+        sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+        if not sender or not password:
+            raise RuntimeError("SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD).")
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = assunto
+        msg["From"] = f"{sender_name} <{sender}>"
+        msg["To"] = ", ".join(destinatarios)
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+        msg.attach(MIMEText(f"NF {numero_nota} lançada. AR/lote: {numero_ar}.", "plain", "utf-8"))
+        msg.attach(MIMEText(_html(entrada, itens, cfops), "html", "utf-8"))
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.send_message(msg)
+
+        log.status = "Enviado"
+        log.tentativas = (log.tentativas or 0) + 1
+        log.enviado_em = datetime.now()
+        db.session.commit()
+        return {"sucesso": True, "log_id": log.id}
+    except Exception as exc:
+        log.status = "Falha"
+        log.tentativas = (log.tentativas or 0) + 1
+        log.erro_mensagem = str(exc)[:800]
+        db.session.commit()
+        app.logger.exception("Falha ao enviar aviso de entrada de chapa NF %s", numero_nota)
+        return {"sucesso": False, "erro": str(exc), "log_id": log.id}
+
+
+def notificar_entrada_chapa_lancada(
+    numero_nota: str,
+    *,
+    numero_ar: str | None = None,
+    chave: str | None = None,
+    usuario: str = "Sistema",
+    origem: str = "Sistema",
+    assincrono: bool = True,
+) -> dict:
+    app = current_app._get_current_object()
+    if not app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True):
+        return {"sucesso": True, "ignorado": True, "motivo": "desabilitado"}
+
+    def _run() -> dict:
+        with app.app_context():
+            entrada = _buscar_entrada(str(numero_nota), numero_ar, chave)
+            if not entrada:
+                return {"sucesso": True, "ignorado": True, "motivo": "entrada_nao_encontrada"}
+            if not _data_lancamento_valida(entrada):
+                return {"sucesso": True, "ignorado": True, "motivo": "antes_de_2026_05_13"}
+            eh_chapa, cfops, itens = _eh_entrada_chapa(entrada, app)
+            if not eh_chapa:
+                return {"sucesso": True, "ignorado": True, "motivo": "nao_eh_chapa_lote"}
+            return _enviar_email(app, entrada, itens, cfops, usuario, origem)
+
+    if assincrono:
+        threading.Thread(target=_run, daemon=True, name=f"entrada-chapa-email-{numero_nota}").start()
+        return {"sucesso": True, "pendente": True}
+    return _run()

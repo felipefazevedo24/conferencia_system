@@ -443,6 +443,44 @@ def _ensure_item_nota_columns() -> None:
             "CREATE INDEX ix_boleto_conta_receber_cpf_cnpj_pagador ON boleto_conta_receber (cpf_cnpj_pagador)",
         )
 
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS email_entrada_chapa (
+                    id INTEGER PRIMARY KEY,
+                    numero_nota VARCHAR(60) NOT NULL,
+                    chave_acesso VARCHAR(44),
+                    numero_ar VARCHAR(80) NOT NULL,
+                    parceiro_nome VARCHAR(220),
+                    cfops VARCHAR(120),
+                    destinatarios VARCHAR(800) NOT NULL,
+                    assunto VARCHAR(300),
+                    status VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+                    tentativas INTEGER NOT NULL DEFAULT 0,
+                    erro_mensagem VARCHAR(800),
+                    disparado_por VARCHAR(100),
+                    origem VARCHAR(20) NOT NULL DEFAULT 'Sistema',
+                    criado_em DATETIME NOT NULL,
+                    enviado_em DATETIME,
+                    CONSTRAINT ux_email_entrada_chapa_nota_ar UNIQUE (numero_nota, numero_ar)
+                )
+                """
+            )
+        )
+        conn.commit()
+        _create_index_if_missing(
+            conn,
+            "email_entrada_chapa",
+            "ix_email_entrada_chapa_status",
+            "CREATE INDEX ix_email_entrada_chapa_status ON email_entrada_chapa (status)",
+        )
+        _create_index_if_missing(
+            conn,
+            "email_entrada_chapa",
+            "ix_email_entrada_chapa_criado_em",
+            "CREATE INDEX ix_email_entrada_chapa_criado_em ON email_entrada_chapa (criado_em)",
+        )
+
         cols_fat = _get_column_names("expedicao_faturamento")
         if "transporte_tipo" not in cols_fat:
             conn.execute(db.text("ALTER TABLE expedicao_faturamento ADD COLUMN transporte_tipo VARCHAR(20) DEFAULT 'Proprio'"))

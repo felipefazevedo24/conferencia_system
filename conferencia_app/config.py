@@ -153,6 +153,13 @@ class Config:
     NFE_EMAIL_CFOPS_ESPECIAIS = os.environ.get("NFE_EMAIL_CFOPS_ESPECIAIS", "")
     NFE_EMAIL_DESTINATARIOS_ESPECIAIS = os.environ.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", "")
 
+    # Aviso interno de entrada de chapas/barras com controle de lote.
+    ENTRADA_CHAPA_EMAIL_ENABLED = os.environ.get("ENTRADA_CHAPA_EMAIL_ENABLED", "1") == "1"
+    ENTRADA_CHAPA_EMAIL_DESTINATARIOS = os.environ.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", "fiscal@colmac.com")
+    ENTRADA_CHAPA_EMAIL_CC = os.environ.get("ENTRADA_CHAPA_EMAIL_CC", "")
+    ENTRADA_CHAPA_CFOPS = os.environ.get("ENTRADA_CHAPA_CFOPS", "1901,1915")
+    ENTRADA_CHAPA_CONTROLE_LOTE_VALORES = os.environ.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")
+
     # DANFE: usa por padrão a engine fiscal aprovada para o layout principal da NF.
     DANFE_PREFER_FISCAL_ENGINE = os.environ.get("DANFE_PREFER_FISCAL_ENGINE", "1") == "1"
 

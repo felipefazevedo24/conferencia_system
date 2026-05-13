@@ -1255,3 +1255,27 @@ class EmailNFEnviado(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     enviado_em = db.Column(db.DateTime)
 
+
+class EmailEntradaChapa(db.Model):
+    """Log/idempotencia do aviso de NF de entrada de chapa/barra com lote."""
+    __tablename__ = "email_entrada_chapa"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(60), nullable=False, index=True)
+    chave_acesso = db.Column(db.String(44), index=True)
+    numero_ar = db.Column(db.String(80), nullable=False, index=True)
+    parceiro_nome = db.Column(db.String(220))
+    cfops = db.Column(db.String(120))
+    destinatarios = db.Column(db.String(800), nullable=False)
+    assunto = db.Column(db.String(300))
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    tentativas = db.Column(db.Integer, nullable=False, default=0)
+    erro_mensagem = db.Column(db.String(800))
+    disparado_por = db.Column(db.String(100))
+    origem = db.Column(db.String(20), nullable=False, default="Sistema", index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    enviado_em = db.Column(db.DateTime)
+
+    __table_args__ = (
+        db.UniqueConstraint("numero_nota", "numero_ar", name="ux_email_entrada_chapa_nota_ar"),
+    )

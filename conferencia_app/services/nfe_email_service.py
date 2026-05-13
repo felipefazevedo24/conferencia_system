@@ -447,6 +447,7 @@ def enviar_nfe_por_email(
     origem: str = "Manual",
     conferencia_id: int | None = None,
     faturamento_id: int | None = None,
+    envio_assincrono: bool = True,
 ) -> dict:
     """Orquestra resolucao + download + envio. Retorna dict com resultado."""
     app = current_app._get_current_object()
@@ -605,20 +606,19 @@ def enviar_nfe_por_email(
     db.session.add(log)
     db.session.commit()
 
-    # Envio em background
-    destinatarios_smtp = [destino_efetivo]
-    if cc_final:
-        destinatarios_smtp += cc_final
-
-    thread = threading.Thread(
-        target=_send_async,
-        args=(app, msg, smtp_server, smtp_port, sender, password, log.id),
-        daemon=True,
-    )
-    thread.start()
+    if envio_assincrono:
+        thread = threading.Thread(
+            target=_send_async,
+            args=(app, msg, smtp_server, smtp_port, sender, password, log.id),
+            daemon=True,
+        )
+        thread.start()
+    else:
+        _send_async(app, msg, smtp_server, smtp_port, sender, password, log.id)
+        db.session.refresh(log)
 
     return {
-        "sucesso": True,
+        "sucesso": bool(log.status == "Enviado") if not envio_assincrono else True,
         "log_id": log.id,
         "numero_nf": nota.numero,
         "chave": nota.chave,
@@ -628,4 +628,6 @@ def enviar_nfe_por_email(
         "fonte_email": fonte,
         "anexou_xml": anexou_xml,
         "anexou_pdf": anexou_pdf,
+        "status": log.status,
+        "erro": log.erro_mensagem if log.status == "Falha" else None,
     }

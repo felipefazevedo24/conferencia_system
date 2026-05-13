@@ -5147,6 +5147,19 @@ def confirmar_lancamento():
     # Integração com WMS via fila (idempotente), com tentativa imediata best-effort.
     evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
     processamento = _processar_evento_integracao_wms(evento) if evento else {"sucesso": False, "erro": "evento_nao_criado"}
+    aviso_chapa = None
+    try:
+        from ..services.entrada_chapa_email_service import notificar_entrada_chapa_lancada
+        aviso_chapa = notificar_entrada_chapa_lancada(
+            numero_nota,
+            numero_ar=codigo,
+            usuario=session.get("username", "Sistema"),
+            origem="Manual",
+            assincrono=True,
+        )
+    except Exception as exc:
+        current_app.logger.exception("Falha ao acionar aviso de entrada de chapa NF %s: %s", numero_nota, exc)
+        aviso_chapa = {"sucesso": False, "erro": str(exc)}
 
     return jsonify(
         {
@@ -5159,6 +5172,7 @@ def confirmar_lancamento():
                 "status": evento.status if evento else "NaoCriado",
                 "novo_evento": bool(criado),
             },
+            "aviso_chapa": aviso_chapa,
         }
     )
 

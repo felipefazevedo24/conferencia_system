@@ -3,7 +3,7 @@
 Rule of thumb:
 - Executa a cada NFE_EMAIL_POLL_INTERVAL_SECONDS.
 - Considera apenas NFs emitidas >= 2026-05-13, mesmo se a config pedir antes.
-- Nao reenvia: usa EmailNFEnviado (qualquer status != AguardandoManual) como dedupe.
+- Nao reenvia o que ja foi Enviado ou ficou AguardandoManual.
 - Notas sem e-mail geram status AguardandoManual (para o usuario completar via tela).
 - Usa um lock para nao rodar em paralelo.
 """
@@ -58,12 +58,12 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                         last_message=msg)
             return {"ok": False, "erro": str(exc)}
 
-        # Dedupe: NFs que ja tem log (exceto AguardandoManual, que PODE ser reprocessada
-        # se o usuario tiver preenchido o e-mail no cadastro/planilha e quiser reenvio).
+        # Dedupe: enviado nao reenvia; aguardando manual tambem nao fica criando
+        # pendencias repetidas a cada ciclo. Falha/Pendente podem ser tentadas de novo.
         ja_processadas = {
             row.numero_nf
             for row in EmailNFEnviado.query.filter(
-                EmailNFEnviado.status.in_(["Enviado", "Pendente", "Falha"])
+                EmailNFEnviado.status.in_(["Enviado", "AguardandoManual"])
             ).all()
             if row.numero_nf
         }
@@ -92,6 +92,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                     chave=chave,
                     origem="Auto",
                     disparado_por="scheduler",
+                    envio_assincrono=False,
                 )
                 if resultado.get("sucesso"):
                     enviadas += 1
