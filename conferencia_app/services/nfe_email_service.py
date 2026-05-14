@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 import smtplib
 import threading
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from email.mime.application import MIMEApplication
@@ -28,6 +29,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
 from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+from .danfe_service import gerar_danfe
 from .planilhas_cadastros import buscar_email_por_cnpj
 
 
@@ -91,9 +93,6 @@ def _resolver_nota_erp(numero_nf: str, chave: str | None = None) -> NotaEmitida 
         pdf_bytes=doc.get("pdf_bytes"),
     )
 
-    if nota.xml_bytes and not nota.pdf_bytes:
-        app.logger.warning("NF-e %s encontrada no ERP sem PDF DANFE no banco.", chave_doc)
-
     email_xml, nome_xml, cnpj_xml = _parse_dest_email_do_xml(nota.xml_bytes)
     if email_xml:
         nota.dest_email_xml = email_xml
@@ -101,6 +100,10 @@ def _resolver_nota_erp(numero_nf: str, chave: str | None = None) -> NotaEmitida 
         nota.dest_nome = nome_xml
     if not nota.dest_cnpj and cnpj_xml:
         nota.dest_cnpj = cnpj_xml
+
+    if nota.xml_bytes and not nota.pdf_bytes:
+        app.logger.warning("NF-e %s encontrada no ERP sem PDF DANFE no banco; gerando localmente.", chave_doc)
+        nota.pdf_bytes = _gerar_pdf_danfe_do_xml(nota.xml_bytes, nota.numero, nota.chave)
     return nota
 
 
@@ -139,6 +142,23 @@ def _parse_cfops_do_xml(xml_bytes: bytes | None) -> set[str]:
         if valor:
             cfops.add(valor[:4])
     return cfops
+
+
+def _gerar_pdf_danfe_do_xml(xml_bytes: bytes | None, numero_nf: str, chave: str) -> bytes | None:
+    """Gera DANFE localmente quando o ERP ainda nao gravou pdf_danfe."""
+    if not xml_bytes:
+        return None
+    app = current_app._get_current_object()
+    try:
+        logo_path = os.path.normpath(os.path.join(app.root_path, "..", "static", "columbia_logo.png"))
+        logo_url = app.config.get("EMPRESA_LOGO_URL", "")
+        pdf_bytes = gerar_danfe(xml_bytes, logo_path=logo_path, logo_url=logo_url)
+        if pdf_bytes:
+            app.logger.info("DANFE da NF-e %s/%s gerada localmente a partir do XML.", numero_nf, chave)
+            return pdf_bytes
+    except Exception as exc:
+        app.logger.exception("Falha ao gerar DANFE local da NF-e %s/%s: %s", numero_nf, chave, exc)
+    return None
 
 
 def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | None:
@@ -182,7 +202,6 @@ def resolver_destinatario(numero_nf: str, chave: str | None = None, override_ema
     numero, chave e avisos[]. Se nao encontrar nada, email="".
     """
     nota = _resolver_nota(numero_nf, chave)
-    avisos: list[str] = []
     if not nota:
         return {
             "email": (override_email or "").strip(),
@@ -193,6 +212,12 @@ def resolver_destinatario(numero_nf: str, chave: str | None = None, override_ema
             "chave": chave or "",
             "avisos": ["NF nao encontrada/autorizada no ERP a partir de 13/05/2026."],
         }
+
+    return _resolver_destinatario_da_nota(nota, override_email)
+
+
+def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None = None) -> dict:
+    avisos: list[str] = []
 
     email_manual = (override_email or "").strip()
     if email_manual and _valido_email(email_manual):
@@ -483,7 +508,7 @@ def enviar_nfe_por_email(
             )
 
     # Destinatario
-    resolvido = resolver_destinatario(nota.numero, nota.chave, override_email)
+    resolvido = _resolver_destinatario_da_nota(nota, override_email)
     destino_real = resolvido["email"]
     fonte = resolvido["fonte_email"]
 

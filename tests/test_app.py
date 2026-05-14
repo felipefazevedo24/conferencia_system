@@ -17,6 +17,7 @@ from conferencia_app.models import (
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesEstorno,
     ExpedicaoConferenciaSimplesFoto,
+    EmailNFEnviado,
     ItemNota,
     LogDivergencia,
     LogEstornoLancamento,
@@ -1143,6 +1144,57 @@ def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path
     assert payload["boletos"][0]["banco"] == "Banco do Brasil"
     assert payload["boletos"][0]["cpf_cnpj_pagador"] == "12345678901"
     assert payload["boletos"][0]["nome_pagador"] == "Cliente Portal"
+
+
+def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config.update(
+        MAIL_SENDER="fiscal@teste.com",
+        MAIL_PASSWORD="senha",
+        MAIL_SENDER_NAME="Fiscal Teste",
+        NFE_EMAIL_MODO_TESTE=False,
+    )
+
+    xml_bytes = build_test_nfe_xml(
+        "9100",
+        [{"codigo": "P1", "descricao": "Produto teste", "cfop": "5102", "quantidade": "1.0000"}],
+    )
+    chave = "1" * 44
+    pdf_gerado = b"%PDF-1.4 DANFE teste"
+
+    with app.app_context(), patch(
+        "conferencia_app.services.nfe_email_service.buscar_nfe_emitida_erp",
+        return_value={
+            "numero": "9100",
+            "chave": chave,
+            "autorizada": True,
+            "dest_nome": "Cliente Teste",
+            "dest_cnpj": "11222333000144",
+            "email_danfe": "",
+            "xml_bytes": xml_bytes,
+            "pdf_bytes": None,
+        },
+    ), patch(
+        "conferencia_app.services.nfe_email_service.gerar_danfe",
+        return_value=pdf_gerado,
+    ) as gerar_danfe_mock, patch("conferencia_app.services.nfe_email_service._send_async"):
+        from conferencia_app.services.nfe_email_service import enviar_nfe_por_email
+
+        resultado = enviar_nfe_por_email(
+            "9100",
+            chave=chave,
+            override_email="cliente@teste.com",
+            envio_assincrono=True,
+        )
+
+        assert resultado["sucesso"] is True
+        assert resultado["anexou_xml"] is True
+        assert resultado["anexou_pdf"] is True
+        gerar_danfe_mock.assert_called_once()
+        log = EmailNFEnviado.query.filter_by(numero_nf="9100").first()
+        assert log is not None
+        assert log.anexou_xml is True
+        assert log.anexou_pdf is True
 
 
 def test_api_consyste_emissao_solicitar_bloqueada_para_admin(tmp_path):
