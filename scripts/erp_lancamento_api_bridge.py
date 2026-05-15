@@ -338,15 +338,18 @@ ENTRADA_CHAPA_SQL = """
         c.dt_recebimento,
         c.dt_lancamento,
         coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
-        coalesce(
-            nullif(c.fornecedor, ''),
-            nullif(c.cliente, ''),
-            nullif(f.razao_social, ''),
-            nullif(f.nome, ''),
-            nullif(cli.razao_social, ''),
-            nullif(cli.nome, '')
-        ) as parceiro_nome,
-        coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, '')) as parceiro_documento,
+        coalesce(nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, '')) as fornecedor_nome,
+        coalesce(nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, '')) as cliente_nome,
+        case
+            when left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = '1924'
+                then coalesce(nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, ''), nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, ''))
+            else coalesce(nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, ''), nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, ''))
+        end as parceiro_nome,
+        case
+            when left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = '1924'
+                then coalesce(nullif(cli.rg_cgc, ''), nullif(f.cgc, ''))
+            else coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, ''))
+        end as parceiro_documento,
         coalesce(nullif(c.cfop, ''), '') as cfop_cabecalho,
         a.numero_item,
         coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop_item,
@@ -377,8 +380,8 @@ ENTRADA_CHAPA_SQL = """
      and lot.guid_pai = a.guid_linha
     where (
         (%s <> '' and c.codigo::text = %s)
-        or (%s <> '' and c.n_nf::text = %s)
-        or (%s <> '' and regexp_replace(coalesce(c.chv_nfe, ''), '\\D', '', 'g') = %s)
+        or (%s = '' and %s <> '' and c.n_nf::text = %s)
+        or (%s = '' and %s = '' and %s <> '' and regexp_replace(coalesce(c.chv_nfe, ''), '\\D', '', 'g') = %s)
     )
     order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
     limit 200
@@ -394,15 +397,18 @@ ENTRADAS_CHAPA_DESDE_SQL = """
         c.dt_recebimento,
         c.dt_lancamento,
         coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
-        coalesce(
-            nullif(c.fornecedor, ''),
-            nullif(c.cliente, ''),
-            nullif(f.razao_social, ''),
-            nullif(f.nome, ''),
-            nullif(cli.razao_social, ''),
-            nullif(cli.nome, '')
-        ) as parceiro_nome,
-        coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, '')) as parceiro_documento,
+        coalesce(nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, '')) as fornecedor_nome,
+        coalesce(nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, '')) as cliente_nome,
+        case
+            when left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = '1924'
+                then coalesce(nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, ''), nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, ''))
+            else coalesce(nullif(f.razao_social, ''), nullif(f.nome, ''), nullif(c.fornecedor, ''), nullif(cli.razao_social, ''), nullif(cli.nome, ''), nullif(c.cliente, ''))
+        end as parceiro_nome,
+        case
+            when left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = '1924'
+                then coalesce(nullif(cli.rg_cgc, ''), nullif(f.cgc, ''))
+            else coalesce(nullif(f.cgc, ''), nullif(cli.rg_cgc, ''))
+        end as parceiro_documento,
         coalesce(nullif(c.cfop, ''), '') as cfop_cabecalho,
         a.numero_item,
         coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop_item,
@@ -433,8 +439,7 @@ ENTRADAS_CHAPA_DESDE_SQL = """
      and lot.guid_pai = a.guid_linha
     where c.dt_recebimento::date >= %s
       and (
-        left(coalesce(nullif(a.cfop, ''), nullif(c.cfop, ''), ''), 4) = any(%s)
-        or coalesce(p.controle_lote_serie, 0)::text = any(%s)
+        coalesce(p.controle_lote_serie, 0)::text = any(%s)
         or coalesce(a.tipo_controle, 0)::text = any(%s)
       )
     order by c.dt_recebimento desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
@@ -446,6 +451,16 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
     if not rows:
         return None
     cab = rows[0]
+    row_1924 = next(
+        (
+            r for r in rows
+            if str(r.get("cfop_item") or r.get("cfop_cabecalho") or "").strip()[:4] == "1924"
+            and (r.get("cliente_nome") or r.get("parceiro_nome"))
+        ),
+        None,
+    )
+    parceiro_nome = (row_1924.get("cliente_nome") or row_1924.get("parceiro_nome")) if row_1924 else cab.get("parceiro_nome")
+    parceiro_documento = row_1924.get("parceiro_documento") if row_1924 else cab.get("parceiro_documento")
     itens = []
     for row in rows:
         if not row.get("cod_interno") and not row.get("descricao"):
@@ -470,8 +485,8 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
         "dt_recebimento": _date_to_api(cab.get("dt_recebimento")),
         "dt_lancamento": _date_to_api(cab.get("dt_lancamento")),
         "chave_acesso": cab.get("chave_acesso") or chave,
-        "parceiro_nome": cab.get("parceiro_nome") or "",
-        "parceiro_documento": cab.get("parceiro_documento") or "",
+        "parceiro_nome": parceiro_nome or "",
+        "parceiro_documento": parceiro_documento or "",
         "cfop_cabecalho": cab.get("cfop_cabecalho") or "",
         "itens": itens,
     }
@@ -685,7 +700,20 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(ENTRADA_CHAPA_SQL, (numero_ar, numero_ar, numero_nota, numero_nota, chave, chave))
+                    cur.execute(
+                        ENTRADA_CHAPA_SQL,
+                        (
+                            numero_ar,
+                            numero_ar,
+                            numero_ar,
+                            numero_nota,
+                            numero_nota,
+                            numero_ar,
+                            numero_nota,
+                            chave,
+                            chave,
+                        ),
+                    )
                     cols = [desc[0] for desc in cur.description]
                     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -706,10 +734,10 @@ def create_app() -> Flask:
         try:
             payload = request.get_json(silent=True) or {}
             data_minima = _parse_data_minima(payload.get("data_recebimento_minima"))
-            cfops = [str(c).strip()[:4] for c in (payload.get("cfops") or ["1901", "1915"]) if str(c).strip()]
+            cfops = [str(c).strip()[:4] for c in (payload.get("cfops") or ["1901", "1915", "1924"]) if str(c).strip()]
             controles = [str(c).strip() for c in (payload.get("controles_lote") or ["1", "3"]) if str(c).strip()]
             if not cfops:
-                cfops = ["1901", "1915"]
+                cfops = ["1901", "1915", "1924"]
             if not controles:
                 controles = ["1", "3"]
             try:
@@ -720,7 +748,7 @@ def create_app() -> Flask:
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(ENTRADAS_CHAPA_DESDE_SQL, (data_minima, cfops, controles, controles, limite))
+                    cur.execute(ENTRADAS_CHAPA_DESDE_SQL, (data_minima, controles, controles, limite))
                     cols = [desc[0] for desc in cur.description]
                     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
 

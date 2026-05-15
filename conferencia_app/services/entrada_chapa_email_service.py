@@ -147,7 +147,6 @@ def _buscar_entradas_recebidas_desde(app, data_minima: date) -> list[dict[str, A
 
 
 def _eh_entrada_chapa(entrada: dict[str, Any], app) -> tuple[bool, list[str], list[dict[str, Any]]]:
-    cfops_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915")))
     controles_alvo = set(_split_lista(app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")))
     itens = [i for i in (entrada.get("itens") or []) if isinstance(i, dict)]
     itens_relevantes = []
@@ -156,13 +155,11 @@ def _eh_entrada_chapa(entrada: dict[str, Any], app) -> tuple[bool, list[str], li
     for item in itens:
         cfop = str(item.get("cfop") or entrada.get("cfop_cabecalho") or "").strip()[:4]
         controle = str(item.get("controle_lote_serie") or "").strip()
+        tipo_controle = str(item.get("tipo_controle") or "").strip()
         if cfop:
             cfops_encontrados.add(cfop)
-        if (cfop and cfop in cfops_alvo) or (controle and controle in controles_alvo):
+        if (controle and controle in controles_alvo) or (tipo_controle and tipo_controle in controles_alvo):
             itens_relevantes.append(item)
-
-    if not itens_relevantes and str(entrada.get("cfop_cabecalho") or "").strip()[:4] in cfops_alvo:
-        itens_relevantes = itens
 
     return bool(itens_relevantes), sorted(cfops_encontrados), itens_relevantes
 

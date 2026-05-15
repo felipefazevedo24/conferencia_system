@@ -361,8 +361,8 @@
       <section class="cfg-section">
         <h4 class="cfg-section-title">Aviso de chapas e barras</h4>
         <p class="cfg-section-desc">
-          Quando uma NF de entrada for lancada com CFOP/controle de lote de chapa ou barra,
-          o Sync envia um aviso interno com NF, AR/lote, fornecedor e quantidades.
+          Quando uma NF de entrada for lancada com material controlado por lote/serie,
+          o Sync envia um aviso interno com NF, AR/lote, parceiro e quantidades.
           So considera lancamentos a partir de 13/05/2026.
         </p>
 
@@ -402,11 +402,11 @@
 
         <div class="cfg-row">
           <div class="cfg-row-label">
-            CFOPs de chapa/barra
-            <small>Padrao: 1901, 1915.</small>
+            CFOPs de referencia
+            <small>Padrao: 1901, 1915, 1924. O disparo exige controle de lote.</small>
           </div>
           <div class="cfg-row-control">
-            <input id="cfg-chapa-cfops" type="text" placeholder="1901, 1915">
+            <input id="cfg-chapa-cfops" type="text" placeholder="1901, 1915, 1924">
           </div>
         </div>
 
@@ -733,7 +733,7 @@ async function carregarConfig() {
     setVal('cfg-poll', c.poll_intervalo || 300);
     setVal('cfg-chapa-destinatarios', c.entrada_chapa_destinatarios || '');
     setVal('cfg-chapa-cc', c.entrada_chapa_cc || '');
-    setVal('cfg-chapa-cfops', c.entrada_chapa_cfops || '1901, 1915');
+    setVal('cfg-chapa-cfops', c.entrada_chapa_cfops || '1901, 1915, 1924');
     setVal('cfg-chapa-controles', c.entrada_chapa_controles || '1, 3');
 
     // CC -> chips

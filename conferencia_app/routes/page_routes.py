@@ -249,6 +249,20 @@ HOME_MODULES = [
         "metric_key": "agendamento_ativo",
     },
     {
+        "id": "logistica_mapa_frota",
+        "title": "Mapa da Frota",
+        "subtitle": "Visao geral",
+        "description": "Veja os veiculos no mapa e acesse a viagem em andamento a partir do popup.",
+        "href": "/logistica/mapa-frota",
+        "icon": "fa-map-location-dot",
+        "permission": "PAGE_LOGISTICA_VIAGEM",
+        "section": "LogÃ­stica",
+        "tone": "cyan",
+        "priority": 87,
+        "keywords": ["mapa", "frota", "veiculo", "viagem", "gps", "rastreamento"],
+        "metric_key": "agendamento_ativo",
+    },
+    {
         "id": "logistica_viagem",
         "title": "Gestão de Viagens",
         "subtitle": "Rastreamento ponta-a-ponta",
@@ -855,6 +869,17 @@ def painel_motorista_page():
 def rastreamento_page():
     return render_template(
         "rastreamento.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
+@page_bp.route("/logistica/mapa-frota")
+@permission_required("PAGE_LOGISTICA_VIAGEM")
+def mapa_frota_page():
+    return render_template(
+        "mapa_frota.html",
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",

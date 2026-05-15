@@ -157,7 +157,7 @@ class Config:
     ENTRADA_CHAPA_EMAIL_ENABLED = os.environ.get("ENTRADA_CHAPA_EMAIL_ENABLED", "1") == "1"
     ENTRADA_CHAPA_EMAIL_DESTINATARIOS = os.environ.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", "fiscal@colmac.com")
     ENTRADA_CHAPA_EMAIL_CC = os.environ.get("ENTRADA_CHAPA_EMAIL_CC", "")
-    ENTRADA_CHAPA_CFOPS = os.environ.get("ENTRADA_CHAPA_CFOPS", "1901,1915")
+    ENTRADA_CHAPA_CFOPS = os.environ.get("ENTRADA_CHAPA_CFOPS", "1901,1915,1924")
     ENTRADA_CHAPA_CONTROLE_LOTE_VALORES = os.environ.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3")
 
     # DANFE: usa por padrão a engine fiscal aprovada para o layout principal da NF.

@@ -245,8 +245,14 @@
     .rt-agenda-item strong{font-size:15px;color:#1e293b;font-weight:700}
     .rt-agenda-item p{margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.5}
     .rt-agenda-item .agenda-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-    .ops-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;margin-bottom:18px}
+    .ops-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-bottom:18px}
     @media(max-width:1200px){.ops-grid{grid-template-columns:1fr}}
+    .agenda-collapse{margin-bottom:18px}
+    .agenda-collapse summary{list-style:none;cursor:pointer}
+    .agenda-collapse summary::-webkit-details-marker{display:none}
+    .agenda-summary-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:linear-gradient(180deg,#f8fafc,#fff);border-bottom:1px solid var(--doc-border)}
+    .agenda-summary-line strong{font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;color:#0f172a;display:flex;align-items:center;gap:8px}
+    .agenda-summary-line span{font-size:11.5px;color:#64748b;font-weight:700}
     .visual-agenda{display:grid;gap:12px;padding:14px;background:#fcfcfd}
     .visual-row{border:1px solid var(--doc-border);border-radius:10px;background:#fff;overflow:hidden}
     .visual-label{padding:10px 12px;font-size:12px;font-weight:800;color:#0f172a;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f8fafc;border-bottom:1px solid var(--doc-border)}
@@ -269,16 +275,6 @@
     .tower-item:hover{background:#f8fafc}
     .tower-item strong{font-size:12px;color:#0f172a}
     .tower-item p{margin:4px 0 0;color:#64748b;font-size:11.5px}
-    .fleet-map-panel{margin-bottom:18px}
-    #fleet-map{height:430px;width:100%;background:#f8fafc}
-    .fleet-map-meta{font-size:11.5px;color:#64748b;font-weight:700}
-    .fleet-marker{display:flex;align-items:center;gap:6px;background:#fff;border:2px solid #059669;color:#064e3b;border-radius:999px;padding:5px 9px;box-shadow:0 8px 20px rgba(15,23,42,.18);font-size:11px;font-weight:800;white-space:nowrap}
-    .fleet-marker.idle{border-color:#64748b;color:#334155}
-    .fleet-marker i{font-size:12px}
-    .fleet-popup{min-width:230px;display:grid;gap:8px}
-    .fleet-popup strong{font-size:13px;color:#0f172a}
-    .fleet-popup p{margin:0;color:#64748b;font-size:12px;line-height:1.4}
-    .fleet-popup .doc-btn{justify-content:center;margin-top:2px}
     .rt-drivers{display:grid;gap:12px}
     .rt-driver{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;padding:16px;transition:all .2s ease;box-shadow:0 4px 12px rgba(18,40,58,.02);display:flex;align-items:center;gap:14px}
     .rt-driver:hover{box-shadow:0 8px 24px rgba(18,40,58,.06);transform:translateY(-1px)}
@@ -362,7 +358,6 @@
         </div>
         <div class="doc-hero-actions">
             <a href="/logistica/frota" class="doc-btn doc-btn-outline"><i class="fa-solid fa-truck-field"></i> Frota</a>
-            <a href="/logistica/rastreamento" class="doc-btn doc-btn-outline"><i class="fa-solid fa-location-crosshairs"></i> Mapa</a>
             <button class="doc-btn doc-btn-outline" onclick="abrirModalImportarRota()"><i class="fa-solid fa-map-marked-alt"></i> Importar Rota</button>
             <button class="doc-btn doc-btn-primary" onclick="abrirModalNova()"><i class="fa-solid fa-plus"></i> Nova viagem</button>
         </div>
@@ -370,29 +365,23 @@
 
     <div class="doc-kpi-grid" id="kpi-grid"></div>
 
-    <section class="doc-panel fleet-map-panel">
+    <details class="doc-panel agenda-collapse">
+        <summary class="agenda-summary-line">
+            <strong><i class="fa-solid fa-calendar-days"></i> Agenda Visual</strong>
+            <span>Abrir agenda por motorista e veiculo</span>
+        </summary>
         <div class="doc-panel-head">
-            <div>
-                <div class="doc-panel-title"><i class="fa-solid fa-map-location-dot"></i> Mapa Geral da Frota</div>
-                <div class="fleet-map-meta" id="fleet-map-meta">Carregando posicoes...</div>
-            </div>
-            <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarMapaFrota()"><i class="fa-solid fa-rotate"></i></button>
-        </div>
-        <div id="fleet-map"></div>
-    </section>
-
-    <div class="ops-grid">
-        <section class="doc-panel">
-            <div class="doc-panel-head">
-                <div class="doc-panel-title"><i class="fa-solid fa-calendar-days"></i> Agenda Visual</div>
-                <div class="doc-hero-actions">
+            <div class="doc-panel-title"><i class="fa-solid fa-calendar-days"></i> Agenda Visual</div>
+            <div class="doc-hero-actions">
                     <select id="viagemAgendaModo" class="doc-select" style="width:120px"><option value="dia">Dia</option><option value="semana">Semana</option></select>
                     <input id="viagemAgendaData" type="date" class="doc-input" style="width:150px">
                     <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarAgendaViagens()"><i class="fa-solid fa-rotate"></i></button>
-                </div>
             </div>
-            <div id="viagem-agenda" class="visual-agenda"></div>
-        </section>
+        </div>
+        <div id="viagem-agenda" class="visual-agenda"></div>
+    </details>
+
+    <div class="ops-grid">
         <section class="doc-panel">
             <div class="doc-panel-head">
                 <div class="doc-panel-title"><i class="fa-solid fa-tower-observation"></i> Torre de Controle</div>
@@ -946,7 +935,6 @@ const fmtHour = s => { if (!s) return '—'; try { const d = new Date(s); return
 const fmtMoney = n => (Number(n)||0).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
 const fmtNum = (n, d=1) => (Number(n)||0).toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d});
 const fmtDuracao = m => { m = parseInt(m||0); if (!m) return '—'; const h = Math.floor(m/60); const mm = m%60; return `${h}h${String(mm).padStart(2,'0')}`; };
-const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toDatetimeLocal = s => {
     if (!s) return '';
     const d = new Date(s);
@@ -1001,8 +989,6 @@ let viagemSelecionadaId = null;
 let viagemSelecionada = null;
 let mapView = null;
 let mapLayer = null;
-let fleetMap = null;
-let fleetLayer = null;
 let solSelecionadas = new Set();
 let paradasManuais = [];
 
@@ -1121,79 +1107,6 @@ async function carregarTorreControle() {
         }).join('');
     } catch (e) {
         box.innerHTML = `<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-triangle-exclamation"></i><div>${e.message || 'Falha ao carregar torre.'}</div></div>`;
-    }
-}
-
-function inicializarMapaFrota(base) {
-    if (fleetMap) return;
-    const lat = Number(base?.latitude) || -22.8531;
-    const lng = Number(base?.longitude) || -47.2158;
-    fleetMap = L.map('fleet-map', {scrollWheelZoom: false}).setView([lat, lng], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(fleetMap);
-    fleetLayer = L.layerGroup().addTo(fleetMap);
-}
-
-function markerFrota(v) {
-    const label = v.placa || v.veiculo_label || 'Veiculo';
-    const cls = v.em_viagem ? '' : 'idle';
-    return L.divIcon({
-        className: '',
-        html: `<div class="fleet-marker ${cls}"><i class="fa-solid fa-truck"></i><span>${esc(label)}</span></div>`,
-        iconSize: null,
-        iconAnchor: [18, 18],
-        popupAnchor: [0, -18],
-    });
-}
-
-function popupFrota(v) {
-    const viagem = v.viagem;
-    const atualizacao = v.atualizado_em ? fmtDate(v.atualizado_em) : 'Sem horario';
-    const velocidade = v.velocidade_kmh !== null && v.velocidade_kmh !== undefined && Number.isFinite(Number(v.velocidade_kmh)) ? `${fmtNum(v.velocidade_kmh, 0)} km/h` : 'Velocidade indisponivel';
-    const viagemHtml = viagem
-        ? `<p><b>${esc(viagem.codigo || 'Viagem')}</b>${viagem.titulo ? ' - ' + esc(viagem.titulo) : ''}<br>${esc(viagem.motorista_nome || 'Motorista nao informado')}<br>${fmtDate(viagem.saida_real || viagem.saida_prevista)}</p>
-           <button class="doc-btn doc-btn-primary doc-btn-sm" onclick="abrirDetalhe(${Number(viagem.id)})">Ir para viagem</button>`
-        : '<p>Nenhuma viagem em andamento vinculada a este veiculo.</p>';
-    return `<div class="fleet-popup">
-        <strong>${esc(v.veiculo_label || 'Veiculo')}</strong>
-        <p>${esc(v.placa || 'Sem placa')}<br>${esc(velocidade)}<br>Atualizado: ${esc(atualizacao)}</p>
-        ${viagemHtml}
-    </div>`;
-}
-
-async function carregarMapaFrota() {
-    const meta = document.getElementById('fleet-map-meta');
-    try {
-        const res = await apiGet('/api/viagem/mapa-frota');
-        inicializarMapaFrota(res.base || {});
-        fleetLayer.clearLayers();
-        const bounds = [];
-        (res.veiculos || []).forEach(v => {
-            const lat = Number(v.latitude);
-            const lng = Number(v.longitude);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-            L.marker([lat, lng], {icon: markerFrota(v)})
-                .bindPopup(popupFrota(v))
-                .addTo(fleetLayer);
-            bounds.push([lat, lng]);
-        });
-        const baseLat = Number(res.base?.latitude);
-        const baseLng = Number(res.base?.longitude);
-        if (Number.isFinite(baseLat) && Number.isFinite(baseLng)) {
-            L.circleMarker([baseLat, baseLng], {radius: 7, color: '#0f62c9', fillColor: '#0f62c9', fillOpacity: .9})
-                .bindPopup(`<strong>${esc(res.base?.nome || 'Base')}</strong>`)
-                .addTo(fleetLayer);
-            bounds.push([baseLat, baseLng]);
-        }
-        if (bounds.length) fleetMap.fitBounds(bounds, {padding: [34, 34], maxZoom: 14});
-        setTimeout(() => fleetMap.invalidateSize(), 80);
-        const total = (res.veiculos || []).length;
-        const rodando = (res.veiculos || []).filter(v => v.em_viagem).length;
-        meta.textContent = `${total} veiculo(s) com posicao no mapa | ${rodando} em viagem | ${res.sem_posicao || 0} sem posicao`;
-    } catch (e) {
-        meta.textContent = e.message || 'Falha ao carregar mapa da frota.';
     }
 }
 
@@ -1972,6 +1885,13 @@ document.querySelectorAll('.doc-modal-overlay').forEach(o => {
 // filtros
 document.getElementById('f-status').addEventListener('change', () => filtroRapido(document.getElementById('f-status').value));
 document.getElementById('f-veiculo').addEventListener('change', carregarLista);
+document.querySelector('.agenda-collapse')?.addEventListener('toggle', (ev) => {
+    const agendaBox = document.getElementById('viagem-agenda');
+    if (ev.currentTarget.open && agendaBox && !agendaBox.dataset.loaded) {
+        agendaBox.dataset.loaded = '1';
+        carregarAgendaViagens();
+    }
+});
 
 // -------------------- init
 (async () => {
@@ -1979,9 +1899,7 @@ document.getElementById('f-veiculo').addEventListener('change', carregarLista);
         await carregarAuxiliares();
         await carregarKPIs();
         await carregarLista();
-        await carregarMapaFrota();
         document.getElementById('viagemAgendaData').value = new Date().toISOString().slice(0, 10);
-        await carregarAgendaViagens();
         await carregarTorreControle();
         const vid = Number(new URLSearchParams(window.location.search).get('vid'));
         if (vid) abrirDetalhe(vid);
@@ -1990,7 +1908,7 @@ document.getElementById('f-veiculo').addEventListener('change', carregarLista);
 })();
 
 // auto-refresh a cada 30s (para pegar novas posições do Locartrack)
-setInterval(() => { carregarKPIs(); carregarLista(); carregarMapaFrota(); carregarTorreControle(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
+setInterval(() => { carregarKPIs(); carregarLista(); carregarTorreControle(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
 
 // ── Tab switcher ──────────────────────────────────────────────────────────
 function switchTab(tab) {

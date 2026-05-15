@@ -236,7 +236,7 @@ def api_nfe_email_config():
         "entrada_chapa_enabled": bool(current_app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True)),
         "entrada_chapa_destinatarios": current_app.config.get("ENTRADA_CHAPA_EMAIL_DESTINATARIOS", ""),
         "entrada_chapa_cc": current_app.config.get("ENTRADA_CHAPA_EMAIL_CC", ""),
-        "entrada_chapa_cfops": current_app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915"),
+        "entrada_chapa_cfops": current_app.config.get("ENTRADA_CHAPA_CFOPS", "1901,1915,1924"),
         "entrada_chapa_controles": current_app.config.get("ENTRADA_CHAPA_CONTROLE_LOTE_VALORES", "1,3"),
     })
 

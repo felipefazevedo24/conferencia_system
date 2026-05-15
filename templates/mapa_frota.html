@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa da Frota{% endblock %}
+{% block shell_title %}Mapa da Frota{% endblock %}
+{% block shell_subtitle %}Posicao geral dos veiculos em operacao.{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+    :root {
+        --map-bg: var(--rec-bg, #f1f6fb);
+        --map-card: var(--rec-surface, #fff);
+        --map-border: var(--rec-border, #dbe3ef);
+        --map-ink: #0f172a;
+        --map-muted: #64748b;
+        --map-green: #059669;
+        --map-amber: #d97706;
+        --map-red: #dc2626;
+    }
+    .fleet-shell{max-width:1800px;margin:0 auto;padding:20px;display:grid;gap:14px}
+    .fleet-head{background:#fff;border:1px solid var(--map-border);border-radius:14px;box-shadow:var(--rec-shadow-1,0 6px 18px rgba(15,23,42,.06));padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .fleet-title{margin:0;font-size:22px;font-weight:800;color:var(--map-ink);display:flex;align-items:center;gap:10px}
+    .fleet-sub{margin:4px 0 0;color:var(--map-muted);font-size:13px;font-weight:600}
+    .fleet-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .fleet-btn{border:1.5px solid #0f62c9;background:#fff;color:#0f62c9;border-radius:9px;padding:9px 13px;font-size:12px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+    .fleet-btn.primary{background:#059669;border-color:#059669;color:#fff}
+    .fleet-kpis{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px}
+    .fleet-kpi{background:#fff;border:1px solid var(--map-border);border-radius:10px;padding:10px 12px}
+    .fleet-kpi span{display:block;font-size:10px;font-weight:800;color:var(--map-muted);text-transform:uppercase;letter-spacing:.5px}
+    .fleet-kpi strong{display:block;margin-top:2px;color:var(--map-ink);font-size:20px;font-weight:900}
+    .fleet-map-card{position:relative;background:#fff;border:1px solid var(--map-border);border-radius:14px;overflow:hidden;min-height:calc(100vh - 260px);box-shadow:var(--rec-shadow-1,0 6px 18px rgba(15,23,42,.06))}
+    #fleetMap{height:calc(100vh - 260px);min-height:520px;width:100%;background:#eef2f7}
+    .fleet-marker{display:flex;align-items:center;gap:7px;background:#fff;border:2px solid var(--map-green);color:#064e3b;border-radius:999px;padding:6px 10px;box-shadow:0 10px 24px rgba(15,23,42,.20);font-size:11px;font-weight:900;white-space:nowrap}
+    .fleet-marker.warn{border-color:var(--map-amber);color:#92400e}
+    .fleet-marker.danger{border-color:var(--map-red);color:#991b1b}
+    .fleet-marker.idle{border-color:#64748b;color:#334155}
+    .fleet-marker i{font-size:12px}
+    .fleet-popup{min-width:250px;display:grid;gap:8px}
+    .fleet-popup strong{font-size:14px;color:var(--map-ink)}
+    .fleet-popup p{margin:0;color:var(--map-muted);font-size:12px;line-height:1.45}
+    .fleet-popup a{justify-content:center}
+    .fleet-state{position:absolute;left:16px;bottom:16px;z-index:500;background:#fff;border:1px solid var(--map-border);border-radius:999px;padding:8px 12px;color:var(--map-muted);font-size:12px;font-weight:800;box-shadow:0 8px 22px rgba(15,23,42,.12)}
+    @media(max-width:900px){.fleet-shell{padding:12px}.fleet-kpis{grid-template-columns:repeat(2,1fr)}#fleetMap,.fleet-map-card{min-height:520px;height:70vh}.fleet-title{font-size:18px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fleet-shell">
+    <header class="fleet-head">
+        <div>
+            <h1 class="fleet-title"><i class="fa-solid fa-map-location-dot"></i> Mapa da Frota</h1>
+            <p class="fleet-sub" id="fleetMeta">Carregando posicoes...</p>
+        </div>
+        <div class="fleet-actions">
+            <a class="fleet-btn" href="/logistica/viagens"><i class="fa-solid fa-route"></i> Viagens</a>
+            <button class="fleet-btn primary" type="button" onclick="carregarMapaFrota()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+        </div>
+    </header>
+
+    <section class="fleet-kpis">
+        <div class="fleet-kpi"><span>No mapa</span><strong id="kpiMapa">0</strong></div>
+        <div class="fleet-kpi"><span>Em viagem</span><strong id="kpiViagem">0</strong></div>
+        <div class="fleet-kpi"><span>Sem posicao</span><strong id="kpiSemPosicao">0</strong></div>
+        <div class="fleet-kpi"><span>Atualizacao</span><strong id="kpiAtualizacao">--:--</strong></div>
+    </section>
+
+    <section class="fleet-map-card">
+        <div id="fleetMap"></div>
+        <div class="fleet-state" id="fleetState">Sincronizando...</div>
+    </section>
+</div>
+
+<script>
+const fmtDate = s => {
+    if (!s) return '--';
+    try { return new Date(s).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    catch(e) { return s; }
+};
+const fmtHour = s => {
+    if (!s) return '--:--';
+    try { return new Date(s).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}); }
+    catch(e) { return '--:--'; }
+};
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let fleetMap = null;
+let fleetLayer = null;
+
+function idadeMinutos(s) {
+    if (!s) return null;
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / 60000);
+}
+
+function classeMarker(v) {
+    if (!v.em_viagem) return 'idle';
+    const idade = idadeMinutos(v.atualizado_em);
+    if (idade === null) return 'warn';
+    if (idade > 15) return 'danger';
+    if (idade > 5) return 'warn';
+    return '';
+}
+
+function inicializar(base) {
+    if (fleetMap) return;
+    const lat = Number(base?.latitude) || -22.8531;
+    const lng = Number(base?.longitude) || -47.2158;
+    fleetMap = L.map('fleetMap', {scrollWheelZoom: true}).setView([lat, lng], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(fleetMap);
+    fleetLayer = L.layerGroup().addTo(fleetMap);
+}
+
+function markerFrota(v) {
+    const label = v.placa || v.veiculo_label || 'Veiculo';
+    return L.divIcon({
+        className: '',
+        html: `<div class="fleet-marker ${classeMarker(v)}"><i class="fa-solid fa-truck"></i><span>${esc(label)}</span></div>`,
+        iconSize: null,
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18],
+    });
+}
+
+function popupFrota(v) {
+    const viagem = v.viagem;
+    const velocidade = v.velocidade_kmh !== null && v.velocidade_kmh !== undefined && Number.isFinite(Number(v.velocidade_kmh))
+        ? `${Number(v.velocidade_kmh).toLocaleString('pt-BR', {maximumFractionDigits:0})} km/h`
+        : 'Velocidade indisponivel';
+    const viagemHtml = viagem
+        ? `<p><b>${esc(viagem.codigo || 'Viagem')}</b>${viagem.titulo ? ' - ' + esc(viagem.titulo) : ''}<br>${esc(viagem.motorista_nome || 'Motorista nao informado')}<br>${fmtDate(viagem.saida_real || viagem.saida_prevista)}</p>
+           <a class="fleet-btn primary" href="/logistica/viagens?vid=${Number(viagem.id)}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ir para viagem</a>`
+        : '<p>Nenhuma viagem em andamento vinculada a este veiculo.</p>';
+    return `<div class="fleet-popup">
+        <strong>${esc(v.veiculo_label || 'Veiculo')}</strong>
+        <p>${esc(v.placa || 'Sem placa')}<br>${esc(velocidade)}<br>Atualizado: ${esc(fmtDate(v.atualizado_em))}</p>
+        ${viagemHtml}
+    </div>`;
+}
+
+async function carregarMapaFrota() {
+    const state = document.getElementById('fleetState');
+    state.textContent = 'Atualizando...';
+    try {
+        const r = await fetch('/api/viagem/mapa-frota', {credentials: 'same-origin'});
+        const res = await r.json();
+        if (!r.ok) throw new Error(res.msg || res.error || 'HTTP ' + r.status);
+        inicializar(res.base || {});
+        fleetLayer.clearLayers();
+        const bounds = [];
+        (res.veiculos || []).forEach(v => {
+            const lat = Number(v.latitude);
+            const lng = Number(v.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+            L.marker([lat, lng], {icon: markerFrota(v)}).bindPopup(popupFrota(v)).addTo(fleetLayer);
+            bounds.push([lat, lng]);
+        });
+        const baseLat = Number(res.base?.latitude);
+        const baseLng = Number(res.base?.longitude);
+        if (Number.isFinite(baseLat) && Number.isFinite(baseLng)) {
+            L.circleMarker([baseLat, baseLng], {radius: 7, color: '#0f62c9', fillColor: '#0f62c9', fillOpacity: .9})
+                .bindPopup(`<strong>${esc(res.base?.nome || 'Base')}</strong>`)
+                .addTo(fleetLayer);
+            bounds.push([baseLat, baseLng]);
+        }
+        if (bounds.length) fleetMap.fitBounds(bounds, {padding: [38, 38], maxZoom: 14});
+        setTimeout(() => fleetMap.invalidateSize(), 80);
+        const total = (res.veiculos || []).length;
+        const rodando = (res.veiculos || []).filter(v => v.em_viagem).length;
+        document.getElementById('kpiMapa').textContent = total;
+        document.getElementById('kpiViagem').textContent = rodando;
+        document.getElementById('kpiSemPosicao').textContent = res.sem_posicao || 0;
+        document.getElementById('kpiAtualizacao').textContent = fmtHour(res.gerado_em);
+        document.getElementById('fleetMeta').textContent = `${total} veiculo(s) com posicao | ${rodando} em viagem | ${res.sem_posicao || 0} sem posicao`;
+        state.textContent = total ? 'Mapa atualizado' : 'Nenhum veiculo com posicao';
+    } catch (e) {
+        state.textContent = e.message || 'Falha ao carregar mapa';
+        document.getElementById('fleetMeta').textContent = state.textContent;
+    }
+}
+
+carregarMapaFrota();
+setInterval(carregarMapaFrota, 30000);
+</script>
+{% endblock %}
