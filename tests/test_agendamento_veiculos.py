@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem
+from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem, ViagemPosicao
 from conferencia_app.services.pedidos_service import _linha_postgres_to_pedido, buscar_linhas_pedido
 
 
@@ -328,6 +328,56 @@ def test_viagem_agenda_e_torre_controle_retorna_dados(tmp_path):
     payload = torre.get_json()
     assert "resumo" in payload
     assert any(item["codigo"] == "VG-TORRE-1" for item in payload["items"])
+
+
+def test_viagem_mapa_frota_mostra_veiculo_sem_expor_viagem_no_marcador(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo = AgendamentoVeiculo(codigo="MAP-1", nome_exibicao="Van Mapa", placa="ABC-1D23", ativo=True)
+        motorista = AgendamentoMotorista(nome="Motorista Mapa", ativo=True)
+        db.session.add_all([veiculo, motorista])
+        db.session.flush()
+        viagem = Viagem(
+            codigo="VG-MAPA-1",
+            veiculo_id=veiculo.id,
+            motorista_id=motorista.id,
+            motorista_nome=motorista.nome,
+            status="EmAndamento",
+            tipo="ENTREGA",
+            titulo="Entrega sensivel",
+            saida_real=datetime.now() - timedelta(minutes=15),
+        )
+        db.session.add(viagem)
+        db.session.flush()
+        db.session.add(
+            ViagemPosicao(
+                viagem_id=viagem.id,
+                latitude=-22.85,
+                longitude=-47.21,
+                velocidade_kmh=42,
+                origem="motorista_app",
+            )
+        )
+        db.session.commit()
+        viagem_id = viagem.id
+
+    response = client.get("/api/viagem/mapa-frota")
+    assert response.status_code == 200
+    payload = response.get_json()
+    item = next(v for v in payload["veiculos"] if v["placa"] == "ABC-1D23")
+    assert item["veiculo_label"] == "Van Mapa (ABC-1D23)"
+    assert item["em_viagem"] is True
+    assert item["viagem"]["id"] == viagem_id
+    assert item["latitude"] == -22.85
+    assert item["longitude"] == -47.21
 
 
 def test_registrar_usuario_motorista_cria_cadastro_operacional(tmp_path):

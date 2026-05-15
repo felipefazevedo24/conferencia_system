@@ -202,6 +202,25 @@ def _veiculo_label(v):
     return f"{v.nome_exibicao}" + (f" ({v.placa})" if v.placa else "")
 
 
+def _normalizar_placa(valor: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(valor or "").upper())
+
+
+def _viagem_resumo_mapa(v: Viagem | None) -> dict | None:
+    if not v:
+        return None
+    return {
+        "id": v.id,
+        "codigo": v.codigo,
+        "status": v.status,
+        "titulo": v.titulo,
+        "motorista_nome": v.motorista_nome,
+        "saida_prevista": v.saida_prevista.isoformat() if v.saida_prevista else None,
+        "saida_real": v.saida_real.isoformat() if v.saida_real else None,
+        "retorno_previsto": v.retorno_previsto.isoformat() if v.retorno_previsto else None,
+    }
+
+
 def _checklist_liberacao(v: Viagem, paradas: list[ViagemParada] | None = None) -> dict:
     paradas = paradas if paradas is not None else ViagemParada.query.filter_by(viagem_id=v.id).order_by(ViagemParada.sequencia).all()
     motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
@@ -712,6 +731,85 @@ def torre_controle():
     prioridade_ordem = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
     items.sort(key=lambda i: (prioridade_ordem.get(i["sla"]["prioridade"], 9), i.get("saida_prevista") or "9999"))
     return jsonify({"resumo": resumo, "items": items[:40], "gerado_em": agora.isoformat()})
+
+
+@viagem_bp.route("/mapa-frota", methods=["GET"])
+@permission_required(PERM)
+def mapa_frota():
+    try:
+        from ..services import rastreamento_store
+
+        rastreamento = rastreamento_store.estado_publico()
+    except Exception as exc:
+        current_app.logger.warning("Falha ao carregar estado de rastreamento: %s", exc)
+        rastreamento = {"base": {}, "veiculos": []}
+
+    posicoes_por_placa: dict[str, dict] = {}
+    for item in rastreamento.get("veiculos") or []:
+        placa_key = _normalizar_placa(item.get("placa"))
+        if placa_key and item.get("latitude") is not None and item.get("longitude") is not None:
+            posicoes_por_placa[placa_key] = item
+
+    veiculos = (
+        AgendamentoVeiculo.query
+        .filter_by(ativo=True)
+        .order_by(AgendamentoVeiculo.ordem_exibicao.asc(), AgendamentoVeiculo.nome_exibicao.asc())
+        .all()
+    )
+    saida = []
+    sem_posicao = 0
+    for veiculo in veiculos:
+        viagem = (
+            Viagem.query
+            .filter_by(veiculo_id=veiculo.id, status="EmAndamento")
+            .order_by(Viagem.saida_real.desc(), Viagem.id.desc())
+            .first()
+        )
+        ult = None
+        if viagem:
+            ult = (
+                ViagemPosicao.query.filter_by(viagem_id=viagem.id)
+                .order_by(ViagemPosicao.registrado_em.desc())
+                .first()
+            )
+
+        latitude = ult.latitude if ult else None
+        longitude = ult.longitude if ult else None
+        atualizado_em = ult.registrado_em.isoformat() if ult else None
+        velocidade = ult.velocidade_kmh if ult else None
+        origem = ult.origem if ult else None
+
+        rastreado = posicoes_por_placa.get(_normalizar_placa(veiculo.placa))
+        if latitude is None and rastreado:
+            latitude = rastreado.get("latitude")
+            longitude = rastreado.get("longitude")
+            atualizado_em = rastreado.get("atualizado_em")
+            velocidade = rastreado.get("velocidade_kmh")
+            origem = "rastreamento"
+
+        if latitude is None or longitude is None:
+            sem_posicao += 1
+            continue
+
+        saida.append({
+            "veiculo_id": veiculo.id,
+            "veiculo_label": _veiculo_label(veiculo),
+            "placa": veiculo.placa,
+            "latitude": latitude,
+            "longitude": longitude,
+            "atualizado_em": atualizado_em,
+            "velocidade_kmh": velocidade,
+            "origem": origem or "sem_viagem",
+            "em_viagem": viagem is not None,
+            "viagem": _viagem_resumo_mapa(viagem),
+        })
+
+    return jsonify({
+        "base": rastreamento.get("base") or {},
+        "veiculos": saida,
+        "sem_posicao": sem_posicao,
+        "gerado_em": datetime.now().isoformat(),
+    })
 
 
 @viagem_bp.route("/agenda", methods=["GET"])
