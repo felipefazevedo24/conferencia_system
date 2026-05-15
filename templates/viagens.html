@@ -245,6 +245,21 @@
     .rt-agenda-item strong{font-size:15px;color:#1e293b;font-weight:700}
     .rt-agenda-item p{margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.5}
     .rt-agenda-item .agenda-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .ops-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;margin-bottom:18px}
+    @media(max-width:1200px){.ops-grid{grid-template-columns:1fr}}
+    .visual-agenda{display:grid;gap:10px;padding:14px}
+    .visual-row{display:grid;grid-template-columns:170px 1fr;gap:10px;align-items:stretch}
+    .visual-label{border:1px solid var(--doc-border);border-radius:8px;background:#f8fafc;padding:10px;font-size:12px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px}
+    .visual-track{position:relative;min-height:48px;border:1px solid var(--doc-border);border-radius:8px;background:linear-gradient(90deg,#f8fafc 0,#fff 100%);overflow:hidden}
+    .visual-block{position:absolute;top:7px;min-width:92px;height:34px;border-radius:8px;padding:5px 8px;background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .visual-block.EmAndamento{background:#dcfce7;color:#15803d;border-left-color:#16a34a}
+    .visual-block.critico{background:#fee2e2;color:#b91c1c;border-left-color:#dc2626}
+    .visual-block.alto{background:#fef3c7;color:#92400e;border-left-color:#f59e0b}
+    .tower-list{display:grid;gap:8px;padding:14px;max-height:360px;overflow:auto}
+    .tower-item{border:1px solid var(--doc-border);border-radius:8px;padding:10px;background:#fff;cursor:pointer}
+    .tower-item:hover{background:#f8fafc}
+    .tower-item strong{font-size:12px;color:#0f172a}
+    .tower-item p{margin:4px 0 0;color:#64748b;font-size:11.5px}
     .rt-drivers{display:grid;gap:12px}
     .rt-driver{border:1px solid rgba(18,40,58,.08);border-radius:16px;background:#fff;padding:16px;transition:all .2s ease;box-shadow:0 4px 12px rgba(18,40,58,.02);display:flex;align-items:center;gap:14px}
     .rt-driver:hover{box-shadow:0 8px 24px rgba(18,40,58,.06);transform:translateY(-1px)}
@@ -335,6 +350,27 @@
     </div>
 
     <div class="doc-kpi-grid" id="kpi-grid"></div>
+
+    <div class="ops-grid">
+        <section class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-calendar-days"></i> Agenda Visual</div>
+                <div class="doc-hero-actions">
+                    <select id="viagemAgendaModo" class="doc-select" style="width:120px"><option value="dia">Dia</option><option value="semana">Semana</option></select>
+                    <input id="viagemAgendaData" type="date" class="doc-input" style="width:150px">
+                    <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarAgendaViagens()"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+            </div>
+            <div id="viagem-agenda" class="visual-agenda"></div>
+        </section>
+        <section class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title"><i class="fa-solid fa-tower-observation"></i> Torre de Controle</div>
+                <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarTorreControle()"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+            <div id="torre-controle" class="tower-list"></div>
+        </section>
+    </div>
 
     <div class="doc-workspace">
         <!-- COLUNA ESQUERDA: lista -->
@@ -998,6 +1034,63 @@ async function carregarKPIs() {
         <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
         <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-paper-plane"></i></div><div><div class="doc-kpi-label">Pendentes de liberaÃ§Ã£o</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
         <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
+}
+
+async function carregarAgendaViagens() {
+    const box = document.getElementById('viagem-agenda');
+    const modo = document.getElementById('viagemAgendaModo').value || 'dia';
+    const data = document.getElementById('viagemAgendaData').value || new Date().toISOString().slice(0, 10);
+    box.innerHTML = '<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-spinner fa-spin"></i><div>Carregando agenda...</div></div>';
+    try {
+        const res = await apiGet(`/api/viagem/agenda?modo=${encodeURIComponent(modo)}&data=${encodeURIComponent(data)}`);
+        if (!res.linhas || !res.linhas.length) {
+            box.innerHTML = '<div class="doc-empty" style="padding:22px"><i class="fa-regular fa-calendar"></i><div>Nenhuma viagem planejada neste periodo.</div></div>';
+            return;
+        }
+        const inicio = new Date(res.inicio).getTime();
+        const fim = new Date(res.fim).getTime();
+        const span = Math.max(1, fim - inicio);
+        box.innerHTML = res.linhas.map(linha => {
+            const icon = linha.tipo === 'motorista' ? 'fa-id-card' : 'fa-truck';
+            const items = (linha.items || []).map(item => {
+                const a = new Date(item.inicio).getTime();
+                const b = new Date(item.fim || item.inicio).getTime();
+                const left = Math.max(0, Math.min(96, ((a - inicio) / span) * 100));
+                const width = Math.max(8, Math.min(96 - left, ((Math.max(b, a + 1800000) - a) / span) * 100));
+                const risk = item.sla?.nivel === 'critico' ? 'critico' : (item.sla?.nivel === 'alto' ? 'alto' : '');
+                return `<button class="visual-block ${item.status} ${risk}" style="left:${left}%;width:${width}%" onclick="abrirDetalhe(${item.id})" title="${item.codigo} | ${fmtDate(item.inicio)}">${item.codigo} · ${fmtHour(item.inicio)}</button>`;
+            }).join('');
+            return `<div class="visual-row"><div class="visual-label"><i class="fa-solid ${icon}"></i>${linha.label}</div><div class="visual-track">${items}</div></div>`;
+        }).join('');
+    } catch (e) {
+        box.innerHTML = `<div class="doc-empty" style="padding:22px"><i class="fa-solid fa-triangle-exclamation"></i><div>${e.message || 'Falha ao carregar agenda.'}</div></div>`;
+    }
+}
+
+async function carregarTorreControle() {
+    const box = document.getElementById('torre-controle');
+    box.innerHTML = '<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-spinner fa-spin"></i><div>Carregando riscos...</div></div>';
+    try {
+        const res = await apiGet('/api/viagem/torre-controle');
+        const r = res.resumo || {};
+        const header = `<div class="release-check-grid" style="padding:0 0 6px">
+            <div class="release-check-item ${r.criticas ? 'block' : 'ok'}"><i class="fa-solid fa-triangle-exclamation"></i> Criticas: ${r.criticas || 0}</div>
+            <div class="release-check-item ${r.altas ? 'warn' : 'ok'}"><i class="fa-solid fa-clock"></i> Alta atencao: ${r.altas || 0}</div>
+            <div class="release-check-item ${r.sem_gps ? 'warn' : 'ok'}"><i class="fa-solid fa-location-crosshairs"></i> Sem GPS: ${r.sem_gps || 0}</div>
+        </div>`;
+        const items = res.items || [];
+        if (!items.length) {
+            box.innerHTML = header + '<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-circle-check"></i><div>Nenhuma excecao operacional agora.</div></div>';
+            return;
+        }
+        box.innerHTML = header + items.slice(0, 12).map(item => {
+            const cls = item.sla?.prioridade === 'Critica' ? 'danger' : (item.sla?.prioridade === 'Alta' ? 'warn' : 'slate');
+            const alertas = (item.alertas || []).map(a => a.msg).join(' | ');
+            return `<article class="tower-item" onclick="abrirDetalhe(${item.id})"><strong>${item.codigo} <span class="doc-chip ${cls}">${item.sla?.prioridade || 'Baixa'}</span></strong><p>${item.veiculo || ''}${item.motorista ? ' · ' + item.motorista : ''}</p><p>${fmtDate(item.saida_prevista)}${alertas ? ' · ' + alertas : ''}</p></article>`;
+        }).join('');
+    } catch (e) {
+        box.innerHTML = `<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-triangle-exclamation"></i><div>${e.message || 'Falha ao carregar torre.'}</div></div>`;
+    }
 }
 
 function renderAlertBadges(v) {
@@ -1782,6 +1875,9 @@ document.getElementById('f-veiculo').addEventListener('change', carregarLista);
         await carregarAuxiliares();
         await carregarKPIs();
         await carregarLista();
+        document.getElementById('viagemAgendaData').value = new Date().toISOString().slice(0, 10);
+        await carregarAgendaViagens();
+        await carregarTorreControle();
         const vid = Number(new URLSearchParams(window.location.search).get('vid'));
         if (vid) abrirDetalhe(vid);
     }
@@ -1789,7 +1885,7 @@ document.getElementById('f-veiculo').addEventListener('change', carregarLista);
 })();
 
 // auto-refresh a cada 30s (para pegar novas posições do Locartrack)
-setInterval(() => { carregarKPIs(); carregarLista(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
+setInterval(() => { carregarKPIs(); carregarLista(); carregarTorreControle(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
 
 // ── Tab switcher ──────────────────────────────────────────────────────────
 function switchTab(tab) {

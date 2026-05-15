@@ -950,6 +950,21 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         ) > (outro_inicio - timedelta(minutes=buffer_min)):
             return jsonify({"error": f"{veiculo.nome_exibicao} já possui uma saída programada para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."}), 409
 
+    if motorista:
+        query_motorista = AgendamentoSolicitacao.query.filter(
+            AgendamentoSolicitacao.motorista_id == motorista.id,
+            AgendamentoSolicitacao.status.in_(["Alocada", "EmAndamento", "EmRota"]),
+            AgendamentoSolicitacao.id != row.id,
+        )
+        for existente in query_motorista.all():
+            outro_inicio, outro_fim = _intervalo_planejado(existente)
+            if not outro_inicio or not outro_fim:
+                continue
+            if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
+                fim_atual + timedelta(minutes=buffer_min)
+            ) > (outro_inicio - timedelta(minutes=buffer_min)):
+                return jsonify({"error": f"{motorista.nome} ja possui uma viagem programada para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."}), 409
+
     status_anterior = str(row.status or "").strip()
     row.veiculo_id = veiculo.id
     row.motorista_id = motorista.id if motorista else None

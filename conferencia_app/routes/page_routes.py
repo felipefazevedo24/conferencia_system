@@ -811,12 +811,9 @@ def solicitar_transporte_page():
 @page_bp.route("/logistica/agendamento-veiculos")
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def agendamento_veiculos_page():
-    return render_template(
-        "agendamento_veiculos.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-        is_admin=session.get("role") == "Admin",
-    )
+    from flask import redirect
+
+    return redirect("/logistica/viagens?tab=viagens", code=302)
 
 
 @page_bp.route("/logistica/operacao")

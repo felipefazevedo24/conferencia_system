@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, Usuario
+from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem
 from conferencia_app.services.pedidos_service import _linha_postgres_to_pedido, buscar_linhas_pedido
 
 
@@ -152,8 +152,8 @@ def test_agendamento_dashboard_importa_cadastros_e_renderiza_pagina(tmp_path):
     login_admin(client)
 
     page = client.get("/logistica/agendamento-veiculos")
-    assert page.status_code == 200
-    assert "Agendamento de Veiculos" in page.get_data(as_text=True)
+    assert page.status_code == 302
+    assert "/logistica/viagens" in page.location
 
     response = client.get("/api/logistica/agendamento-veiculos/dashboard")
     assert response.status_code == 200
@@ -228,6 +228,106 @@ def test_motorista_cadastrado_em_usuarios_aparece_auxiliares_viagem_sem_reload(t
         motorista = AgendamentoMotorista.query.filter_by(usuario_username="motorista.viagem").first()
         assert motorista is not None
         assert motorista.ativo is True
+
+
+def test_viagem_bloqueia_conflito_de_motorista(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo_a = AgendamentoVeiculo.query.filter_by(codigo="VAN-A").first()
+        if not veiculo_a:
+            veiculo_a = AgendamentoVeiculo(codigo="VAN-A", nome_exibicao="Van A", ativo=True)
+            db.session.add(veiculo_a)
+        veiculo_b = AgendamentoVeiculo.query.filter_by(codigo="VAN-B").first()
+        if not veiculo_b:
+            veiculo_b = AgendamentoVeiculo(codigo="VAN-B", nome_exibicao="Van B", ativo=True)
+            db.session.add(veiculo_b)
+        motorista = AgendamentoMotorista(nome="Motorista Conflito", ativo=True)
+        db.session.add(motorista)
+        db.session.flush()
+        saida = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
+        db.session.add(
+            Viagem(
+                codigo="VG-CONFLITO-1",
+                veiculo_id=veiculo_a.id,
+                motorista_id=motorista.id,
+                motorista_nome=motorista.nome,
+                status="Planejada",
+                tipo="MISTA",
+                saida_prevista=saida,
+                retorno_previsto=saida + timedelta(hours=2),
+            )
+        )
+        db.session.commit()
+        veiculo_b_id = veiculo_b.id
+        motorista_id = motorista.id
+
+    response = client.post(
+        "/api/viagem",
+        json={
+            "veiculo_id": veiculo_b_id,
+            "motorista_id": motorista_id,
+            "tipo": "ENTREGA",
+            "saida_prevista": saida.isoformat(timespec="minutes"),
+            "retorno_previsto": (saida + timedelta(hours=1)).isoformat(timespec="minutes"),
+            "paradas": [{"tipo": "ENTREGA", "parceiro_nome": "Cliente", "cidade": "Campinas", "uf": "SP"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "outra viagem" in response.get_json()["msg"]
+
+
+def test_viagem_agenda_e_torre_controle_retorna_dados(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo = AgendamentoVeiculo.query.filter_by(codigo="VAN-T").first()
+        if not veiculo:
+            veiculo = AgendamentoVeiculo(codigo="VAN-T", nome_exibicao="Van Torre", ativo=True)
+            db.session.add(veiculo)
+        motorista = AgendamentoMotorista(nome="Motorista Torre", ativo=True)
+        db.session.add(motorista)
+        db.session.flush()
+        saida = datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=30)
+        db.session.add(
+            Viagem(
+                codigo="VG-TORRE-1",
+                veiculo_id=veiculo.id,
+                motorista_id=motorista.id,
+                motorista_nome=motorista.nome,
+                status="Planejada",
+                tipo="COLETA",
+                saida_prevista=saida,
+                retorno_previsto=saida + timedelta(hours=1),
+            )
+        )
+        db.session.commit()
+        data = saida.strftime("%Y-%m-%d")
+
+    agenda = client.get(f"/api/viagem/agenda?modo=dia&data={data}")
+    assert agenda.status_code == 200
+    assert agenda.get_json()["linhas"]
+
+    torre = client.get("/api/viagem/torre-controle")
+    assert torre.status_code == 200
+    payload = torre.get_json()
+    assert "resumo" in payload
+    assert any(item["codigo"] == "VG-TORRE-1" for item in payload["items"])
 
 
 def test_registrar_usuario_motorista_cria_cadastro_operacional(tmp_path):

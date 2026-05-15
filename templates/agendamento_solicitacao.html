@@ -229,7 +229,7 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
                 <p class="rq-copy">Diga <strong>onde</strong> precisa coletar ou entregar e <strong>quando</strong>. OC e NF são opcionais — a logística completa os documentos depois.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a class="btn" href="/logistica/agendamento-veiculos"><i class="fas fa-gauge-high"></i> Ir para gestão de rotas</a>{% endif %}
+                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_VIAGEM') %}<a class="btn" href="/logistica/viagens"><i class="fas fa-route"></i> Ir para gestão de viagens</a>{% endif %}
                 <button class="btn btn-primary" type="button" onclick="loadMinhasSolicitacoes()"><i class="fas fa-rotate"></i> Atualizar status</button>
             </div>
         </div>

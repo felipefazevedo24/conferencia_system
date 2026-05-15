@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import math
+import re
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session, url_for
@@ -16,6 +17,8 @@ from ..auth import permission_required
 from ..extensions import db
 from ..models import (
     AgendamentoMotorista,
+    AgendamentoCliente,
+    AgendamentoFornecedor,
     AgendamentoSolicitacao,
     AgendamentoVeiculo,
     FrotaAbastecimento,
@@ -141,6 +144,58 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def _intervalo_viagem(v: Viagem | None, *, saida=None, retorno=None) -> tuple[datetime | None, datetime | None]:
+    inicio = saida if saida is not None else (v.saida_prevista if v else None)
+    if not inicio:
+        return None, None
+    fim = retorno if retorno is not None else (v.retorno_previsto if v else None)
+    if fim and fim > inicio:
+        return inicio, fim
+    return inicio, inicio + timedelta(minutes=int(current_app.config.get("VIAGEM_DURACAO_PADRAO_MINUTOS", 180)))
+
+
+def _validar_conflito_recurso(
+    *,
+    veiculo_id: int | None,
+    motorista_id: int | None,
+    saida: datetime | None,
+    retorno: datetime | None,
+    viagem_id: int | None = None,
+) -> str | None:
+    inicio, fim = _intervalo_viagem(None, saida=saida, retorno=retorno)
+    if not inicio or not fim:
+        return None
+
+    buffer_min = int(current_app.config.get("VIAGEM_CONFLITO_MINUTOS", 30))
+    query = Viagem.query.filter(Viagem.status.in_(["Planejada", "EmAndamento"]))
+    if viagem_id:
+        query = query.filter(Viagem.id != viagem_id)
+    if veiculo_id and motorista_id:
+        query = query.filter((Viagem.veiculo_id == veiculo_id) | (Viagem.motorista_id == motorista_id))
+    elif veiculo_id:
+        query = query.filter(Viagem.veiculo_id == veiculo_id)
+    elif motorista_id:
+        query = query.filter(Viagem.motorista_id == motorista_id)
+    else:
+        return None
+
+    for outra in query.all():
+        outro_inicio, outro_fim = _intervalo_viagem(outra)
+        if not outro_inicio or not outro_fim:
+            continue
+        sobrepoe = (inicio - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
+            fim + timedelta(minutes=buffer_min)
+        ) > (outro_inicio - timedelta(minutes=buffer_min))
+        if not sobrepoe:
+            continue
+        if veiculo_id and outra.veiculo_id == veiculo_id:
+            return f"Veiculo ja reservado na viagem {outra.codigo or outra.id} para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."
+        if motorista_id and outra.motorista_id == motorista_id:
+            nome = outra.motorista_nome or "Motorista"
+            return f"{nome} ja esta em outra viagem ({outra.codigo or outra.id}) em {outro_inicio.strftime('%d/%m/%Y %H:%M')}."
+    return None
+
+
 def _veiculo_label(v):
     if not v:
         return "—"
@@ -200,6 +255,28 @@ def _alertas_operacionais(v: Viagem, ult: ViagemPosicao | None = None) -> list[d
     return alertas
 
 
+def _sla_viagem(v: Viagem, ult: ViagemPosicao | None = None) -> dict:
+    agora = datetime.now()
+    base = v.saida_prevista
+    if v.status == "EmAndamento":
+        base = v.retorno_previsto
+    if v.status in ("Concluida", "Cancelada") or not base:
+        return {"nivel": "ok", "label": "Sem risco", "minutos": None, "prioridade": "Baixa"}
+
+    minutos = int((base - agora).total_seconds() // 60)
+    sem_gps_min = None
+    if v.status == "EmAndamento" and ult:
+        sem_gps_min = int((agora - ult.registrado_em).total_seconds() // 60)
+
+    if minutos < 0 or (sem_gps_min is not None and sem_gps_min > 15):
+        return {"nivel": "critico", "label": "CrÃ­tico", "minutos": minutos, "prioridade": "Critica"}
+    if minutos <= 60 or (sem_gps_min is not None and sem_gps_min > 5):
+        return {"nivel": "alto", "label": "Alta atenÃ§Ã£o", "minutos": minutos, "prioridade": "Alta"}
+    if minutos <= 240:
+        return {"nivel": "medio", "label": "Monitorar", "minutos": minutos, "prioridade": "Media"}
+    return {"nivel": "ok", "label": "No prazo", "minutos": minutos, "prioridade": "Baixa"}
+
+
 # --------------------------------------------------------------------------- serializers
 def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
     veiculo = AgendamentoVeiculo.query.get(v.veiculo_id)
@@ -221,6 +298,7 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
         .first()
     )
     alertas = _alertas_operacionais(v, ult)
+    sla = _sla_viagem(v, ult)
 
     out = {
         "id": v.id,
@@ -268,6 +346,8 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
         "liberada_por": v.liberada_por,
         "destino_unico": bool(v.destino_unico),
         "alertas": alertas,
+        "sla": sla,
+        "prioridade_operacional": sla["prioridade"],
     }
     if detalhada:
         try:
@@ -431,6 +511,36 @@ def _geocodificar_paradas_sem_coord(paradas: list[ViagemParada]) -> int:
     return atualizadas
 
 
+def _janela_inicio_minutos(texto: str | None) -> int | None:
+    raw = str(texto or "").strip()
+    if not raw:
+        return None
+    match = re.search(r"(\d{1,2})[:h](\d{2})?", raw.lower())
+    if not match:
+        return None
+    hora = max(0, min(23, int(match.group(1) or 0)))
+    minuto = int(match.group(2) or 0)
+    minuto = max(0, min(59, minuto))
+    return hora * 60 + minuto
+
+
+def _janela_atendimento_parada(parada: ViagemParada) -> int | None:
+    if parada.solicitacao_id:
+        sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
+        if sol:
+            model = AgendamentoFornecedor if sol.parceiro_tipo == "Fornecedor" else AgendamentoCliente
+            cadastro = None
+            if sol.parceiro_codigo:
+                cadastro = model.query.filter_by(codigo=sol.parceiro_codigo).first()
+            if not cadastro and sol.parceiro_documento:
+                cadastro = model.query.filter_by(cnpj_cpf=sol.parceiro_documento).first()
+            if not cadastro and sol.parceiro_nome:
+                cadastro = model.query.filter(model.nome.ilike(f"%{sol.parceiro_nome}%")).first()
+            janela = getattr(cadastro, "janela_atendimento", None) if cadastro else None
+            return _janela_inicio_minutos(janela)
+    return None
+
+
 def _reordenar_paradas(viagem_id: int, ids: list[int], *, permitir_concluidas: bool = False) -> dict:
     paradas = ViagemParada.query.filter_by(viagem_id=viagem_id).order_by(ViagemParada.sequencia).all()
     por_id = {p.id: p for p in paradas}
@@ -552,6 +662,107 @@ def dashboard():
     })
 
 
+@viagem_bp.route("/torre-controle", methods=["GET"])
+@permission_required(PERM)
+def torre_controle():
+    agora = datetime.now()
+    inicio = agora - timedelta(hours=12)
+    fim = agora + timedelta(days=2)
+    viagens = (
+        Viagem.query
+        .filter(Viagem.status.in_(["Planejada", "EmAndamento"]))
+        .filter((Viagem.saida_prevista == None) | ((Viagem.saida_prevista >= inicio) & (Viagem.saida_prevista <= fim)))  # noqa: E711
+        .order_by(Viagem.saida_prevista.asc().nullslast(), Viagem.criado_em.desc())
+        .limit(120)
+        .all()
+    )
+    items = []
+    resumo = {"criticas": 0, "altas": 0, "sem_gps": 0, "pendentes_liberacao": 0, "em_rota": 0}
+    for v in viagens:
+        ult = (
+            ViagemPosicao.query.filter_by(viagem_id=v.id)
+            .order_by(ViagemPosicao.registrado_em.desc())
+            .first()
+        )
+        sla = _sla_viagem(v, ult)
+        alertas = _alertas_operacionais(v, ult)
+        if sla["prioridade"] == "Critica":
+            resumo["criticas"] += 1
+        if sla["prioridade"] == "Alta":
+            resumo["altas"] += 1
+        if v.status == "EmAndamento":
+            resumo["em_rota"] += 1
+        if v.status == "Planejada" and not v.liberada:
+            resumo["pendentes_liberacao"] += 1
+        if any("GPS" in a.get("msg", "") for a in alertas):
+            resumo["sem_gps"] += 1
+        items.append({
+            "id": v.id,
+            "codigo": v.codigo,
+            "status": v.status,
+            "titulo": v.titulo,
+            "veiculo": _veiculo_label(AgendamentoVeiculo.query.get(v.veiculo_id)),
+            "motorista": v.motorista_nome or "",
+            "saida_prevista": v.saida_prevista.isoformat() if v.saida_prevista else None,
+            "retorno_previsto": v.retorno_previsto.isoformat() if v.retorno_previsto else None,
+            "ultima_posicao": ult.registrado_em.isoformat() if ult else None,
+            "sla": sla,
+            "alertas": alertas,
+        })
+    prioridade_ordem = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
+    items.sort(key=lambda i: (prioridade_ordem.get(i["sla"]["prioridade"], 9), i.get("saida_prevista") or "9999"))
+    return jsonify({"resumo": resumo, "items": items[:40], "gerado_em": agora.isoformat()})
+
+
+@viagem_bp.route("/agenda", methods=["GET"])
+@permission_required(PERM)
+def agenda_viagens():
+    data_raw = (request.args.get("data") or "").strip()
+    modo = (request.args.get("modo") or "dia").strip().lower()
+    if modo not in {"dia", "semana"}:
+        modo = "dia"
+    try:
+        base = datetime.strptime(data_raw, "%Y-%m-%d") if data_raw else datetime.now()
+    except ValueError:
+        base = datetime.now()
+    inicio = base.replace(hour=0, minute=0, second=0, microsecond=0)
+    fim = inicio + timedelta(days=7 if modo == "semana" else 1)
+    viagens = (
+        Viagem.query
+        .filter(Viagem.status.in_(["Planejada", "EmAndamento"]))
+        .filter(Viagem.saida_prevista.isnot(None))
+        .filter(Viagem.saida_prevista >= inicio)
+        .filter(Viagem.saida_prevista < fim)
+        .order_by(Viagem.saida_prevista.asc())
+        .all()
+    )
+    linhas: dict[str, dict] = {}
+    for v in viagens:
+        veiculo = AgendamentoVeiculo.query.get(v.veiculo_id)
+        motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
+        for tipo, ref_id, label in (
+            ("veiculo", v.veiculo_id, _veiculo_label(veiculo)),
+            ("motorista", v.motorista_id, motorista.nome if motorista else "Sem motorista"),
+        ):
+            if not ref_id and tipo == "motorista":
+                continue
+            key = f"{tipo}:{ref_id or 'sem'}"
+            linhas.setdefault(key, {"tipo": tipo, "id": ref_id, "label": label, "items": []})
+            ini_v, fim_v = _intervalo_viagem(v)
+            linhas[key]["items"].append({
+                "id": v.id,
+                "codigo": v.codigo,
+                "titulo": v.titulo or v.codigo,
+                "status": v.status,
+                "inicio": ini_v.isoformat() if ini_v else None,
+                "fim": fim_v.isoformat() if fim_v else None,
+                "motorista": v.motorista_nome or (motorista.nome if motorista else ""),
+                "veiculo": _veiculo_label(veiculo),
+                "sla": _sla_viagem(v),
+            })
+    return jsonify({"inicio": inicio.isoformat(), "fim": fim.isoformat(), "modo": modo, "linhas": list(linhas.values())})
+
+
 @viagem_bp.route("/lista", methods=["GET"])
 @permission_required(PERM)
 def listar():
@@ -596,6 +807,17 @@ def criar():
     if sol_ids and not motorista_id:
         return jsonify({"sucesso": False, "msg": "Selecione um motorista para assumir as solicitações da viagem."}), 400
 
+    saida_prevista = _parse_dt(p.get("saida_prevista"))
+    retorno_previsto = _parse_dt(p.get("retorno_previsto"))
+    conflito = _validar_conflito_recurso(
+        veiculo_id=veiculo_id,
+        motorista_id=motorista_id,
+        saida=saida_prevista,
+        retorno=retorno_previsto,
+    )
+    if conflito:
+        return jsonify({"sucesso": False, "msg": conflito}), 409
+
     v = Viagem(
         codigo=_proximo_codigo(),
         veiculo_id=veiculo_id,
@@ -605,8 +827,8 @@ def criar():
         status="Planejada",
         titulo=str(p.get("titulo") or "").strip() or None,
         observacao=str(p.get("observacao") or "").strip() or None,
-        saida_prevista=_parse_dt(p.get("saida_prevista")),
-        retorno_previsto=_parse_dt(p.get("retorno_previsto")),
+        saida_prevista=saida_prevista,
+        retorno_previsto=retorno_previsto,
         km_previsto=_parse_float(p.get("km_previsto")),
         origem_label=str(p.get("origem_label") or "").strip() or None,
         origem_lat=_parse_float(p.get("origem_lat")),
@@ -685,6 +907,15 @@ def editar(vid: int):
     for campo in ("saida_prevista", "retorno_previsto"):
         if campo in p:
             setattr(v, campo, _parse_dt(p[campo]))
+    conflito = _validar_conflito_recurso(
+        veiculo_id=v.veiculo_id,
+        motorista_id=v.motorista_id,
+        saida=v.saida_prevista,
+        retorno=v.retorno_previsto,
+        viagem_id=v.id,
+    )
+    if conflito:
+        return jsonify({"sucesso": False, "msg": conflito}), 409
     if "km_previsto" in p:
         v.km_previsto = _parse_float(p["km_previsto"])
     for campo in ("origem_lat", "origem_lng", "destino_lat", "destino_lng"):
@@ -1448,6 +1679,16 @@ def importar_rota():
         tipo_v = next(iter(tipos))
     else:
         tipo_v = "MISTA"
+    saida_prevista = primeira.data_hora_saida_prevista
+    retorno_previsto = ultima.data_hora_retorno_prevista or ultima.data_hora_saida_prevista
+    conflito = _validar_conflito_recurso(
+        veiculo_id=veiculo_id,
+        motorista_id=primeira.motorista_id,
+        saida=saida_prevista,
+        retorno=retorno_previsto,
+    )
+    if conflito:
+        return jsonify({"sucesso": False, "msg": conflito}), 409
 
     v = Viagem(
         codigo=_proximo_codigo(),
@@ -1458,8 +1699,8 @@ def importar_rota():
         status="Planejada",
         titulo=str(p.get("titulo") or f"Rota {dia.strftime('%d/%m/%Y')}").strip(),
         observacao=str(p.get("observacao") or "").strip() or None,
-        saida_prevista=primeira.data_hora_saida_prevista,
-        retorno_previsto=ultima.data_hora_retorno_prevista or ultima.data_hora_saida_prevista,
+        saida_prevista=saida_prevista,
+        retorno_previsto=retorno_previsto,
         origem_lat=primeira.origem_latitude,
         origem_lng=primeira.origem_longitude,
         destino_label=f"{ultima.parceiro_nome} — {ultima.cidade}/{ultima.uf}" if ultima.parceiro_nome else None,
@@ -1545,11 +1786,12 @@ def _otimizar_paradas_viagem(vid: int) -> dict:
         ref_lat, ref_lng = pendentes[0].latitude, pendentes[0].longitude
 
     restantes = list(pendentes)
+    janelas = {p.id: _janela_atendimento_parada(p) for p in restantes}
     ordenadas: list[ViagemParada] = []
     total_km = 0.0
     cur_lat, cur_lng = ref_lat, ref_lng
     while restantes:
-        restantes.sort(key=lambda p: _haversine_km(cur_lat, cur_lng, p.latitude, p.longitude))
+        restantes.sort(key=lambda p: (janelas.get(p.id) is None, janelas.get(p.id) or 9999, _haversine_km(cur_lat, cur_lng, p.latitude, p.longitude)))
         prox = restantes.pop(0)
         total_km += _haversine_km(cur_lat, cur_lng, prox.latitude, prox.longitude)
         ordenadas.append(prox)
