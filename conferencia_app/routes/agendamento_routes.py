@@ -284,6 +284,7 @@ def _ordenar_cards(cards: list[dict]) -> list[dict]:
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def dashboard_agendamento_veiculos():
     ensure_cadastros_base_carregados()
+    sincronizar_motoristas_usuarios(commit=True)
     _auto_transicao_em_andamento()
     termo = str(request.args.get("q") or "").strip()
     status = str(request.args.get("status") or "").strip()
@@ -448,6 +449,7 @@ def importar_cadastros_agendamento():
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/motoristas")
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def listar_motoristas_endpoint():
+    sincronizar_motoristas_usuarios(commit=True)
     q = str(request.args.get("q") or "").strip()
     incluir_inativos = str(request.args.get("incluir_inativos") or "").strip().lower() in {"1", "true", "sim"}
     return jsonify({"rows": listar_motoristas_agendamento(q=q, incluir_inativos=incluir_inativos)})

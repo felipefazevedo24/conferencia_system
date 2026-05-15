@@ -26,6 +26,7 @@ from ..models import (
     ViagemPosicao,
 )
 from ..services.agendamento_service import _geocode_endereco, montar_endereco_rota
+from ..services.agendamento_service import sincronizar_motoristas_usuarios
 
 viagem_bp = Blueprint("viagem", __name__, url_prefix="/api/viagem")
 
@@ -1292,6 +1293,7 @@ def registrar_evento(vid: int):
 @viagem_bp.route("/auxiliares", methods=["GET"])
 @permission_required(PERM)
 def auxiliares():
+    sincronizar_motoristas_usuarios(commit=True)
     veiculos = AgendamentoVeiculo.query.filter_by(ativo=True).order_by(AgendamentoVeiculo.ordem_exibicao).all()
     motoristas = AgendamentoMotorista.query.filter_by(ativo=True).order_by(AgendamentoMotorista.nome).all()
     sols = (

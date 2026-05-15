@@ -198,6 +198,38 @@ def test_motorista_cadastrado_em_usuarios_aparece_na_logistica_sem_reload(tmp_pa
         assert motorista.ativo is True
 
 
+def test_motorista_cadastrado_em_usuarios_aparece_auxiliares_viagem_sem_reload(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            Usuario(
+                username="motorista.viagem",
+                password=generate_password_hash("123456"),
+                role="Motorista",
+            )
+        )
+        db.session.commit()
+        assert AgendamentoMotorista.query.filter_by(usuario_username="motorista.viagem").first() is None
+
+    response = client.get("/api/viagem/auxiliares")
+    assert response.status_code == 200
+    motoristas = response.get_json()["motoristas"]
+    assert any(row["label"] == "motorista.viagem" for row in motoristas)
+
+    with app.app_context():
+        motorista = AgendamentoMotorista.query.filter_by(usuario_username="motorista.viagem").first()
+        assert motorista is not None
+        assert motorista.ativo is True
+
+
 def test_registrar_usuario_motorista_cria_cadastro_operacional(tmp_path):
     fornecedores = tmp_path / "fornecedores.xlsx"
     clientes = tmp_path / "clientes.xlsx"
