@@ -365,32 +365,6 @@
 
     <div class="doc-kpi-grid" id="kpi-grid"></div>
 
-    <details class="doc-panel agenda-collapse">
-        <summary class="agenda-summary-line">
-            <strong><i class="fa-solid fa-calendar-days"></i> Agenda Visual</strong>
-            <span>Abrir agenda por motorista e veiculo</span>
-        </summary>
-        <div class="doc-panel-head">
-            <div class="doc-panel-title"><i class="fa-solid fa-calendar-days"></i> Agenda Visual</div>
-            <div class="doc-hero-actions">
-                    <select id="viagemAgendaModo" class="doc-select" style="width:120px"><option value="dia">Dia</option><option value="semana">Semana</option></select>
-                    <input id="viagemAgendaData" type="date" class="doc-input" style="width:150px">
-                    <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarAgendaViagens()"><i class="fa-solid fa-rotate"></i></button>
-            </div>
-        </div>
-        <div id="viagem-agenda" class="visual-agenda"></div>
-    </details>
-
-    <div class="ops-grid">
-        <section class="doc-panel">
-            <div class="doc-panel-head">
-                <div class="doc-panel-title"><i class="fa-solid fa-tower-observation"></i> Torre de Controle</div>
-                <button class="doc-btn doc-btn-secondary doc-btn-sm" onclick="carregarTorreControle()"><i class="fa-solid fa-rotate"></i></button>
-            </div>
-            <div id="torre-controle" class="tower-list"></div>
-        </section>
-    </div>
-
     <div class="doc-workspace">
         <!-- COLUNA ESQUERDA: lista -->
         <div class="doc-panel">
@@ -1055,40 +1029,11 @@ async function carregarKPIs() {
         <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
 }
 
-async function carregarAgendaViagens() {
-    const box = document.getElementById('viagem-agenda');
-    const modo = document.getElementById('viagemAgendaModo').value || 'dia';
-    const data = document.getElementById('viagemAgendaData').value || new Date().toISOString().slice(0, 10);
-    box.innerHTML = '<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-spinner fa-spin"></i><div>Carregando agenda...</div></div>';
-    try {
-        const res = await apiGet(`/api/viagem/agenda?modo=${encodeURIComponent(modo)}&data=${encodeURIComponent(data)}`);
-        if (!res.linhas || !res.linhas.length) {
-            box.innerHTML = '<div class="doc-empty" style="padding:22px"><i class="fa-regular fa-calendar"></i><div>Nenhuma viagem planejada neste periodo.</div></div>';
-            return;
-        }
-        box.innerHTML = res.linhas.map(linha => {
-            const icon = linha.tipo === 'motorista' ? 'fa-id-card' : 'fa-truck';
-            const items = (linha.items || []).map(item => {
-                const risk = item.sla?.nivel === 'critico' ? 'critico' : (item.sla?.nivel === 'alto' ? 'alto' : '');
-                const meta = linha.tipo === 'motorista' ? item.veiculo : item.motorista;
-                return `<button class="visual-block ${item.status} ${risk}" onclick="abrirDetalhe(${item.id})" title="${item.codigo} | ${fmtDate(item.inicio)}">
-                    <span class="time">${fmtHour(item.inicio)}${item.fim ? ' - ' + fmtHour(item.fim) : ''}</span>
-                    <span class="title">${item.codigo} - ${item.titulo || 'Viagem'}</span>
-                    <span class="meta">${meta || 'Sem recurso vinculado'} - ${item.status}${item.sla?.prioridade ? ' - ' + item.sla.prioridade : ''}</span>
-                </button>`;
-            }).join('');
-            return `<div class="visual-row"><div class="visual-label"><span><i class="fa-solid ${icon}"></i>${linha.label}</span><small>${(linha.items || []).length} viagem(ns)</small></div><div class="visual-track">${items}</div></div>`;
-        }).join('');
-    } catch (e) {
-        box.innerHTML = `<div class="doc-empty" style="padding:22px"><i class="fa-solid fa-triangle-exclamation"></i><div>${e.message || 'Falha ao carregar agenda.'}</div></div>`;
-    }
-}
-
-async function carregarTorreControle() {
-    const box = document.getElementById('torre-controle');
+async function torreControleRemovida() {
+    const box = null;
     box.innerHTML = '<div class="doc-empty" style="padding:18px"><i class="fa-solid fa-spinner fa-spin"></i><div>Carregando riscos...</div></div>';
     try {
-        const res = await apiGet('/api/viagem/torre-controle');
+        const res = {resumo: {}, items: []};
         const r = res.resumo || {};
         const header = `<div class="release-check-grid" style="padding:0 0 6px">
             <div class="release-check-item ${r.criticas ? 'block' : 'ok'}"><i class="fa-solid fa-triangle-exclamation"></i> Criticas: ${r.criticas || 0}</div>
@@ -1885,13 +1830,6 @@ document.querySelectorAll('.doc-modal-overlay').forEach(o => {
 // filtros
 document.getElementById('f-status').addEventListener('change', () => filtroRapido(document.getElementById('f-status').value));
 document.getElementById('f-veiculo').addEventListener('change', carregarLista);
-document.querySelector('.agenda-collapse')?.addEventListener('toggle', (ev) => {
-    const agendaBox = document.getElementById('viagem-agenda');
-    if (ev.currentTarget.open && agendaBox && !agendaBox.dataset.loaded) {
-        agendaBox.dataset.loaded = '1';
-        carregarAgendaViagens();
-    }
-});
 
 // -------------------- init
 (async () => {
@@ -1899,8 +1837,6 @@ document.querySelector('.agenda-collapse')?.addEventListener('toggle', (ev) => {
         await carregarAuxiliares();
         await carregarKPIs();
         await carregarLista();
-        document.getElementById('viagemAgendaData').value = new Date().toISOString().slice(0, 10);
-        await carregarTorreControle();
         const vid = Number(new URLSearchParams(window.location.search).get('vid'));
         if (vid) abrirDetalhe(vid);
     }
@@ -1908,7 +1844,7 @@ document.querySelector('.agenda-collapse')?.addEventListener('toggle', (ev) => {
 })();
 
 // auto-refresh a cada 30s (para pegar novas posições do Locartrack)
-setInterval(() => { carregarKPIs(); carregarLista(); carregarTorreControle(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
+setInterval(() => { carregarKPIs(); carregarLista(); if (viagemSelecionadaId && viagemSelecionada?.status === 'EmAndamento') abrirDetalhe(viagemSelecionadaId); }, 30000);
 
 // ── Tab switcher ──────────────────────────────────────────────────────────
 function switchTab(tab) {
