@@ -225,7 +225,7 @@ from ..services.expedicao_photo_storage import (
     using_drive,
 )
 from ..services.xml_service import process_xml_and_store
-from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf, formatar_codigo_material_padrao
+from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf
 
 
 register_schema = RegisterSchema()
@@ -2689,20 +2689,13 @@ def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str,
             item.pedido_compra = po_pedido[:50]
             atualizou = True
 
-        codigo_material = formatar_codigo_material_padrao(par.get("po_codigo_material"))
+        codigo_material = str(par.get("po_codigo_material") or "").strip()
         descricao_material = str(par.get("po_descricao_material") or "").strip()
         if codigo_material and item.codigo != codigo_material:
             item.codigo = codigo_material
             atualizou = True
         if descricao_material and item.descricao != descricao_material:
             item.descricao = descricao_material
-            atualizou = True
-
-    # Retroativo: saneia codigos ja gravados para o padrao operacional (inclui casos ...02010 -> ...00010).
-    for item in itens_nf:
-        codigo_saneado = formatar_codigo_material_padrao(item.codigo)
-        if codigo_saneado and item.codigo != codigo_saneado:
-            item.codigo = codigo_saneado
             atualizou = True
 
     if atualizou:

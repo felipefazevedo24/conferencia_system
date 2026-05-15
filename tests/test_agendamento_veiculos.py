@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash
 from conferencia_app import create_app
 from conferencia_app.extensions import db
 from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, Usuario
-from conferencia_app.services.pedidos_service import buscar_linhas_pedido
+from conferencia_app.services.pedidos_service import _linha_postgres_to_pedido, buscar_linhas_pedido
 
 
 def build_test_app(tmp_path: Path, fornecedores_path: Path, clientes_path: Path):
@@ -285,6 +285,24 @@ def test_busca_linhas_pedido_usa_erp_postgres():
     assert linhas[0]["vl_pendente"] == 23.0
     carregar_sheets.assert_not_called()
     salvar_cache.assert_not_called()
+
+
+def test_linha_postgres_preserva_codigo_material_do_erp_sem_formatar():
+    linha = _linha_postgres_to_pedido(
+        {
+            "ordem_compra": "11560",
+            "cod_fornecedor": "635",
+            "fornecedor": "ARTOLE PARAFUSOS LTDA",
+            "cod_interno": "190300016",
+            "descricao": "PARAFUSO ALLEN",
+            "pendente": 100.0,
+            "preco_unitario": 0.23,
+            "vl_pendente": 23.0,
+            "total_item": 23.0,
+        }
+    )
+
+    assert linha["codigo_material"] == "190300016"
 
 
 def test_agendamento_cria_coleta_e_bloqueia_conflito_de_veiculo(tmp_path):

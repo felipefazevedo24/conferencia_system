@@ -308,8 +308,6 @@ def _linha_postgres_to_pedido(row: dict) -> dict:
     total_item = float(row.get("total_item") or 0.0)
     fornecedor_cnpj = re.sub(r"\D", "", str(row.get("fornecedor_cnpj") or "").strip())
     cep = re.sub(r"\D", "", str(row.get("cep") or "").strip())
-    codigo_material = cod_interno if "/" in cod_interno else _formatar_codigo_material_padrao(cod_interno)
-
     linha = {
         "ordem_compra": ordem_compra,
         "cod_fornecedor": str(row.get("cod_fornecedor") or "").strip(),
@@ -324,7 +322,7 @@ def _linha_postgres_to_pedido(row: dict) -> dict:
         "pedido_compra": ordem_compra,
         "qtd": pendente,
         "valor_unit": preco_unitario,
-        "codigo_material": codigo_material,
+        "codigo_material": cod_interno,
         "descricao_material": descricao,
         "fonte_dados": PEDIDOS_FONTE_ERP_POSTGRES,
     }
@@ -667,7 +665,7 @@ def _normalizar_linha_cache(linha: dict, pedido: str) -> dict:
         "pedido_compra": str(linha.get("pedido_compra") or pedido),
         "qtd": float(linha.get("qtd") or 0.0),
         "valor_unit": float(linha.get("valor_unit") or 0.0),
-        "codigo_material": _formatar_codigo_material_padrao(linha.get("codigo_material")),
+        "codigo_material": str(linha.get("codigo_material") or "").strip(),
         "descricao_material": str(linha.get("descricao_material") or "").strip(),
         "fonte_dados": str(linha.get("fonte_dados") or PEDIDOS_FONTE_CACHE_LOCAL),
     }

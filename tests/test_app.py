@@ -2798,6 +2798,45 @@ def test_liberar_nfse_envia_direto_entrada_concluido(tmp_path):
         assert item.status == "Concluído"
 
 
+def test_auditor_preserva_codigo_material_do_erp_sem_formatar(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="7040",
+                fornecedor="Fornecedor ERP",
+                codigo="COD-XML",
+                descricao="Item XML",
+                qtd_real=1.0,
+                valor_produto=10.0,
+                status="AguardandoLiberacao",
+            )
+        )
+        db.session.commit()
+        item_id = ItemNota.query.filter_by(numero_nota="7040").first().id
+
+        resultado = {
+            "pares": [
+                {
+                    "item_id": item_id,
+                    "po_index": 0,
+                    "po_pedido": "11560",
+                    "po_codigo_material": "190300016",
+                    "po_descricao_material": "PARAFUSO ALLEN",
+                }
+            ]
+        }
+
+        from conferencia_app.routes.api_routes import _sincronizar_codigo_interno_por_pedido
+
+        _sincronizar_codigo_interno_por_pedido("7040", "11560", resultado)
+
+        item = ItemNota.query.filter_by(numero_nota="7040").first()
+        assert item.codigo == "190300016"
+        assert item.descricao == "PARAFUSO ALLEN"
+
+
 def test_process_xml_store_nfse_sem_numero_usa_fallback(tmp_path):
     app = build_test_app(tmp_path)
 
