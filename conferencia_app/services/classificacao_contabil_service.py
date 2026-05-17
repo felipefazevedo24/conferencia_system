@@ -46,6 +46,27 @@ def _normalizar_codigo(value: Any) -> str:
     return normalizar_texto(value).replace(" ", "")
 
 
+def _cfop_variantes(value: Any) -> list[str]:
+    cfop = re.sub(r"\D", "", str(value or "").strip())
+    if not cfop:
+        return [""]
+    variantes = {cfop}
+    if len(cfop) == 4:
+        if cfop.startswith("5"):
+            variantes.add("1" + cfop[1:])
+        elif cfop.startswith("6"):
+            variantes.add("2" + cfop[1:])
+        elif cfop.startswith("1"):
+            variantes.add("5" + cfop[1:])
+        elif cfop.startswith("2"):
+            variantes.add("6" + cfop[1:])
+    return list(variantes)
+
+
+def _filtrar_cfop(query, variantes: list[str]):
+    return query.filter(ClassificacaoContabilPadrao.cfop.in_(variantes))
+
+
 def _valor(row: tuple, index: dict[str, int], campo: str) -> Any:
     for header in HEADER_ALIASES[campo]:
         pos = index.get(header)
@@ -300,12 +321,16 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
     codigo = _normalizar_codigo(item.codigo)
     descricao = normalizar_texto(item.descricao)
     cfop = str(item.cfop or "").strip()
+    cfops = _cfop_variantes(cfop)
 
     tentativas = [
         (
             "Fornecedor + codigo + CFOP",
             98,
-            ClassificacaoContabilPadrao.query.filter_by(fornecedor_norm=fornecedor, codigo_norm=codigo, cfop=cfop),
+            _filtrar_cfop(
+                ClassificacaoContabilPadrao.query.filter_by(fornecedor_norm=fornecedor, codigo_norm=codigo),
+                cfops,
+            ),
         ),
         (
             "Fornecedor + codigo",
@@ -315,22 +340,35 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
         (
             "Codigo + CFOP",
             86,
-            ClassificacaoContabilPadrao.query.filter_by(codigo_norm=codigo, cfop=cfop),
+            _filtrar_cfop(ClassificacaoContabilPadrao.query.filter_by(codigo_norm=codigo), cfops),
+        ),
+        (
+            "Codigo do item",
+            82,
+            ClassificacaoContabilPadrao.query.filter_by(codigo_norm=codigo),
         ),
         (
             "Fornecedor + descricao + CFOP",
             82,
-            ClassificacaoContabilPadrao.query.filter_by(fornecedor_norm=fornecedor, descricao_norm=descricao, cfop=cfop),
+            _filtrar_cfop(
+                ClassificacaoContabilPadrao.query.filter_by(fornecedor_norm=fornecedor, descricao_norm=descricao),
+                cfops,
+            ),
         ),
         (
             "CFOP + descricao",
             70,
-            ClassificacaoContabilPadrao.query.filter_by(cfop=cfop, descricao_norm=descricao),
+            _filtrar_cfop(ClassificacaoContabilPadrao.query.filter_by(descricao_norm=descricao), cfops),
+        ),
+        (
+            "Descricao do item",
+            66,
+            ClassificacaoContabilPadrao.query.filter_by(descricao_norm=descricao),
         ),
         (
             "CFOP dominante",
             55,
-            ClassificacaoContabilPadrao.query.filter_by(cfop=cfop),
+            _filtrar_cfop(ClassificacaoContabilPadrao.query, cfops),
         ),
     ]
 

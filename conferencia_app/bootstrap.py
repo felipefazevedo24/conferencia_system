@@ -789,6 +789,13 @@ def initialize_database(app: Flask) -> None:
         except Exception:
             pass
 
+        if not app.config.get("TESTING"):
+            try:
+                from .services.classificacao_contabil_service import importar_padroes_internos
+                importar_padroes_internos()
+            except Exception:
+                pass
+
 
 def _ensure_facilities_extra_columns() -> None:
     """Adiciona colunas Fase 2+3 (estoque, retirada, evidencia, auditoria, cancelamento)."""

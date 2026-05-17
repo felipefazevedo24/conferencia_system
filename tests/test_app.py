@@ -1245,6 +1245,48 @@ def test_financeiro_classificacao_contabil_reprocessa_pendente_existente(tmp_pat
         assert classificacao.status == "Classificado"
 
 
+def test_financeiro_classificacao_contabil_equivale_cfop_saida_para_entrada(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026CFOP",
+            fornecedor="Fornecedor CFOP",
+            codigo="EQ001",
+            descricao="Item equivalente",
+            cfop="5102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 7, 2, 9, 0),
+        )
+        db.session.add(item)
+        db.session.add(
+            ClassificacaoContabilPadrao(
+                fornecedor_norm="FORNECEDOR CFOP",
+                cfop="1102",
+                codigo_norm="EQ001",
+                descricao_norm="ITEM EQUIVALENTE",
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDÁRIOS",
+                ocorrencias=3,
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/financeiro/classificacao-contabil/reprocessar",
+        json={"inicio": "2026-07-01", "fim": "2026-07-31"},
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        classificacao = ClassificacaoContabilItem.query.filter_by(numero_nota="2026CFOP").first()
+        assert classificacao.conta == "12503"
+        assert classificacao.metodo == "Fornecedor + codigo + CFOP"
+
+
 def test_financeiro_classificacao_contabil_aprovacao_bloqueia_reprocessamento(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

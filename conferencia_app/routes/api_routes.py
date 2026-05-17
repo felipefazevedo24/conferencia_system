@@ -2217,7 +2217,7 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_importar_padroes():
     resultado = importar_padroes_internos(forcar=True)
-    classificados = classificar_lancadas_desde_2026(limite=1000)
+    classificados = classificar_lancadas_desde_2026(limite=0)
     resultado["itens_classificados"] = classificados
     return jsonify({"sucesso": True, "resultado": resultado})
 
@@ -2229,7 +2229,7 @@ def financeiro_classificacao_upload_padroes():
     if not arquivos:
         return jsonify({"sucesso": False, "msg": "Envie pelo menos um arquivo Excel."}), 400
     resultado = importar_padroes_uploads(arquivos)
-    classificados = classificar_lancadas_desde_2026(limite=1000)
+    classificados = classificar_lancadas_desde_2026(limite=0)
     resultado["itens_classificados"] = classificados
     return jsonify({"sucesso": True, "resultado": resultado})
 
@@ -2248,7 +2248,7 @@ def financeiro_classificacao_reprocessar():
         total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
     else:
         total = classificar_lancadas_desde_2026(
-            limite=int(data.get("limite") or 1000),
+            limite=int(data.get("limite") or 0),
             data_inicio=data_inicio,
             data_fim=data_fim,
             sobrescrever_manual=sobrescrever,
@@ -2293,7 +2293,7 @@ def financeiro_classificacao_aprovar_periodo():
 @api_bp.route("/api/financeiro/classificacao-contabil")
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_listar():
-    classificar_lancadas_desde_2026(limite=1000)
+    classificar_lancadas_desde_2026(limite=0)
     data_inicio = _parse_data_filtro(request.args.get("inicio")) or datetime(2026, 1, 1)
     data_fim = _parse_data_filtro(request.args.get("fim"), fim=True)
     if data_inicio < datetime(2026, 1, 1):
