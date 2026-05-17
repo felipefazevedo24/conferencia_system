@@ -1189,6 +1189,127 @@ def test_financeiro_classificacao_contabil_usa_base_interna_sem_excel_upload(tmp
         assert ClassificacaoContabilPadrao.query.count() > 100
 
 
+def test_financeiro_classificacao_contabil_reprocessa_pendente_existente(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026REP",
+            fornecedor="Fornecedor Reprocesso",
+            codigo="COD-BANCO-1",
+            descricao="Item vindo do banco",
+            cfop="1102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 5, 2, 9, 0),
+        )
+        db.session.add(item)
+        db.session.commit()
+        db.session.add(
+            ClassificacaoContabilItem(
+                item_nota_id=item.id,
+                numero_nota=item.numero_nota,
+                fornecedor=item.fornecedor,
+                codigo_item=item.codigo,
+                descricao_item=item.descricao,
+                cfop=item.cfop,
+                status="Pendente",
+                metodo="Sem padrão",
+            )
+        )
+        db.session.add(
+            ClassificacaoContabilPadrao(
+                fornecedor_norm="FORNECEDOR REPROCESSO",
+                cfop="1102",
+                codigo_norm="CODBANCO1",
+                descricao_norm="ITEM VINDO DO BANCO",
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDÁRIOS",
+                ocorrencias=5,
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/financeiro/classificacao-contabil/reprocessar",
+        json={"inicio": "2026-05-01", "fim": "2026-05-31"},
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        classificacao = ClassificacaoContabilItem.query.filter_by(numero_nota="2026REP").first()
+        assert classificacao.conta == "12503"
+        assert classificacao.codigo_item == "COD-BANCO-1"
+        assert classificacao.status == "Classificado"
+
+
+def test_financeiro_classificacao_contabil_aprovacao_bloqueia_reprocessamento(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026APR",
+            fornecedor="Fornecedor Aprovar",
+            codigo="APR1",
+            descricao="Item aprovado",
+            cfop="1102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 6, 10, 9, 0),
+        )
+        db.session.add(item)
+        db.session.commit()
+        db.session.add(
+            ClassificacaoContabilItem(
+                item_nota_id=item.id,
+                numero_nota=item.numero_nota,
+                fornecedor=item.fornecedor,
+                codigo_item=item.codigo,
+                descricao_item=item.descricao,
+                cfop=item.cfop,
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDÁRIOS",
+                status="Classificado",
+                confianca=98,
+            )
+        )
+        db.session.add(
+            ClassificacaoContabilPadrao(
+                fornecedor_norm="FORNECEDOR APROVAR",
+                cfop="1102",
+                codigo_norm="APR1",
+                descricao_norm="ITEM APROVADO",
+                conta="99999",
+                nome_conta="CONTA NOVA",
+                ocorrencias=10,
+            )
+        )
+        db.session.commit()
+
+    aprovacao = client.post(
+        "/api/financeiro/classificacao-contabil/aprovar",
+        json={"inicio": "2026-06-01", "fim": "2026-06-30"},
+    )
+    assert aprovacao.status_code == 200
+    assert aprovacao.get_json()["aprovadas"] == 1
+
+    reprocessar = client.post(
+        "/api/financeiro/classificacao-contabil/reprocessar",
+        json={"inicio": "2026-06-01", "fim": "2026-06-30"},
+    )
+    assert reprocessar.status_code == 200
+
+    with app.app_context():
+        classificacao = ClassificacaoContabilItem.query.filter_by(numero_nota="2026APR").first()
+        assert classificacao.status == "Aprovado"
+        assert classificacao.conta == "12503"
+        assert classificacao.aprovado_por == "contador_teste"
+
+
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

@@ -140,6 +140,8 @@ class ClassificacaoContabilItem(db.Model):
     regra_id = db.Column(db.Integer, db.ForeignKey("classificacao_contabil_padrao.id"), nullable=True)
     revisado_por = db.Column(db.String(100))
     revisado_em = db.Column(db.DateTime)
+    aprovado_por = db.Column(db.String(100))
+    aprovado_em = db.Column(db.DateTime)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 

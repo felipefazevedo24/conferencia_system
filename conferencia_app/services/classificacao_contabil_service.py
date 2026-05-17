@@ -370,7 +370,7 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
 
 def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> ClassificacaoContabilItem:
     existente = ClassificacaoContabilItem.query.filter_by(item_nota_id=item.id).first()
-    if existente and existente.status == "Revisado" and not sobrescrever_manual:
+    if existente and existente.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
         return existente
 
     sugestao = sugerir_classificacao_item(item)
@@ -378,7 +378,7 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> Class
     registro = existente or ClassificacaoContabilItem(item_nota_id=item.id, numero_nota=str(item.numero_nota or ""))
     registro.numero_nota = str(item.numero_nota or "")
     registro.fornecedor = item.fornecedor
-    registro.codigo_item = item.codigo
+    registro.codigo_item = str(item.codigo or "").strip()
     registro.descricao_item = item.descricao
     registro.cfop = item.cfop
     registro.conta = sugestao["conta"]
@@ -405,18 +405,29 @@ def classificar_nota(numero_nota: str, sobrescrever_manual: bool = False) -> int
     return total
 
 
-def classificar_lancadas_desde_2026(limite: int = 500) -> int:
+def classificar_lancadas_desde_2026(
+    limite: int = 500,
+    data_inicio: datetime | None = None,
+    data_fim: datetime | None = None,
+    sobrescrever_manual: bool = False,
+) -> int:
+    data_inicio = max(data_inicio or datetime(2026, 1, 1), datetime(2026, 1, 1))
     query = (
-        ItemNota.query.outerjoin(ClassificacaoContabilItem, ClassificacaoContabilItem.item_nota_id == ItemNota.id)
+        ItemNota.query
         .filter(ItemNota.status == "Lançado")
-        .filter(ItemNota.data_lancamento >= datetime(2026, 1, 1))
-        .filter(ClassificacaoContabilItem.id.is_(None))
+        .filter(ItemNota.data_lancamento >= data_inicio)
         .order_by(ItemNota.data_lancamento.desc())
-        .limit(limite)
     )
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    if limite:
+        query = query.limit(limite)
     total = 0
     for item in query.all():
-        classificar_item(item)
+        antes = ClassificacaoContabilItem.query.filter_by(item_nota_id=item.id).first()
+        if antes and antes.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
+            continue
+        classificar_item(item, sobrescrever_manual=sobrescrever_manual)
         total += 1
     db.session.commit()
     return total
@@ -433,6 +444,7 @@ def resumo_classificacoes(data_inicio: datetime | None = None, data_fim: datetim
     total = query.count()
     revisao = query.filter(ClassificacaoContabilItem.status.in_(["Revisar", "Pendente"])).count()
     revisados = query.filter(ClassificacaoContabilItem.status == "Revisado").count()
+    aprovados = query.filter(ClassificacaoContabilItem.status == "Aprovado").count()
     auto = query.filter(ClassificacaoContabilItem.status == "Classificado").count()
     confianca_media = query.with_entities(func.avg(ClassificacaoContabilItem.confianca)).scalar() or 0
     return {
@@ -440,6 +452,7 @@ def resumo_classificacoes(data_inicio: datetime | None = None, data_fim: datetim
         "classificados": auto,
         "revisao": revisao,
         "revisados": revisados,
+        "aprovados": aprovados,
         "confianca_media": round(float(confianca_media), 1),
         "padroes": ClassificacaoContabilPadrao.query.count(),
     }

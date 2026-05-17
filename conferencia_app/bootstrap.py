@@ -443,6 +443,15 @@ def _ensure_item_nota_columns() -> None:
             "CREATE INDEX ix_boleto_conta_receber_cpf_cnpj_pagador ON boleto_conta_receber (cpf_cnpj_pagador)",
         )
 
+        cols_classificacao = _get_column_names("classificacao_contabil_item")
+        if cols_classificacao:
+            if "aprovado_por" not in cols_classificacao:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN aprovado_por VARCHAR(100)"))
+                conn.commit()
+            if "aprovado_em" not in cols_classificacao:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN aprovado_em DATETIME"))
+                conn.commit()
+
         conn.execute(
             db.text(
                 """

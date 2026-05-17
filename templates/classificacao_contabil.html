@@ -55,7 +55,7 @@
     }
     .cc-kpis {
         display: grid;
-        grid-template-columns: repeat(5, minmax(130px, 1fr));
+        grid-template-columns: repeat(6, minmax(130px, 1fr));
         gap: 12px;
         margin-bottom: 14px;
     }
@@ -197,6 +197,7 @@
     .cc-pill.ok { color: #166534; background: #ecfdf3; border-color: #bbf7d0; }
     .cc-pill.warn { color: #92400e; background: #fffbeb; border-color: #fde68a; }
     .cc-pill.pending { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+    .cc-pill.approved { color: #075985; background: #e0f2fe; border-color: #bae6fd; }
     .cc-account-muted {
         color: #991b1b;
         font-weight: 800;
@@ -279,6 +280,7 @@
         <div class="cc-actions">
             <input id="upload-padroes" type="file" accept=".xlsx,.xlsm" multiple hidden>
             <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-database"></i> Recarregar padrões</button>
+            <button class="cc-btn secondary" id="btn-aprovar" type="button"><i class="fas fa-circle-check"></i> Aprovar período</button>
             <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
         </div>
     </div>
@@ -287,6 +289,7 @@
         <div class="cc-kpi"><span>Total</span><strong id="k-total">0</strong></div>
         <div class="cc-kpi"><span>Automático</span><strong id="k-auto">0</strong></div>
         <div class="cc-kpi"><span>Pendências</span><strong id="k-revisao">0</strong></div>
+        <div class="cc-kpi"><span>Aprovadas</span><strong id="k-aprovadas">0</strong></div>
         <div class="cc-kpi"><span>Confiança média</span><strong id="k-confianca">0%</strong></div>
         <div class="cc-kpi"><span>Padrões</span><strong id="k-padroes">0</strong></div>
     </section>
@@ -308,6 +311,7 @@
                 <option value="Revisar">Revisar</option>
                 <option value="Pendente">Pendente</option>
                 <option value="Revisado">Revisado</option>
+                <option value="Aprovado">Aprovado</option>
             </select>
         </div>
         <div class="cc-field">
@@ -388,6 +392,7 @@ function toast(msg) {
 }
 
 function statusClass(status) {
+    if (status === "Aprovado") return "approved";
     if (status === "Classificado" || status === "Revisado") return "ok";
     if (status === "Revisar") return "warn";
     return "pending";
@@ -398,6 +403,7 @@ function money(value) {
 }
 
 function rowClass(status) {
+    if (status === "Aprovado") return "";
     if (status === "Pendente") return "row-pending";
     if (status === "Revisar") return "row-review";
     return "";
@@ -450,6 +456,7 @@ function renderResumo(resumo) {
     document.getElementById("k-total").textContent = resumo.total || 0;
     document.getElementById("k-auto").textContent = resumo.classificados || 0;
     document.getElementById("k-revisao").textContent = resumo.revisao || 0;
+    document.getElementById("k-aprovadas").textContent = resumo.aprovados || 0;
     document.getElementById("k-confianca").textContent = `${resumo.confianca_media || 0}%`;
     document.getElementById("k-padroes").textContent = resumo.padroes || 0;
 }
@@ -531,6 +538,39 @@ async function acaoPost(url, msg) {
     await carregar();
 }
 
+function periodoPayload() {
+    return {
+        inicio: document.getElementById("f-inicio").value || "2026-01-01",
+        fim: document.getElementById("f-fim").value || "",
+    };
+}
+
+async function reprocessarPeriodo() {
+    toast("Reprocessando o período sem alterar aprovações do contador...");
+    const res = await fetch("/api/financeiro/classificacao-contabil/reprocessar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(periodoPayload()),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao reprocessar");
+    toast(`${data.itens_classificados || 0} item(ns) reprocessado(s). Aprovados foram preservados.`);
+    await carregar();
+}
+
+async function aprovarPeriodo() {
+    toast("Aprovando classificações do período filtrado...");
+    const res = await fetch("/api/financeiro/classificacao-contabil/aprovar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(periodoPayload()),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao aprovar período");
+    toast(`${data.aprovadas || 0} classificação(ões) aprovadas. ${data.pendentes || 0} pendente(s) ficaram fora.`);
+    await carregar();
+}
+
 async function importarUploads(files) {
     if (!files || !files.length) return;
     const form = new FormData();
@@ -552,7 +592,8 @@ document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
 document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
 document.getElementById("btn-importar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/padroes/importar", "Recarregando a base interna de padrões 2026...").catch(err => toast(err.message)));
 document.getElementById("upload-padroes").addEventListener("change", event => importarUploads(event.target.files).catch(err => toast(err.message)));
-document.getElementById("btn-reprocessar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/reprocessar", "Reprocessando notas lançadas desde 2026...").catch(err => toast(err.message)));
+document.getElementById("btn-reprocessar").addEventListener("click", () => reprocessarPeriodo().catch(err => toast(err.message)));
+document.getElementById("btn-aprovar").addEventListener("click", () => aprovarPeriodo().catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {
     if (event.key === "Enter") carregar().catch(err => toast(err.message));
 });

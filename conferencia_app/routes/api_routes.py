@@ -2204,6 +2204,8 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "status": row.status or "Pendente",
         "revisado_por": row.revisado_por or "",
         "revisado_em": row.revisado_em.strftime("%d/%m/%Y %H:%M") if row.revisado_em else "",
+        "aprovado_por": row.aprovado_por or "",
+        "aprovado_em": row.aprovado_em.strftime("%d/%m/%Y %H:%M") if row.aprovado_em else "",
         "data_lancamento": data_lanc.strftime("%d/%m/%Y %H:%M") if data_lanc else "---",
         "data_lancamento_iso": data_lanc.date().isoformat() if data_lanc else "",
         "data_nf": data_nf.strftime("%d/%m/%Y") if data_nf else "---",
@@ -2238,11 +2240,54 @@ def financeiro_classificacao_reprocessar():
     data = request.json or {}
     nota = str(data.get("nota") or "").strip()
     sobrescrever = bool(data.get("sobrescrever_manual", False))
+    data_inicio = _parse_data_filtro(data.get("inicio")) or datetime(2026, 1, 1)
+    data_fim = _parse_data_filtro(data.get("fim"), fim=True)
+    if data_inicio < datetime(2026, 1, 1):
+        data_inicio = datetime(2026, 1, 1)
     if nota:
         total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
     else:
-        total = classificar_lancadas_desde_2026(limite=int(data.get("limite") or 1000))
+        total = classificar_lancadas_desde_2026(
+            limite=int(data.get("limite") or 1000),
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            sobrescrever_manual=sobrescrever,
+        )
     return jsonify({"sucesso": True, "itens_classificados": total})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/aprovar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_aprovar_periodo():
+    data = request.json or {}
+    data_inicio = _parse_data_filtro(data.get("inicio")) or datetime(2026, 1, 1)
+    data_fim = _parse_data_filtro(data.get("fim"), fim=True)
+    if data_inicio < datetime(2026, 1, 1):
+        data_inicio = datetime(2026, 1, 1)
+
+    query = ClassificacaoContabilItem.query.join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
+    query = query.filter(ItemNota.data_lancamento >= data_inicio)
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+
+    agora = datetime.now()
+    usuario = session.get("username", "contador")
+    aprovadas = 0
+    pendentes = 0
+    for row in query.all():
+        if not str(row.conta or "").strip() or row.status == "Pendente":
+            pendentes += 1
+            continue
+        if row.status == "Aprovado":
+            continue
+        row.status = "Aprovado"
+        row.aprovado_por = usuario
+        row.aprovado_em = agora
+        row.atualizado_em = agora
+        aprovadas += 1
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "aprovadas": aprovadas, "pendentes": pendentes})
 
 
 @api_bp.route("/api/financeiro/classificacao-contabil")
@@ -2319,6 +2364,8 @@ def financeiro_classificacao_atualizar(classificacao_id):
     row.status = "Revisado"
     row.revisado_por = session.get("username", "contador")
     row.revisado_em = datetime.now()
+    row.aprovado_por = None
+    row.aprovado_em = None
     row.atualizado_em = datetime.now()
 
     item = row.item_nota
