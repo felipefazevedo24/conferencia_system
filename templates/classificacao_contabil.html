@@ -278,7 +278,7 @@
         </div>
         <div class="cc-actions">
             <input id="upload-padroes" type="file" accept=".xlsx,.xlsm" multiple hidden>
-            <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-file-excel"></i> Importar Excel</button>
+            <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-database"></i> Recarregar padrões</button>
             <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
         </div>
     </div>
@@ -550,7 +550,7 @@ async function importarUploads(files) {
 document.getElementById("btn-filtrar").addEventListener("click", () => carregar().catch(err => toast(err.message)));
 document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
 document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
-document.getElementById("btn-importar").addEventListener("click", () => document.getElementById("upload-padroes").click());
+document.getElementById("btn-importar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/padroes/importar", "Recarregando a base interna de padrões 2026...").catch(err => toast(err.message)));
 document.getElementById("upload-padroes").addEventListener("change", event => importarUploads(event.target.files).catch(err => toast(err.message)));
 document.getElementById("btn-reprocessar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/reprocessar", "Reprocessando notas lançadas desde 2026...").catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {

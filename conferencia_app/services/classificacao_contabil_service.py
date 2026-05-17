@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import json
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ ARQUIVOS_PADRAO_2026 = [
     Path(r"z:\CUSTOS\ESTOQUE\2026\03-Março 2026\Classificações entradas\Entradas 30 _ CHECk _ FINAL.xlsx"),
     Path(r"z:\CUSTOS\ESTOQUE\2026\02-Fevereiro 2026\Classificações entradas\Entradas Fevereiro  01 A 26.xlsx"),
 ]
+BUNDLED_PADROES_PATH = Path(__file__).resolve().parents[1] / "data" / "classificacao_contabil_padroes_2026.json"
 
 
 HEADER_ALIASES = {
@@ -218,6 +220,66 @@ def importar_padroes_uploads(arquivos) -> dict:
     }
 
 
+def importar_padroes_internos(forcar: bool = False) -> dict:
+    if not forcar and ClassificacaoContabilPadrao.query.count() > 0:
+        return {
+            "origem": "banco",
+            "padroes_criados": 0,
+            "padroes_atualizados": 0,
+            "padroes_total": ClassificacaoContabilPadrao.query.count(),
+        }
+    if not BUNDLED_PADROES_PATH.exists():
+        return {
+            "origem": "interno_indisponivel",
+            "padroes_criados": 0,
+            "padroes_atualizados": 0,
+            "padroes_total": ClassificacaoContabilPadrao.query.count(),
+        }
+
+    data = json.loads(BUNDLED_PADROES_PATH.read_text(encoding="utf-8"))
+    agora = datetime.now()
+    criados = 0
+    atualizados = 0
+    for row in data.get("padroes", []):
+        padrao = ClassificacaoContabilPadrao.query.filter_by(
+            fornecedor_norm=str(row.get("fornecedor_norm") or ""),
+            cfop=str(row.get("cfop") or ""),
+            codigo_norm=str(row.get("codigo_norm") or ""),
+            descricao_norm=str(row.get("descricao_norm") or ""),
+            conta=str(row.get("conta") or ""),
+        ).first()
+        if padrao is None:
+            padrao = ClassificacaoContabilPadrao(
+                fornecedor_norm=str(row.get("fornecedor_norm") or ""),
+                cfop=str(row.get("cfop") or ""),
+                codigo_norm=str(row.get("codigo_norm") or ""),
+                descricao_norm=str(row.get("descricao_norm") or ""),
+                conta=str(row.get("conta") or ""),
+            )
+            db.session.add(padrao)
+            criados += 1
+        else:
+            atualizados += 1
+        padrao.nome_conta = str(row.get("nome_conta") or "")[:180]
+        padrao.comentario = str(row.get("comentario") or "")[:500]
+        padrao.ocorrencias = int(row.get("ocorrencias") or 1)
+        padrao.origem = str(row.get("origem") or "Base interna 2026")[:120]
+        padrao.atualizado_em = agora
+
+    db.session.commit()
+    return {
+        "origem": "base_interna_2026",
+        "padroes_criados": criados,
+        "padroes_atualizados": atualizados,
+        "padroes_total": ClassificacaoContabilPadrao.query.count(),
+    }
+
+
+def garantir_padroes_internos() -> None:
+    if ClassificacaoContabilPadrao.query.count() == 0:
+        importar_padroes_internos()
+
+
 def _conta_dominante(query):
     rows = query.all()
     if not rows:
@@ -233,6 +295,7 @@ def _conta_dominante(query):
 
 
 def sugerir_classificacao_item(item: ItemNota) -> dict:
+    garantir_padroes_internos()
     fornecedor = normalizar_texto(item.fornecedor)
     codigo = _normalizar_codigo(item.codigo)
     descricao = normalizar_texto(item.descricao)

@@ -125,6 +125,7 @@ from ..services.classificacao_contabil_service import (
     classificar_item,
     classificar_lancadas_desde_2026,
     classificar_nota,
+    importar_padroes_internos,
     importar_padroes_excel,
     importar_padroes_uploads,
     normalizar_texto,
@@ -2213,7 +2214,7 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
 @api_bp.route("/api/financeiro/classificacao-contabil/padroes/importar", methods=["POST"])
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_importar_padroes():
-    resultado = importar_padroes_excel()
+    resultado = importar_padroes_internos(forcar=True)
     classificados = classificar_lancadas_desde_2026(limite=1000)
     resultado["itens_classificados"] = classificados
     return jsonify({"sucesso": True, "resultado": resultado})

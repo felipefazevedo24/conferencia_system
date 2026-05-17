@@ -1096,7 +1096,7 @@ def test_financeiro_classificacao_contabil_revisao_manual_aprende_padrao(tmp_pat
 
     lista = client.get("/api/financeiro/classificacao-contabil?inicio=2026-01-01").get_json()
     classificacao = next(item for item in lista["itens"] if item["numero_nota"] == "2026B")
-    assert classificacao["status"] == "Pendente"
+    assert classificacao["status"] in {"Pendente", "Revisar"}
 
     response = client.patch(
         f"/api/financeiro/classificacao-contabil/{classificacao['id']}",
@@ -1113,7 +1113,7 @@ def test_financeiro_classificacao_contabil_revisao_manual_aprende_padrao(tmp_pat
 
     with app.app_context():
         assert ClassificacaoContabilItem.query.filter_by(numero_nota="2026B", status="Revisado").count() == 1
-        assert ClassificacaoContabilPadrao.query.filter_by(conta="94901").count() == 1
+        assert ClassificacaoContabilPadrao.query.filter_by(conta="94901").count() >= 1
 
 
 def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_path):
@@ -1155,6 +1155,38 @@ def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_p
         padrao = ClassificacaoContabilPadrao.query.filter_by(conta="12503").first()
         assert padrao is not None
         assert padrao.fornecedor_norm == "FORNECEDOR UPLOAD"
+
+
+def test_financeiro_classificacao_contabil_usa_base_interna_sem_excel_upload(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="2026BASE",
+                fornecedor="K VOLTS RESISTENCIAS",
+                codigo="26-06-00016",
+                descricao="Servico manutencao",
+                cfop="1933",
+                qtd_real=1,
+                status="Lançado",
+                data_lancamento=datetime(2026, 4, 2, 9, 0),
+                valor_produto=300,
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/financeiro/classificacao-contabil?inicio=2026-01-01")
+    assert response.status_code == 200
+    data = response.get_json()
+    item = next(row for row in data["itens"] if row["numero_nota"] == "2026BASE")
+    assert item["conta"] == "94901"
+    assert item["status"] == "Classificado"
+
+    with app.app_context():
+        assert ClassificacaoContabilPadrao.query.count() > 100
 
 
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
