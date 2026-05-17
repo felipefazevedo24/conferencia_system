@@ -14,6 +14,8 @@ from conferencia_app.auth import check_active_session
 from conferencia_app.extensions import db
 from conferencia_app.models import (
     BoletoContaReceber,
+    ClassificacaoContabilItem,
+    ClassificacaoContabilPadrao,
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesEstorno,
     ExpedicaoConferenciaSimplesFoto,
@@ -1009,6 +1011,109 @@ def test_fiscal_sem_acesso_a_financeiro_faturamento(tmp_path):
 
     response = client.get("/financeiro/faturamento")
     assert response.status_code == 403
+
+
+def test_financeiro_classificacao_contabil_page_e_api_filtram_desde_2026(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        db.session.add(
+            ClassificacaoContabilPadrao(
+                fornecedor_norm="FORNECEDOR PADRAO",
+                cfop="1102",
+                codigo_norm="MAT001",
+                descricao_norm="PARAFUSO",
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDÁRIOS",
+                ocorrencias=4,
+                origem="Teste",
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="2026A",
+                fornecedor="Fornecedor Padrão",
+                codigo="MAT001",
+                descricao="Parafuso",
+                cfop="1102",
+                qtd_real=1,
+                status="Lançado",
+                data_lancamento=datetime(2026, 2, 10, 8, 30),
+                valor_produto=50,
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="2025A",
+                fornecedor="Fornecedor Padrão",
+                codigo="MAT001",
+                descricao="Parafuso",
+                cfop="1102",
+                qtd_real=1,
+                status="Lançado",
+                data_lancamento=datetime(2025, 12, 30, 8, 30),
+                valor_produto=50,
+            )
+        )
+        db.session.commit()
+
+    page = client.get("/financeiro/classificacao-contabil")
+    assert page.status_code == 200
+    assert "Classificação contábil".encode("utf-8") in page.data
+
+    response = client.get("/api/financeiro/classificacao-contabil?inicio=2025-01-01")
+    assert response.status_code == 200
+    data = response.get_json()
+    numeros = {item["numero_nota"] for item in data["itens"]}
+    assert "2026A" in numeros
+    assert "2025A" not in numeros
+    item_2026 = next(item for item in data["itens"] if item["numero_nota"] == "2026A")
+    assert item_2026["conta"] == "12503"
+    assert item_2026["status"] == "Classificado"
+
+
+def test_financeiro_classificacao_contabil_revisao_manual_aprende_padrao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026B",
+            fornecedor="Fornecedor Novo",
+            codigo="SERV01",
+            descricao="Servico especializado",
+            cfop="1933",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 3, 5, 9, 0),
+            valor_produto=300,
+        )
+        db.session.add(item)
+        db.session.commit()
+
+    lista = client.get("/api/financeiro/classificacao-contabil?inicio=2026-01-01").get_json()
+    classificacao = next(item for item in lista["itens"] if item["numero_nota"] == "2026B")
+    assert classificacao["status"] == "Pendente"
+
+    response = client.patch(
+        f"/api/financeiro/classificacao-contabil/{classificacao['id']}",
+        json={
+            "conta": "94901",
+            "nome_conta": "MANUTENÇÃO MÁQUINAS - CUSTO - GERAL",
+            "comentario": "ajuste contador",
+        },
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["item"]["status"] == "Revisado"
+    assert data["item"]["conta"] == "94901"
+
+    with app.app_context():
+        assert ClassificacaoContabilItem.query.filter_by(numero_nota="2026B", status="Revisado").count() == 1
+        assert ClassificacaoContabilPadrao.query.filter_by(conta="94901").count() == 1
 
 
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):

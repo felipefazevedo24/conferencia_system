@@ -1,0 +1,544 @@
+{% extends "base.html" %}
+{% block title %}Financeiro - Classificação Contábil{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cc-wrap {
+        min-height: 100vh;
+        background: #f5f7fb;
+        color: #111827;
+        padding: 22px;
+    }
+    .cc-top {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: end;
+        margin-bottom: 18px;
+    }
+    .cc-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: clamp(1.45rem, 2vw, 2.1rem);
+        font-weight: 800;
+        margin: 0;
+        color: #0f172a;
+    }
+    .cc-sub {
+        margin: 6px 0 0;
+        color: #64748b;
+        font-size: .96rem;
+    }
+    .cc-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .cc-btn {
+        border: 0;
+        border-radius: 8px;
+        min-height: 40px;
+        padding: 0 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        color: #fff;
+        background: #2563eb;
+        box-shadow: 0 12px 24px rgba(37, 99, 235, .18);
+    }
+    .cc-btn.secondary {
+        color: #0f172a;
+        background: #fff;
+        border: 1px solid #dbe4ef;
+        box-shadow: none;
+    }
+    .cc-kpis {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(130px, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+    .cc-kpi {
+        background: #fff;
+        border: 1px solid #e4eaf3;
+        border-radius: 8px;
+        padding: 14px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+    }
+    .cc-kpi span {
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .cc-kpi strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 1.55rem;
+        color: #0f172a;
+        font-family: "Space Grotesk", sans-serif;
+    }
+    .cc-filters {
+        background: #fff;
+        border: 1px solid #e4eaf3;
+        border-radius: 8px;
+        padding: 14px;
+        display: grid;
+        grid-template-columns: 140px 140px 170px minmax(180px, 1fr) minmax(180px, 1.1fr) auto;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 14px;
+    }
+    .cc-field label {
+        display: block;
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    .cc-field input,
+    .cc-field select {
+        width: 100%;
+        height: 38px;
+        border: 1px solid #d9e2ef;
+        border-radius: 8px;
+        padding: 0 10px;
+        color: #0f172a;
+        background: #fbfdff;
+    }
+    .cc-panel {
+        background: #fff;
+        border: 1px solid #e4eaf3;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, .06);
+    }
+    .cc-table-wrap {
+        overflow-x: auto;
+    }
+    .cc-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1120px;
+        font-size: .88rem;
+    }
+    .cc-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: .74rem;
+        text-transform: uppercase;
+        letter-spacing: 0;
+        padding: 11px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+    .cc-table td {
+        padding: 11px 12px;
+        border-bottom: 1px solid #edf2f7;
+        vertical-align: top;
+    }
+    .cc-table tr.row-pending {
+        background: linear-gradient(90deg, #fff7ed 0, #fff7ed 5px, #fff 5px);
+    }
+    .cc-table tr.row-review {
+        background: linear-gradient(90deg, #fffbeb 0, #fffbeb 5px, #fff 5px);
+    }
+    .cc-pendency {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 220px;
+    }
+    .cc-pendency-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: #dc2626;
+        flex: 0 0 auto;
+        box-shadow: 0 10px 18px rgba(220, 38, 38, .18);
+    }
+    .cc-pendency-icon.warn {
+        background: #d97706;
+        box-shadow: 0 10px 18px rgba(217, 119, 6, .18);
+    }
+    .cc-pendency strong {
+        display: block;
+        color: #7f1d1d;
+        line-height: 1.2;
+    }
+    .cc-pendency small {
+        display: block;
+        color: #92400e;
+        line-height: 1.25;
+        margin-top: 2px;
+    }
+    .cc-desc {
+        max-width: 310px;
+        color: #334155;
+    }
+    .cc-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 86px;
+        height: 26px;
+        border-radius: 999px;
+        font-size: .76rem;
+        font-weight: 800;
+        border: 1px solid #dbe4ef;
+        color: #334155;
+        background: #f8fafc;
+    }
+    .cc-pill.ok { color: #166534; background: #ecfdf3; border-color: #bbf7d0; }
+    .cc-pill.warn { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+    .cc-pill.pending { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+    .cc-account-muted {
+        color: #991b1b;
+        font-weight: 800;
+    }
+    .cc-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid #dbe4ef;
+        background: #fff;
+        color: #0f172a;
+    }
+    .cc-empty {
+        padding: 34px;
+        color: #64748b;
+        text-align: center;
+    }
+    .cc-drawer {
+        position: fixed;
+        right: 0;
+        top: 0;
+        width: min(440px, 100vw);
+        height: 100vh;
+        background: #fff;
+        border-left: 1px solid #e2e8f0;
+        box-shadow: -18px 0 40px rgba(15, 23, 42, .18);
+        transform: translateX(110%);
+        transition: transform .18s ease;
+        z-index: 1080;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .cc-drawer.open {
+        transform: translateX(0);
+    }
+    .cc-drawer h3 {
+        font-size: 1.2rem;
+        font-weight: 800;
+        margin: 0;
+    }
+    .cc-drawer textarea {
+        min-height: 94px;
+        padding-top: 10px;
+        resize: vertical;
+    }
+    .cc-toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        background: #0f172a;
+        color: #fff;
+        border-radius: 8px;
+        padding: 12px 14px;
+        display: none;
+        z-index: 1100;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, .28);
+    }
+    @media (max-width: 980px) {
+        .cc-top { grid-template-columns: 1fr; }
+        .cc-actions { justify-content: flex-start; }
+        .cc-kpis { grid-template-columns: repeat(2, 1fr); }
+        .cc-filters { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 620px) {
+        .cc-wrap { padding: 14px; }
+        .cc-kpis, .cc-filters { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cc-wrap">
+    <div class="cc-top">
+        <div>
+            <h1 class="cc-title"><i class="fas fa-scale-balanced"></i> Classificação contábil</h1>
+            <p class="cc-sub">Entradas lançadas a partir de 01/01/2026, com sugestão automática e revisão manual.</p>
+        </div>
+        <div class="cc-actions">
+            <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-file-excel"></i> Atualizar padrões</button>
+            <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
+        </div>
+    </div>
+
+    <section class="cc-kpis">
+        <div class="cc-kpi"><span>Total</span><strong id="k-total">0</strong></div>
+        <div class="cc-kpi"><span>Automático</span><strong id="k-auto">0</strong></div>
+        <div class="cc-kpi"><span>Pendências</span><strong id="k-revisao">0</strong></div>
+        <div class="cc-kpi"><span>Confiança média</span><strong id="k-confianca">0%</strong></div>
+        <div class="cc-kpi"><span>Padrões</span><strong id="k-padroes">0</strong></div>
+    </section>
+
+    <section class="cc-filters">
+        <div class="cc-field">
+            <label>Início</label>
+            <input id="f-inicio" type="date" min="2026-01-01" value="2026-01-01">
+        </div>
+        <div class="cc-field">
+            <label>Fim</label>
+            <input id="f-fim" type="date" min="2026-01-01">
+        </div>
+        <div class="cc-field">
+            <label>Status</label>
+            <select id="f-status">
+                <option value="">Todos</option>
+                <option value="Classificado">Classificado</option>
+                <option value="Revisar">Revisar</option>
+                <option value="Pendente">Pendente</option>
+                <option value="Revisado">Revisado</option>
+            </select>
+        </div>
+        <div class="cc-field">
+            <label>Conta</label>
+            <select id="f-conta"><option value="">Todas as contas</option></select>
+        </div>
+        <div class="cc-field">
+            <label>Busca</label>
+            <input id="f-busca" type="search" placeholder="NF, fornecedor, item ou código">
+        </div>
+        <button class="cc-btn secondary" id="btn-filtrar" type="button"><i class="fas fa-filter"></i> Filtrar</button>
+    </section>
+
+    <section class="cc-panel">
+        <div class="cc-table-wrap">
+            <table class="cc-table">
+                <thead>
+                    <tr>
+                        <th>NF</th>
+                        <th>Lançamento</th>
+                        <th>Fornecedor</th>
+                        <th>Item</th>
+                        <th>CFOP</th>
+                        <th>Conta</th>
+                        <th>Confiança</th>
+                        <th>Status</th>
+                        <th>Origem</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="cc-body"></tbody>
+            </table>
+        </div>
+        <div class="cc-empty" id="cc-empty" style="display:none;">Nenhuma classificação encontrada para os filtros selecionados.</div>
+    </section>
+</div>
+
+<aside class="cc-drawer" id="cc-drawer" aria-hidden="true">
+    <div class="d-flex justify-content-between align-items-center">
+        <h3>Editar conta</h3>
+        <button class="cc-icon-btn" id="btn-fechar" type="button" title="Fechar"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="cc-field">
+        <label>Nota fiscal</label>
+        <input id="e-nota" type="text" disabled>
+    </div>
+    <div class="cc-field">
+        <label>Item</label>
+        <input id="e-item" type="text" disabled>
+    </div>
+    <div class="cc-field">
+        <label>Conta</label>
+        <input id="e-conta" type="text" placeholder="Ex.: 12503">
+    </div>
+    <div class="cc-field">
+        <label>Nome da conta</label>
+        <input id="e-nome" type="text" placeholder="Ex.: MATERIAIS SECUNDÁRIOS">
+    </div>
+    <div class="cc-field">
+        <label>Comentário</label>
+        <textarea id="e-comentario" class="form-control" placeholder="Observação contábil"></textarea>
+    </div>
+    <button class="cc-btn" id="btn-salvar" type="button"><i class="fas fa-floppy-disk"></i> Salvar revisão</button>
+</aside>
+
+<div class="cc-toast" id="cc-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const state = { itens: [], selecionado: null };
+
+function toast(msg) {
+    const el = document.getElementById("cc-toast");
+    el.textContent = msg;
+    el.style.display = "block";
+    setTimeout(() => { el.style.display = "none"; }, 3200);
+}
+
+function statusClass(status) {
+    if (status === "Classificado" || status === "Revisado") return "ok";
+    if (status === "Revisar") return "warn";
+    return "pending";
+}
+
+function money(value) {
+    return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function rowClass(status) {
+    if (status === "Pendente") return "row-pending";
+    if (status === "Revisar") return "row-review";
+    return "";
+}
+
+function accountCell(item) {
+    if (item.status === "Pendente") {
+        return `
+            <div class="cc-pendency">
+                <span class="cc-pendency-icon"><i class="fas fa-circle-exclamation"></i></span>
+                <div>
+                    <strong>Pendência contábil</strong>
+                    <small>Nenhum padrão encontrado. Abra a revisão e informe a conta.</small>
+                </div>
+            </div>
+        `;
+    }
+    if (item.status === "Revisar") {
+        return `
+            <div class="cc-pendency">
+                <span class="cc-pendency-icon warn"><i class="fas fa-triangle-exclamation"></i></span>
+                <div>
+                    <strong>Revisar sugestão</strong>
+                    <small>${item.conta || "Conta sugerida"} - ${item.nome_conta || "confiança baixa"}</small>
+                </div>
+            </div>
+        `;
+    }
+    return `<strong>${item.conta || "Pendente"}</strong><br><small>${item.nome_conta || "Sem conta sugerida"}</small>`;
+}
+
+async function carregar() {
+    const params = new URLSearchParams({
+        inicio: document.getElementById("f-inicio").value || "2026-01-01",
+        fim: document.getElementById("f-fim").value || "",
+        status: document.getElementById("f-status").value || "",
+        conta: document.getElementById("f-conta").value || "",
+        q: document.getElementById("f-busca").value || "",
+    });
+    const res = await fetch(`/api/financeiro/classificacao-contabil?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao carregar classificações");
+    state.itens = data.itens || [];
+    renderResumo(data.resumo || {});
+    renderContas(data.contas || []);
+    renderTabela();
+}
+
+function renderResumo(resumo) {
+    document.getElementById("k-total").textContent = resumo.total || 0;
+    document.getElementById("k-auto").textContent = resumo.classificados || 0;
+    document.getElementById("k-revisao").textContent = resumo.revisao || 0;
+    document.getElementById("k-confianca").textContent = `${resumo.confianca_media || 0}%`;
+    document.getElementById("k-padroes").textContent = resumo.padroes || 0;
+}
+
+function renderContas(contas) {
+    const select = document.getElementById("f-conta");
+    const atual = select.value;
+    select.innerHTML = '<option value="">Todas as contas</option>' + contas.map(c =>
+        `<option value="${c.conta}">${c.conta} - ${c.nome_conta}</option>`
+    ).join("");
+    select.value = atual;
+}
+
+function renderTabela() {
+    const body = document.getElementById("cc-body");
+    const empty = document.getElementById("cc-empty");
+    empty.style.display = state.itens.length ? "none" : "block";
+    body.innerHTML = state.itens.map(item => `
+        <tr class="${rowClass(item.status)}">
+            <td><strong>${item.numero_nota}</strong><br><small>${item.data_nf}</small></td>
+            <td>${item.data_lancamento}<br><small>${money(item.valor)}</small></td>
+            <td>${item.fornecedor}</td>
+            <td class="cc-desc"><strong>${item.codigo_item}</strong><br>${item.descricao_item}</td>
+            <td>${item.cfop}</td>
+            <td>${accountCell(item)}</td>
+            <td>${item.confianca}%</td>
+            <td><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
+            <td>${item.metodo}<br><small>${item.revisado_por || ""}</small></td>
+            <td><button class="cc-icon-btn" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
+        </tr>
+    `).join("");
+}
+
+function abrirEditor(id) {
+    const item = state.itens.find(row => row.id === id);
+    if (!item) return;
+    state.selecionado = item;
+    document.getElementById("e-nota").value = item.numero_nota;
+    document.getElementById("e-item").value = `${item.codigo_item} - ${item.descricao_item}`;
+    document.getElementById("e-conta").value = item.conta || "";
+    document.getElementById("e-nome").value = item.nome_conta || "";
+    document.getElementById("e-comentario").value = item.comentario || "";
+    document.getElementById("cc-drawer").classList.add("open");
+}
+
+function fecharEditor() {
+    document.getElementById("cc-drawer").classList.remove("open");
+    state.selecionado = null;
+}
+
+async function salvarEditor() {
+    if (!state.selecionado) return;
+    const payload = {
+        conta: document.getElementById("e-conta").value,
+        nome_conta: document.getElementById("e-nome").value,
+        comentario: document.getElementById("e-comentario").value,
+    };
+    const res = await fetch(`/api/financeiro/classificacao-contabil/${state.selecionado.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        toast(data.msg || "Não foi possível salvar.");
+        return;
+    }
+    toast("Classificação revisada e padrão atualizado.");
+    fecharEditor();
+    await carregar();
+}
+
+async function acaoPost(url, msg) {
+    toast(msg);
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha na operação");
+    toast("Processo concluído.");
+    await carregar();
+}
+
+document.getElementById("btn-filtrar").addEventListener("click", () => carregar().catch(err => toast(err.message)));
+document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
+document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
+document.getElementById("btn-importar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/padroes/importar", "Lendo planilhas e atualizando padrões...").catch(err => toast(err.message)));
+document.getElementById("btn-reprocessar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/reprocessar", "Reprocessando notas lançadas desde 2026...").catch(err => toast(err.message)));
+document.getElementById("f-busca").addEventListener("keydown", event => {
+    if (event.key === "Enter") carregar().catch(err => toast(err.message));
+});
+
+carregar().catch(err => toast(err.message));
+</script>
+{% endblock %}

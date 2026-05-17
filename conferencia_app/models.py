@@ -98,6 +98,54 @@ class ItemNota(db.Model):
     data_emissao = db.Column(db.DateTime, nullable=True, index=True)
 
 
+class ClassificacaoContabilPadrao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fornecedor_norm = db.Column(db.String(180), nullable=False, default="", index=True)
+    cfop = db.Column(db.String(10), nullable=False, default="", index=True)
+    codigo_norm = db.Column(db.String(80), nullable=False, default="", index=True)
+    descricao_norm = db.Column(db.String(260), nullable=False, default="", index=True)
+    conta = db.Column(db.String(30), nullable=False, index=True)
+    nome_conta = db.Column(db.String(180), nullable=False)
+    comentario = db.Column(db.String(500))
+    ocorrencias = db.Column(db.Integer, nullable=False, default=0)
+    origem = db.Column(db.String(120))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fornecedor_norm",
+            "cfop",
+            "codigo_norm",
+            "descricao_norm",
+            "conta",
+            name="ux_classificacao_padrao_chave_conta",
+        ),
+    )
+
+
+class ClassificacaoContabilItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_nota_id = db.Column(db.Integer, db.ForeignKey("item_nota.id"), nullable=False, unique=True, index=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    fornecedor = db.Column(db.String(180))
+    codigo_item = db.Column(db.String(80), index=True)
+    descricao_item = db.Column(db.String(260))
+    cfop = db.Column(db.String(10), index=True)
+    conta = db.Column(db.String(30), index=True)
+    nome_conta = db.Column(db.String(180))
+    comentario = db.Column(db.String(500))
+    confianca = db.Column(db.Integer, nullable=False, default=0, index=True)
+    metodo = db.Column(db.String(40), nullable=False, default="Pendente", index=True)
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    regra_id = db.Column(db.Integer, db.ForeignKey("classificacao_contabil_padrao.id"), nullable=True)
+    revisado_por = db.Column(db.String(100))
+    revisado_em = db.Column(db.DateTime)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    item_nota = db.relationship("ItemNota", backref=db.backref("classificacao_contabil", uselist=False))
+
+
 class LogDivergencia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), index=True)

@@ -29,7 +29,9 @@ PERMISSION_CATALOG = {
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
     "PAGE_WMS": "WMS > Enderecamento e relatorios",
+    "PAGE_FINANCEIRO_FATURAMENTO": "Financeiro > Faturamento",
     "PAGE_FINANCEIRO_CONTAS_RECEBER": "Financeiro > Contas a Receber",
+    "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL": "Financeiro > Classificacao contabil",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_ADMIN": "Expedicao > Controle Admin",
     "PAGE_EXPEDICAO_ROMANEIO": "Expedicao > Romaneios",
@@ -66,6 +68,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
+        "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
     },
     "Logística": {
         "PAGE_CONFERENCIA",

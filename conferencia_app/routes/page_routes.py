@@ -349,6 +349,20 @@ HOME_MODULES = [
         "metric_key": "boletos_gerados",
     },
     {
+        "id": "classificacao_contabil",
+        "title": "Classificacao Contabil",
+        "subtitle": "Financeiro",
+        "description": "Revise classificacoes de entradas, ajuste contas e acompanhe pendencias do contador.",
+        "href": "/financeiro/classificacao-contabil",
+        "icon": "fa-scale-balanced",
+        "permission": "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
+        "section": "Financeiro",
+        "tone": "red",
+        "priority": 84,
+        "keywords": ["contabil", "classificacao", "contador", "conta", "entrada"],
+        "metric_key": "boletos_gerados",
+    },
+    {
         "id": "dashboard_admin",
         "title": "Painel de Controle",
         "subtitle": "Administração",
@@ -780,6 +794,12 @@ def financeiro_faturamento_page():
 @permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
 def financeiro_contas_receber_page():
     return render_template("contas_receber.html", user=session["username"])
+
+
+@page_bp.route("/financeiro/classificacao-contabil")
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_contabil_page():
+    return render_template("classificacao_contabil.html", user=session["username"])
 
 
 @page_bp.route("/admin/wms-enderecos")

@@ -470,6 +470,11 @@ def executar_ciclo() -> dict[str, Any]:
 
                 total_lancadas += 1
                 _limpar_status(n_nf)
+                try:
+                    from .classificacao_contabil_service import classificar_nota
+                    classificar_nota(str(n_nf))
+                except Exception:
+                    logger.exception("Falha ao classificar contabilmente a NF %s", n_nf)
                 _enfileirar_wms_se_disponivel(n_nf, usuario)
                 try:
                     from .entrada_chapa_email_service import notificar_entrada_chapa_lancada

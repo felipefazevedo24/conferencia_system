@@ -88,6 +88,8 @@ from ..models import (
     ItemWMS,
     MovimentacaoWMS,
     BoletoContaReceber,
+    ClassificacaoContabilItem,
+    ClassificacaoContabilPadrao,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -119,6 +121,14 @@ from ..schemas.api_schemas import (
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
+from ..services.classificacao_contabil_service import (
+    classificar_item,
+    classificar_lancadas_desde_2026,
+    classificar_nota,
+    importar_padroes_excel,
+    normalizar_texto,
+    resumo_classificacoes,
+)
 
 
 def _parse_aviso_datetime(value):
@@ -2155,6 +2165,182 @@ def _gerar_campos_boleto(numero_nota: str, valor: float):
         f"{codigo_barras[32:33]} {codigo_barras[33:44]}"
     )
     return nosso_numero, linha_digitavel, codigo_barras
+
+
+def _parse_data_filtro(value: str | None, fim: bool = False):
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        if len(value) == 10:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+            if fim:
+                return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+            return parsed
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+
+def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
+    item = row.item_nota
+    data_lanc = item.data_lancamento if item else None
+    data_nf = item.data_emissao if item else None
+    return {
+        "id": row.id,
+        "item_nota_id": row.item_nota_id,
+        "numero_nota": row.numero_nota,
+        "fornecedor": row.fornecedor or "---",
+        "codigo_item": row.codigo_item or "---",
+        "descricao_item": row.descricao_item or "---",
+        "cfop": row.cfop or "---",
+        "conta": row.conta or "",
+        "nome_conta": row.nome_conta or "",
+        "comentario": row.comentario or "",
+        "confianca": int(row.confianca or 0),
+        "metodo": row.metodo or "Pendente",
+        "status": row.status or "Pendente",
+        "revisado_por": row.revisado_por or "",
+        "revisado_em": row.revisado_em.strftime("%d/%m/%Y %H:%M") if row.revisado_em else "",
+        "data_lancamento": data_lanc.strftime("%d/%m/%Y %H:%M") if data_lanc else "---",
+        "data_lancamento_iso": data_lanc.date().isoformat() if data_lanc else "",
+        "data_nf": data_nf.strftime("%d/%m/%Y") if data_nf else "---",
+        "valor": float(item.valor_produto or 0.0) if item else 0.0,
+    }
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/padroes/importar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_importar_padroes():
+    resultado = importar_padroes_excel()
+    classificados = classificar_lancadas_desde_2026(limite=1000)
+    resultado["itens_classificados"] = classificados
+    return jsonify({"sucesso": True, "resultado": resultado})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/reprocessar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_reprocessar():
+    data = request.json or {}
+    nota = str(data.get("nota") or "").strip()
+    sobrescrever = bool(data.get("sobrescrever_manual", False))
+    if nota:
+        total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
+    else:
+        total = classificar_lancadas_desde_2026(limite=int(data.get("limite") or 1000))
+    return jsonify({"sucesso": True, "itens_classificados": total})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil")
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_listar():
+    classificar_lancadas_desde_2026(limite=1000)
+    data_inicio = _parse_data_filtro(request.args.get("inicio")) or datetime(2026, 1, 1)
+    data_fim = _parse_data_filtro(request.args.get("fim"), fim=True)
+    if data_inicio < datetime(2026, 1, 1):
+        data_inicio = datetime(2026, 1, 1)
+
+    status = str(request.args.get("status") or "").strip()
+    termo = normalizar_texto(request.args.get("q") or "")
+    conta = str(request.args.get("conta") or "").strip()
+    limite = max(10, min(int(request.args.get("limite") or 300), 1000))
+
+    query = ClassificacaoContabilItem.query.join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
+    query = query.filter(ItemNota.data_lancamento >= data_inicio)
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    if status:
+        query = query.filter(ClassificacaoContabilItem.status == status)
+    if conta:
+        query = query.filter(ClassificacaoContabilItem.conta == conta)
+    if termo:
+        like = f"%{termo}%"
+        query = query.filter(
+            or_(
+                func.upper(ClassificacaoContabilItem.fornecedor).like(like),
+                func.upper(ClassificacaoContabilItem.descricao_item).like(like),
+                func.upper(ClassificacaoContabilItem.codigo_item).like(like),
+                ClassificacaoContabilItem.numero_nota.like(f"%{request.args.get('q', '').strip()}%"),
+            )
+        )
+
+    rows = query.order_by(ItemNota.data_lancamento.desc(), ClassificacaoContabilItem.id.desc()).limit(limite).all()
+    contas = (
+        db.session.query(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta, func.count(ClassificacaoContabilItem.id))
+        .filter(ClassificacaoContabilItem.conta.isnot(None))
+        .filter(ClassificacaoContabilItem.conta != "")
+        .group_by(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta)
+        .order_by(ClassificacaoContabilItem.conta.asc())
+        .all()
+    )
+    return jsonify(
+        {
+            "itens": [_serializar_classificacao(row) for row in rows],
+            "resumo": resumo_classificacoes(data_inicio, data_fim),
+            "contas": [
+                {"conta": c[0], "nome_conta": c[1], "total": int(c[2] or 0)}
+                for c in contas
+            ],
+            "corte_minimo": "2026-01-01",
+        }
+    )
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/<int:classificacao_id>", methods=["PATCH"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_atualizar(classificacao_id):
+    row = ClassificacaoContabilItem.query.get_or_404(classificacao_id)
+    data = request.json or {}
+    conta = str(data.get("conta") or "").strip()
+    nome_conta = str(data.get("nome_conta") or "").strip()
+    comentario = str(data.get("comentario") or "").strip()
+    if not conta or not nome_conta:
+        return jsonify({"sucesso": False, "msg": "Informe conta e nome da conta."}), 400
+
+    row.conta = conta[:30]
+    row.nome_conta = nome_conta[:180]
+    row.comentario = comentario[:500]
+    row.confianca = 100
+    row.metodo = "Revisao manual"
+    row.status = "Revisado"
+    row.revisado_por = session.get("username", "contador")
+    row.revisado_em = datetime.now()
+    row.atualizado_em = datetime.now()
+
+    item = row.item_nota
+    if item:
+        fornecedor_norm = normalizar_texto(item.fornecedor)
+        codigo_norm = normalizar_texto(item.codigo).replace(" ", "")
+        descricao_norm = normalizar_texto(item.descricao)
+        cfop = str(item.cfop or "").strip()
+        padrao = ClassificacaoContabilPadrao.query.filter_by(
+            fornecedor_norm=fornecedor_norm,
+            cfop=cfop,
+            codigo_norm=codigo_norm,
+            descricao_norm=descricao_norm,
+            conta=conta,
+        ).first()
+        if padrao is None:
+            padrao = ClassificacaoContabilPadrao(
+                fornecedor_norm=fornecedor_norm,
+                cfop=cfop,
+                codigo_norm=codigo_norm,
+                descricao_norm=descricao_norm,
+                conta=conta,
+                ocorrencias=1,
+                origem="Revisao manual",
+            )
+            db.session.add(padrao)
+        else:
+            padrao.ocorrencias = int(padrao.ocorrencias or 0) + 1
+        padrao.nome_conta = nome_conta[:180]
+        padrao.comentario = comentario[:500]
+        padrao.atualizado_em = datetime.now()
+        db.session.flush()
+        row.regra_id = padrao.id
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "item": _serializar_classificacao(row)})
 
 
 @api_bp.route("/api/financeiro/contas-receber/notas")
@@ -5112,6 +5298,10 @@ def confirmar_lancamento():
         }
     )
     db.session.commit()
+    try:
+        classificar_nota(numero_nota)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao classificar contabilmente a NF %s: %s", numero_nota, exc)
 
     manifestacao_result = None
     if manifestar_destinatario:
