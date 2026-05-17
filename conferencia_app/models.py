@@ -137,6 +137,8 @@ class ClassificacaoContabilItem(db.Model):
     confianca = db.Column(db.Integer, nullable=False, default=0, index=True)
     metodo = db.Column(db.String(40), nullable=False, default="Pendente", index=True)
     status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    motivo_pendencia = db.Column(db.String(80), index=True)
+    tipo_regra = db.Column(db.String(30), index=True)
     regra_id = db.Column(db.Integer, db.ForeignKey("classificacao_contabil_padrao.id"), nullable=True)
     revisado_por = db.Column(db.String(100))
     revisado_em = db.Column(db.DateTime)
@@ -146,6 +148,31 @@ class ClassificacaoContabilItem(db.Model):
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
     item_nota = db.relationship("ItemNota", backref=db.backref("classificacao_contabil", uselist=False))
+
+
+class ClassificacaoContabilCompetencia(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    competencia = db.Column(db.String(7), nullable=False, unique=True, index=True)
+    status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)
+    fechado_por = db.Column(db.String(100))
+    fechado_em = db.Column(db.DateTime)
+    reaberto_por = db.Column(db.String(100))
+    reaberto_em = db.Column(db.DateTime)
+    motivo_reabertura = db.Column(db.String(500))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class LogClassificacaoContabil(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    classificacao_id = db.Column(db.Integer, db.ForeignKey("classificacao_contabil_item.id"), nullable=True, index=True)
+    numero_nota = db.Column(db.String(20), index=True)
+    competencia = db.Column(db.String(7), index=True)
+    evento = db.Column(db.String(40), nullable=False, index=True)
+    valor_anterior = db.Column(db.Text)
+    valor_novo = db.Column(db.Text)
+    motivo = db.Column(db.String(500))
+    usuario = db.Column(db.String(100))
+    data = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
 class LogDivergencia(db.Model):

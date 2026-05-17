@@ -451,6 +451,12 @@ def _ensure_item_nota_columns() -> None:
             if "aprovado_em" not in cols_classificacao:
                 conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN aprovado_em DATETIME"))
                 conn.commit()
+            if "motivo_pendencia" not in cols_classificacao:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN motivo_pendencia VARCHAR(80)"))
+                conn.commit()
+            if "tipo_regra" not in cols_classificacao:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN tipo_regra VARCHAR(30)"))
+                conn.commit()
 
         conn.execute(
             db.text(

@@ -1352,6 +1352,55 @@ def test_financeiro_classificacao_contabil_aprovacao_bloqueia_reprocessamento(tm
         assert classificacao.aprovado_por == "contador_teste"
 
 
+def test_financeiro_classificacao_contabil_aprova_somente_competencia(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        for numero, data_lanc in [("JAN1", datetime(2026, 1, 20, 9, 0)), ("FEV1", datetime(2026, 2, 3, 9, 0))]:
+            item = ItemNota(
+                numero_nota=numero,
+                fornecedor="Fornecedor Competencia",
+                codigo=numero,
+                descricao="Item competencia",
+                cfop="1102",
+                qtd_real=1,
+                status="Lançado",
+                data_lancamento=data_lanc,
+            )
+            db.session.add(item)
+            db.session.flush()
+            db.session.add(
+                ClassificacaoContabilItem(
+                    item_nota_id=item.id,
+                    numero_nota=item.numero_nota,
+                    fornecedor=item.fornecedor,
+                    codigo_item=item.codigo,
+                    descricao_item=item.descricao,
+                    cfop=item.cfop,
+                    conta="12503",
+                    nome_conta="MATERIAIS SECUNDÁRIOS",
+                    status="Classificado",
+                    confianca=98,
+                )
+            )
+        db.session.commit()
+
+    response = client.post(
+        "/api/financeiro/classificacao-contabil/aprovar",
+        json={"competencia": "2026-01"},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["aprovadas"] == 1
+
+    with app.app_context():
+        jan = ClassificacaoContabilItem.query.filter_by(numero_nota="JAN1").first()
+        fev = ClassificacaoContabilItem.query.filter_by(numero_nota="FEV1").first()
+        assert jan.status == "Aprovado"
+        assert fev.status == "Classificado"
+
+
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

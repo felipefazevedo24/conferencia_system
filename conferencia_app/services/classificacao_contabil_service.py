@@ -315,6 +315,39 @@ def _conta_dominante(query):
     return melhor["row"], melhor["ocorrencias"], total
 
 
+def _motivo_sem_padrao(item: ItemNota) -> str:
+    codigo = _normalizar_codigo(item.codigo)
+    descricao = normalizar_texto(item.descricao)
+    cfops = _cfop_variantes(item.cfop)
+    fornecedor = normalizar_texto(item.fornecedor)
+    if not codigo:
+        return "Sem codigo do item"
+    if not str(item.cfop or "").strip():
+        return "Sem CFOP"
+    if fornecedor and ClassificacaoContabilPadrao.query.filter_by(fornecedor_norm=fornecedor).count() == 0:
+        return "Fornecedor sem historico"
+    if codigo and ClassificacaoContabilPadrao.query.filter_by(codigo_norm=codigo).count() == 0:
+        return "Codigo sem historico"
+    if descricao and ClassificacaoContabilPadrao.query.filter_by(descricao_norm=descricao).count() == 0:
+        return "Descricao sem historico"
+    if cfops and _filtrar_cfop(ClassificacaoContabilPadrao.query, cfops).count() == 0:
+        return "CFOP sem historico"
+    return "Padrao inconclusivo"
+
+
+def _tipo_regra(metodo: str) -> str:
+    metodo_norm = normalizar_texto(metodo)
+    if "FORNECEDOR" in metodo_norm and "CODIGO" in metodo_norm and "CFOP" in metodo_norm:
+        return "Alta"
+    if "CODIGO" in metodo_norm:
+        return "Media"
+    if "DESCRICAO" in metodo_norm:
+        return "Media"
+    if "CFOP DOMINANTE" in metodo_norm:
+        return "Baixa"
+    return "Sem regra"
+
+
 def sugerir_classificacao_item(item: ItemNota) -> dict:
     garantir_padroes_internos()
     fornecedor = normalizar_texto(item.fornecedor)
@@ -392,6 +425,8 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
             "comentario": regra.comentario or "",
             "confianca": int(confianca),
             "metodo": metodo,
+            "motivo_pendencia": "",
+            "tipo_regra": _tipo_regra(metodo),
             "status": "Classificado" if confianca >= 80 else "Revisar",
         }
 
@@ -402,6 +437,8 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
         "comentario": "",
         "confianca": 0,
         "metodo": "Sem padrão",
+        "motivo_pendencia": _motivo_sem_padrao(item),
+        "tipo_regra": "Sem regra",
         "status": "Pendente",
     }
 
@@ -425,6 +462,8 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> Class
     registro.confianca = sugestao["confianca"]
     registro.metodo = sugestao["metodo"]
     registro.status = sugestao["status"]
+    registro.motivo_pendencia = sugestao.get("motivo_pendencia") or ""
+    registro.tipo_regra = sugestao.get("tipo_regra") or ""
     registro.regra_id = sugestao["regra"].id if sugestao["regra"] else None
     registro.atualizado_em = agora
     if existente is None:
@@ -466,6 +505,31 @@ def classificar_lancadas_desde_2026(
         if antes and antes.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
             continue
         classificar_item(item, sobrescrever_manual=sobrescrever_manual)
+        total += 1
+    db.session.commit()
+    return total
+
+
+def classificar_lancadas_sem_registro(
+    limite: int = 1000,
+    data_inicio: datetime | None = None,
+    data_fim: datetime | None = None,
+) -> int:
+    data_inicio = max(data_inicio or datetime(2026, 1, 1), datetime(2026, 1, 1))
+    query = (
+        ItemNota.query.outerjoin(ClassificacaoContabilItem, ClassificacaoContabilItem.item_nota_id == ItemNota.id)
+        .filter(ItemNota.status == "Lançado")
+        .filter(ItemNota.data_lancamento >= data_inicio)
+        .filter(ClassificacaoContabilItem.id.is_(None))
+        .order_by(ItemNota.data_lancamento.desc())
+    )
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    if limite:
+        query = query.limit(limite)
+    total = 0
+    for item in query.all():
+        classificar_item(item)
         total += 1
     db.session.commit()
     return total

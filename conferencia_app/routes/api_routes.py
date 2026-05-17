@@ -89,6 +89,8 @@ from ..models import (
     MovimentacaoWMS,
     BoletoContaReceber,
     ClassificacaoContabilItem,
+    ClassificacaoContabilCompetencia,
+    LogClassificacaoContabil,
     ClassificacaoContabilPadrao,
     LogAcessoAdministrativo,
     LogDivergencia,
@@ -124,6 +126,7 @@ from ..services.consyste_service import download_documento_consyste, listar_docu
 from ..services.classificacao_contabil_service import (
     classificar_item,
     classificar_lancadas_desde_2026,
+    classificar_lancadas_sem_registro,
     classificar_nota,
     importar_padroes_internos,
     importar_padroes_excel,
@@ -2184,6 +2187,56 @@ def _parse_data_filtro(value: str | None, fim: bool = False):
         return None
 
 
+def _periodo_competencia(data: dict | None = None):
+    source = data or request.args
+    competencia = str(source.get("competencia") or "").strip()
+    if competencia:
+        try:
+            inicio = datetime.strptime(f"{competencia}-01", "%Y-%m-%d")
+            if inicio < datetime(2026, 1, 1):
+                inicio = datetime(2026, 1, 1)
+            if inicio.month == 12:
+                proximo = datetime(inicio.year + 1, 1, 1)
+            else:
+                proximo = datetime(inicio.year, inicio.month + 1, 1)
+            fim = proximo - timedelta(microseconds=1)
+            return inicio, fim, inicio.strftime("%Y-%m")
+        except Exception:
+            pass
+
+    inicio = _parse_data_filtro(source.get("inicio")) or datetime(2026, 1, 1)
+    fim = _parse_data_filtro(source.get("fim"), fim=True)
+    if inicio < datetime(2026, 1, 1):
+        inicio = datetime(2026, 1, 1)
+    return inicio, fim, inicio.strftime("%Y-%m")
+
+
+def _competencia_row(competencia: str) -> ClassificacaoContabilCompetencia:
+    row = ClassificacaoContabilCompetencia.query.filter_by(competencia=competencia).first()
+    if row is None:
+        row = ClassificacaoContabilCompetencia(competencia=competencia, status="Aberta")
+        db.session.add(row)
+        db.session.flush()
+    return row
+
+
+def _log_classificacao(row: ClassificacaoContabilItem | None, evento: str, anterior=None, novo=None, motivo: str = ""):
+    data_ref = row.item_nota.data_lancamento if row and row.item_nota else datetime.now()
+    competencia = data_ref.strftime("%Y-%m") if data_ref else ""
+    db.session.add(
+        LogClassificacaoContabil(
+            classificacao_id=row.id if row else None,
+            numero_nota=row.numero_nota if row else None,
+            competencia=competencia,
+            evento=evento,
+            valor_anterior=json.dumps(anterior or {}, ensure_ascii=False),
+            valor_novo=json.dumps(novo or {}, ensure_ascii=False),
+            motivo=motivo[:500],
+            usuario=session.get("username", "sistema"),
+        )
+    )
+
+
 def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
     item = row.item_nota
     data_lanc = item.data_lancamento if item else None
@@ -2202,6 +2255,8 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "confianca": int(row.confianca or 0),
         "metodo": row.metodo or "Pendente",
         "status": row.status or "Pendente",
+        "motivo_pendencia": row.motivo_pendencia or "",
+        "tipo_regra": row.tipo_regra or "",
         "revisado_por": row.revisado_por or "",
         "revisado_em": row.revisado_em.strftime("%d/%m/%Y %H:%M") if row.revisado_em else "",
         "aprovado_por": row.aprovado_por or "",
@@ -2210,6 +2265,52 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "data_lancamento_iso": data_lanc.date().isoformat() if data_lanc else "",
         "data_nf": data_nf.strftime("%d/%m/%Y") if data_nf else "---",
         "valor": float(item.valor_produto or 0.0) if item else 0.0,
+    }
+
+
+def _classificacao_query_periodo(data_inicio, data_fim):
+    query = ClassificacaoContabilItem.query.join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
+    query = query.filter(ItemNota.data_lancamento >= data_inicio)
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    return query
+
+
+def _resumo_governanca(data_inicio, data_fim, competencia):
+    query = _classificacao_query_periodo(data_inicio, data_fim)
+    pendentes = query.filter(ClassificacaoContabilItem.status == "Pendente").count()
+    revisar = query.filter(ClassificacaoContabilItem.status == "Revisar").count()
+    conflitos = 0
+    conflito_rows = (
+        db.session.query(
+            ClassificacaoContabilItem.codigo_item,
+            func.count(func.distinct(ClassificacaoContabilItem.conta)).label("contas"),
+        )
+        .join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
+        .filter(ItemNota.data_lancamento >= data_inicio)
+        .filter(ClassificacaoContabilItem.codigo_item.isnot(None))
+        .filter(ClassificacaoContabilItem.codigo_item != "")
+        .filter(ClassificacaoContabilItem.conta.isnot(None))
+        .filter(ClassificacaoContabilItem.conta != "")
+    )
+    if data_fim:
+        conflito_rows = conflito_rows.filter(ItemNota.data_lancamento <= data_fim)
+    conflitos = conflito_rows.group_by(ClassificacaoContabilItem.codigo_item).having(func.count(func.distinct(ClassificacaoContabilItem.conta)) > 1).count()
+    top_pendencias = (
+        query.with_entities(ClassificacaoContabilItem.motivo_pendencia, func.count(ClassificacaoContabilItem.id))
+        .filter(ClassificacaoContabilItem.status == "Pendente")
+        .group_by(ClassificacaoContabilItem.motivo_pendencia)
+        .order_by(func.count(ClassificacaoContabilItem.id).desc())
+        .limit(5)
+        .all()
+    )
+    comp = _competencia_row(competencia)
+    return {
+        "competencia_status": comp.status,
+        "pendentes": pendentes,
+        "revisar": revisar,
+        "conflitos": conflitos,
+        "top_pendencias": [{"motivo": r[0] or "Sem motivo", "total": int(r[1] or 0)} for r in top_pendencias],
     }
 
 
@@ -2240,10 +2341,7 @@ def financeiro_classificacao_reprocessar():
     data = request.json or {}
     nota = str(data.get("nota") or "").strip()
     sobrescrever = bool(data.get("sobrescrever_manual", False))
-    data_inicio = _parse_data_filtro(data.get("inicio")) or datetime(2026, 1, 1)
-    data_fim = _parse_data_filtro(data.get("fim"), fim=True)
-    if data_inicio < datetime(2026, 1, 1):
-        data_inicio = datetime(2026, 1, 1)
+    data_inicio, data_fim, competencia = _periodo_competencia(data)
     if nota:
         total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
     else:
@@ -2253,22 +2351,40 @@ def financeiro_classificacao_reprocessar():
             data_fim=data_fim,
             sobrescrever_manual=sobrescrever,
         )
-    return jsonify({"sucesso": True, "itens_classificados": total})
+    return jsonify({"sucesso": True, "itens_classificados": total, "competencia": competencia})
 
 
 @api_bp.route("/api/financeiro/classificacao-contabil/aprovar", methods=["POST"])
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_aprovar_periodo():
     data = request.json or {}
-    data_inicio = _parse_data_filtro(data.get("inicio")) or datetime(2026, 1, 1)
-    data_fim = _parse_data_filtro(data.get("fim"), fim=True)
-    if data_inicio < datetime(2026, 1, 1):
-        data_inicio = datetime(2026, 1, 1)
+    data_inicio, data_fim, competencia = _periodo_competencia(data)
+    confirmar_pendencias = bool(data.get("confirmar_pendencias", False))
+    comp = _competencia_row(competencia)
+    if comp.status == "Fechada":
+        return jsonify({"sucesso": False, "msg": "Competência já aprovada. Reabra para alterar."}), 409
 
-    query = ClassificacaoContabilItem.query.join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
-    query = query.filter(ItemNota.data_lancamento >= data_inicio)
-    if data_fim:
-        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    query = _classificacao_query_periodo(data_inicio, data_fim)
+    conta = str(data.get("conta") or "").strip()
+    status_filtro = str(data.get("status") or "").strip()
+    if conta:
+        query = query.filter(ClassificacaoContabilItem.conta == conta)
+    if status_filtro:
+        query = query.filter(ClassificacaoContabilItem.status == status_filtro)
+
+    pendentes_total = query.filter(ClassificacaoContabilItem.status == "Pendente").count()
+    if pendentes_total and not confirmar_pendencias:
+        return (
+            jsonify(
+                {
+                    "sucesso": False,
+                    "msg": "Existem pendências sem conta nessa competência. Revise ou confirme aprovação parcial.",
+                    "pendentes": pendentes_total,
+                    "competencia": competencia,
+                }
+            ),
+            409,
+        )
 
     agora = datetime.now()
     usuario = session.get("username", "contador")
@@ -2280,24 +2396,47 @@ def financeiro_classificacao_aprovar_periodo():
             continue
         if row.status == "Aprovado":
             continue
+        anterior = {"status": row.status, "conta": row.conta}
         row.status = "Aprovado"
         row.aprovado_por = usuario
         row.aprovado_em = agora
         row.atualizado_em = agora
+        _log_classificacao(row, "Aprovacao", anterior, {"status": row.status, "conta": row.conta})
         aprovadas += 1
 
+    comp.status = "Fechada" if not conta and not status_filtro and pendentes == 0 else comp.status
+    if comp.status == "Fechada":
+        comp.fechado_por = usuario
+        comp.fechado_em = agora
+    comp.atualizado_em = agora
     db.session.commit()
-    return jsonify({"sucesso": True, "aprovadas": aprovadas, "pendentes": pendentes})
+    return jsonify({"sucesso": True, "aprovadas": aprovadas, "pendentes": pendentes, "competencia": competencia, "status_competencia": comp.status})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/reabrir", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_reabrir_competencia():
+    data = request.json or {}
+    _inicio, _fim, competencia = _periodo_competencia(data)
+    motivo = str(data.get("motivo") or "").strip()
+    if not motivo:
+        return jsonify({"sucesso": False, "msg": "Informe o motivo da reabertura."}), 400
+    comp = _competencia_row(competencia)
+    comp.status = "Aberta"
+    comp.reaberto_por = session.get("username", "contador")
+    comp.reaberto_em = datetime.now()
+    comp.motivo_reabertura = motivo[:500]
+    comp.atualizado_em = datetime.now()
+    _log_classificacao(None, "ReaberturaCompetencia", {"competencia": competencia}, {"status": "Aberta"}, motivo)
+    db.session.commit()
+    return jsonify({"sucesso": True, "competencia": competencia, "status_competencia": comp.status})
 
 
 @api_bp.route("/api/financeiro/classificacao-contabil")
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_listar():
-    classificar_lancadas_desde_2026(limite=0)
-    data_inicio = _parse_data_filtro(request.args.get("inicio")) or datetime(2026, 1, 1)
-    data_fim = _parse_data_filtro(request.args.get("fim"), fim=True)
-    if data_inicio < datetime(2026, 1, 1):
-        data_inicio = datetime(2026, 1, 1)
+    data_inicio, data_fim, competencia = _periodo_competencia()
+    classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
 
     status = str(request.args.get("status") or "").strip()
     termo = normalizar_texto(request.args.get("q") or "")
@@ -2336,11 +2475,13 @@ def financeiro_classificacao_listar():
         {
             "itens": [_serializar_classificacao(row) for row in rows],
             "resumo": resumo_classificacoes(data_inicio, data_fim),
+            "governanca": _resumo_governanca(data_inicio, data_fim, competencia),
             "contas": [
                 {"conta": c[0], "nome_conta": c[1], "total": int(c[2] or 0)}
                 for c in contas
             ],
             "corte_minimo": "2026-01-01",
+            "competencia": competencia,
         }
     )
 
@@ -2350,12 +2491,18 @@ def financeiro_classificacao_listar():
 def financeiro_classificacao_atualizar(classificacao_id):
     row = ClassificacaoContabilItem.query.get_or_404(classificacao_id)
     data = request.json or {}
+    data_ref = row.item_nota.data_lancamento if row.item_nota else datetime.now()
+    competencia = data_ref.strftime("%Y-%m")
+    comp = _competencia_row(competencia)
+    if comp.status == "Fechada" and not bool(data.get("autorizar_competencia_fechada", False)):
+        return jsonify({"sucesso": False, "msg": "Competência aprovada. Reabra a competência antes de alterar."}), 409
     conta = str(data.get("conta") or "").strip()
     nome_conta = str(data.get("nome_conta") or "").strip()
     comentario = str(data.get("comentario") or "").strip()
     if not conta or not nome_conta:
         return jsonify({"sucesso": False, "msg": "Informe conta e nome da conta."}), 400
 
+    anterior = {"conta": row.conta, "nome_conta": row.nome_conta, "status": row.status}
     row.conta = conta[:30]
     row.nome_conta = nome_conta[:180]
     row.comentario = comentario[:500]
@@ -2367,6 +2514,8 @@ def financeiro_classificacao_atualizar(classificacao_id):
     row.aprovado_por = None
     row.aprovado_em = None
     row.atualizado_em = datetime.now()
+    row.motivo_pendencia = ""
+    row.tipo_regra = "Manual"
 
     item = row.item_nota
     if item:
@@ -2400,8 +2549,99 @@ def financeiro_classificacao_atualizar(classificacao_id):
         db.session.flush()
         row.regra_id = padrao.id
 
+    _log_classificacao(row, "RevisaoManual", anterior, {"conta": row.conta, "nome_conta": row.nome_conta, "status": row.status}, comentario)
     db.session.commit()
     return jsonify({"sucesso": True, "item": _serializar_classificacao(row)})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/exportar")
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_exportar():
+    data_inicio, data_fim, competencia = _periodo_competencia()
+    rows = (
+        _classificacao_query_periodo(data_inicio, data_fim)
+        .order_by(ItemNota.data_lancamento.asc(), ClassificacaoContabilItem.numero_nota.asc())
+        .all()
+    )
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "competencia",
+        "numero_nota",
+        "data_lancamento",
+        "fornecedor",
+        "codigo_item",
+        "descricao_item",
+        "cfop",
+        "conta",
+        "nome_conta",
+        "status",
+        "confianca",
+        "metodo",
+        "motivo_pendencia",
+        "comentario",
+    ])
+    for row in rows:
+        item = row.item_nota
+        writer.writerow([
+            competencia,
+            row.numero_nota,
+            item.data_lancamento.strftime("%d/%m/%Y %H:%M") if item and item.data_lancamento else "",
+            row.fornecedor or "",
+            row.codigo_item or "",
+            row.descricao_item or "",
+            row.cfop or "",
+            row.conta or "",
+            row.nome_conta or "",
+            row.status or "",
+            row.confianca or 0,
+            row.metodo or "",
+            row.motivo_pendencia or "",
+            row.comentario or "",
+        ])
+    data = output.getvalue().encode("utf-8-sig")
+    return Response(
+        data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="classificacao_contabil_{competencia}.csv"'},
+    )
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/conflitos")
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_conflitos():
+    data_inicio, data_fim, competencia = _periodo_competencia()
+    base = (
+        db.session.query(
+            ClassificacaoContabilItem.codigo_item,
+            func.count(func.distinct(ClassificacaoContabilItem.conta)).label("contas"),
+            func.count(ClassificacaoContabilItem.id).label("total"),
+        )
+        .join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
+        .filter(ItemNota.data_lancamento >= data_inicio)
+        .filter(ClassificacaoContabilItem.codigo_item.isnot(None))
+        .filter(ClassificacaoContabilItem.codigo_item != "")
+        .filter(ClassificacaoContabilItem.conta.isnot(None))
+        .filter(ClassificacaoContabilItem.conta != "")
+    )
+    if data_fim:
+        base = base.filter(ItemNota.data_lancamento <= data_fim)
+    conflitos = []
+    for codigo, _contas, total in base.group_by(ClassificacaoContabilItem.codigo_item).having(func.count(func.distinct(ClassificacaoContabilItem.conta)) > 1).limit(50).all():
+        contas = (
+            db.session.query(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta, func.count(ClassificacaoContabilItem.id))
+            .filter(ClassificacaoContabilItem.codigo_item == codigo)
+            .group_by(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta)
+            .all()
+        )
+        conflitos.append(
+            {
+                "codigo_item": codigo,
+                "total": int(total or 0),
+                "contas": [{"conta": c[0], "nome_conta": c[1], "total": int(c[2] or 0)} for c in contas],
+            }
+        )
+    return jsonify({"competencia": competencia, "conflitos": conflitos})
 
 
 @api_bp.route("/api/financeiro/contas-receber/notas")

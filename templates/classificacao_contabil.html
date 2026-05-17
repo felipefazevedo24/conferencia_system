@@ -53,6 +53,10 @@
         border: 1px solid #dbe4ef;
         box-shadow: none;
     }
+    .cc-btn.danger {
+        background: #b91c1c;
+        box-shadow: 0 12px 24px rgba(185, 28, 28, .16);
+    }
     .cc-kpis {
         display: grid;
         grid-template-columns: repeat(6, minmax(130px, 1fr));
@@ -79,13 +83,52 @@
         color: #0f172a;
         font-family: "Space Grotesk", sans-serif;
     }
+    .cc-governance {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        background: #fff;
+        border: 1px solid #e4eaf3;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 14px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+    }
+    .cc-governance-main {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        color: #334155;
+    }
+    .cc-governance strong { color: #0f172a; }
+    .cc-mini-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+    }
+    .cc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        font-size: .78rem;
+        font-weight: 700;
+    }
     .cc-filters {
         background: #fff;
         border: 1px solid #e4eaf3;
         border-radius: 8px;
         padding: 14px;
         display: grid;
-        grid-template-columns: 140px 140px 170px minmax(180px, 1fr) minmax(180px, 1.1fr) auto;
+        grid-template-columns: 170px 170px minmax(180px, 1fr) minmax(180px, 1.1fr) auto;
         gap: 10px;
         align-items: end;
         margin-bottom: 14px;
@@ -281,6 +324,8 @@
             <input id="upload-padroes" type="file" accept=".xlsx,.xlsm" multiple hidden>
             <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-database"></i> Recarregar padrões</button>
             <button class="cc-btn secondary" id="btn-aprovar" type="button"><i class="fas fa-circle-check"></i> Aprovar período</button>
+            <button class="cc-btn secondary" id="btn-exportar" type="button"><i class="fas fa-file-export"></i> Exportar</button>
+            <button class="cc-btn danger" id="btn-reabrir" type="button"><i class="fas fa-lock-open"></i> Reabrir</button>
             <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
         </div>
     </div>
@@ -294,14 +339,25 @@
         <div class="cc-kpi"><span>Padrões</span><strong id="k-padroes">0</strong></div>
     </section>
 
+    <section class="cc-governance">
+        <div>
+            <div class="cc-governance-main">
+                <span>Competência <strong id="g-competencia">---</strong></span>
+                <span class="cc-pill" id="g-status">Aberta</span>
+                <span><strong id="g-conflitos">0</strong> conflito(s)</span>
+                <span><strong id="g-revisar">0</strong> sugestão(ões) para revisar</span>
+            </div>
+            <div class="cc-mini-list" id="g-pendencias"></div>
+        </div>
+        <div class="cc-governance-main">
+            <span class="cc-chip"><i class="fas fa-shield-halved"></i> Aprovadas não são reprocessadas</span>
+        </div>
+    </section>
+
     <section class="cc-filters">
         <div class="cc-field">
-            <label>Início</label>
-            <input id="f-inicio" type="date" min="2026-01-01" value="2026-01-01">
-        </div>
-        <div class="cc-field">
-            <label>Fim</label>
-            <input id="f-fim" type="date" min="2026-01-01">
+            <label>Competência</label>
+            <input id="f-competencia" type="month" min="2026-01">
         </div>
         <div class="cc-field">
             <label>Status</label>
@@ -339,6 +395,7 @@
                         <th>Confiança</th>
                         <th>Status</th>
                         <th>Origem</th>
+                        <th>Motivo</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -402,6 +459,20 @@ function money(value) {
     return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function competenciaAtual() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function periodoCompetencia() {
+    const competencia = document.getElementById("f-competencia").value || "2026-01";
+    const [ano, mes] = competencia.split("-").map(Number);
+    const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
+    const fimDate = new Date(ano, mes, 0);
+    const fim = `${ano}-${String(mes).padStart(2, "0")}-${String(fimDate.getDate()).padStart(2, "0")}`;
+    return { competencia, inicio, fim };
+}
+
 function rowClass(status) {
     if (status === "Aprovado") return "";
     if (status === "Pendente") return "row-pending";
@@ -436,9 +507,12 @@ function accountCell(item) {
 }
 
 async function carregar() {
+    document.getElementById("cc-body").innerHTML = "";
+    const empty = document.getElementById("cc-empty");
+    empty.style.display = "block";
+    empty.textContent = "Carregando classificações...";
     const params = new URLSearchParams({
-        inicio: document.getElementById("f-inicio").value || "2026-01-01",
-        fim: document.getElementById("f-fim").value || "",
+        ...periodoCompetencia(),
         status: document.getElementById("f-status").value || "",
         conta: document.getElementById("f-conta").value || "",
         q: document.getElementById("f-busca").value || "",
@@ -448,6 +522,7 @@ async function carregar() {
     if (!res.ok) throw new Error(data.msg || data.error || "Falha ao carregar classificações");
     state.itens = data.itens || [];
     renderResumo(data.resumo || {});
+    renderGovernanca(data);
     renderContas(data.contas || []);
     renderTabela();
 }
@@ -459,6 +534,21 @@ function renderResumo(resumo) {
     document.getElementById("k-aprovadas").textContent = resumo.aprovados || 0;
     document.getElementById("k-confianca").textContent = `${resumo.confianca_media || 0}%`;
     document.getElementById("k-padroes").textContent = resumo.padroes || 0;
+}
+
+function renderGovernanca(data) {
+    const gov = data.governanca || {};
+    document.getElementById("g-competencia").textContent = data.competencia || periodoCompetencia().competencia;
+    const status = gov.competencia_status || "Aberta";
+    const statusEl = document.getElementById("g-status");
+    statusEl.textContent = status;
+    statusEl.className = `cc-pill ${status === "Fechada" ? "approved" : "ok"}`;
+    document.getElementById("g-conflitos").textContent = gov.conflitos || 0;
+    document.getElementById("g-revisar").textContent = gov.revisar || 0;
+    const pendencias = gov.top_pendencias || [];
+    document.getElementById("g-pendencias").innerHTML = pendencias.length
+        ? pendencias.map(p => `<span class="cc-chip"><i class="fas fa-circle-exclamation"></i>${p.motivo}: ${p.total}</span>`).join("")
+        : '<span class="cc-chip"><i class="fas fa-check"></i> Sem pendências críticas</span>';
 }
 
 function renderContas(contas) {
@@ -473,6 +563,7 @@ function renderContas(contas) {
 function renderTabela() {
     const body = document.getElementById("cc-body");
     const empty = document.getElementById("cc-empty");
+    empty.textContent = "Nenhuma classificação encontrada para os filtros selecionados.";
     empty.style.display = state.itens.length ? "none" : "block";
     body.innerHTML = state.itens.map(item => `
         <tr class="${rowClass(item.status)}">
@@ -485,6 +576,7 @@ function renderTabela() {
             <td>${item.confianca}%</td>
             <td><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
             <td>${item.metodo}<br><small>${item.revisado_por || ""}</small></td>
+            <td>${item.motivo_pendencia || item.tipo_regra || "---"}</td>
             <td><button class="cc-icon-btn" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
         </tr>
     `).join("");
@@ -539,10 +631,7 @@ async function acaoPost(url, msg) {
 }
 
 function periodoPayload() {
-    return {
-        inicio: document.getElementById("f-inicio").value || "2026-01-01",
-        fim: document.getElementById("f-fim").value || "",
-    };
+    return periodoCompetencia();
 }
 
 async function reprocessarPeriodo() {
@@ -560,15 +649,44 @@ async function reprocessarPeriodo() {
 
 async function aprovarPeriodo() {
     toast("Aprovando classificações do período filtrado...");
-    const res = await fetch("/api/financeiro/classificacao-contabil/aprovar", {
+    let res = await fetch("/api/financeiro/classificacao-contabil/aprovar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(periodoPayload()),
     });
-    const data = await res.json();
+    let data = await res.json();
+    if (res.status === 409 && data.pendentes) {
+        const ok = window.confirm(`${data.pendentes} pendência(s) sem conta ficaram na competência. Aprovar somente o que já tem conta?`);
+        if (!ok) throw new Error(data.msg || "Aprovação cancelada.");
+        res = await fetch("/api/financeiro/classificacao-contabil/aprovar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...periodoPayload(), confirmar_pendencias: true }),
+        });
+        data = await res.json();
+    }
     if (!res.ok) throw new Error(data.msg || data.error || "Falha ao aprovar período");
     toast(`${data.aprovadas || 0} classificação(ões) aprovadas. ${data.pendentes || 0} pendente(s) ficaram fora.`);
     await carregar();
+}
+
+async function reabrirCompetencia() {
+    const motivo = window.prompt("Motivo da reabertura da competência:");
+    if (!motivo) return;
+    const res = await fetch("/api/financeiro/classificacao-contabil/reabrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...periodoPayload(), motivo }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao reabrir competência");
+    toast("Competência reaberta.");
+    await carregar();
+}
+
+function exportarCompetencia() {
+    const params = new URLSearchParams(periodoCompetencia());
+    window.location.href = `/api/financeiro/classificacao-contabil/exportar?${params.toString()}`;
 }
 
 async function importarUploads(files) {
@@ -594,10 +712,17 @@ document.getElementById("btn-importar").addEventListener("click", () => acaoPost
 document.getElementById("upload-padroes").addEventListener("change", event => importarUploads(event.target.files).catch(err => toast(err.message)));
 document.getElementById("btn-reprocessar").addEventListener("click", () => reprocessarPeriodo().catch(err => toast(err.message)));
 document.getElementById("btn-aprovar").addEventListener("click", () => aprovarPeriodo().catch(err => toast(err.message)));
+document.getElementById("btn-exportar").addEventListener("click", exportarCompetencia);
+document.getElementById("btn-reabrir").addEventListener("click", () => reabrirCompetencia().catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {
     if (event.key === "Enter") carregar().catch(err => toast(err.message));
 });
 
-carregar().catch(err => toast(err.message));
+document.getElementById("f-competencia").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
+carregar().catch(err => {
+    document.getElementById("cc-empty").style.display = "block";
+    document.getElementById("cc-empty").textContent = err.message;
+    toast(err.message);
+});
 </script>
 {% endblock %}
