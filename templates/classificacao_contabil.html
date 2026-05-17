@@ -277,7 +277,8 @@
             <p class="cc-sub">Entradas lançadas a partir de 01/01/2026, com sugestão automática e revisão manual.</p>
         </div>
         <div class="cc-actions">
-            <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-file-excel"></i> Atualizar padrões</button>
+            <input id="upload-padroes" type="file" accept=".xlsx,.xlsm" multiple hidden>
+            <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-file-excel"></i> Importar Excel</button>
             <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
         </div>
     </div>
@@ -530,10 +531,27 @@ async function acaoPost(url, msg) {
     await carregar();
 }
 
+async function importarUploads(files) {
+    if (!files || !files.length) return;
+    const form = new FormData();
+    Array.from(files).forEach(file => form.append("arquivos", file));
+    toast("Importando padrões para o banco do sistema...");
+    const res = await fetch("/api/financeiro/classificacao-contabil/padroes/upload", {
+        method: "POST",
+        body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao importar Excel");
+    const r = data.resultado || {};
+    toast(`Padrões salvos: ${r.padroes_criados || 0} novos, ${r.padroes_atualizados || 0} atualizados.`);
+    await carregar();
+}
+
 document.getElementById("btn-filtrar").addEventListener("click", () => carregar().catch(err => toast(err.message)));
 document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
 document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
-document.getElementById("btn-importar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/padroes/importar", "Lendo planilhas e atualizando padrões...").catch(err => toast(err.message)));
+document.getElementById("btn-importar").addEventListener("click", () => document.getElementById("upload-padroes").click());
+document.getElementById("upload-padroes").addEventListener("change", event => importarUploads(event.target.files).catch(err => toast(err.message)));
 document.getElementById("btn-reprocessar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/reprocessar", "Reprocessando notas lançadas desde 2026...").catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {
     if (event.key === "Enter") carregar().catch(err => toast(err.message));

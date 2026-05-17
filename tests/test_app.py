@@ -1116,6 +1116,47 @@ def test_financeiro_classificacao_contabil_revisao_manual_aprende_padrao(tmp_pat
         assert ClassificacaoContabilPadrao.query.filter_by(conta="94901").count() == 1
 
 
+def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "ENTRADAS TESTE"
+    ws.append(
+        [
+            "Entrada:Fornecedor",
+            "Itens da Entrada de NF:CFOP",
+            "Itens da Entrada de NF:Cód. interno /Cód. fabricante",
+            "Itens da Entrada de NF:Descrição",
+            "Conta",
+            "Nome conta",
+            "comentario",
+        ]
+    )
+    ws.append(["Fornecedor Upload", "1102", "UP001", "Item upload", "12503", "MATERIAIS SECUNDÁRIOS", "excel"])
+    arquivo = io.BytesIO()
+    wb.save(arquivo)
+    arquivo.seek(0)
+
+    response = client.post(
+        "/api/financeiro/classificacao-contabil/padroes/upload",
+        data={"arquivos": (arquivo, "padroes.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["resultado"]["padroes_criados"] == 1
+
+    with app.app_context():
+        padrao = ClassificacaoContabilPadrao.query.filter_by(conta="12503").first()
+        assert padrao is not None
+        assert padrao.fornecedor_norm == "FORNECEDOR UPLOAD"
+
+
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

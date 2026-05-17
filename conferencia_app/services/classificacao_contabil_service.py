@@ -60,8 +60,8 @@ def _linha_cabecalho(sheet) -> tuple[int, list[str]] | None:
     return None
 
 
-def _iter_linhas_classificadas(path: Path):
-    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+def _iter_linhas_classificadas(workbook_source, origem_nome: str):
+    workbook = openpyxl.load_workbook(workbook_source, read_only=True, data_only=True)
     for sheet in workbook.worksheets:
         header_info = _linha_cabecalho(sheet)
         if not header_info:
@@ -88,7 +88,7 @@ def _iter_linhas_classificadas(path: Path):
                 "conta": conta,
                 "nome_conta": nome_conta,
                 "comentario": str(_valor(row, index, "comentario") or "").strip(),
-                "origem": f"{path.name} / {sheet.title}",
+                "origem": f"{origem_nome} / {sheet.title}",
             }
 
 
@@ -102,7 +102,7 @@ def importar_padroes_excel(paths: list[Path] | None = None) -> dict:
         if not path.exists():
             continue
         arquivos_lidos.append(str(path))
-        for row in _iter_linhas_classificadas(path):
+        for row in _iter_linhas_classificadas(path, path.name):
             key = (
                 row["fornecedor_norm"],
                 row["cfop"],
@@ -140,6 +140,71 @@ def importar_padroes_excel(paths: list[Path] | None = None) -> dict:
         padrao.nome_conta = row["nome_conta"]
         padrao.comentario = row["comentario"][:500]
         padrao.ocorrencias = int(ocorrencias)
+        padrao.origem = row["origem"][:120]
+        padrao.atualizado_em = agora
+
+    db.session.commit()
+    return {
+        "arquivos_lidos": len(arquivos_lidos),
+        "linhas_agregadas": sum(agregadas.values()),
+        "padroes_criados": criados,
+        "padroes_atualizados": atualizados,
+        "padroes_total": ClassificacaoContabilPadrao.query.count(),
+    }
+
+
+def importar_padroes_uploads(arquivos) -> dict:
+    agregadas: Counter[tuple] = Counter()
+    exemplos: dict[tuple, dict] = {}
+    arquivos_lidos = []
+
+    for arquivo in arquivos:
+        filename = str(getattr(arquivo, "filename", "") or "upload.xlsx").strip()
+        if not filename.lower().endswith((".xlsx", ".xlsm")):
+            continue
+        try:
+            arquivo.stream.seek(0)
+        except Exception:
+            pass
+        arquivos_lidos.append(filename)
+        for row in _iter_linhas_classificadas(arquivo.stream, filename):
+            key = (
+                row["fornecedor_norm"],
+                row["cfop"],
+                row["codigo_norm"],
+                row["descricao_norm"],
+                row["conta"],
+            )
+            agregadas[key] += 1
+            exemplos.setdefault(key, row)
+
+    agora = datetime.now()
+    criados = 0
+    atualizados = 0
+    for key, ocorrencias in agregadas.items():
+        row = exemplos[key]
+        padrao = ClassificacaoContabilPadrao.query.filter_by(
+            fornecedor_norm=row["fornecedor_norm"],
+            cfop=row["cfop"],
+            codigo_norm=row["codigo_norm"],
+            descricao_norm=row["descricao_norm"],
+            conta=row["conta"],
+        ).first()
+        if padrao is None:
+            padrao = ClassificacaoContabilPadrao(
+                fornecedor_norm=row["fornecedor_norm"],
+                cfop=row["cfop"],
+                codigo_norm=row["codigo_norm"],
+                descricao_norm=row["descricao_norm"],
+                conta=row["conta"],
+            )
+            db.session.add(padrao)
+            criados += 1
+        else:
+            atualizados += 1
+        padrao.nome_conta = row["nome_conta"]
+        padrao.comentario = row["comentario"][:500]
+        padrao.ocorrencias = int(padrao.ocorrencias or 0) + int(ocorrencias)
         padrao.origem = row["origem"][:120]
         padrao.atualizado_em = agora
 
