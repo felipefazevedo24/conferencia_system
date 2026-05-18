@@ -653,7 +653,7 @@ CONSERTO_RETORNOS_SQL = """
      and f.codigo = c.cod_fornecedor
     where c.cod_empresa = %s
       and c.dt_nf::date >= %s
-      and a.cfop in ('1915', '2915')
+      and a.cfop in ('1916', '2916')
       and coalesce(nullif(trim(a.cod_interno), ''), '') <> ''
     order by c.dt_nf desc nulls last, c.codigo desc
     limit %s

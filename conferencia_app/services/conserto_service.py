@@ -17,7 +17,7 @@ class ConsertoService:
     MAPA_OPERACOES = {
         "Conserto": {
             "remessa": {"5915", "6915"},
-            "retorno": {"1915", "2915"},
+            "retorno": {"1916", "2916"},
         },
     }
     CFOPS_REMESSA = {

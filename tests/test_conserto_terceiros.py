@@ -63,7 +63,7 @@ def test_retorno_conserto_gera_baixa_pendente_para_autorizacao(tmp_path):
             ItemNota(
                 numero_nota="3001",
                 chave_acesso="3" * 44,
-                cfop="1915",
+                cfop="1916",
                 fornecedor="Terceiro Conserto",
                 codigo="MAT-002",
                 descricao="Item conserto",
@@ -80,7 +80,7 @@ def test_retorno_conserto_gera_baixa_pendente_para_autorizacao(tmp_path):
         estoque = ConsertoEstoque.query.one()
 
         assert resumo["baixas_sugeridas"] == 1
-        assert baixa.cfop_retorno == "1915"
+        assert baixa.cfop_retorno == "1916"
         assert baixa.status_baixa == "Pendente de confirmacao"
         assert estoque.quantidade_saldo == 5
 
@@ -137,7 +137,7 @@ def test_sincronizacao_conserto_usa_erp_postgres_e_confirma_baixa(tmp_path, monk
                                 "chave_nf_retorno": "8" * 44,
                                 "data_nf_retorno": "2026-05-15",
                                 "quantidade": 4,
-                                "cfop_retorno": "1915",
+                                "cfop_retorno": "1916",
                                 "origem_vinculo": "nf_entrada_referenciada",
                             }
                         ],
@@ -211,7 +211,7 @@ def test_consulta_manual_por_numero_preenche_dados_do_retorno(tmp_path):
             ItemNota(
                 numero_nota="6001",
                 chave_acesso="7" * 44,
-                cfop="1915",
+                cfop="1916",
                 fornecedor="Fornecedor Teste",
                 codigo="MAT-005",
                 descricao="Produto teste",
@@ -227,5 +227,5 @@ def test_consulta_manual_por_numero_preenche_dados_do_retorno(tmp_path):
 
         assert payload["numero_nf_retorno"] == "6001"
         assert payload["chave_nf_retorno"] == "7" * 44
-        assert payload["cfop_retorno"] == "1915"
+        assert payload["cfop_retorno"] == "1916"
         assert payload["quantidade"] == 4
