@@ -44,6 +44,41 @@ def test_erp_sync_normaliza_linha_postgres_estoque():
     assert item["localizacao_estoque"] == "AL-PB-02-02"
 
 
+def test_erp_sync_consulta_estoque_pela_api_bridge():
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "sucesso": True,
+                "itens": [
+                    {
+                        "codigo_interno": "19-02-00030",
+                        "item": "Mola",
+                        "unidade": "PÇ",
+                        "qtde_total": 52,
+                        "qtde_reservada": 16,
+                        "qtde_disponivel": 36,
+                        "localizacao_estoque": "AL-PB-02-02",
+                    }
+                ],
+            }
+
+    app = create_app({"TESTING": True, "ERP_ESTOQUE_PG_COMPANY": 1})
+    with app.app_context(), patch("conferencia_app.services.erp_sync_service.requests.post", return_value=FakeResponse()) as post:
+        itens = ERPSyncService._buscar_estoque_erp_api(
+            {"api_url": "https://bridge.local", "api_token": "token", "api_timeout": 30}
+        )
+
+    assert itens[0]["codigo_interno"] == "19-02-00030"
+    assert itens[0]["qtde_disponivel"] == 36.0
+    post.assert_called_once()
+    assert post.call_args.args[0] == "https://bridge.local/api/erp/estoque"
+    assert post.call_args.kwargs["json"] == {"empresa": 1}
+    assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer token"
+
+
 def test_erp_sync_popula_item_com_endereco_mesmo_sem_saldo():
     app = create_app(
         {

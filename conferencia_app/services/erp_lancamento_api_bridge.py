@@ -447,6 +447,29 @@ ENTRADAS_CHAPA_DESDE_SQL = """
 """
 
 
+ESTOQUE_SQL = """
+    select
+        p.codigo_interno,
+        p.nome as item,
+        coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
+        coalesce(p.estoque_disponivel_uso, coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0), 0) as qtde_total,
+        coalesce(p.estoque_reservado, 0) as qtde_reservada,
+        coalesce(p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
+        p.localizacao_estoque,
+        coalesce(f.nome, '') as familia,
+        coalesce(p.cod_grupo::text, '') as grupo
+    from public.tproduto p
+    left join public.tfamilia f
+      on f.cod_empresa = p.cod_empresa
+     and f.codigo = p.cod_familia
+    where p.cod_empresa = %s
+      and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
+      and coalesce(nullif(trim(p.localizacao_estoque), ''), '') <> ''
+      and coalesce(p.inativo, 0) = 0
+    order by p.localizacao_estoque, p.codigo_interno
+"""
+
+
 def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
     if not rows:
         return None
@@ -607,6 +630,32 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "linhas": linhas})
         except Exception as exc:
             app.logger.exception("Falha ao consultar pedidos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/estoque")
+    def consultar_estoque():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(ESTOQUE_SQL, (empresa,))
+                    cols = [desc[0] for desc in cur.description]
+                    itens = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            return jsonify({"sucesso": True, "empresa": empresa, "itens": itens})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar estoque no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/nfe-emitidas")

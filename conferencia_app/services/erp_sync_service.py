@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+import requests
 from flask import current_app
 from sqlalchemy import func
 
@@ -58,6 +59,9 @@ class ERPSyncService:
             "user": str(os.environ.get("ERP_ESTOQUE_PG_USER") or os.environ.get("ERP_LANCAMENTO_PG_USER") or arquivo.get("user") or "").strip(),
             "password": str(os.environ.get("ERP_ESTOQUE_PG_PASSWORD") or os.environ.get("ERP_LANCAMENTO_PG_PASSWORD") or arquivo.get("password") or ""),
             "connect_timeout": int(os.environ.get("ERP_ESTOQUE_PG_CONNECT_TIMEOUT") or os.environ.get("ERP_LANCAMENTO_CONNECT_TIMEOUT") or 8),
+            "api_url": str(os.environ.get("ERP_ESTOQUE_API_URL") or os.environ.get("ERP_LANCAMENTO_API_URL") or arquivo.get("api_url") or "").strip().rstrip("/"),
+            "api_token": str(os.environ.get("ERP_ESTOQUE_API_TOKEN") or os.environ.get("ERP_LANCAMENTO_API_TOKEN") or arquivo.get("api_token") or ""),
+            "api_timeout": int(os.environ.get("ERP_ESTOQUE_API_TIMEOUT") or os.environ.get("ERP_LANCAMENTO_API_TIMEOUT") or arquivo.get("api_timeout") or 30),
         }
 
     @staticmethod
@@ -119,6 +123,9 @@ class ERPSyncService:
     @classmethod
     def buscar_estoque_erp(cls):
         cfg = cls._carregar_config_postgres()
+        if cfg.get("api_url"):
+            return cls._buscar_estoque_erp_api(cfg)
+
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             raise ValueError("Banco do ERP nao configurado para consulta de estoque.")
 
@@ -149,6 +156,34 @@ class ERPSyncService:
                 cur.execute(sql, (cls._get_company(),))
                 cols = [desc[0] for desc in cur.description]
                 return [cls._row_postgres_to_estoque(dict(zip(cols, row))) for row in cur.fetchall()]
+
+    @classmethod
+    def _buscar_estoque_erp_api(cls, cfg):
+        url = f"{cfg['api_url']}/api/erp/estoque"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "ColumbiaSync/ERP-Estoque",
+        }
+        if cfg.get("api_token"):
+            headers["Authorization"] = f"Bearer {cfg['api_token']}"
+
+        resp = requests.post(
+            url,
+            headers=headers,
+            json={"empresa": cls._get_company()},
+            timeout=cfg.get("api_timeout") or cls._get_timeout(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("sucesso"):
+            raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API ERP Estoque"))
+
+        itens_raw = data.get("itens") or []
+        if not isinstance(itens_raw, list):
+            return []
+        return [cls._row_postgres_to_estoque(item) for item in itens_raw if isinstance(item, dict)]
 
     @classmethod
     def sincronizar_skus(cls, itens_erp):
