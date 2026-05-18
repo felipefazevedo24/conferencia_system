@@ -5,9 +5,10 @@ gera divergências e alertas operacionais.
 """
 import json
 import logging
+import os
+from pathlib import Path
 from datetime import datetime
 
-import requests
 from flask import current_app
 from sqlalchemy import func
 
@@ -28,20 +29,49 @@ logger = logging.getLogger(__name__)
 class ERPSyncService:
     """Sincroniza dados de estoque vindos do ERP com o WMS local."""
 
-    ERP_HEADERS = {
-        "ngrok-skip-browser-warning": "1",
-        "User-Agent": "ColumbiaSyncBot/1.0",
-    }
-
     # ── helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
-    def _get_url():
-        return current_app.config.get("ERP_ESTOQUE_URL", "").strip()
+    def _get_company():
+        return int(current_app.config.get("ERP_ESTOQUE_PG_COMPANY") or 1)
 
     @staticmethod
     def _get_timeout():
         return current_app.config.get("ERP_ESTOQUE_TIMEOUT", 30)
+
+    @staticmethod
+    def _carregar_config_postgres():
+        config_path = Path(__file__).resolve().parent.parent.parent / "instance" / "erp_lancamento_config.json"
+        arquivo = {}
+        try:
+            if config_path.exists():
+                arquivo = json.loads(config_path.read_text(encoding="utf-8")) or {}
+                if not isinstance(arquivo, dict):
+                    arquivo = {}
+        except Exception:
+            arquivo = {}
+
+        return {
+            "host": str(os.environ.get("ERP_ESTOQUE_PG_HOST") or os.environ.get("ERP_LANCAMENTO_PG_HOST") or arquivo.get("host") or "").strip(),
+            "port": int(os.environ.get("ERP_ESTOQUE_PG_PORT") or os.environ.get("ERP_LANCAMENTO_PG_PORT") or arquivo.get("port") or 5432),
+            "database": str(os.environ.get("ERP_ESTOQUE_PG_DB") or os.environ.get("ERP_LANCAMENTO_PG_DB") or arquivo.get("database") or "").strip(),
+            "user": str(os.environ.get("ERP_ESTOQUE_PG_USER") or os.environ.get("ERP_LANCAMENTO_PG_USER") or arquivo.get("user") or "").strip(),
+            "password": str(os.environ.get("ERP_ESTOQUE_PG_PASSWORD") or os.environ.get("ERP_LANCAMENTO_PG_PASSWORD") or arquivo.get("password") or ""),
+            "connect_timeout": int(os.environ.get("ERP_ESTOQUE_PG_CONNECT_TIMEOUT") or os.environ.get("ERP_LANCAMENTO_CONNECT_TIMEOUT") or 8),
+        }
+
+    @staticmethod
+    def _conectar_postgres(cfg):
+        import psycopg2  # type: ignore
+
+        return psycopg2.connect(
+            host=cfg["host"],
+            port=cfg["port"],
+            dbname=cfg["database"],
+            user=cfg["user"],
+            password=cfg["password"],
+            connect_timeout=cfg.get("connect_timeout") or 8,
+        )
 
     @staticmethod
     def _normalizar_unidade(un):
@@ -58,27 +88,67 @@ class ERPSyncService:
         # grupo vem como "CENTRO DE USINAGEM"
         return familia_raw, grupo_raw
 
+    @staticmethod
+    def _row_postgres_to_estoque(row):
+        def _float(valor, padrao=0.0):
+            try:
+                return float(valor if valor is not None else padrao)
+            except (TypeError, ValueError):
+                return float(padrao)
+
+        qtd_total = _float(row.get("qtde_total"))
+        qtd_reservada = _float(row.get("qtde_reservada"))
+        qtd_disponivel = _float(row.get("qtde_disponivel"), qtd_total - qtd_reservada)
+
+        return {
+            "codigo_interno": str(row.get("codigo_interno") or "").strip(),
+            "item": str(row.get("item") or "").strip(),
+            "unidade": str(row.get("unidade") or "UN").strip(),
+            "qtde_total": qtd_total,
+            "qtde_reservada": qtd_reservada,
+            "qtde_disponivel": qtd_disponivel,
+            "localizacao_estoque": str(row.get("localizacao_estoque") or "").strip(),
+            "familia": str(row.get("familia") or "").strip(),
+            "grupo": str(row.get("grupo") or "").strip(),
+        }
+
     # ── buscar dados do ERP ──────────────────────────────────────────────
+
+    # ── sincronizar SKU mestre ───────────────────────────────────────────
 
     @classmethod
     def buscar_estoque_erp(cls):
-        url = cls._get_url()
-        if not url:
-            raise ValueError("ERP_ESTOQUE_URL não configurada.")
+        cfg = cls._carregar_config_postgres()
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            raise ValueError("Banco do ERP nao configurado para consulta de estoque.")
 
-        resp = requests.get(url, headers=cls.ERP_HEADERS, timeout=cls._get_timeout())
-        resp.raise_for_status()
-        dados = resp.json()
+        sql = """
+            select
+                p.codigo_interno,
+                p.nome as item,
+                coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
+                coalesce(p.estoque_disponivel_uso, coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0), 0) as qtde_total,
+                coalesce(p.estoque_reservado, 0) as qtde_reservada,
+                coalesce(p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
+                p.localizacao_estoque,
+                coalesce(f.nome, '') as familia,
+                coalesce(p.cod_grupo::text, '') as grupo
+            from public.tproduto p
+            left join public.tfamilia f
+              on f.cod_empresa = p.cod_empresa
+             and f.codigo = p.cod_familia
+            where p.cod_empresa = %s
+              and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
+              and coalesce(nullif(trim(p.localizacao_estoque), ''), '') <> ''
+              and coalesce(p.inativo, 0) = 0
+            order by p.localizacao_estoque, p.codigo_interno
+        """
 
-        if isinstance(dados, dict):
-            dados = dados.get("itens") or dados.get("data") or dados.get("estoque") or []
-
-        if not isinstance(dados, list):
-            raise ValueError("Formato inesperado do endpoint ERP (esperava lista).")
-
-        return dados
-
-    # ── sincronizar SKU mestre ───────────────────────────────────────────
+        with cls._conectar_postgres(cfg) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (cls._get_company(),))
+                cols = [desc[0] for desc in cur.description]
+                return [cls._row_postgres_to_estoque(dict(zip(cols, row))) for row in cur.fetchall()]
 
     @classmethod
     def sincronizar_skus(cls, itens_erp):
@@ -292,8 +362,6 @@ class ERPSyncService:
 
             qtd_total = float(item.get("qtde_total") or 0)
             qtd_reservada = float(item.get("qtde_reservada") or 0)
-            if qtd_total <= 0:
-                continue
 
             try:
                 loc = cls._obter_ou_criar_localizacao(loc_str)
@@ -369,14 +437,6 @@ class ERPSyncService:
             evento.payload_json = json.dumps(resultado, ensure_ascii=False, default=str)
             db.session.commit()
 
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-            # Falha de rede/DNS: log curto sem traceback (ambiente offline ou endpoint fora do ar)
-            logger.warning("ERP Sync: sem conectividade (%s)", exc.__class__.__name__)
-            resultado["erro"] = f"sem conectividade: {exc.__class__.__name__}"
-            evento.status = "Falha"
-            evento.ultima_erro = str(exc)[:500]
-            db.session.commit()
-            raise
         except Exception as exc:
             logger.exception("Erro na sincronização ERP→WMS")
             resultado["erro"] = str(exc)

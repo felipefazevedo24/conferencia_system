@@ -3,7 +3,8 @@ from unittest.mock import patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import DepositoWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSIntegracaoEvento
+from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSIntegracaoEvento
+from conferencia_app.services.erp_sync_service import ERPSyncService
 
 
 def build_test_app(tmp_path):
@@ -18,6 +19,61 @@ def build_test_app(tmp_path):
 
 def login_admin(client):
     return client.post("/login", json={"username": "admin", "password": "admin1234"})
+
+
+def test_erp_sync_normaliza_linha_postgres_estoque():
+    item = ERPSyncService._row_postgres_to_estoque(
+        {
+            "codigo_interno": " 19-02-00030 ",
+            "item": " Mola ",
+            "unidade": "PÇ",
+            "qtde_total": "52",
+            "qtde_reservada": "16",
+            "qtde_disponivel": "36",
+            "localizacao_estoque": " AL-PB-02-02 ",
+            "familia": "Insumos",
+            "grupo": 2,
+        }
+    )
+
+    assert item["codigo_interno"] == "19-02-00030"
+    assert item["item"] == "Mola"
+    assert item["qtde_total"] == 52.0
+    assert item["qtde_reservada"] == 16.0
+    assert item["qtde_disponivel"] == 36.0
+    assert item["localizacao_estoque"] == "AL-PB-02-02"
+
+
+def test_erp_sync_popula_item_com_endereco_mesmo_sem_saldo():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+
+    with app.app_context():
+        deposito = DepositoWMS.query.filter_by(codigo="AL").first()
+        if not deposito:
+            db.session.add(DepositoWMS(codigo="AL", nome="Almoxarifado", ativo=True))
+            db.session.commit()
+
+        criados = ERPSyncService.popular_estoque_wms(
+            [
+                {
+                    "codigo_interno": "28-15-00002",
+                    "localizacao_estoque": "AL-PA-01-01",
+                    "qtde_total": 0,
+                    "qtde_reservada": 0,
+                }
+            ]
+        )
+
+        estoque = EstoqueWMS.query.filter_by(codigo_item="28-15-00002").first()
+        assert criados == 1
+        assert estoque is not None
+        assert float(estoque.qtd_total or 0) == 0.0
+        assert db.session.get(LocalizacaoArmazem, estoque.localizacao_id).codigo == "AL-PA-01-01"
 
 
 def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):

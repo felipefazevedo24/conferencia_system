@@ -10,7 +10,6 @@ import time
 import uuid
 from datetime import datetime, date, timedelta
 
-import requests
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 from werkzeug.utils import secure_filename
 
@@ -56,21 +55,17 @@ def _buscar_estoque_erp():
     agora = time.time()
     if _ERP_ESTOQUE_CACHE["data"] is not None and (agora - _ERP_ESTOQUE_CACHE["ts"]) < _ERP_ESTOQUE_TTL_SECONDS:
         return _ERP_ESTOQUE_CACHE["data"]
-    url = current_app.config.get("ERP_ESTOQUE_URL")
-    timeout = current_app.config.get("ERP_ESTOQUE_TIMEOUT", 30)
-    if not url:
-        return None
     try:
-        resp = requests.get(url, timeout=timeout, headers={"ngrok-skip-browser-warning": "true"})
-        resp.raise_for_status()
-        data = resp.json()
+        from ..services.erp_sync_service import ERPSyncService
+
+        data = ERPSyncService.buscar_estoque_erp()
         if not isinstance(data, list):
             return None
         _ERP_ESTOQUE_CACHE["data"] = data
         _ERP_ESTOQUE_CACHE["ts"] = agora
         return data
     except Exception as exc:
-        current_app.logger.warning("Falha ao consultar ERP_ESTOQUE_URL: %s", exc)
+        current_app.logger.warning("Falha ao consultar estoque no banco do ERP: %s", exc)
         return None
 
 from ..auth import login_required, permission_required
@@ -321,7 +316,7 @@ def api_criar_colaborador():
 def api_listar_epi_materiais():
     """Lista materiais EPI/Uniforme disponiveis.
 
-    Fonte primaria: ERP externo (ERP_ESTOQUE_URL) filtrado por grupo/familia.
+    Fonte primaria: banco do ERP filtrado por grupo/familia.
     Fallback: tabela local FacilitiesEpiMaterial (seed/cadastro manual).
     """
     tipo = (request.args.get("tipo") or "").lower()

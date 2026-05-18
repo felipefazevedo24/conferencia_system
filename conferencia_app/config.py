@@ -68,8 +68,8 @@ class Config:
     INVENTREE_TIMEOUT_SECONDS = int(os.environ.get("INVENTREE_TIMEOUT_SECONDS", "20"))
     INVENTREE_STOCK_NOTE_PREFIX = str(os.environ.get("INVENTREE_STOCK_NOTE_PREFIX", "ERP/WMS")).strip() or "ERP/WMS"
 
-    ERP_ESTOQUE_URL = os.environ.get("ERP_ESTOQUE_URL", "https://superelevated-han-throughly.ngrok-free.dev/estoque")
     ERP_ESTOQUE_TIMEOUT = int(os.environ.get("ERP_ESTOQUE_TIMEOUT", "30"))
+    ERP_ESTOQUE_PG_COMPANY = int(os.environ.get("ERP_ESTOQUE_PG_COMPANY", "1"))
 
     # Sincronizacao automatica ERP -> WMS (estoque + enderecos)
     ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
