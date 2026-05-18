@@ -1,8 +1,6 @@
 from datetime import datetime
-import threading
-import uuid
 
-from flask import Blueprint, current_app, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session
 from sqlalchemy import func
 
 from ..auth import permission_required
@@ -177,34 +175,19 @@ def relatorio_estoque():
 @permission_required("PAGE_CONSERTO")
 def sincronizar_notas():
     usuario = session.get("username", "sistema")
-    app_obj = current_app._get_current_object()
-    job_id = str(uuid.uuid4())
     data_inicial = datetime(datetime.now().year, 3, 1)
-    SYNC_JOBS[job_id] = {
-        "status": "running",
-        "logs": [f"Fila criada para sincronizacao apenas de NF-es emitidas a partir de {data_inicial.strftime('%Y-%m-%d')}."],
-        "resumo": None,
-        "error": None,
-    }
-
-    def _worker():
-        with app_obj.app_context():
-            try:
-                resumo = ConsertoService.sincronizar_notas_fiscais(
-                    usuario,
-                    data_inicial=data_inicial,
-                    debug_callback=lambda msg: SYNC_JOBS[job_id]["logs"].append(msg),
-                )
-                SYNC_JOBS[job_id]["status"] = "completed"
-                SYNC_JOBS[job_id]["resumo"] = resumo
-            except Exception as exc:
-                db.session.rollback()
-                SYNC_JOBS[job_id]["status"] = "failed"
-                SYNC_JOBS[job_id]["error"] = str(exc)
-                SYNC_JOBS[job_id]["logs"].append(f"Erro: {str(exc)}")
-
-    threading.Thread(target=_worker, daemon=True).start()
-    return jsonify({"job_id": job_id, "msg": "Sincronizacao iniciada."}), 202
+    logs = [f"Sincronizacao iniciada a partir de {data_inicial.strftime('%Y-%m-%d')}."]
+    try:
+        resumo = ConsertoService.sincronizar_notas_fiscais(
+            usuario,
+            data_inicial=data_inicial,
+            debug_callback=lambda msg: logs.append(msg),
+        )
+        return jsonify({"resumo": resumo, "logs": logs, "msg": "Sincronizacao concluida."}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logs.append(f"Erro: {str(exc)}")
+        return jsonify({"error": str(exc), "logs": logs}), 500
 
 
 @conserto_bp.route("/conserto/sincronizar_notas/<job_id>", methods=["GET"])
