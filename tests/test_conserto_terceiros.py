@@ -15,7 +15,7 @@ def build_test_app(tmp_path):
     )
 
 
-def test_criar_saldo_industrializacao_grava_classificacao(tmp_path):
+def test_criar_saldo_conserto_grava_classificacao(tmp_path):
     app = build_test_app(tmp_path)
 
     with app.app_context():
@@ -24,23 +24,23 @@ def test_criar_saldo_industrializacao_grava_classificacao(tmp_path):
             chave_nf_remessa="1" * 44,
             data_emissao=datetime(2026, 3, 31),
             fornecedor_cnpj="12345678000199",
-            fornecedor_nome="Fornecedor Industrializacao",
+            fornecedor_nome="Fornecedor Conserto",
             produto_codigo="MAT-001",
             produto_descricao="Material enviado",
             quantidade=10,
-            tipo_operacao="Industrializacao",
+            tipo_operacao="Conserto",
             tipo_controle="Meu em poder de terceiros",
-            cfop_remessa="5901",
+            cfop_remessa="5915",
             usuario="admin",
         )
 
-        assert saldo.tipo_operacao == "Industrializacao"
+        assert saldo.tipo_operacao == "Conserto"
         assert saldo.tipo_controle == "Meu em poder de terceiros"
-        assert saldo.cfop_remessa == "5901"
+        assert saldo.cfop_remessa == "5915"
         assert saldo.status == "Pendente de retorno"
 
 
-def test_retorno_industrializacao_gera_baixa_pendente_para_autorizacao(tmp_path):
+def test_retorno_conserto_gera_baixa_pendente_para_autorizacao(tmp_path):
     app = build_test_app(tmp_path)
 
     with app.app_context():
@@ -49,13 +49,13 @@ def test_retorno_industrializacao_gera_baixa_pendente_para_autorizacao(tmp_path)
             chave_nf_remessa="2" * 44,
             data_emissao=datetime(2026, 3, 30),
             fornecedor_cnpj="98765432000188",
-            fornecedor_nome="Terceiro Industrial",
+            fornecedor_nome="Terceiro Conserto",
             produto_codigo="MAT-002",
-            produto_descricao="Item industrializado",
+            produto_descricao="Item conserto",
             quantidade=5,
-            tipo_operacao="Industrializacao",
+            tipo_operacao="Conserto",
             tipo_controle="Meu em poder de terceiros",
-            cfop_remessa="5901",
+            cfop_remessa="5915",
             usuario="admin",
         )
 
@@ -63,10 +63,10 @@ def test_retorno_industrializacao_gera_baixa_pendente_para_autorizacao(tmp_path)
             ItemNota(
                 numero_nota="3001",
                 chave_acesso="3" * 44,
-                cfop="5902",
-                fornecedor="Terceiro Industrial",
+                cfop="1915",
+                fornecedor="Terceiro Conserto",
                 codigo="MAT-002",
-                descricao="Item industrializado",
+                descricao="Item conserto",
                 qtd_real=5,
                 status="Concluido",
                 cnpj_emitente="98765432000188",
@@ -80,7 +80,7 @@ def test_retorno_industrializacao_gera_baixa_pendente_para_autorizacao(tmp_path)
         estoque = ConsertoEstoque.query.one()
 
         assert resumo["baixas_sugeridas"] == 1
-        assert baixa.cfop_retorno == "5902"
+        assert baixa.cfop_retorno == "1915"
         assert baixa.status_baixa == "Pendente de confirmacao"
         assert estoque.quantidade_saldo == 5
 
@@ -102,27 +102,12 @@ def test_relatorio_estoque_consolida_operacoes(tmp_path):
             cfop_remessa="5915",
             usuario="admin",
         )
-        ConsertoService.criar_saldo_remessa(
-            numero_nf_remessa="4002",
-            chave_nf_remessa="5" * 44,
-            data_emissao=datetime(2026, 3, 29),
-            fornecedor_cnpj="22222222000122",
-            fornecedor_nome="Fornecedor Industrial",
-            produto_codigo="MAT-004",
-            produto_descricao="Item industrializacao",
-            quantidade=3,
-            tipo_operacao="Industrializacao",
-            cfop_remessa="5901",
-            usuario="admin",
-        )
-
         relatorio = ConsertoService.montar_relatorio_estoque()
         operacoes = {item["tipo_operacao"]: item for item in relatorio["grupos_operacao"]}
 
-        assert relatorio["cards"]["registros_abertos"] == 2
-        assert relatorio["cards"]["quantidade_em_terceiros"] == 5
+        assert relatorio["cards"]["registros_abertos"] == 1
+        assert relatorio["cards"]["quantidade_em_terceiros"] == 2
         assert operacoes["Conserto"]["quantidade_saldo"] == 2
-        assert operacoes["Industrializacao"]["quantidade_saldo"] == 3
 
 
 def test_sincronizacao_conserto_usa_erp_postgres_e_confirma_baixa(tmp_path, monkeypatch):
@@ -143,19 +128,16 @@ def test_sincronizacao_conserto_usa_erp_postgres_e_confirma_baixa(tmp_path, monk
                         "produto_codigo": "MAT-ERP",
                         "produto_descricao": "Material ERP",
                         "quantidade_enviada": 10,
-                        "quantidade_retornada": 4,
+                        "quantidade_retornada": 0,
                         "cfop_remessa": "5915",
                         "tipo_operacao": "Conserto",
-                        "chave_nf_retorno": "8" * 44,
-                        "numero_nf_retorno": "8001",
-                        "data_nf_retorno": "2026-05-15",
                         "retornos": [
                             {
                                 "numero_nf_retorno": "8001",
                                 "chave_nf_retorno": "8" * 44,
                                 "data_nf_retorno": "2026-05-15",
                                 "quantidade": 4,
-                                "cfop_retorno": "1916",
+                                "cfop_retorno": "1915",
                                 "origem_vinculo": "nf_entrada_referenciada",
                             }
                         ],
@@ -229,7 +211,7 @@ def test_consulta_manual_por_numero_preenche_dados_do_retorno(tmp_path):
             ItemNota(
                 numero_nota="6001",
                 chave_acesso="7" * 44,
-                cfop="5916",
+                cfop="1915",
                 fornecedor="Fornecedor Teste",
                 codigo="MAT-005",
                 descricao="Produto teste",
@@ -245,5 +227,5 @@ def test_consulta_manual_por_numero_preenche_dados_do_retorno(tmp_path):
 
         assert payload["numero_nf_retorno"] == "6001"
         assert payload["chave_nf_retorno"] == "7" * 44
-        assert payload["cfop_retorno"] == "5916"
+        assert payload["cfop_retorno"] == "1915"
         assert payload["quantidade"] == 4

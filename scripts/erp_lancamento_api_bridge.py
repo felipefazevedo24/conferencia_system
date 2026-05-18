@@ -332,23 +332,37 @@ def _aplicar_retornos_conserto(remessas: list[dict[str, Any]], retornos: list[di
         produto = str(retorno.get("produto_codigo") or "").strip()
         if not produto:
             continue
-        refs_chave = set(_extrair_refs_nfe_xml(retorno.pop("nfe_arquivo_xml", None)))
+        refs_chave = set()
+        rastreio_chave = "".join(ch for ch in str(retorno.get("chave_nf_remessa_rastreio") or "") if ch.isdigit())
+        if len(rastreio_chave) == 44:
+            refs_chave.add(rastreio_chave)
+        refs_chave.update(_extrair_refs_nfe_xml(retorno.pop("nfe_arquivo_xml", None)))
         chave_ref = "".join(ch for ch in str(retorno.get("chave_nf_remessa_ref") or "") if ch.isdigit())
         if len(chave_ref) == 44:
             refs_chave.add(chave_ref)
 
-        refs_numero = set(_extrair_numeros_ref_texto(retorno.get("referencia"), retorno.get("infadprod_v01")))
+        refs_numero = set()
+        numero_rastreio = str(retorno.get("numero_nf_remessa_rastreio") or "").strip().lstrip("0")
+        if numero_rastreio:
+            refs_numero.add(numero_rastreio)
+        refs_numero.update(_extrair_numeros_ref_texto(retorno.get("referencia"), retorno.get("infadprod_v01")))
         numero_ref = str(retorno.get("numero_nf_remessa_ref") or "").strip().lstrip("0")
         if numero_ref and numero_ref != "None":
             refs_numero.add(numero_ref)
 
-        remessa = next((por_chave_produto.get((ref, produto)) for ref in refs_chave if por_chave_produto.get((ref, produto))), None)
+        remessa = None
+        if rastreio_chave:
+            remessa = por_chave_produto.get((rastreio_chave, produto))
+        if not remessa and numero_rastreio:
+            remessa = por_numero_produto.get((numero_rastreio, produto))
+        if not remessa:
+            remessa = next((por_chave_produto.get((ref, produto)) for ref in refs_chave if por_chave_produto.get((ref, produto))), None)
         if not remessa:
             remessa = next((por_numero_produto.get((ref, produto)) for ref in refs_numero if por_numero_produto.get((ref, produto))), None)
         if not remessa:
             continue
 
-        quantidade = float(retorno.get("quantidade_retornada") or 0)
+        quantidade = float(retorno.get("quantidade_rastreio") or retorno.get("quantidade_retornada") or 0)
         remessa["quantidade_retornada"] = float(remessa.get("quantidade_retornada") or 0) + quantidade
         remessa["retornos"].append({
             "codigo_entrada": retorno.get("codigo_entrada"),
@@ -357,7 +371,7 @@ def _aplicar_retornos_conserto(remessas: list[dict[str, Any]], retornos: list[di
             "data_nf_retorno": _date_to_api(retorno.get("data_nf_retorno")),
             "quantidade": quantidade,
             "cfop_retorno": retorno.get("cfop_retorno"),
-            "origem_vinculo": "nf_entrada_referenciada",
+            "origem_vinculo": "rastreio_servico" if (rastreio_chave or numero_rastreio) else "nf_entrada_referenciada",
         })
 
 
@@ -584,25 +598,8 @@ CONSERTO_REMESSAS_SQL = """
         i.produto as produto_descricao,
         coalesce(i.qtde, 0) as quantidade_enviada,
         i.cfop as cfop_remessa,
-        i.n_nf_entrada::text as numero_nf_retorno,
-        i.dt_emissao_entrada as data_nf_retorno,
-        i.cod_entrada,
-        i.cod_item_entrada,
-        i.numero_item_nf_entrada,
-        i.chv_entrada as chave_nf_retorno,
-        case
-            when coalesce(i.qtde_retornada, 0) > 0 then i.qtde_retornada
-            when coalesce(i.qtde_retorno, 0) > 0 then i.qtde_retorno
-            when coalesce(i.cod_entrada, 0) <> 0
-              or coalesce(i.n_nf_entrada, 0) <> 0
-              or coalesce(nullif(i.chv_entrada, ''), '') <> ''
-              then coalesce(i.qtde, 0)
-            else 0
-        end as quantidade_retornada,
-        case
-            when i.cfop in ('5901', '6901') then 'Industrializacao'
-            else 'Conserto'
-        end as tipo_operacao
+        0::double precision as quantidade_retornada,
+        'Conserto' as tipo_operacao
     from public.tnota_fiscal nf
     join public.tnota_fiscal_item i
       on i.cod_empresa = nf.cod_empresa
@@ -613,7 +610,7 @@ CONSERTO_REMESSAS_SQL = """
     where nf.cod_empresa = %s
       and coalesce(nf.cancelada, 0) = 0
       and nf.dt_emissao::date >= %s
-      and i.cfop in ('5915', '6915', '5901', '6901')
+      and i.cfop in ('5915', '6915')
       and coalesce(nullif(trim(i.codigo), ''), '') <> ''
     order by nf.dt_emissao desc nulls last, nf.numero desc, coalesce(nullif(i.nitem_vc03, ''), '0')
     limit %s
@@ -637,17 +634,26 @@ CONSERTO_RETORNOS_SQL = """
         a.cfop as cfop_retorno,
         a.referencia,
         a.infadprod_v01,
+        os.numero_nf_envio::text as numero_nf_remessa_rastreio,
+        os.chave_envio_nf as chave_nf_remessa_rastreio,
+        os.numero_item_envio_nf as numero_item_remessa_rastreio,
+        os.qtde as quantidade_rastreio,
+        os.cfop_envio_nf as cfop_remessa_rastreio,
         c.nfe_arquivo_xml
     from public.tcompras c
     join public.tcom_aux a
       on a.cod_empresa = c.cod_empresa
      and a.realciona_auto = c.codigo
+    left join public.tcom_aux_os os
+      on os.cod_empresa = a.cod_empresa
+     and os.guid_pai = a.guid_linha
+     and coalesce(os.cancelado, 0) = 0
     left join public.tfornece f
       on f.cod_empresa = c.cod_empresa
      and f.codigo = c.cod_fornecedor
     where c.cod_empresa = %s
       and c.dt_nf::date >= %s
-      and a.cfop in ('1915', '2915', '1916', '2916', '1902', '2902')
+      and a.cfop in ('1915', '2915')
       and coalesce(nullif(trim(a.cod_interno), ''), '') <> ''
     order by c.dt_nf desc nulls last, c.codigo desc
     limit %s

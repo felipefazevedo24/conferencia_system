@@ -17,11 +17,7 @@ class ConsertoService:
     MAPA_OPERACOES = {
         "Conserto": {
             "remessa": {"5915", "6915"},
-            "retorno": {"5916", "6916"},
-        },
-        "Industrializacao": {
-            "remessa": {"5901", "6901"},
-            "retorno": {"5902", "6902"},
+            "retorno": {"1915", "2915"},
         },
     }
     CFOPS_REMESSA = {
@@ -172,13 +168,11 @@ class ConsertoService:
                 },
             )
             grupo["quantidade_enviada"] += ConsertoService._float(row.get("quantidade_enviada"))
-            qtd_retorno = ConsertoService._float(row.get("quantidade_retornada"))
-            grupo["quantidade_retornada"] += qtd_retorno
-
             for retorno_row in row.get("retornos") or []:
                 quantidade_retorno = ConsertoService._float(retorno_row.get("quantidade"))
                 if quantidade_retorno <= 0:
                     continue
+                grupo["quantidade_retornada"] += quantidade_retorno
                 chave_retorno = ConsertoService._normalizar_texto(retorno_row.get("chave_nf_retorno"))
                 numero_retorno = ConsertoService._normalizar_texto(retorno_row.get("numero_nf_retorno"))
                 codigo_entrada = ConsertoService._normalizar_texto(retorno_row.get("codigo_entrada"))
@@ -194,22 +188,6 @@ class ConsertoService:
                     },
                 )
                 retorno["quantidade"] += quantidade_retorno
-
-            chave_retorno = ConsertoService._normalizar_texto(row.get("chave_nf_retorno"))
-            numero_retorno = ConsertoService._normalizar_texto(row.get("numero_nf_retorno"))
-            cod_entrada = ConsertoService._normalizar_texto(row.get("cod_entrada"))
-            if qtd_retorno > 0 and (chave_retorno or numero_retorno or cod_entrada):
-                retorno_key = chave_retorno or f"ERP:{cod_entrada or numero_retorno}"
-                retorno = grupo["retornos"].setdefault(
-                    retorno_key,
-                    {
-                        "chave_nf_retorno": chave_retorno,
-                        "numero_nf_retorno": numero_retorno,
-                        "data_nf_retorno": ConsertoService._parse_data_qualquer(row.get("data_nf_retorno")),
-                        "quantidade": 0.0,
-                    },
-                )
-                retorno["quantidade"] += qtd_retorno
 
         return list(grupos.values())
 
@@ -991,7 +969,7 @@ class ConsertoService:
                 for cfop in item["cfops"]
             )
             if not possui_cfop_remessa:
-                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: sem CFOP de remessa para terceiro (5915/6915/5901/6901).")
+                log(f"Ignorada {nota['numero_nota'] or doc['chave']}: sem CFOP de remessa para conserto (5915/6915).")
                 continue
 
             resumo["remessas_emitidas_consyste"] += 1
