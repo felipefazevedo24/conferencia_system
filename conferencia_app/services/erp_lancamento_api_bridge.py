@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import os
 import base64
+import re
 from datetime import date, datetime
 from typing import Any
+from xml.etree import ElementTree as et
 
 from flask import Flask, jsonify, request
 import psycopg2  # type: ignore
@@ -268,6 +270,97 @@ def _b64(valor: Any) -> str:
     return base64.b64encode(valor).decode("ascii")
 
 
+def _xml_bytes(valor: Any) -> bytes:
+    if not valor:
+        return b""
+    if isinstance(valor, memoryview):
+        return valor.tobytes()
+    if isinstance(valor, bytearray):
+        return bytes(valor)
+    if isinstance(valor, bytes):
+        return valor
+    if isinstance(valor, str):
+        return valor.encode("utf-8", errors="ignore")
+    return b""
+
+
+def _extrair_refs_nfe_xml(valor: Any) -> list[str]:
+    dados = _xml_bytes(valor)
+    if not dados:
+        return []
+    try:
+        root = et.fromstring(dados)
+    except Exception:
+        return []
+    ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+    refs = []
+    for ref in root.findall(".//nfe:NFref/nfe:refNFe", ns):
+        texto = "".join(ch for ch in str(ref.text or "") if ch.isdigit())
+        if len(texto) == 44:
+            refs.append(texto)
+    return refs
+
+
+def _extrair_numeros_ref_texto(*valores: Any) -> list[str]:
+    texto = " ".join(str(v or "") for v in valores)
+    candidatos = re.findall(r"(?<!\d)(\d{4,6})(?!\d)", texto)
+    vistos: set[str] = set()
+    refs = []
+    for candidato in candidatos:
+        normalizado = candidato.lstrip("0") or "0"
+        if normalizado not in vistos:
+            vistos.add(normalizado)
+            refs.append(normalizado)
+    return refs
+
+
+def _aplicar_retornos_conserto(remessas: list[dict[str, Any]], retornos: list[dict[str, Any]]) -> None:
+    por_chave_produto: dict[tuple[str, str], dict[str, Any]] = {}
+    por_numero_produto: dict[tuple[str, str], dict[str, Any]] = {}
+    for remessa in remessas:
+        remessa["quantidade_retornada"] = 0.0
+        remessa["retornos"] = []
+        produto = str(remessa.get("produto_codigo") or "").strip()
+        chave = str(remessa.get("chave_nf_remessa") or "").strip()
+        numero = str(remessa.get("numero_nf_remessa") or "").strip().lstrip("0")
+        if chave and produto:
+            por_chave_produto[(chave, produto)] = remessa
+        if numero and produto:
+            por_numero_produto[(numero, produto)] = remessa
+
+    for retorno in retornos:
+        produto = str(retorno.get("produto_codigo") or "").strip()
+        if not produto:
+            continue
+        refs_chave = set(_extrair_refs_nfe_xml(retorno.pop("nfe_arquivo_xml", None)))
+        chave_ref = "".join(ch for ch in str(retorno.get("chave_nf_remessa_ref") or "") if ch.isdigit())
+        if len(chave_ref) == 44:
+            refs_chave.add(chave_ref)
+
+        refs_numero = set(_extrair_numeros_ref_texto(retorno.get("referencia"), retorno.get("infadprod_v01")))
+        numero_ref = str(retorno.get("numero_nf_remessa_ref") or "").strip().lstrip("0")
+        if numero_ref and numero_ref != "None":
+            refs_numero.add(numero_ref)
+
+        remessa = next((por_chave_produto.get((ref, produto)) for ref in refs_chave if por_chave_produto.get((ref, produto))), None)
+        if not remessa:
+            remessa = next((por_numero_produto.get((ref, produto)) for ref in refs_numero if por_numero_produto.get((ref, produto))), None)
+        if not remessa:
+            continue
+
+        quantidade = float(retorno.get("quantidade_retornada") or 0)
+        remessa["quantidade_retornada"] = float(remessa.get("quantidade_retornada") or 0) + quantidade
+        remessa["retornos"].append({
+            "codigo_entrada": retorno.get("codigo_entrada"),
+            "numero_nf_retorno": retorno.get("numero_nf_retorno"),
+            "chave_nf_retorno": retorno.get("chave_nf_retorno"),
+            "data_nf_retorno": _date_to_api(retorno.get("data_nf_retorno")),
+            "quantidade": quantidade,
+            "cfop_retorno": retorno.get("cfop_retorno"),
+            "origem_vinculo": "nf_entrada_referenciada",
+        })
+
+
 def _parse_data_minima(valor: Any) -> date:
     data = _parse_data(valor) or NFE_EMAIL_DATA_MINIMA
     return data if data >= NFE_EMAIL_DATA_MINIMA else NFE_EMAIL_DATA_MINIMA
@@ -479,6 +572,88 @@ ESTOQUE_CODIGOS_ATIVOS_SQL = """
 """
 
 
+CONSERTO_REMESSAS_SQL = """
+    select
+        nf.numero::text as numero_nf_remessa,
+        nf.dt_emissao as data_emissao,
+        nf.chv_nfe as chave_nf_remessa,
+        regexp_replace(coalesce(nf.cgc_cpf, ''), '[^0-9]', '', 'g') as fornecedor_cnpj,
+        coalesce(nullif(nf.cliente, ''), nullif(nf.razao_social, ''), 'Fornecedor nao informado') as fornecedor_nome,
+        coalesce(nullif(i.nitem_vc03, ''), '0') as numero_item_remessa,
+        i.codigo as produto_codigo,
+        i.produto as produto_descricao,
+        coalesce(i.qtde, 0) as quantidade_enviada,
+        i.cfop as cfop_remessa,
+        i.n_nf_entrada::text as numero_nf_retorno,
+        i.dt_emissao_entrada as data_nf_retorno,
+        i.cod_entrada,
+        i.cod_item_entrada,
+        i.numero_item_nf_entrada,
+        i.chv_entrada as chave_nf_retorno,
+        case
+            when coalesce(i.qtde_retornada, 0) > 0 then i.qtde_retornada
+            when coalesce(i.qtde_retorno, 0) > 0 then i.qtde_retorno
+            when coalesce(i.cod_entrada, 0) <> 0
+              or coalesce(i.n_nf_entrada, 0) <> 0
+              or coalesce(nullif(i.chv_entrada, ''), '') <> ''
+              then coalesce(i.qtde, 0)
+            else 0
+        end as quantidade_retornada,
+        case
+            when i.cfop in ('5901', '6901') then 'Industrializacao'
+            else 'Conserto'
+        end as tipo_operacao
+    from public.tnota_fiscal nf
+    join public.tnota_fiscal_item i
+      on i.cod_empresa = nf.cod_empresa
+     and i.modelo = nf.modelo
+     and i.serie = nf.serie
+     and i.sub_serie = nf.sub_serie
+     and i.numero_nf = nf.numero
+    where nf.cod_empresa = %s
+      and coalesce(nf.cancelada, 0) = 0
+      and nf.dt_emissao::date >= %s
+      and i.cfop in ('5915', '6915', '5901', '6901')
+      and coalesce(nullif(trim(i.codigo), ''), '') <> ''
+    order by nf.dt_emissao desc nulls last, nf.numero desc, coalesce(nullif(i.nitem_vc03, ''), '0')
+    limit %s
+"""
+
+
+CONSERTO_RETORNOS_SQL = """
+    select
+        c.codigo::text as codigo_entrada,
+        c.n_nf::text as numero_nf_retorno,
+        c.dt_nf as data_nf_retorno,
+        c.dt_recebimento,
+        c.chv_nfe as chave_nf_retorno,
+        regexp_replace(coalesce(f.cgc, ''), '[^0-9]', '', 'g') as fornecedor_cnpj,
+        coalesce(nullif(c.fornecedor, ''), nullif(f.razao_social, ''), nullif(f.nome, ''), 'Fornecedor nao informado') as fornecedor_nome,
+        c.num_doc_ref::text as numero_nf_remessa_ref,
+        c.hash_doc_ref as chave_nf_remessa_ref,
+        a.cod_interno as produto_codigo,
+        a.produto as produto_descricao,
+        coalesce(a.qtde, 0) as quantidade_retornada,
+        a.cfop as cfop_retorno,
+        a.referencia,
+        a.infadprod_v01,
+        c.nfe_arquivo_xml
+    from public.tcompras c
+    join public.tcom_aux a
+      on a.cod_empresa = c.cod_empresa
+     and a.realciona_auto = c.codigo
+    left join public.tfornece f
+      on f.cod_empresa = c.cod_empresa
+     and f.codigo = c.cod_fornecedor
+    where c.cod_empresa = %s
+      and c.dt_nf::date >= %s
+      and a.cfop in ('1915', '2915', '1916', '2916', '1902', '2902')
+      and coalesce(nullif(trim(a.cod_interno), ''), '') <> ''
+    order by c.dt_nf desc nulls last, c.codigo desc
+    limit %s
+"""
+
+
 def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
     if not rows:
         return None
@@ -667,6 +842,55 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "empresa": empresa, "itens": itens, "codigos_ativos": codigos_ativos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar estoque no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/conserto")
+    def consultar_conserto():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            try:
+                empresa = int(payload.get("empresa") or 1)
+            except (TypeError, ValueError):
+                empresa = 1
+
+            data_inicial = _parse_data(payload.get("data_inicial")) or date(datetime.now().year, 3, 1)
+            try:
+                limite = int(payload.get("limite") or 5000)
+            except (TypeError, ValueError):
+                limite = 5000
+            limite = max(1, min(limite, 20000))
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(CONSERTO_REMESSAS_SQL, (empresa, data_inicial, limite))
+                    cols = [desc[0] for desc in cur.description]
+                    remessas = []
+                    for row in cur.fetchall():
+                        item = dict(zip(cols, row))
+                        item["data_emissao"] = _date_to_api(item.get("data_emissao"))
+                        item["data_nf_retorno"] = _date_to_api(item.get("data_nf_retorno"))
+                        remessas.append(item)
+                    cur.execute(CONSERTO_RETORNOS_SQL, (empresa, data_inicial, limite))
+                    cols = [desc[0] for desc in cur.description]
+                    retornos = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            _aplicar_retornos_conserto(remessas, retornos)
+
+            return jsonify({
+                "sucesso": True,
+                "empresa": empresa,
+                "data_inicial": data_inicial.isoformat(),
+                "remessas": remessas,
+                "retornos_lidos": len(retornos),
+            })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar conserto no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/nfe-emitidas")

@@ -125,6 +125,88 @@ def test_relatorio_estoque_consolida_operacoes(tmp_path):
         assert operacoes["Industrializacao"]["quantidade_saldo"] == 3
 
 
+def test_sincronizacao_conserto_usa_erp_postgres_e_confirma_baixa(tmp_path, monkeypatch):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        monkeypatch.setattr(
+            ConsertoService,
+            "_buscar_conserto_erp_bridge",
+            staticmethod(
+                lambda data_inicial: [
+                    {
+                        "numero_nf_remessa": "9001",
+                        "chave_nf_remessa": "9" * 44,
+                        "data_emissao": "2026-05-10",
+                        "fornecedor_cnpj": "12345678000199",
+                        "fornecedor_nome": "Fornecedor GRV",
+                        "produto_codigo": "MAT-ERP",
+                        "produto_descricao": "Material ERP",
+                        "quantidade_enviada": 10,
+                        "quantidade_retornada": 4,
+                        "cfop_remessa": "5915",
+                        "tipo_operacao": "Conserto",
+                        "chave_nf_retorno": "8" * 44,
+                        "numero_nf_retorno": "8001",
+                        "data_nf_retorno": "2026-05-15",
+                        "retornos": [
+                            {
+                                "numero_nf_retorno": "8001",
+                                "chave_nf_retorno": "8" * 44,
+                                "data_nf_retorno": "2026-05-15",
+                                "quantidade": 4,
+                                "cfop_retorno": "1916",
+                                "origem_vinculo": "nf_entrada_referenciada",
+                            }
+                        ],
+                    }
+                ]
+            ),
+        )
+
+        resumo = ConsertoService.sincronizar_notas_fiscais("admin", data_inicial=datetime(2026, 5, 1))
+        estoque = ConsertoEstoque.query.one()
+        baixa = ConsertoBaixa.query.one()
+
+        assert resumo["remessas_erp"] == 1
+        assert resumo["saldos_criados"] == 1
+        assert resumo["baixas_confirmadas_erp"] == 1
+        assert estoque.numero_nf_remessa == "9001"
+        assert estoque.quantidade_enviada == 10
+        assert estoque.quantidade_saldo == 6
+        assert baixa.numero_nf_retorno == "8001"
+        assert baixa.status_baixa == "Confirmado"
+
+
+def test_processos_conserto_consolida_por_nf_remessa(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        saldo = ConsertoService.criar_saldo_remessa(
+            numero_nf_remessa="7001",
+            chave_nf_remessa="a" * 44,
+            data_emissao=datetime(2026, 5, 1),
+            fornecedor_cnpj="12345678000199",
+            fornecedor_nome="Fornecedor Processo",
+            produto_codigo="MAT-PROC",
+            produto_descricao="Material processo",
+            quantidade=5,
+            tipo_operacao="Conserto",
+            cfop_remessa="5915",
+            usuario="admin",
+        )
+        saldo.quantidade_saldo = 2
+        db.session.commit()
+
+        processos = ConsertoService.listar_processos_conserto()
+
+        assert len(processos) == 1
+        assert processos[0]["numero_nf_remessa"] == "7001"
+        assert processos[0]["quantidade_enviada"] == 5
+        assert processos[0]["quantidade_baixada"] == 3
+        assert processos[0]["quantidade_saldo"] == 2
+
+
 def test_consulta_manual_por_numero_preenche_dados_do_retorno(tmp_path):
     app = build_test_app(tmp_path)
 

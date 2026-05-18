@@ -46,7 +46,7 @@ def _mapa_numeros_por_chave(chaves):
 @conserto_bp.route("/conserto/estoque_aberto", methods=["GET"])
 @permission_required("PAGE_CONSERTO")
 def tela_central_conserto():
-    return render_template("conserto_central.html", **_contexto_tela("estoque"))
+    return render_template("conserto_central.html", **_contexto_tela("processos"))
 
 
 @conserto_bp.route("/conserto/confirmacao_baixa", methods=["GET"])
@@ -78,6 +78,12 @@ def auditoria_conserto():
         for auditoria in auditorias
     ]
     return jsonify(result)
+
+
+@conserto_bp.route("/conserto/processos", methods=["GET"])
+@permission_required("PAGE_CONSERTO")
+def processos_conserto():
+    return jsonify(ConsertoService.listar_processos_conserto())
 
 
 @conserto_bp.route("/conserto/baixas_pendentes", methods=["GET"])

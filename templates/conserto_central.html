@@ -315,7 +315,7 @@
     <section class="conserto-hero">
         <article class="conserto-card conserto-summary">
             <h2>Controle de estoque em conserto</h2>
-            <p>Sincronize NF-es de conserto por CFOP, sugira baixas automáticas por vínculo fiscal e trate manualmente os casos sem referência.</p>
+            <p>Baseado no Postgres do ERP: remessas, saldos e retornos vinculados no GRV.</p>
             <div class="conserto-metrics">
                 <div class="metric-box">
                     <strong id="metric-saldos">0</strong>
@@ -331,12 +331,12 @@
                 </div>
             </div>
             <div class="conserto-summary-actions">
-                <button class="btn-conserto primary inverse" id="btn-sincronizar-notas" type="button">Sincronizar notas fiscais</button>
+                <button class="btn-conserto primary inverse" id="btn-sincronizar-notas" type="button">Sincronizar ERP</button>
             </div>
         </article>
 
         <article class="conserto-card conserto-form-card">
-            <h3>Novo saldo de remessa</h3>
+            <h3>Ajuste manual de exceção</h3>
             <form id="form-criar-saldo" class="conserto-form-grid">
                 <div class="conserto-field">
                     <label for="chave_nf_remessa">Chave NF remessa</label>
@@ -374,11 +374,34 @@
     </section>
 
     <div class="conserto-tabs">
+        <button class="conserto-tab-btn" data-tab="processos" type="button">Processos</button>
         <button class="conserto-tab-btn" data-tab="estoque" type="button">Estoque em aberto</button>
         <button class="conserto-tab-btn" data-tab="historico" type="button">Historico de estoque</button>
         <button class="conserto-tab-btn" data-tab="baixa" type="button">Confirmacao de baixa</button>
         <button class="conserto-tab-btn" data-tab="auditoria" type="button">Auditoria</button>
     </div>
+
+    <section id="tab-processos" class="conserto-card conserto-table-card">
+        <h3>Processos por NF de remessa</h3>
+        <div class="conserto-table-wrap">
+            <table class="conserto-table">
+                <thead>
+                    <tr>
+                        <th>NF remessa</th>
+                        <th>Fornecedor</th>
+                        <th>Tipo</th>
+                        <th>Itens</th>
+                        <th>Enviado</th>
+                        <th>Retornado</th>
+                        <th>Saldo</th>
+                        <th>Dias</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="processos-tbody"></tbody>
+            </table>
+        </div>
+    </section>
 
     <section id="tab-estoque" class="conserto-card conserto-table-card">
         <h3>Saldos aguardando retorno</h3>
@@ -499,6 +522,7 @@
 <script>
     const estadoConserto = {
         tabAtiva: {{ tab_ativa|tojson }},
+        processos: [],
         saldos: [],
         baixas: [],
         historico: []
@@ -574,6 +598,33 @@
                 <td class="conserto-actions">
                     <button class="btn-conserto secondary" type="button" onclick="abrirModalVinculo(${item.id}, ${Number(item.quantidade_saldo || 0)})">Vincular retorno</button>
                 </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderizarProcessos() {
+        const tbody = document.getElementById("processos-tbody");
+        tbody.innerHTML = "";
+
+        if (!estadoConserto.processos.length) {
+            tbody.innerHTML = '<tr><td class="conserto-empty" colspan="9">Nenhum processo sincronizado.</td></tr>';
+            return;
+        }
+
+        estadoConserto.processos.forEach((item) => {
+            const statusClass = Number(item.quantidade_saldo || 0) > 0 ? "status-open" : "status-done";
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><strong>${item.numero_nf_remessa || "-"}</strong><br><small>${abreviarChave(item.chave_nf_remessa)}</small></td>
+                <td>${item.fornecedor_nome}<br><small>${item.fornecedor_cnpj || "-"}</small></td>
+                <td>${item.tipo_operacao || "-"}</td>
+                <td>${formatarNumero((item.itens || []).length)}</td>
+                <td>${formatarNumero(item.quantidade_enviada)}</td>
+                <td>${formatarNumero(item.quantidade_baixada)}</td>
+                <td><strong>${formatarNumero(item.quantidade_saldo)}</strong></td>
+                <td>${formatarNumero(item.dias_em_aberto)}</td>
+                <td><span class="conserto-status ${statusClass}">${item.status}</span></td>
             `;
             tbody.appendChild(tr);
         });
@@ -666,6 +717,16 @@
         atualizarMetricas();
     }
 
+    async function carregarProcessos() {
+        const response = await fetch("/conserto/processos");
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Falha ao carregar processos.");
+        }
+        estadoConserto.processos = data;
+        renderizarProcessos();
+    }
+
     async function carregarBaixas() {
         const response = await fetch("/conserto/baixas_pendentes");
         const data = await response.json();
@@ -697,7 +758,7 @@
     }
 
     async function recarregarTudo() {
-        await Promise.all([carregarSaldos(), carregarBaixas(), carregarAuditoria(), carregarHistorico()]);
+        await Promise.all([carregarProcessos(), carregarSaldos(), carregarBaixas(), carregarAuditoria(), carregarHistorico()]);
     }
 
     function abrirModalVinculo(estoqueId, saldoMaximo) {
@@ -745,16 +806,34 @@
                 throw new Error(data.error || "Nao foi possivel sincronizar as notas.");
             }
 
-            const resumo = data.resumo || {};
+            let resumo = data.resumo || null;
+            if (data.job_id) {
+                for (let tentativa = 0; tentativa < 120; tentativa += 1) {
+                    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+                    const statusResponse = await fetch(`/conserto/sincronizar_notas/${data.job_id}`);
+                    const statusData = await statusResponse.json();
+                    if (!statusResponse.ok) {
+                        throw new Error(statusData.error || "Falha ao acompanhar a sincronizacao.");
+                    }
+                    if (statusData.status === "failed") {
+                        throw new Error(statusData.error || "Sincronizacao falhou.");
+                    }
+                    if (statusData.status === "completed") {
+                        resumo = statusData.resumo || {};
+                        break;
+                    }
+                }
+            }
+            resumo = resumo || {};
             mostrarToast(
-                `Sincronizacao concluida. Saldos: ${resumo.saldos_criados || 0}, baixas: ${resumo.baixas_sugeridas || 0}, sem vinculo: ${resumo.retornos_sem_vinculo || 0}.`
+                `Sincronizacao concluida. ERP: ${resumo.remessas_erp || 0}, saldos: ${resumo.saldos_criados || 0}, baixas GRV: ${resumo.baixas_confirmadas_erp || 0}.`
             );
             await recarregarTudo();
         } catch (error) {
             mostrarToast(error.message, "error");
         } finally {
             btn.disabled = false;
-            btn.textContent = "Sincronizar notas fiscais";
+            btn.textContent = "Sincronizar ERP";
         }
     }
 
@@ -849,7 +928,7 @@
     });
 
     (async function initConserto() {
-        ativarTab(estadoConserto.tabAtiva || "estoque");
+        ativarTab(estadoConserto.tabAtiva || "processos");
         try {
             await recarregarTudo();
         } catch (error) {
