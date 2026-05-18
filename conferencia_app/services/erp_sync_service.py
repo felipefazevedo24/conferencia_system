@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 class ERPSyncService:
     """Sincroniza dados de estoque vindos do ERP com o WMS local."""
 
+    _ultimos_codigos_erp_ativos = None
+
     # ── helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -155,7 +157,19 @@ class ERPSyncService:
             with conn.cursor() as cur:
                 cur.execute(sql, (cls._get_company(),))
                 cols = [desc[0] for desc in cur.description]
-                return [cls._row_postgres_to_estoque(dict(zip(cols, row))) for row in cur.fetchall()]
+                itens = [cls._row_postgres_to_estoque(dict(zip(cols, row))) for row in cur.fetchall()]
+                cur.execute(
+                    """
+                    select distinct p.codigo_interno
+                    from public.tproduto p
+                    where p.cod_empresa = %s
+                      and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
+                      and coalesce(p.inativo, 0) = 0
+                    """,
+                    (cls._get_company(),),
+                )
+                cls._ultimos_codigos_erp_ativos = {str(row[0]).strip().lower() for row in cur.fetchall() if row and row[0]}
+                return itens
 
     @classmethod
     def _buscar_estoque_erp_api(cls, cfg):
@@ -183,6 +197,11 @@ class ERPSyncService:
         itens_raw = data.get("itens") or []
         if not isinstance(itens_raw, list):
             return []
+        cls._ultimos_codigos_erp_ativos = {
+            str(codigo).strip().lower()
+            for codigo in (data.get("codigos_ativos") or [])
+            if str(codigo or "").strip()
+        } or None
         return [cls._row_postgres_to_estoque(item) for item in itens_raw if isinstance(item, dict)]
 
     @classmethod
@@ -389,6 +408,14 @@ class ERPSyncService:
     def popular_estoque_wms(cls, itens_erp):
         """Cria/atualiza registros em EstoqueWMS para itens ERP que têm localização."""
         endereçados = 0
+        pares_erp = {
+            ((item.get("codigo_interno") or "").strip().lower(), (item.get("localizacao_estoque") or "").strip().upper())
+            for item in itens_erp
+            if (item.get("codigo_interno") or "").strip() and (item.get("localizacao_estoque") or "").strip()
+        }
+        codigos_erp_ativos = cls._ultimos_codigos_erp_ativos or {codigo for codigo, _loc in pares_erp}
+        cls._remover_estoque_obsoleto(codigos_erp_ativos, pares_erp)
+
         for item in itens_erp:
             codigo = (item.get("codigo_interno") or "").strip()
             loc_str = (item.get("localizacao_estoque") or "").strip()
@@ -431,6 +458,30 @@ class ERPSyncService:
         return endereçados
 
     # ── sincronização completa ───────────────────────────────────────────
+
+    @classmethod
+    def _remover_estoque_obsoleto(cls, codigos_erp_ativos, pares_erp):
+        if not codigos_erp_ativos:
+            return 0
+
+        registros = (
+            db.session.query(EstoqueWMS, LocalizacaoArmazem)
+            .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+            .filter(func.lower(func.trim(EstoqueWMS.codigo_item)).in_(list(codigos_erp_ativos)))
+            .all()
+        )
+
+        removidos = 0
+        for estoque, loc in registros:
+            par = ((estoque.codigo_item or "").strip().lower(), (loc.codigo or "").strip().upper())
+            if par in pares_erp:
+                continue
+            db.session.delete(estoque)
+            removidos += 1
+
+        if removidos:
+            db.session.commit()
+        return removidos
 
     @classmethod
     def executar_sync_completo(cls):

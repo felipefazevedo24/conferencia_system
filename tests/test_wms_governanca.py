@@ -63,6 +63,7 @@ def test_erp_sync_consulta_estoque_pela_api_bridge():
                         "localizacao_estoque": "AL-PB-02-02",
                     }
                 ],
+                "codigos_ativos": ["19-02-00030"],
             }
 
     app = create_app({"TESTING": True, "ERP_ESTOQUE_PG_COMPANY": 1})
@@ -109,6 +110,42 @@ def test_erp_sync_popula_item_com_endereco_mesmo_sem_saldo():
         assert estoque is not None
         assert float(estoque.qtd_total or 0) == 0.0
         assert db.session.get(LocalizacaoArmazem, estoque.localizacao_id).codigo == "AL-PA-01-01"
+
+
+def test_erp_sync_remove_endereco_local_quando_erp_nao_traz_mais_endereco():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+
+    with app.app_context():
+        deposito = DepositoWMS.query.filter_by(codigo="AL").first()
+        if not deposito:
+            deposito = DepositoWMS(codigo="AL", nome="Almoxarifado", ativo=True)
+            db.session.add(deposito)
+            db.session.commit()
+        loc = LocalizacaoArmazem(
+            codigo="J7",
+            deposito_id=deposito.id,
+            rua="J7",
+            predio="01",
+            nivel="01",
+            corredor="J7",
+            prateleira="01",
+            posicao="01",
+            ativo=True,
+        )
+        db.session.add(loc)
+        db.session.flush()
+        db.session.add(EstoqueWMS(codigo_item="19-03-00018", localizacao_id=loc.id, qtd_total=74, qtd_separada=0))
+        db.session.commit()
+
+        ERPSyncService._ultimos_codigos_erp_ativos = {"19-03-00018"}
+        ERPSyncService.popular_estoque_wms([])
+
+        assert EstoqueWMS.query.filter_by(codigo_item="19-03-00018").first() is None
 
 
 def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):

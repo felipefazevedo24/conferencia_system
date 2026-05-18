@@ -470,6 +470,15 @@ ESTOQUE_SQL = """
 """
 
 
+ESTOQUE_CODIGOS_ATIVOS_SQL = """
+    select distinct p.codigo_interno
+    from public.tproduto p
+    where p.cod_empresa = %s
+      and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
+      and coalesce(p.inativo, 0) = 0
+"""
+
+
 def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numero_nota: str = "", chave: str = "") -> dict[str, Any] | None:
     if not rows:
         return None
@@ -652,8 +661,10 @@ def create_app() -> Flask:
                     cur.execute(ESTOQUE_SQL, (empresa,))
                     cols = [desc[0] for desc in cur.description]
                     itens = [dict(zip(cols, row)) for row in cur.fetchall()]
+                    cur.execute(ESTOQUE_CODIGOS_ATIVOS_SQL, (empresa,))
+                    codigos_ativos = [str(row[0]).strip() for row in cur.fetchall() if row and row[0]]
 
-            return jsonify({"sucesso": True, "empresa": empresa, "itens": itens})
+            return jsonify({"sucesso": True, "empresa": empresa, "itens": itens, "codigos_ativos": codigos_ativos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar estoque no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
