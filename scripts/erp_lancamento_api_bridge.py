@@ -626,8 +626,8 @@ CONSERTO_RETORNOS_SQL = """
         c.chv_nfe as chave_nf_retorno,
         regexp_replace(coalesce(f.cgc, ''), '[^0-9]', '', 'g') as fornecedor_cnpj,
         coalesce(nullif(c.fornecedor, ''), nullif(f.razao_social, ''), nullif(f.nome, ''), 'Fornecedor nao informado') as fornecedor_nome,
-        c.num_doc_ref::text as numero_nf_remessa_ref,
-        c.hash_doc_ref as chave_nf_remessa_ref,
+        coalesce(ref.entraref_numero_nf, c.num_doc_ref::text) as numero_nf_remessa_ref,
+        coalesce(ref.entraref_chave_nf, c.hash_doc_ref) as chave_nf_remessa_ref,
         a.cod_interno as produto_codigo,
         a.produto as produto_descricao,
         coalesce(a.qtde, 0) as quantidade_retornada,
@@ -648,6 +648,10 @@ CONSERTO_RETORNOS_SQL = """
       on os.cod_empresa = a.cod_empresa
      and os.guid_pai = a.guid_linha
      and coalesce(os.cancelado, 0) = 0
+    left join public.tnota_fiscal_entraref ref
+      on ref.cod_empresa = c.cod_empresa
+     and ref.cod_compra = c.codigo
+     and coalesce(nullif(ref.entraref_numero_nf, ''), nullif(ref.entraref_chave_nf, '')) is not null
     left join public.tfornece f
       on f.cod_empresa = c.cod_empresa
      and f.codigo = c.cod_fornecedor
