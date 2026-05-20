@@ -24,6 +24,13 @@ class StoredPhoto:
     file_id: str | None = None
 
 
+@dataclass
+class DownloadedDriveFile:
+    data: bytes
+    file_name: str
+    mimetype: str
+
+
 def storage_mode() -> str:
     mode = str(current_app.config.get("EXPEDICAO_FOTOS_STORAGE") or "").strip().lower()
     if mode:
@@ -56,6 +63,25 @@ def decode_drive_rascunho(raw: str) -> tuple[str, str] | None:
     if not file_id:
         return None
     return file_id, urllib.parse.unquote(encoded_name) if sep else file_id
+
+
+def extract_drive_file_id(url: str | None) -> str | None:
+    raw = str(url or "").strip()
+    if not raw:
+        return None
+
+    draft = decode_drive_rascunho(raw)
+    if draft:
+        return draft[0]
+
+    parsed = urllib.parse.urlparse(raw)
+    qs = urllib.parse.parse_qs(parsed.query)
+    file_id = (qs.get("id") or [""])[0]
+    if file_id:
+        return file_id
+    if "/file/d/" in parsed.path:
+        return parsed.path.split("/file/d/", 1)[1].split("/", 1)[0] or None
+    return None
 
 
 def is_external_url(value: str | None) -> bool:
@@ -162,15 +188,30 @@ def upload_path_to_drive(path: str, file_name: str | None = None) -> StoredPhoto
     return upload_bytes_to_drive(data, final_name, mimetype)
 
 
+def download_drive_url(url: str, default_name: str | None = None) -> DownloadedDriveFile:
+    file_id = extract_drive_file_id(url)
+    if not file_id:
+        raise RuntimeError("Nao foi possivel identificar o arquivo no Drive.")
+
+    service = _drive_service()
+    metadata = service.files().get(
+        fileId=file_id,
+        fields="name,mimeType",
+        supportsAllDrives=True,
+    ).execute()
+    data = service.files().get_media(
+        fileId=file_id,
+        supportsAllDrives=True,
+    ).execute()
+    return DownloadedDriveFile(
+        data=data,
+        file_name=metadata.get("name") or default_name or file_id,
+        mimetype=metadata.get("mimeType") or "application/octet-stream",
+    )
+
+
 def delete_drive_url(url: str | None) -> None:
-    raw = str(url or "")
-    if "drive.google.com" not in raw:
-        return
-    parsed = urllib.parse.urlparse(raw)
-    qs = urllib.parse.parse_qs(parsed.query)
-    file_id = (qs.get("id") or [""])[0]
-    if not file_id and "/file/d/" in parsed.path:
-        file_id = parsed.path.split("/file/d/", 1)[1].split("/", 1)[0]
+    file_id = extract_drive_file_id(url)
     if not file_id:
         return
     _drive_service().files().delete(fileId=file_id, supportsAllDrives=True).execute()

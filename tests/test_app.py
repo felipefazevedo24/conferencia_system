@@ -2702,6 +2702,58 @@ def test_excluir_registro_expedicao_remove_vinculos_mesmo_com_foto_perdida(tmp_p
         assert ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=registro_id).count() == 0
 
 
+def test_foto_expedicao_drive_e_servida_pela_rota_do_sistema(tmp_path):
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+        }
+    )
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        agora = datetime.now()
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="ORC-DRIVE",
+            tipo_referencia="Orcamento",
+            conferente="admin",
+            data_conferencia=agora,
+            status="Pendente de expediÃ§Ã£o",
+            created_at=agora,
+            updated_at=agora,
+        )
+        db.session.add(registro)
+        db.session.flush()
+        foto = ExpedicaoConferenciaSimplesFoto(
+            conferencia_id=registro.id,
+            file_name="foto-drive.jpg",
+            file_path="https://drive.google.com/thumbnail?id=drive-file-123&sz=w1600",
+        )
+        db.session.add(foto)
+        db.session.commit()
+        registro_id = registro.id
+        foto_id = foto.id
+
+    list_response = client.get("/api/expedicao/conferencia-simples")
+    assert list_response.status_code == 200
+    foto_payload = list_response.get_json()["registros"][0]["fotos"][0]
+    assert foto_payload["url"] == f"/api/expedicao/conferencia-simples/{registro_id}/foto/{foto_id}"
+    assert "drive.google.com" not in foto_payload["url"]
+
+    downloaded = Mock(data=b"fake-drive-image", mimetype="image/jpeg", file_name="foto-drive.jpg")
+    with patch("conferencia_app.routes.api_routes.download_drive_url", return_value=downloaded) as mocked_download:
+        photo_response = client.get(f"/api/expedicao/conferencia-simples/{registro_id}/foto/{foto_id}")
+
+    assert photo_response.status_code == 200
+    assert photo_response.data == b"fake-drive-image"
+    assert photo_response.mimetype == "image/jpeg"
+    mocked_download.assert_called_once_with(
+        "https://drive.google.com/thumbnail?id=drive-file-123&sz=w1600",
+        default_name="foto-drive.jpg",
+    )
+
+
 def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):
     reports_dir = tmp_path / "eReports"
     reports_dir.mkdir(parents=True, exist_ok=True)

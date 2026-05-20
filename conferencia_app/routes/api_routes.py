@@ -234,6 +234,7 @@ from ..services.expedicao_service import (
 from ..services.expedicao_photo_storage import (
     decode_drive_rascunho,
     delete_drive_url,
+    download_drive_url,
     encode_drive_rascunho,
     is_external_url,
     upload_to_drive,
@@ -7110,9 +7111,19 @@ def _resolver_foto_expedicao(fotos_dir, file_name, file_path=None):
 
 
 def _foto_expedicao_url(registro_id, foto):
-    if is_external_url(foto.file_path):
-        return foto.file_path
     return f"/api/expedicao/conferencia-simples/{registro_id}/foto/{foto.id}"
+
+
+def _send_foto_expedicao(caminho, file_name=None):
+    if is_external_url(caminho):
+        downloaded = download_drive_url(caminho, default_name=file_name)
+        download_name = secure_filename(downloaded.file_name or file_name or "foto.jpg") or "foto.jpg"
+        return Response(
+            downloaded.data,
+            mimetype=downloaded.mimetype,
+            headers={"Content-Disposition": f"inline; filename={download_name}"},
+        )
+    return send_file(caminho)
 
 
 @api_bp.route("/api/expedicao/conferencia-simples")
@@ -7420,9 +7431,10 @@ def upload_foto_rascunho_expedicao():
         except Exception as exc:
             current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
             return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+        rascunho_ref = encode_drive_rascunho(stored.file_id or "", stored.file_name)
         return jsonify({
-            "rascunho_id": encode_drive_rascunho(stored.file_id or "", stored.file_name),
-            "url": stored.url,
+            "rascunho_id": rascunho_ref,
+            "url": f"/api/expedicao/conferencia-simples/foto-rascunho/{rascunho_ref}",
             "external": True,
         })
 
@@ -7438,6 +7450,15 @@ def upload_foto_rascunho_expedicao():
 @login_required
 def servir_foto_rascunho_expedicao(rascunho_id):
     """Serve o arquivo de rascunho para preview no frontend."""
+    drive_ref = decode_drive_rascunho(rascunho_id)
+    if drive_ref:
+        file_id, file_name = drive_ref
+        try:
+            return _send_foto_expedicao(f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600", file_name)
+        except Exception as exc:
+            current_app.logger.exception("Falha ao baixar rascunho de expedicao do Drive")
+            return jsonify({"error": f"Falha ao baixar foto do Drive: {exc}"}), 502
+
     fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
     if not fotos_dir:
         fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
@@ -7447,9 +7468,7 @@ def servir_foto_rascunho_expedicao(rascunho_id):
     caminho = os.path.join(rascunho_dir, safe_id)
     if not os.path.isfile(caminho):
         return jsonify({"error": "Arquivo não encontrado."}), 404
-    if is_external_url(caminho):
-        return redirect(caminho)
-    return send_file(caminho)
+    return _send_foto_expedicao(caminho)
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/buscar-nf", methods=["POST"])
@@ -7614,7 +7633,6 @@ def criar_registro_conferencia_simples():
                 try:
                     stored = upload_to_drive(foto, nome_arquivo)
                     caminho = stored.file_path
-                    foto_url = stored.url
                 except Exception as exc:
                     db.session.rollback()
                     current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
@@ -7622,16 +7640,17 @@ def criar_registro_conferencia_simples():
             else:
                 caminho = os.path.join(fotos_dir, nome_arquivo)
                 foto.save(caminho)
-                foto_url = ""
             foto_db = ExpedicaoConferenciaSimplesFoto(
                 conferencia_id=registro.id,
                 file_name=nome_arquivo,
                 file_path=caminho,
             )
             db.session.add(foto_db)
-            if not foto_url:
-                foto_url = f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"
-            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
+            db.session.flush()
+            fotos_salvas.append({
+                "nome": nome_arquivo,
+                "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}",
+            })
 
     # Fotos pré-carregadas via rascunho (upload imediato)
     fotos_rascunho_ids = request.form.getlist("fotos_rascunho") if request.content_type and "multipart" in request.content_type else []
@@ -7647,7 +7666,11 @@ def criar_registro_conferencia_simples():
                 file_path=foto_url,
             )
             db.session.add(foto_db)
-            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
+            db.session.flush()
+            fotos_salvas.append({
+                "nome": nome_arquivo,
+                "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}",
+            })
             continue
         safe_id = os.path.basename(rascunho_id)
         origem = os.path.join(rascunho_dir, safe_id)
@@ -7664,6 +7687,7 @@ def criar_registro_conferencia_simples():
             file_path=destino,
         )
         db.session.add(foto_db)
+        db.session.flush()
         fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
 
     if rascunhos_perdidos:
@@ -7914,7 +7938,6 @@ def completar_registro_conferencia_simples(registro_id):
                 try:
                     stored = upload_to_drive(foto, nome_arquivo)
                     caminho = stored.file_path
-                    foto_url = stored.url
                 except Exception as exc:
                     db.session.rollback()
                     current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
@@ -7922,14 +7945,17 @@ def completar_registro_conferencia_simples(registro_id):
             else:
                 caminho = os.path.join(fotos_dir, nome_arquivo)
                 foto.save(caminho)
-                foto_url = ""
             foto_db = ExpedicaoConferenciaSimplesFoto(
                 conferencia_id=registro.id,
                 file_name=nome_arquivo,
                 file_path=caminho,
             )
             db.session.add(foto_db)
-            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url or f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
+            db.session.flush()
+            fotos_salvas.append({
+                "nome": nome_arquivo,
+                "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}",
+            })
             fotos_adicionadas += 1
 
     # Fotos pré-carregadas via rascunho (upload imediato)
@@ -7946,7 +7972,11 @@ def completar_registro_conferencia_simples(registro_id):
                 file_path=foto_url,
             )
             db.session.add(foto_db)
-            fotos_salvas.append({"nome": nome_arquivo, "url": foto_url})
+            db.session.flush()
+            fotos_salvas.append({
+                "nome": nome_arquivo,
+                "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}",
+            })
             fotos_adicionadas += 1
             continue
         safe_id = os.path.basename(rascunho_id)
@@ -7964,6 +7994,7 @@ def completar_registro_conferencia_simples(registro_id):
             file_path=destino,
         )
         db.session.add(foto_db)
+        db.session.flush()
         fotos_salvas.append({"nome": nome_arquivo, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{foto_db.id}"})
         fotos_adicionadas += 1
 
@@ -8071,9 +8102,11 @@ def obter_canhoto_conferencia_simples(registro_id):
     if not caminho:
         return jsonify({"error": "Arquivo não encontrado."}), 404
 
-    if is_external_url(caminho):
-        return redirect(caminho)
-    return send_file(caminho)
+    try:
+        return _send_foto_expedicao(caminho, registro.canhoto_file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar canhoto de expedicao do Drive")
+        return jsonify({"error": f"Falha ao baixar canhoto do Drive: {exc}"}), 502
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>")
@@ -8095,9 +8128,11 @@ def obter_foto_conferencia_simples(registro_id, foto_id):
     if not caminho:
         return jsonify({"error": "Arquivo não encontrado."}), 404
 
-    if is_external_url(caminho):
-        return redirect(caminho)
-    return send_file(caminho)
+    try:
+        return _send_foto_expedicao(caminho, foto.file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar foto de expedicao do Drive")
+        return jsonify({"error": f"Falha ao baixar foto do Drive: {exc}"}), 502
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>", methods=["DELETE"])
