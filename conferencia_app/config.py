@@ -8,6 +8,11 @@ INSTANCE_DIR = BASE_DIR / "instance"
 DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = INSTANCE_DIR / "columbia-sync-01d50c87dd4a.json"
 
 
+def _env_or_default(name: str, default: str = "") -> str:
+    value = str(os.environ.get(name, "") or "").strip()
+    return value or default
+
+
 def _normalize_database_url(raw_url: str) -> str:
     url = str(raw_url or "").strip()
     if not url:
@@ -58,7 +63,7 @@ class Config:
     EXPEDICAO_GOOGLE_DRIVE_PUBLIC = os.environ.get("EXPEDICAO_GOOGLE_DRIVE_PUBLIC", "1")
     EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID = os.environ.get("EXPEDICAO_GOOGLE_DRIVE_FOLDER_ID", "1TmbDeg1KLveZMU-ieIWWsP_gppyYsm7p")
     GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
-    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = os.environ.get(
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = _env_or_default(
         "GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE",
         str(DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE) if DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE.exists() else "",
     )
