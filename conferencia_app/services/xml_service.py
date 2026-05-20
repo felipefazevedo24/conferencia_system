@@ -18,6 +18,24 @@ def _digits(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _float_xml(value, default=0.0):
+    try:
+        return float(str(value if value is not None else default).replace(",", "."))
+    except Exception:
+        return float(default)
+
+
+def _tributo_credito(imposto, grupo: str, ns) -> dict:
+    bloco = imposto.find(f"nfe:{grupo}", ns) if imposto is not None else None
+    if bloco is None:
+        return {"base": 0.0, "aliquota": 0.0, "valor": 0.0}
+    return {
+        "base": _float_xml(_txt(bloco, ".//nfe:vBC", ns, "0")),
+        "aliquota": _float_xml(_txt(bloco, ".//nfe:p" + grupo, ns, "0")),
+        "valor": _float_xml(_txt(bloco, ".//nfe:v" + grupo, ns, "0")),
+    }
+
+
 def _local_name(tag: str) -> str:
     return str(tag or "").split("}")[-1].lower()
 
@@ -202,6 +220,7 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
 
         v_nf = root.find(".//nfe:total/nfe:ICMSTot/nfe:vNF", ns)
         v_icms = root.find(".//nfe:total/nfe:ICMSTot/nfe:vICMS", ns)
+        valor_nf = _float_xml(v_nf.text if v_nf is not None else 0)
         txt_total = f"R$ {v_nf.text}" if v_nf is not None else "---"
         txt_imposto = f"R$ {v_icms.text}" if v_icms is not None else "---"
 
@@ -279,6 +298,8 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
 
             cst_pis = _txt(imposto, "nfe:PIS//nfe:CST", ns, "").strip() if imposto is not None else ""
             cst_cofins = _txt(imposto, "nfe:COFINS//nfe:CST", ns, "").strip() if imposto is not None else ""
+            pis_credito = _tributo_credito(imposto, "PIS", ns)
+            cofins_credito = _tributo_credito(imposto, "COFINS", ns)
 
             itens_xml.append(
                 {
@@ -289,9 +310,16 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     "unidade_comercial": _txt(prod, "nfe:uCom", ns, "UN") or "UN",
                     "ncm": _txt(prod, "nfe:NCM", ns, "").strip()[:8],
                     "valor_produto": float(_txt(prod, "nfe:vProd", ns, "0") or 0),
+                    "valor_nf": valor_nf,
                     "cst_icms": str(cst_icms or "").strip()[:3],
                     "cst_pis": str(cst_pis or "").strip()[:2],
                     "cst_cofins": str(cst_cofins or "").strip()[:2],
+                    "pis_base_calculo": pis_credito["base"],
+                    "pis_aliquota": pis_credito["aliquota"],
+                    "pis_valor_credito": pis_credito["valor"],
+                    "cofins_base_calculo": cofins_credito["base"],
+                    "cofins_aliquota": cofins_credito["aliquota"],
+                    "cofins_valor_credito": cofins_credito["valor"],
                 }
             )
 
@@ -321,6 +349,13 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     cst_pis=item["cst_pis"],
                     cst_cofins=item["cst_cofins"],
                     valor_produto=item["valor_produto"],
+                    valor_nf=item["valor_nf"],
+                    pis_base_calculo=item["pis_base_calculo"],
+                    pis_aliquota=item["pis_aliquota"],
+                    pis_valor_credito=item["pis_valor_credito"],
+                    cofins_base_calculo=item["cofins_base_calculo"],
+                    cofins_aliquota=item["cofins_aliquota"],
+                    cofins_valor_credito=item["cofins_valor_credito"],
                     pagamento_xml=pagamento_xml,
                     tipo_pagamento_xml=tipo_pagamento_xml,
                     valor_pagamento_xml=valor_pagamento_xml,

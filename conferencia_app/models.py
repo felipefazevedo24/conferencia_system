@@ -55,6 +55,7 @@ class ItemNota(db.Model):
     cfop = db.Column(db.String(4), index=True)
     fornecedor = db.Column(db.String(100))
     codigo = db.Column(db.String(50))
+    codigo_grv = db.Column(db.String(80), index=True)
     descricao = db.Column(db.String(200))
     qtd_real = db.Column(db.Float)
     status = db.Column(db.String(20), default="Pendente", index=True)
@@ -76,6 +77,13 @@ class ItemNota(db.Model):
     cst_pis = db.Column(db.String(2), index=True)
     cst_cofins = db.Column(db.String(2), index=True)
     valor_produto = db.Column(db.Float)
+    valor_nf = db.Column(db.Float)
+    pis_base_calculo = db.Column(db.Float)
+    pis_aliquota = db.Column(db.Float)
+    pis_valor_credito = db.Column(db.Float)
+    cofins_base_calculo = db.Column(db.Float)
+    cofins_aliquota = db.Column(db.Float)
+    cofins_valor_credito = db.Column(db.Float)
     pagamento_xml = db.Column(db.Boolean, nullable=False, default=False, index=True)
     tipo_pagamento_xml = db.Column(db.String(100))
     valor_pagamento_xml = db.Column(db.Float)
@@ -123,6 +131,16 @@ class ClassificacaoContabilPadrao(db.Model):
     )
 
 
+class PlanoContaDominio(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo_conta = db.Column(db.String(30), nullable=False, unique=True, index=True)
+    classificacao_conta = db.Column(db.String(60), index=True)
+    nome_conta = db.Column(db.String(180), nullable=False)
+    tipo_conta = db.Column(db.String(20))
+    origem = db.Column(db.String(160))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class ClassificacaoContabilItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_nota_id = db.Column(db.Integer, db.ForeignKey("item_nota.id"), nullable=False, unique=True, index=True)
@@ -154,6 +172,8 @@ class ClassificacaoContabilCompetencia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     competencia = db.Column(db.String(7), nullable=False, unique=True, index=True)
     status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)
+    aprovado_por = db.Column(db.String(100))
+    aprovado_em = db.Column(db.DateTime)
     fechado_por = db.Column(db.String(100))
     fechado_em = db.Column(db.DateTime)
     reaberto_por = db.Column(db.String(100))

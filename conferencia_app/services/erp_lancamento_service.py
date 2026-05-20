@@ -289,6 +289,176 @@ def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, date
     return resultados
 
 
+def _consultar_entrada_grv_via_api(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
+    if not cfg.get("api_url"):
+        return None
+    url = f"{cfg['api_url']}/api/erp/entrada-chapa"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/ERP-Lancamento",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    payload = {
+        "numero_ar": str(codigo_lancamento or "").strip(),
+        "codigo_lancamento": str(codigo_lancamento or "").strip(),
+        "numero_nota": str(numero_nota or "").strip(),
+        "chave": str(chave or "").strip(),
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        return None
+    entrada = data.get("entrada")
+    return entrada if isinstance(entrada, dict) else None
+
+
+def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
+    if not cfg.get("host") or not cfg.get("database") or not cfg.get("user"):
+        return None
+    where = []
+    params: list[Any] = []
+    if codigo_lancamento:
+        where.append("c.codigo::text = %s")
+        params.append(str(codigo_lancamento))
+    elif numero_nota:
+        where.append("c.n_nf::text = %s")
+        params.append(str(numero_nota))
+    elif chave:
+        where.append("regexp_replace(coalesce(c.chv_nfe, ''), '\\D', '', 'g') = %s")
+        params.append("".join(ch for ch in str(chave) if ch.isdigit()))
+    else:
+        return None
+
+    sql = f"""
+        select
+            c.codigo::text as codigo_lancamento,
+            c.n_nf::text as numero_nota,
+            coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
+            a.numero_item,
+            coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop,
+            coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
+            coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
+            coalesce(a.qtde, 0) as quantidade
+        from public.tcompras c
+        left join public.tcom_aux a
+          on a.cod_empresa = c.cod_empresa
+         and a.realciona_auto = c.codigo
+        left join public.tproduto p
+          on p.cod_empresa = a.cod_empresa
+         and p.codigo = a.cod_produto
+        where {" or ".join(where)}
+        order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
+        limit 200
+    """
+    with _conectar(cfg) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            cols = [desc[0] for desc in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+    if not rows:
+        return None
+    cab = rows[0]
+    itens = [
+        {
+            "numero_item": row.get("numero_item"),
+            "cfop": row.get("cfop") or "",
+            "cod_interno": row.get("cod_interno") or "",
+            "descricao": row.get("descricao") or "",
+            "quantidade": row.get("quantidade") or 0,
+        }
+        for row in rows
+        if row.get("cod_interno") or row.get("descricao")
+    ]
+    return {
+        "codigo_lancamento": cab.get("codigo_lancamento") or codigo_lancamento,
+        "numero_nota": cab.get("numero_nota") or numero_nota,
+        "chave_acesso": cab.get("chave_acesso") or chave,
+        "itens": itens,
+    }
+
+
+def _normalizar_match_texto(valor: Any) -> str:
+    import unicodedata
+
+    text = str(valor or "").strip().upper()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return " ".join(re for re in "".join(ch if ch.isalnum() else " " for ch in text).split() if re)
+
+
+def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
+    itens_grv = [row for row in (entrada.get("itens") or []) if isinstance(row, dict) and str(row.get("cod_interno") or "").strip()]
+    if not itens_grv:
+        return 0
+
+    itens_locais = ItemNota.query.filter_by(numero_nota=str(numero_nota)).order_by(ItemNota.id.asc()).all()
+    atualizados = 0
+    usados: set[int] = set()
+    for item in itens_locais:
+        if item.codigo_grv:
+            continue
+        melhor_idx = None
+        item_desc = _normalizar_match_texto(item.descricao)
+        item_cfop = str(item.cfop or "").strip()[:4]
+        item_qtd = float(item.qtd_real or 0)
+        for idx, row in enumerate(itens_grv):
+            if idx in usados:
+                continue
+            row_cfop = str(row.get("cfop") or "").strip()[:4]
+            row_desc = _normalizar_match_texto(row.get("descricao"))
+            try:
+                row_qtd = float(row.get("quantidade") or 0)
+            except Exception:
+                row_qtd = 0.0
+            if item_cfop and row_cfop and item_cfop != row_cfop:
+                continue
+            if item_desc and row_desc and (item_desc in row_desc or row_desc in item_desc):
+                melhor_idx = idx
+                break
+            if item_qtd and row_qtd and abs(item_qtd - row_qtd) < 0.0001:
+                melhor_idx = idx
+                break
+        if melhor_idx is None and len(itens_locais) == len(itens_grv):
+            for idx in range(len(itens_grv)):
+                if idx not in usados:
+                    melhor_idx = idx
+                    break
+        if melhor_idx is None:
+            continue
+        usados.add(melhor_idx)
+        codigo = str(itens_grv[melhor_idx].get("cod_interno") or "").strip()
+        if codigo:
+            item.codigo_grv = codigo[:80]
+            atualizados += 1
+    return atualizados
+
+
+def sincronizar_codigos_grv_nota(numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> int:
+    cfg = _resolver_config()
+    if not cfg.get("api_url") and (not cfg.get("host") or not cfg.get("database") or not cfg.get("user")):
+        return 0
+    try:
+        entrada = (
+            _consultar_entrada_grv_via_api(cfg, numero_nota, codigo_lancamento, chave)
+            if cfg.get("api_url")
+            else _consultar_entrada_grv_direto(cfg, numero_nota, codigo_lancamento, chave)
+        )
+        if not entrada:
+            return 0
+        total = _aplicar_codigos_grv(str(numero_nota), entrada)
+        if total:
+            db.session.commit()
+        return total
+    except Exception:
+        db.session.rollback()
+        logger.exception("Falha ao sincronizar codigo GRV da NF %s", numero_nota)
+        return 0
+
+
 def _consultar_codigos(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
     if cfg.get("api_url"):
         return _consultar_codigos_via_api(cfg, chaves)
@@ -470,6 +640,7 @@ def executar_ciclo() -> dict[str, Any]:
 
                 total_lancadas += 1
                 _limpar_status(n_nf)
+                sincronizar_codigos_grv_nota(str(n_nf), codigo_lancamento=str(codigo))
                 try:
                     from .classificacao_contabil_service import classificar_nota
                     classificar_nota(str(n_nf))

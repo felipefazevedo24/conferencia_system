@@ -140,6 +140,9 @@ def _ensure_item_nota_columns() -> None:
         if "cfop" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cfop VARCHAR(4)"))
             conn.commit()
+        if "codigo_grv" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN codigo_grv VARCHAR(80)"))
+            conn.commit()
         if "unidade_comercial" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN unidade_comercial VARCHAR(20)"))
             conn.commit()
@@ -163,6 +166,27 @@ def _ensure_item_nota_columns() -> None:
             conn.commit()
         if "valor_produto" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_produto FLOAT"))
+            conn.commit()
+        if "valor_nf" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_nf FLOAT"))
+            conn.commit()
+        if "pis_base_calculo" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pis_base_calculo FLOAT"))
+            conn.commit()
+        if "pis_aliquota" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pis_aliquota FLOAT"))
+            conn.commit()
+        if "pis_valor_credito" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pis_valor_credito FLOAT"))
+            conn.commit()
+        if "cofins_base_calculo" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cofins_base_calculo FLOAT"))
+            conn.commit()
+        if "cofins_aliquota" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cofins_aliquota FLOAT"))
+            conn.commit()
+        if "cofins_valor_credito" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cofins_valor_credito FLOAT"))
             conn.commit()
         if "pagamento_xml" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pagamento_xml BOOLEAN NOT NULL DEFAULT 0"))
@@ -454,8 +478,17 @@ def _ensure_item_nota_columns() -> None:
             if "motivo_pendencia" not in cols_classificacao:
                 conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN motivo_pendencia VARCHAR(80)"))
                 conn.commit()
-            if "tipo_regra" not in cols_classificacao:
-                conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN tipo_regra VARCHAR(30)"))
+        if "tipo_regra" not in cols_classificacao:
+            conn.execute(db.text("ALTER TABLE classificacao_contabil_item ADD COLUMN tipo_regra VARCHAR(30)"))
+            conn.commit()
+
+        cols_competencia = _get_column_names("classificacao_contabil_competencia")
+        if cols_competencia:
+            if "aprovado_por" not in cols_competencia:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_competencia ADD COLUMN aprovado_por VARCHAR(100)"))
+                conn.commit()
+            if "aprovado_em" not in cols_competencia:
+                conn.execute(db.text("ALTER TABLE classificacao_contabil_competencia ADD COLUMN aprovado_em DATETIME"))
                 conn.commit()
 
         conn.execute(
@@ -797,7 +830,8 @@ def initialize_database(app: Flask) -> None:
 
         if not app.config.get("TESTING"):
             try:
-                from .services.classificacao_contabil_service import importar_padroes_internos
+                from .services.classificacao_contabil_service import importar_padroes_internos, importar_plano_contas_dominio
+                importar_plano_contas_dominio()
                 importar_padroes_internos()
             except Exception:
                 pass

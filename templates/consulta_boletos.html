@@ -23,7 +23,6 @@
             --primary-soft: #eaf3ff;
             --ink: #102033;
             --muted: #617187;
-            --text-muted: #617187;
             --line: #d9e3ef;
             --success: #047857;
             --success-bg: #e9f8f1;
@@ -531,14 +530,12 @@
     </header>
 
     <main class="main">
-        <div class="panel-grid">
         <!-- Search -->
         <div class="search-card">
             <h2><i class="fas fa-search"></i> Localizar boletos</h2>
-            <p class="subtext">Use o documento do pagador ou informe a NF para localizar os titulos disponiveis.</p>
 
             <!-- Tabs de modo -->
-            <div class="tabs">
+            <div style="display:flex;gap:4px;margin-bottom:16px;">
                 <button type="button" class="btn-tab active" data-modo="cpf_cnpj" id="tabCpf">
                     <i class="fas fa-id-card"></i> CPF / CNPJ
                 </button>
@@ -575,25 +572,6 @@
             <div class="feedback" id="feedback" role="alert"></div>
         </div>
 
-        <aside class="side-card" aria-label="Informacoes da consulta">
-            <h3>Como consultar</h3>
-            <ul class="side-list">
-                <li>
-                    <i class="fas fa-id-card"></i>
-                    <span><strong>CPF/CNPJ</strong>Lista os boletos vinculados ao documento informado.</span>
-                </li>
-                <li>
-                    <i class="fas fa-file-invoice"></i>
-                    <span><strong>NF + valor</strong>Ajuda a localizar o titulo quando o documento nao estiver em maos.</span>
-                </li>
-                <li>
-                    <i class="fas fa-copy"></i>
-                    <span><strong>Copia rapida</strong>Copie a linha digitavel ou o codigo de barras com um clique.</span>
-                </li>
-            </ul>
-        </aside>
-        </div>
-
         <!-- Loading -->
         <div class="loading-spinner" id="loading">
             <i class="fas fa-spinner"></i>
@@ -611,7 +589,7 @@
     </main>
 
     <footer class="footer">
-        <p>Banco do Brasil &mdash; Cobranca &bull; Columbia Sync &copy; 2026</p>
+        <p>Banco do Brasil &mdash; Cobrança &bull; Columbia Sync &copy; 2026</p>
         <p style="margin-top:4px;"><a href="/login">Acesso administrativo</a></p>
     </footer>
 
@@ -634,7 +612,7 @@
         document.querySelectorAll('.btn-tab').forEach(function(tab) {
             tab.addEventListener('click', function() {
                 document.querySelectorAll('.btn-tab').forEach(function(t) { t.classList.remove('active'); });
-                this.classList.add('active');
+                this.classList.add('active');4
                 modoAtual = this.getAttribute('data-modo');
 
                 document.getElementById('modoCpf').style.display = modoAtual === 'cpf_cnpj' ? '' : 'none';

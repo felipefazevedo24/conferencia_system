@@ -12,7 +12,7 @@ import openpyxl
 from sqlalchemy import func
 
 from ..extensions import db
-from ..models import ClassificacaoContabilItem, ClassificacaoContabilPadrao, ItemNota
+from ..models import ClassificacaoContabilItem, ClassificacaoContabilPadrao, ItemNota, PlanoContaDominio
 
 
 ARQUIVOS_PADRAO_2026 = [
@@ -21,6 +21,37 @@ ARQUIVOS_PADRAO_2026 = [
     Path(r"z:\CUSTOS\ESTOQUE\2026\02-Fevereiro 2026\Classificações entradas\Entradas Fevereiro  01 A 26.xlsx"),
 ]
 BUNDLED_PADROES_PATH = Path(__file__).resolve().parents[1] / "data" / "classificacao_contabil_padroes_2026.json"
+PLANO_CONTAS_DOMINIO_PATH = Path(__file__).resolve().parents[2] / "Plano contas dominio.xlsx"
+
+CFOP_ENTRADA_DESCRICOES = {
+    "1101": "Compra para industrializacao",
+    "1102": "Compra para comercializacao",
+    "1124": "Industrializacao efetuada por outra empresa",
+    "1151": "Transferencia para industrializacao",
+    "1152": "Transferencia para comercializacao",
+    "1201": "Devolucao de venda de producao do estabelecimento",
+    "1202": "Devolucao de venda de mercadoria adquirida ou recebida de terceiros",
+    "1252": "Compra de energia eletrica",
+    "1352": "Aquisicao de servico de transporte",
+    "1403": "Compra para comercializacao em operacao com substituicao tributaria",
+    "1551": "Compra de bem para o ativo imobilizado",
+    "1556": "Compra de material para uso ou consumo",
+    "1901": "Entrada para industrializacao por encomenda",
+    "1902": "Retorno de mercadoria remetida para industrializacao por encomenda",
+    "1915": "Entrada de mercadoria recebida para conserto ou reparo",
+    "1916": "Retorno de mercadoria remetida para conserto ou reparo",
+    "1924": "Entrada para industrializacao por conta e ordem do adquirente",
+    "1933": "Aquisicao de servico tributado pelo ISSQN",
+    "2101": "Compra para industrializacao de outro estado",
+    "2102": "Compra para comercializacao de outro estado",
+    "2124": "Industrializacao efetuada por outra empresa de outro estado",
+    "2403": "Compra para comercializacao de outro estado com substituicao tributaria",
+    "2551": "Compra de bem para o ativo imobilizado de outro estado",
+    "2556": "Compra de material para uso ou consumo de outro estado",
+    "2915": "Entrada de mercadoria recebida para conserto ou reparo de outro estado",
+    "2916": "Retorno de mercadoria remetida para conserto ou reparo de outro estado",
+    "2933": "Aquisicao de servico tributado pelo ISSQN de outro estado",
+}
 
 
 HEADER_ALIASES = {
@@ -44,6 +75,92 @@ def normalizar_texto(value: Any) -> str:
 
 def _normalizar_codigo(value: Any) -> str:
     return normalizar_texto(value).replace(" ", "")
+
+
+def _somente_digitos(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def normalizar_conta(value: Any) -> str:
+    texto = str(value or "").strip()
+    if not texto:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return _somente_digitos(texto) or texto
+
+
+def cfop_entrada(value: Any) -> str:
+    variantes = _cfop_variantes(value)
+    for variante in variantes:
+        if variante.startswith(("1", "2", "3")):
+            return variante
+    return variantes[0] if variantes else ""
+
+
+def descricao_cfop_entrada(value: Any) -> str:
+    entrada = cfop_entrada(value)
+    return CFOP_ENTRADA_DESCRICOES.get(entrada, "")
+
+
+def buscar_nome_conta(conta: Any) -> str:
+    codigo = normalizar_conta(conta)
+    if not codigo:
+        return ""
+    plano = PlanoContaDominio.query.filter_by(codigo_conta=codigo).first()
+    return plano.nome_conta if plano else ""
+
+
+def importar_plano_contas_dominio(path: Path | None = None, forcar: bool = False) -> dict:
+    path = path or PLANO_CONTAS_DOMINIO_PATH
+    if not path.exists():
+        return {"origem": "arquivo_indisponivel", "contas_criadas": 0, "contas_atualizadas": 0, "contas_total": PlanoContaDominio.query.count()}
+    if not forcar and PlanoContaDominio.query.count() > 0:
+        return {"origem": "banco", "contas_criadas": 0, "contas_atualizadas": 0, "contas_total": PlanoContaDominio.query.count()}
+
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    criadas = 0
+    atualizadas = 0
+    agora = datetime.now()
+    for sheet in workbook.worksheets:
+        headers = []
+        header_row = None
+        for row_number, row in enumerate(sheet.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
+            headers = [normalizar_texto(value).replace(" ", "_").lower() for value in row]
+            if "codigo_conta" in headers and "nome_conta" in headers:
+                header_row = row_number
+                break
+        if not header_row:
+            continue
+        index = {header: pos for pos, header in enumerate(headers) if header}
+        for row in sheet.iter_rows(min_row=header_row + 1, values_only=True):
+            def cell(campo):
+                pos = index.get(campo)
+                return row[pos] if pos is not None and pos < len(row) else ""
+
+            codigo = normalizar_conta(cell("codigo_conta"))
+            nome = str(cell("nome_conta") or "").strip()
+            if not codigo or not nome:
+                continue
+            plano = PlanoContaDominio.query.filter_by(codigo_conta=codigo).first()
+            if plano is None:
+                plano = PlanoContaDominio(codigo_conta=codigo)
+                db.session.add(plano)
+                criadas += 1
+            else:
+                atualizadas += 1
+            plano.nome_conta = nome[:180]
+            plano.classificacao_conta = str(cell("classificacao_conta") or "").strip()[:60]
+            plano.tipo_conta = str(cell("tipo_conta") or "").strip()[:20]
+            plano.origem = path.name[:160]
+            plano.atualizado_em = agora
+    db.session.commit()
+    return {"origem": str(path), "contas_criadas": criadas, "contas_atualizadas": atualizadas, "contas_total": PlanoContaDominio.query.count()}
+
+
+def garantir_plano_contas_dominio() -> None:
+    if PlanoContaDominio.query.count() == 0:
+        importar_plano_contas_dominio()
 
 
 def _cfop_variantes(value: Any) -> list[str]:
@@ -351,7 +468,8 @@ def _tipo_regra(metodo: str) -> str:
 def sugerir_classificacao_item(item: ItemNota) -> dict:
     garantir_padroes_internos()
     fornecedor = normalizar_texto(item.fornecedor)
-    codigo = _normalizar_codigo(item.codigo)
+    codigo_origem = getattr(item, "codigo_grv", None) or item.codigo
+    codigo = _normalizar_codigo(codigo_origem)
     descricao = normalizar_texto(item.descricao)
     cfop = str(item.cfop or "").strip()
     cfops = _cfop_variantes(cfop)
@@ -448,12 +566,27 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> Class
     if existente and existente.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
         return existente
 
+    if not getattr(item, "codigo_grv", None) and getattr(item, "numero_lancamento", None):
+        try:
+            from .erp_lancamento_service import sincronizar_codigos_grv_nota
+
+            sincronizar_codigos_grv_nota(
+                str(item.numero_nota or ""),
+                codigo_lancamento=str(item.numero_lancamento or ""),
+                chave=str(item.chave_acesso or ""),
+            )
+            db.session.refresh(item)
+        except Exception:
+            pass
+
     sugestao = sugerir_classificacao_item(item)
+    if sugestao["conta"]:
+        sugestao["nome_conta"] = buscar_nome_conta(sugestao["conta"]) or sugestao["nome_conta"]
     agora = datetime.now()
     registro = existente or ClassificacaoContabilItem(item_nota_id=item.id, numero_nota=str(item.numero_nota or ""))
     registro.numero_nota = str(item.numero_nota or "")
     registro.fornecedor = item.fornecedor
-    registro.codigo_item = str(item.codigo or "").strip()
+    registro.codigo_item = str(getattr(item, "codigo_grv", None) or item.codigo or "").strip()
     registro.descricao_item = item.descricao
     registro.cfop = item.cfop
     registro.conta = sugestao["conta"]

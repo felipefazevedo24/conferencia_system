@@ -92,6 +92,7 @@ from ..models import (
     ClassificacaoContabilCompetencia,
     LogClassificacaoContabil,
     ClassificacaoContabilPadrao,
+    PlanoContaDominio,
     LogAcessoAdministrativo,
     LogDivergencia,
     LogExclusaoNota,
@@ -131,6 +132,11 @@ from ..services.classificacao_contabil_service import (
     importar_padroes_internos,
     importar_padroes_excel,
     importar_padroes_uploads,
+    importar_plano_contas_dominio,
+    buscar_nome_conta,
+    descricao_cfop_entrada,
+    cfop_entrada,
+    normalizar_conta,
     normalizar_texto,
     resumo_classificacoes,
 )
@@ -2238,10 +2244,23 @@ def _log_classificacao(row: ClassificacaoContabilItem | None, evento: str, anter
     )
 
 
+def _float_contabil(valor, padrao=0.0):
+    try:
+        if isinstance(valor, str):
+            texto = valor.replace("R$", "").strip()
+            if "," in texto:
+                texto = texto.replace(".", "").replace(",", ".")
+            return float(texto or padrao)
+        return float(valor if valor is not None else padrao)
+    except Exception:
+        return float(padrao)
+
+
 def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
     item = row.item_nota
     data_lanc = item.data_lancamento if item else None
     data_nf = item.data_emissao if item else None
+    cfop_ent = cfop_entrada(row.cfop) if row.cfop else ""
     return {
         "id": row.id,
         "item_nota_id": row.item_nota_id,
@@ -2250,6 +2269,8 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "codigo_item": row.codigo_item or "---",
         "descricao_item": row.descricao_item or "---",
         "cfop": row.cfop or "---",
+        "cfop_entrada": cfop_ent or row.cfop or "---",
+        "descricao_cfop_entrada": descricao_cfop_entrada(row.cfop) or "---",
         "conta": row.conta or "",
         "nome_conta": row.nome_conta or "",
         "comentario": row.comentario or "",
@@ -2266,6 +2287,15 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "data_lancamento_iso": data_lanc.date().isoformat() if data_lanc else "",
         "data_nf": data_nf.strftime("%d/%m/%Y") if data_nf else "---",
         "valor": float(item.valor_produto or 0.0) if item else 0.0,
+        "valor_nf": _float_contabil(getattr(item, "valor_nf", None) or getattr(item, "valor_total", None)) if item else 0.0,
+        "pis_base_calculo": _float_contabil(getattr(item, "pis_base_calculo", 0)) if item else 0.0,
+        "pis_aliquota": _float_contabil(getattr(item, "pis_aliquota", 0)) if item else 0.0,
+        "pis_cst": getattr(item, "cst_pis", "") if item else "",
+        "pis_valor_credito": _float_contabil(getattr(item, "pis_valor_credito", 0)) if item else 0.0,
+        "cofins_base_calculo": _float_contabil(getattr(item, "cofins_base_calculo", 0)) if item else 0.0,
+        "cofins_aliquota": _float_contabil(getattr(item, "cofins_aliquota", 0)) if item else 0.0,
+        "cofins_cst": getattr(item, "cst_cofins", "") if item else "",
+        "cofins_valor_credito": _float_contabil(getattr(item, "cofins_valor_credito", 0)) if item else 0.0,
     }
 
 
@@ -2308,6 +2338,10 @@ def _resumo_governanca(data_inicio, data_fim, competencia):
     comp = _competencia_row(competencia)
     return {
         "competencia_status": comp.status,
+        "aprovado_por": comp.aprovado_por or "",
+        "aprovado_em": comp.aprovado_em.strftime("%d/%m/%Y %H:%M") if comp.aprovado_em else "",
+        "fechado_por": comp.fechado_por or "",
+        "fechado_em": comp.fechado_em.strftime("%d/%m/%Y %H:%M") if comp.fechado_em else "",
         "pendentes": pendentes,
         "revisar": revisar,
         "conflitos": conflitos,
@@ -2322,6 +2356,23 @@ def financeiro_classificacao_importar_padroes():
     classificados = classificar_lancadas_desde_2026(limite=0)
     resultado["itens_classificados"] = classificados
     return jsonify({"sucesso": True, "resultado": resultado})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/plano-contas/importar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_importar_plano_contas():
+    resultado = importar_plano_contas_dominio(forcar=True)
+    return jsonify({"sucesso": True, "resultado": resultado})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/plano-contas/<conta>")
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_buscar_plano_conta(conta):
+    codigo = normalizar_conta(conta)
+    plano = PlanoContaDominio.query.filter_by(codigo_conta=codigo).first() if codigo else None
+    if not plano:
+        return jsonify({"sucesso": False, "conta": codigo, "nome_conta": ""}), 404
+    return jsonify({"sucesso": True, "conta": plano.codigo_conta, "nome_conta": plano.nome_conta})
 
 
 @api_bp.route("/api/financeiro/classificacao-contabil/padroes/upload", methods=["POST"])
@@ -2343,6 +2394,9 @@ def financeiro_classificacao_reprocessar():
     nota = str(data.get("nota") or "").strip()
     sobrescrever = bool(data.get("sobrescrever_manual", False))
     data_inicio, data_fim, competencia = _periodo_competencia(data)
+    comp = _competencia_row(competencia)
+    if comp.status == "Fechada":
+        return jsonify({"sucesso": False, "msg": "Competencia fechada. Abra o periodo antes de reprocessar."}), 409
     if nota:
         total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
     else:
@@ -2352,6 +2406,10 @@ def financeiro_classificacao_reprocessar():
             data_fim=data_fim,
             sobrescrever_manual=sobrescrever,
         )
+    if total and comp.status == "Aprovada":
+        comp.status = "Aberta"
+        comp.atualizado_em = datetime.now()
+        db.session.commit()
     return jsonify({"sucesso": True, "itens_classificados": total, "competencia": competencia})
 
 
@@ -2363,7 +2421,7 @@ def financeiro_classificacao_aprovar_periodo():
     confirmar_pendencias = bool(data.get("confirmar_pendencias", False))
     comp = _competencia_row(competencia)
     if comp.status == "Fechada":
-        return jsonify({"sucesso": False, "msg": "Competência já aprovada. Reabra para alterar."}), 409
+        return jsonify({"sucesso": False, "msg": "Competencia fechada. Abra o periodo antes de aprovar novamente."}), 409
 
     query = _classificacao_query_periodo(data_inicio, data_fim)
     conta = str(data.get("conta") or "").strip()
@@ -2405,13 +2463,38 @@ def financeiro_classificacao_aprovar_periodo():
         _log_classificacao(row, "Aprovacao", anterior, {"status": row.status, "conta": row.conta})
         aprovadas += 1
 
-    comp.status = "Fechada" if not conta and not status_filtro and pendentes == 0 else comp.status
-    if comp.status == "Fechada":
-        comp.fechado_por = usuario
-        comp.fechado_em = agora
+    if not conta and not status_filtro:
+        comp.status = "Aprovada"
+        comp.aprovado_por = usuario
+        comp.aprovado_em = agora
     comp.atualizado_em = agora
     db.session.commit()
     return jsonify({"sucesso": True, "aprovadas": aprovadas, "pendentes": pendentes, "competencia": competencia, "status_competencia": comp.status})
+
+
+@api_bp.route("/api/financeiro/classificacao-contabil/fechar", methods=["POST"])
+@permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
+def financeiro_classificacao_fechar_competencia():
+    data = request.json or {}
+    data_inicio, data_fim, competencia = _periodo_competencia(data)
+    comp = _competencia_row(competencia)
+    if comp.status == "Fechada":
+        return jsonify({"sucesso": True, "competencia": competencia, "status_competencia": comp.status, "msg": "Periodo ja esta fechado."})
+
+    query = _classificacao_query_periodo(data_inicio, data_fim)
+    bloqueios = query.filter(ClassificacaoContabilItem.status.in_(["Pendente", "Revisar"])).count()
+    if bloqueios and not bool(data.get("confirmar_pendencias", False)):
+        return jsonify({"sucesso": False, "msg": "Existem itens pendentes ou para revisar. Confirme para fechar mesmo assim.", "pendentes": bloqueios}), 409
+
+    agora = datetime.now()
+    usuario = session.get("username", "contador")
+    comp.status = "Fechada"
+    comp.fechado_por = usuario
+    comp.fechado_em = agora
+    comp.atualizado_em = agora
+    _log_classificacao(None, "FechamentoCompetencia", {"competencia": competencia}, {"status": "Fechada"}, "")
+    db.session.commit()
+    return jsonify({"sucesso": True, "competencia": competencia, "status_competencia": comp.status})
 
 
 @api_bp.route("/api/financeiro/classificacao-contabil/reabrir", methods=["POST"])
@@ -2427,6 +2510,8 @@ def financeiro_classificacao_reabrir_competencia():
     comp.reaberto_por = session.get("username", "contador")
     comp.reaberto_em = datetime.now()
     comp.motivo_reabertura = motivo[:500]
+    comp.fechado_por = None
+    comp.fechado_em = None
     comp.atualizado_em = datetime.now()
     _log_classificacao(None, "ReaberturaCompetencia", {"competencia": competencia}, {"status": "Aberta"}, motivo)
     db.session.commit()
@@ -2437,7 +2522,13 @@ def financeiro_classificacao_reabrir_competencia():
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_listar():
     data_inicio, data_fim, competencia = _periodo_competencia()
-    classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
+    comp = _competencia_row(competencia)
+    if comp.status != "Fechada":
+        novos = classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
+        if novos and comp.status == "Aprovada":
+            comp.status = "Aberta"
+            comp.atualizado_em = datetime.now()
+            db.session.commit()
 
     status = str(request.args.get("status") or "").strip()
     termo = normalizar_texto(request.args.get("q") or "")
@@ -2495,10 +2586,10 @@ def financeiro_classificacao_atualizar(classificacao_id):
     data_ref = row.item_nota.data_lancamento if row.item_nota else datetime.now()
     competencia = data_ref.strftime("%Y-%m")
     comp = _competencia_row(competencia)
-    if comp.status == "Fechada" and not bool(data.get("autorizar_competencia_fechada", False)):
-        return jsonify({"sucesso": False, "msg": "Competência aprovada. Reabra a competência antes de alterar."}), 409
-    conta = str(data.get("conta") or "").strip()
-    nome_conta = str(data.get("nome_conta") or "").strip()
+    if comp.status == "Fechada":
+        return jsonify({"sucesso": False, "msg": "Competencia fechada. Abra o periodo antes de alterar."}), 409
+    conta = normalizar_conta(data.get("conta") or "")
+    nome_conta = str(data.get("nome_conta") or "").strip() or buscar_nome_conta(conta)
     comentario = str(data.get("comentario") or "").strip()
     if not conta or not nome_conta:
         return jsonify({"sucesso": False, "msg": "Informe conta e nome da conta."}), 400
@@ -2517,6 +2608,9 @@ def financeiro_classificacao_atualizar(classificacao_id):
     row.atualizado_em = datetime.now()
     row.motivo_pendencia = ""
     row.tipo_regra = "Manual"
+    if comp.status == "Aprovada":
+        comp.status = "Aberta"
+        comp.atualizado_em = datetime.now()
 
     item = row.item_nota
     if item:
@@ -2570,10 +2664,20 @@ def financeiro_classificacao_exportar():
         "competencia",
         "numero_nota",
         "data_lancamento",
+        "valor_nf",
         "fornecedor",
         "codigo_item",
         "descricao_item",
-        "cfop",
+        "cfop_entrada",
+        "descricao_cfop_entrada",
+        "pis_base_calculo",
+        "pis_aliquota",
+        "pis_cst",
+        "pis_valor_credito",
+        "cofins_base_calculo",
+        "cofins_aliquota",
+        "cofins_cst",
+        "cofins_valor_credito",
         "conta",
         "nome_conta",
         "status",
@@ -2588,10 +2692,20 @@ def financeiro_classificacao_exportar():
             competencia,
             row.numero_nota,
             item.data_lancamento.strftime("%d/%m/%Y %H:%M") if item and item.data_lancamento else "",
+            _float_contabil(getattr(item, "valor_nf", None) or getattr(item, "valor_total", None)) if item else 0,
             row.fornecedor or "",
             row.codigo_item or "",
             row.descricao_item or "",
-            row.cfop or "",
+            cfop_entrada(row.cfop) or row.cfop or "",
+            descricao_cfop_entrada(row.cfop),
+            _float_contabil(getattr(item, "pis_base_calculo", 0)) if item else 0,
+            _float_contabil(getattr(item, "pis_aliquota", 0)) if item else 0,
+            getattr(item, "cst_pis", "") if item else "",
+            _float_contabil(getattr(item, "pis_valor_credito", 0)) if item else 0,
+            _float_contabil(getattr(item, "cofins_base_calculo", 0)) if item else 0,
+            _float_contabil(getattr(item, "cofins_aliquota", 0)) if item else 0,
+            getattr(item, "cst_cofins", "") if item else "",
+            _float_contabil(getattr(item, "cofins_valor_credito", 0)) if item else 0,
             row.conta or "",
             row.nome_conta or "",
             row.status or "",

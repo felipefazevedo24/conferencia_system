@@ -163,7 +163,7 @@
     .cc-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 1120px;
+        min-width: 1780px;
         font-size: .88rem;
     }
     .cc-table th {
@@ -245,6 +245,18 @@
         color: #991b1b;
         font-weight: 800;
     }
+    .cc-tax {
+        min-width: 190px;
+        color: #334155;
+        line-height: 1.35;
+    }
+    .cc-tax strong {
+        color: #0f172a;
+    }
+    .cc-locked {
+        opacity: .55;
+        pointer-events: none;
+    }
     .cc-icon-btn {
         width: 34px;
         height: 34px;
@@ -323,9 +335,11 @@
         <div class="cc-actions">
             <input id="upload-padroes" type="file" accept=".xlsx,.xlsm" multiple hidden>
             <button class="cc-btn secondary" id="btn-importar" type="button"><i class="fas fa-database"></i> Recarregar padrões</button>
+            <button class="cc-btn secondary" id="btn-plano-contas" type="button"><i class="fas fa-book"></i> Plano de contas</button>
             <button class="cc-btn secondary" id="btn-aprovar" type="button"><i class="fas fa-circle-check"></i> Aprovar período</button>
+            <button class="cc-btn" id="btn-fechar-periodo" type="button"><i class="fas fa-lock"></i> Fechar período</button>
             <button class="cc-btn secondary" id="btn-exportar" type="button"><i class="fas fa-file-export"></i> Exportar</button>
-            <button class="cc-btn danger" id="btn-reabrir" type="button"><i class="fas fa-lock-open"></i> Reabrir</button>
+            <button class="cc-btn danger" id="btn-reabrir" type="button"><i class="fas fa-lock-open"></i> Abrir período</button>
             <button class="cc-btn" id="btn-reprocessar" type="button"><i class="fas fa-rotate"></i> Reprocessar</button>
         </div>
     </div>
@@ -388,9 +402,12 @@
                     <tr>
                         <th>NF</th>
                         <th>Lançamento</th>
+                        <th>Valor NF</th>
                         <th>Fornecedor</th>
                         <th>Item</th>
-                        <th>CFOP</th>
+                        <th>CFOP entrada</th>
+                        <th>PIS</th>
+                        <th>COFINS</th>
                         <th>Conta</th>
                         <th>Confiança</th>
                         <th>Status</th>
@@ -439,7 +456,7 @@
 
 {% block extra_js %}
 <script>
-const state = { itens: [], selecionado: null };
+const state = { itens: [], selecionado: null, competenciaStatus: "Aberta" };
 
 function toast(msg) {
     const el = document.getElementById("cc-toast");
@@ -457,6 +474,10 @@ function statusClass(status) {
 
 function money(value) {
     return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function percent(value) {
+    return `${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%`;
 }
 
 function competenciaAtual() {
@@ -506,6 +527,16 @@ function accountCell(item) {
     return `<strong>${item.conta || "Pendente"}</strong><br><small>${item.nome_conta || "Sem conta sugerida"}</small>`;
 }
 
+function taxCell(base, aliquota, cst, valor) {
+    return `
+        <div class="cc-tax">
+            <div>Base <strong>${money(base)}</strong></div>
+            <div>Alíq. <strong>${percent(aliquota)}</strong> · CST <strong>${cst || "---"}</strong></div>
+            <div>Crédito <strong>${money(valor)}</strong></div>
+        </div>
+    `;
+}
+
 async function carregar() {
     document.getElementById("cc-body").innerHTML = "";
     const empty = document.getElementById("cc-empty");
@@ -540,15 +571,26 @@ function renderGovernanca(data) {
     const gov = data.governanca || {};
     document.getElementById("g-competencia").textContent = data.competencia || periodoCompetencia().competencia;
     const status = gov.competencia_status || "Aberta";
+    state.competenciaStatus = status;
     const statusEl = document.getElementById("g-status");
     statusEl.textContent = status;
-    statusEl.className = `cc-pill ${status === "Fechada" ? "approved" : "ok"}`;
+    statusEl.className = `cc-pill ${status === "Fechada" ? "approved" : status === "Aprovada" ? "warn" : "ok"}`;
     document.getElementById("g-conflitos").textContent = gov.conflitos || 0;
     document.getElementById("g-revisar").textContent = gov.revisar || 0;
     const pendencias = gov.top_pendencias || [];
     document.getElementById("g-pendencias").innerHTML = pendencias.length
         ? pendencias.map(p => `<span class="cc-chip"><i class="fas fa-circle-exclamation"></i>${p.motivo}: ${p.total}</span>`).join("")
         : '<span class="cc-chip"><i class="fas fa-check"></i> Sem pendências críticas</span>';
+    atualizarBotoesPeriodo(status);
+}
+
+function atualizarBotoesPeriodo(status) {
+    const fechado = status === "Fechada";
+    document.getElementById("btn-aprovar").style.display = fechado ? "none" : "inline-flex";
+    document.getElementById("btn-fechar-periodo").style.display = fechado ? "none" : "inline-flex";
+    document.getElementById("btn-reprocessar").style.display = fechado ? "none" : "inline-flex";
+    document.getElementById("btn-reabrir").style.display = fechado ? "inline-flex" : "none";
+    document.getElementById("btn-fechar-periodo").disabled = fechado;
 }
 
 function renderContas(contas) {
@@ -568,21 +610,28 @@ function renderTabela() {
     body.innerHTML = state.itens.map(item => `
         <tr class="${rowClass(item.status)}">
             <td><strong>${item.numero_nota}</strong><br><small>${item.data_nf}</small></td>
-            <td>${item.data_lancamento}<br><small>${money(item.valor)}</small></td>
+            <td>${item.data_lancamento}</td>
+            <td>${money(item.valor_nf)}</td>
             <td>${item.fornecedor}</td>
             <td class="cc-desc"><strong>${item.codigo_item}</strong><br>${item.descricao_item}</td>
-            <td>${item.cfop}</td>
+            <td><strong>${item.cfop_entrada || item.cfop}</strong><br><small>${item.descricao_cfop_entrada || "---"}</small></td>
+            <td>${taxCell(item.pis_base_calculo, item.pis_aliquota, item.pis_cst, item.pis_valor_credito)}</td>
+            <td>${taxCell(item.cofins_base_calculo, item.cofins_aliquota, item.cofins_cst, item.cofins_valor_credito)}</td>
             <td>${accountCell(item)}</td>
             <td>${item.confianca}%</td>
             <td><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
             <td>${item.metodo}<br><small>${item.revisado_por || ""}</small></td>
             <td>${item.motivo_pendencia || item.tipo_regra || "---"}</td>
-            <td><button class="cc-icon-btn" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
+            <td><button class="cc-icon-btn ${state.competenciaStatus === "Fechada" ? "cc-locked" : ""}" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
         </tr>
     `).join("");
 }
 
 function abrirEditor(id) {
+    if (state.competenciaStatus === "Fechada") {
+        toast("Periodo fechado. Abra o periodo antes de editar.");
+        return;
+    }
     const item = state.itens.find(row => row.id === id);
     if (!item) return;
     state.selecionado = item;
@@ -599,8 +648,23 @@ function fecharEditor() {
     state.selecionado = null;
 }
 
+async function preencherNomeConta() {
+    const contaEl = document.getElementById("e-conta");
+    const nomeEl = document.getElementById("e-nome");
+    const conta = contaEl.value.trim();
+    if (!conta || nomeEl.value.trim()) return;
+    const res = await fetch(`/api/financeiro/classificacao-contabil/plano-contas/${encodeURIComponent(conta)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.nome_conta) {
+        nomeEl.value = data.nome_conta;
+        toast("Descrição da conta preenchida pelo plano Dominio.");
+    }
+}
+
 async function salvarEditor() {
     if (!state.selecionado) return;
+    await preencherNomeConta();
     const payload = {
         conta: document.getElementById("e-conta").value,
         nome_conta: document.getElementById("e-nome").value,
@@ -670,6 +734,28 @@ async function aprovarPeriodo() {
     await carregar();
 }
 
+async function fecharPeriodo() {
+    let res = await fetch("/api/financeiro/classificacao-contabil/fechar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(periodoPayload()),
+    });
+    let data = await res.json();
+    if (res.status === 409 && data.pendentes) {
+        const ok = window.confirm(`${data.pendentes} item(ns) pendente(s) ou para revisar. Fechar mesmo assim?`);
+        if (!ok) throw new Error(data.msg || "Fechamento cancelado.");
+        res = await fetch("/api/financeiro/classificacao-contabil/fechar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...periodoPayload(), confirmar_pendencias: true }),
+        });
+        data = await res.json();
+    }
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao fechar período");
+    toast("Período fechado. Edição e reprocessamento foram bloqueados.");
+    await carregar();
+}
+
 async function reabrirCompetencia() {
     const motivo = window.prompt("Motivo da reabertura da competência:");
     if (!motivo) return;
@@ -682,6 +768,19 @@ async function reabrirCompetencia() {
     if (!res.ok) throw new Error(data.msg || data.error || "Falha ao reabrir competência");
     toast("Competência reaberta.");
     await carregar();
+}
+
+async function importarPlanoContas() {
+    toast("Importando plano de contas Dominio para o banco...");
+    const res = await fetch("/api/financeiro/classificacao-contabil/plano-contas/importar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.msg || data.error || "Falha ao importar plano de contas");
+    const r = data.resultado || {};
+    toast(`Plano de contas atualizado: ${r.contas_criadas || 0} novas, ${r.contas_atualizadas || 0} atualizadas.`);
 }
 
 function exportarCompetencia() {
@@ -707,11 +806,14 @@ async function importarUploads(files) {
 
 document.getElementById("btn-filtrar").addEventListener("click", () => carregar().catch(err => toast(err.message)));
 document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
+document.getElementById("e-conta").addEventListener("blur", () => preencherNomeConta().catch(() => {}));
 document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
 document.getElementById("btn-importar").addEventListener("click", () => acaoPost("/api/financeiro/classificacao-contabil/padroes/importar", "Recarregando a base interna de padrões 2026...").catch(err => toast(err.message)));
+document.getElementById("btn-plano-contas").addEventListener("click", () => importarPlanoContas().catch(err => toast(err.message)));
 document.getElementById("upload-padroes").addEventListener("change", event => importarUploads(event.target.files).catch(err => toast(err.message)));
 document.getElementById("btn-reprocessar").addEventListener("click", () => reprocessarPeriodo().catch(err => toast(err.message)));
 document.getElementById("btn-aprovar").addEventListener("click", () => aprovarPeriodo().catch(err => toast(err.message)));
+document.getElementById("btn-fechar-periodo").addEventListener("click", () => fecharPeriodo().catch(err => toast(err.message)));
 document.getElementById("btn-exportar").addEventListener("click", exportarCompetencia);
 document.getElementById("btn-reabrir").addEventListener("click", () => reabrirCompetencia().catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {

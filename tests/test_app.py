@@ -15,12 +15,14 @@ from conferencia_app.extensions import db
 from conferencia_app.models import (
     BoletoContaReceber,
     ClassificacaoContabilItem,
+    ClassificacaoContabilCompetencia,
     ClassificacaoContabilPadrao,
     ExpedicaoConferenciaSimples,
     ExpedicaoConferenciaSimplesEstorno,
     ExpedicaoConferenciaSimplesFoto,
     EmailNFEnviado,
     ItemNota,
+    PlanoContaDominio,
     LogDivergencia,
     LogEstornoLancamento,
     LogEventoFiscalNota,
@@ -1116,6 +1118,92 @@ def test_financeiro_classificacao_contabil_revisao_manual_aprende_padrao(tmp_pat
         assert ClassificacaoContabilPadrao.query.filter_by(conta="94901").count() >= 1
 
 
+def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        db.session.add(PlanoContaDominio(codigo_conta="94901", nome_conta="MANUTENCAO MAQUINAS - CUSTO - GERAL"))
+        item = ItemNota(
+            numero_nota="2026PLANO",
+            fornecedor="Fornecedor Plano",
+            codigo="PL1",
+            descricao="Item plano",
+            cfop="1102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 3, 10, 9, 0),
+            valor_nf=123.45,
+            pis_base_calculo=100,
+            pis_aliquota=1.65,
+            cst_pis="50",
+            pis_valor_credito=1.65,
+            cofins_base_calculo=100,
+            cofins_aliquota=7.6,
+            cst_cofins="50",
+            cofins_valor_credito=7.6,
+        )
+        db.session.add(item)
+        db.session.commit()
+
+    lista = client.get("/api/financeiro/classificacao-contabil?competencia=2026-03").get_json()
+    classificacao = next(item for item in lista["itens"] if item["numero_nota"] == "2026PLANO")
+
+    response = client.patch(
+        f"/api/financeiro/classificacao-contabil/{classificacao['id']}",
+        json={"conta": "94901", "comentario": "conta pelo plano"},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["item"]["nome_conta"] == "MANUTENCAO MAQUINAS - CUSTO - GERAL"
+    assert data["item"]["valor_nf"] == 123.45
+    assert data["item"]["pis_cst"] == "50"
+    assert data["item"]["cofins_aliquota"] == 7.6
+
+
+def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        db.session.add(
+            ClassificacaoContabilPadrao(
+                fornecedor_norm="FORNECEDOR GRV",
+                cfop="1102",
+                codigo_norm="GRV001",
+                descricao_norm="ITEM GRV",
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDARIOS",
+                ocorrencias=4,
+                origem="Postgres GRV",
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="2026GRV",
+                fornecedor="Fornecedor GRV",
+                codigo="XML-001",
+                codigo_grv="GRV-001",
+                descricao="Item GRV",
+                cfop="1102",
+                qtd_real=1,
+                status="Lançado",
+                data_lancamento=datetime(2026, 3, 12, 9, 0),
+                numero_lancamento="777",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/financeiro/classificacao-contabil?competencia=2026-03")
+    assert response.status_code == 200
+    data = response.get_json()
+    item = next(row for row in data["itens"] if row["numero_nota"] == "2026GRV")
+    assert item["codigo_item"] == "GRV-001"
+    assert item["conta"] == "12503"
+
+
 def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -1399,6 +1487,73 @@ def test_financeiro_classificacao_contabil_aprova_somente_competencia(tmp_path):
         fev = ClassificacaoContabilItem.query.filter_by(numero_nota="FEV1").first()
         assert jan.status == "Aprovado"
         assert fev.status == "Classificado"
+
+
+def test_financeiro_classificacao_contabil_aprovar_nao_fecha_e_fechar_bloqueia(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="JANFECHA",
+            fornecedor="Fornecedor Fecha",
+            codigo="FEC1",
+            descricao="Item fecha",
+            cfop="1102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 1, 10, 9, 0),
+        )
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(
+            ClassificacaoContabilItem(
+                item_nota_id=item.id,
+                numero_nota=item.numero_nota,
+                fornecedor=item.fornecedor,
+                codigo_item=item.codigo,
+                descricao_item=item.descricao,
+                cfop=item.cfop,
+                conta="12503",
+                nome_conta="MATERIAIS SECUNDARIOS",
+                status="Classificado",
+                confianca=98,
+            )
+        )
+        db.session.commit()
+
+    aprovacao = client.post("/api/financeiro/classificacao-contabil/aprovar", json={"competencia": "2026-01"})
+    assert aprovacao.status_code == 200
+    assert aprovacao.get_json()["status_competencia"] == "Aprovada"
+
+    with app.app_context():
+        competencia = ClassificacaoContabilCompetencia.query.filter_by(competencia="2026-01").first()
+        classificacao = ClassificacaoContabilItem.query.filter_by(numero_nota="JANFECHA").first()
+        classificacao_id = classificacao.id
+        assert competencia.status == "Aprovada"
+
+    editar_aprovada = client.patch(
+        f"/api/financeiro/classificacao-contabil/{classificacao_id}",
+        json={"conta": "12503", "nome_conta": "MATERIAIS SECUNDARIOS AJUSTADO"},
+    )
+    assert editar_aprovada.status_code == 200
+    with app.app_context():
+        competencia = ClassificacaoContabilCompetencia.query.filter_by(competencia="2026-01").first()
+        assert competencia.status == "Aberta"
+
+    fechar = client.post("/api/financeiro/classificacao-contabil/fechar", json={"competencia": "2026-01"})
+    assert fechar.status_code == 200
+    assert fechar.get_json()["status_competencia"] == "Fechada"
+
+    editar_fechada = client.patch(
+        f"/api/financeiro/classificacao-contabil/{classificacao_id}",
+        json={"conta": "99999", "nome_conta": "BLOQUEADA"},
+    )
+    assert editar_fechada.status_code == 409
+
+    reprocessar_fechada = client.post("/api/financeiro/classificacao-contabil/reprocessar", json={"competencia": "2026-01"})
+    assert reprocessar_fechada.status_code == 409
 
 
 def test_api_financeiro_contas_receber_lista_so_nota_com_pagamento_xml(tmp_path):
