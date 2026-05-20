@@ -164,11 +164,11 @@
 
                 {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') %}
                 <div class="menu-item">
-                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-financeiro" aria-expanded="false">
-                        <span class="nav-group-title"><i class="fas fa-coins"></i><span>Financeiro</span></span>
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-coins"></i><span>Controladoria</span></span>
                         <i class="fas fa-chevron-down nav-chevron"></i>
                     </button>
-                    <div class="submenu-panel" id="menu-financeiro">
+                    <div class="submenu-panel" id="menu-controladoria">
                         {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}<a href="/financeiro/faturamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Faturamento</a>{% endif %}
                         {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') %}<a href="/faturamento/emails-nfe" class="list-group-item list-group-item-action"><i class="fas fa-envelope-open-text"></i> E-mails de NF-e</a>{% endif %}
                         {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') %}<a href="/financeiro/contas-receber" class="list-group-item list-group-item-action"><i class="fas fa-hand-holding-usd"></i> Contas a receber</a>{% endif %}
