@@ -89,6 +89,57 @@ def is_external_url(value: str | None) -> bool:
     return raw.startswith("http://") or raw.startswith("https://")
 
 
+def _load_service_account_info(raw_json: str | None = None, file_path: str | None = None) -> dict[str, Any] | None:
+    try:
+        if raw_json:
+            info = json.loads(raw_json)
+        elif file_path:
+            with open(os.path.abspath(file_path), "r", encoding="utf-8") as fh:
+                info = json.load(fh)
+        else:
+            return None
+    except Exception:
+        return None
+
+    if (
+        isinstance(info, dict)
+        and info.get("type") == "service_account"
+        and info.get("client_email")
+        and info.get("private_key")
+    ):
+        return info
+    return None
+
+
+def _discover_service_account_info() -> dict[str, Any] | None:
+    raw_json = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON") or "").strip()
+    info = _load_service_account_info(raw_json=raw_json)
+    if info:
+        return info
+
+    configured_file = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE") or "").strip()
+    if configured_file:
+        info = _load_service_account_info(file_path=configured_file)
+        if info:
+            return info
+
+    instance_path = getattr(current_app, "instance_path", "")
+    if not instance_path:
+        return None
+    try:
+        for name in os.listdir(instance_path):
+            if not name.lower().endswith(".json"):
+                continue
+            candidate = os.path.join(instance_path, name)
+            info = _load_service_account_info(file_path=candidate)
+            if info:
+                current_app.logger.info("Usando service account do Google Drive em instance/%s", name)
+                return info
+    except OSError:
+        return None
+    return None
+
+
 def _drive_credentials():
     from google.auth.transport.requests import Request
     from google.auth.exceptions import RefreshError
@@ -96,16 +147,12 @@ def _drive_credentials():
     from google.oauth2 import service_account
 
     scopes = ["https://www.googleapis.com/auth/drive"]
+    service_account_info = _discover_service_account_info()
+    if service_account_info:
+        return service_account.Credentials.from_service_account_info(service_account_info, scopes=scopes)
+
     oauth_json = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_JSON") or "").strip()
     oauth_file = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_FILE") or "").strip()
-    raw_json = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON") or "").strip()
-    file_path = str(current_app.config.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE") or "").strip()
-
-    if raw_json:
-        info = json.loads(raw_json)
-        return service_account.Credentials.from_service_account_info(info, scopes=scopes)
-    if file_path:
-        return service_account.Credentials.from_service_account_file(file_path, scopes=scopes)
 
     try:
         if oauth_json:
@@ -120,11 +167,11 @@ def _drive_credentials():
             return creds
     except RefreshError as exc:
         msg = str(exc)
-        if "disabled_client" in msg:
+        if "disabled_client" in msg or "invalid_grant" in msg:
             raise RuntimeError(
-                "OAuth do Google Drive desativado no Google Cloud. Reative o OAuth client "
-                "ou configure GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/FILE e compartilhe a pasta "
-                "do Drive com o e-mail da service account."
+                "OAuth do Google Drive desativado, expirado ou revogado. Coloque o JSON da "
+                "service account na pasta instance/ do servidor e reinicie o app, ou gere um "
+                "novo OAuth token ativo."
             ) from exc
         raise
 
