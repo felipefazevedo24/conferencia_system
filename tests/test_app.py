@@ -2754,29 +2754,31 @@ def test_foto_expedicao_drive_e_servida_pela_rota_do_sistema(tmp_path):
     )
 
 
-def test_drive_credentials_prefere_service_account_quando_oauth_tambem_existe(tmp_path):
+def test_drive_credentials_prefere_oauth_quando_oauth_e_service_account_existem(tmp_path):
     app = create_app(
         {
             "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
-            "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON": '{"type":"service_account"}',
+            "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON": '{"type":"service_account","client_email":"svc@test","private_key":"key"}',
             "GOOGLE_DRIVE_OAUTH_TOKEN_JSON": '{"client_id":"oauth-antigo"}',
         }
     )
 
     with app.app_context():
+        oauth_creds = Mock(expired=False)
         with patch(
             "google.oauth2.service_account.Credentials.from_service_account_info",
             return_value="service-creds",
         ) as mocked_service, patch(
-            "google.oauth2.credentials.Credentials.from_authorized_user_info"
+            "google.oauth2.credentials.Credentials.from_authorized_user_info",
+            return_value=oauth_creds,
         ) as mocked_oauth:
             from conferencia_app.services.expedicao_photo_storage import _drive_credentials
 
-            assert _drive_credentials() == "service-creds"
+            assert _drive_credentials() is oauth_creds
 
-    mocked_service.assert_called_once()
-    mocked_oauth.assert_not_called()
+    mocked_oauth.assert_called_once()
+    mocked_service.assert_not_called()
 
 
 def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):

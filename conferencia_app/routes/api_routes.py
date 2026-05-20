@@ -7126,6 +7126,19 @@ def _send_foto_expedicao(caminho, file_name=None):
     return send_file(caminho)
 
 
+def _is_drive_quota_service_account_error(exc):
+    msg = str(exc).lower()
+    return (
+        "service account" in msg
+        and (
+            "cota" in msg
+            or "quota" in msg
+            or "storage" in msg
+            or "drive compartilhado" in msg
+        )
+    )
+
+
 @api_bp.route("/api/expedicao/conferencia-simples")
 @roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def listar_registros_conferencia_simples():
@@ -7429,6 +7442,22 @@ def upload_foto_rascunho_expedicao():
         try:
             stored = upload_to_drive(foto, nome_arquivo)
         except Exception as exc:
+            if _is_drive_quota_service_account_error(exc):
+                current_app.logger.warning(
+                    "Drive sem cota para service account; salvando rascunho de expedicao localmente: %s",
+                    exc,
+                )
+                try:
+                    foto.stream.seek(0)
+                except Exception:
+                    pass
+                caminho = os.path.join(rascunho_dir, rascunho_id)
+                foto.save(caminho)
+                return jsonify({
+                    "rascunho_id": rascunho_id,
+                    "url": f"/api/expedicao/conferencia-simples/foto-rascunho/{rascunho_id}",
+                    "storage": "local_fallback",
+                })
             current_app.logger.exception("Falha ao enviar foto de expedicao para Drive")
             return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
         rascunho_ref = encode_drive_rascunho(stored.file_id or "", stored.file_name)

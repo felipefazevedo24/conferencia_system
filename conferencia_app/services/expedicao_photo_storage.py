@@ -140,38 +140,56 @@ def _discover_service_account_info() -> dict[str, Any] | None:
     return None
 
 
-def _drive_credentials():
+def _oauth_credentials(scopes: list[str]):
     from google.auth.transport.requests import Request
-    from google.auth.exceptions import RefreshError
     from google.oauth2.credentials import Credentials
-    from google.oauth2 import service_account
-
-    scopes = ["https://www.googleapis.com/auth/drive"]
-    service_account_info = _discover_service_account_info()
-    if service_account_info:
-        return service_account.Credentials.from_service_account_info(service_account_info, scopes=scopes)
 
     oauth_json = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_JSON") or "").strip()
     oauth_file = str(current_app.config.get("GOOGLE_DRIVE_OAUTH_TOKEN_FILE") or "").strip()
 
+    if oauth_json:
+        creds = Credentials.from_authorized_user_info(json.loads(oauth_json), scopes=scopes)
+    elif oauth_file:
+        creds = Credentials.from_authorized_user_file(oauth_file, scopes=scopes)
+    else:
+        return None
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    return creds
+
+
+def _drive_credentials():
+    from google.auth.exceptions import RefreshError
+    from google.oauth2 import service_account
+
+    scopes = ["https://www.googleapis.com/auth/drive"]
+
     try:
-        if oauth_json:
-            creds = Credentials.from_authorized_user_info(json.loads(oauth_json), scopes=scopes)
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+        creds = _oauth_credentials(scopes)
+        if creds:
             return creds
-        if oauth_file:
-            creds = Credentials.from_authorized_user_file(oauth_file, scopes=scopes)
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+    except RefreshError as exc:
+        msg = str(exc)
+        if "disabled_client" in msg or "invalid_grant" in msg:
+            current_app.logger.warning("OAuth do Google Drive invalido; tentando service account: %s", exc)
+        else:
+            raise
+
+    service_account_info = _discover_service_account_info()
+    if service_account_info:
+        return service_account.Credentials.from_service_account_info(service_account_info, scopes=scopes)
+
+    try:
+        creds = _oauth_credentials(scopes)
+        if creds:
             return creds
     except RefreshError as exc:
         msg = str(exc)
         if "disabled_client" in msg or "invalid_grant" in msg:
             raise RuntimeError(
-                "OAuth do Google Drive desativado, expirado ou revogado. Coloque o JSON da "
-                "service account na pasta instance/ do servidor e reinicie o app, ou gere um "
-                "novo OAuth token ativo."
+                "OAuth do Google Drive desativado, expirado ou revogado. Gere um novo "
+                "google-drive-oauth-token.json e coloque em instance/ no servidor."
             ) from exc
         raise
 

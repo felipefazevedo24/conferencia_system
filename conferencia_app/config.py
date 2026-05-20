@@ -6,6 +6,7 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 INSTANCE_DIR = BASE_DIR / "instance"
 DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = INSTANCE_DIR / "columbia-sync-01d50c87dd4a.json"
+DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE = INSTANCE_DIR / "google-drive-oauth-token.json"
 
 
 def _env_or_default(name: str, default: str = "") -> str:
@@ -68,7 +69,10 @@ class Config:
         str(DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE) if DEFAULT_GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE.exists() else "",
     )
     GOOGLE_DRIVE_OAUTH_TOKEN_JSON = os.environ.get("GOOGLE_DRIVE_OAUTH_TOKEN_JSON", "")
-    GOOGLE_DRIVE_OAUTH_TOKEN_FILE = os.environ.get("GOOGLE_DRIVE_OAUTH_TOKEN_FILE", "")
+    GOOGLE_DRIVE_OAUTH_TOKEN_FILE = _env_or_default(
+        "GOOGLE_DRIVE_OAUTH_TOKEN_FILE",
+        str(DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE) if DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE.exists() else "",
+    )
     INVENTREE_WMS_ENABLED = _env_bool("INVENTREE_WMS_ENABLED", "0")
     INVENTREE_API_BASE = str(os.environ.get("INVENTREE_API_BASE", "")).strip().rstrip("/")
     INVENTREE_API_TOKEN = str(os.environ.get("INVENTREE_API_TOKEN", "")).strip()
