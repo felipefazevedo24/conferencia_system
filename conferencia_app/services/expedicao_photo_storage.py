@@ -154,12 +154,23 @@ def upload_bytes_to_drive(data: bytes, file_name: str, mimetype: str | None = No
         resumable=False,
     )
     metadata: dict[str, Any] = {"name": file_name, "parents": [folder_id]}
-    created = service.files().create(
-        body=metadata,
-        media_body=media,
-        fields="id,name,webViewLink",
-        supportsAllDrives=True,
-    ).execute()
+    try:
+        created = service.files().create(
+            body=metadata,
+            media_body=media,
+            fields="id,name,webViewLink",
+            supportsAllDrives=True,
+        ).execute()
+    except Exception as exc:
+        msg = str(exc)
+        if "storageQuotaExceeded" in msg or "Service Accounts do not have storage quota" in msg:
+            raise RuntimeError(
+                "A service account consegue acessar a pasta, mas nao consegue enviar arquivos "
+                "para uma pasta de Meu Drive porque service accounts nao possuem cota de "
+                "armazenamento propria. Use um Drive compartilhado para essa pasta ou configure "
+                "um OAuth ativo para uploads."
+            ) from exc
+        raise
     file_id = created["id"]
 
     if str(current_app.config.get("EXPEDICAO_GOOGLE_DRIVE_PUBLIC", "1")).strip() not in {"0", "false", "False"}:
