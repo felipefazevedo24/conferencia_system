@@ -333,29 +333,53 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
     else:
         return None
 
-    sql = f"""
-        select
-            c.codigo::text as codigo_lancamento,
-            c.n_nf::text as numero_nota,
-            coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
-            a.numero_item,
-            coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop,
-            coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
-            coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
-            coalesce(a.qtde, 0) as quantidade
-        from public.tcompras c
-        left join public.tcom_aux a
-          on a.cod_empresa = c.cod_empresa
-         and a.realciona_auto = c.codigo
-        left join public.tproduto p
-          on p.cod_empresa = a.cod_empresa
-         and p.codigo = a.cod_produto
-        where {" or ".join(where)}
-        order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
-        limit 200
-    """
     with _conectar(cfg) as conn:
         with conn.cursor() as cur:
+            cur.execute("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'tcom_aux'")
+            cols_aux = {str(row[0]).lower() for row in cur.fetchall()}
+
+            def col(alias: str, *candidates: str, default: str = "null") -> str:
+                for name in candidates:
+                    if name.lower() in cols_aux:
+                        return f"a.{name} as {alias}"
+                return f"{default} as {alias}"
+
+            tax_select = ",\n            ".join([
+                col("icms_base_calculo", "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms", "bc_icms", default="0"),
+                col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms", default="0"),
+                col("icms_cst", "icms_cst", "cst_icms", "cst", "sit_trib_icms", default="''"),
+                col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "v_icms", default="0"),
+                col("pis_base_calculo", "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis", default="0"),
+                col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis", default="0"),
+                col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", default="''"),
+                col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "v_pis", default="0"),
+                col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins", default="0"),
+                col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins", default="0"),
+                col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", default="''"),
+                col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins", default="0"),
+            ])
+            sql = f"""
+                select
+                    c.codigo::text as codigo_lancamento,
+                    c.n_nf::text as numero_nota,
+                    coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
+                    a.numero_item,
+                    coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop,
+                    coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
+                    coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
+                    coalesce(a.qtde, 0) as quantidade,
+                    {tax_select}
+                from public.tcompras c
+                left join public.tcom_aux a
+                  on a.cod_empresa = c.cod_empresa
+                 and a.realciona_auto = c.codigo
+                left join public.tproduto p
+                  on p.cod_empresa = a.cod_empresa
+                 and p.codigo = a.cod_produto
+                where {" or ".join(where)}
+                order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
+                limit 200
+            """
             cur.execute(sql, params)
             cols = [desc[0] for desc in cur.description]
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
@@ -390,6 +414,30 @@ def _normalizar_match_texto(valor: Any) -> str:
     return " ".join(re for re in "".join(ch if ch.isalnum() else " " for ch in text).split() if re)
 
 
+def _float_grv(valor: Any, default=0.0) -> float:
+    try:
+        if isinstance(valor, str):
+            texto = valor.replace("R$", "").strip()
+            if "," in texto:
+                texto = texto.replace(".", "").replace(",", ".")
+            return float(texto or default)
+        return float(valor if valor is not None else default)
+    except Exception:
+        return float(default)
+
+
+def _set_if_present(item: ItemNota, attr: str, row: dict[str, Any], *keys: str) -> None:
+    for key in keys:
+        if key in row and row.get(key) not in (None, ""):
+            if attr == "cst_icms":
+                setattr(item, attr, str(row.get(key) or "").strip()[:3])
+            elif attr in {"cst_pis", "cst_cofins"}:
+                setattr(item, attr, str(row.get(key) or "").strip()[:2])
+            else:
+                setattr(item, attr, _float_grv(row.get(key)))
+            return
+
+
 def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
     itens_grv = [row for row in (entrada.get("itens") or []) if isinstance(row, dict) and str(row.get("cod_interno") or "").strip()]
     if not itens_grv:
@@ -399,29 +447,34 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
     atualizados = 0
     usados: set[int] = set()
     for item in itens_locais:
-        if item.codigo_grv:
-            continue
         melhor_idx = None
+        codigo_atual = str(item.codigo_grv or "").strip().lower()
+        if codigo_atual:
+            for idx, row in enumerate(itens_grv):
+                if idx not in usados and str(row.get("cod_interno") or "").strip().lower() == codigo_atual:
+                    melhor_idx = idx
+                    break
         item_desc = _normalizar_match_texto(item.descricao)
         item_cfop = str(item.cfop or "").strip()[:4]
         item_qtd = float(item.qtd_real or 0)
-        for idx, row in enumerate(itens_grv):
-            if idx in usados:
-                continue
-            row_cfop = str(row.get("cfop") or "").strip()[:4]
-            row_desc = _normalizar_match_texto(row.get("descricao"))
-            try:
-                row_qtd = float(row.get("quantidade") or 0)
-            except Exception:
-                row_qtd = 0.0
-            if item_cfop and row_cfop and item_cfop != row_cfop:
-                continue
-            if item_desc and row_desc and (item_desc in row_desc or row_desc in item_desc):
-                melhor_idx = idx
-                break
-            if item_qtd and row_qtd and abs(item_qtd - row_qtd) < 0.0001:
-                melhor_idx = idx
-                break
+        if melhor_idx is None:
+            for idx, row in enumerate(itens_grv):
+                if idx in usados:
+                    continue
+                row_cfop = str(row.get("cfop") or "").strip()[:4]
+                row_desc = _normalizar_match_texto(row.get("descricao"))
+                try:
+                    row_qtd = float(row.get("quantidade") or 0)
+                except Exception:
+                    row_qtd = 0.0
+                if item_cfop and row_cfop and item_cfop != row_cfop:
+                    continue
+                if item_desc and row_desc and (item_desc in row_desc or row_desc in item_desc):
+                    melhor_idx = idx
+                    break
+                if item_qtd and row_qtd and abs(item_qtd - row_qtd) < 0.0001:
+                    melhor_idx = idx
+                    break
         if melhor_idx is None and len(itens_locais) == len(itens_grv):
             for idx in range(len(itens_grv)):
                 if idx not in usados:
@@ -432,7 +485,20 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         usados.add(melhor_idx)
         codigo = str(itens_grv[melhor_idx].get("cod_interno") or "").strip()
         if codigo:
+            row_grv = itens_grv[melhor_idx]
             item.codigo_grv = codigo[:80]
+            _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
+            _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
+            _set_if_present(item, "cst_icms", row_grv, "icms_cst", "cst_icms", "cst")
+            _set_if_present(item, "icms_valor", row_grv, "icms_valor", "valor_icms", "vl_icms", "v_icms")
+            _set_if_present(item, "pis_base_calculo", row_grv, "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis")
+            _set_if_present(item, "pis_aliquota", row_grv, "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis")
+            _set_if_present(item, "cst_pis", row_grv, "pis_cst", "cst_pis")
+            _set_if_present(item, "pis_valor_credito", row_grv, "pis_valor_credito", "valor_pis", "vl_pis", "v_pis")
+            _set_if_present(item, "cofins_base_calculo", row_grv, "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins")
+            _set_if_present(item, "cofins_aliquota", row_grv, "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins")
+            _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins")
+            _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins")
             atualizados += 1
     return atualizados
 

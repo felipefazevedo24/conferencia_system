@@ -300,6 +300,15 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
             cst_cofins = _txt(imposto, "nfe:COFINS//nfe:CST", ns, "").strip() if imposto is not None else ""
             pis_credito = _tributo_credito(imposto, "PIS", ns)
             cofins_credito = _tributo_credito(imposto, "COFINS", ns)
+            icms_base = 0.0
+            icms_aliquota = 0.0
+            icms_valor = 0.0
+            if imposto is not None:
+                icms_bloco = imposto.find("nfe:ICMS/*", ns)
+                if icms_bloco is not None:
+                    icms_base = _float_xml(_txt(icms_bloco, "nfe:vBC", ns, "0"))
+                    icms_aliquota = _float_xml(_txt(icms_bloco, "nfe:pICMS", ns, "0"))
+                    icms_valor = _float_xml(_txt(icms_bloco, "nfe:vICMS", ns, "0"))
 
             itens_xml.append(
                 {
@@ -314,6 +323,9 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     "cst_icms": str(cst_icms or "").strip()[:3],
                     "cst_pis": str(cst_pis or "").strip()[:2],
                     "cst_cofins": str(cst_cofins or "").strip()[:2],
+                    "icms_base_calculo": icms_base,
+                    "icms_aliquota": icms_aliquota,
+                    "icms_valor": icms_valor,
                     "pis_base_calculo": pis_credito["base"],
                     "pis_aliquota": pis_credito["aliquota"],
                     "pis_valor_credito": pis_credito["valor"],
@@ -350,6 +362,9 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
                     cst_cofins=item["cst_cofins"],
                     valor_produto=item["valor_produto"],
                     valor_nf=item["valor_nf"],
+                    icms_base_calculo=item["icms_base_calculo"],
+                    icms_aliquota=item["icms_aliquota"],
+                    icms_valor=item["icms_valor"],
                     pis_base_calculo=item["pis_base_calculo"],
                     pis_aliquota=item["pis_aliquota"],
                     pis_valor_credito=item["pis_valor_credito"],

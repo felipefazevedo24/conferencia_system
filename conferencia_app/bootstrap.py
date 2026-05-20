@@ -170,6 +170,15 @@ def _ensure_item_nota_columns() -> None:
         if "valor_nf" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN valor_nf FLOAT"))
             conn.commit()
+        if "icms_base_calculo" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN icms_base_calculo FLOAT"))
+            conn.commit()
+        if "icms_aliquota" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN icms_aliquota FLOAT"))
+            conn.commit()
+        if "icms_valor" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN icms_valor FLOAT"))
+            conn.commit()
         if "pis_base_calculo" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pis_base_calculo FLOAT"))
             conn.commit()

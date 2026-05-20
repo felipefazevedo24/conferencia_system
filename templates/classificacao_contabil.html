@@ -11,9 +11,9 @@
     }
     .cc-top {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 18px;
-        align-items: end;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
         margin-bottom: 18px;
     }
     .cc-title {
@@ -32,7 +32,7 @@
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
     }
     .cc-btn {
         border: 0;
@@ -59,7 +59,7 @@
     }
     .cc-kpis {
         display: grid;
-        grid-template-columns: repeat(6, minmax(130px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 12px;
         margin-bottom: 14px;
     }
@@ -163,8 +163,8 @@
     .cc-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 1780px;
-        font-size: .88rem;
+        min-width: 1260px;
+        font-size: .82rem;
     }
     .cc-table th {
         background: #f8fafc;
@@ -172,12 +172,12 @@
         font-size: .74rem;
         text-transform: uppercase;
         letter-spacing: 0;
-        padding: 11px 12px;
+        padding: 10px 12px;
         border-bottom: 1px solid #e2e8f0;
         white-space: nowrap;
     }
     .cc-table td {
-        padding: 11px 12px;
+        padding: 10px 12px;
         border-bottom: 1px solid #edf2f7;
         vertical-align: top;
     }
@@ -221,7 +221,7 @@
         margin-top: 2px;
     }
     .cc-desc {
-        max-width: 310px;
+        max-width: 250px;
         color: #334155;
     }
     .cc-pill {
@@ -246,12 +246,27 @@
         font-weight: 800;
     }
     .cc-tax {
-        min-width: 190px;
+        min-width: 250px;
         color: #334155;
-        line-height: 1.35;
+        line-height: 1.3;
     }
     .cc-tax strong {
         color: #0f172a;
+    }
+    .cc-tax-row {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 8px;
+        padding: 3px 0;
+        border-bottom: 1px solid #eef2f7;
+    }
+    .cc-tax-row:last-child { border-bottom: 0; }
+    .cc-tax-row span:first-child {
+        font-weight: 800;
+        color: #475569;
+    }
+    .cc-meta-stack {
+        min-width: 120px;
     }
     .cc-locked {
         opacity: .55;
@@ -406,13 +421,10 @@
                         <th>Fornecedor</th>
                         <th>Item</th>
                         <th>CFOP entrada</th>
-                        <th>PIS</th>
-                        <th>COFINS</th>
+                        <th>Tributos GRV</th>
                         <th>Conta</th>
-                        <th>Confiança</th>
-                        <th>Status</th>
-                        <th>Origem</th>
-                        <th>Motivo</th>
+                        <th>Conf./Status</th>
+                        <th>Origem/Motivo</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -529,10 +541,16 @@ function accountCell(item) {
 
 function taxCell(base, aliquota, cst, valor) {
     return `
+        Base <strong>${money(base)}</strong> · Alíq. <strong>${percent(aliquota)}</strong> · CST <strong>${cst || "---"}</strong> · Valor <strong>${money(valor)}</strong>
+    `;
+}
+
+function tributosCell(item) {
+    return `
         <div class="cc-tax">
-            <div>Base <strong>${money(base)}</strong></div>
-            <div>Alíq. <strong>${percent(aliquota)}</strong> · CST <strong>${cst || "---"}</strong></div>
-            <div>Crédito <strong>${money(valor)}</strong></div>
+            <div class="cc-tax-row"><span>ICMS</span><div>${taxCell(item.icms_base_calculo, item.icms_aliquota, item.icms_cst, item.icms_valor)}</div></div>
+            <div class="cc-tax-row"><span>PIS</span><div>${taxCell(item.pis_base_calculo, item.pis_aliquota, item.pis_cst, item.pis_valor_credito)}</div></div>
+            <div class="cc-tax-row"><span>COFINS</span><div>${taxCell(item.cofins_base_calculo, item.cofins_aliquota, item.cofins_cst, item.cofins_valor_credito)}</div></div>
         </div>
     `;
 }
@@ -615,13 +633,10 @@ function renderTabela() {
             <td>${item.fornecedor}</td>
             <td class="cc-desc"><strong>${item.codigo_item}</strong><br>${item.descricao_item}</td>
             <td><strong>${item.cfop_entrada || item.cfop}</strong><br><small>${item.descricao_cfop_entrada || "---"}</small></td>
-            <td>${taxCell(item.pis_base_calculo, item.pis_aliquota, item.pis_cst, item.pis_valor_credito)}</td>
-            <td>${taxCell(item.cofins_base_calculo, item.cofins_aliquota, item.cofins_cst, item.cofins_valor_credito)}</td>
+            <td>${tributosCell(item)}</td>
             <td>${accountCell(item)}</td>
-            <td>${item.confianca}%</td>
-            <td><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
-            <td>${item.metodo}<br><small>${item.revisado_por || ""}</small></td>
-            <td>${item.motivo_pendencia || item.tipo_regra || "---"}</td>
+            <td class="cc-meta-stack"><strong>${item.confianca}%</strong><br><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
+            <td>${item.metodo}<br><small>${item.motivo_pendencia || item.tipo_regra || "---"} ${item.revisado_por ? "· " + item.revisado_por : ""}</small></td>
             <td><button class="cc-icon-btn ${state.competenciaStatus === "Fechada" ? "cc-locked" : ""}" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
         </tr>
     `).join("");

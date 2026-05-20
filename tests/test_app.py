@@ -1135,6 +1135,10 @@ def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_pa
             status="Lançado",
             data_lancamento=datetime(2026, 3, 10, 9, 0),
             valor_nf=123.45,
+            icms_base_calculo=100,
+            icms_aliquota=18,
+            cst_icms="000",
+            icms_valor=18,
             pis_base_calculo=100,
             pis_aliquota=1.65,
             cst_pis="50",
@@ -1158,6 +1162,8 @@ def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_pa
     data = response.get_json()
     assert data["item"]["nome_conta"] == "MANUTENCAO MAQUINAS - CUSTO - GERAL"
     assert data["item"]["valor_nf"] == 123.45
+    assert data["item"]["icms_cst"] == "000"
+    assert data["item"]["icms_valor"] == 18
     assert data["item"]["pis_cst"] == "50"
     assert data["item"]["cofins_aliquota"] == 7.6
 

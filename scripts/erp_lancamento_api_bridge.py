@@ -690,6 +690,18 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
             "descricao": row.get("descricao") or "",
             "quantidade": row.get("quantidade") or 0,
             "unidade": row.get("unidade") or "",
+            "icms_base_calculo": row.get("icms_base_calculo") or 0,
+            "icms_aliquota": row.get("icms_aliquota") or 0,
+            "icms_cst": row.get("icms_cst") or "",
+            "icms_valor": row.get("icms_valor") or 0,
+            "pis_base_calculo": row.get("pis_base_calculo") or 0,
+            "pis_aliquota": row.get("pis_aliquota") or 0,
+            "pis_cst": row.get("pis_cst") or "",
+            "pis_valor_credito": row.get("pis_valor_credito") or 0,
+            "cofins_base_calculo": row.get("cofins_base_calculo") or 0,
+            "cofins_aliquota": row.get("cofins_aliquota") or 0,
+            "cofins_cst": row.get("cofins_cst") or "",
+            "cofins_valor_credito": row.get("cofins_valor_credito") or 0,
             "tipo_controle": row.get("tipo_controle") or 0,
             "controle_lote_serie": row.get("controle_lote_serie") or 0,
             "lote": row.get("lote") or "",
@@ -707,6 +719,48 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
         "cfop_cabecalho": cab.get("cfop_cabecalho") or "",
         "itens": itens,
     }
+
+
+def _enriquecer_tributos_entrada(cur, rows: list[dict[str, Any]]) -> None:
+    guids = [str(row.get("guid_linha") or "").strip() for row in rows if str(row.get("guid_linha") or "").strip()]
+    if not guids:
+        return
+    cur.execute("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'tcom_aux'")
+    cols_aux = {str(row[0]).lower() for row in cur.fetchall()}
+
+    def col(alias: str, *candidates: str, default: str = "null") -> str:
+        for name in candidates:
+            if name.lower() in cols_aux:
+                return f"a.{name} as {alias}"
+        return f"{default} as {alias}"
+
+    tax_select = ",\n            ".join([
+        col("icms_base_calculo", "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms", "bc_icms", default="0"),
+        col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms", default="0"),
+        col("icms_cst", "icms_cst", "cst_icms", "cst", "sit_trib_icms", default="''"),
+        col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "v_icms", default="0"),
+        col("pis_base_calculo", "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis", default="0"),
+        col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis", default="0"),
+        col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", default="''"),
+        col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "v_pis", default="0"),
+        col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins", default="0"),
+        col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins", default="0"),
+        col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", default="''"),
+        col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins", default="0"),
+    ])
+    cur.execute(
+        f"""
+        select a.guid_linha::text as guid_linha, {tax_select}
+        from public.tcom_aux a
+        where a.guid_linha::text = any(%s)
+        """,
+        (guids,),
+    )
+    cols = [desc[0] for desc in cur.description]
+    por_guid = {str(row[0]): dict(zip(cols, row)) for row in cur.fetchall()}
+    for row in rows:
+        guid = str(row.get("guid_linha") or "")
+        row.update(por_guid.get(guid, {}))
 
 
 def _authorized(cfg: dict[str, Any]) -> bool:
@@ -1010,6 +1064,7 @@ def create_app() -> Flask:
                     )
                     cols = [desc[0] for desc in cur.description]
                     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                    _enriquecer_tributos_entrada(cur, rows)
 
             entrada = _montar_entrada_chapa(rows, numero_ar, numero_nota, chave)
             return jsonify({"sucesso": True, "entrada": entrada})
