@@ -14,15 +14,29 @@ Endpoint:
 """
 from __future__ import annotations
 
-import os
 import base64
+import os
 import re
-from datetime import date, datetime
+import sys
+import time
+from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as et
 
-from flask import Flask, jsonify, request
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from flask import Blueprint, Flask, g, jsonify, redirect, request, session
 import psycopg2  # type: ignore
+
+from conferencia_app.bootstrap import initialize_database
+from conferencia_app.config import Config
+from conferencia_app.error_handlers import register_error_handlers
+from conferencia_app.extensions import db, migrate
+from conferencia_app.routes.auth_routes import auth_bp
+from conferencia_app.routes.facilities_routes import facilities_bp
 
 
 def _env(name: str, default: str = "") -> str:
@@ -775,12 +789,95 @@ def _authorized(cfg: dict[str, Any]) -> bool:
     return auth == f"Bearer {token}"
 
 
+def _registrar_facilities_na_bridge(app: Flask) -> None:
+    app.config.from_object(Config)
+    os.makedirs(app.instance_path, exist_ok=True)
+    db.init_app(app)
+    migrate.init_app(app, db)
+
+    pages_bp = Blueprint("pages", __name__)
+
+    @pages_bp.route("/")
+    def home():
+        return redirect("/facilities/admin")
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(pages_bp)
+    app.register_blueprint(facilities_bp)
+    register_error_handlers(app)
+
+    @app.before_request
+    def before_request_logging():
+        g.start_time = time.perf_counter()
+        if "username" in session:
+            now = datetime.now()
+            last_activity_raw = session.get("last_activity")
+            if last_activity_raw:
+                last_activity = datetime.fromisoformat(last_activity_raw)
+                timeout = timedelta(minutes=app.config.get("SESSION_TIMEOUT_MINUTES", 30))
+                if now - last_activity > timeout:
+                    session.clear()
+            session["last_activity"] = now.isoformat()
+            session.permanent = True
+
+    @app.after_request
+    def after_request_logging(response):
+        elapsed_ms = (time.perf_counter() - g.start_time) * 1000
+        app.logger.info("%s %s %s %.2fms", request.method, request.path, response.status_code, elapsed_ms)
+        ctype = response.headers.get("Content-Type", "")
+        if ctype.startswith("text/html") and "charset" not in ctype.lower():
+            response.headers["Content-Type"] = "text/html; charset=utf-8"
+        elif ctype.startswith("application/json") and "charset" not in ctype.lower():
+            response.headers["Content-Type"] = "application/json; charset=utf-8"
+        return response
+
+    @app.context_processor
+    def inject_access_control_helpers():
+        from conferencia_app.auth import get_effective_permissions, has_permission
+
+        perms = get_effective_permissions() if "username" in session else {}
+        return {
+            "can_access": lambda key: has_permission(key),
+            "access_permissions": perms,
+        }
+
+    @app.context_processor
+    def inject_asset_version():
+        try:
+            css_dir = os.path.join(app.static_folder or "", "css")
+            mtimes = []
+            for root_, _dirs, files in os.walk(css_dir):
+                for fn in files:
+                    if fn.endswith(".css"):
+                        mtimes.append(os.path.getmtime(os.path.join(root_, fn)))
+            asset_version = str(int(max(mtimes))) if mtimes else str(int(time.time()))
+        except Exception:
+            asset_version = str(int(time.time()))
+        return {"asset_version": asset_version}
+
+    initialize_database(app)
+
+    if not app.config.get("TESTING"):
+        try:
+            from conferencia_app.services.facilities_scheduler import iniciar_scheduler as iniciar_facilities_nr6
+
+            iniciar_facilities_nr6(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Facilities NR-6")
+
+
 def create_app() -> Flask:
-    app = Flask(__name__)
+    app = Flask(
+        __name__,
+        template_folder=str(ROOT_DIR / "templates"),
+        static_folder=str(ROOT_DIR / "static"),
+        instance_relative_config=True,
+    )
+    _registrar_facilities_na_bridge(app)
 
     @app.get("/health")
     def health():
-        return jsonify({"ok": True, "service": "erp-lancamento-api-bridge"})
+        return jsonify({"ok": True, "service": "erp-lancamento-api-bridge", "facilities": True})
 
     @app.post("/api/erp/lancamentos")
     def consultar_lancamentos():
