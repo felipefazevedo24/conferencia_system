@@ -29,6 +29,7 @@ from ..models import (
     FacilitiesProjetoTarefa,
     FacilitiesTarefa,
 )
+from ..services.facilities_grv_service import FacilitiesGRVService, normalizar_nome
 
 
 # Cache simples em memória para o catálogo do ERP (evitar bater na API a cada request)
@@ -47,6 +48,53 @@ def _classificar_tipo_item(item):
     if "EPI" in texto:
         return "epi"
     return None
+
+
+def _upsert_colaborador_grv(row: dict) -> FacilitiesColaborador:
+    codigo = row.get("codigo")
+    cod_empresa = row.get("cod_empresa") or 1
+    identificacao = str(row.get("identificacao") or "").strip()
+    nome = str(row.get("nome") or "").strip()
+    apelido = str(row.get("apelido") or "").strip()
+    colab = None
+    if codigo:
+        colab = FacilitiesColaborador.query.filter_by(
+            grv_cod_empresa=cod_empresa,
+            grv_codigo=int(codigo),
+        ).first()
+    if not colab and identificacao:
+        colab = FacilitiesColaborador.query.filter_by(grv_identificacao=identificacao).first()
+    if not colab and nome:
+        nome_norm = normalizar_nome(nome)
+        for atual in FacilitiesColaborador.query.all():
+            if normalizar_nome(atual.nome) == nome_norm:
+                colab = atual
+                break
+    if not colab:
+        colab = FacilitiesColaborador(nome=nome or apelido or str(codigo), criado_em=datetime.now())
+        db.session.add(colab)
+
+    colab.nome = nome or colab.nome
+    colab.cargo = str(row.get("cargo") or "")[:80]
+    colab.setor = str(row.get("setor") or "")[:80]
+    colab.email = str(row.get("email") or "").strip()[:160] or None
+    colab.ativo = not bool(int(row.get("inativo") or 0))
+    colab.origem = "GRV"
+    colab.grv_cod_empresa = int(cod_empresa or 1)
+    colab.grv_codigo = int(codigo or 0) or None
+    colab.grv_identificacao = identificacao[:30] or None
+    colab.grv_apelido = apelido[:100] or None
+    if not colab.nivel_acesso:
+        colab.nivel_acesso = "solicitante"
+    return colab
+
+
+def _sincronizar_colaboradores_grv() -> list[FacilitiesColaborador]:
+    rows = FacilitiesGRVService.listar_funcionarios(ativos=True)
+    colaboradores = [_upsert_colaborador_grv(row) for row in rows]
+    if colaboradores:
+        db.session.commit()
+    return colaboradores
 
 
 def _buscar_estoque_erp():
@@ -92,6 +140,10 @@ def _colaborador_do_usuario_logado():
     username = (session.get("username") or "").strip()
     if not username:
         return None
+    try:
+        _sincronizar_colaboradores_grv()
+    except Exception as exc:
+        current_app.logger.warning("Falha ao sincronizar funcionarios GRV: %s", exc)
     # Tenta match exato case-insensitive
     resultado = (
         FacilitiesColaborador.query
@@ -104,7 +156,7 @@ def _colaborador_do_usuario_logado():
     username_norm = _normalizar_nome(username)
     todos = FacilitiesColaborador.query.all()
     for c in todos:
-        if _normalizar_nome(c.nome) == username_norm:
+        if _normalizar_nome(c.nome) == username_norm or _normalizar_nome(getattr(c, "grv_apelido", "") or "") == username_norm:
             return c
     return None
 
@@ -127,18 +179,31 @@ def _audit(entidade: str, entidade_id, acao: str, detalhes: str = "") -> None:
 
 
 def _estoque_disponivel_erp(codigo_interno: str) -> int | None:
-    """Retorna qtde_disponivel do ERP para um codigo_interno, ou None se indisponivel."""
+    """Retorna saldo do material no GRV/Postgres, ou None se indisponivel."""
     if not codigo_interno:
         return None
-    estoque = _buscar_estoque_erp()
-    if not estoque:
+    try:
+        saldo = FacilitiesGRVService.saldo_material(codigo_interno)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao consultar saldo GRV Facilities: %s", exc)
         return None
-    for item in estoque:
-        if (item.get("codigo_interno") or "") == codigo_interno:
-            try:
-                return int(item.get("qtde_disponivel") or 0)
-            except (TypeError, ValueError):
-                return 0
+    if saldo is None:
+        return None
+    return int(saldo)
+
+
+def _material_grv_por_codigo(codigo_interno: str, com_saldo: bool = False) -> dict | None:
+    codigo = str(codigo_interno or "").strip().lower()
+    if not codigo:
+        return None
+    try:
+        materiais = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=com_saldo)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao consultar material GRV Facilities: %s", exc)
+        return None
+    for item in materiais:
+        if str(item.get("codigo_interno") or "").strip().lower() == codigo:
+            return item
     return None
 
 
@@ -269,7 +334,17 @@ def api_me():
 @permission_required("PAGE_FACILITIES_GESTOR")
 def api_listar_colaboradores():
     """Lista colaboradores ativos para seleção em formulários"""
-    rows = FacilitiesColaborador.query.filter_by(ativo=True).order_by(FacilitiesColaborador.nome).all()
+    try:
+        _sincronizar_colaboradores_grv()
+    except Exception as exc:
+        current_app.logger.warning("Falha ao listar funcionarios GRV: %s", exc)
+    rows = (
+        FacilitiesColaborador.query
+        .filter_by(ativo=True)
+        .filter(FacilitiesColaborador.origem == "GRV")
+        .order_by(FacilitiesColaborador.nome)
+        .all()
+    )
     return jsonify({
         "rows": [
             {
@@ -279,6 +354,10 @@ def api_listar_colaboradores():
                 "setor": c.setor or "",
                 "email": c.email or "",
                 "nivel_acesso": c.nivel_acesso,
+                "origem": c.origem or "",
+                "codigo_grv": c.grv_codigo,
+                "identificacao_grv": c.grv_identificacao or "",
+                "apelido": c.grv_apelido or "",
             }
             for c in rows
         ]
@@ -288,6 +367,7 @@ def api_listar_colaboradores():
 @facilities_bp.route("/api/facilities/colaboradores", methods=["POST"])
 @login_required
 def api_criar_colaborador():
+    return jsonify({"error": "Cadastro manual bloqueado. A lista de funcionarios vem do GRV/Postgres."}), 409
     """Cria um novo colaborador (usuário logado)."""
     data = request.get_json() or {}
     nome = (data.get("nome") or "").strip()
@@ -314,65 +394,21 @@ def api_criar_colaborador():
 @facilities_bp.route("/api/facilities/epi-materiais")
 @login_required
 def api_listar_epi_materiais():
-    """Lista materiais EPI/Uniforme disponiveis.
-
-    Fonte primaria: banco do ERP filtrado por grupo/familia.
-    Fallback: tabela local FacilitiesEpiMaterial (seed/cadastro manual).
-    """
+    """Lista materiais EPI/Uniforme disponiveis pelo GRV/Postgres."""
     tipo = (request.args.get("tipo") or "").lower()
 
-    estoque = _buscar_estoque_erp()
-    if estoque:
-        rows = []
-        for item in estoque:
-            classificacao = _classificar_tipo_item(item)
-            if classificacao is None:
-                continue
-            if tipo in ("epi", "uniforme") and classificacao != tipo:
-                continue
-            try:
-                disponivel = int(item.get("qtde_disponivel") or 0)
-            except (TypeError, ValueError):
-                disponivel = 0
-            if disponivel <= 0:
-                continue
-            codigo = item.get("codigo_interno") or ""
-            nome = item.get("item") or ""
-            rows.append({
-                "id": codigo,
-                "codigo_interno": codigo,
-                "nome": nome,
-                "tipo": classificacao,
-                "numero_ca": "",
-                "qtd_estoque": disponivel,
-                "qtd_minima": 0,
-                "abaixo_minimo": disponivel <= 2,
-                "label": f"{codigo} - {nome} (estoque: {disponivel})",
-            })
-        rows.sort(key=lambda r: r["codigo_interno"])
-        return jsonify({"rows": rows, "fonte": "erp"})
+    try:
+        rows = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=True)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao listar materiais GRV Facilities: %s", exc)
+        return jsonify({"rows": [], "fonte": "grv_postgres", "error": "Falha ao consultar materiais no GRV."}), 502
 
-    # Fallback: catalogo local
-    query = FacilitiesEpiMaterial.query.filter_by(ativo=True)
     if tipo in ("epi", "uniforme"):
-        query = query.filter_by(tipo=tipo)
-    rows = query.order_by(FacilitiesEpiMaterial.codigo_interno).all()
+        rows = [m for m in rows if m.get("tipo") == tipo]
+    rows.sort(key=lambda r: str(r.get("codigo_interno") or ""))
     return jsonify({
-        "rows": [
-            {
-                "id": m.id,
-                "codigo_interno": m.codigo_interno,
-                "nome": m.nome,
-                "tipo": m.tipo,
-                "numero_ca": m.numero_ca or "",
-                "qtd_estoque": m.qtd_estoque or 0,
-                "qtd_minima": m.qtd_minima or 0,
-                "abaixo_minimo": (m.qtd_estoque or 0) <= (m.qtd_minima or 0),
-                "label": f"{m.codigo_interno} - {m.nome}",
-            }
-            for m in rows
-        ],
-        "fonte": "local",
+        "rows": rows,
+        "fonte": "grv_postgres",
     })
 
 
@@ -380,6 +416,7 @@ def api_listar_epi_materiais():
 @login_required
 @permission_required("PAGE_FACILITIES_ADMIN")
 def api_criar_epi_material():
+    return jsonify({"error": "Cadastro manual bloqueado. Materiais EPI/Uniformes vêm do GRV/Postgres."}), 409
     """Cadastra novo material EPI/Uniforme (Admin)"""
     data = request.get_json() or {}
     codigo = (data.get("codigo_interno") or "").strip()
@@ -404,6 +441,7 @@ def api_criar_epi_material():
 @login_required
 @permission_required("PAGE_FACILITIES_ADMIN")
 def api_atualizar_epi_material(id):
+    return jsonify({"error": "Edicao local bloqueada. Materiais EPI/Uniformes vêm do GRV/Postgres."}), 409
     """Atualiza material EPI (Admin) - inclui ajuste de estoque/CA."""
     m = FacilitiesEpiMaterial.query.get_or_404(id)
     data = request.get_json() or {}
@@ -511,6 +549,11 @@ def api_listar_epi_solicitacoes():
                 "tem_assinatura": bool(s.assinatura_path),
                 "proxima_troca_em": s.proxima_troca_em.strftime("%d/%m/%Y") if s.proxima_troca_em else "",
                 "cancelado_em": s.cancelado_em.strftime("%d/%m/%Y %H:%M") if s.cancelado_em else "",
+                "estoque_grv_antes": s.estoque_grv_antes,
+                "estoque_grv_depois": s.estoque_grv_depois,
+                "estoque_grv_baixado": s.estoque_grv_baixado,
+                "estoque_grv_verificado_em": s.estoque_grv_verificado_em.strftime("%d/%m/%Y %H:%M") if s.estoque_grv_verificado_em else "",
+                "estoque_grv_mensagem": s.estoque_grv_mensagem or "",
             }
             for s in rows
         ]
@@ -566,6 +609,7 @@ def _resolver_beneficiario(data: dict):
         cargo=(data.get("beneficiario_cargo") or "").strip() or None,
         nivel_acesso="solicitante",
     )
+    return None, "Funcionario nao encontrado no GRV. Atualize a lista de colaboradores e tente novamente."
     db.session.add(novo)
     db.session.flush()  # pega o id
     return novo, None
@@ -589,9 +633,18 @@ def api_criar_epi_solicitacao():
     except (TypeError, ValueError):
         quantidade = 1
 
-    # Validacao de estoque (ERP) - bloqueia se pedir mais do que tem
+    material_grv = _material_grv_por_codigo(codigo_item, com_saldo=False)
+    if not material_grv:
+        return jsonify({"error": "Material nao encontrado no GRV para EPI/Uniformes."}), 400
+
+    nome_item = material_grv.get("nome") or nome_item
+    tipo_item = material_grv.get("tipo") or data.get("tipo", "epi")
+
+    # Validacao de estoque no GRV - bloqueia se pedir mais do que tem
     disponivel = _estoque_disponivel_erp(codigo_item)
-    if disponivel is not None and quantidade > disponivel:
+    if disponivel is None or disponivel <= 0:
+        return jsonify({"error": "Material sem saldo disponivel no GRV.", "disponivel": disponivel}), 400
+    if quantidade > disponivel:
         return jsonify({
             "error": f"Quantidade solicitada ({quantidade}) maior que o estoque disponivel ({disponivel}).",
             "disponivel": disponivel,
@@ -633,7 +686,7 @@ def api_criar_epi_solicitacao():
         colaborador_id=beneficiario.id,
         solicitante_id=solicitante_id,
         solicitante_nome=solicitante_nome,
-        tipo=data.get("tipo", "epi"),
+        tipo=tipo_item,
         codigo_item=codigo_item,
         nome_item=nome_item,
         tamanho=data.get("tamanho", ""),
@@ -900,6 +953,33 @@ def api_acao_lote_epi():
     return jsonify({"processadas": processadas, "solicitadas": len(ids)})
 
 
+def _verificar_baixa_grv_solicitacao(solicitacao: FacilitiesEpiSolicitacao) -> dict:
+    saldo_atual = FacilitiesGRVService.saldo_material(solicitacao.codigo_item)
+    solicitacao.estoque_grv_depois = saldo_atual
+    solicitacao.estoque_grv_verificado_em = datetime.now()
+    if saldo_atual is None:
+        solicitacao.estoque_grv_baixado = False
+        solicitacao.estoque_grv_mensagem = "Nao foi possivel consultar o saldo no GRV."
+    elif solicitacao.estoque_grv_antes is None:
+        solicitacao.estoque_grv_baixado = False
+        solicitacao.estoque_grv_mensagem = "Saldo anterior nao registrado; retire novamente ou consulte manualmente no GRV."
+    else:
+        esperado = max(0.0, float(solicitacao.estoque_grv_antes) - float(solicitacao.quantidade or 1))
+        baixado = float(saldo_atual) <= esperado + 0.0001
+        solicitacao.estoque_grv_baixado = baixado
+        if baixado:
+            solicitacao.estoque_grv_mensagem = "Baixa confirmada no GRV."
+        else:
+            solicitacao.estoque_grv_mensagem = "Processo concluido no Sync, mas a baixa ainda nao apareceu no estoque do GRV."
+    return {
+        "estoque_grv_antes": solicitacao.estoque_grv_antes,
+        "estoque_grv_depois": solicitacao.estoque_grv_depois,
+        "estoque_grv_baixado": solicitacao.estoque_grv_baixado,
+        "estoque_grv_verificado_em": solicitacao.estoque_grv_verificado_em.strftime("%d/%m/%Y %H:%M") if solicitacao.estoque_grv_verificado_em else "",
+        "estoque_grv_mensagem": solicitacao.estoque_grv_mensagem or "",
+    }
+
+
 @facilities_bp.route("/api/facilities/epi-solicitacoes/<int:id>/retirar", methods=["POST"])
 @login_required
 @permission_required("PAGE_FACILITIES_ADMIN")
@@ -917,6 +997,12 @@ def api_retirar_epi_solicitacao(id):
 
     data = request.get_json() or {}
     assinatura_b64 = (data.get("assinatura_base64") or "").strip()
+    saldo_grv_antes = None
+    material_grv = _material_grv_por_codigo(solicitacao.codigo_item, com_saldo=False)
+    try:
+        saldo_grv_antes = FacilitiesGRVService.saldo_material(solicitacao.codigo_item)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao consultar saldo GRV antes da retirada: %s", exc)
     if not assinatura_b64:
         return jsonify({"error": "Assinatura digital é obrigatória (NR-6)."}), 400
 
@@ -936,20 +1022,18 @@ def api_retirar_epi_solicitacao(id):
     # CA: payload sobrescreve, senão pega do material cadastrado
     numero_ca = (data.get("numero_ca") or "").strip()
     if not numero_ca:
-        material = FacilitiesEpiMaterial.query.filter_by(codigo_interno=solicitacao.codigo_item).first()
-        numero_ca = (material.numero_ca if material and material.numero_ca else "") or ""
-
-    # Abate estoque (se material existe e tem estoque suficiente)
-    material = FacilitiesEpiMaterial.query.filter_by(codigo_interno=solicitacao.codigo_item).first()
-    if material:
-        atual = material.qtd_estoque or 0
-        material.qtd_estoque = max(0, atual - (solicitacao.quantidade or 1))
+        numero_ca = (material_grv or {}).get("numero_ca") or ""
 
     solicitacao.status = "retirado"
     solicitacao.retirado_em = datetime.now()
     solicitacao.retirado_por = session.get("username") or ""
     solicitacao.numero_ca_entregue = numero_ca or None
     solicitacao.assinatura_path = nome_arquivo
+    solicitacao.estoque_grv_antes = saldo_grv_antes
+    solicitacao.estoque_grv_depois = saldo_grv_antes
+    solicitacao.estoque_grv_baixado = False
+    solicitacao.estoque_grv_verificado_em = datetime.now()
+    solicitacao.estoque_grv_mensagem = "Aguardando baixa no GRV." if saldo_grv_antes is not None else "Saldo GRV indisponivel na retirada."
 
     # Calcula proxima troca baseado em ciclo
     meses = _meses_validade_por_item(solicitacao.codigo_item, solicitacao.nome_item)
@@ -962,7 +1046,71 @@ def api_retirar_epi_solicitacao(id):
         "id": solicitacao.id,
         "status": solicitacao.status,
         "proxima_troca_em": solicitacao.proxima_troca_em.strftime("%d/%m/%Y"),
-        "estoque_restante": material.qtd_estoque if material else None,
+        "estoque_grv_antes": solicitacao.estoque_grv_antes,
+        "estoque_grv_baixado": solicitacao.estoque_grv_baixado,
+        "estoque_grv_mensagem": solicitacao.estoque_grv_mensagem,
+    })
+
+
+@facilities_bp.route("/api/facilities/epi-solicitacoes/<int:id>/verificar-baixa-grv", methods=["POST"])
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_verificar_baixa_grv_epi(id):
+    solicitacao = FacilitiesEpiSolicitacao.query.get_or_404(id)
+    if solicitacao.status != "retirado":
+        return jsonify({"error": "A baixa GRV so e verificada apos a retirada no Sync."}), 400
+    try:
+        resultado = _verificar_baixa_grv_solicitacao(solicitacao)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao verificar baixa GRV Facilities: %s", exc)
+        return jsonify({"error": "Falha ao consultar saldo no GRV."}), 502
+    db.session.commit()
+    _audit("epi_solicitacao", solicitacao.id, "verificar_baixa_grv", resultado.get("estoque_grv_mensagem", ""))
+    return jsonify({"id": solicitacao.id, **resultado})
+
+
+@facilities_bp.route("/api/facilities/epi/pendencias-baixa-grv")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_pendencias_baixa_grv():
+    refresh = (request.args.get("refresh") or "").lower() in ("1", "true", "yes")
+    rows = (
+        FacilitiesEpiSolicitacao.query
+        .filter(FacilitiesEpiSolicitacao.status == "retirado")
+        .filter(db.or_(
+            FacilitiesEpiSolicitacao.estoque_grv_baixado.is_(None),
+            FacilitiesEpiSolicitacao.estoque_grv_baixado == False,  # noqa: E712
+        ))
+        .order_by(FacilitiesEpiSolicitacao.retirado_em.desc())
+        .limit(500)
+        .all()
+    )
+    if refresh:
+        for s in rows:
+            try:
+                _verificar_baixa_grv_solicitacao(s)
+            except Exception as exc:
+                current_app.logger.warning("Falha ao atualizar pendencia baixa GRV %s: %s", s.id, exc)
+        db.session.commit()
+        rows = [s for s in rows if not s.estoque_grv_baixado]
+    return jsonify({
+        "rows": [
+            {
+                "id": s.id,
+                "colaborador_nome": s.colaborador.nome if s.colaborador else "",
+                "setor": (s.colaborador.setor if s.colaborador else "") or "",
+                "codigo_item": s.codigo_item,
+                "nome_item": s.nome_item,
+                "quantidade": s.quantidade,
+                "retirado_em": s.retirado_em.strftime("%d/%m/%Y %H:%M") if s.retirado_em else "",
+                "estoque_grv_antes": s.estoque_grv_antes,
+                "estoque_grv_depois": s.estoque_grv_depois,
+                "estoque_grv_baixado": s.estoque_grv_baixado,
+                "estoque_grv_verificado_em": s.estoque_grv_verificado_em.strftime("%d/%m/%Y %H:%M") if s.estoque_grv_verificado_em else "",
+                "estoque_grv_mensagem": s.estoque_grv_mensagem or "",
+            }
+            for s in rows
+        ]
     })
 
 
@@ -1371,14 +1519,11 @@ def api_dashboard():
     
     colaboradores_ativos = FacilitiesColaborador.query.filter_by(ativo=True).count()
 
-    # Estoque baixo: itens cuja quantidade <= minima (e minima > 0).
-    materiais_estoque_baixo = (
-        FacilitiesEpiMaterial.query
-        .filter(FacilitiesEpiMaterial.ativo == True)  # noqa: E712
-        .filter(FacilitiesEpiMaterial.qtd_minima > 0)
-        .filter(FacilitiesEpiMaterial.qtd_estoque <= FacilitiesEpiMaterial.qtd_minima)
-        .count()
-    )
+    try:
+        materiais_grv = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=True)
+    except Exception:
+        materiais_grv = []
+    materiais_estoque_baixo = len([m for m in materiais_grv if float(m.get("qtd_estoque") or 0) <= 2])
 
     # Vencimentos NR-6
     hoje = date.today()
@@ -1400,6 +1545,13 @@ def api_dashboard():
     retiradas_pendentes = FacilitiesEpiSolicitacao.query.filter(
         FacilitiesEpiSolicitacao.status == "liberado",
         FacilitiesEpiSolicitacao.liberado_em < tres_dias_atras,
+    ).count()
+    baixa_grv_pendente = FacilitiesEpiSolicitacao.query.filter(
+        FacilitiesEpiSolicitacao.status == "retirado",
+        db.or_(
+            FacilitiesEpiSolicitacao.estoque_grv_baixado.is_(None),
+            FacilitiesEpiSolicitacao.estoque_grv_baixado == False,  # noqa: E712
+        ),
     ).count()
 
     # Top 5 itens solicitados ultimos 30 dias
@@ -1466,6 +1618,7 @@ def api_dashboard():
         "colaboradores_ativos": colaboradores_ativos,
         "colaboradores": colaboradores_ativos,
         "materiais_estoque_baixo": materiais_estoque_baixo,
+        "materiais_grv_disponiveis": len(materiais_grv),
         "estoque_critico": FacilitiesEstoqueItem.query.filter(
             FacilitiesEstoqueItem.quantidade <= FacilitiesEstoqueItem.qtd_minima
         ).count(),
@@ -1475,6 +1628,7 @@ def api_dashboard():
         "epi_vencido": epi_vencido,
         "epi_vence_30d": epi_vence_30d,
         "retiradas_pendentes": retiradas_pendentes,
+        "baixa_grv_pendente": baixa_grv_pendente,
         "ultimas_solicitacoes": [
             {
                 "id": s.id,
@@ -1523,6 +1677,13 @@ def api_facilities_badge():
     estoque_critico = FacilitiesEstoqueItem.query.filter(
         FacilitiesEstoqueItem.quantidade <= FacilitiesEstoqueItem.qtd_minima
     ).count()
+    baixa_grv_pendente = FacilitiesEpiSolicitacao.query.filter(
+        FacilitiesEpiSolicitacao.status == "retirado",
+        db.or_(
+            FacilitiesEpiSolicitacao.estoque_grv_baixado.is_(None),
+            FacilitiesEpiSolicitacao.estoque_grv_baixado == False,  # noqa: E712
+        ),
+    ).count()
     return jsonify({
         "epi_pendentes": pendentes,
         "retiradas_pendentes": retiradas,
@@ -1530,6 +1691,7 @@ def api_facilities_badge():
         "epi_vence_30d": epi_vence_30d,
         "chamados_abertos": chamados_abertos,
         "estoque_critico": estoque_critico,
+        "baixa_grv_pendente": baixa_grv_pendente,
     })
 
 
@@ -1553,7 +1715,17 @@ def api_alertas_vencimento_epi():
         .limit(500)
         .all()
     )
+    resumo_setor = {}
+    for s in rows:
+        setor = (s.colaborador.setor if s.colaborador and s.colaborador.setor else "Sem setor")
+        item = resumo_setor.setdefault(setor, {"setor": setor, "vencidos": 0, "vence_30d": 0, "total": 0})
+        item["total"] += 1
+        if s.proxima_troca_em and s.proxima_troca_em < hoje:
+            item["vencidos"] += 1
+        else:
+            item["vence_30d"] += 1
     return jsonify({
+        "resumo_setor": sorted(resumo_setor.values(), key=lambda x: (-x["vencidos"], -x["total"], x["setor"])),
         "rows": [
             {
                 "id": s.id,
@@ -1656,7 +1828,7 @@ def _gerar_ficha_pdf_bytes(solicitacoes, colaborador):
     ))
     story.append(Spacer(1, 0.4 * cm))
 
-    headers = ["Data", "Item", "CA", "Qtd", "Proxima Troca", "Status"]
+    headers = ["Data", "Item", "CA", "Qtd", "Proxima Troca", "Ass.", "Status"]
     data_tbl = [headers]
     for s in solicitacoes:
         data_tbl.append([
@@ -1665,9 +1837,10 @@ def _gerar_ficha_pdf_bytes(solicitacoes, colaborador):
             s.numero_ca_entregue or "-",
             str(s.quantidade),
             s.proxima_troca_em.strftime("%d/%m/%Y") if s.proxima_troca_em else "-",
+            "Sim" if s.assinatura_path else "Nao",
             s.status.upper(),
         ])
-    tbl = Table(data_tbl, colWidths=[2.2 * cm, 6.5 * cm, 2 * cm, 1.3 * cm, 2.8 * cm, 2.5 * cm])
+    tbl = Table(data_tbl, colWidths=[2.0 * cm, 5.8 * cm, 1.7 * cm, 1.1 * cm, 2.5 * cm, 1.2 * cm, 2.2 * cm])
     tbl.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -1690,6 +1863,23 @@ def _gerar_ficha_pdf_bytes(solicitacoes, colaborador):
                 story.append(Image(caminho, width=8 * cm, height=3 * cm))
             except Exception:
                 pass
+    elif len(solicitacoes) > 1:
+        assinadas = [s for s in solicitacoes if s.assinatura_path][:8]
+        if assinadas:
+            story.append(Paragraph("<b>Assinaturas registradas por entrega:</b>", styles["Normal"]))
+            for s in assinadas:
+                caminho = os.path.join(_pasta_assinaturas(), s.assinatura_path)
+                if not os.path.exists(caminho):
+                    continue
+                try:
+                    story.append(Paragraph(
+                        f"{s.retirado_em.strftime('%d/%m/%Y') if s.retirado_em else '-'} - "
+                        f"{s.codigo_item} - {s.nome_item}",
+                        styles["Normal"],
+                    ))
+                    story.append(Image(caminho, width=6 * cm, height=2 * cm))
+                except Exception:
+                    pass
 
     story.append(Spacer(1, 1 * cm))
     story.append(Paragraph(
@@ -1834,6 +2024,44 @@ def api_relatorio_consumo():
         "total_retiradas": len(sols),
         "por_setor": resultado,
     })
+
+
+@facilities_bp.route("/api/facilities/relatorio-consumo/exportar")
+@login_required
+@permission_required("PAGE_FACILITIES_ADMIN")
+def api_relatorio_consumo_exportar():
+    dias = request.args.get("dias", 90, type=int)
+    tipo = (request.args.get("tipo") or "").lower()
+    desde = datetime.now() - timedelta(days=max(1, dias))
+    q = (
+        FacilitiesEpiSolicitacao.query
+        .filter(FacilitiesEpiSolicitacao.status == "retirado")
+        .filter(FacilitiesEpiSolicitacao.retirado_em >= desde)
+        .order_by(FacilitiesEpiSolicitacao.retirado_em.desc())
+    )
+    if tipo in ("epi", "uniforme"):
+        q = q.filter_by(tipo=tipo)
+    linhas = ["data;colaborador;setor;codigo;item;tipo;qtd;ca;baixa_grv;mensagem_grv"]
+    for s in q.all():
+        valores = [
+            s.retirado_em.strftime("%d/%m/%Y") if s.retirado_em else "",
+            s.colaborador.nome if s.colaborador else "",
+            (s.colaborador.setor if s.colaborador else "") or "",
+            s.codigo_item or "",
+            s.nome_item or "",
+            s.tipo or "",
+            str(s.quantidade or 0),
+            s.numero_ca_entregue or "",
+            "sim" if s.estoque_grv_baixado else "nao",
+            s.estoque_grv_mensagem or "",
+        ]
+        linhas.append(";".join(str(v).replace(";", ",").replace("\n", " ") for v in valores))
+    csv_text = "\ufeff" + "\n".join(linhas)
+    return current_app.response_class(
+        csv_text,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=facilities_consumo_epi.csv"},
+    )
 
 
 # ============================================================================
@@ -2046,15 +2274,16 @@ def api_gerar_limpezas_da_semana():
             # checar se ja existe agendamento daquele template para aquele dia
             ja = (FacilitiesLimpeza.query
                   .filter_by(data_agendada=dia, local=t.local or t.nome,
-                             responsavel_id=t.colaborador_id)
+                             colaborador_id=t.colaborador_id)
                   .first())
             if ja:
                 continue
             L = FacilitiesLimpeza(
+                titulo=t.nome,
                 local=t.local or t.nome,
-                descricao=f"[auto] Template: {t.nome}",
+                observacoes=f"[auto] Template: {t.nome}",
                 data_agendada=dia,
-                responsavel_id=t.colaborador_id,
+                colaborador_id=t.colaborador_id,
                 concluido=False,
             )
             db.session.add(L)

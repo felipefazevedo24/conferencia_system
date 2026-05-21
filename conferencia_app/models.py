@@ -1125,6 +1125,11 @@ class FacilitiesColaborador(db.Model):
     email = db.Column(db.String(160), index=True)
     nivel_acesso = db.Column(db.String(20), nullable=False, default="solicitante", index=True)  # solicitante|gestor
     ativo = db.Column(db.Boolean, nullable=False, default=True)
+    origem = db.Column(db.String(20), nullable=False, default="Local", index=True)
+    grv_cod_empresa = db.Column(db.Integer, index=True)
+    grv_codigo = db.Column(db.Integer, index=True)
+    grv_identificacao = db.Column(db.String(30), index=True)
+    grv_apelido = db.Column(db.String(100), index=True)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
@@ -1223,6 +1228,11 @@ class FacilitiesEpiSolicitacao(db.Model):
     motivo_cancelamento = db.Column(db.Text)
     proxima_troca_em = db.Column(db.Date, index=True)  # calculado na retirada (vencimento do EPI)
     lembrete_retirada_enviado_em = db.Column(db.DateTime)
+    estoque_grv_antes = db.Column(db.Float)
+    estoque_grv_depois = db.Column(db.Float)
+    estoque_grv_baixado = db.Column(db.Boolean)
+    estoque_grv_verificado_em = db.Column(db.DateTime)
+    estoque_grv_mensagem = db.Column(db.String(300))
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
     colaborador = db.relationship("FacilitiesColaborador", foreign_keys=[colaborador_id], backref="solicitacoes_epi")

@@ -251,6 +251,7 @@
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fee2e2;color:#dc2626"><i class="fas fa-exclamation-circle"></i></div></div><div class="dash-card-val" id="dVencidos">-</div><div class="dash-card-label">EPIs Vencidos/Vencendo</div></div>
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-ticket-alt"></i></div></div><div class="dash-card-val" id="dChamados">-</div><div class="dash-card-label">Chamados Abertos</div></div>
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#ede9fe;color:#7c3aed"><i class="fas fa-boxes"></i></div></div><div class="dash-card-val" id="dEstoqBaixo">-</div><div class="dash-card-label">Itens Abaixo do Mínimo</div></div>
+        <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fff7ed;color:#ea580c"><i class="fas fa-database"></i></div></div><div class="dash-card-val" id="dBaixaGrv">-</div><div class="dash-card-label">Baixas GRV Pendentes</div></div>
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#f0fdf4;color:#15803d"><i class="fas fa-broom"></i></div></div><div class="dash-card-val" id="dLimpezas">-</div><div class="dash-card-label">Limpezas Hoje</div></div>
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#fff7ed;color:#ea580c"><i class="fas fa-tasks"></i></div></div><div class="dash-card-val" id="dProjetos">-</div><div class="dash-card-label">Projetos Ativos</div></div>
         <div class="dash-card"><div class="dash-card-header"><div class="dash-card-icon" style="background:#f0f9ff;color:#0369a1"><i class="fas fa-users"></i></div></div><div class="dash-card-val" id="dColabs">-</div><div class="dash-card-label">Colaboradores Ativos</div></div>
@@ -263,6 +264,7 @@
         <a href="/facilities/relatorio-consumo" class="qlink" target="_blank"><i class="fas fa-chart-bar" style="background:#fef3c7;color:#d97706"></i> Rel. Consumo</a>
         <a href="/facilities/cronograma-limpeza" class="qlink" target="_blank"><i class="fas fa-calendar-alt" style="background:#f0fdf4;color:#15803d"></i> Cronograma</a>
         <button class="qlink" onclick="nav('chamados')"><i class="fas fa-ticket-alt" style="background:#fee2e2;color:#dc2626"></i> Chamados</button>
+        <button class="qlink" onclick="nav('alertas')"><i class="fas fa-database" style="background:#fff7ed;color:#ea580c"></i> Baixas GRV</button>
       </div>
       <div style="background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(18,40,58,.04)">
         <div class="sec-hdr"><h2 class="sec-title"><i class="fas fa-hard-hat" style="color:#f59e0b"></i> Últimas Solicitações EPI</h2></div>
@@ -327,6 +329,18 @@
         <table class="fac-table">
           <thead><tr><th>Colaborador</th><th>Setor</th><th>Item</th><th>Retirada</th><th>Próx. Troca</th><th>Situação</th><th>Ações</th></tr></thead>
           <tbody id="alertasTableBody"></tbody>
+        </table>
+      </div>
+      <div class="sec-hdr" style="margin-top:24px">
+        <h2 class="sec-title"><i class="fas fa-database" style="color:#ea580c"></i> Processo concluido no Sync sem baixa no GRV</h2>
+        <div class="sec-actions">
+          <button class="btn btn-ghost btn-sm" onclick="loadPendenciasBaixaGrv(true)"><i class="fas fa-sync"></i> Verificar agora</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="fac-table">
+          <thead><tr><th>Colaborador</th><th>Item</th><th>Qtd</th><th>Retirada</th><th>Saldo antes</th><th>Saldo atual</th><th>Status GRV</th><th>Acoes</th></tr></thead>
+          <tbody id="baixaGrvTableBody"></tbody>
         </table>
       </div>
     </div>
@@ -750,7 +764,7 @@ function nav(page) {
   // Load data for each page
   if (page === 'dashboard') loadDashboard();
   else if (page === 'epi') loadEpi();
-  else if (page === 'alertas') loadAlertas();
+  else if (page === 'alertas') { loadAlertas(); loadPendenciasBaixaGrv(false); }
   else if (page === 'estoque') loadEstoque();
   else if (page === 'chamados') loadChamados();
   else if (page === 'limpeza') loadLimpezas();
@@ -794,7 +808,8 @@ async function loadDashboard() {
     set('dEpiLib',     d.epi_liberados_hoje || 0);
     set('dVencidos',   (d.epi_vencido || 0) + (d.epi_vence_30d || 0));
     set('dChamados',   d.chamados_abertos || 0);
-    set('dEstoqBaixo', d.estoque_critico  || 0);
+    set('dEstoqBaixo', d.materiais_estoque_baixo ?? d.estoque_critico ?? 0);
+    set('dBaixaGrv',   d.baixa_grv_pendente || 0);
     set('dLimpezas',   d.limpezas_hoje    || 0);
     set('dProjetos',   d.projetos_ativos  || 0);
     set('dColabs',     d.colaboradores    || 0);
@@ -832,7 +847,7 @@ async function updateBadges() {
     setB('nbEpi', d.epi_pendentes || 0);
     setB('nbAlertas', (d.epi_vencido || 0) + (d.epi_vence_30d || 0));
     setB('nbChamados', d.chamados_abertos || 0);
-    setB('nbEstoque', d.estoque_critico || 0);
+    setB('nbEstoque', (d.estoque_critico || 0) + (d.baixa_grv_pendente || 0));
   } catch(e) {}
 }
 setInterval(updateBadges, 60000);
@@ -1214,6 +1229,38 @@ async function loadAlertas() {
             <td><a class="fac-btn fac-btn-sm fac-btn-blue" href="/api/facilities/colaboradores/${s.colaborador_id}/ficha-epi-pdf" target="_blank"><i class="fas fa-file-pdf"></i></a></td>
         </tr>
     `).join('');
+}
+
+async function loadPendenciasBaixaGrv(refresh=false) {
+    const tbody = document.getElementById('baixaGrvTableBody');
+    if (!tbody) return;
+    const r = await fetch(`/api/facilities/epi/pendencias-baixa-grv${refresh ? '?refresh=1' : ''}`);
+    const d = await r.json();
+    if (!d.rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="fac-empty"><i class="fas fa-check-circle"></i><br>Nenhuma baixa GRV pendente.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.rows.map(s => `
+        <tr>
+            <td><strong>${s.colaborador_nome}</strong>${s.setor ? '<br><small style="color:#64748b">' + s.setor + '</small>' : ''}</td>
+            <td>${s.codigo_item}<br><small>${s.nome_item}</small></td>
+            <td>${s.quantidade}</td>
+            <td>${s.retirado_em}</td>
+            <td>${s.estoque_grv_antes ?? '-'}</td>
+            <td>${s.estoque_grv_depois ?? '-'}</td>
+            <td><span class="fac-badge baixa">${s.estoque_grv_mensagem || 'Aguardando baixa no GRV'}</span></td>
+            <td><button class="fac-btn fac-btn-sm fac-btn-blue" onclick="verificarBaixaGrv(${s.id})"><i class="fas fa-sync"></i></button></td>
+        </tr>
+    `).join('');
+}
+
+async function verificarBaixaGrv(id) {
+    const r = await fetch(`/api/facilities/epi-solicitacoes/${id}/verificar-baixa-grv`, { method:'POST' });
+    const d = await r.json();
+    if (r.ok) showToast(d.estoque_grv_mensagem || 'Baixa verificada.', d.estoque_grv_baixado ? 'success' : 'warning');
+    else showToast(d.error || 'Erro ao verificar baixa GRV.', 'error');
+    loadPendenciasBaixaGrv(false);
+    loadDashboard();
 }
 async function enviarLembretes() {
     if (!confirm('Enviar email de lembrete para todos com retirada pendente > 3 dias?')) return;

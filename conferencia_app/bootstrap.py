@@ -862,6 +862,11 @@ def _ensure_facilities_extra_columns() -> None:
     additions = {
         "facilities_colaborador": [
             ("email", "VARCHAR(160)"),
+            ("origem", "VARCHAR(20) NOT NULL DEFAULT 'Local'"),
+            ("grv_cod_empresa", "INTEGER"),
+            ("grv_codigo", "INTEGER"),
+            ("grv_identificacao", "VARCHAR(30)"),
+            ("grv_apelido", "VARCHAR(100)"),
         ],
         "facilities_epi_material": [
             ("numero_ca", "VARCHAR(20)"),
@@ -883,6 +888,11 @@ def _ensure_facilities_extra_columns() -> None:
             ("motivo_cancelamento", "TEXT"),
             ("proxima_troca_em", "DATE"),
             ("lembrete_retirada_enviado_em", "DATETIME"),
+            ("estoque_grv_antes", "FLOAT"),
+            ("estoque_grv_depois", "FLOAT"),
+            ("estoque_grv_baixado", "BOOLEAN"),
+            ("estoque_grv_verificado_em", "DATETIME"),
+            ("estoque_grv_mensagem", "VARCHAR(300)"),
         ],
         "facilities_limpeza": [
             ("concluido_em", "DATETIME"),

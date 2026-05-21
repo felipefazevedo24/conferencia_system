@@ -240,9 +240,7 @@
                     opt.textContent = m.label + (m.abaixo_minimo ? ' (baixo estoque)' : '');
                     sel.appendChild(opt);
                 });
-                help.textContent = d.fonte === 'erp'
-                    ? `${materiais.length} itens do estoque ERP.`
-                    : `${materiais.length} itens (catalogo local).`;
+                help.textContent = `${materiais.length} itens com saldo no GRV.`;
             } catch (e) {
                 help.textContent = 'Falha ao carregar catalogo.';
             }
@@ -273,7 +271,7 @@
             const t = termo.toLowerCase();
             const hits = colaboradores.filter(c => (c.nome || '').toLowerCase().includes(t)).slice(0, 10);
             if (hits.length === 0) {
-                lista.innerHTML = `<div class="empty">Nenhum funcionario encontrado.<br><button type="button" class="btn-link" onclick="abrirCadastroNovo('${termo.replace(/'/g, "&#39;")}')"><i class="fas fa-user-plus"></i> Cadastrar "${termo}"</button></div>`;
+                lista.innerHTML = `<div class="empty">Nenhum funcionario encontrado no GRV.</div>`;
             } else {
                 lista.innerHTML = hits.map(c => `
                     <div class="item" onclick='selecionarFuncionario(${JSON.stringify(c)})'>
