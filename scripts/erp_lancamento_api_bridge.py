@@ -735,18 +735,18 @@ def _enriquecer_tributos_entrada(cur, rows: list[dict[str, Any]]) -> None:
         return f"{default} as {alias}"
 
     tax_select = ",\n            ".join([
-        col("icms_base_calculo", "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms", "bc_icms", default="0"),
-        col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms", default="0"),
-        col("icms_cst", "icms_cst", "cst_icms", "cst", "sit_trib_icms", default="''"),
-        col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "v_icms", default="0"),
-        col("pis_base_calculo", "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis", default="0"),
-        col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis", default="0"),
-        col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", default="''"),
-        col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "v_pis", default="0"),
-        col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins", default="0"),
-        col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins", default="0"),
-        col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", default="''"),
-        col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins", default="0"),
+        col("icms_base_calculo", "icms_base_calculo", "base_icms", "base_calculo_icms", "vl_base_icms", "vlr_base_icms", "vbc_icms", "bc_icms", "bcicms", default="0"),
+        col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "perc_icms", "per_icms", "p_icms", default="0"),
+        col("icms_cst", "icms_cst", "cst_icms", "sit_trib_icms", "situacao_tributaria_icms", "cst", "sit_trib", default="''"),
+        col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "vlr_icms", "v_icms", "icms", default="0"),
+        col("pis_base_calculo", "pis_base_calculo", "base_pis", "base_calculo_pis", "vl_base_pis", "vlr_base_pis", "vbc_pis", "bc_pis", default="0"),
+        col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "perc_pis", "per_pis", "p_pis", default="0"),
+        col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", "situacao_tributaria_pis", default="''"),
+        col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "vlr_pis", "v_pis", "pis", default="0"),
+        col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "base_calculo_cofins", "vl_base_cofins", "vlr_base_cofins", "vbc_cofins", "bc_cofins", default="0"),
+        col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "perc_cofins", "per_cofins", "p_cofins", default="0"),
+        col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", "situacao_tributaria_cofins", default="''"),
+        col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "vlr_cofins", "v_cofins", "cofins", default="0"),
     ])
     cur.execute(
         f"""

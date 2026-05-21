@@ -419,18 +419,18 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
                 return f"{default} as {alias}"
 
             tax_select = ",\n            ".join([
-                col("icms_base_calculo", "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms", "bc_icms", default="0"),
-                col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms", default="0"),
-                col("icms_cst", "icms_cst", "cst_icms", "cst", "sit_trib_icms", default="''"),
-                col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "v_icms", default="0"),
-                col("pis_base_calculo", "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis", default="0"),
-                col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis", default="0"),
-                col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", default="''"),
-                col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "v_pis", default="0"),
-                col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins", default="0"),
-                col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins", default="0"),
-                col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", default="''"),
-                col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins", default="0"),
+                col("icms_base_calculo", "icms_base_calculo", "base_icms", "base_calculo_icms", "vl_base_icms", "vlr_base_icms", "vbc_icms", "bc_icms", "bcicms", default="0"),
+                col("icms_aliquota", "icms_aliquota", "aliquota_icms", "aliq_icms", "perc_icms", "per_icms", "p_icms", default="0"),
+                col("icms_cst", "icms_cst", "cst_icms", "sit_trib_icms", "situacao_tributaria_icms", "cst", "sit_trib", default="''"),
+                col("icms_valor", "icms_valor", "valor_icms", "vl_icms", "vlr_icms", "v_icms", "icms", default="0"),
+                col("pis_base_calculo", "pis_base_calculo", "base_pis", "base_calculo_pis", "vl_base_pis", "vlr_base_pis", "vbc_pis", "bc_pis", default="0"),
+                col("pis_aliquota", "pis_aliquota", "aliquota_pis", "aliq_pis", "perc_pis", "per_pis", "p_pis", default="0"),
+                col("pis_cst", "pis_cst", "cst_pis", "sit_trib_pis", "situacao_tributaria_pis", default="''"),
+                col("pis_valor_credito", "pis_valor_credito", "valor_pis", "vl_pis", "vlr_pis", "v_pis", "pis", default="0"),
+                col("cofins_base_calculo", "cofins_base_calculo", "base_cofins", "base_calculo_cofins", "vl_base_cofins", "vlr_base_cofins", "vbc_cofins", "bc_cofins", default="0"),
+                col("cofins_aliquota", "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "perc_cofins", "per_cofins", "p_cofins", default="0"),
+                col("cofins_cst", "cofins_cst", "cst_cofins", "sit_trib_cofins", "situacao_tributaria_cofins", default="''"),
+                col("cofins_valor_credito", "cofins_valor_credito", "valor_cofins", "vl_cofins", "vlr_cofins", "v_cofins", "cofins", default="0"),
             ])
             sql = f"""
                 select
@@ -502,6 +502,37 @@ def _normalizar_match_texto(valor: Any) -> str:
     return " ".join(re for re in "".join(ch if ch.isalnum() else " " for ch in text).split() if re)
 
 
+CFOP_POR_NATUREZA_GRV = {
+    "COMPRA PARA INDUSTRIALIZACAO": "1101",
+    "COMPRA PARA COMERCIALIZACAO": "1102",
+    "INDUSTRIALIZACAO EFETUADA POR OUTRA EMPRESA": "1124",
+    "COMPRA DE MATERIAL PARA USO OU CONSUMO": "1556",
+    "COMPRA DE BEM PARA O ATIVO IMOBILIZADO": "1551",
+    "RETORNO DE MERCADORIA REMETIDA PARA INDUSTRIALIZACAO POR ENCOMENDA": "1902",
+    "ENTRADA PARA INDUSTRIALIZACAO POR ENCOMENDA": "1901",
+    "ENTRADA DE MERCADORIA RECEBIDA PARA CONSERTO OU REPARO": "1915",
+    "RETORNO DE MERCADORIA REMETIDA PARA CONSERTO OU REPARO": "1916",
+    "AQUISICAO DE SERVICO TRIBUTADO PELO ISSQN": "1933",
+    "COMPRA PARA INDUSTRIALIZACAO DE OUTRO ESTADO": "2101",
+    "COMPRA PARA COMERCIALIZACAO DE OUTRO ESTADO": "2102",
+    "INDUSTRIALIZACAO EFETUADA POR OUTRA EMPRESA DE OUTRO ESTADO": "2124",
+    "COMPRA DE MATERIAL PARA USO OU CONSUMO DE OUTRO ESTADO": "2556",
+    "COMPRA DE BEM PARA O ATIVO IMOBILIZADO DE OUTRO ESTADO": "2551",
+}
+
+
+def _cfop_por_natureza_grv(natureza: Any) -> str:
+    texto = _normalizar_match_texto(natureza)
+    if not texto:
+        return ""
+    if texto in CFOP_POR_NATUREZA_GRV:
+        return CFOP_POR_NATUREZA_GRV[texto]
+    for descricao, cfop in CFOP_POR_NATUREZA_GRV.items():
+        if descricao in texto or texto in descricao:
+            return cfop
+    return ""
+
+
 def _float_grv(valor: Any, default=0.0) -> float:
     try:
         if isinstance(valor, str):
@@ -545,20 +576,16 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
                     melhor_idx = idx
                     break
         item_desc = _normalizar_match_texto(item.descricao)
-        item_cfop = str(item.cfop or "").strip()[:4]
         item_qtd = float(item.qtd_real or 0)
         if melhor_idx is None:
             for idx, row in enumerate(itens_grv):
                 if idx in usados:
                     continue
-                row_cfop = str(row.get("cfop") or "").strip()[:4]
                 row_desc = _normalizar_match_texto(row.get("descricao"))
                 try:
                     row_qtd = float(row.get("quantidade") or 0)
                 except Exception:
                     row_qtd = 0.0
-                if item_cfop and row_cfop and item_cfop != row_cfop:
-                    continue
                 if item_desc and row_desc and (item_desc in row_desc or row_desc in item_desc):
                     melhor_idx = idx
                     break
@@ -581,10 +608,12 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
                 item.fornecedor = fornecedor_grv[:100]
             if isinstance(data_lancamento_grv, datetime):
                 item.data_lancamento = data_lancamento_grv
-            cfop_grv = str(row_grv.get("cfop") or "").strip()[:4]
+            natureza_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()
+            cfop_natureza = _cfop_por_natureza_grv(natureza_grv)
+            cfop_grv = cfop_natureza or str(row_grv.get("cfop") or "").strip()[:4]
             if cfop_grv:
                 item.cfop = cfop_grv
-            item.cfop_descricao_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()[:180]
+            item.cfop_descricao_grv = natureza_grv[:180]
             _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
             _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
             _set_if_present(item, "cst_icms", row_grv, "icms_cst", "cst_icms", "cst")

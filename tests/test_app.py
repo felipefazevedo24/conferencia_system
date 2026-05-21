@@ -1275,6 +1275,50 @@ def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path)
     assert item["conta"] == "12503"
 
 
+def test_financeiro_classificacao_contabil_cfop_segue_natureza_grv(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026CFOPGRV",
+            fornecedor="Fornecedor GRV",
+            codigo="XML-CFOP",
+            descricao="Material consumo",
+            cfop="1102",
+            qtd_real=1,
+            status="Lançado",
+            data_lancamento=datetime(2026, 5, 20, 13, 30),
+            numero_lancamento="888",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        from conferencia_app.services.erp_lancamento_service import _aplicar_codigos_grv
+
+        total = _aplicar_codigos_grv(
+            "2026CFOPGRV",
+            {
+                "numero_nota": "2026CFOPGRV",
+                "dt_lancamento": "2026-05-21T12:40:00",
+                "itens": [
+                    {
+                        "cod_interno": "GRV-CFOP",
+                        "descricao": "Material consumo",
+                        "quantidade": 1,
+                        "cfop": "1102",
+                        "natureza_operacao": "Compra de material para uso ou consumo",
+                    }
+                ],
+            },
+        )
+        db.session.commit()
+
+        atualizado = ItemNota.query.filter_by(numero_nota="2026CFOPGRV").first()
+        assert total == 1
+        assert atualizado.codigo_grv == "GRV-CFOP"
+        assert atualizado.cfop == "1556"
+        assert atualizado.cfop_descricao_grv == "Compra de material para uso ou consumo"
+
+
 def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
