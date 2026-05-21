@@ -219,8 +219,17 @@
             try {
                 const r = await fetch('/api/facilities/colaboradores');
                 const d = await r.json();
+                if (!r.ok) {
+                    showToast(d.error || d.msg || 'Falha ao carregar funcionarios do GRV.', 'error');
+                    colaboradores = [];
+                    return;
+                }
                 colaboradores = d.rows || [];
-            } catch (e) { colaboradores = []; }
+                if (!colaboradores.length) showToast('Nenhum funcionario retornou do GRV.', 'warning');
+            } catch (e) {
+                colaboradores = [];
+                showToast('Falha ao carregar funcionarios do GRV.', 'error');
+            }
         }
 
         async function carregarMateriais() {
@@ -230,6 +239,12 @@
             try {
                 const r = await fetch(`/api/facilities/epi-materiais?tipo=${tipo}`);
                 const d = await r.json();
+                if (!r.ok) {
+                    materiais = [];
+                    help.textContent = d.error || 'Falha ao consultar materiais no GRV.';
+                    showToast(help.textContent, 'error');
+                    return;
+                }
                 materiais = d.rows || [];
                 const sel = document.getElementById('selItem');
                 sel.innerHTML = '<option value="">-- Selecione --</option>';
@@ -283,7 +298,13 @@
         }
 
         function selecionarFuncionario(c) {
-            beneficiario = { id: c.id, nome: c.nome, setor: c.setor || c.cargo || '' };
+            beneficiario = {
+                id: c.id,
+                grv_codigo: c.codigo_grv,
+                grv_cod_empresa: c.grv_cod_empresa || 1,
+                nome: c.nome,
+                setor: c.setor || c.cargo || ''
+            };
             document.getElementById('sugestoesFuncionario').classList.remove('show');
             document.getElementById('beneficiarioNovo').classList.remove('show');
             document.getElementById('buscaFuncionario').value = '';
@@ -375,7 +396,10 @@
                 motivo: document.getElementById('txtMotivo').value.trim(),
             };
             if (beneficiario.id) payload.colaborador_id = beneficiario.id;
-            else { payload.beneficiario_nome = beneficiario.nome; payload.beneficiario_setor = beneficiario.setor || ''; }
+            else if (beneficiario.grv_codigo) {
+                payload.grv_codigo = beneficiario.grv_codigo;
+                payload.grv_cod_empresa = beneficiario.grv_cod_empresa || 1;
+            } else { payload.beneficiario_nome = beneficiario.nome; payload.beneficiario_setor = beneficiario.setor || ''; }
 
             const btn = document.getElementById('btnSolicitar');
             btn.disabled = true;

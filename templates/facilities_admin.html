@@ -856,6 +856,11 @@ setInterval(updateBadges, 60000);
 async function loadColaboradores() {
   const r = await fetch('/api/facilities/colaboradores');
   const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || d.msg || 'Falha ao carregar colaboradores do GRV.', 'error');
+    colaboradores = [];
+    return;
+  }
   colaboradores = d.rows || [];
   const selLimpeza = document.getElementById('limpezaColaborador');
   if (selLimpeza) {
@@ -1082,6 +1087,10 @@ async function loadColaboradoresTable() {
     const r = await fetch('/api/facilities/colaboradores');
     const d = await r.json();
     const tbody = document.getElementById('colaboradoresTableBody');
+    if (!r.ok) {
+        tbody.innerHTML = `<tr><td colspan="5" class="fac-empty"><i class="fas fa-exclamation-triangle"></i><br>${d.error || d.msg || 'Falha ao carregar colaboradores do GRV.'}</td></tr>`;
+        return;
+    }
     if (!d.rows?.length) {
         tbody.innerHTML = '<tr><td colspan="5" class="fac-empty"><i class="fas fa-users"></i><br>Nenhum colaborador cadastrado.</td></tr>';
         return;
@@ -1135,6 +1144,10 @@ async function loadMateriais() {
     const r = await fetch('/api/facilities/epi-materiais');
     const d = await r.json();
     const tbody = document.getElementById('materiaisTableBody');
+    if (!r.ok) {
+        tbody.innerHTML = `<tr><td colspan="3" class="fac-empty"><i class="fas fa-exclamation-triangle"></i><br>${d.error || d.msg || 'Falha ao carregar materiais do GRV.'}</td></tr>`;
+        return;
+    }
     if (!d.rows?.length) {
         tbody.innerHTML = '<tr><td colspan="3" class="fac-empty"><i class="fas fa-boxes"></i><br>Nenhum material cadastrado.</td></tr>';
         return;

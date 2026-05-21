@@ -97,6 +97,22 @@ def _sincronizar_colaboradores_grv() -> list[FacilitiesColaborador]:
     return colaboradores
 
 
+def _colaborador_payload_grv(row: dict, local: FacilitiesColaborador | None = None) -> dict:
+    return {
+        "id": local.id if local else None,
+        "nome": row.get("nome") or "",
+        "cargo": row.get("cargo") or "",
+        "setor": row.get("setor") or "",
+        "email": row.get("email") or "",
+        "nivel_acesso": (local.nivel_acesso if local else None) or "solicitante",
+        "origem": "GRV",
+        "codigo_grv": row.get("codigo"),
+        "grv_cod_empresa": row.get("cod_empresa") or 1,
+        "identificacao_grv": row.get("identificacao") or "",
+        "apelido": row.get("apelido") or "",
+    }
+
+
 def _buscar_estoque_erp():
     """Busca o catalogo de estoque no ERP externo com cache de 5 min.
     Retorna lista de dicts, ou None em caso de falha."""
@@ -333,6 +349,28 @@ def api_me():
 @login_required
 @permission_required("PAGE_FACILITIES_GESTOR")
 def api_listar_colaboradores():
+    try:
+        grv_rows = FacilitiesGRVService.listar_funcionarios(ativos=True)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao listar funcionarios GRV: %s", exc)
+        return jsonify({"rows": [], "fonte": "grv_postgres", "error": "Falha ao consultar funcionarios no GRV."}), 502
+
+    payload = []
+    for row in grv_rows:
+        local = None
+        try:
+            local = _upsert_colaborador_grv(row)
+            db.session.flush()
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.warning("Falha ao espelhar funcionario GRV %s: %s", row.get("codigo"), exc)
+        payload.append(_colaborador_payload_grv(row, local))
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning("Falha ao salvar espelho de funcionarios GRV: %s", exc)
+    return jsonify({"rows": payload, "fonte": "grv_postgres"})
     """Lista colaboradores ativos para seleção em formulários"""
     try:
         _sincronizar_colaboradores_grv()
@@ -580,6 +618,30 @@ def _resolver_beneficiario(data: dict):
         if not colab:
             return None, "Colaborador informado nao encontrado."
         return colab, None
+
+    grv_codigo = data.get("grv_codigo") or data.get("codigo_grv")
+    grv_cod_empresa = data.get("grv_cod_empresa") or data.get("cod_empresa") or 1
+    if grv_codigo:
+        try:
+            grv_codigo_int = int(grv_codigo)
+            grv_empresa_int = int(grv_cod_empresa or 1)
+        except (TypeError, ValueError):
+            return None, "Codigo GRV do funcionario invalido."
+        existente = FacilitiesColaborador.query.filter_by(
+            grv_cod_empresa=grv_empresa_int,
+            grv_codigo=grv_codigo_int,
+        ).first()
+        if existente:
+            return existente, None
+        try:
+            for row in FacilitiesGRVService.listar_funcionarios(ativos=True):
+                if int(row.get("codigo") or 0) == grv_codigo_int and int(row.get("cod_empresa") or 1) == grv_empresa_int:
+                    colab = _upsert_colaborador_grv(row)
+                    db.session.flush()
+                    return colab, None
+        except Exception as exc:
+            current_app.logger.warning("Falha ao resolver funcionario GRV %s: %s", grv_codigo, exc)
+        return None, "Funcionario informado nao encontrado no GRV."
 
     nome = (data.get("beneficiario_nome") or "").strip()
     if not nome:
