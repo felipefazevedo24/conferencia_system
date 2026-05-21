@@ -1343,13 +1343,17 @@ def test_financeiro_classificacao_contabil_cria_item_ausente_pelo_grv(tmp_path):
                         "icms_aliquota": 18,
                         "icms_cst": "101",
                         "icms_valor": 22.22,
+                        "pis_base_calculo": 0,
                         "vbc_q07": 280.0,
                         "ppis_q08": 1.65,
                         "pis_cst": "50",
+                        "pis_valor_credito": 0,
                         "vpis_q09": 5.775,
+                        "cofins_base_calculo": 0,
                         "vbc_s07": 280.0,
                         "pcofins_s08": 7.6,
                         "cofins_cst": "50",
+                        "cofins_valor_credito": 0,
                         "vcofins_s11": 26.6,
                     }
                 ],
@@ -1369,6 +1373,7 @@ def test_financeiro_classificacao_contabil_cria_item_ausente_pelo_grv(tmp_path):
         assert item.pis_valor_credito == 5.775
         assert item.cofins_base_calculo == 280
         assert item.cofins_aliquota == 7.6
+        assert item.cofins_valor_credito == 26.6
         assert item.tributos_origem == "GRV"
 
 

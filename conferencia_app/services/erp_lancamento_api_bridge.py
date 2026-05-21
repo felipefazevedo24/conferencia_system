@@ -729,10 +729,14 @@ def _enriquecer_tributos_entrada(cur, rows: list[dict[str, Any]]) -> None:
     cols_aux = {str(row[0]).lower() for row in cur.fetchall()}
 
     def col(alias: str, *candidates: str, default: str = "null") -> str:
-        for name in candidates:
-            if name.lower() in cols_aux:
-                return f"a.{name} as {alias}"
-        return f"{default} as {alias}"
+        existentes = [name for name in candidates if name.lower() in cols_aux]
+        if not existentes:
+            return f"{default} as {alias}"
+        if default == "0":
+            exprs = [f"nullif(a.{name}, 0)" for name in existentes]
+            return f"coalesce({', '.join(exprs)}, 0) as {alias}"
+        exprs = [f"nullif(a.{name}::text, '')" for name in existentes]
+        return f"coalesce({', '.join(exprs)}, {default}) as {alias}"
 
     tax_select = ",\n            ".join([
         col("icms_base_calculo", "icms_base_calculo", "base_icms", "base_calculo_icms", "vl_base_calc_icms", "vl_base_icms", "vlr_base_icms", "vbc_icms", "bc_icms", "bcicms", default="0"),

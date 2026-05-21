@@ -348,8 +348,8 @@ def _consultar_entrada_grv_via_api(cfg: dict[str, Any], numero_nota: str, codigo
     return entrada if isinstance(entrada, dict) else None
 
 
-def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) -> list[dict[str, Any]]:
-    if not cfg.get("api_url") or not itens:
+def _consultar_entradas_grv_payload_via_api(cfg: dict[str, Any], entradas_payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not cfg.get("api_url") or not entradas_payload:
         return []
     url = f"{cfg['api_url']}/api/erp/entradas-chapa-lote"
     headers = {
@@ -360,18 +360,6 @@ def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) 
     }
     if cfg.get("api_token"):
         headers["Authorization"] = f"Bearer {cfg['api_token']}"
-    entradas_payload = [
-        {
-            "numero_ar": str(item.numero_lancamento or "").strip(),
-            "codigo_lancamento": str(item.numero_lancamento or "").strip(),
-            "numero_nota": str(item.numero_nota or "").strip(),
-            "chave": str(item.chave_acesso or "").strip(),
-        }
-        for item in itens
-        if str(item.numero_lancamento or item.numero_nota or item.chave_acesso or "").strip()
-    ]
-    if not entradas_payload:
-        return []
     resultado = []
     for inicio in range(0, len(entradas_payload), 500):
         payload = {"entradas": entradas_payload[inicio:inicio + 500]}
@@ -388,6 +376,20 @@ def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) 
         entradas = data.get("entradas") or []
         resultado.extend(entrada for entrada in entradas if isinstance(entrada, dict))
     return resultado
+
+
+def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) -> list[dict[str, Any]]:
+    entradas_payload = [
+        {
+            "numero_ar": str(item.numero_lancamento or "").strip(),
+            "codigo_lancamento": str(item.numero_lancamento or "").strip(),
+            "numero_nota": str(item.numero_nota or "").strip(),
+            "chave": str(item.chave_acesso or "").strip(),
+        }
+        for item in itens or []
+        if str(item.numero_lancamento or item.numero_nota or item.chave_acesso or "").strip()
+    ]
+    return _consultar_entradas_grv_payload_via_api(cfg, entradas_payload)
 
 
 def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
@@ -413,10 +415,14 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
             cols_aux = {str(row[0]).lower() for row in cur.fetchall()}
 
             def col(alias: str, *candidates: str, default: str = "null") -> str:
-                for name in candidates:
-                    if name.lower() in cols_aux:
-                        return f"a.{name} as {alias}"
-                return f"{default} as {alias}"
+                existentes = [name for name in candidates if name.lower() in cols_aux]
+                if not existentes:
+                    return f"{default} as {alias}"
+                if default == "0":
+                    exprs = [f"nullif(a.{name}, 0)" for name in existentes]
+                    return f"coalesce({', '.join(exprs)}, 0) as {alias}"
+                exprs = [f"nullif(a.{name}::text, '')" for name in existentes]
+                return f"coalesce({', '.join(exprs)}, {default}) as {alias}"
 
             tax_select = ",\n            ".join([
                 col("icms_base_calculo", "icms_base_calculo", "base_icms", "base_calculo_icms", "vl_base_calc_icms", "vl_base_icms", "vlr_base_icms", "vbc_icms", "bc_icms", "bcicms", default="0"),
@@ -515,14 +521,37 @@ def _float_grv(valor: Any, default=0.0) -> float:
 
 
 def _set_if_present(item: ItemNota, attr: str, row: dict[str, Any], *keys: str) -> None:
+    primeiro_valor = None
+    encontrou = False
     for key in keys:
-        if key in row:
-            if attr == "cst_icms":
-                setattr(item, attr, str(row.get(key) or "").strip()[:3])
-            elif attr in {"cst_pis", "cst_cofins"}:
-                setattr(item, attr, str(row.get(key) or "").strip()[:2])
-            else:
-                setattr(item, attr, _float_grv(row.get(key)))
+        if key not in row:
+            continue
+        valor = row.get(key)
+        encontrou = True
+        if primeiro_valor is None:
+            primeiro_valor = valor
+        if attr == "cst_icms":
+            texto = str(valor or "").strip()
+            if texto:
+                setattr(item, attr, texto[:3])
+                return
+        elif attr in {"cst_pis", "cst_cofins"}:
+            texto = str(valor or "").strip()
+            if texto:
+                setattr(item, attr, texto[:2])
+                return
+        else:
+            numero = _float_grv(valor)
+            if numero:
+                setattr(item, attr, numero)
+                return
+    if encontrou:
+        if attr == "cst_icms":
+            setattr(item, attr, str(primeiro_valor or "").strip()[:3])
+        elif attr in {"cst_pis", "cst_cofins"}:
+            setattr(item, attr, str(primeiro_valor or "").strip()[:2])
+        else:
+            setattr(item, attr, _float_grv(primeiro_valor))
             return
 
 
@@ -727,6 +756,8 @@ def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetim
         return resumo
 
     notas_para_classificar: set[str] = set()
+    entradas_payload: list[dict[str, Any]] = []
+    vistos_payload: set[tuple[str, str, str]] = set()
     for row in rows:
         numero = str(row.get("numero_nota") or row.get("n_nf") or "").strip()
         codigo = str(row.get("codigo") or row.get("codigo_lancamento") or "").strip()
@@ -742,11 +773,25 @@ def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetim
         )
         if atualizados:
             resumo["aplicados"] += 1
-        entrada = _consultar_entrada_grv_via_api(cfg, numero, codigo, chave)
-        if entrada:
-            resumo["detalhados"] += _aplicar_codigos_grv(str(entrada.get("numero_nota") or numero), entrada)
+        chave_payload = (numero, codigo, chave)
+        if chave_payload not in vistos_payload:
+            entradas_payload.append(
+                {
+                    "numero_ar": codigo,
+                    "codigo_lancamento": codigo,
+                    "numero_nota": numero,
+                    "chave": chave,
+                }
+            )
+            vistos_payload.add(chave_payload)
         if ItemNota.query.filter(ItemNota.numero_nota == numero).first():
             notas_para_classificar.add(numero)
+
+    for entrada in _consultar_entradas_grv_payload_via_api(cfg, entradas_payload):
+        numero_entrada = str(entrada.get("numero_nota") or "").strip()
+        resumo["detalhados"] += _aplicar_codigos_grv(numero_entrada, entrada)
+        if numero_entrada:
+            notas_para_classificar.add(numero_entrada)
 
     if notas_para_classificar:
         try:

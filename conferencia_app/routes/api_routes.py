@@ -2504,6 +2504,12 @@ def financeiro_classificacao_reprocessar():
     comp = _competencia_row(competencia)
     if comp.status == "Fechada":
         return jsonify({"sucesso": False, "msg": "Competencia fechada. Abra o periodo antes de reprocessar."}), 409
+    try:
+        from ..services.erp_lancamento_service import sincronizar_lancamentos_grv_periodo
+
+        sincronizar_lancamentos_grv_periodo(data_inicio, data_fim or data_inicio)
+    except Exception:
+        current_app.logger.exception("Falha ao sincronizar lancamentos GRV antes do reprocessamento contabil")
     if nota:
         total = classificar_nota(nota, sobrescrever_manual=sobrescrever)
     else:
@@ -2630,14 +2636,14 @@ def financeiro_classificacao_reabrir_competencia():
 def financeiro_classificacao_listar():
     data_inicio, data_fim, competencia = _periodo_competencia()
     comp = _competencia_row(competencia)
-    if comp.status != "Fechada":
+    sincronizar_grv = str(request.args.get("sync") or request.args.get("sincronizar") or "").strip().lower() in {"1", "true", "sim", "s"}
+    if comp.status != "Fechada" and sincronizar_grv:
         try:
             from ..services.erp_lancamento_service import sincronizar_lancamentos_grv_periodo
 
             sincronizar_lancamentos_grv_periodo(data_inicio, data_fim or data_inicio)
         except Exception:
             current_app.logger.exception("Falha ao sincronizar lancamentos GRV da competencia antes da classificacao")
-        novos = classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
         sincronizou_grv = _sincronizar_grv_competencia(data_inicio, data_fim)
         if sincronizou_grv:
             classificar_lancadas_desde_2026(
@@ -2646,6 +2652,9 @@ def financeiro_classificacao_listar():
                 data_fim=data_fim,
                 sobrescrever_manual=False,
             )
+
+    if comp.status != "Fechada":
+        novos = classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
         if novos and comp.status == "Aprovada":
             comp.status = "Aberta"
             comp.atualizado_em = datetime.now()
