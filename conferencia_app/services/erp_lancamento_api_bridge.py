@@ -17,10 +17,19 @@ from __future__ import annotations
 import base64
 import os
 import re
+import sys
 import time
 from datetime import date, datetime, timedelta
 from typing import Any
 from xml.etree import ElementTree as et
+
+# Permite executar esta copia diretamente sem depender do PYTHONPATH.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir, os.pardir))
+if not os.path.isdir(os.path.join(ROOT_DIR, "conferencia_app")):
+    ROOT_DIR = os.getcwd()
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from flask import Blueprint, Flask, g, jsonify, redirect, request, session
 import psycopg2  # type: ignore

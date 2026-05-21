@@ -20,13 +20,19 @@ import re
 import sys
 import time
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as et
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+# Quando a bridge e executada direto por:
+#   python .\scripts\erp_lancamento_api_bridge.py
+# o Python coloca apenas a pasta scripts/ no sys.path. O bloco abaixo procura
+# a raiz real do projeto e injeta antes dos imports de conferencia_app.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
+if not os.path.isdir(os.path.join(ROOT_DIR, "conferencia_app")):
+    ROOT_DIR = os.getcwd()
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from flask import Blueprint, Flask, g, jsonify, redirect, request, session
 import psycopg2  # type: ignore
@@ -869,8 +875,8 @@ def _registrar_facilities_na_bridge(app: Flask) -> None:
 def create_app() -> Flask:
     app = Flask(
         __name__,
-        template_folder=str(ROOT_DIR / "templates"),
-        static_folder=str(ROOT_DIR / "static"),
+        template_folder=os.path.join(ROOT_DIR, "templates"),
+        static_folder=os.path.join(ROOT_DIR, "static"),
         instance_relative_config=True,
     )
     _registrar_facilities_na_bridge(app)
