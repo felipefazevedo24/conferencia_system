@@ -1275,7 +1275,7 @@ def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path)
     assert item["conta"] == "12503"
 
 
-def test_financeiro_classificacao_contabil_cfop_segue_natureza_grv(tmp_path):
+def test_financeiro_classificacao_contabil_cfop_exato_grv_prevalece(tmp_path):
     app = build_test_app(tmp_path)
     with app.app_context():
         item = ItemNota(
@@ -1304,7 +1304,7 @@ def test_financeiro_classificacao_contabil_cfop_segue_natureza_grv(tmp_path):
                         "cod_interno": "GRV-CFOP",
                         "descricao": "Material consumo",
                         "quantidade": 1,
-                        "cfop": "1102",
+                        "cfop": "3102",
                         "natureza_operacao": "Compra de material para uso ou consumo",
                     }
                 ],
@@ -1315,7 +1315,7 @@ def test_financeiro_classificacao_contabil_cfop_segue_natureza_grv(tmp_path):
         atualizado = ItemNota.query.filter_by(numero_nota="2026CFOPGRV").first()
         assert total == 1
         assert atualizado.codigo_grv == "GRV-CFOP"
-        assert atualizado.cfop == "1556"
+        assert atualizado.cfop == "3102"
         assert atualizado.cfop_descricao_grv == "Compra de material para uso ou consumo"
 
 
@@ -1337,20 +1337,18 @@ def test_financeiro_classificacao_contabil_cria_item_ausente_pelo_grv(tmp_path):
                         "cod_interno": "22-02-9999",
                         "descricao": "Item lancado apenas no GRV",
                         "quantidade": 3,
-                        "cfop": "1102",
-                        "natureza_operacao": "Compra de material para uso ou consumo",
+                        "cfop": "3551",
+                        "natureza_operacao": "Compra de bem para o ativo imobilizado",
                         "icms_base_calculo": 123.45,
                         "icms_aliquota": 18,
                         "icms_cst": "101",
                         "icms_valor": 22.22,
-                        "pis_base_calculo": 123.45,
-                        "pis_aliquota": 1.65,
+                        "ppis_q08": 1.65,
                         "pis_cst": "50",
-                        "pis_valor_credito": 2.04,
-                        "cofins_base_calculo": 123.45,
-                        "cofins_aliquota": 7.6,
+                        "vpis_q09": 5.775,
+                        "pcofins_s08": 7.6,
                         "cofins_cst": "50",
-                        "cofins_valor_credito": 9.38,
+                        "vcofins_s11": 26.6,
                     }
                 ],
             },
@@ -1362,10 +1360,12 @@ def test_financeiro_classificacao_contabil_cria_item_ausente_pelo_grv(tmp_path):
         assert item is not None
         assert item.status == "Lançado"
         assert item.codigo_grv == "22-02-9999"
-        assert item.cfop == "1556"
+        assert item.cfop == "3551"
         assert item.icms_base_calculo == 123.45
         assert item.cst_icms == "101"
-        assert item.pis_valor_credito == 2.04
+        assert item.pis_base_calculo == 350
+        assert item.pis_valor_credito == 5.775
+        assert item.cofins_base_calculo == 350
         assert item.cofins_aliquota == 7.6
         assert item.tributos_origem == "GRV"
 

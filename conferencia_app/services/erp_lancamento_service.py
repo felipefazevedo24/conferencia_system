@@ -502,37 +502,6 @@ def _normalizar_match_texto(valor: Any) -> str:
     return " ".join(re for re in "".join(ch if ch.isalnum() else " " for ch in text).split() if re)
 
 
-CFOP_POR_NATUREZA_GRV = {
-    "COMPRA PARA INDUSTRIALIZACAO": "1101",
-    "COMPRA PARA COMERCIALIZACAO": "1102",
-    "INDUSTRIALIZACAO EFETUADA POR OUTRA EMPRESA": "1124",
-    "COMPRA DE MATERIAL PARA USO OU CONSUMO": "1556",
-    "COMPRA DE BEM PARA O ATIVO IMOBILIZADO": "1551",
-    "RETORNO DE MERCADORIA REMETIDA PARA INDUSTRIALIZACAO POR ENCOMENDA": "1902",
-    "ENTRADA PARA INDUSTRIALIZACAO POR ENCOMENDA": "1901",
-    "ENTRADA DE MERCADORIA RECEBIDA PARA CONSERTO OU REPARO": "1915",
-    "RETORNO DE MERCADORIA REMETIDA PARA CONSERTO OU REPARO": "1916",
-    "AQUISICAO DE SERVICO TRIBUTADO PELO ISSQN": "1933",
-    "COMPRA PARA INDUSTRIALIZACAO DE OUTRO ESTADO": "2101",
-    "COMPRA PARA COMERCIALIZACAO DE OUTRO ESTADO": "2102",
-    "INDUSTRIALIZACAO EFETUADA POR OUTRA EMPRESA DE OUTRO ESTADO": "2124",
-    "COMPRA DE MATERIAL PARA USO OU CONSUMO DE OUTRO ESTADO": "2556",
-    "COMPRA DE BEM PARA O ATIVO IMOBILIZADO DE OUTRO ESTADO": "2551",
-}
-
-
-def _cfop_por_natureza_grv(natureza: Any) -> str:
-    texto = _normalizar_match_texto(natureza)
-    if not texto:
-        return ""
-    if texto in CFOP_POR_NATUREZA_GRV:
-        return CFOP_POR_NATUREZA_GRV[texto]
-    for descricao, cfop in CFOP_POR_NATUREZA_GRV.items():
-        if descricao in texto or texto in descricao:
-            return cfop
-    return ""
-
-
 def _float_grv(valor: Any, default=0.0) -> float:
     try:
         if isinstance(valor, str):
@@ -557,6 +526,14 @@ def _set_if_present(item: ItemNota, attr: str, row: dict[str, Any], *keys: str) 
             return
 
 
+def _calcular_base_por_valor_aliquota(valor: Any, aliquota: Any) -> float:
+    valor_float = _float_grv(valor)
+    aliquota_float = _float_grv(aliquota)
+    if not valor_float or not aliquota_float:
+        return 0.0
+    return round(valor_float / (aliquota_float / 100), 4)
+
+
 def _aplicar_campos_grv_item(item: ItemNota, row_grv: dict[str, Any], entrada: dict[str, Any]) -> None:
     fornecedor_grv = str(entrada.get("parceiro_nome") or "").strip()
     data_lancamento_grv = _parse_dt_nf_api(entrada.get("dt_lancamento"))
@@ -569,8 +546,7 @@ def _aplicar_campos_grv_item(item: ItemNota, row_grv: dict[str, Any], entrada: d
     if isinstance(data_lancamento_grv, datetime):
         item.data_lancamento = data_lancamento_grv
     natureza_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()
-    cfop_natureza = _cfop_por_natureza_grv(natureza_grv)
-    cfop_grv = cfop_natureza or str(row_grv.get("cfop") or "").strip()[:4]
+    cfop_grv = str(row_grv.get("cfop") or "").strip()[:4]
     if cfop_grv:
         item.cfop = cfop_grv
     item.cfop_descricao_grv = natureza_grv[:180]
@@ -589,6 +565,10 @@ def _aplicar_campos_grv_item(item: ItemNota, row_grv: dict[str, Any], entrada: d
     _set_if_present(item, "cofins_aliquota", row_grv, "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "aliq_perc_cofins", "pcofins_s08", "pcofins_t03", "p_cofins")
     _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins", "cst_s06")
     _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "vl_reais_cofins", "vl_reias_cofins", "vcofins_s11", "vcofins_t06", "v_cofins")
+    if not _float_grv(item.pis_base_calculo) and _float_grv(item.pis_valor_credito) and _float_grv(item.pis_aliquota):
+        item.pis_base_calculo = _calcular_base_por_valor_aliquota(item.pis_valor_credito, item.pis_aliquota)
+    if not _float_grv(item.cofins_base_calculo) and _float_grv(item.cofins_valor_credito) and _float_grv(item.cofins_aliquota):
+        item.cofins_base_calculo = _calcular_base_por_valor_aliquota(item.cofins_valor_credito, item.cofins_aliquota)
     item.tributos_origem = "GRV"
     item.tributos_grv_atualizado_em = datetime.now()
 
