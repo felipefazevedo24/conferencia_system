@@ -7,7 +7,9 @@
         min-height: 100vh;
         background: #f5f7fb;
         color: #111827;
-        padding: 22px;
+        padding: 26px 32px 34px;
+        max-width: 1680px;
+        margin: 0 auto;
     }
     .cc-top {
         display: grid;
@@ -160,54 +162,65 @@
     .cc-table-wrap {
         overflow-x: hidden;
         width: 100%;
+        padding: 10px 12px 4px;
+        background: #f8fafc;
     }
     .cc-table {
         width: 100%;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0 10px;
         min-width: 0;
-        table-layout: fixed;
-        font-size: .76rem;
+        table-layout: auto;
+        font-size: .84rem;
     }
-    .cc-table th {
-        background: #f8fafc;
-        color: #475569;
-        font-size: .74rem;
-        text-transform: uppercase;
-        letter-spacing: 0;
-        padding: 8px 7px;
-        border-bottom: 1px solid #e2e8f0;
-        white-space: normal;
-        overflow-wrap: anywhere;
-    }
+    .cc-table thead { display: none; }
     .cc-table td {
-        padding: 8px 7px;
-        border-bottom: 1px solid #edf2f7;
+        padding: 0;
+        border-bottom: 0;
         vertical-align: top;
         overflow-wrap: anywhere;
         word-break: break-word;
     }
-    .cc-table th:nth-child(1), .cc-table td:nth-child(1) { width: 6%; }
-    .cc-table th:nth-child(2), .cc-table td:nth-child(2) { width: 7%; }
-    .cc-table th:nth-child(3), .cc-table td:nth-child(3) { width: 7%; }
-    .cc-table th:nth-child(4), .cc-table td:nth-child(4) { width: 10%; }
-    .cc-table th:nth-child(5), .cc-table td:nth-child(5) { width: 15%; }
-    .cc-table th:nth-child(6), .cc-table td:nth-child(6) { width: 9%; }
-    .cc-table th:nth-child(7), .cc-table td:nth-child(7) { width: 17%; }
-    .cc-table th:nth-child(8), .cc-table td:nth-child(8) { width: 10%; }
-    .cc-table th:nth-child(9), .cc-table td:nth-child(9) { width: 7%; }
-    .cc-table th:nth-child(10), .cc-table td:nth-child(10) { width: 9%; }
-    .cc-table th:nth-child(11), .cc-table td:nth-child(11) { width: 3%; }
-    .cc-table tr.row-pending {
-        background: linear-gradient(90deg, #fff7ed 0, #fff7ed 5px, #fff 5px);
+    .cc-row-card {
+        display: grid;
+        grid-template-columns: minmax(115px, .75fr) minmax(190px, 1.25fr) minmax(230px, 1.55fr) minmax(150px, .9fr) minmax(280px, 1.8fr) minmax(190px, 1fr) minmax(120px, .75fr) 38px;
+        gap: 14px;
+        align-items: start;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 15px 16px;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, .045);
     }
-    .cc-table tr.row-review {
-        background: linear-gradient(90deg, #fffbeb 0, #fffbeb 5px, #fff 5px);
+    .row-pending .cc-row-card {
+        border-left: 5px solid #f59e0b;
+        background: linear-gradient(90deg, #fffaf0 0, #fff 120px);
+    }
+    .row-review .cc-row-card {
+        border-left: 5px solid #eab308;
+        background: linear-gradient(90deg, #fffbea 0, #fff 120px);
+    }
+    .cc-cell-label {
+        display: block;
+        margin-bottom: 5px;
+        color: #64748b;
+        font-size: .68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .cc-cell-main {
+        color: #0f172a;
+        line-height: 1.35;
+    }
+    .cc-cell-main small {
+        color: #475569;
     }
     .cc-pendency {
         display: flex;
         align-items: flex-start;
         gap: 10px;
-        min-width: 220px;
+        min-width: 0;
     }
     .cc-pendency-icon {
         width: 30px;
@@ -265,16 +278,16 @@
         min-width: 0;
         color: #334155;
         line-height: 1.3;
-        font-size: .74rem;
+        font-size: .8rem;
     }
     .cc-tax strong {
         color: #0f172a;
     }
     .cc-tax-row {
         display: grid;
-        grid-template-columns: 42px minmax(0, 1fr);
-        gap: 6px;
-        padding: 3px 0;
+        grid-template-columns: 50px minmax(0, 1fr);
+        gap: 8px;
+        padding: 4px 0;
         border-bottom: 1px solid #eef2f7;
     }
     .cc-tax-row:last-child { border-bottom: 0; }
@@ -375,10 +388,14 @@
         .cc-actions { justify-content: flex-start; }
         .cc-kpis { grid-template-columns: repeat(2, 1fr); }
         .cc-filters { grid-template-columns: 1fr 1fr; }
+        .cc-row-card { grid-template-columns: 1fr 1fr; }
+        .cc-row-action { justify-self: end; }
     }
     @media (max-width: 620px) {
-        .cc-wrap { padding: 14px; }
+        .cc-wrap { padding: 16px; }
         .cc-kpis, .cc-filters { grid-template-columns: 1fr; }
+        .cc-table-wrap { padding: 8px; }
+        .cc-row-card { grid-template-columns: 1fr; padding: 14px; }
     }
 </style>
 {% endblock %}
@@ -703,6 +720,59 @@ function renderTabela() {
             <td class="cc-meta-stack"><strong>${item.confianca}%</strong><br><span class="cc-pill ${statusClass(item.status)}">${item.status}</span></td>
             <td>${item.metodo}<br><small>${item.motivo_pendencia || item.tipo_regra || "---"} ${item.revisado_por ? "· " + item.revisado_por : ""}</small></td>
             <td><button class="cc-icon-btn ${state.competenciaStatus === "Fechada" ? "cc-locked" : ""}" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button></td>
+        </tr>
+    `).join("");
+}
+
+function renderTabela() {
+    const body = document.getElementById("cc-body");
+    const empty = document.getElementById("cc-empty");
+    empty.textContent = "Nenhuma classificacao encontrada para os filtros selecionados.";
+    empty.style.display = state.itens.length ? "none" : "block";
+    body.innerHTML = state.itens.map(item => `
+        <tr class="${rowClass(item.status)}">
+            <td colspan="11">
+                <article class="cc-row-card">
+                    <div class="cc-cell-main">
+                        <span class="cc-cell-label">NF / valor</span>
+                        <strong>${item.numero_nota}</strong><br>
+                        <small>${item.data_nf}</small><br>
+                        <strong>${money(item.valor_nf)}</strong>
+                    </div>
+                    <div class="cc-cell-main">
+                        <span class="cc-cell-label">Lancamento / fornecedor</span>
+                        <strong>${item.data_lancamento}</strong><br>
+                        <small>${item.fornecedor}</small>
+                    </div>
+                    <div class="cc-cell-main cc-desc">
+                        <span class="cc-cell-label">Item</span>
+                        <strong>${item.codigo_item}</strong><br>
+                        <small>${item.descricao_item}</small>
+                    </div>
+                    <div class="cc-cell-main">
+                        <span class="cc-cell-label">CFOP entrada</span>
+                        <strong>${item.cfop_entrada || item.cfop}</strong><br>
+                        <small>${item.descricao_cfop_entrada || "---"}</small>
+                    </div>
+                    <div>
+                        <span class="cc-cell-label">Tributos GRV</span>
+                        ${tributosCell(item)}
+                    </div>
+                    <div class="cc-cell-main">
+                        <span class="cc-cell-label">Conta</span>
+                        ${accountCell(item)}
+                    </div>
+                    <div class="cc-meta-stack cc-cell-main">
+                        <span class="cc-cell-label">Status</span>
+                        <strong>${item.confianca}%</strong><br>
+                        <span class="cc-pill ${statusClass(item.status)}">${item.status}</span><br>
+                        <small>${item.metodo}<br>${item.motivo_pendencia || item.tipo_regra || "---"} ${item.revisado_por ? " - " + item.revisado_por : ""}</small>
+                    </div>
+                    <div class="cc-row-action">
+                        <button class="cc-icon-btn ${state.competenciaStatus === "Fechada" ? "cc-locked" : ""}" type="button" title="Editar" onclick="abrirEditor(${item.id})"><i class="fas fa-pen"></i></button>
+                    </div>
+                </article>
+            </td>
         </tr>
     `).join("");
 }
