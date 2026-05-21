@@ -143,9 +143,6 @@ def _ensure_item_nota_columns() -> None:
         if "codigo_grv" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN codigo_grv VARCHAR(80)"))
             conn.commit()
-        if "cfop_grv" not in cols:
-            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cfop_grv VARCHAR(10)"))
-            conn.commit()
         if "cfop_descricao_grv" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cfop_descricao_grv VARCHAR(180)"))
             conn.commit()

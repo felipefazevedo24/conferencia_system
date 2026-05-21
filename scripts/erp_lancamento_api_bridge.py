@@ -844,6 +844,58 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar lancamentos no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/lancamentos-periodo")
+    def consultar_lancamentos_periodo():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            table = _validar_table(cfg["table"])
+            payload = request.get_json(silent=True) or {}
+            inicio = _parse_data(payload.get("inicio"))
+            fim = _parse_data(payload.get("fim")) or inicio
+            if not inicio or not fim:
+                return jsonify({"sucesso": False, "erro": "inicio_e_fim_obrigatorios"}), 400
+            try:
+                limite = int(payload.get("limite") or 2000)
+            except (TypeError, ValueError):
+                limite = 2000
+            limite = max(1, min(limite, 5000))
+
+            sql = f"""
+                select
+                    codigo::text as codigo,
+                    n_nf::text as numero_nota,
+                    dt_nf,
+                    dt_lancamento,
+                    coalesce(nullif(chv_nfe, ''), '') as chave_acesso
+                from {table}
+                where dt_lancamento::date >= %s
+                  and dt_lancamento::date <= %s
+                  and coalesce(codigo::text, '') <> ''
+                  and coalesce(n_nf::text, '') <> ''
+                order by dt_lancamento desc nulls last, codigo desc
+                limit %s
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (inicio, fim, limite))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = []
+                    for row in cur.fetchall():
+                        item = dict(zip(cols, row))
+                        item["dt_nf"] = _iso_dt(item.get("dt_nf"))
+                        item["dt_lancamento"] = _iso_dt(item.get("dt_lancamento"))
+                        rows.append(item)
+
+            return jsonify({"sucesso": True, "lancamentos": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar lancamentos por periodo no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/pedidos")
     def consultar_pedidos():
         cfg = _config()

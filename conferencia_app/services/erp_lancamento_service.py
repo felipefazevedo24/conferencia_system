@@ -221,6 +221,14 @@ def _parse_dt_nf_api(valor: Any) -> Any:
         return valor
 
 
+def _date_api(valor: Any) -> str:
+    if isinstance(valor, datetime):
+        return valor.date().isoformat()
+    if hasattr(valor, "isoformat"):
+        return valor.isoformat()[:10]
+    return str(valor or "")[:10]
+
+
 def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
     """Consulta a API bridge hospedada na VM.
 
@@ -287,6 +295,30 @@ def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, date
                 resultados[n_nf] = (codigo, _parse_dt_nf_api(row.get("dt_nf")))
 
     return resultados
+
+
+def _consultar_lancamentos_periodo_via_api(cfg: dict[str, Any], data_inicio: datetime, data_fim: datetime) -> list[dict[str, Any]]:
+    if not cfg.get("api_url"):
+        return []
+    url = f"{cfg['api_url']}/api/erp/lancamentos-periodo"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/ERP-Lancamento",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    payload = {"inicio": _date_api(data_inicio), "fim": _date_api(data_fim), "limite": 2000}
+    resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 60)
+    if resp.status_code == 404:
+        return []
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        return []
+    rows = data.get("lancamentos") or []
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _consultar_entrada_grv_via_api(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
@@ -500,6 +532,8 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         return 0
 
     itens_locais = ItemNota.query.filter_by(numero_nota=str(numero_nota)).order_by(ItemNota.id.asc()).all()
+    fornecedor_grv = str(entrada.get("parceiro_nome") or "").strip()
+    data_lancamento_grv = _parse_dt_nf_api(entrada.get("dt_lancamento"))
     atualizados = 0
     usados: set[int] = set()
     for item in itens_locais:
@@ -543,7 +577,13 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         if codigo:
             row_grv = itens_grv[melhor_idx]
             item.codigo_grv = codigo[:80]
-            item.cfop_grv = str(row_grv.get("cfop") or "").strip()[:10]
+            if fornecedor_grv:
+                item.fornecedor = fornecedor_grv[:100]
+            if isinstance(data_lancamento_grv, datetime):
+                item.data_lancamento = data_lancamento_grv
+            cfop_grv = str(row_grv.get("cfop") or "").strip()[:4]
+            if cfop_grv:
+                item.cfop = cfop_grv
             item.cfop_descricao_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()[:180]
             _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
             _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
@@ -624,6 +664,62 @@ def sincronizar_codigos_grv_itens(itens: list[ItemNota]) -> int:
         return 0
 
 
+def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetime) -> dict[str, Any]:
+    resumo = {"consultados": 0, "aplicados": 0, "detalhados": 0, "classificados": 0, "erro": ""}
+    cfg = _resolver_config()
+    if not cfg.get("api_url"):
+        return resumo
+    try:
+        rows = _consultar_lancamentos_periodo_via_api(cfg, data_inicio, data_fim)
+    except Exception as exc:
+        logger.exception("Falha ao consultar lancamentos GRV da competencia")
+        resumo["erro"] = str(exc)[:200]
+        return resumo
+    resumo["consultados"] = len(rows)
+    if not rows:
+        return resumo
+
+    itens_para_detalhar: list[ItemNota] = []
+    for row in rows:
+        numero = str(row.get("numero_nota") or row.get("n_nf") or "").strip()
+        codigo = str(row.get("codigo") or row.get("codigo_lancamento") or "").strip()
+        chave = "".join(ch for ch in str(row.get("chave_acesso") or row.get("chv_nfe") or "") if ch.isdigit())
+        if not numero or not codigo:
+            continue
+        itens = ItemNota.query.filter(ItemNota.numero_nota == numero).all()
+        if not itens and chave:
+            itens = ItemNota.query.filter(ItemNota.chave_acesso == chave).all()
+        if not itens:
+            continue
+        atualizados = _aplicar_lancamento_local(
+            numero,
+            codigo,
+            cfg["usuario_lancamento"],
+            _parse_dt_nf_api(row.get("dt_nf")),
+            row.get("dt_lancamento"),
+        )
+        if atualizados:
+            resumo["aplicados"] += 1
+        itens_para_detalhar.extend(itens)
+
+    if itens_para_detalhar:
+        resumo["detalhados"] = sincronizar_codigos_grv_itens(itens_para_detalhar)
+        try:
+            from .classificacao_contabil_service import classificar_nota
+
+            notas = {str(item.numero_nota or "") for item in itens_para_detalhar if item.numero_nota}
+            for numero in notas:
+                resumo["classificados"] += classificar_nota(numero)
+        except Exception:
+            logger.exception("Falha ao classificar lancamentos GRV do periodo")
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception("Falha no commit da sincronizacao GRV do periodo")
+    return resumo
+
+
 def _consultar_codigos(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
     if cfg.get("api_url"):
         return _consultar_codigos_via_api(cfg, chaves)
@@ -635,16 +731,18 @@ def _aplicar_lancamento_local(
     codigo: str,
     usuario: str,
     dt_nf_erp: Any = None,
+    dt_lancamento_erp: Any = None,
 ) -> int:
     """Replica exatamente o fluxo manual: status->Lancado, numero_lancamento=codigo.
 
     Faz tambem backfill de `data_emissao` quando estiver vazia e o ERP tiver
     retornado `dt_nf` (NFs importadas antes da feature).
     """
+    data_lancamento = _parse_dt_nf_api(dt_lancamento_erp) if dt_lancamento_erp else datetime.now()
     update_values: dict[str, Any] = {
         "status": "Lançado",
         "usuario_lancamento": usuario,
-        "data_lancamento": datetime.now(),
+        "data_lancamento": data_lancamento if isinstance(data_lancamento, datetime) else datetime.now(),
         "numero_lancamento": codigo,
     }
     rows = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").update(update_values)

@@ -471,7 +471,7 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
     codigo_origem = getattr(item, "codigo_grv", None) or item.codigo
     codigo = _normalizar_codigo(codigo_origem)
     descricao = normalizar_texto(item.descricao)
-    cfop = str(getattr(item, "cfop_grv", None) or item.cfop or "").strip()
+    cfop = str(item.cfop or "").strip()
     cfops = _cfop_variantes(cfop)
 
     tentativas = [
@@ -588,7 +588,7 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False, sincroni
     registro.fornecedor = item.fornecedor
     registro.codigo_item = str(getattr(item, "codigo_grv", None) or item.codigo or "").strip()
     registro.descricao_item = item.descricao
-    registro.cfop = str(getattr(item, "cfop_grv", None) or item.cfop or "").strip()
+    registro.cfop = str(item.cfop or "").strip()
     registro.conta = sugestao["conta"]
     registro.nome_conta = sugestao["nome_conta"]
     registro.comentario = sugestao["comentario"][:500]

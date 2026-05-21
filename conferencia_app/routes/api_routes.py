@@ -2321,13 +2321,13 @@ def _atualizar_nomes_conta_plano(rows: list[ClassificacaoContabilItem]) -> bool:
     for row in rows:
         item = row.item_nota
         codigo_grv = str(getattr(item, "codigo_grv", "") or "").strip() if item else ""
-        cfop_grv = str(getattr(item, "cfop_grv", "") or "").strip() if item else ""
         if codigo_grv and codigo_grv != (row.codigo_item or ""):
             row.codigo_item = codigo_grv[:80]
             row.atualizado_em = datetime.now()
             alterou = True
-        if cfop_grv and cfop_grv != (row.cfop or ""):
-            row.cfop = cfop_grv[:10]
+        cfop_item = str(getattr(item, "cfop", "") or "").strip() if item else ""
+        if cfop_item and cfop_item != (row.cfop or ""):
+            row.cfop = cfop_item[:10]
             row.atualizado_em = datetime.now()
             alterou = True
         if not row.conta:
@@ -2344,8 +2344,7 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
     item = row.item_nota
     data_lanc = item.data_lancamento if item else None
     data_nf = item.data_emissao if item else None
-    cfop_grv = str(getattr(item, "cfop_grv", "") or "").strip() if item else ""
-    cfop_ent = cfop_grv or (cfop_entrada(row.cfop) if row.cfop else "")
+    cfop_ent = str(row.cfop or getattr(item, "cfop", "") or "").strip()
     descricao_cfop = str(getattr(item, "cfop_descricao_grv", "") or "").strip() if item else ""
     return {
         "id": row.id,
@@ -2354,7 +2353,7 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "fornecedor": row.fornecedor or "---",
         "codigo_item": row.codigo_item or "---",
         "descricao_item": row.descricao_item or "---",
-        "cfop": cfop_grv or row.cfop or "---",
+        "cfop": cfop_ent or "---",
         "cfop_entrada": cfop_ent or row.cfop or "---",
         "descricao_cfop_entrada": descricao_cfop or descricao_cfop_entrada(cfop_ent or row.cfop) or "---",
         "conta": row.conta or "",
@@ -2616,6 +2615,12 @@ def financeiro_classificacao_listar():
     data_inicio, data_fim, competencia = _periodo_competencia()
     comp = _competencia_row(competencia)
     if comp.status != "Fechada":
+        try:
+            from ..services.erp_lancamento_service import sincronizar_lancamentos_grv_periodo
+
+            sincronizar_lancamentos_grv_periodo(data_inicio, data_fim or data_inicio)
+        except Exception:
+            current_app.logger.exception("Falha ao sincronizar lancamentos GRV da competencia antes da classificacao")
         novos = classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
         sincronizou_grv = _sincronizar_grv_competencia(data_inicio, data_fim)
         if sincronizou_grv:
@@ -2831,8 +2836,8 @@ def financeiro_classificacao_exportar():
             row.fornecedor or "",
             row.codigo_item or "",
             row.descricao_item or "",
-            getattr(item, "cfop_grv", "") or cfop_entrada(row.cfop) or row.cfop or "",
-            getattr(item, "cfop_descricao_grv", "") or descricao_cfop_entrada(getattr(item, "cfop_grv", "") or row.cfop),
+            row.cfop or "",
+            getattr(item, "cfop_descricao_grv", "") or descricao_cfop_entrada(row.cfop),
             _tributo_grv(item, "icms_base_calculo"),
             _tributo_grv(item, "icms_aliquota"),
             _cst_grv(item, "cst_icms"),
