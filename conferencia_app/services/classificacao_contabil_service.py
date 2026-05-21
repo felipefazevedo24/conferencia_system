@@ -471,7 +471,7 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
     codigo_origem = getattr(item, "codigo_grv", None) or item.codigo
     codigo = _normalizar_codigo(codigo_origem)
     descricao = normalizar_texto(item.descricao)
-    cfop = str(item.cfop or "").strip()
+    cfop = str(getattr(item, "cfop_grv", None) or item.cfop or "").strip()
     cfops = _cfop_variantes(cfop)
 
     tentativas = [
@@ -588,7 +588,7 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False, sincroni
     registro.fornecedor = item.fornecedor
     registro.codigo_item = str(getattr(item, "codigo_grv", None) or item.codigo or "").strip()
     registro.descricao_item = item.descricao
-    registro.cfop = item.cfop
+    registro.cfop = str(getattr(item, "cfop_grv", None) or item.cfop or "").strip()
     registro.conta = sugestao["conta"]
     registro.nome_conta = sugestao["nome_conta"]
     registro.comentario = sugestao["comentario"][:500]
@@ -610,7 +610,10 @@ def classificar_nota(numero_nota: str, sobrescrever_manual: bool = False) -> int
     try:
         from .erp_lancamento_service import sincronizar_codigos_grv_itens
 
-        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        sincronizar_codigos_grv_itens([
+            item for item in itens
+            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+        ])
         for item in itens:
             db.session.refresh(item)
     except Exception:
@@ -644,7 +647,10 @@ def classificar_lancadas_desde_2026(
     try:
         from .erp_lancamento_service import sincronizar_codigos_grv_itens
 
-        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        sincronizar_codigos_grv_itens([
+            item for item in itens
+            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+        ])
         for item in itens:
             db.session.refresh(item)
     except Exception:
@@ -681,7 +687,10 @@ def classificar_lancadas_sem_registro(
     try:
         from .erp_lancamento_service import sincronizar_codigos_grv_itens
 
-        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        sincronizar_codigos_grv_itens([
+            item for item in itens
+            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+        ])
         for item in itens:
             db.session.refresh(item)
     except Exception:

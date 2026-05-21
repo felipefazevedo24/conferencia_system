@@ -56,6 +56,7 @@ class ItemNota(db.Model):
     fornecedor = db.Column(db.String(100))
     codigo = db.Column(db.String(50))
     codigo_grv = db.Column(db.String(80), index=True)
+    cfop_grv = db.Column(db.String(10), index=True)
     cfop_descricao_grv = db.Column(db.String(180))
     descricao = db.Column(db.String(200))
     qtd_real = db.Column(db.Float)

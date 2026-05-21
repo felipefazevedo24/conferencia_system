@@ -1254,7 +1254,9 @@ def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path)
                 codigo="XML-001",
                 codigo_grv="GRV-001",
                 descricao="Item GRV",
-                cfop="1102",
+                cfop="5102",
+                cfop_grv="1102",
+                cfop_descricao_grv="Compra para comercializacao lancada no GRV",
                 qtd_real=1,
                 status="Lançado",
                 data_lancamento=datetime(2026, 3, 12, 9, 0),
@@ -1268,6 +1270,9 @@ def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path)
     data = response.get_json()
     item = next(row for row in data["itens"] if row["numero_nota"] == "2026GRV")
     assert item["codigo_item"] == "GRV-001"
+    assert item["cfop"] == "1102"
+    assert item["cfop_entrada"] == "1102"
+    assert item["descricao_cfop_entrada"] == "Compra para comercializacao lancada no GRV"
     assert item["conta"] == "12503"
 
 

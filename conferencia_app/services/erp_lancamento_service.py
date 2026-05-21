@@ -543,6 +543,7 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         if codigo:
             row_grv = itens_grv[melhor_idx]
             item.codigo_grv = codigo[:80]
+            item.cfop_grv = str(row_grv.get("cfop") or "").strip()[:10]
             item.cfop_descricao_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()[:180]
             _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
             _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
