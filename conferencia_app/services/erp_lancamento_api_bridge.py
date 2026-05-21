@@ -875,6 +875,7 @@ def create_app() -> Flask:
         __name__,
         template_folder=os.path.join(root_dir, "templates"),
         static_folder=os.path.join(root_dir, "static"),
+        instance_path=os.path.join(root_dir, "instance"),
         instance_relative_config=True,
     )
     _registrar_facilities_na_bridge(app)
@@ -882,6 +883,35 @@ def create_app() -> Flask:
     @app.get("/health")
     def health():
         return jsonify({"ok": True, "service": "erp-lancamento-api-bridge", "facilities": True})
+
+    @app.get("/api/erp/facilities-diagnostico")
+    def facilities_diagnostico():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        try:
+            from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
+
+            funcionarios = FacilitiesGRVService.listar_funcionarios(ativos=True)
+            materiais = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=True)
+            epi = next((m for m in materiais if m.get("tipo") == "epi"), None)
+            uniforme = next((m for m in materiais if m.get("tipo") == "uniforme"), None)
+            funcionario = next((f for f in funcionarios if str(f.get("codigo")) != "240"), None)
+            return jsonify({
+                "sucesso": True,
+                "instance_path": app.instance_path,
+                "postgres_configurado": bool(cfg.get("host") and cfg.get("database") and cfg.get("user")),
+                "postgres_host": cfg.get("host") or "",
+                "postgres_database": cfg.get("database") or "",
+                "funcionarios_total": len(funcionarios),
+                "materiais_total": len(materiais),
+                "funcionario_exemplo": funcionario,
+                "epi_exemplo": epi,
+                "uniforme_exemplo": uniforme,
+            })
+        except Exception as exc:
+            app.logger.exception("Falha no diagnostico Facilities GRV")
+            return jsonify({"sucesso": False, "erro": str(exc), "instance_path": app.instance_path}), 500
 
     @app.post("/api/erp/lancamentos")
     def consultar_lancamentos():
