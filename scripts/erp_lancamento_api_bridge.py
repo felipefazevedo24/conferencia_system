@@ -1100,6 +1100,7 @@ def create_app() -> Flask:
                     cur.execute(ENTRADAS_CHAPA_DESDE_SQL, (data_minima, controles, controles, limite))
                     cols = [desc[0] for desc in cur.description]
                     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                    _enriquecer_tributos_entrada(cur, rows)
 
             grupos: dict[str, list[dict[str, Any]]] = {}
             for row in rows:

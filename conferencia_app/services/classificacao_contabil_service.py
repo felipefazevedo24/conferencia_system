@@ -566,13 +566,7 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> Class
     if existente and existente.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
         return existente
 
-    precisa_grv = (
-        not getattr(item, "codigo_grv", None)
-        or getattr(item, "icms_base_calculo", None) is None
-        or getattr(item, "pis_base_calculo", None) is None
-        or getattr(item, "cofins_base_calculo", None) is None
-    )
-    if precisa_grv and getattr(item, "numero_lancamento", None):
+    if getattr(item, "numero_lancamento", None):
         try:
             from .erp_lancamento_service import sincronizar_codigos_grv_nota
 

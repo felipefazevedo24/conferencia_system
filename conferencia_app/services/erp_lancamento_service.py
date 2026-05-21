@@ -365,6 +365,7 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
                     coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
                     a.numero_item,
                     coalesce(nullif(a.cfop, ''), nullif(c.cfop, '')) as cfop,
+                    coalesce(nullif(a.descricao_cfop, ''), nullif(c.tipo_movimento, ''), nullif(c.codigo_movimentacao, '')) as natureza_operacao,
                     coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
                     coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
                     coalesce(a.qtde, 0) as quantidade,
@@ -390,9 +391,22 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
         {
             "numero_item": row.get("numero_item"),
             "cfop": row.get("cfop") or "",
+            "natureza_operacao": row.get("natureza_operacao") or "",
             "cod_interno": row.get("cod_interno") or "",
             "descricao": row.get("descricao") or "",
             "quantidade": row.get("quantidade") or 0,
+            "icms_base_calculo": row.get("icms_base_calculo") or 0,
+            "icms_aliquota": row.get("icms_aliquota") or 0,
+            "icms_cst": row.get("icms_cst") or "",
+            "icms_valor": row.get("icms_valor") or 0,
+            "pis_base_calculo": row.get("pis_base_calculo") or 0,
+            "pis_aliquota": row.get("pis_aliquota") or 0,
+            "pis_cst": row.get("pis_cst") or "",
+            "pis_valor_credito": row.get("pis_valor_credito") or 0,
+            "cofins_base_calculo": row.get("cofins_base_calculo") or 0,
+            "cofins_aliquota": row.get("cofins_aliquota") or 0,
+            "cofins_cst": row.get("cofins_cst") or "",
+            "cofins_valor_credito": row.get("cofins_valor_credito") or 0,
         }
         for row in rows
         if row.get("cod_interno") or row.get("descricao")
@@ -428,7 +442,7 @@ def _float_grv(valor: Any, default=0.0) -> float:
 
 def _set_if_present(item: ItemNota, attr: str, row: dict[str, Any], *keys: str) -> None:
     for key in keys:
-        if key in row and row.get(key) not in (None, ""):
+        if key in row:
             if attr == "cst_icms":
                 setattr(item, attr, str(row.get(key) or "").strip()[:3])
             elif attr in {"cst_pis", "cst_cofins"}:
@@ -487,6 +501,7 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         if codigo:
             row_grv = itens_grv[melhor_idx]
             item.codigo_grv = codigo[:80]
+            item.cfop_descricao_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()[:180]
             _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
             _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
             _set_if_present(item, "cst_icms", row_grv, "icms_cst", "cst_icms", "cst")
@@ -499,6 +514,8 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
             _set_if_present(item, "cofins_aliquota", row_grv, "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins")
             _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins")
             _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins")
+            item.tributos_origem = "GRV"
+            item.tributos_grv_atualizado_em = datetime.now()
             atualizados += 1
     return atualizados
 

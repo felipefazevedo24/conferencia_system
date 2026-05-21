@@ -1068,6 +1068,9 @@ def test_financeiro_classificacao_contabil_page_e_api_filtram_desde_2026(tmp_pat
     response = client.get("/api/financeiro/classificacao-contabil?inicio=2025-01-01")
     assert response.status_code == 200
     data = response.get_json()
+    assert data["paginacao"]["page"] == 1
+    assert data["paginacao"]["per_page"] == 50
+    assert data["paginacao"]["total"] == 1
     numeros = {item["numero_nota"] for item in data["itens"]}
     assert "2026A" in numeros
     assert "2025A" not in numeros
@@ -1147,6 +1150,8 @@ def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_pa
             cofins_aliquota=7.6,
             cst_cofins="50",
             cofins_valor_credito=7.6,
+            tributos_origem="GRV",
+            tributos_grv_atualizado_em=datetime(2026, 3, 10, 9, 5),
         )
         db.session.add(item)
         db.session.commit()
@@ -1156,7 +1161,7 @@ def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_pa
 
     response = client.patch(
         f"/api/financeiro/classificacao-contabil/{classificacao['id']}",
-        json={"conta": "94901", "comentario": "conta pelo plano"},
+        json={"conta": "94901", "nome_conta": "NOME DIGITADO ERRADO", "comentario": "conta pelo plano"},
     )
     assert response.status_code == 200
     data = response.get_json()
@@ -1166,6 +1171,62 @@ def test_financeiro_classificacao_contabil_preenche_nome_conta_pelo_plano(tmp_pa
     assert data["item"]["icms_valor"] == 18
     assert data["item"]["pis_cst"] == "50"
     assert data["item"]["cofins_aliquota"] == 7.6
+
+
+def test_financeiro_classificacao_contabil_nao_exibe_tributo_xml_sem_grv(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Financeiro")
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="2026XMLTRIB",
+            fornecedor="Fornecedor XML",
+            codigo="XMLTRIB",
+            descricao="Item com imposto do XML",
+            cfop="1102",
+            qtd_real=1,
+            status="LanÃ§ado",
+            data_lancamento=datetime(2026, 3, 11, 9, 0),
+            valor_nf=999,
+            icms_base_calculo=999,
+            icms_aliquota=18,
+            cst_icms="000",
+            icms_valor=179.82,
+            pis_base_calculo=999,
+            pis_aliquota=1.65,
+            cst_pis="50",
+            pis_valor_credito=16.48,
+            cofins_base_calculo=999,
+            cofins_aliquota=7.6,
+            cst_cofins="50",
+            cofins_valor_credito=75.92,
+        )
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(
+            ClassificacaoContabilItem(
+                item_nota_id=item.id,
+                numero_nota=item.numero_nota,
+                fornecedor=item.fornecedor,
+                codigo_item=item.codigo,
+                descricao_item=item.descricao,
+                cfop=item.cfop,
+                status="Pendente",
+                metodo="Sem padrão",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/financeiro/classificacao-contabil?competencia=2026-03")
+    assert response.status_code == 200
+    data = response.get_json()
+    item = next(row for row in data["itens"] if row["numero_nota"] == "2026XMLTRIB")
+    assert item["tributos_origem"] == ""
+    assert item["icms_base_calculo"] == 0
+    assert item["icms_cst"] == ""
+    assert item["pis_valor_credito"] == 0
+    assert item["cofins_aliquota"] == 0
 
 
 def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):

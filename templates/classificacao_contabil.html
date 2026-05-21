@@ -327,6 +327,32 @@
         z-index: 1100;
         box-shadow: 0 14px 34px rgba(15, 23, 42, .28);
     }
+    .cc-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+        color: #475569;
+        font-size: .86rem;
+        flex-wrap: wrap;
+    }
+    .cc-page-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .cc-page-size {
+        width: 92px;
+        height: 34px;
+        border: 1px solid #d9e2ef;
+        border-radius: 8px;
+        background: #fbfdff;
+        color: #0f172a;
+        padding: 0 8px;
+    }
     @media (max-width: 980px) {
         .cc-top { grid-template-columns: 1fr; }
         .cc-actions { justify-content: flex-start; }
@@ -432,6 +458,18 @@
             </table>
         </div>
         <div class="cc-empty" id="cc-empty" style="display:none;">Nenhuma classificação encontrada para os filtros selecionados.</div>
+        <div class="cc-pagination">
+            <div id="cc-page-info">Página 1 de 1</div>
+            <div class="cc-page-actions">
+                <button class="cc-icon-btn" id="btn-page-prev" type="button" title="Página anterior"><i class="fas fa-chevron-left"></i></button>
+                <select class="cc-page-size" id="f-per-page" title="Itens por página">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+                <button class="cc-icon-btn" id="btn-page-next" type="button" title="Próxima página"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
     </section>
 </div>
 
@@ -468,7 +506,7 @@
 
 {% block extra_js %}
 <script>
-const state = { itens: [], selecionado: null, competenciaStatus: "Aberta" };
+const state = { itens: [], selecionado: null, competenciaStatus: "Aberta", page: 1, perPage: 50, paginacao: {} };
 
 function toast(msg) {
     const el = document.getElementById("cc-toast");
@@ -546,8 +584,12 @@ function taxCell(base, aliquota, cst, valor) {
 }
 
 function tributosCell(item) {
+    const origem = item.tributos_origem === "GRV"
+        ? `<small class="text-success">GRV ${item.tributos_grv_atualizado_em || ""}</small>`
+        : `<small class="text-danger">Aguardando GRV</small>`;
     return `
         <div class="cc-tax">
+            <div>${origem}</div>
             <div class="cc-tax-row"><span>ICMS</span><div>${taxCell(item.icms_base_calculo, item.icms_aliquota, item.icms_cst, item.icms_valor)}</div></div>
             <div class="cc-tax-row"><span>PIS</span><div>${taxCell(item.pis_base_calculo, item.pis_aliquota, item.pis_cst, item.pis_valor_credito)}</div></div>
             <div class="cc-tax-row"><span>COFINS</span><div>${taxCell(item.cofins_base_calculo, item.cofins_aliquota, item.cofins_cst, item.cofins_valor_credito)}</div></div>
@@ -555,7 +597,9 @@ function tributosCell(item) {
     `;
 }
 
-async function carregar() {
+async function carregar(page = state.page) {
+    state.page = Math.max(1, Number(page || 1));
+    state.perPage = Number(document.getElementById("f-per-page").value || state.perPage || 50);
     document.getElementById("cc-body").innerHTML = "";
     const empty = document.getElementById("cc-empty");
     empty.style.display = "block";
@@ -565,15 +609,19 @@ async function carregar() {
         status: document.getElementById("f-status").value || "",
         conta: document.getElementById("f-conta").value || "",
         q: document.getElementById("f-busca").value || "",
+        page: state.page,
+        per_page: state.perPage,
     });
     const res = await fetch(`/api/financeiro/classificacao-contabil?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.msg || data.error || "Falha ao carregar classificações");
     state.itens = data.itens || [];
+    state.paginacao = data.paginacao || {};
     renderResumo(data.resumo || {});
     renderGovernanca(data);
     renderContas(data.contas || []);
     renderTabela();
+    renderPaginacao();
 }
 
 function renderResumo(resumo) {
@@ -642,6 +690,21 @@ function renderTabela() {
     `).join("");
 }
 
+function renderPaginacao() {
+    const p = state.paginacao || {};
+    const page = Number(p.page || state.page || 1);
+    const pages = Number(p.pages || 1);
+    const total = Number(p.total || 0);
+    const perPage = Number(p.per_page || state.perPage || 50);
+    const inicio = total ? ((page - 1) * perPage) + 1 : 0;
+    const fim = Math.min(page * perPage, total);
+    document.getElementById("cc-page-info").textContent = total
+        ? `Página ${page} de ${pages} - ${inicio} a ${fim} de ${total}`
+        : "Nenhum lançamento";
+    document.getElementById("btn-page-prev").disabled = !p.has_prev;
+    document.getElementById("btn-page-next").disabled = !p.has_next;
+}
+
 function abrirEditor(id) {
     if (state.competenciaStatus === "Fechada") {
         toast("Periodo fechado. Abra o periodo antes de editar.");
@@ -667,7 +730,7 @@ async function preencherNomeConta() {
     const contaEl = document.getElementById("e-conta");
     const nomeEl = document.getElementById("e-nome");
     const conta = contaEl.value.trim();
-    if (!conta || nomeEl.value.trim()) return;
+    if (!conta) return;
     const res = await fetch(`/api/financeiro/classificacao-contabil/plano-contas/${encodeURIComponent(conta)}`);
     if (!res.ok) return;
     const data = await res.json();
@@ -819,7 +882,7 @@ async function importarUploads(files) {
     await carregar();
 }
 
-document.getElementById("btn-filtrar").addEventListener("click", () => carregar().catch(err => toast(err.message)));
+document.getElementById("btn-filtrar").addEventListener("click", () => carregar(1).catch(err => toast(err.message)));
 document.getElementById("btn-fechar").addEventListener("click", fecharEditor);
 document.getElementById("e-conta").addEventListener("blur", () => preencherNomeConta().catch(() => {}));
 document.getElementById("btn-salvar").addEventListener("click", () => salvarEditor().catch(err => toast(err.message)));
@@ -831,8 +894,11 @@ document.getElementById("btn-aprovar").addEventListener("click", () => aprovarPe
 document.getElementById("btn-fechar-periodo").addEventListener("click", () => fecharPeriodo().catch(err => toast(err.message)));
 document.getElementById("btn-exportar").addEventListener("click", exportarCompetencia);
 document.getElementById("btn-reabrir").addEventListener("click", () => reabrirCompetencia().catch(err => toast(err.message)));
+document.getElementById("btn-page-prev").addEventListener("click", () => carregar((state.paginacao.page || 1) - 1).catch(err => toast(err.message)));
+document.getElementById("btn-page-next").addEventListener("click", () => carregar((state.paginacao.page || 1) + 1).catch(err => toast(err.message)));
+document.getElementById("f-per-page").addEventListener("change", () => carregar(1).catch(err => toast(err.message)));
 document.getElementById("f-busca").addEventListener("keydown", event => {
-    if (event.key === "Enter") carregar().catch(err => toast(err.message));
+    if (event.key === "Enter") carregar(1).catch(err => toast(err.message));
 });
 
 document.getElementById("f-competencia").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();

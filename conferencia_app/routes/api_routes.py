@@ -2256,11 +2256,68 @@ def _float_contabil(valor, padrao=0.0):
         return float(padrao)
 
 
+def _item_tem_tributo_grv(item: ItemNota | None) -> bool:
+    return bool(item and getattr(item, "tributos_origem", "") == "GRV")
+
+
+def _tributo_grv(item: ItemNota | None, attr: str, padrao=0.0):
+    if not _item_tem_tributo_grv(item):
+        return padrao
+    return _float_contabil(getattr(item, attr, padrao), padrao)
+
+
+def _cst_grv(item: ItemNota | None, attr: str) -> str:
+    if not _item_tem_tributo_grv(item):
+        return ""
+    return str(getattr(item, attr, "") or "")
+
+
+def _sincronizar_grv_classificacao(rows: list[ClassificacaoContabilItem]) -> bool:
+    sincronizadas = False
+    notas: set[tuple[str, str, str]] = set()
+    for row in rows:
+        item = row.item_nota
+        if not item or not getattr(item, "numero_lancamento", None):
+            continue
+        notas.add((str(item.numero_nota or row.numero_nota or ""), str(item.numero_lancamento or ""), str(item.chave_acesso or "")))
+    if not notas:
+        return False
+    try:
+        from ..services.erp_lancamento_service import sincronizar_codigos_grv_nota
+
+        for numero, lancamento, chave in notas:
+            if sincronizar_codigos_grv_nota(numero, codigo_lancamento=lancamento, chave=chave):
+                sincronizadas = True
+    except Exception:
+        current_app.logger.exception("Falha ao sincronizar tributos GRV para classificacao contabil")
+    return sincronizadas
+
+
+def _atualizar_nomes_conta_plano(rows: list[ClassificacaoContabilItem]) -> bool:
+    alterou = False
+    for row in rows:
+        item = row.item_nota
+        codigo_grv = str(getattr(item, "codigo_grv", "") or "").strip() if item else ""
+        if codigo_grv and codigo_grv != (row.codigo_item or ""):
+            row.codigo_item = codigo_grv[:80]
+            row.atualizado_em = datetime.now()
+            alterou = True
+        if not row.conta:
+            continue
+        nome_plano = buscar_nome_conta(row.conta)
+        if nome_plano and nome_plano != (row.nome_conta or ""):
+            row.nome_conta = nome_plano[:180]
+            row.atualizado_em = datetime.now()
+            alterou = True
+    return alterou
+
+
 def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
     item = row.item_nota
     data_lanc = item.data_lancamento if item else None
     data_nf = item.data_emissao if item else None
     cfop_ent = cfop_entrada(row.cfop) if row.cfop else ""
+    descricao_cfop = str(getattr(item, "cfop_descricao_grv", "") or "").strip() if item else ""
     return {
         "id": row.id,
         "item_nota_id": row.item_nota_id,
@@ -2270,7 +2327,7 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "descricao_item": row.descricao_item or "---",
         "cfop": row.cfop or "---",
         "cfop_entrada": cfop_ent or row.cfop or "---",
-        "descricao_cfop_entrada": descricao_cfop_entrada(row.cfop) or "---",
+        "descricao_cfop_entrada": descricao_cfop or descricao_cfop_entrada(row.cfop) or "---",
         "conta": row.conta or "",
         "nome_conta": row.nome_conta or "",
         "comentario": row.comentario or "",
@@ -2288,18 +2345,20 @@ def _serializar_classificacao(row: ClassificacaoContabilItem) -> dict:
         "data_nf": data_nf.strftime("%d/%m/%Y") if data_nf else "---",
         "valor": float(item.valor_produto or 0.0) if item else 0.0,
         "valor_nf": _float_contabil(getattr(item, "valor_nf", None) or getattr(item, "valor_total", None)) if item else 0.0,
-        "icms_base_calculo": _float_contabil(getattr(item, "icms_base_calculo", 0)) if item else 0.0,
-        "icms_aliquota": _float_contabil(getattr(item, "icms_aliquota", 0)) if item else 0.0,
-        "icms_cst": getattr(item, "cst_icms", "") if item else "",
-        "icms_valor": _float_contabil(getattr(item, "icms_valor", 0)) if item else 0.0,
-        "pis_base_calculo": _float_contabil(getattr(item, "pis_base_calculo", 0)) if item else 0.0,
-        "pis_aliquota": _float_contabil(getattr(item, "pis_aliquota", 0)) if item else 0.0,
-        "pis_cst": getattr(item, "cst_pis", "") if item else "",
-        "pis_valor_credito": _float_contabil(getattr(item, "pis_valor_credito", 0)) if item else 0.0,
-        "cofins_base_calculo": _float_contabil(getattr(item, "cofins_base_calculo", 0)) if item else 0.0,
-        "cofins_aliquota": _float_contabil(getattr(item, "cofins_aliquota", 0)) if item else 0.0,
-        "cofins_cst": getattr(item, "cst_cofins", "") if item else "",
-        "cofins_valor_credito": _float_contabil(getattr(item, "cofins_valor_credito", 0)) if item else 0.0,
+        "tributos_origem": (getattr(item, "tributos_origem", "") or "") if item else "",
+        "tributos_grv_atualizado_em": item.tributos_grv_atualizado_em.strftime("%d/%m/%Y %H:%M") if item and item.tributos_grv_atualizado_em else "",
+        "icms_base_calculo": _tributo_grv(item, "icms_base_calculo"),
+        "icms_aliquota": _tributo_grv(item, "icms_aliquota"),
+        "icms_cst": _cst_grv(item, "cst_icms"),
+        "icms_valor": _tributo_grv(item, "icms_valor"),
+        "pis_base_calculo": _tributo_grv(item, "pis_base_calculo"),
+        "pis_aliquota": _tributo_grv(item, "pis_aliquota"),
+        "pis_cst": _cst_grv(item, "cst_pis"),
+        "pis_valor_credito": _tributo_grv(item, "pis_valor_credito"),
+        "cofins_base_calculo": _tributo_grv(item, "cofins_base_calculo"),
+        "cofins_aliquota": _tributo_grv(item, "cofins_aliquota"),
+        "cofins_cst": _cst_grv(item, "cst_cofins"),
+        "cofins_valor_credito": _tributo_grv(item, "cofins_valor_credito"),
     }
 
 
@@ -2537,7 +2596,14 @@ def financeiro_classificacao_listar():
     status = str(request.args.get("status") or "").strip()
     termo = normalizar_texto(request.args.get("q") or "")
     conta = str(request.args.get("conta") or "").strip()
-    limite = max(10, min(int(request.args.get("limite") or 300), 1000))
+    try:
+        pagina = max(1, int(request.args.get("page") or request.args.get("pagina") or 1))
+    except (TypeError, ValueError):
+        pagina = 1
+    try:
+        por_pagina = max(25, min(int(request.args.get("per_page") or request.args.get("por_pagina") or request.args.get("limite") or 50), 200))
+    except (TypeError, ValueError):
+        por_pagina = 50
 
     query = ClassificacaoContabilItem.query.join(ItemNota, ItemNota.id == ClassificacaoContabilItem.item_nota_id)
     query = query.filter(ItemNota.data_lancamento >= data_inicio)
@@ -2558,7 +2624,20 @@ def financeiro_classificacao_listar():
             )
         )
 
-    rows = query.order_by(ItemNota.data_lancamento.desc(), ClassificacaoContabilItem.id.desc()).limit(limite).all()
+    total = query.count()
+    paginas = max(1, (total + por_pagina - 1) // por_pagina)
+    if pagina > paginas:
+        pagina = paginas
+    rows = (
+        query.order_by(ItemNota.data_lancamento.desc(), ClassificacaoContabilItem.id.desc())
+        .offset((pagina - 1) * por_pagina)
+        .limit(por_pagina)
+        .all()
+    )
+    sincronizou = _sincronizar_grv_classificacao(rows)
+    atualizou_contas = _atualizar_nomes_conta_plano(rows)
+    if sincronizou or atualizou_contas:
+        db.session.commit()
     contas = (
         db.session.query(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta, func.count(ClassificacaoContabilItem.id))
         .filter(ClassificacaoContabilItem.conta.isnot(None))
@@ -2576,6 +2655,14 @@ def financeiro_classificacao_listar():
                 {"conta": c[0], "nome_conta": c[1], "total": int(c[2] or 0)}
                 for c in contas
             ],
+            "paginacao": {
+                "page": pagina,
+                "per_page": por_pagina,
+                "total": total,
+                "pages": paginas,
+                "has_prev": pagina > 1,
+                "has_next": pagina < paginas,
+            },
             "corte_minimo": "2026-01-01",
             "competencia": competencia,
         }
@@ -2593,7 +2680,7 @@ def financeiro_classificacao_atualizar(classificacao_id):
     if comp.status == "Fechada":
         return jsonify({"sucesso": False, "msg": "Competencia fechada. Abra o periodo antes de alterar."}), 409
     conta = normalizar_conta(data.get("conta") or "")
-    nome_conta = str(data.get("nome_conta") or "").strip() or buscar_nome_conta(conta)
+    nome_conta = buscar_nome_conta(conta) or str(data.get("nome_conta") or "").strip()
     comentario = str(data.get("comentario") or "").strip()
     if not conta or not nome_conta:
         return jsonify({"sucesso": False, "msg": "Informe conta e nome da conta."}), 400
@@ -2662,6 +2749,10 @@ def financeiro_classificacao_exportar():
         .order_by(ItemNota.data_lancamento.asc(), ClassificacaoContabilItem.numero_nota.asc())
         .all()
     )
+    sincronizou = _sincronizar_grv_classificacao(rows)
+    atualizou_contas = _atualizar_nomes_conta_plano(rows)
+    if sincronizou or atualizou_contas:
+        db.session.commit()
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
     writer.writerow([
@@ -2705,19 +2796,19 @@ def financeiro_classificacao_exportar():
             row.codigo_item or "",
             row.descricao_item or "",
             cfop_entrada(row.cfop) or row.cfop or "",
-            descricao_cfop_entrada(row.cfop),
-            _float_contabil(getattr(item, "icms_base_calculo", 0)) if item else 0,
-            _float_contabil(getattr(item, "icms_aliquota", 0)) if item else 0,
-            getattr(item, "cst_icms", "") if item else "",
-            _float_contabil(getattr(item, "icms_valor", 0)) if item else 0,
-            _float_contabil(getattr(item, "pis_base_calculo", 0)) if item else 0,
-            _float_contabil(getattr(item, "pis_aliquota", 0)) if item else 0,
-            getattr(item, "cst_pis", "") if item else "",
-            _float_contabil(getattr(item, "pis_valor_credito", 0)) if item else 0,
-            _float_contabil(getattr(item, "cofins_base_calculo", 0)) if item else 0,
-            _float_contabil(getattr(item, "cofins_aliquota", 0)) if item else 0,
-            getattr(item, "cst_cofins", "") if item else "",
-            _float_contabil(getattr(item, "cofins_valor_credito", 0)) if item else 0,
+            getattr(item, "cfop_descricao_grv", "") or descricao_cfop_entrada(row.cfop),
+            _tributo_grv(item, "icms_base_calculo"),
+            _tributo_grv(item, "icms_aliquota"),
+            _cst_grv(item, "cst_icms"),
+            _tributo_grv(item, "icms_valor"),
+            _tributo_grv(item, "pis_base_calculo"),
+            _tributo_grv(item, "pis_aliquota"),
+            _cst_grv(item, "cst_pis"),
+            _tributo_grv(item, "pis_valor_credito"),
+            _tributo_grv(item, "cofins_base_calculo"),
+            _tributo_grv(item, "cofins_aliquota"),
+            _cst_grv(item, "cst_cofins"),
+            _tributo_grv(item, "cofins_valor_credito"),
             row.conta or "",
             row.nome_conta or "",
             row.status or "",

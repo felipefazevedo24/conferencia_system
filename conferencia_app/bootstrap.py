@@ -143,6 +143,9 @@ def _ensure_item_nota_columns() -> None:
         if "codigo_grv" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN codigo_grv VARCHAR(80)"))
             conn.commit()
+        if "cfop_descricao_grv" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cfop_descricao_grv VARCHAR(180)"))
+            conn.commit()
         if "unidade_comercial" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN unidade_comercial VARCHAR(20)"))
             conn.commit()
@@ -196,6 +199,12 @@ def _ensure_item_nota_columns() -> None:
             conn.commit()
         if "cofins_valor_credito" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN cofins_valor_credito FLOAT"))
+            conn.commit()
+        if "tributos_origem" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN tributos_origem VARCHAR(20)"))
+            conn.commit()
+        if "tributos_grv_atualizado_em" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN tributos_grv_atualizado_em DATETIME"))
             conn.commit()
         if "pagamento_xml" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN pagamento_xml BOOLEAN NOT NULL DEFAULT 0"))
