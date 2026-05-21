@@ -2297,14 +2297,30 @@ def _sincronizar_grv_competencia(data_inicio, data_fim) -> bool:
     query = query.filter(ItemNota.data_lancamento >= data_inicio)
     if data_fim:
         query = query.filter(ItemNota.data_lancamento <= data_fim)
-    itens = (
+    itens_base = (
         query.filter(ItemNota.numero_lancamento.isnot(None))
         .filter(ItemNota.numero_lancamento != "")
-        .filter(or_(ItemNota.tributos_origem.is_(None), ItemNota.tributos_origem != "GRV"))
         .order_by(ItemNota.data_lancamento.desc())
         .limit(2000)
         .all()
     )
+    itens = []
+    for item in itens_base:
+        valores = [
+            getattr(item, "icms_base_calculo", None),
+            getattr(item, "icms_aliquota", None),
+            getattr(item, "icms_valor", None),
+            getattr(item, "pis_base_calculo", None),
+            getattr(item, "pis_aliquota", None),
+            getattr(item, "pis_valor_credito", None),
+            getattr(item, "cofins_base_calculo", None),
+            getattr(item, "cofins_aliquota", None),
+            getattr(item, "cofins_valor_credito", None),
+        ]
+        csts = [getattr(item, "cst_icms", ""), getattr(item, "cst_pis", ""), getattr(item, "cst_cofins", "")]
+        tem_tributo = any(float(v or 0) != 0 for v in valores) or any(str(cst or "").strip() for cst in csts)
+        if getattr(item, "tributos_origem", None) != "GRV" or not tem_tributo:
+            itens.append(item)
     if not itens:
         return False
     try:

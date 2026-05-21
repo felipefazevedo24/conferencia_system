@@ -465,6 +465,28 @@ def _tipo_regra(metodo: str) -> str:
     return "Sem regra"
 
 
+def _precisa_sincronizar_grv(item: ItemNota) -> bool:
+    if not getattr(item, "numero_lancamento", None):
+        return False
+    if getattr(item, "tributos_origem", None) != "GRV":
+        return True
+    valores = [
+        getattr(item, "icms_base_calculo", None),
+        getattr(item, "icms_aliquota", None),
+        getattr(item, "icms_valor", None),
+        getattr(item, "pis_base_calculo", None),
+        getattr(item, "pis_aliquota", None),
+        getattr(item, "pis_valor_credito", None),
+        getattr(item, "cofins_base_calculo", None),
+        getattr(item, "cofins_aliquota", None),
+        getattr(item, "cofins_valor_credito", None),
+    ]
+    csts = [getattr(item, "cst_icms", ""), getattr(item, "cst_pis", ""), getattr(item, "cst_cofins", "")]
+    tem_valor = any(float(v or 0) != 0 for v in valores)
+    tem_cst = any(str(cst or "").strip() for cst in csts)
+    return not (tem_valor or tem_cst)
+
+
 def sugerir_classificacao_item(item: ItemNota) -> dict:
     garantir_padroes_internos()
     fornecedor = normalizar_texto(item.fornecedor)
@@ -612,7 +634,7 @@ def classificar_nota(numero_nota: str, sobrescrever_manual: bool = False) -> int
 
         sincronizar_codigos_grv_itens([
             item for item in itens
-            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+            if _precisa_sincronizar_grv(item)
         ])
         for item in itens:
             db.session.refresh(item)
@@ -649,7 +671,7 @@ def classificar_lancadas_desde_2026(
 
         sincronizar_codigos_grv_itens([
             item for item in itens
-            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+            if _precisa_sincronizar_grv(item)
         ])
         for item in itens:
             db.session.refresh(item)
@@ -689,7 +711,7 @@ def classificar_lancadas_sem_registro(
 
         sincronizar_codigos_grv_itens([
             item for item in itens
-            if getattr(item, "numero_lancamento", None) and getattr(item, "tributos_origem", None) != "GRV"
+            if _precisa_sincronizar_grv(item)
         ])
         for item in itens:
             db.session.refresh(item)
