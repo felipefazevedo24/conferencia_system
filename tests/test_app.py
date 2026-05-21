@@ -1319,6 +1319,57 @@ def test_financeiro_classificacao_contabil_cfop_segue_natureza_grv(tmp_path):
         assert atualizado.cfop_descricao_grv == "Compra de material para uso ou consumo"
 
 
+def test_financeiro_classificacao_contabil_cria_item_ausente_pelo_grv(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        from conferencia_app.services.erp_lancamento_service import _aplicar_codigos_grv
+
+        total = _aplicar_codigos_grv(
+            "11355",
+            {
+                "codigo_lancamento": "GRV-11355",
+                "numero_nota": "11355",
+                "dt_nf": "2026-05-21T00:00:00",
+                "dt_lancamento": "2026-05-21T10:15:00",
+                "parceiro_nome": "Fornecedor GRV",
+                "itens": [
+                    {
+                        "cod_interno": "22-02-9999",
+                        "descricao": "Item lancado apenas no GRV",
+                        "quantidade": 3,
+                        "cfop": "1102",
+                        "natureza_operacao": "Compra de material para uso ou consumo",
+                        "icms_base_calculo": 123.45,
+                        "icms_aliquota": 18,
+                        "icms_cst": "101",
+                        "icms_valor": 22.22,
+                        "pis_base_calculo": 123.45,
+                        "pis_aliquota": 1.65,
+                        "pis_cst": "50",
+                        "pis_valor_credito": 2.04,
+                        "cofins_base_calculo": 123.45,
+                        "cofins_aliquota": 7.6,
+                        "cofins_cst": "50",
+                        "cofins_valor_credito": 9.38,
+                    }
+                ],
+            },
+        )
+        db.session.commit()
+
+        item = ItemNota.query.filter_by(numero_nota="11355").first()
+        assert total == 1
+        assert item is not None
+        assert item.status == "Lançado"
+        assert item.codigo_grv == "22-02-9999"
+        assert item.cfop == "1556"
+        assert item.icms_base_calculo == 123.45
+        assert item.cst_icms == "101"
+        assert item.pis_valor_credito == 2.04
+        assert item.cofins_aliquota == 7.6
+        assert item.tributos_origem == "GRV"
+
+
 def test_financeiro_classificacao_contabil_importa_excel_upload_para_banco(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

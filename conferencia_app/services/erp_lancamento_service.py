@@ -557,14 +557,88 @@ def _set_if_present(item: ItemNota, attr: str, row: dict[str, Any], *keys: str) 
             return
 
 
+def _aplicar_campos_grv_item(item: ItemNota, row_grv: dict[str, Any], entrada: dict[str, Any]) -> None:
+    fornecedor_grv = str(entrada.get("parceiro_nome") or "").strip()
+    data_lancamento_grv = _parse_dt_nf_api(entrada.get("dt_lancamento"))
+    codigo = str(row_grv.get("cod_interno") or "").strip()
+    if codigo:
+        item.codigo_grv = codigo[:80]
+        item.codigo = codigo[:50]
+    if fornecedor_grv:
+        item.fornecedor = fornecedor_grv[:100]
+    if isinstance(data_lancamento_grv, datetime):
+        item.data_lancamento = data_lancamento_grv
+    natureza_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()
+    cfop_natureza = _cfop_por_natureza_grv(natureza_grv)
+    cfop_grv = cfop_natureza or str(row_grv.get("cfop") or "").strip()[:4]
+    if cfop_grv:
+        item.cfop = cfop_grv
+    item.cfop_descricao_grv = natureza_grv[:180]
+    item.descricao = str(row_grv.get("descricao") or item.descricao or "").strip()[:200]
+    item.qtd_real = _float_grv(row_grv.get("quantidade"), item.qtd_real or 0.0)
+    item.unidade_comercial = str(row_grv.get("unidade") or item.unidade_comercial or "").strip()[:20]
+    _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
+    _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
+    _set_if_present(item, "cst_icms", row_grv, "icms_cst", "cst_icms", "cst")
+    _set_if_present(item, "icms_valor", row_grv, "icms_valor", "valor_icms", "vl_icms", "v_icms")
+    _set_if_present(item, "pis_base_calculo", row_grv, "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis")
+    _set_if_present(item, "pis_aliquota", row_grv, "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis")
+    _set_if_present(item, "cst_pis", row_grv, "pis_cst", "cst_pis")
+    _set_if_present(item, "pis_valor_credito", row_grv, "pis_valor_credito", "valor_pis", "vl_pis", "v_pis")
+    _set_if_present(item, "cofins_base_calculo", row_grv, "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins")
+    _set_if_present(item, "cofins_aliquota", row_grv, "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins")
+    _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins")
+    _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins")
+    item.tributos_origem = "GRV"
+    item.tributos_grv_atualizado_em = datetime.now()
+
+
+def _garantir_itens_grv(entrada: dict[str, Any]) -> int:
+    numero = str(entrada.get("numero_nota") or "").strip()
+    if not numero:
+        return 0
+    itens_grv = [row for row in (entrada.get("itens") or []) if isinstance(row, dict) and (row.get("cod_interno") or row.get("descricao"))]
+    if not itens_grv:
+        return 0
+
+    existentes = ItemNota.query.filter_by(numero_nota=numero).all()
+    codigos_existentes = {str(item.codigo_grv or item.codigo or "").strip().lower() for item in existentes if str(item.codigo_grv or item.codigo or "").strip()}
+    criados = 0
+    for row in itens_grv:
+        codigo = str(row.get("cod_interno") or "").strip()
+        if codigo and codigo.lower() in codigos_existentes:
+            continue
+        item = ItemNota(
+            numero_nota=numero,
+            chave_acesso=str(entrada.get("chave_acesso") or "").strip()[:44],
+            fornecedor=str(entrada.get("parceiro_nome") or "").strip()[:100],
+            codigo=codigo[:50],
+            codigo_grv=codigo[:80],
+            descricao=str(row.get("descricao") or "").strip()[:200],
+            qtd_real=_float_grv(row.get("quantidade")),
+            status="Lançado",
+            usuario_lancamento="GRV",
+            numero_lancamento=str(entrada.get("codigo_lancamento") or entrada.get("numero_ar") or "").strip()[:80],
+            data_importacao=datetime.now(),
+            data_lancamento=_parse_dt_nf_api(entrada.get("dt_lancamento")) if isinstance(_parse_dt_nf_api(entrada.get("dt_lancamento")), datetime) else datetime.now(),
+            data_emissao=_parse_dt_nf_api(entrada.get("dt_nf")) if isinstance(_parse_dt_nf_api(entrada.get("dt_nf")), datetime) else None,
+        )
+        _aplicar_campos_grv_item(item, row, entrada)
+        db.session.add(item)
+        codigos_existentes.add(codigo.lower())
+        criados += 1
+    if criados:
+        db.session.flush()
+    return criados
+
+
 def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
     itens_grv = [row for row in (entrada.get("itens") or []) if isinstance(row, dict) and str(row.get("cod_interno") or "").strip()]
     if not itens_grv:
         return 0
 
+    _garantir_itens_grv(entrada)
     itens_locais = ItemNota.query.filter_by(numero_nota=str(numero_nota)).order_by(ItemNota.id.asc()).all()
-    fornecedor_grv = str(entrada.get("parceiro_nome") or "").strip()
-    data_lancamento_grv = _parse_dt_nf_api(entrada.get("dt_lancamento"))
     atualizados = 0
     usados: set[int] = set()
     for item in itens_locais:
@@ -603,31 +677,7 @@ def _aplicar_codigos_grv(numero_nota: str, entrada: dict[str, Any]) -> int:
         codigo = str(itens_grv[melhor_idx].get("cod_interno") or "").strip()
         if codigo:
             row_grv = itens_grv[melhor_idx]
-            item.codigo_grv = codigo[:80]
-            if fornecedor_grv:
-                item.fornecedor = fornecedor_grv[:100]
-            if isinstance(data_lancamento_grv, datetime):
-                item.data_lancamento = data_lancamento_grv
-            natureza_grv = str(row_grv.get("natureza_operacao") or row_grv.get("descricao_cfop") or "").strip()
-            cfop_natureza = _cfop_por_natureza_grv(natureza_grv)
-            cfop_grv = cfop_natureza or str(row_grv.get("cfop") or "").strip()[:4]
-            if cfop_grv:
-                item.cfop = cfop_grv
-            item.cfop_descricao_grv = natureza_grv[:180]
-            _set_if_present(item, "icms_base_calculo", row_grv, "icms_base_calculo", "base_icms", "vl_base_icms", "vbc_icms")
-            _set_if_present(item, "icms_aliquota", row_grv, "icms_aliquota", "aliquota_icms", "aliq_icms", "p_icms")
-            _set_if_present(item, "cst_icms", row_grv, "icms_cst", "cst_icms", "cst")
-            _set_if_present(item, "icms_valor", row_grv, "icms_valor", "valor_icms", "vl_icms", "v_icms")
-            _set_if_present(item, "pis_base_calculo", row_grv, "pis_base_calculo", "base_pis", "vl_base_pis", "vbc_pis")
-            _set_if_present(item, "pis_aliquota", row_grv, "pis_aliquota", "aliquota_pis", "aliq_pis", "p_pis")
-            _set_if_present(item, "cst_pis", row_grv, "pis_cst", "cst_pis")
-            _set_if_present(item, "pis_valor_credito", row_grv, "pis_valor_credito", "valor_pis", "vl_pis", "v_pis")
-            _set_if_present(item, "cofins_base_calculo", row_grv, "cofins_base_calculo", "base_cofins", "vl_base_cofins", "vbc_cofins")
-            _set_if_present(item, "cofins_aliquota", row_grv, "cofins_aliquota", "aliquota_cofins", "aliq_cofins", "p_cofins")
-            _set_if_present(item, "cst_cofins", row_grv, "cofins_cst", "cst_cofins")
-            _set_if_present(item, "cofins_valor_credito", row_grv, "cofins_valor_credito", "valor_cofins", "vl_cofins", "v_cofins")
-            item.tributos_origem = "GRV"
-            item.tributos_grv_atualizado_em = datetime.now()
+            _aplicar_campos_grv_item(item, row_grv, entrada)
             atualizados += 1
     return atualizados
 
@@ -708,17 +758,12 @@ def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetim
     if not rows:
         return resumo
 
-    itens_para_detalhar: list[ItemNota] = []
+    notas_para_classificar: set[str] = set()
     for row in rows:
         numero = str(row.get("numero_nota") or row.get("n_nf") or "").strip()
         codigo = str(row.get("codigo") or row.get("codigo_lancamento") or "").strip()
         chave = "".join(ch for ch in str(row.get("chave_acesso") or row.get("chv_nfe") or "") if ch.isdigit())
         if not numero or not codigo:
-            continue
-        itens = ItemNota.query.filter(ItemNota.numero_nota == numero).all()
-        if not itens and chave:
-            itens = ItemNota.query.filter(ItemNota.chave_acesso == chave).all()
-        if not itens:
             continue
         atualizados = _aplicar_lancamento_local(
             numero,
@@ -729,15 +774,17 @@ def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetim
         )
         if atualizados:
             resumo["aplicados"] += 1
-        itens_para_detalhar.extend(itens)
+        entrada = _consultar_entrada_grv_via_api(cfg, numero, codigo, chave)
+        if entrada:
+            resumo["detalhados"] += _aplicar_codigos_grv(str(entrada.get("numero_nota") or numero), entrada)
+        if ItemNota.query.filter(ItemNota.numero_nota == numero).first():
+            notas_para_classificar.add(numero)
 
-    if itens_para_detalhar:
-        resumo["detalhados"] = sincronizar_codigos_grv_itens(itens_para_detalhar)
+    if notas_para_classificar:
         try:
             from .classificacao_contabil_service import classificar_nota
 
-            notas = {str(item.numero_nota or "") for item in itens_para_detalhar if item.numero_nota}
-            for numero in notas:
+            for numero in notas_para_classificar:
                 resumo["classificados"] += classificar_nota(numero)
         except Exception:
             logger.exception("Falha ao classificar lancamentos GRV do periodo")
