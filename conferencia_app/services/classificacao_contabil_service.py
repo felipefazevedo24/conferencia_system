@@ -561,12 +561,12 @@ def sugerir_classificacao_item(item: ItemNota) -> dict:
     }
 
 
-def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> ClassificacaoContabilItem:
+def classificar_item(item: ItemNota, sobrescrever_manual: bool = False, sincronizar_grv: bool = True) -> ClassificacaoContabilItem:
     existente = ClassificacaoContabilItem.query.filter_by(item_nota_id=item.id).first()
     if existente and existente.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
         return existente
 
-    if getattr(item, "numero_lancamento", None):
+    if sincronizar_grv and getattr(item, "numero_lancamento", None):
         try:
             from .erp_lancamento_service import sincronizar_codigos_grv_nota
 
@@ -607,9 +607,17 @@ def classificar_item(item: ItemNota, sobrescrever_manual: bool = False) -> Class
 
 def classificar_nota(numero_nota: str, sobrescrever_manual: bool = False) -> int:
     itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status="Lançado").all()
+    try:
+        from .erp_lancamento_service import sincronizar_codigos_grv_itens
+
+        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        for item in itens:
+            db.session.refresh(item)
+    except Exception:
+        pass
     total = 0
     for item in itens:
-        classificar_item(item, sobrescrever_manual=sobrescrever_manual)
+        classificar_item(item, sobrescrever_manual=sobrescrever_manual, sincronizar_grv=False)
         total += 1
     db.session.commit()
     return total
@@ -632,12 +640,21 @@ def classificar_lancadas_desde_2026(
         query = query.filter(ItemNota.data_lancamento <= data_fim)
     if limite:
         query = query.limit(limite)
+    itens = query.all()
+    try:
+        from .erp_lancamento_service import sincronizar_codigos_grv_itens
+
+        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        for item in itens:
+            db.session.refresh(item)
+    except Exception:
+        pass
     total = 0
-    for item in query.all():
+    for item in itens:
         antes = ClassificacaoContabilItem.query.filter_by(item_nota_id=item.id).first()
         if antes and antes.status in {"Revisado", "Aprovado"} and not sobrescrever_manual:
             continue
-        classificar_item(item, sobrescrever_manual=sobrescrever_manual)
+        classificar_item(item, sobrescrever_manual=sobrescrever_manual, sincronizar_grv=False)
         total += 1
     db.session.commit()
     return total
@@ -660,9 +677,18 @@ def classificar_lancadas_sem_registro(
         query = query.filter(ItemNota.data_lancamento <= data_fim)
     if limite:
         query = query.limit(limite)
+    itens = query.all()
+    try:
+        from .erp_lancamento_service import sincronizar_codigos_grv_itens
+
+        sincronizar_codigos_grv_itens([item for item in itens if getattr(item, "numero_lancamento", None)])
+        for item in itens:
+            db.session.refresh(item)
+    except Exception:
+        pass
     total = 0
-    for item in query.all():
-        classificar_item(item)
+    for item in itens:
+        classificar_item(item, sincronizar_grv=False)
         total += 1
     db.session.commit()
     return total

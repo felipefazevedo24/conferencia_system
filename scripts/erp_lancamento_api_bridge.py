@@ -1072,6 +1072,58 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar entrada de chapa no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/entradas-chapa-lote")
+    def consultar_entradas_chapa_lote():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            entradas_payload = payload.get("entradas") or []
+            if not isinstance(entradas_payload, list):
+                return jsonify({"sucesso": False, "erro": "entradas_deve_ser_lista"}), 400
+            entradas_payload = entradas_payload[:500]
+            entradas = []
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    for item in entradas_payload:
+                        if not isinstance(item, dict):
+                            continue
+                        numero_ar = str(item.get("numero_ar") or item.get("codigo_lancamento") or "").strip()
+                        numero_nota = str(item.get("numero_nota") or "").strip()
+                        chave = "".join(ch for ch in str(item.get("chave") or "") if ch.isdigit())
+                        if not numero_ar and not numero_nota and not chave:
+                            continue
+                        cur.execute(
+                            ENTRADA_CHAPA_SQL,
+                            (
+                                numero_ar,
+                                numero_ar,
+                                numero_ar,
+                                numero_nota,
+                                numero_nota,
+                                numero_ar,
+                                numero_nota,
+                                chave,
+                                chave,
+                            ),
+                        )
+                        cols = [desc[0] for desc in cur.description]
+                        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                        _enriquecer_tributos_entrada(cur, rows)
+                        entrada = _montar_entrada_chapa(rows, numero_ar, numero_nota, chave)
+                        if entrada:
+                            entradas.append(entrada)
+
+            return jsonify({"sucesso": True, "entradas": entradas})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar entradas de chapa em lote no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/entrada-chapa-desde")
     def consultar_entradas_chapa_desde():
         cfg = _config()

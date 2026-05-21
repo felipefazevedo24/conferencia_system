@@ -2273,24 +2273,47 @@ def _cst_grv(item: ItemNota | None, attr: str) -> str:
 
 
 def _sincronizar_grv_classificacao(rows: list[ClassificacaoContabilItem]) -> bool:
-    sincronizadas = False
-    notas: set[tuple[str, str, str]] = set()
+    itens: list[ItemNota] = []
+    vistos: set[int] = set()
     for row in rows:
         item = row.item_nota
-        if not item or not getattr(item, "numero_lancamento", None):
+        if not item or item.id in vistos or not getattr(item, "numero_lancamento", None):
             continue
-        notas.add((str(item.numero_nota or row.numero_nota or ""), str(item.numero_lancamento or ""), str(item.chave_acesso or "")))
-    if not notas:
+        itens.append(item)
+        vistos.add(item.id)
+    if not itens:
         return False
     try:
-        from ..services.erp_lancamento_service import sincronizar_codigos_grv_nota
+        from ..services.erp_lancamento_service import sincronizar_codigos_grv_itens
 
-        for numero, lancamento, chave in notas:
-            if sincronizar_codigos_grv_nota(numero, codigo_lancamento=lancamento, chave=chave):
-                sincronizadas = True
+        return bool(sincronizar_codigos_grv_itens(itens))
     except Exception:
         current_app.logger.exception("Falha ao sincronizar tributos GRV para classificacao contabil")
-    return sincronizadas
+    return False
+
+
+def _sincronizar_grv_competencia(data_inicio, data_fim) -> bool:
+    query = ItemNota.query.filter(ItemNota.status == "Lançado")
+    query = query.filter(ItemNota.data_lancamento >= data_inicio)
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    itens = (
+        query.filter(ItemNota.numero_lancamento.isnot(None))
+        .filter(ItemNota.numero_lancamento != "")
+        .filter(or_(ItemNota.tributos_origem.is_(None), ItemNota.tributos_origem != "GRV"))
+        .order_by(ItemNota.data_lancamento.desc())
+        .limit(2000)
+        .all()
+    )
+    if not itens:
+        return False
+    try:
+        from ..services.erp_lancamento_service import sincronizar_codigos_grv_itens
+
+        return bool(sincronizar_codigos_grv_itens(itens))
+    except Exception:
+        current_app.logger.exception("Falha ao sincronizar tributos GRV da competencia")
+        return False
 
 
 def _atualizar_nomes_conta_plano(rows: list[ClassificacaoContabilItem]) -> bool:
@@ -2588,6 +2611,7 @@ def financeiro_classificacao_listar():
     comp = _competencia_row(competencia)
     if comp.status != "Fechada":
         novos = classificar_lancadas_sem_registro(limite=1000, data_inicio=data_inicio, data_fim=data_fim)
+        _sincronizar_grv_competencia(data_inicio, data_fim)
         if novos and comp.status == "Aprovada":
             comp.status = "Aberta"
             comp.atualizado_em = datetime.now()
@@ -2634,9 +2658,8 @@ def financeiro_classificacao_listar():
         .limit(por_pagina)
         .all()
     )
-    sincronizou = _sincronizar_grv_classificacao(rows)
     atualizou_contas = _atualizar_nomes_conta_plano(rows)
-    if sincronizou or atualizou_contas:
+    if atualizou_contas:
         db.session.commit()
     contas = (
         db.session.query(ClassificacaoContabilItem.conta, ClassificacaoContabilItem.nome_conta, func.count(ClassificacaoContabilItem.id))

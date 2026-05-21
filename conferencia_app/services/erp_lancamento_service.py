@@ -316,6 +316,48 @@ def _consultar_entrada_grv_via_api(cfg: dict[str, Any], numero_nota: str, codigo
     return entrada if isinstance(entrada, dict) else None
 
 
+def _consultar_entradas_grv_via_api(cfg: dict[str, Any], itens: list[ItemNota]) -> list[dict[str, Any]]:
+    if not cfg.get("api_url") or not itens:
+        return []
+    url = f"{cfg['api_url']}/api/erp/entradas-chapa-lote"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/ERP-Lancamento",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    entradas_payload = [
+        {
+            "numero_ar": str(item.numero_lancamento or "").strip(),
+            "codigo_lancamento": str(item.numero_lancamento or "").strip(),
+            "numero_nota": str(item.numero_nota or "").strip(),
+            "chave": str(item.chave_acesso or "").strip(),
+        }
+        for item in itens
+        if str(item.numero_lancamento or item.numero_nota or item.chave_acesso or "").strip()
+    ]
+    if not entradas_payload:
+        return []
+    resultado = []
+    for inicio in range(0, len(entradas_payload), 500):
+        payload = {"entradas": entradas_payload[inicio:inicio + 500]}
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 60)
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.HTTPError:
+            raise
+        if not isinstance(data, dict):
+            continue
+        entradas = data.get("entradas") or []
+        resultado.extend(entrada for entrada in entradas if isinstance(entrada, dict))
+    return resultado
+
+
 def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_lancamento: str = "", chave: str = "") -> dict[str, Any] | None:
     if not cfg.get("host") or not cfg.get("database") or not cfg.get("user"):
         return None
@@ -539,6 +581,45 @@ def sincronizar_codigos_grv_nota(numero_nota: str, codigo_lancamento: str = "", 
     except Exception:
         db.session.rollback()
         logger.exception("Falha ao sincronizar codigo GRV da NF %s", numero_nota)
+        return 0
+
+
+def sincronizar_codigos_grv_itens(itens: list[ItemNota]) -> int:
+    itens_validos = []
+    vistos: set[tuple[str, str, str]] = set()
+    for item in itens or []:
+        chave = (str(item.numero_nota or ""), str(item.numero_lancamento or ""), str(item.chave_acesso or ""))
+        if chave in vistos or not (chave[0] or chave[1] or chave[2]):
+            continue
+        vistos.add(chave)
+        itens_validos.append(item)
+    if not itens_validos:
+        return 0
+
+    cfg = _resolver_config()
+    if not cfg.get("api_url") and (not cfg.get("host") or not cfg.get("database") or not cfg.get("user")):
+        return 0
+    total = 0
+    try:
+        entradas = _consultar_entradas_grv_via_api(cfg, itens_validos) if cfg.get("api_url") else []
+        if entradas:
+            for entrada in entradas:
+                total += _aplicar_codigos_grv(str(entrada.get("numero_nota") or ""), entrada)
+        else:
+            for item in itens_validos:
+                entrada = (
+                    _consultar_entrada_grv_via_api(cfg, str(item.numero_nota or ""), str(item.numero_lancamento or ""), str(item.chave_acesso or ""))
+                    if cfg.get("api_url")
+                    else _consultar_entrada_grv_direto(cfg, str(item.numero_nota or ""), str(item.numero_lancamento or ""), str(item.chave_acesso or ""))
+                )
+                if entrada:
+                    total += _aplicar_codigos_grv(str(item.numero_nota or ""), entrada)
+        if total:
+            db.session.commit()
+        return total
+    except Exception:
+        db.session.rollback()
+        logger.exception("Falha ao sincronizar codigos GRV em lote")
         return 0
 
 
