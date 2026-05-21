@@ -481,7 +481,7 @@
                         <th>Fornecedor</th>
                         <th>Item</th>
                         <th>CFOP entrada</th>
-                        <th>Tributos GRV</th>
+                        <th>Tributação de entrada</th>
                         <th>Conta</th>
                         <th>Conf./Status</th>
                         <th>Origem/Motivo</th>
@@ -619,8 +619,8 @@ function taxCell(base, aliquota, cst, valor) {
 
 function tributosCell(item) {
     const origem = item.tributos_origem === "GRV"
-        ? `<small class="text-success">GRV ${item.tributos_grv_atualizado_em || ""}</small>`
-        : `<small class="text-danger">Aguardando GRV</small>`;
+        ? `<small class="text-success">Atualizado em ${item.tributos_grv_atualizado_em || ""}</small>`
+        : `<small class="text-danger">Aguardando atualização</small>`;
     return `
         <div class="cc-tax">
             <div>${origem}</div>
