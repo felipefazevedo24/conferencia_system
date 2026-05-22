@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import current_app
+import requests
 
 
 GRV_FAMILIA_USO_CONSUMO = 39
@@ -45,6 +46,9 @@ def _config() -> dict[str, Any]:
         "password": str(os.environ.get("FACILITIES_GRV_PG_PASSWORD") or os.environ.get("ERP_LANCAMENTO_PG_PASSWORD") or arquivo.get("password") or ""),
         "connect_timeout": int(os.environ.get("FACILITIES_GRV_CONNECT_TIMEOUT") or os.environ.get("ERP_LANCAMENTO_CONNECT_TIMEOUT") or 8),
         "empresa": int(os.environ.get("FACILITIES_GRV_EMPRESA") or os.environ.get("ERP_ESTOQUE_PG_COMPANY") or 1),
+        "api_url": str(os.environ.get("FACILITIES_GRV_API_URL") or os.environ.get("ERP_LANCAMENTO_API_URL") or arquivo.get("api_url") or "").strip().rstrip("/"),
+        "api_token": str(os.environ.get("FACILITIES_GRV_API_TOKEN") or os.environ.get("ERP_LANCAMENTO_API_TOKEN") or arquivo.get("api_token") or ""),
+        "api_timeout": int(os.environ.get("FACILITIES_GRV_API_TIMEOUT") or os.environ.get("ERP_LANCAMENTO_API_TIMEOUT") or arquivo.get("api_timeout") or 30),
     }
 
 
@@ -85,10 +89,38 @@ def _extrair_ca(nome_item: str) -> str:
     return "".join(ch for ch in match.group(1) if ch.isdigit())[:20]
 
 
+def _post_bridge(cfg: dict[str, Any], path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    url = f"{cfg['api_url']}{path}"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/Facilities-GRV",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    current_app.logger.info("Facilities GRV via bridge: POST %s", path)
+    resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("sucesso"):
+        raise RuntimeError(str((data or {}).get("erro") or "Resposta invalida da API Facilities GRV"))
+    return data
+
+
 class FacilitiesGRVService:
     @staticmethod
     def listar_funcionarios(ativos: bool = True) -> list[dict[str, Any]]:
         cfg = _config()
+        if cfg.get("api_url"):
+            data = _post_bridge(cfg, "/api/erp/facilities/funcionarios", {"ativos": bool(ativos)})
+            rows = data.get("funcionarios") or []
+            return rows if isinstance(rows, list) else []
+        return FacilitiesGRVService._listar_funcionarios_postgres(cfg, ativos=ativos)
+
+    @staticmethod
+    def _listar_funcionarios_postgres(cfg: dict[str, Any] | None = None, ativos: bool = True) -> list[dict[str, Any]]:
+        cfg = cfg or _config()
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             return []
         where_ativo = "and coalesce(inativo, 0) = 0" if ativos else ""
@@ -119,6 +151,15 @@ class FacilitiesGRVService:
     @staticmethod
     def listar_materiais_epi_uniforme(com_saldo: bool = True) -> list[dict[str, Any]]:
         cfg = _config()
+        if cfg.get("api_url"):
+            data = _post_bridge(cfg, "/api/erp/facilities/materiais", {"com_saldo": bool(com_saldo)})
+            rows = data.get("materiais") or []
+            return rows if isinstance(rows, list) else []
+        return FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(cfg, com_saldo=com_saldo)
+
+    @staticmethod
+    def _listar_materiais_epi_uniforme_postgres(cfg: dict[str, Any] | None = None, com_saldo: bool = True) -> list[dict[str, Any]]:
+        cfg = cfg or _config()
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             return []
         filtro_saldo = "and coalesce(p.estoque, 0) > 0" if com_saldo else ""
@@ -181,6 +222,18 @@ class FacilitiesGRVService:
         if not codigo:
             return None
         cfg = _config()
+        if cfg.get("api_url"):
+            data = _post_bridge(cfg, "/api/erp/facilities/saldo", {"codigo_interno": codigo})
+            saldo = data.get("saldo")
+            return _float(saldo) if saldo is not None else None
+        return FacilitiesGRVService._saldo_material_postgres(codigo, cfg)
+
+    @staticmethod
+    def _saldo_material_postgres(codigo_interno: str, cfg: dict[str, Any] | None = None) -> float | None:
+        codigo = str(codigo_interno or "").strip()
+        if not codigo:
+            return None
+        cfg = cfg or _config()
         if not cfg["host"] or not cfg["database"] or not cfg["user"]:
             return None
         sql = """

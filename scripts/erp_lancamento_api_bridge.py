@@ -899,8 +899,8 @@ def create_app() -> Flask:
         try:
             from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
 
-            funcionarios = FacilitiesGRVService.listar_funcionarios(ativos=True)
-            materiais = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=True)
+            funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=True)
+            materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=True)
             epi = next((m for m in materiais if m.get("tipo") == "epi"), None)
             uniforme = next((m for m in materiais if m.get("tipo") == "uniforme"), None)
             funcionario = next((f for f in funcionarios if str(f.get("codigo")) != "240"), None)
@@ -919,6 +919,65 @@ def create_app() -> Flask:
         except Exception as exc:
             app.logger.exception("Falha no diagnostico Facilities GRV")
             return jsonify({"sucesso": False, "erro": str(exc), "instance_path": app.instance_path}), 500
+
+    @app.post("/api/erp/facilities/funcionarios")
+    def facilities_funcionarios_grv():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            ativos = bool(payload.get("ativos", True))
+            from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
+
+            app.logger.info("Facilities GRV: consultando funcionarios ativos=%s", ativos)
+            funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=ativos)
+            return jsonify({"sucesso": True, "funcionarios": funcionarios})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar funcionarios Facilities no GRV")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/facilities/materiais")
+    def facilities_materiais_grv():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            com_saldo = bool(payload.get("com_saldo", True))
+            from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
+
+            app.logger.info("Facilities GRV: consultando materiais com_saldo=%s", com_saldo)
+            materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=com_saldo)
+            return jsonify({"sucesso": True, "materiais": materiais})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar materiais Facilities no GRV")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/facilities/saldo")
+    def facilities_saldo_grv():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            codigo = str(payload.get("codigo_interno") or "").strip()
+            if not codigo:
+                return jsonify({"sucesso": False, "erro": "codigo_interno_obrigatorio"}), 400
+            from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
+
+            app.logger.info("Facilities GRV: consultando saldo codigo_interno=%s", codigo)
+            saldo = FacilitiesGRVService._saldo_material_postgres(codigo)
+            return jsonify({"sucesso": True, "codigo_interno": codigo, "saldo": saldo})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar saldo Facilities no GRV")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/lancamentos")
     def consultar_lancamentos():
