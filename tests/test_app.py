@@ -2723,6 +2723,43 @@ def test_bootstrap_corrige_schema_legado_expedicao_conferencia_simples(tmp_path)
     }.issubset(cols_estorno)
 
 
+def test_bootstrap_corrige_solicitante_nome_facilities_legado(tmp_path):
+    db_path = tmp_path / "legacy_facilities.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE facilities_epi_solicitacao (
+            id INTEGER PRIMARY KEY,
+            colaborador_id INTEGER NOT NULL,
+            tipo VARCHAR(20) NOT NULL,
+            codigo_item VARCHAR(30) NOT NULL,
+            nome_item VARCHAR(150) NOT NULL,
+            tamanho VARCHAR(20),
+            quantidade INTEGER NOT NULL DEFAULT 1,
+            motivo TEXT,
+            status VARCHAR(20) NOT NULL DEFAULT 'solicitado',
+            solicitado_em DATETIME NOT NULL,
+            criado_em DATETIME NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
+        }
+    )
+
+    conn = sqlite3.connect(db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(facilities_epi_solicitacao)")}
+    conn.close()
+
+    assert "solicitante_nome" in cols
+
+
 def test_cria_registro_expedicao_com_ordem_de_compra_e_cliente_manual(tmp_path):
     fotos_dir = tmp_path / "expedicao_fotos"
     app = create_app(

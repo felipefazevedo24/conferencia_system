@@ -880,6 +880,7 @@ def _ensure_facilities_extra_columns() -> None:
             ("numero_ca_entregue", "VARCHAR(20)"),
             ("assinatura_path", "VARCHAR(500)"),
             ("solicitante_id", "INTEGER"),
+            ("solicitante_nome", "VARCHAR(120)"),
             ("liberador_id", "INTEGER"),
             ("liberado_em", "DATETIME"),
             ("liberado_por_username", "VARCHAR(100)"),
