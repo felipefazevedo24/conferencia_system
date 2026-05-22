@@ -38,6 +38,7 @@
     .toast.err{border-left-color:#ef4444}
     .motivo-tag{display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   </style>
+  <link rel="stylesheet" href="/static/css/facilities_theme.css?v={{ asset_version|default('1') }}">
 </head>
 <body>
 <div class="shell">
@@ -66,7 +67,6 @@
           <th>Colaborador</th>
           <th>Setor</th>
           <th>Item</th>
-          <th>Tam.</th>
           <th>Qtd</th>
           <th>Solicitado por</th>
           <th>Liberado em</th>
@@ -107,7 +107,7 @@
   function renderRows(rows) {
     const tb = document.getElementById('tbody');
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="9"><div class="empty"><i class="fas fa-check-circle" style="color:#22c55e"></i>Nenhuma entrega pendente!</div></td></tr>';
+      tb.innerHTML = '<tr><td colspan="8"><div class="empty"><i class="fas fa-check-circle" style="color:#22c55e"></i>Nenhuma entrega pendente!</div></td></tr>';
       return;
     }
     tb.innerHTML = rows.map(s => `
@@ -119,7 +119,6 @@
           <small style="color:#64748b">${s.codigo_item}</small>
           ${s.motivo ? `<div class="motivo-tag" title="${s.motivo}">📋 ${s.motivo}</div>` : ''}
         </td>
-        <td>${s.tamanho || '-'}</td>
         <td style="text-align:center;font-weight:700">${s.quantidade}</td>
         <td>${s.solicitante_nome || '-'}</td>
         <td><small>${s.liberado_em || '-'}</small></td>

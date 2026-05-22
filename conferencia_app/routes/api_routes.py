@@ -97,6 +97,7 @@ from ..models import (
     LogDivergencia,
     LogExclusaoNota,
     LogEstornoLancamento,
+    LogEventoFiscalNota,
     LogManifestacaoDestinatario,
     LogReversaoConferencia,
     LogTentativaConferencia,
@@ -984,6 +985,72 @@ def _fetch_consyste_document_bytes(chave_acesso, tipo_documento):
     return resp, tipo
 
 
+def _texto_payload_consyste(payload) -> str:
+    if isinstance(payload, dict):
+        partes = []
+        for chave in ("error", "motivo", "mensagem", "message", "raw", "cStat", "xMotivo"):
+            valor = payload.get(chave)
+            if valor not in (None, ""):
+                partes.append(str(valor))
+        if not partes:
+            partes = [str(payload)]
+        return " ".join(partes).lower()
+    return str(payload or "").lower()
+
+
+def _payload_indica_manifestacao_ja_registrada(payload) -> bool:
+    texto = _texto_payload_consyste(payload)
+    return any(
+        token in texto
+        for token in (
+            "duplicidade",
+            "duplic",
+            "ja manifest",
+            "já manifest",
+            "manifestacao ja",
+            "manifestação já",
+            "evento ja",
+            "evento já",
+            "evento registrado",
+            "573",
+        )
+    )
+
+
+def _log_manifestacao_sucesso_existente(numero_nota: str, chave_acesso: str, manifestacao: str):
+    query = LogManifestacaoDestinatario.query.filter_by(
+        numero_nota=str(numero_nota or "").strip(),
+        manifestacao=manifestacao,
+        status="Sucesso",
+    )
+    chave = re.sub(r"\D", "", str(chave_acesso or ""))
+    if chave:
+        query = query.filter(
+            (LogManifestacaoDestinatario.chave_acesso == chave)
+            | (LogManifestacaoDestinatario.chave_acesso.is_(None))
+            | (LogManifestacaoDestinatario.chave_acesso == "")
+        )
+    return query.order_by(LogManifestacaoDestinatario.data.desc()).first()
+
+
+def _registrar_evento_manifestacao_idempotente(numero_nota: str, usuario: str, detalhe: str) -> None:
+    try:
+        db.session.add(
+            LogEventoFiscalNota(
+                numero_nota=str(numero_nota or "").strip(),
+                evento="ManifestacaoIdempotente",
+                etapa="Fiscal",
+                status="Sucesso",
+                detalhe=str(detalhe or "")[:1000],
+                usuario=usuario,
+            )
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Falha ao registrar evento idempotente de manifestacao")
+
+
 def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, descricao_evento: str, justificativa: str | None = None):
     numero_resolvido, chave_resolvida, itens = _resolve_nota_context(numero_nota=numero_nota)
     if not numero_resolvido or not itens:
@@ -1003,6 +1070,17 @@ def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, 
         )
         db.session.commit()
         return {"sucesso": False, "msg": detalhe, "status_code": 400}
+
+    existente = _log_manifestacao_sucesso_existente(numero_resolvido, chave_resolvida, manifestacao)
+    if existente:
+        detalhe = existente.detalhe or f"{descricao_evento} já registrada anteriormente."
+        _registrar_evento_manifestacao_idempotente(numero_resolvido, usuario, detalhe)
+        return {
+            "sucesso": True,
+            "msg": detalhe,
+            "status_code": 200,
+            "idempotente": True,
+        }
 
     try:
         ok, status_code, payload = manifestar_destinatario_consyste(
@@ -1027,6 +1105,10 @@ def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, 
                 or (payload or {}).get("motivo")
                 or f"Falha ao enviar {descricao_evento.lower()}."
             )[:500]
+            if _payload_indica_manifestacao_ja_registrada(payload):
+                ok = True
+                status_code = 200
+                detalhe = f"{descricao_evento} já registrada na SEFAZ/Consyste."
 
         db.session.add(
             LogManifestacaoDestinatario(
@@ -1044,6 +1126,7 @@ def _manifestar_destinatario(numero_nota: str, usuario: str, manifestacao: str, 
             "msg": detalhe,
             "status_code": status_code,
             "payload": payload,
+            "idempotente": _payload_indica_manifestacao_ja_registrada(payload),
         }
     except Exception as exc:
         detalhe = str(exc)[:500]
@@ -5827,6 +5910,35 @@ def confirmar_lancamento():
 
     itens_concluidos = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
     if not itens_concluidos:
+        itens_lancados = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").all()
+        mesmo_lancamento = [
+            item
+            for item in itens_lancados
+            if str(item.numero_lancamento or "").strip() == str(codigo or "").strip()
+        ]
+        if mesmo_lancamento:
+            manifestacao_result = None
+            if manifestar_destinatario:
+                manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
+                if not manifestacao_result.get("sucesso"):
+                    return (
+                        jsonify(
+                            {
+                                "sucesso": False,
+                                "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
+                                "manifestacao": manifestacao_result,
+                            }
+                        ),
+                        manifestacao_result.get("status_code") or 502,
+                    )
+            return jsonify(
+                {
+                    "sucesso": True,
+                    "idempotente": True,
+                    "manifestacao": manifestacao_result,
+                    "msg": "NF já lançada com este código.",
+                }
+            )
         return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
 
     eh_material_cliente = bool(itens_concluidos[0].material_cliente)
@@ -5959,7 +6071,11 @@ def manifestar_destinatario_fiscal():
 
     resultado = _manifestar_confirmacao_operacao(numero_nota, session["username"])
     status_http = 200 if resultado.get("sucesso") else (resultado.get("status_code") or 500)
-    return jsonify({"sucesso": bool(resultado.get("sucesso")), "msg": resultado.get("msg")}), status_http
+    return jsonify({
+        "sucesso": bool(resultado.get("sucesso")),
+        "msg": resultado.get("msg"),
+        "idempotente": bool(resultado.get("idempotente")),
+    }), status_http
 
 
 @api_bp.route("/api/wms/integracao/processar", methods=["POST"])
@@ -8366,8 +8482,20 @@ def upload_canhoto_conferencia_simples(registro_id):
             stored = upload_to_drive(canhoto, nome_arquivo)
             caminho = stored.file_path
         except Exception as exc:
-            current_app.logger.exception("Falha ao enviar canhoto de expedicao para Drive")
-            return jsonify({"error": f"Falha ao enviar canhoto para o Drive: {exc}"}), 502
+            if _is_drive_quota_service_account_error(exc):
+                current_app.logger.warning(
+                    "Drive sem cota para service account; salvando canhoto de expedicao localmente: %s",
+                    exc,
+                )
+                try:
+                    canhoto.stream.seek(0)
+                except Exception:
+                    pass
+                caminho = os.path.join(fotos_dir, nome_arquivo)
+                canhoto.save(caminho)
+            else:
+                current_app.logger.exception("Falha ao enviar canhoto de expedicao para Drive")
+                return jsonify({"error": f"Falha ao enviar canhoto para o Drive: {exc}"}), 502
     else:
         caminho = os.path.join(fotos_dir, nome_arquivo)
         canhoto.save(caminho)

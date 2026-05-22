@@ -2,6 +2,7 @@ import io
 from datetime import datetime, timedelta
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from flask import session
@@ -572,6 +573,47 @@ def test_confirmar_lancamento_reverte_quando_manifestacao_falha(tmp_path):
         assert item.usuario_lancamento is None
         assert log is not None
         assert log.status == "Falha"
+
+
+def test_confirmar_lancamento_trata_duplicidade_manifestacao_como_sucesso(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="2008",
+                fornecedor="Fornecedor Duplicidade Manifestacao",
+                codigo="MAN8",
+                descricao="Item ja manifestado na sefaz",
+                qtd_real=1.0,
+                status="Concluído",
+                chave_acesso="20082008200820082008200820082008200820082008",
+            )
+        )
+        db.session.commit()
+
+    with patch(
+        "conferencia_app.routes.api_routes.manifestar_destinatario_consyste",
+        return_value=(False, 400, {"cStat": "573", "motivo": "Duplicidade de Evento"}),
+    ):
+        response = client.post(
+            "/api/confirmar_lancamento",
+            json={"nota": "2008", "codigo": "ERP-2008", "manifestar_destinatario": True},
+        )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+    assert data["manifestacao"]["sucesso"] is True
+    assert data["manifestacao"]["idempotente"] is True
+
+    with app.app_context():
+        item = ItemNota.query.filter_by(numero_nota="2008").first()
+        log = LogManifestacaoDestinatario.query.filter_by(numero_nota="2008").order_by(LogManifestacaoDestinatario.id.desc()).first()
+        assert item.status == "Lançado"
+        assert log.status == "Sucesso"
 
 
 def test_confirmar_lancamento_remessa_exige_codigo_material_por_item(tmp_path):
@@ -3144,6 +3186,56 @@ def test_drive_credentials_prefere_oauth_quando_oauth_e_service_account_existem(
 
     mocked_oauth.assert_called_once()
     mocked_service.assert_not_called()
+
+
+def test_canhoto_expedicao_faz_fallback_local_quando_drive_sem_cota(tmp_path):
+    fotos_dir = tmp_path / "expedicao_fotos"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
+            "EXPEDICAO_CONFERENCIA_FOTOS_DIR": str(fotos_dir),
+        }
+    )
+    client = app.test_client()
+    set_logged_user(client, "ADMIN", "Admin")
+
+    with app.app_context():
+        registro = ExpedicaoConferenciaSimples(
+            orcamento="ORC-CANHOTO",
+            conferente="felipe",
+            status="Expedido",
+            expedido_at=datetime.now(),
+            expedido_by="felipe",
+        )
+        db.session.add(registro)
+        db.session.commit()
+        registro_id = registro.id
+
+    with patch("conferencia_app.routes.api_routes.using_drive", return_value=True), patch(
+        "conferencia_app.routes.api_routes.upload_to_drive",
+        side_effect=RuntimeError("service account sem storage quota"),
+    ):
+        response = client.post(
+            f"/api/expedicao/conferencia-simples/{registro_id}/canhoto",
+            data={"canhoto": (io.BytesIO(b"fake-canhoto-image"), "canhoto.jpg")},
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["registro"]["status"] == "Finalizado"
+
+    with app.app_context():
+        atualizado = ExpedicaoConferenciaSimples.query.get(registro_id)
+        assert atualizado.canhoto_file_name
+        assert atualizado.canhoto_file_path
+        assert Path(atualizado.canhoto_file_path).exists()
+        assert atualizado.status == "Finalizado"
+
+    arquivo = client.get(f"/api/expedicao/conferencia-simples/{registro_id}/canhoto")
+    assert arquivo.status_code == 200
+    assert arquivo.data == b"fake-canhoto-image"
 
 
 def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):

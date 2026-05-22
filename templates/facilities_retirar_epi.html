@@ -2,6 +2,14 @@
 {% block title %}Retirar EPI #{{ solicitacao.id }}{% endblock %}
 
 {% block content %}
+<style>
+  @import url("/static/css/facilities_theme.css?v={{ asset_version|default('1') }}");
+  .card{border:1px solid #dbe5ed!important;border-radius:14px!important;box-shadow:0 14px 34px rgba(15,23,42,.06)!important}
+  .card h2{font-size:24px!important;font-weight:850!important;color:#172033!important}
+  #sig{background:#fff}
+  #btn-confirmar{background:#0f766e!important;border:none!important;border-radius:8px!important}
+  #btn-confirmar:hover{background:#0d9488!important}
+</style>
 <div style="max-width:720px;margin:24px auto;padding:0 16px">
   <div class="card" style="padding:20px">
     <h2 style="margin:0 0 8px">Retirar EPI</h2>
@@ -21,7 +29,6 @@
     <dl style="display:grid;grid-template-columns:180px 1fr;gap:6px 12px;margin:0 0 20px">
       <dt>Item:</dt><dd><b>{{ solicitacao.nome_item }}</b> ({{ solicitacao.codigo_item }})</dd>
       <dt>Quantidade:</dt><dd>{{ solicitacao.quantidade }}</dd>
-      <dt>Tamanho:</dt><dd>{{ solicitacao.tamanho or '-' }}</dd>
       <dt>Liberado em:</dt><dd>{{ solicitacao.liberado_em.strftime('%d/%m/%Y %H:%M') if solicitacao.liberado_em else '-' }}</dd>
     </dl>
 

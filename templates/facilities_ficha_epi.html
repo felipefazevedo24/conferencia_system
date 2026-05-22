@@ -141,7 +141,6 @@
         <tr>
           <th>Código</th>
           <th>Descrição</th>
-          <th>Tamanho</th>
           <th>Qtd</th>
           <th>Nº CA (NR-6)</th>
           <th>Data Entrega</th>
@@ -153,7 +152,6 @@
         <tr>
           <td>{{ sol.codigo_item }}</td>
           <td><strong>{{ sol.nome_item }}</strong></td>
-          <td>{{ sol.tamanho or '—' }}</td>
           <td style="text-align:center">{{ sol.quantidade }}</td>
           <td>{{ sol.numero_ca_entregue or '—' }}</td>
           <td>{{ sol.retirado_em.strftime('%d/%m/%Y') if sol.retirado_em else '—' }}</td>

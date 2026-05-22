@@ -160,6 +160,7 @@
   .stock-bar.warn{background:#f59e0b}
   .stock-bar.danger{background:#ef4444}
 </style>
+<link rel="stylesheet" href="/static/css/facilities_theme.css?v={{ asset_version|default('1') }}">
 </head>
 <body>
 <div class="layout" id="app">
@@ -310,7 +311,7 @@
         <table class="fac-table">
           <thead><tr>
             <th style="width:32px"><input type="checkbox" id="epiSelAll" onchange="toggleSelAll(this)"></th>
-            <th>Funcionário</th><th>Solicitado por</th><th>Item</th><th>Tam.</th><th>Qtd</th><th>Data</th><th>Status</th><th>Ações</th>
+            <th>Funcionário</th><th>Solicitado por</th><th>Item</th><th>Qtd</th><th>Data</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody id="epiTableBody"></tbody>
         </table>
@@ -901,7 +902,6 @@ async function loadEpi() {
             <td><strong>${s.colaborador_nome}</strong>${s.colaborador_setor ? '<br><small style="color:#64748b">' + s.colaborador_setor + '</small>' : ''}</td>
             <td>${s.solicitante_nome || '-'}</td>
             <td>${s.nome_item}${s.proxima_troca_em ? '<br><small style="color:#888">Próx. troca: ' + s.proxima_troca_em + '</small>' : ''}</td>
-            <td>${s.tamanho || '-'}</td>
             <td>${s.quantidade}</td>
             <td>${s.solicitado_em}</td>
             <td><span class="fac-badge ${s.status}">${s.status === 'solicitado' ? 'Pendente' : s.status}</span></td>
