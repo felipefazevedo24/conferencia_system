@@ -7,41 +7,54 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;min-height:100vh;color:#1e293b}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#eef3f7;min-height:100vh;color:#172033}
         .fac-layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
-        .sidebar{background:#0f172a;color:#e2e8f0;padding:20px 14px;position:sticky;top:0;height:100vh}
-        .brand{font-size:15px;font-weight:800;letter-spacing:.3px;padding:8px 10px;margin-bottom:16px}
-        .nav-link{display:flex;align-items:center;gap:10px;color:#cbd5e1;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:6px}
-        .nav-link:hover{background:#1e293b;color:#fff}
-        .nav-link.active{background:#1d4ed8;color:#fff}
-        .main{padding:20px}
-        .shell{max-width:900px}
-        .hero{background:linear-gradient(135deg,#059669,#10b981 50%,#34d399);border-radius:24px;padding:28px 32px;color:#fff;margin-bottom:20px;box-shadow:0 12px 40px rgba(5,150,105,.25);display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+        .sidebar{background:#111827;color:#e2e8f0;padding:22px 14px;position:sticky;top:0;height:100vh;border-right:1px solid rgba(255,255,255,.06)}
+        .brand{font-size:15px;font-weight:800;letter-spacing:.2px;padding:8px 10px;margin-bottom:18px;color:#fff}
+        .nav-link{display:flex;align-items:center;gap:11px;color:#cbd5e1;text-decoration:none;padding:11px 12px;border-radius:8px;font-size:14px;font-weight:700;margin-bottom:7px}
+        .nav-link i{width:18px;text-align:center}
+        .nav-link:hover{background:#1f2937;color:#fff}
+        .nav-link.active{background:#0f766e;color:#fff;box-shadow:0 8px 20px rgba(15,118,110,.25)}
+        .main{padding:24px;background:linear-gradient(180deg,#f8fbfc 0,#edf2f7 100%)}
+        .shell{max-width:980px}
+        .hero{background:#0f766e;border-radius:18px;padding:26px 30px;color:#fff;margin-bottom:18px;box-shadow:0 16px 40px rgba(15,118,110,.22);display:flex;align-items:center;gap:20px;flex-wrap:wrap;position:relative;overflow:hidden}
+        .hero:after{content:"";position:absolute;right:-80px;top:-90px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.12)}
         .hero-text{flex:1;min-width:220px}
-        .hero h1{font-size:28px;font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:10px}
-        .hero p{opacity:.92;font-size:14px}
-        .hero-gestor{background:rgba(255,255,255,.16);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:10px}
+        .hero h1{font-size:27px;font-weight:850;margin-bottom:8px;display:flex;align-items:center;gap:10px;letter-spacing:0}
+        .hero p{opacity:.92;font-size:14px;line-height:1.45}
+        .hero-gestor{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.28);border-radius:12px;padding:10px 15px;font-size:13px;display:flex;align-items:center;gap:10px;position:relative;z-index:1}
         .hero-gestor i{font-size:18px}
         .hero-gestor strong{display:block;font-size:14px;font-weight:700}
-        .panel{background:#fff;border-radius:18px;padding:22px 24px;box-shadow:0 8px 24px rgba(18,40,58,.05);margin-bottom:16px}
-        .panel-title{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:16px;display:flex;align-items:center;gap:10px}
-        .panel-title .idx{width:26px;height:26px;border-radius:50%;background:#10b981;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+        .panel{background:#fff;border:1px solid #dbe5ed;border-radius:14px;padding:22px;box-shadow:0 14px 34px rgba(15,23,42,.06);margin-bottom:16px}
+        .panel-title{font-size:16px;font-weight:800;color:#111827;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+        .panel-title .idx{width:28px;height:28px;border-radius:9px;background:#0f766e;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:850}
         .form-group{margin-bottom:14px;position:relative}
-        .form-label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
-        .form-control,.form-select{width:100%;padding:11px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;background:#f8fafc;transition:all .15s;font-family:inherit}
-        .form-control:focus,.form-select:focus{outline:none;border-color:#10b981;background:#fff;box-shadow:0 0 0 3px rgba(16,185,129,.12)}
-        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .form-label{display:block;font-size:11px;font-weight:800;color:#526176;margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+        .form-control,.form-select{width:100%;padding:12px 13px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#fbfdff;transition:all .15s;font-family:inherit;color:#111827}
+        .form-control:focus,.form-select:focus{outline:none;border-color:#0f766e;background:#fff;box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+        .form-row{display:grid;grid-template-columns:1.35fr .65fr;gap:12px}
+        .request-grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
+        .summary-box{background:#f8fafc;border:1px solid #dbe5ed;border-radius:12px;padding:16px;position:sticky;top:18px}
+        .summary-eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:800;margin-bottom:10px}
+        .item-preview{display:none;background:#fff;border:1px solid #dbe5ed;border-radius:10px;padding:12px;margin-top:10px}
+        .item-preview.show{display:block}
+        .preview-name{font-size:14px;font-weight:800;color:#111827;line-height:1.35;margin-bottom:8px}
+        .preview-meta{display:flex;flex-wrap:wrap;gap:6px}
+        .meta-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:5px 8px;font-size:11px;font-weight:800}
+        .meta-pill.neutral{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+        .meta-pill.warn{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+        .form-note{font-size:12px;color:#64748b;line-height:1.45;margin-top:8px}
         @media (max-width:560px){.form-row{grid-template-columns:1fr}}
-        @media (max-width:980px){.fac-layout{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.main{padding:14px}}
-        .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .15s;font-family:inherit}
-        .btn-primary{background:linear-gradient(135deg,#059669,#10b981);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.25);width:100%;padding:14px}
-        .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 20px rgba(16,185,129,.32)}
+        @media (max-width:980px){.fac-layout{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.main{padding:14px}.request-grid{grid-template-columns:1fr}.summary-box{position:relative;top:auto}}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:800;border:none;cursor:pointer;transition:all .15s;font-family:inherit}
+        .btn-primary{background:#0f766e;color:#fff;box-shadow:0 8px 18px rgba(15,118,110,.22);width:100%;padding:14px}
+        .btn-primary:hover:not(:disabled){transform:translateY(-1px);background:#0d9488;box-shadow:0 12px 22px rgba(15,118,110,.25)}
         .btn-primary:disabled{opacity:.55;cursor:not-allowed}
         .btn-ghost{background:transparent;color:#0f172a;border:1px solid #e2e8f0;padding:8px 14px;font-size:13px}
         .btn-ghost:hover{background:#f1f5f9}
         .btn-link{background:transparent;color:#059669;border:none;padding:0;font-weight:600;font-size:13px;cursor:pointer}
         .btn-link:hover{text-decoration:underline}
-        .sugestoes{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;z-index:50;display:none;margin-top:4px}
+        .sugestoes{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #dbe5ed;border-radius:10px;box-shadow:0 14px 35px rgba(15,23,42,.14);max-height:260px;overflow-y:auto;z-index:50;display:none;margin-top:4px}
         .sugestoes.show{display:block}
         .sugestoes .item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px}
         .sugestoes .item:last-child{border-bottom:none}
@@ -58,7 +71,7 @@
         .ben-novo{background:#fffbeb;border:1px dashed #fcd34d;border-radius:12px;padding:14px;margin-top:8px;display:none}
         .ben-novo.show{display:block}
         .ben-novo-title{font-size:13px;color:#92400e;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-        .status-card{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px;margin-top:16px;display:none}
+        .status-card{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:14px;display:none}
         .status-card.show{display:block}
         .status-card h3{color:#15803d;font-size:15px;font-weight:700;margin-bottom:4px}
         .status-card p{color:#166534;font-size:13px}
@@ -66,7 +79,7 @@
         .toast{background:#fff;border-radius:12px;padding:12px 18px;box-shadow:0 12px 40px rgba(0,0,0,.12);border-left:4px solid #10b981;transform:translateX(120%);opacity:0;transition:all .3s;margin-bottom:8px;font-size:14px}
         .toast.show{transform:translateX(0);opacity:1}
         .toast.error{border-left-color:#ef4444}
-        .sol-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+        .sol-item{background:#f8fafc;border:1px solid #dbe5ed;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
         .sol-item .info{flex:1;min-width:0}
         .sol-item .info strong{display:block;color:#1e293b;font-size:14px}
         .sol-item .info span{color:#64748b;font-size:12px}
@@ -139,40 +152,48 @@
 
         <div class="panel">
             <h2 class="panel-title"><span class="idx">2</span> O que precisa?</h2>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">Tipo</label>
-                    <select id="selTipo" class="form-select" onchange="carregarMateriais()">
-                        <option value="epi">EPI - Equipamento de Protecao</option>
-                        <option value="uniforme">Uniforme</option>
-                    </select>
+            <div class="request-grid">
+                <div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Tipo</label>
+                            <select id="selTipo" class="form-select" onchange="carregarMateriais()">
+                                <option value="epi">EPI - Equipamento de Protecao</option>
+                                <option value="uniforme">Uniforme</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Quantidade</label>
+                            <input type="number" id="txtQuantidade" class="form-control" value="1" min="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Item *</label>
+                        <select id="selItem" class="form-select" onchange="atualizarResumoItem()">
+                            <option value="">-- Selecione --</option>
+                        </select>
+                        <p class="help" id="helpEstoque">Catalogo sincronizado do estoque.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Motivo (opcional)</label>
+                        <textarea id="txtMotivo" class="form-control" rows="3" placeholder="Descreva o motivo da solicitacao"></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Quantidade</label>
-                    <input type="number" id="txtQuantidade" class="form-control" value="1" min="1">
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Item *</label>
-                <select id="selItem" class="form-select">
-                    <option value="">-- Selecione --</option>
-                </select>
-                <p class="help" id="helpEstoque">Catalogo sincronizado do estoque.</p>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Tamanho</label>
-                <input type="text" id="txtTamanho" class="form-control" placeholder="Ex: M, 42, GG">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Motivo (opcional)</label>
-                <textarea id="txtMotivo" class="form-control" rows="2" placeholder="Descreva o motivo da solicitacao"></textarea>
-            </div>
-            <button id="btnSolicitar" class="btn btn-primary" onclick="enviarSolicitacao()">
-                <i class="fas fa-paper-plane"></i> Enviar solicitacao
-            </button>
-            <div id="statusCard" class="status-card">
-                <h3><i class="fas fa-check-circle"></i> Solicitacao enviada!</h3>
-                <p>O pedido foi registrado e os gestores foram notificados.</p>
+                <aside class="summary-box">
+                    <div class="summary-eyebrow">Resumo do item</div>
+                    <div id="itemPreviewEmpty" class="form-note">Selecione um material do GRV. O tamanho/modelo deve estar na propria descricao cadastrada.</div>
+                    <div id="itemPreview" class="item-preview">
+                        <div id="previewName" class="preview-name"></div>
+                        <div id="previewMeta" class="preview-meta"></div>
+                    </div>
+                    <button id="btnSolicitar" class="btn btn-primary" onclick="enviarSolicitacao()" style="margin-top:14px">
+                        <i class="fas fa-paper-plane"></i> Enviar solicitacao
+                    </button>
+                    <div id="statusCard" class="status-card">
+                        <h3><i class="fas fa-check-circle"></i> Solicitacao enviada!</h3>
+                        <p>O pedido foi registrado e os gestores foram notificados.</p>
+                    </div>
+                </aside>
             </div>
         </div>
 
@@ -195,6 +216,16 @@
         let euSouColaborador = null;
         let debounceBusca = null;
 
+        async function lerResposta(r) {
+            const texto = await r.text();
+            if (!texto) return {};
+            try {
+                return JSON.parse(texto);
+            } catch (e) {
+                return { error: texto.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || `HTTP ${r.status}` };
+            }
+        }
+
         async function init() {
             await carregarPerfilGestor();
             await carregarColaboradores();
@@ -206,7 +237,7 @@
         async function carregarPerfilGestor() {
             try {
                 const r = await fetch('/api/facilities/me');
-                const d = await r.json();
+                const d = await lerResposta(r);
                 euSouColaborador = d.colaborador;
                 const nome = (d.colaborador && d.colaborador.nome) || d.username || 'Usuario';
                 document.getElementById('gestorNome').textContent = nome;
@@ -218,7 +249,7 @@
         async function carregarColaboradores() {
             try {
                 const r = await fetch('/api/facilities/colaboradores');
-                const d = await r.json();
+                const d = await lerResposta(r);
                 if (!r.ok) {
                     showToast(d.error || d.msg || 'Falha ao carregar funcionarios do GRV.', 'error');
                     colaboradores = [];
@@ -238,7 +269,7 @@
             help.textContent = 'Carregando catalogo...';
             try {
                 const r = await fetch(`/api/facilities/epi-materiais?tipo=${tipo}`);
-                const d = await r.json();
+                const d = await lerResposta(r);
                 if (!r.ok) {
                     materiais = [];
                     help.textContent = d.error || 'Falha ao consultar materiais no GRV.';
@@ -252,13 +283,44 @@
                     const opt = document.createElement('option');
                     opt.value = m.codigo_interno;
                     opt.dataset.nome = m.nome;
-                    opt.textContent = m.label + (m.abaixo_minimo ? ' (baixo estoque)' : '');
+                    opt.textContent = `${m.codigo_interno} - ${m.nome}`;
                     sel.appendChild(opt);
                 });
                 help.textContent = `${materiais.length} itens com saldo no GRV.`;
+                atualizarResumoItem();
             } catch (e) {
                 help.textContent = 'Falha ao carregar catalogo.';
             }
+        }
+
+        function materialSelecionado() {
+            const codigo = document.getElementById('selItem').value;
+            return materiais.find(m => String(m.codigo_interno || '') === String(codigo || '')) || null;
+        }
+
+        function atualizarResumoItem() {
+            const material = materialSelecionado();
+            const preview = document.getElementById('itemPreview');
+            const empty = document.getElementById('itemPreviewEmpty');
+            const name = document.getElementById('previewName');
+            const meta = document.getElementById('previewMeta');
+            if (!material) {
+                preview.classList.remove('show');
+                empty.style.display = 'block';
+                name.textContent = '';
+                meta.innerHTML = '';
+                return;
+            }
+            empty.style.display = 'none';
+            preview.classList.add('show');
+            name.textContent = `${material.codigo_interno || ''} - ${material.nome || ''}`.trim();
+            const saldo = Number(material.qtd_estoque || 0);
+            const baixo = Boolean(material.abaixo_minimo);
+            meta.innerHTML = `
+                <span class="meta-pill neutral"><i class="fas fa-tag"></i> ${(material.tipo || '').toUpperCase() || 'ITEM'}</span>
+                <span class="meta-pill ${baixo ? 'warn' : ''}"><i class="fas fa-boxes-stacked"></i> Saldo ${Number.isFinite(saldo) ? saldo : 0}</span>
+                ${material.numero_ca ? `<span class="meta-pill"><i class="fas fa-shield-halved"></i> CA ${material.numero_ca}</span>` : ''}
+            `;
         }
 
         function bindBusca() {
@@ -391,7 +453,6 @@
                 tipo: document.getElementById('selTipo').value,
                 codigo_item,
                 nome_item,
-                tamanho: document.getElementById('txtTamanho').value.trim(),
                 quantidade: parseInt(document.getElementById('txtQuantidade').value) || 1,
                 motivo: document.getElementById('txtMotivo').value.trim(),
             };
@@ -409,8 +470,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                const d = await r.json();
-                if (!r.ok) { showToast(d.error || 'Erro ao enviar.', 'error'); return; }
+                const d = await lerResposta(r);
+                if (!r.ok) { showToast(d.error || d.msg || `Erro ao enviar (${r.status}).`, 'error'); return; }
                 showToast('Solicitacao enviada!', 'success');
                 document.getElementById('statusCard').classList.add('show');
                 // Atualiza id do beneficiario caso tenha sido criado agora
@@ -420,7 +481,7 @@
                 }
                 // Reseta so os campos do item (mantem beneficiario para proxima solicitacao do mesmo funcionario)
                 document.getElementById('selItem').value = '';
-                document.getElementById('txtTamanho').value = '';
+                atualizarResumoItem();
                 document.getElementById('txtQuantidade').value = '1';
                 document.getElementById('txtMotivo').value = '';
                 carregarMinhasSolicitacoes();
@@ -433,7 +494,7 @@
             const lista = document.getElementById('listaSolicitacoes');
             try {
                 const r = await fetch('/api/facilities/epi-solicitacoes?mine=1');
-                const d = await r.json();
+                const d = await lerResposta(r);
                 if (!d.rows?.length) {
                     lista.innerHTML = '<div class="empty-list">Voce ainda nao abriu nenhuma solicitacao.</div>';
                     return;
@@ -449,7 +510,7 @@
                     return `
                     <div class="sol-item">
                         <div class="info">
-                            <strong>${s.nome_item}${s.tamanho ? ' - ' + s.tamanho : ''} (x${s.quantidade})</strong>
+                            <strong>${s.nome_item} (x${s.quantidade})</strong>
                             <span class="ben"><i class="fas fa-user"></i> ${s.colaborador_nome}${s.colaborador_setor ? ' - ' + s.colaborador_setor : ''}</span>
                             <span>${s.solicitado_em}</span>
                             ${proxima}
@@ -486,7 +547,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ motivo })
                 });
-                const d = await r.json();
+                const d = await lerResposta(r);
                 if (r.ok) { showToast('Solicitação cancelada.', 'success'); carregarMinhasSolicitacoes(); }
                 else showToast(d.error || 'Erro ao cancelar.', 'error');
             } catch (e) { showToast('Falha de rede.', 'error'); }

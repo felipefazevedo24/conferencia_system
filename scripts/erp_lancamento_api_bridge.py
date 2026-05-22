@@ -899,8 +899,14 @@ def create_app() -> Flask:
         try:
             from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
 
-            funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=True)
-            materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=True)
+            if hasattr(FacilitiesGRVService, "_listar_funcionarios_postgres"):
+                funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=True)
+            else:
+                funcionarios = FacilitiesGRVService.listar_funcionarios(ativos=True)
+            if hasattr(FacilitiesGRVService, "_listar_materiais_epi_uniforme_postgres"):
+                materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=True)
+            else:
+                materiais = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=True)
             epi = next((m for m in materiais if m.get("tipo") == "epi"), None)
             uniforme = next((m for m in materiais if m.get("tipo") == "uniforme"), None)
             funcionario = next((f for f in funcionarios if str(f.get("codigo")) != "240"), None)
@@ -933,7 +939,10 @@ def create_app() -> Flask:
             from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
 
             app.logger.info("Facilities GRV: consultando funcionarios ativos=%s", ativos)
-            funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=ativos)
+            if hasattr(FacilitiesGRVService, "_listar_funcionarios_postgres"):
+                funcionarios = FacilitiesGRVService._listar_funcionarios_postgres(ativos=ativos)
+            else:
+                funcionarios = FacilitiesGRVService.listar_funcionarios(ativos=ativos)
             return jsonify({"sucesso": True, "funcionarios": funcionarios})
         except Exception as exc:
             app.logger.exception("Falha ao consultar funcionarios Facilities no GRV")
@@ -952,7 +961,10 @@ def create_app() -> Flask:
             from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
 
             app.logger.info("Facilities GRV: consultando materiais com_saldo=%s", com_saldo)
-            materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=com_saldo)
+            if hasattr(FacilitiesGRVService, "_listar_materiais_epi_uniforme_postgres"):
+                materiais = FacilitiesGRVService._listar_materiais_epi_uniforme_postgres(com_saldo=com_saldo)
+            else:
+                materiais = FacilitiesGRVService.listar_materiais_epi_uniforme(com_saldo=com_saldo)
             return jsonify({"sucesso": True, "materiais": materiais})
         except Exception as exc:
             app.logger.exception("Falha ao consultar materiais Facilities no GRV")
@@ -973,7 +985,10 @@ def create_app() -> Flask:
             from conferencia_app.services.facilities_grv_service import FacilitiesGRVService
 
             app.logger.info("Facilities GRV: consultando saldo codigo_interno=%s", codigo)
-            saldo = FacilitiesGRVService._saldo_material_postgres(codigo)
+            if hasattr(FacilitiesGRVService, "_saldo_material_postgres"):
+                saldo = FacilitiesGRVService._saldo_material_postgres(codigo)
+            else:
+                saldo = FacilitiesGRVService.saldo_material(codigo)
             return jsonify({"sucesso": True, "codigo_interno": codigo, "saldo": saldo})
         except Exception as exc:
             app.logger.exception("Falha ao consultar saldo Facilities no GRV")

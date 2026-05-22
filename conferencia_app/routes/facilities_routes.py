@@ -699,8 +699,8 @@ def api_criar_epi_solicitacao():
     if not material_grv:
         return jsonify({"error": "Material nao encontrado no GRV para EPI/Uniformes."}), 400
 
-    nome_item = material_grv.get("nome") or nome_item
-    tipo_item = material_grv.get("tipo") or data.get("tipo", "epi")
+    nome_item = str(material_grv.get("nome") or nome_item or "").strip()[:150]
+    tipo_item = str(material_grv.get("tipo") or data.get("tipo", "epi") or "epi").strip()[:20]
 
     # Validacao de estoque no GRV - bloqueia se pedir mais do que tem
     disponivel = _estoque_disponivel_erp(codigo_item)
@@ -747,16 +747,21 @@ def api_criar_epi_solicitacao():
     solicitacao = FacilitiesEpiSolicitacao(
         colaborador_id=beneficiario.id,
         solicitante_id=solicitante_id,
-        solicitante_nome=solicitante_nome,
+        solicitante_nome=str(solicitante_nome or "")[:120],
         tipo=tipo_item,
-        codigo_item=codigo_item,
+        codigo_item=str(codigo_item or "").strip()[:30],
         nome_item=nome_item,
-        tamanho=data.get("tamanho", ""),
+        tamanho="",
         quantidade=quantidade,
-        motivo=data.get("motivo", ""),
+        motivo=str(data.get("motivo") or "").strip(),
     )
-    db.session.add(solicitacao)
-    db.session.commit()
+    try:
+        db.session.add(solicitacao)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Falha ao salvar solicitacao Facilities EPI")
+        return jsonify({"error": f"Falha ao salvar solicitacao: {exc}"}), 500
 
     _audit("epi_solicitacao", solicitacao.id, "criar",
            f"beneficiario={beneficiario.nome} item={nome_item} qtd={quantidade}")
