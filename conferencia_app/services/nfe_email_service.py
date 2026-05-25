@@ -12,7 +12,6 @@ Fluxo:
 from __future__ import annotations
 
 import re
-import smtplib
 import threading
 import os
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
 from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from .danfe_service import gerar_danfe
 from .planilhas_cadastros import buscar_email_por_cnpj
+from .smtp_service import enviar_mensagem_smtp
 
 
 # ---------- Utilidades ----------
@@ -438,10 +438,15 @@ def _montar_corpo_html(numero_nf: str, chave: str, dest_nome: str, emit_nome: st
 def _send_async(app, msg, smtp_server, smtp_port, sender, password, log_id):
     with app.app_context():
         try:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-                server.starttls()
-                server.login(sender, password)
-                server.send_message(msg)
+            enviar_mensagem_smtp(
+                app,
+                msg,
+                smtp_server=smtp_server,
+                smtp_port=smtp_port,
+                sender=sender,
+                password=password,
+                timeout=30,
+            )
             row = db.session.get(EmailNFEnviado, log_id)
             if row:
                 row.status = "Enviado"

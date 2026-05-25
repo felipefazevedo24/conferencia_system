@@ -1,19 +1,25 @@
-import smtplib
 import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import current_app
+
+from .smtp_service import enviar_mensagem_smtp
 
 
 def _send_async(app, msg, smtp_server, smtp_port, sender, password):
     """Send email in background thread to avoid blocking the request."""
     with app.app_context():
         try:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
-                server.starttls()
-                server.login(sender, password)
-                server.send_message(msg)
-                app.logger.info("E-mail enviado para %s", msg["To"])
+            enviar_mensagem_smtp(
+                app,
+                msg,
+                smtp_server=smtp_server,
+                smtp_port=smtp_port,
+                sender=sender,
+                password=password,
+                timeout=15,
+            )
+            app.logger.info("E-mail enviado para %s", msg["To"])
         except Exception as e:
             app.logger.error("Erro ao enviar e-mail: %s", e)
 

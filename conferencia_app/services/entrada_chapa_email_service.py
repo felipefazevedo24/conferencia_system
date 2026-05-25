@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import smtplib
 import threading
 from datetime import date, datetime
 from pathlib import Path
@@ -17,6 +16,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import EmailEntradaChapa, ItemNota
+from .smtp_service import enviar_mensagem_smtp
 
 DATA_MINIMA_ENTRADA_CHAPA = date(2026, 5, 13)
 
@@ -306,10 +306,15 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
         msg.attach(MIMEText(f"NF {numero_nota} lancada. AR/lote: {numero_ar or 'Nao informado'}.", "plain", "utf-8"))
         msg.attach(MIMEText(_html(entrada, itens, cfops), "html", "utf-8"))
 
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-            server.starttls()
-            server.login(sender, password)
-            server.send_message(msg)
+        enviar_mensagem_smtp(
+            app,
+            msg,
+            smtp_server=smtp_server,
+            smtp_port=smtp_port,
+            sender=sender,
+            password=password,
+            timeout=30,
+        )
 
         log.status = "Enviado"
         log.tentativas = (log.tentativas or 0) + 1

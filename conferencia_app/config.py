@@ -143,11 +143,14 @@ class Config:
     ).strip().rstrip("/")
 
     # Email SMTP
-    MAIL_SMTP_SERVER = os.environ.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
+    MAIL_SMTP_SERVER = os.environ.get("MAIL_SMTP_SERVER", "email-ssl.com.br")
     MAIL_SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", "587"))
-    MAIL_SENDER = os.environ.get("MAIL_SENDER", "sync.columbia@gmail.com")
-    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "cvwu wwdq kbbw ridh")
-    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "Columbia Sync")
+    MAIL_SMTP_USER = os.environ.get("MAIL_SMTP_USER", "")
+    MAIL_SMTP_USE_SSL = os.environ.get("MAIL_SMTP_USE_SSL", "0") == "1"
+    MAIL_SMTP_STARTTLS = os.environ.get("MAIL_SMTP_STARTTLS", "1") == "1"
+    MAIL_SENDER = os.environ.get("MAIL_SENDER", "nfe@columbiamachine.com.br")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "NF-e | Columbia Machine Brasil")
 
     # Envio automatico de NF-e emitida para cliente/destinatario
     # Em modo teste, todos os envios sao redirecionados para NFE_EMAIL_TESTE_DESTINO.

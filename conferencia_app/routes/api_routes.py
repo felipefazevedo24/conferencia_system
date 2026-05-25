@@ -3109,6 +3109,7 @@ CUSTO_RELATORIO_CODIGOS_CATEGORIA = {
     "28-11-00342": "oleo_soluvel",
     "281100342": "oleo_soluvel",
 }
+CUSTO_RELATORIO_CFOPS_IGNORADOS = {"1916", "2916"}
 
 
 def _normalizar_codigo_custo(value) -> str:
@@ -3118,6 +3119,10 @@ def _normalizar_codigo_custo(value) -> str:
 def _codigo_custo_ignorado(*values) -> bool:
     ignorados = {_normalizar_codigo_custo(codigo) for codigo in CUSTO_RELATORIO_CODIGOS_IGNORADOS}
     return any(_normalizar_codigo_custo(value) in ignorados for value in values if str(value or "").strip())
+
+
+def _cfop_custo_ignorado(value) -> bool:
+    return _normalize_cfop(value) in CUSTO_RELATORIO_CFOPS_IGNORADOS
 
 
 def _categoria_custo_por_codigo(*values) -> dict | None:
@@ -3215,6 +3220,8 @@ def _categoria_custo_por_cadastro(row: dict) -> dict | None:
 
 
 def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> dict | None:
+    if _cfop_custo_ignorado(getattr(item, "cfop", "")):
+        return None
     if _codigo_custo_ignorado(item.codigo, item.codigo_grv, getattr(classificacao, "codigo_item", "")):
         return None
     categoria_codigo = _categoria_custo_por_codigo(item.codigo, item.codigo_grv, getattr(classificacao, "codigo_item", ""))
@@ -3228,6 +3235,8 @@ def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilIt
 
 
 def _categoria_custo_row(row: dict) -> dict | None:
+    if _cfop_custo_ignorado(row.get("cfop") or row.get("cfop_item") or row.get("cfop_cabecalho")):
+        return None
     if _codigo_custo_ignorado(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item")):
         return None
     categoria_codigo = _categoria_custo_por_codigo(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item"))

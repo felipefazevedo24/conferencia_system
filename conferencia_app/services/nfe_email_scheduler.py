@@ -58,12 +58,12 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
                         last_message=msg)
             return {"ok": False, "erro": str(exc)}
 
-        # Dedupe: enviado nao reenvia; aguardando manual tambem nao fica criando
-        # pendencias repetidas a cada ciclo. Falha/Pendente podem ser tentadas de novo.
+        # Dedupe: o scheduler nao cria registros repetidos para a mesma NF.
+        # Reenvios de falha ficam sob acao manual, para nao martelar SMTP quebrado.
         ja_processadas = {
             row.numero_nf
             for row in EmailNFEnviado.query.filter(
-                EmailNFEnviado.status.in_(["Enviado", "AguardandoManual"])
+                EmailNFEnviado.status.in_(["Enviado", "AguardandoManual", "Falha", "Pendente"])
             ).all()
             if row.numero_nf
         }
@@ -85,6 +85,7 @@ def executar_ciclo(app: Flask) -> dict[str, Any]:
             if numero in ja_processadas:
                 ignoradas += 1
                 continue
+            ja_processadas.add(numero)
 
             try:
                 resultado = enviar_nfe_por_email(

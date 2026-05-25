@@ -59,6 +59,7 @@
   .origem.reenvio { background: #fce7f3; color: #9d174d; }
 
   .fonte-chip { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; background: #f1f5f9; color: #334155; }
+  .erro-envio { margin-top: 4px; color: #b91c1c; font-size: 11px; max-width: 260px; white-space: normal; }
 
   .sugestao-box {
     margin-top: 10px; padding: 12px; border-radius: 10px; background: #f8fafc;
@@ -937,6 +938,7 @@ async function carregarHistorico() {
     const org = (r.origem || '').toLowerCase();
     const anexos = [r.anexou_xml ? 'XML' : '', r.anexou_pdf ? 'PDF' : ''].filter(Boolean).join(' + ') || '-';
     const data = r.criado_em ? new Date(r.criado_em).toLocaleString('pt-BR') : '-';
+    const erro = r.erro_mensagem ? String(r.erro_mensagem).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])) : '';
     const retry = (r.status === 'Falha' || r.status === 'Pendente')
       ? `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`
       : `<button class="btn ghost" style="padding:5px 10px;font-size:11px" onclick="reenviar(${r.id})">Reenviar</button>`;
@@ -947,7 +949,7 @@ async function carregarHistorico() {
       <td>${r.destinatario_email || '-'}</td>
       <td><span class="fonte-chip">${r.fonte_email || '-'}</span></td>
       <td><span class="origem ${org}">${r.origem || '-'}</span></td>
-      <td><span class="status ${st}">${r.status || '-'}</span></td>
+      <td><span class="status ${st}" title="${erro}">${r.status || '-'}</span>${erro ? `<div class="erro-envio">${erro}</div>` : ''}</td>
       <td>${anexos}</td>
       <td>${retry}</td>
     </tr>`;

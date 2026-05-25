@@ -1334,6 +1334,18 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
                     data_lancamento=datetime(2026, 5, 22, 10, 0),
                     valor_produto=300,
                 ),
+                ItemNota(
+                    numero_nota="CUSTO6",
+                    fornecedor="Retorno Conserto",
+                    codigo="INS-RET",
+                    descricao="Inserto metal duro retorno conserto",
+                    qtd_real=1,
+                    unidade_comercial="UN",
+                    status="LanÃ§ado",
+                    data_lancamento=datetime(2026, 5, 23, 10, 0),
+                    valor_produto=9999,
+                    cfop="1916",
+                ),
             ]
         )
         db.session.commit()
@@ -1357,6 +1369,7 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     assert categorias["arames_solda"]["custo_medio_unitario"] == 20
     assert data["familias_custo_medio"][0]["custo_medio_unitario"] == 1200
     assert all(linha["numero_nota"] != "CUSTO3" for linha in data["linhas"])
+    assert all(linha["numero_nota"] != "CUSTO6" for linha in data["linhas"])
     assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
 
     filtrado = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
@@ -1415,6 +1428,14 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
                     "valor_total_linha": 800,
                     "cfop": "1556",
                 },
+                {
+                    "cod_interno": "F-RET",
+                    "descricao": "Fresa topo metal duro retorno conserto",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "valor_total_linha": 9999,
+                    "cfop": "1916",
+                },
             ],
         }
     ]
@@ -1435,6 +1456,7 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
     assert data["linhas"][0]["numero_nota"] == "312312"
     assert any(linha["categoria_id"] == "arames_solda" for linha in data["linhas"])
     assert any(linha["categoria_id"] == "oleo_soluvel" and linha["codigo"] == "28-11-00342" for linha in data["linhas"])
+    assert all(linha["cfop"] != "1916" for linha in data["linhas"])
     assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 25
@@ -2211,6 +2233,85 @@ def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
         assert log is not None
         assert log.anexou_xml is True
         assert log.anexou_pdf is True
+
+
+def test_scheduler_nfe_nao_repete_nota_duplicada_ou_aguardando_manual(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config.update(NFE_EMAIL_AUTO_DESDE="2026-05-13")
+    documentos = [
+        {"numero": "9200", "chave": "2" * 44, "autorizada": True, "emitido_em": "2026-05-20T10:00:00"},
+        {"numero": "9200", "chave": "2" * 44, "autorizada": True, "emitido_em": "2026-05-20T10:00:00"},
+    ]
+    chamadas = []
+
+    def fake_enviar_nfe_por_email(numero_nf, **kwargs):
+        chamadas.append(numero_nf)
+        db.session.add(
+            EmailNFEnviado(
+                numero_nf=numero_nf,
+                chave_acesso=kwargs.get("chave"),
+                destinatario_email="",
+                origem=kwargs.get("origem", "Auto"),
+                status="AguardandoManual",
+                erro_mensagem="Sem e-mail no XML, planilha ou cadastro.",
+                disparado_por=kwargs.get("disparado_por"),
+            )
+        )
+        db.session.commit()
+        return {"sucesso": False, "status": "AguardandoManual"}
+
+    with app.app_context(), patch(
+        "conferencia_app.services.erp_nfe_emitidas_service.listar_nfes_emitidas_erp",
+        return_value=documentos,
+    ), patch(
+        "conferencia_app.services.nfe_email_service.enviar_nfe_por_email",
+        side_effect=fake_enviar_nfe_por_email,
+    ):
+        from conferencia_app.services.nfe_email_scheduler import executar_ciclo
+
+        primeiro = executar_ciclo(app)
+        segundo = executar_ciclo(app)
+
+    assert primeiro["pendentes"] == 1
+    assert primeiro["ignoradas"] == 1
+    assert segundo["pendentes"] == 0
+    assert segundo["ignoradas"] == 2
+    assert chamadas == ["9200"]
+    with app.app_context():
+        assert EmailNFEnviado.query.filter_by(numero_nf="9200").count() == 1
+
+
+def test_scheduler_nfe_nao_reprocessa_falha_automaticamente(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config.update(NFE_EMAIL_AUTO_DESDE="2026-05-13")
+    documentos = [{"numero": "9300", "chave": "3" * 44, "autorizada": True, "emitido_em": "2026-05-20T10:00:00"}]
+
+    with app.app_context():
+        db.session.add(
+            EmailNFEnviado(
+                numero_nf="9300",
+                chave_acesso="3" * 44,
+                destinatario_email="cliente@teste.com",
+                origem="Auto",
+                status="Falha",
+                erro_mensagem="SMTPAuthenticationError",
+            )
+        )
+        db.session.commit()
+
+    with app.app_context(), patch(
+        "conferencia_app.services.erp_nfe_emitidas_service.listar_nfes_emitidas_erp",
+        return_value=documentos,
+    ), patch("conferencia_app.services.nfe_email_service.enviar_nfe_por_email") as enviar_mock:
+        from conferencia_app.services.nfe_email_scheduler import executar_ciclo
+
+        resumo = executar_ciclo(app)
+
+    assert resumo["ignoradas"] == 1
+    assert resumo["pendentes"] == 0
+    enviar_mock.assert_not_called()
+    with app.app_context():
+        assert EmailNFEnviado.query.filter_by(numero_nf="9300").count() == 1
 
 
 def test_api_consyste_emissao_solicitar_bloqueada_para_admin(tmp_path):
