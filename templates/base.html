@@ -162,7 +162,7 @@
 
                 {% endif %}
 
-                {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') %}
+                {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-coins"></i><span>Controladoria</span></span>
@@ -179,11 +179,12 @@
                             </div>
                         </div>
                         {% endif %}
-                        {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') %}
+                        {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
                         <div class="submenu-subgroup" data-subgroup="contabilidade">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-scale-balanced submenu-icon"></i> Contabilidade <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
-                                <a href="/financeiro/classificacao-contabil" class="list-group-item list-group-item-action"><i class="fas fa-scale-balanced"></i> Classificação contábil</a>
+                                {% if can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') %}<a href="/financeiro/classificacao-contabil" class="list-group-item list-group-item-action"><i class="fas fa-scale-balanced"></i> Classificação contábil</a>{% endif %}
+                                {% if can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}<a href="/financeiro/relatorio-custos" class="list-group-item list-group-item-action"><i class="fas fa-chart-pie"></i> Relatório de custos</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}

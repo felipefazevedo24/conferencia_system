@@ -3011,6 +3011,330 @@ def financeiro_classificacao_conflitos():
     return jsonify({"competencia": competencia, "conflitos": conflitos})
 
 
+CUSTO_RELATORIO_CATEGORIAS = [
+    {
+        "id": "insertos_ferramentas",
+        "label": "Insertos / ferramentas",
+        "setor": "Centros de usinagem",
+        "icon": "fa-screwdriver-wrench",
+        "keywords": [
+            "INSERTO",
+            "PASTILHA",
+            "FRESA",
+            "BROCA",
+            "MACHO",
+            "ALARGADOR",
+            "MANDRIL",
+            "PORTA INSERTO",
+            "SUPORTE FERRAMENTA",
+            "FERRAMENTA DE CORTE",
+            "BITS",
+        ],
+    },
+    {
+        "id": "oleo_soluvel",
+        "label": "Oleo soluvel",
+        "setor": "Centros de usinagem",
+        "icon": "fa-droplet",
+        "keywords": [
+            "OLEO SOLUVEL",
+            "OLEO DE CORTE",
+            "FLUIDO DE CORTE",
+            "COOLANT",
+            "EMULSIONAVEL",
+            "LUBRIFICANTE USINAGEM",
+        ],
+    },
+    {
+        "id": "arames_solda",
+        "label": "Arames de solda",
+        "setor": "Solda",
+        "icon": "fa-fire-flame-curved",
+        "keywords": ["ARAME SOLDA", "ARAME MIG", "ARAME MAG", "ER70S", "AWS A5", "SOLDA MIG"],
+    },
+    {
+        "id": "discos_corte",
+        "label": "Discos de corte",
+        "setor": "Solda",
+        "icon": "fa-compact-disc",
+        "keywords": ["DISCO CORTE", "DISCO DE CORTE", "DISCO DESBASTE", "DISCO FLAP", "ABRASIVO CORTE"],
+    },
+    {
+        "id": "qualidade_medicao",
+        "label": "Qualidade / medicao",
+        "setor": "Qualidade",
+        "icon": "fa-ruler-combined",
+        "keywords": [
+            "AFERICAO",
+            "CALIBRACAO",
+            "QUALIDADE",
+            "APARELHO DE MEDICAO",
+            "INSTRUMENTO DE MEDICAO",
+            "PAQUIMETRO",
+            "MICROMETRO",
+            "RELOGIO COMPARADOR",
+            "TRIDIMENSIONAL",
+            "MEDIDOR",
+        ],
+    },
+    {
+        "id": "energia_eletrica",
+        "label": "Energia eletrica",
+        "setor": "Fabrica",
+        "icon": "fa-bolt",
+        "keywords": ["ENERGIA ELETRICA", "ENERGIA", "ELETRICIDADE", "CPFL", "CONTA DE LUZ"],
+    },
+    {
+        "id": "oxigenio_laser",
+        "label": "Oxigenio laser",
+        "setor": "Laser",
+        "icon": "fa-wind",
+        "keywords": ["OXIGENIO", "OXIGENIO LIQUIDO", "GAS OXIGENIO", "LASER OXIGENIO"],
+    },
+]
+
+
+def _texto_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> str:
+    partes = [
+        getattr(item, "codigo_grv", "") or getattr(item, "codigo", ""),
+        getattr(item, "descricao", ""),
+        getattr(item, "fornecedor", ""),
+        getattr(item, "cfop_descricao_grv", ""),
+        getattr(classificacao, "codigo_item", "") if classificacao else "",
+        getattr(classificacao, "descricao_item", "") if classificacao else "",
+        getattr(classificacao, "nome_conta", "") if classificacao else "",
+        getattr(classificacao, "comentario", "") if classificacao else "",
+    ]
+    return normalizar_texto(" ".join(str(p or "") for p in partes))
+
+
+def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> dict | None:
+    texto = _texto_custo_item(item, classificacao)
+    for categoria in CUSTO_RELATORIO_CATEGORIAS:
+        if any(keyword in texto for keyword in categoria["keywords"]):
+            return categoria
+    return None
+
+
+def _valor_custo_item(item: ItemNota) -> float:
+    return _float_contabil(getattr(item, "valor_produto", None) or getattr(item, "valor_total", None) or 0)
+
+
+def _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria_id: str = "") -> list[dict]:
+    query = (
+        db.session.query(ItemNota, ClassificacaoContabilItem)
+        .outerjoin(ClassificacaoContabilItem, ClassificacaoContabilItem.item_nota_id == ItemNota.id)
+        .filter(ItemNota.status.in_(["Lançado", "LanÃ§ado", "LanÃƒÂ§ado"]))
+        .filter(ItemNota.data_lancamento >= data_inicio)
+    )
+    if data_fim:
+        query = query.filter(ItemNota.data_lancamento <= data_fim)
+    rows = query.order_by(ItemNota.data_lancamento.desc(), ItemNota.id.desc()).all()
+
+    resultado = []
+    for item, classificacao in rows:
+        categoria = _categoria_custo_item(item, classificacao)
+        if not categoria:
+            continue
+        if categoria_id and categoria["id"] != categoria_id:
+            continue
+        valor = _valor_custo_item(item)
+        qtd = float(getattr(item, "qtd_real", None) or 0)
+        data_ref = item.data_lancamento or item.data_emissao or item.data_importacao
+        resultado.append(
+            {
+                "categoria_id": categoria["id"],
+                "categoria": categoria["label"],
+                "setor": categoria["setor"],
+                "icon": categoria["icon"],
+                "numero_nota": item.numero_nota or "",
+                "fornecedor": item.fornecedor or "",
+                "codigo": (item.codigo_grv or item.codigo or "").strip(),
+                "descricao": item.descricao or "",
+                "conta": getattr(classificacao, "conta", "") or "",
+                "nome_conta": getattr(classificacao, "nome_conta", "") or "",
+                "cfop": item.cfop or "",
+                "quantidade": qtd,
+                "unidade": item.unidade_comercial or "",
+                "valor": valor,
+                "valor_unitario": valor / qtd if qtd else 0.0,
+                "data_lancamento": data_ref.strftime("%d/%m/%Y") if data_ref else "",
+                "data_lancamento_iso": data_ref.date().isoformat() if data_ref else "",
+                "competencia": data_ref.strftime("%Y-%m") if data_ref else "",
+            }
+        )
+    return resultado
+
+
+def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
+    categorias = {
+        cat["id"]: {
+            "id": cat["id"],
+            "label": cat["label"],
+            "setor": cat["setor"],
+            "icon": cat["icon"],
+            "valor": 0.0,
+            "quantidade": 0.0,
+            "itens": 0,
+            "notas": set(),
+            "fornecedores": set(),
+        }
+        for cat in CUSTO_RELATORIO_CATEGORIAS
+    }
+    mensal: dict[str, float] = {}
+    por_fornecedor: dict[str, float] = {}
+    por_item: dict[tuple[str, str], dict] = {}
+    total = 0.0
+    quantidade = 0.0
+    notas = set()
+
+    for linha in linhas:
+        valor = float(linha["valor"] or 0)
+        qtd = float(linha["quantidade"] or 0)
+        total += valor
+        quantidade += qtd
+        if linha["numero_nota"]:
+            notas.add(linha["numero_nota"])
+        cat = categorias[linha["categoria_id"]]
+        cat["valor"] += valor
+        cat["quantidade"] += qtd
+        cat["itens"] += 1
+        if linha["numero_nota"]:
+            cat["notas"].add(linha["numero_nota"])
+        if linha["fornecedor"]:
+            cat["fornecedores"].add(linha["fornecedor"])
+
+        competencia = linha["competencia"] or "Sem data"
+        mensal[competencia] = mensal.get(competencia, 0.0) + valor
+        fornecedor = linha["fornecedor"] or "Sem fornecedor"
+        por_fornecedor[fornecedor] = por_fornecedor.get(fornecedor, 0.0) + valor
+        chave_item = (linha["codigo"] or "---", linha["descricao"] or "---")
+        item_slot = por_item.setdefault(
+            chave_item,
+            {"codigo": chave_item[0], "descricao": chave_item[1], "valor": 0.0, "quantidade": 0.0, "itens": 0},
+        )
+        item_slot["valor"] += valor
+        item_slot["quantidade"] += qtd
+        item_slot["itens"] += 1
+
+    categorias_lista = []
+    for cat in categorias.values():
+        categorias_lista.append(
+            {
+                "id": cat["id"],
+                "label": cat["label"],
+                "setor": cat["setor"],
+                "icon": cat["icon"],
+                "valor": round(cat["valor"], 2),
+                "quantidade": round(cat["quantidade"], 4),
+                "itens": cat["itens"],
+                "notas": len(cat["notas"]),
+                "fornecedores": len(cat["fornecedores"]),
+                "participacao": round((cat["valor"] / total * 100) if total else 0, 2),
+            }
+        )
+    categorias_lista.sort(key=lambda row: row["valor"], reverse=True)
+    return {
+        "resumo": {
+            "valor_total": round(total, 2),
+            "quantidade_total": round(quantidade, 4),
+            "itens": len(linhas),
+            "notas": len(notas),
+            "ticket_medio": round(total / len(linhas), 2) if linhas else 0.0,
+            "categorias_com_custo": sum(1 for row in categorias_lista if row["valor"] > 0),
+        },
+        "categorias": categorias_lista,
+        "mensal": [{"competencia": k, "valor": round(v, 2)} for k, v in sorted(mensal.items())],
+        "top_fornecedores": [
+            {"fornecedor": k, "valor": round(v, 2)}
+            for k, v in sorted(por_fornecedor.items(), key=lambda item: item[1], reverse=True)[:8]
+        ],
+        "top_itens": sorted(
+            [
+                {**row, "valor": round(row["valor"], 2), "quantidade": round(row["quantidade"], 4)}
+                for row in por_item.values()
+            ],
+            key=lambda row: row["valor"],
+            reverse=True,
+        )[:10],
+    }
+
+
+@api_bp.route("/api/financeiro/relatorio-custos")
+@permission_required("PAGE_FINANCEIRO_RELATORIO_CUSTOS")
+def financeiro_relatorio_custos():
+    data_inicio, data_fim, competencia = _periodo_competencia()
+    categoria = str(request.args.get("categoria") or "").strip()
+    linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    agrupado = _agrupar_relatorio_custos(linhas)
+    limite = max(25, min(int(request.args.get("limite") or 80), 300))
+    return jsonify(
+        {
+            "sucesso": True,
+            "competencia": competencia,
+            "inicio": data_inicio.date().isoformat(),
+            "fim": data_fim.date().isoformat() if data_fim else "",
+            "categorias_catalogo": [
+                {"id": c["id"], "label": c["label"], "setor": c["setor"], "icon": c["icon"]}
+                for c in CUSTO_RELATORIO_CATEGORIAS
+            ],
+            **agrupado,
+            "linhas": linhas[:limite],
+        }
+    )
+
+
+@api_bp.route("/api/financeiro/relatorio-custos/exportar")
+@permission_required("PAGE_FINANCEIRO_RELATORIO_CUSTOS")
+def financeiro_relatorio_custos_exportar():
+    data_inicio, data_fim, competencia = _periodo_competencia()
+    categoria = str(request.args.get("categoria") or "").strip()
+    linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "competencia",
+        "categoria",
+        "setor",
+        "nota",
+        "data_lancamento",
+        "fornecedor",
+        "codigo",
+        "descricao",
+        "cfop",
+        "conta",
+        "nome_conta",
+        "quantidade",
+        "unidade",
+        "valor_unitario",
+        "valor_total",
+    ])
+    for linha in linhas:
+        writer.writerow([
+            linha["competencia"],
+            linha["categoria"],
+            linha["setor"],
+            linha["numero_nota"],
+            linha["data_lancamento"],
+            linha["fornecedor"],
+            linha["codigo"],
+            linha["descricao"],
+            linha["cfop"],
+            linha["conta"],
+            linha["nome_conta"],
+            linha["quantidade"],
+            linha["unidade"],
+            linha["valor_unitario"],
+            linha["valor"],
+        ])
+    data = output.getvalue().encode("utf-8-sig")
+    return Response(
+        data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="relatorio_custos_{competencia}.csv"'},
+    )
+
+
 @api_bp.route("/api/financeiro/contas-receber/notas")
 @permission_required("PAGE_FINANCEIRO_CONTAS_RECEBER")
 def financeiro_contas_receber_notas():

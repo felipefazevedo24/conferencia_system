@@ -1271,6 +1271,69 @@ def test_financeiro_classificacao_contabil_nao_exibe_tributo_xml_sem_grv(tmp_pat
     assert item["cofins_aliquota"] == 0
 
 
+def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Controladoria")
+
+    with app.app_context():
+        db.session.add_all(
+            [
+                ItemNota(
+                    numero_nota="CUSTO1",
+                    fornecedor="Fornecedor Usinagem",
+                    codigo="INS-10",
+                    descricao="Inserto metal duro para centro de usinagem",
+                    qtd_real=10,
+                    unidade_comercial="UN",
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 12, 10, 0),
+                    valor_produto=500,
+                    cfop="1556",
+                ),
+                ItemNota(
+                    numero_nota="CUSTO2",
+                    fornecedor="CPFL",
+                    codigo="ENERGIA",
+                    descricao="Energia eletrica fabrica maio",
+                    qtd_real=1,
+                    unidade_comercial="UN",
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 15, 10, 0),
+                    valor_produto=1200,
+                    cfop="1252",
+                ),
+                ItemNota(
+                    numero_nota="CUSTO3",
+                    fornecedor="Outro",
+                    codigo="MAT",
+                    descricao="Material sem familia de custo",
+                    qtd_real=1,
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 20, 10, 0),
+                    valor_produto=999,
+                ),
+            ]
+        )
+        db.session.commit()
+
+    assert client.get("/financeiro/relatorio-custos").status_code == 200
+
+    response = client.get("/api/financeiro/relatorio-custos?competencia=2026-05")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["resumo"]["valor_total"] == 1700
+    assert data["resumo"]["itens"] == 2
+    categorias = {row["id"]: row for row in data["categorias"]}
+    assert categorias["insertos_ferramentas"]["valor"] == 500
+    assert categorias["energia_eletrica"]["valor"] == 1200
+    assert all(linha["numero_nota"] != "CUSTO3" for linha in data["linhas"])
+
+    filtrado = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
+    assert filtrado.status_code == 200
+    assert filtrado.get_json()["resumo"]["valor_total"] == 1200
+
+
 def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

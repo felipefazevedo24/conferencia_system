@@ -32,6 +32,7 @@ PERMISSION_CATALOG = {
     "PAGE_FINANCEIRO_FATURAMENTO": "Controladoria > Contas a receber > Faturamento",
     "PAGE_FINANCEIRO_CONTAS_RECEBER": "Controladoria > Contas a receber > Contas a Receber",
     "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL": "Controladoria > Contabilidade > Classificacao contabil",
+    "PAGE_FINANCEIRO_RELATORIO_CUSTOS": "Controladoria > Contabilidade > Relatorio de custos",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_ADMIN": "Expedicao > Controle Admin",
     "PAGE_EXPEDICAO_ROMANEIO": "Expedicao > Romaneios",
@@ -70,12 +71,14 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LANCAMENTO",
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
+        "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
     },
     "Controladoria": {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LANCAMENTO",
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
+        "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
     },
     "Logística": {
         "PAGE_CONFERENCIA",

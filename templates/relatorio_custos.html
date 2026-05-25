@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Controladoria - Relatório de Custos{% endblock %}
+{% block shell_title %}Relatório de custos{% endblock %}
+{% block shell_subtitle %}Insumos produtivos, qualidade, energia e gases.{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cost-wrap{min-height:100vh;background:#f5f7fb;color:#0f172a;padding:26px 32px 34px;max-width:1680px;margin:0 auto}
+    .cost-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+    .cost-title{font-family:"Space Grotesk",sans-serif;font-weight:800;font-size:clamp(1.45rem,2vw,2.1rem);margin:0}
+    .cost-sub{margin:6px 0 0;color:#64748b}
+    .cost-actions{display:flex;gap:10px;flex-wrap:wrap}
+    .cost-btn{border:0;border-radius:8px;min-height:40px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;font-weight:800;color:#fff;background:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.18)}
+    .cost-btn.secondary{color:#0f172a;background:#fff;border:1px solid #dbe4ef;box-shadow:none}
+    .cost-filters{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;display:grid;grid-template-columns:170px 230px minmax(160px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
+    .cost-field label{display:block;color:#64748b;font-size:.78rem;font-weight:800;margin-bottom:5px}
+    .cost-field input,.cost-field select{width:100%;height:38px;border:1px solid #d9e2ef;border-radius:8px;padding:0 10px;background:#fbfdff;color:#0f172a}
+    .cost-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+    .cost-kpi{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+    .cost-kpi span{color:#64748b;font-size:.78rem;font-weight:800;text-transform:uppercase}
+    .cost-kpi strong{display:block;margin-top:6px;font:800 1.45rem "Space Grotesk",sans-serif;color:#0f172a}
+    .cost-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:14px;margin-bottom:14px}
+    .cost-panel{background:#fff;border:1px solid #e4eaf3;border-radius:8px;box-shadow:0 10px 26px rgba(15,23,42,.06);overflow:hidden}
+    .cost-panel-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid #eef2f7}
+    .cost-panel-head h2{font-size:1rem;font-weight:800;margin:0}
+    .cost-chart{height:320px;padding:12px}
+    .cost-cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;padding:12px}
+    .cost-cat{border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#fbfdff}
+    .cost-cat-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+    .cost-cat i{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:#eff6ff;color:#2563eb}
+    .cost-cat h3{font-size:.95rem;margin:0;font-weight:800}
+    .cost-cat small{display:block;color:#64748b;margin-top:2px}
+    .cost-cat strong{display:block;margin-top:10px;font-size:1.15rem}
+    .cost-bar{height:7px;border-radius:99px;background:#e2e8f0;overflow:hidden;margin-top:10px}
+    .cost-bar span{display:block;height:100%;background:#2563eb;border-radius:99px}
+    .cost-table-wrap{overflow:auto}
+    .cost-table{width:100%;border-collapse:collapse;font-size:.86rem}
+    .cost-table th{background:#f8fafc;color:#475569;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
+    .cost-table th,.cost-table td{padding:11px 12px;border-bottom:1px solid #eef2f7;vertical-align:top}
+    .cost-table td.num,.cost-table th.num{text-align:right;white-space:nowrap}
+    .cost-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;border:1px solid #dbe4ef;background:#f8fafc;color:#334155;padding:4px 9px;font-weight:800;font-size:.76rem}
+    .cost-empty{padding:34px;color:#64748b;text-align:center}
+    @media(max-width:980px){.cost-filters,.cost-grid{grid-template-columns:1fr}.cost-wrap{padding:16px}.cost-chart{height:260px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cost-wrap">
+    <div class="cost-top">
+        <div>
+            <h1 class="cost-title"><i class="fas fa-chart-pie"></i> Relatório de custos</h1>
+            <p class="cost-sub">Custos reais dos lançamentos: usinagem, solda, qualidade, energia elétrica e oxigênio das lasers.</p>
+        </div>
+        <div class="cost-actions">
+            <button class="cost-btn secondary" id="btn-exportar" type="button"><i class="fas fa-file-export"></i> Exportar CSV</button>
+            <button class="cost-btn" id="btn-atualizar" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+    </div>
+
+    <section class="cost-filters">
+        <div class="cost-field">
+            <label>Competência</label>
+            <input id="f-competencia" type="month" min="2026-01">
+        </div>
+        <div class="cost-field">
+            <label>Categoria</label>
+            <select id="f-categoria"><option value="">Todas as categorias</option></select>
+        </div>
+        <div class="cost-field">
+            <label>Itens exibidos</label>
+            <select id="f-limite"><option value="80">80 linhas</option><option value="150">150 linhas</option><option value="300">300 linhas</option></select>
+        </div>
+        <button class="cost-btn secondary" id="btn-filtrar" type="button"><i class="fas fa-filter"></i> Filtrar</button>
+    </section>
+
+    <section class="cost-kpis">
+        <div class="cost-kpi"><span>Custo total</span><strong id="k-total">R$ 0,00</strong></div>
+        <div class="cost-kpi"><span>Itens encontrados</span><strong id="k-itens">0</strong></div>
+        <div class="cost-kpi"><span>Notas fiscais</span><strong id="k-notas">0</strong></div>
+        <div class="cost-kpi"><span>Ticket médio</span><strong id="k-ticket">R$ 0,00</strong></div>
+        <div class="cost-kpi"><span>Categorias com custo</span><strong id="k-categorias">0</strong></div>
+    </section>
+
+    <section class="cost-grid">
+        <div class="cost-panel">
+            <div class="cost-panel-head"><h2>Custo por categoria</h2><span class="cost-pill" id="periodo-label">---</span></div>
+            <div class="cost-chart"><canvas id="chart-categorias"></canvas></div>
+        </div>
+        <div class="cost-panel">
+            <div class="cost-panel-head"><h2>Tendência mensal</h2><span class="cost-pill">R$</span></div>
+            <div class="cost-chart"><canvas id="chart-mensal"></canvas></div>
+        </div>
+    </section>
+
+    <section class="cost-panel">
+        <div class="cost-panel-head"><h2>Resumo das famílias de custo</h2><span class="cost-pill">Dados do cadastro/lancamento</span></div>
+        <div class="cost-cats" id="cost-cats"></div>
+    </section>
+
+    <section class="cost-grid" style="margin-top:14px">
+        <div class="cost-panel">
+            <div class="cost-panel-head"><h2>Top itens por custo</h2></div>
+            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Código / descrição</th><th class="num">Qtd.</th><th class="num">Valor</th></tr></thead><tbody id="top-itens"></tbody></table></div>
+        </div>
+        <div class="cost-panel">
+            <div class="cost-panel-head"><h2>Top fornecedores</h2></div>
+            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Fornecedor</th><th class="num">Valor</th></tr></thead><tbody id="top-fornecedores"></tbody></table></div>
+        </div>
+    </section>
+
+    <section class="cost-panel">
+        <div class="cost-panel-head"><h2>Detalhamento dos lançamentos</h2><span class="cost-pill" id="linhas-label">0 linhas</span></div>
+        <div class="cost-table-wrap">
+            <table class="cost-table">
+                <thead><tr><th>Categoria</th><th>NF / Data</th><th>Fornecedor</th><th>Material</th><th>Conta</th><th class="num">Qtd.</th><th class="num">Unitário</th><th class="num">Total</th></tr></thead>
+                <tbody id="linhas-body"></tbody>
+            </table>
+        </div>
+        <div class="cost-empty" id="cost-empty" style="display:none">Nenhum custo encontrado para os filtros selecionados.</div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const state = { categoriaChart: null, mensalChart: null, categorias: [] };
+const palette = ["#2563eb","#0891b2","#16a34a","#f59e0b","#dc2626","#7c3aed","#0f766e"];
+
+function money(value){return Number(value || 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});}
+function number(value){return Number(value || 0).toLocaleString("pt-BR",{maximumFractionDigits:4});}
+function competenciaAtual(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;}
+function periodo(){const c=document.getElementById("f-competencia").value || "2026-01";const [ano,mes]=c.split("-").map(Number);const fim=new Date(ano,mes,0);return {competencia:c,inicio:`${ano}-${String(mes).padStart(2,"0")}-01`,fim:`${ano}-${String(mes).padStart(2,"0")}-${String(fim.getDate()).padStart(2,"0")}`};}
+function params(){return new URLSearchParams({...periodo(),categoria:document.getElementById("f-categoria").value || "",limite:document.getElementById("f-limite").value || "80"});}
+
+async function carregar(){
+    document.getElementById("cost-empty").style.display = "none";
+    const res = await fetch(`/api/financeiro/relatorio-custos?${params().toString()}`);
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.msg || data.error || "Falha ao carregar relatório");
+    state.categorias = data.categorias_catalogo || [];
+    renderSelectCategorias();
+    renderResumo(data);
+    renderCharts(data);
+    renderCategorias(data.categorias || []);
+    renderTops(data);
+    renderLinhas(data.linhas || []);
+}
+
+function renderSelectCategorias(){
+    const select=document.getElementById("f-categoria");
+    const atual=select.value;
+    select.innerHTML='<option value="">Todas as categorias</option>' + state.categorias.map(c=>`<option value="${c.id}">${c.label}</option>`).join("");
+    select.value=atual;
+}
+
+function renderResumo(data){
+    const r=data.resumo || {};
+    document.getElementById("k-total").textContent=money(r.valor_total);
+    document.getElementById("k-itens").textContent=r.itens || 0;
+    document.getElementById("k-notas").textContent=r.notas || 0;
+    document.getElementById("k-ticket").textContent=money(r.ticket_medio);
+    document.getElementById("k-categorias").textContent=r.categorias_com_custo || 0;
+    document.getElementById("periodo-label").textContent=`${data.inicio || ""} a ${data.fim || ""}`;
+}
+
+function renderCharts(data){
+    const cats=(data.categorias || []).filter(c=>Number(c.valor)>0);
+    const catCtx=document.getElementById("chart-categorias");
+    if(state.categoriaChart) state.categoriaChart.destroy();
+    state.categoriaChart = new Chart(catCtx,{type:"doughnut",data:{labels:cats.map(c=>c.label),datasets:[{data:cats.map(c=>c.valor),backgroundColor:palette,borderWidth:2,borderColor:"#fff"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}}}});
+    const mensal=data.mensal || [];
+    const mensalCtx=document.getElementById("chart-mensal");
+    if(state.mensalChart) state.mensalChart.destroy();
+    state.mensalChart = new Chart(mensalCtx,{type:"bar",data:{labels:mensal.map(m=>m.competencia),datasets:[{label:"Custo",data:mensal.map(m=>m.valor),backgroundColor:"#2563eb",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>money(ctx.raw)}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
+}
+
+function renderCategorias(categorias){
+    const total = categorias.reduce((acc,c)=>acc+Number(c.valor || 0),0);
+    document.getElementById("cost-cats").innerHTML = categorias.map((c,idx)=>`
+        <article class="cost-cat">
+            <div class="cost-cat-top"><div><h3>${c.label}</h3><small>${c.setor} · ${c.itens} item(ns) · ${c.notas} NF(s)</small></div><i class="fas ${c.icon}"></i></div>
+            <strong>${money(c.valor)}</strong>
+            <small>${c.participacao || 0}% do total · ${number(c.quantidade)} unidades</small>
+            <div class="cost-bar"><span style="width:${total ? Math.max(2,(Number(c.valor||0)/total)*100) : 0}%;background:${palette[idx % palette.length]}"></span></div>
+        </article>
+    `).join("");
+}
+
+function renderTops(data){
+    document.getElementById("top-itens").innerHTML = (data.top_itens || []).map(i=>`<tr><td><strong>${i.codigo}</strong><br><small>${i.descricao}</small></td><td class="num">${number(i.quantidade)}</td><td class="num"><strong>${money(i.valor)}</strong></td></tr>`).join("");
+    document.getElementById("top-fornecedores").innerHTML = (data.top_fornecedores || []).map(f=>`<tr><td>${f.fornecedor}</td><td class="num"><strong>${money(f.valor)}</strong></td></tr>`).join("");
+}
+
+function renderLinhas(linhas){
+    document.getElementById("linhas-label").textContent = `${linhas.length} linhas`;
+    document.getElementById("cost-empty").style.display = linhas.length ? "none" : "block";
+    document.getElementById("linhas-body").innerHTML = linhas.map(l=>`
+        <tr>
+            <td><span class="cost-pill">${l.categoria}</span><br><small>${l.setor}</small></td>
+            <td><strong>${l.numero_nota}</strong><br><small>${l.data_lancamento}</small></td>
+            <td>${l.fornecedor}</td>
+            <td><strong>${l.codigo || "---"}</strong><br><small>${l.descricao}</small></td>
+            <td>${l.conta || "---"}<br><small>${l.nome_conta || ""}</small></td>
+            <td class="num">${number(l.quantidade)} ${l.unidade || ""}</td>
+            <td class="num">${money(l.valor_unitario)}</td>
+            <td class="num"><strong>${money(l.valor)}</strong></td>
+        </tr>
+    `).join("");
+}
+
+function exportar(){window.location.href = `/api/financeiro/relatorio-custos/exportar?${params().toString()}`;}
+document.getElementById("btn-filtrar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
+document.getElementById("btn-atualizar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
+document.getElementById("btn-exportar").addEventListener("click",exportar);
+document.getElementById("f-competencia").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
+carregar().catch(err=>{document.getElementById("cost-empty").style.display="block";document.getElementById("cost-empty").textContent=err.message;});
+</script>
+{% endblock %}

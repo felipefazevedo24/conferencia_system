@@ -363,6 +363,20 @@ HOME_MODULES = [
         "metric_key": "boletos_gerados",
     },
     {
+        "id": "relatorio_custos",
+        "title": "Relatorio de Custos",
+        "subtitle": "Contabilidade",
+        "description": "Consolide custos de insumos produtivos, energia, qualidade e gases com base nos lancamentos reais.",
+        "href": "/financeiro/relatorio-custos",
+        "icon": "fa-chart-pie",
+        "permission": "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
+        "section": "Controladoria",
+        "tone": "red",
+        "priority": 83,
+        "keywords": ["custos", "usinagem", "solda", "energia", "qualidade", "oxigenio"],
+        "metric_key": "boletos_gerados",
+    },
+    {
         "id": "consulta_boletos",
         "title": "Consulta de Boletos",
         "subtitle": "Contas a receber",
@@ -831,6 +845,12 @@ def financeiro_contas_receber_page():
 @permission_required("PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL")
 def financeiro_classificacao_contabil_page():
     return render_template("classificacao_contabil.html", user=session["username"])
+
+
+@page_bp.route("/financeiro/relatorio-custos")
+@permission_required("PAGE_FINANCEIRO_RELATORIO_CUSTOS")
+def financeiro_relatorio_custos_page():
+    return render_template("relatorio_custos.html", user=session["username"])
 
 
 @page_bp.route("/admin/wms-enderecos")
