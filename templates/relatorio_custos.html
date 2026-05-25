@@ -77,18 +77,29 @@
         <div class="cost-kpi"><span>Custo total</span><strong id="k-total">R$ 0,00</strong></div>
         <div class="cost-kpi"><span>Itens encontrados</span><strong id="k-itens">0</strong></div>
         <div class="cost-kpi"><span>Notas fiscais</span><strong id="k-notas">0</strong></div>
-        <div class="cost-kpi"><span>Ticket médio</span><strong id="k-ticket">R$ 0,00</strong></div>
+        <div class="cost-kpi"><span>Médio unitário geral</span><strong id="k-medio-unit">R$ 0,00</strong></div>
+        <div class="cost-kpi"><span>Médio por lançamento</span><strong id="k-medio-lanc">R$ 0,00</strong></div>
         <div class="cost-kpi"><span>Categorias com custo</span><strong id="k-categorias">0</strong></div>
     </section>
 
     <section class="cost-grid">
         <div class="cost-panel">
-            <div class="cost-panel-head"><h2>Custo por categoria</h2><span class="cost-pill" id="periodo-label">---</span></div>
+            <div class="cost-panel-head"><h2>Custo médio unitário por família</h2><span class="cost-pill" id="periodo-label">---</span></div>
             <div class="cost-chart"><canvas id="chart-categorias"></canvas></div>
         </div>
         <div class="cost-panel">
-            <div class="cost-panel-head"><h2>Tendência mensal</h2><span class="cost-pill">R$</span></div>
+            <div class="cost-panel-head"><h2>Custo total por família</h2><span class="cost-pill">R$</span></div>
             <div class="cost-chart"><canvas id="chart-mensal"></canvas></div>
+        </div>
+    </section>
+
+    <section class="cost-panel" style="margin-bottom:14px">
+        <div class="cost-panel-head"><h2>Dados de custo médio por família</h2><span class="cost-pill">Média = total / quantidade</span></div>
+        <div class="cost-table-wrap">
+            <table class="cost-table">
+                <thead><tr><th>Família</th><th>Setor</th><th class="num">Qtd.</th><th class="num">Lançamentos</th><th class="num">Custo médio unit.</th><th class="num">Médio por lançamento</th><th class="num">Custo total</th></tr></thead>
+                <tbody id="familias-medias"></tbody>
+            </table>
         </div>
     </section>
 
@@ -158,20 +169,35 @@ function renderResumo(data){
     document.getElementById("k-total").textContent=money(r.valor_total);
     document.getElementById("k-itens").textContent=r.itens || 0;
     document.getElementById("k-notas").textContent=r.notas || 0;
-    document.getElementById("k-ticket").textContent=money(r.ticket_medio);
+    document.getElementById("k-medio-unit").textContent=money(r.custo_medio_unitario);
+    document.getElementById("k-medio-lanc").textContent=money(r.custo_medio_lancamento);
     document.getElementById("k-categorias").textContent=r.categorias_com_custo || 0;
     document.getElementById("periodo-label").textContent=`${data.inicio || ""} a ${data.fim || ""}`;
 }
 
 function renderCharts(data){
-    const cats=(data.categorias || []).filter(c=>Number(c.valor)>0);
+    const cats=(data.familias_custo_medio || []).filter(c=>Number(c.valor)>0);
     const catCtx=document.getElementById("chart-categorias");
     if(state.categoriaChart) state.categoriaChart.destroy();
-    state.categoriaChart = new Chart(catCtx,{type:"doughnut",data:{labels:cats.map(c=>c.label),datasets:[{data:cats.map(c=>c.valor),backgroundColor:palette,borderWidth:2,borderColor:"#fff"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}}}});
-    const mensal=data.mensal || [];
+    state.categoriaChart = new Chart(catCtx,{type:"bar",data:{labels:cats.map(c=>c.label),datasets:[{label:"Custo médio unitário",data:cats.map(c=>c.custo_medio_unitario),backgroundColor:"#2563eb",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
     const mensalCtx=document.getElementById("chart-mensal");
     if(state.mensalChart) state.mensalChart.destroy();
-    state.mensalChart = new Chart(mensalCtx,{type:"bar",data:{labels:mensal.map(m=>m.competencia),datasets:[{label:"Custo",data:mensal.map(m=>m.valor),backgroundColor:"#2563eb",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>money(ctx.raw)}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
+    state.mensalChart = new Chart(mensalCtx,{type:"doughnut",data:{labels:cats.map(c=>c.label),datasets:[{data:cats.map(c=>c.valor),backgroundColor:palette,borderWidth:2,borderColor:"#fff"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}}}});
+    renderFamiliasMedias(cats);
+}
+
+function renderFamiliasMedias(familias){
+    document.getElementById("familias-medias").innerHTML = familias.length ? familias.map(f=>`
+        <tr>
+            <td><strong>${f.label}</strong></td>
+            <td>${f.setor}</td>
+            <td class="num">${number(f.quantidade)}</td>
+            <td class="num">${f.itens || 0}</td>
+            <td class="num"><strong>${money(f.custo_medio_unitario)}</strong></td>
+            <td class="num">${money(f.custo_medio_lancamento)}</td>
+            <td class="num">${money(f.valor)}</td>
+        </tr>
+    `).join("") : '<tr><td colspan="7" class="text-center text-muted">Nenhuma família com custo no período.</td></tr>';
 }
 
 function renderCategorias(categorias){
@@ -180,7 +206,7 @@ function renderCategorias(categorias){
         <article class="cost-cat">
             <div class="cost-cat-top"><div><h3>${c.label}</h3><small>${c.setor} · ${c.itens} item(ns) · ${c.notas} NF(s)</small></div><i class="fas ${c.icon}"></i></div>
             <strong>${money(c.valor)}</strong>
-            <small>${c.participacao || 0}% do total · ${number(c.quantidade)} unidades</small>
+            <small>Médio unit.: ${money(c.custo_medio_unitario)} · Médio lançamento: ${money(c.custo_medio_lancamento)}</small>
             <div class="cost-bar"><span style="width:${total ? Math.max(2,(Number(c.valor||0)/total)*100) : 0}%;background:${palette[idx % palette.length]}"></span></div>
         </article>
     `).join("");

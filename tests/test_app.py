@@ -1324,9 +1324,15 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     data = response.get_json()
     assert data["resumo"]["valor_total"] == 1700
     assert data["resumo"]["itens"] == 2
+    assert data["resumo"]["custo_medio_unitario"] == 154.55
+    assert data["resumo"]["custo_medio_lancamento"] == 850
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["valor"] == 500
+    assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 50
+    assert categorias["insertos_ferramentas"]["custo_medio_lancamento"] == 500
     assert categorias["energia_eletrica"]["valor"] == 1200
+    assert categorias["energia_eletrica"]["custo_medio_unitario"] == 1200
+    assert data["familias_custo_medio"][0]["custo_medio_unitario"] == 1200
     assert all(linha["numero_nota"] != "CUSTO3" for linha in data["linhas"])
 
     filtrado = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
