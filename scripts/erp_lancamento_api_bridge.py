@@ -485,6 +485,9 @@ ENTRADA_CHAPA_SQL = """
         coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
         coalesce(a.qtde, 0) as quantidade,
         coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
+        coalesce(fam.nome, '') as familia,
+        coalesce(p.cod_grupo::text, '') as grupo,
+        coalesce(nullif(p.localizacao_estoque, ''), '') as localizacao_estoque,
         coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
         coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
         coalesce(nullif(a.lote, ''), nullif(lot.descricao, '')) as lote,
@@ -502,6 +505,9 @@ ENTRADA_CHAPA_SQL = """
     left join public.tproduto p
       on p.cod_empresa = a.cod_empresa
      and p.codigo = a.cod_produto
+    left join public.tfamilia fam
+      on fam.cod_empresa = p.cod_empresa
+     and fam.codigo = p.cod_familia
     left join public.tcom_aux_loteserie lot
       on lot.cod_empresa = a.cod_empresa
      and lot.guid_pai = a.guid_linha
@@ -544,6 +550,9 @@ ENTRADAS_CHAPA_DESDE_SQL = """
         coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
         coalesce(a.qtde, 0) as quantidade,
         coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
+        coalesce(fam.nome, '') as familia,
+        coalesce(p.cod_grupo::text, '') as grupo,
+        coalesce(nullif(p.localizacao_estoque, ''), '') as localizacao_estoque,
         coalesce(a.tipo_controle, p.tipo_controle, 0) as tipo_controle,
         coalesce(p.controle_lote_serie, 0) as controle_lote_serie,
         coalesce(nullif(a.lote, ''), nullif(lot.descricao, '')) as lote,
@@ -561,6 +570,9 @@ ENTRADAS_CHAPA_DESDE_SQL = """
     left join public.tproduto p
       on p.cod_empresa = a.cod_empresa
      and p.codigo = a.cod_produto
+    left join public.tfamilia fam
+      on fam.cod_empresa = p.cod_empresa
+     and fam.codigo = p.cod_familia
     left join public.tcom_aux_loteserie lot
       on lot.cod_empresa = a.cod_empresa
      and lot.guid_pai = a.guid_linha
@@ -710,6 +722,9 @@ def _montar_entrada_chapa(rows: list[dict[str, Any]], numero_ar: str = "", numer
             "descricao": row.get("descricao") or "",
             "quantidade": row.get("quantidade") or 0,
             "unidade": row.get("unidade") or "",
+            "familia": row.get("familia") or "",
+            "grupo": row.get("grupo") or "",
+            "localizacao_estoque": row.get("localizacao_estoque") or "",
             "valor_unitario": row.get("valor_unitario") or 0,
             "valor_total_linha": row.get("valor_total_linha") or 0,
             "icms_base_calculo": row.get("icms_base_calculo") or 0,

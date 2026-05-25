@@ -449,6 +449,11 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
                     coalesce(nullif(a.cod_interno, ''), nullif(p.codigo_interno, '')) as cod_interno,
                     coalesce(nullif(a.produto, ''), nullif(p.nome, '')) as descricao,
                     coalesce(a.qtde, 0) as quantidade,
+                    coalesce(nullif(a.unidade, ''), nullif(p.unidade, ''), nullif(p.unidade_compra, '')) as unidade,
+                    coalesce(fam.nome, '') as familia,
+                    coalesce(p.cod_grupo::text, '') as grupo,
+                    coalesce(nullif(p.localizacao_estoque, ''), '') as localizacao_estoque,
+                    a.guid_linha,
                     {tax_select}
                 from public.tcompras c
                 left join public.tcom_aux a
@@ -457,6 +462,9 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
                 left join public.tproduto p
                   on p.cod_empresa = a.cod_empresa
                  and p.codigo = a.cod_produto
+                left join public.tfamilia fam
+                  on fam.cod_empresa = p.cod_empresa
+                 and fam.codigo = p.cod_familia
                 where {" or ".join(where)}
                 order by c.dt_lancamento desc nulls last, c.dt_nf desc nulls last, c.codigo desc, a.numero_item, a.guid_linha
                 limit 200
@@ -476,6 +484,10 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
             "cod_interno": row.get("cod_interno") or "",
             "descricao": row.get("descricao") or "",
             "quantidade": row.get("quantidade") or 0,
+            "unidade": row.get("unidade") or "",
+            "familia": row.get("familia") or "",
+            "grupo": row.get("grupo") or "",
+            "localizacao_estoque": row.get("localizacao_estoque") or "",
             "valor_unitario": row.get("valor_unitario") or 0,
             "valor_total_linha": row.get("valor_total_linha") or 0,
             "icms_base_calculo": row.get("icms_base_calculo") or 0,

@@ -225,7 +225,7 @@ function renderLinhas(linhas){
             <td><span class="cost-pill">${l.categoria}</span><br><small>${l.setor}</small></td>
             <td><strong>${l.numero_nota}</strong><br><small>${l.data_lancamento}</small></td>
             <td>${l.fornecedor}</td>
-            <td><strong>${l.codigo || "---"}</strong><br><small>${l.descricao}</small></td>
+            <td><strong>${l.codigo || "---"}</strong><br><small>${l.descricao}</small><br><small>${[l.familia,l.grupo,l.localizacao_estoque].filter(Boolean).join(" / ")}</small></td>
             <td>${l.conta || "---"}<br><small>${l.nome_conta || ""}</small></td>
             <td class="num">${number(l.quantidade)} ${l.unidade || ""}</td>
             <td class="num">${money(l.valor_unitario)}</td>

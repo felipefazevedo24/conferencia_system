@@ -1399,7 +1399,9 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
                 },
                 {
                     "cod_interno": "AR-10",
-                    "descricao": "Arame solido 1,2 mm (18kg a unidade)",
+                    "descricao": "Arame tubular 1,6 mm (15kg cada unidade)",
+                    "familia": "N - 06 - INSUMOS DA PRODUCAO",
+                    "localizacao_estoque": "SOLDA",
                     "quantidade": 18,
                     "unidade": "KG",
                     "valor_total_linha": 360,
@@ -1428,6 +1430,47 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 25
     assert categorias["arames_solda"]["custo_medio_unitario"] == 20
+    arame = next(linha for linha in data["linhas"] if linha["categoria_id"] == "arames_solda")
+    assert arame["familia"] == "N - 06 - INSUMOS DA PRODUCAO"
+    assert arame["localizacao_estoque"] == "SOLDA"
+
+
+def test_financeiro_relatorio_custos_nao_cai_no_local_quando_grv_configurado_sem_linhas(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Controladoria")
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="LOCAL1",
+                fornecedor="CPFL",
+                codigo="ENERGIA",
+                descricao="Energia eletrica local antiga",
+                qtd_real=1,
+                unidade_comercial="UN",
+                status="LanÃ§ado",
+                data_lancamento=datetime(2026, 5, 15, 10, 0),
+                valor_produto=1200,
+            )
+        )
+        db.session.commit()
+
+    cfg = {"api_url": "https://bridge.local", "api_token": "token", "api_timeout": 30}
+    with patch("conferencia_app.services.erp_lancamento_service._resolver_config", return_value=cfg), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_lancamentos_periodo_via_api",
+        return_value=[],
+    ), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_entradas_grv_payload_via_api",
+        return_value=[],
+    ):
+        response = client.get("/api/financeiro/relatorio-custos?competencia=2026-05")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["fonte"] == "grv_postgres"
+    assert data["resumo"]["valor_total"] == 0
+    assert data["linhas"] == []
 
 
 def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):

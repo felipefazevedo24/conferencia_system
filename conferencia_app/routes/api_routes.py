@@ -3135,7 +3135,14 @@ def _texto_custo_row(row: dict) -> str:
         row.get("codigo"),
         row.get("codigo_grv"),
         row.get("cod_interno"),
+        row.get("codigo_item"),
         row.get("descricao"),
+        row.get("familia"),
+        row.get("grupo"),
+        row.get("localizacao_estoque"),
+        row.get("cadastro_familia"),
+        row.get("cadastro_grupo"),
+        row.get("cadastro_localizacao"),
         row.get("fornecedor"),
         row.get("parceiro_nome"),
         row.get("natureza_operacao"),
@@ -3143,6 +3150,55 @@ def _texto_custo_row(row: dict) -> str:
         row.get("conta"),
     ]
     return normalizar_texto(" ".join(str(p or "") for p in partes))
+
+
+def _categoria_por_id(categoria_id: str) -> dict | None:
+    return next((cat for cat in CUSTO_RELATORIO_CATEGORIAS if cat["id"] == categoria_id), None)
+
+
+def _categoria_custo_por_cadastro(row: dict) -> dict | None:
+    texto = _texto_custo_row(row)
+    produto = normalizar_texto(
+        " ".join(
+            str(row.get(campo) or "")
+            for campo in ("codigo", "codigo_grv", "cod_interno", "codigo_item", "descricao")
+        )
+    )
+    cadastro = normalizar_texto(
+        " ".join(
+            str(row.get(campo) or "")
+            for campo in (
+                "familia",
+                "grupo",
+                "localizacao_estoque",
+                "cadastro_familia",
+                "cadastro_grupo",
+                "cadastro_localizacao",
+                "natureza_operacao",
+                "nome_conta",
+                "conta",
+            )
+        )
+    )
+
+    if "ARAME" in produto:
+        return _categoria_por_id("arames_solda")
+    if "DISCO" in produto and any(palavra in texto for palavra in ("CORTE", "DESBASTE", "FLAP", "ABRASIVO", "SOLDA")):
+        return _categoria_por_id("discos_corte")
+    if any(palavra in texto for palavra in ("OLEO SOLUVEL", "OLEO DE CORTE", "FLUIDO DE CORTE", "COOLANT", "EMULSIONAVEL")):
+        return _categoria_por_id("oleo_soluvel")
+    if "OXIGENIO" in texto and ("LASER" in texto or "GAS" in texto or "OXIGENIO LIQUIDO" in texto):
+        return _categoria_por_id("oxigenio_laser")
+    if any(palavra in cadastro for palavra in ("QUALIDADE", "MEDICAO", "AFERICAO", "CALIBRACAO")):
+        return _categoria_por_id("qualidade_medicao")
+    if any(palavra in texto for palavra in ("ENERGIA ELETRICA", "CONTA DE LUZ", "CPFL")):
+        return _categoria_por_id("energia_eletrica")
+    if "USINAGEM" in cadastro and any(
+        palavra in produto
+        for palavra in ("INSERTO", "PASTILHA", "FRESA", "BROCA", "MACHO", "ALARGADOR", "MANDRIL", "FERRAMENTA")
+    ):
+        return _categoria_por_id("insertos_ferramentas")
+    return None
 
 
 def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> dict | None:
@@ -3158,6 +3214,9 @@ def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilIt
 def _categoria_custo_row(row: dict) -> dict | None:
     if _codigo_custo_ignorado(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item")):
         return None
+    categoria_cadastro = _categoria_custo_por_cadastro(row)
+    if categoria_cadastro:
+        return categoria_cadastro
     texto = _texto_custo_row(row)
     for categoria in CUSTO_RELATORIO_CATEGORIAS:
         if any(keyword in texto for keyword in categoria["keywords"]):
@@ -3183,6 +3242,14 @@ def _valor_custo_row(row: dict) -> float:
     qtd = _float_contabil(row.get("quantidade") or row.get("qtd_real") or 0)
     unit = _float_contabil(row.get("valor_unitario") or row.get("preco_unitario") or 0)
     return qtd * unit if qtd and unit else 0.0
+
+
+def _origem_valor_custo_row(row: dict) -> str:
+    if _float_contabil(row.get("valor_total_linha") or row.get("valor_total") or row.get("total_item") or row.get("valor_produto") or row.get("vprod") or 0):
+        return "valor_total_linha"
+    if _float_contabil(row.get("quantidade") or row.get("qtd_real") or 0) and _float_contabil(row.get("valor_unitario") or row.get("preco_unitario") or 0):
+        return "quantidade_x_unitario"
+    return "sem_valor"
 
 
 def _parse_grv_datetime(value) -> datetime | None:
@@ -3235,6 +3302,7 @@ def _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria_id: str = "
                 "unidade": item.unidade_comercial or "",
                 "valor": valor,
                 "valor_unitario": valor / qtd if qtd else 0.0,
+                "valor_origem": "valor_item_local",
                 "data_lancamento": data_ref.strftime("%d/%m/%Y") if data_ref else "",
                 "data_lancamento_iso": data_ref.date().isoformat() if data_ref else "",
                 "competencia": data_ref.strftime("%Y-%m") if data_ref else "",
@@ -3243,7 +3311,7 @@ def _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria_id: str = "
     return resultado
 
 
-def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str = "") -> list[dict]:
+def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str = "") -> list[dict] | None:
     try:
         from ..services.erp_lancamento_service import (
             _consultar_entradas_grv_payload_via_api,
@@ -3253,7 +3321,7 @@ def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str
 
         cfg = _resolver_config()
         if not cfg.get("api_url"):
-            return []
+            return None
         lancamentos = _consultar_lancamentos_periodo_via_api(cfg, data_inicio, data_fim or data_inicio)
         entradas_payload = []
         vistos = set()
@@ -3308,6 +3376,9 @@ def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str
                     "fornecedor": str(row.get("fornecedor") or ""),
                     "codigo": str(row.get("codigo") or "").strip(),
                     "descricao": str(row.get("descricao") or ""),
+                    "familia": str(item.get("familia") or item.get("cadastro_familia") or ""),
+                    "grupo": str(item.get("grupo") or item.get("cadastro_grupo") or ""),
+                    "localizacao_estoque": str(item.get("localizacao_estoque") or item.get("cadastro_localizacao") or ""),
                     "conta": "",
                     "nome_conta": "",
                     "cfop": str(item.get("cfop") or ""),
@@ -3315,6 +3386,7 @@ def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str
                     "unidade": str(item.get("unidade") or ""),
                     "valor": valor,
                     "valor_unitario": valor / qtd if qtd else _float_contabil(item.get("valor_unitario") or 0),
+                    "valor_origem": _origem_valor_custo_row(row),
                     "data_lancamento": data_ref.strftime("%d/%m/%Y") if data_ref else "",
                     "data_lancamento_iso": data_ref.date().isoformat() if data_ref else "",
                     "competencia": data_ref.strftime("%Y-%m") if data_ref else "",
@@ -3440,10 +3512,12 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
 def financeiro_relatorio_custos():
     data_inicio, data_fim, competencia = _periodo_competencia()
     categoria = str(request.args.get("categoria") or "").strip()
-    linhas = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
-    fonte = "grv_postgres" if linhas else "local"
-    if not linhas:
+    linhas_grv = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
+    fonte = "grv_postgres" if linhas_grv is not None else "local"
+    if linhas_grv is None:
         linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    else:
+        linhas = linhas_grv
     agrupado = _agrupar_relatorio_custos(linhas)
     limite = max(25, min(int(request.args.get("limite") or 80), 300))
     return jsonify(
@@ -3468,9 +3542,11 @@ def financeiro_relatorio_custos():
 def financeiro_relatorio_custos_exportar():
     data_inicio, data_fim, competencia = _periodo_competencia()
     categoria = str(request.args.get("categoria") or "").strip()
-    linhas = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
-    if not linhas:
+    linhas_grv = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
+    if linhas_grv is None:
         linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    else:
+        linhas = linhas_grv
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
     writer.writerow([
@@ -3482,6 +3558,9 @@ def financeiro_relatorio_custos_exportar():
         "fornecedor",
         "codigo",
         "descricao",
+        "familia",
+        "grupo",
+        "localizacao_estoque",
         "cfop",
         "conta",
         "nome_conta",
@@ -3500,6 +3579,9 @@ def financeiro_relatorio_custos_exportar():
             linha["fornecedor"],
             linha["codigo"],
             linha["descricao"],
+            linha.get("familia", ""),
+            linha.get("grupo", ""),
+            linha.get("localizacao_estoque", ""),
             linha["cfop"],
             linha["conta"],
             linha["nome_conta"],
