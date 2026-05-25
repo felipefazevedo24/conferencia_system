@@ -3462,6 +3462,7 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
                 "participacao": round((cat["valor"] / total * 100) if total else 0, 2),
                 "custo_medio_unitario": round((cat["valor"] / cat["quantidade"]) if cat["quantidade"] else 0, 2),
                 "custo_medio_lancamento": round((cat["valor"] / cat["itens"]) if cat["itens"] else 0, 2),
+                "custo_medio": round((cat["valor"] / cat["itens"]) if cat["itens"] else 0, 2),
             }
         )
     categorias_lista.sort(key=lambda row: row["valor"], reverse=True)
@@ -3470,6 +3471,7 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
             "id": row["id"],
             "label": row["label"],
             "setor": row["setor"],
+            "custo_medio": row["custo_medio"],
             "custo_medio_unitario": row["custo_medio_unitario"],
             "custo_medio_lancamento": row["custo_medio_lancamento"],
             "quantidade": row["quantidade"],
@@ -3487,6 +3489,7 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
             "notas": len(notas),
             "custo_medio_unitario": round(total / quantidade, 2) if quantidade else 0.0,
             "custo_medio_lancamento": round(total / len(linhas), 2) if linhas else 0.0,
+            "custo_medio": round(total / len(linhas), 2) if linhas else 0.0,
             "categorias_com_custo": sum(1 for row in categorias_lista if row["valor"] > 0),
         },
         "categorias": categorias_lista,

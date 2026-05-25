@@ -1473,6 +1473,49 @@ def test_financeiro_relatorio_custos_nao_cai_no_local_quando_grv_configurado_sem
     assert data["linhas"] == []
 
 
+def test_financeiro_relatorio_custos_energia_usa_media_por_lancamento_do_grv(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Controladoria")
+
+    cfg = {"api_url": "https://bridge.local", "api_token": "token", "api_timeout": 30}
+    lancamentos = [{"numero_nota": "ENERGIA1", "codigo": "EN123", "dt_lancamento": "2026-05-10T10:00:00"}]
+    entradas = [
+        {
+            "numero_nota": "ENERGIA1",
+            "codigo_lancamento": "EN123",
+            "dt_lancamento": "2026-05-10T10:00:00",
+            "parceiro_nome": "CPFL",
+            "itens": [
+                {
+                    "cod_interno": "ENERGIA",
+                    "descricao": "Energia eletrica fabrica",
+                    "quantidade": 14.6999,
+                    "unidade": "UN",
+                    "valor_total_linha": 7674.25,
+                    "cfop": "1252",
+                }
+            ],
+        }
+    ]
+
+    with patch("conferencia_app.services.erp_lancamento_service._resolver_config", return_value=cfg), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_lancamentos_periodo_via_api",
+        return_value=lancamentos,
+    ), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_entradas_grv_payload_via_api",
+        return_value=entradas,
+    ):
+        response = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    energia = next(row for row in data["familias_custo_medio"] if row["id"] == "energia_eletrica")
+    assert energia["custo_medio"] == 7674.25
+    assert energia["custo_medio_lancamento"] == 7674.25
+    assert energia["custo_medio_unitario"] == 522.06
+
+
 def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
