@@ -71,7 +71,7 @@ def _bridge_config() -> dict[str, Any]:
         or os.environ.get("ERP_LANCAMENTO_API_TIMEOUT")
         or arquivo.get("api_timeout")
         or app.config.get("ERP_LANCAMENTO_API_TIMEOUT")
-        or 30
+        or 10
     )
     return {
         "api_url": str(api_url or "").strip().rstrip("/"),
@@ -141,4 +141,3 @@ def buscar_nfe_emitida_erp(numero_nf: str = "", chave: str = "") -> dict[str, An
         else:
             nota[campo.replace("_base64", "_bytes")] = None
     return nota
-

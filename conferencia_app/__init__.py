@@ -127,8 +127,13 @@ def create_app(test_config=None) -> Flask:
         from datetime import date
         app.config["NFE_EMAIL_AUTO_DESDE"] = date.today().isoformat()
 
-    # Inicia scheduler somente fora de processo de teste
-    if app.config.get("NFE_EMAIL_AUTO_ENABLED") and not app.config.get("TESTING"):
+    # Em hospedagens WSGI como PythonAnywhere, background threads podem nascer em
+    # mais de um worker e deixar a pagina lenta. Por padrao, rode NF-e por tarefa agendada.
+    if (
+        app.config.get("NFE_EMAIL_AUTO_ENABLED")
+        and app.config.get("NFE_EMAIL_BACKGROUND_SCHEDULER_ENABLED")
+        and not app.config.get("TESTING")
+    ):
         try:
             from .services.nfe_email_scheduler import iniciar_scheduler
             iniciar_scheduler(app)
