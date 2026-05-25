@@ -1313,6 +1313,27 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
                     data_lancamento=datetime(2026, 5, 20, 10, 0),
                     valor_produto=999,
                 ),
+                ItemNota(
+                    numero_nota="CUSTO4",
+                    fornecedor="Fornecedor Ignorado",
+                    codigo="28-11-00131",
+                    descricao="Fresa cadastro ignorado",
+                    qtd_real=2,
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 21, 10, 0),
+                    valor_produto=777,
+                ),
+                ItemNota(
+                    numero_nota="CUSTO5",
+                    fornecedor="Fornecedor Solda",
+                    codigo="AR-01",
+                    descricao="Arame tubular 1,6 mm (15kg cada unidade)",
+                    qtd_real=15,
+                    unidade_comercial="KG",
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 22, 10, 0),
+                    valor_produto=300,
+                ),
             ]
         )
         db.session.commit()
@@ -1322,22 +1343,91 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     response = client.get("/api/financeiro/relatorio-custos?competencia=2026-05")
     assert response.status_code == 200
     data = response.get_json()
-    assert data["resumo"]["valor_total"] == 1700
-    assert data["resumo"]["itens"] == 2
-    assert data["resumo"]["custo_medio_unitario"] == 154.55
-    assert data["resumo"]["custo_medio_lancamento"] == 850
+    assert data["resumo"]["valor_total"] == 2000
+    assert data["resumo"]["itens"] == 3
+    assert data["resumo"]["custo_medio_unitario"] == 76.92
+    assert data["resumo"]["custo_medio_lancamento"] == 666.67
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["valor"] == 500
     assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 50
     assert categorias["insertos_ferramentas"]["custo_medio_lancamento"] == 500
     assert categorias["energia_eletrica"]["valor"] == 1200
     assert categorias["energia_eletrica"]["custo_medio_unitario"] == 1200
+    assert categorias["arames_solda"]["valor"] == 300
+    assert categorias["arames_solda"]["custo_medio_unitario"] == 20
     assert data["familias_custo_medio"][0]["custo_medio_unitario"] == 1200
     assert all(linha["numero_nota"] != "CUSTO3" for linha in data["linhas"])
+    assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
 
     filtrado = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
     assert filtrado.status_code == 200
     assert filtrado.get_json()["resumo"]["valor_total"] == 1200
+
+
+def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Controladoria")
+
+    cfg = {"api_url": "https://bridge.local", "api_token": "token", "api_timeout": 30}
+    lancamentos = [
+        {"numero_nota": "312312", "codigo": "AR123", "dt_lancamento": "2026-05-22T10:00:00", "chave_acesso": "NFE"}
+    ]
+    entradas = [
+        {
+            "numero_nota": "312312",
+            "codigo_lancamento": "AR123",
+            "dt_lancamento": "2026-05-22T10:00:00",
+            "parceiro_nome": "Fornecedor Ferramentas",
+            "itens": [
+                {
+                    "cod_interno": "F-001",
+                    "descricao": "Fresa topo metal duro",
+                    "quantidade": 4,
+                    "unidade": "UN",
+                    "valor_unitario": 25,
+                    "valor_total_linha": 100,
+                    "cfop": "1556",
+                },
+                {
+                    "cod_interno": "28-11-00131",
+                    "descricao": "Fresa cadastro ignorado",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "valor_total_linha": 999,
+                    "cfop": "1556",
+                },
+                {
+                    "cod_interno": "AR-10",
+                    "descricao": "Arame solido 1,2 mm (18kg a unidade)",
+                    "quantidade": 18,
+                    "unidade": "KG",
+                    "valor_total_linha": 360,
+                    "cfop": "1556",
+                },
+            ],
+        }
+    ]
+
+    with patch("conferencia_app.services.erp_lancamento_service._resolver_config", return_value=cfg), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_lancamentos_periodo_via_api",
+        return_value=lancamentos,
+    ), patch(
+        "conferencia_app.services.erp_lancamento_service._consultar_entradas_grv_payload_via_api",
+        return_value=entradas,
+    ):
+        response = client.get("/api/financeiro/relatorio-custos?competencia=2026-05")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["fonte"] == "grv_postgres"
+    assert data["resumo"]["valor_total"] == 460
+    assert data["linhas"][0]["numero_nota"] == "312312"
+    assert any(linha["categoria_id"] == "arames_solda" for linha in data["linhas"])
+    assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
+    categorias = {row["id"]: row for row in data["categorias"]}
+    assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 25
+    assert categorias["arames_solda"]["custo_medio_unitario"] == 20
 
 
 def test_financeiro_classificacao_contabil_prefere_codigo_grv_postgres(tmp_path):

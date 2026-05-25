@@ -3050,7 +3050,19 @@ CUSTO_RELATORIO_CATEGORIAS = [
         "label": "Arames de solda",
         "setor": "Solda",
         "icon": "fa-fire-flame-curved",
-        "keywords": ["ARAME SOLDA", "ARAME MIG", "ARAME MAG", "ER70S", "AWS A5", "SOLDA MIG"],
+        "keywords": [
+            "ARAME SOLDA",
+            "ARAME DE SOLDA",
+            "ARAME MIG",
+            "ARAME MAG",
+            "ARAME TUBULAR",
+            "ARAME SOLIDO",
+            "ER70S",
+            "ER 70S",
+            "EUTECDUR",
+            "AWS A5",
+            "SOLDA MIG",
+        ],
     },
     {
         "id": "discos_corte",
@@ -3092,6 +3104,16 @@ CUSTO_RELATORIO_CATEGORIAS = [
         "keywords": ["OXIGENIO", "OXIGENIO LIQUIDO", "GAS OXIGENIO", "LASER OXIGENIO"],
     },
 ]
+CUSTO_RELATORIO_CODIGOS_IGNORADOS = {"281100131", "28-11-00131"}
+
+
+def _normalizar_codigo_custo(value) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(value or "").strip().upper())
+
+
+def _codigo_custo_ignorado(*values) -> bool:
+    ignorados = {_normalizar_codigo_custo(codigo) for codigo in CUSTO_RELATORIO_CODIGOS_IGNORADOS}
+    return any(_normalizar_codigo_custo(value) in ignorados for value in values if str(value or "").strip())
 
 
 def _texto_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> str:
@@ -3108,8 +3130,35 @@ def _texto_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem |
     return normalizar_texto(" ".join(str(p or "") for p in partes))
 
 
+def _texto_custo_row(row: dict) -> str:
+    partes = [
+        row.get("codigo"),
+        row.get("codigo_grv"),
+        row.get("cod_interno"),
+        row.get("descricao"),
+        row.get("fornecedor"),
+        row.get("parceiro_nome"),
+        row.get("natureza_operacao"),
+        row.get("nome_conta"),
+        row.get("conta"),
+    ]
+    return normalizar_texto(" ".join(str(p or "") for p in partes))
+
+
 def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> dict | None:
+    if _codigo_custo_ignorado(item.codigo, item.codigo_grv, getattr(classificacao, "codigo_item", "")):
+        return None
     texto = _texto_custo_item(item, classificacao)
+    for categoria in CUSTO_RELATORIO_CATEGORIAS:
+        if any(keyword in texto for keyword in categoria["keywords"]):
+            return categoria
+    return None
+
+
+def _categoria_custo_row(row: dict) -> dict | None:
+    if _codigo_custo_ignorado(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item")):
+        return None
+    texto = _texto_custo_row(row)
     for categoria in CUSTO_RELATORIO_CATEGORIAS:
         if any(keyword in texto for keyword in categoria["keywords"]):
             return categoria
@@ -3118,6 +3167,34 @@ def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilIt
 
 def _valor_custo_item(item: ItemNota) -> float:
     return _float_contabil(getattr(item, "valor_produto", None) or getattr(item, "valor_total", None) or 0)
+
+
+def _valor_custo_row(row: dict) -> float:
+    total = _float_contabil(
+        row.get("valor_total_linha")
+        or row.get("valor_total")
+        or row.get("total_item")
+        or row.get("valor_produto")
+        or row.get("vprod")
+        or 0
+    )
+    if total:
+        return total
+    qtd = _float_contabil(row.get("quantidade") or row.get("qtd_real") or 0)
+    unit = _float_contabil(row.get("valor_unitario") or row.get("preco_unitario") or 0)
+    return qtd * unit if qtd and unit else 0.0
+
+
+def _parse_grv_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    texto = str(value or "").strip()
+    if not texto:
+        return None
+    try:
+        return datetime.fromisoformat(texto.replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return None
 
 
 def _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria_id: str = "") -> list[dict]:
@@ -3163,6 +3240,86 @@ def _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria_id: str = "
                 "competencia": data_ref.strftime("%Y-%m") if data_ref else "",
             }
         )
+    return resultado
+
+
+def _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria_id: str = "") -> list[dict]:
+    try:
+        from ..services.erp_lancamento_service import (
+            _consultar_entradas_grv_payload_via_api,
+            _consultar_lancamentos_periodo_via_api,
+            _resolver_config,
+        )
+
+        cfg = _resolver_config()
+        if not cfg.get("api_url"):
+            return []
+        lancamentos = _consultar_lancamentos_periodo_via_api(cfg, data_inicio, data_fim or data_inicio)
+        entradas_payload = []
+        vistos = set()
+        for row in lancamentos:
+            numero = str(row.get("numero_nota") or row.get("n_nf") or "").strip()
+            codigo = str(row.get("codigo") or row.get("codigo_lancamento") or "").strip()
+            chave = "".join(ch for ch in str(row.get("chave_acesso") or row.get("chv_nfe") or "") if ch.isdigit())
+            key = (numero, codigo, chave)
+            if not (numero or codigo or chave) or key in vistos:
+                continue
+            entradas_payload.append(
+                {
+                    "numero_ar": codigo,
+                    "codigo_lancamento": codigo,
+                    "numero_nota": numero,
+                    "chave": chave,
+                }
+            )
+            vistos.add(key)
+        entradas = _consultar_entradas_grv_payload_via_api(cfg, entradas_payload)
+    except Exception:
+        current_app.logger.exception("Falha ao consultar custos direto do GRV/Postgres")
+        return []
+
+    resultado = []
+    for entrada in entradas:
+        data_ref = _parse_grv_datetime(entrada.get("dt_lancamento")) or _parse_grv_datetime(entrada.get("dt_recebimento")) or _parse_grv_datetime(entrada.get("dt_nf"))
+        for item in entrada.get("itens") or []:
+            if not isinstance(item, dict):
+                continue
+            row = {
+                **item,
+                "numero_nota": entrada.get("numero_nota") or "",
+                "fornecedor": entrada.get("parceiro_nome") or entrada.get("fornecedor_nome") or "",
+                "codigo": item.get("cod_interno") or "",
+                "descricao": item.get("descricao") or "",
+            }
+            categoria = _categoria_custo_row(row)
+            if not categoria:
+                continue
+            if categoria_id and categoria["id"] != categoria_id:
+                continue
+            valor = _valor_custo_row(row)
+            qtd = _float_contabil(item.get("quantidade") or 0)
+            resultado.append(
+                {
+                    "categoria_id": categoria["id"],
+                    "categoria": categoria["label"],
+                    "setor": categoria["setor"],
+                    "icon": categoria["icon"],
+                    "numero_nota": str(entrada.get("numero_nota") or ""),
+                    "fornecedor": str(row.get("fornecedor") or ""),
+                    "codigo": str(row.get("codigo") or "").strip(),
+                    "descricao": str(row.get("descricao") or ""),
+                    "conta": "",
+                    "nome_conta": "",
+                    "cfop": str(item.get("cfop") or ""),
+                    "quantidade": qtd,
+                    "unidade": str(item.get("unidade") or ""),
+                    "valor": valor,
+                    "valor_unitario": valor / qtd if qtd else _float_contabil(item.get("valor_unitario") or 0),
+                    "data_lancamento": data_ref.strftime("%d/%m/%Y") if data_ref else "",
+                    "data_lancamento_iso": data_ref.date().isoformat() if data_ref else "",
+                    "competencia": data_ref.strftime("%Y-%m") if data_ref else "",
+                }
+            )
     return resultado
 
 
@@ -3283,13 +3440,17 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
 def financeiro_relatorio_custos():
     data_inicio, data_fim, competencia = _periodo_competencia()
     categoria = str(request.args.get("categoria") or "").strip()
-    linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    linhas = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
+    fonte = "grv_postgres" if linhas else "local"
+    if not linhas:
+        linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
     agrupado = _agrupar_relatorio_custos(linhas)
     limite = max(25, min(int(request.args.get("limite") or 80), 300))
     return jsonify(
         {
             "sucesso": True,
             "competencia": competencia,
+            "fonte": fonte,
             "inicio": data_inicio.date().isoformat(),
             "fim": data_fim.date().isoformat() if data_fim else "",
             "categorias_catalogo": [
@@ -3307,7 +3468,9 @@ def financeiro_relatorio_custos():
 def financeiro_relatorio_custos_exportar():
     data_inicio, data_fim, competencia = _periodo_competencia()
     categoria = str(request.args.get("categoria") or "").strip()
-    linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
+    linhas = _buscar_linhas_relatorio_custos_grv(data_inicio, data_fim, categoria)
+    if not linhas:
+        linhas = _buscar_linhas_relatorio_custos(data_inicio, data_fim, categoria)
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
     writer.writerow([

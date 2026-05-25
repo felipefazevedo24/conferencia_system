@@ -464,6 +464,7 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
             cur.execute(sql, params)
             cols = [desc[0] for desc in cur.description]
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            _enriquecer_valores_entrada(cur, rows)
     if not rows:
         return None
     cab = rows[0]
@@ -475,6 +476,8 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
             "cod_interno": row.get("cod_interno") or "",
             "descricao": row.get("descricao") or "",
             "quantidade": row.get("quantidade") or 0,
+            "valor_unitario": row.get("valor_unitario") or 0,
+            "valor_total_linha": row.get("valor_total_linha") or 0,
             "icms_base_calculo": row.get("icms_base_calculo") or 0,
             "icms_aliquota": row.get("icms_aliquota") or 0,
             "icms_cst": row.get("icms_cst") or "",
@@ -497,6 +500,37 @@ def _consultar_entrada_grv_direto(cfg: dict[str, Any], numero_nota: str, codigo_
         "chave_acesso": cab.get("chave_acesso") or chave,
         "itens": itens,
     }
+
+
+def _enriquecer_valores_entrada(cur, rows: list[dict[str, Any]]) -> None:
+    guids = [str(row.get("guid_linha") or "").strip() for row in rows if str(row.get("guid_linha") or "").strip()]
+    if not guids:
+        return
+    cur.execute("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'tcom_aux'")
+    cols_aux = {str(row[0]).lower() for row in cur.fetchall()}
+
+    def col(alias: str, *candidates: str) -> str:
+        existentes = [name for name in candidates if name.lower() in cols_aux]
+        if not existentes:
+            return f"0 as {alias}"
+        exprs = [f"nullif({name}, 0)" for name in existentes]
+        return f"coalesce({', '.join(exprs)}, 0) as {alias}"
+
+    valor_unitario = col("valor_unitario", "valor_unitario", "vl_unitario", "vlr_unitario", "preco_unitario", "preco", "unitario")
+    valor_total = col("valor_total_linha", "valor_total", "vl_total", "vlr_total", "total", "valor_produto", "vprod", "vl_item", "vlr_item")
+    cur.execute(
+        f"""
+        select guid_linha::text as guid_linha, {valor_unitario}, {valor_total}
+        from public.tcom_aux
+        where guid_linha::text = any(%s)
+        """,
+        (guids,),
+    )
+    por_guid = {str(row[0]): {"valor_unitario": row[1] or 0, "valor_total_linha": row[2] or 0} for row in cur.fetchall()}
+    for row in rows:
+        valores = por_guid.get(str(row.get("guid_linha") or ""))
+        if valores:
+            row.update(valores)
 
 
 def _normalizar_match_texto(valor: Any) -> str:
