@@ -1407,6 +1407,14 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
                     "valor_total_linha": 360,
                     "cfop": "1556",
                 },
+                {
+                    "cod_interno": "28-11-00342",
+                    "descricao": "Cadastro especial centro usinagem",
+                    "quantidade": 20,
+                    "unidade": "LT",
+                    "valor_total_linha": 800,
+                    "cfop": "1556",
+                },
             ],
         }
     ]
@@ -1423,13 +1431,16 @@ def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
     assert response.status_code == 200
     data = response.get_json()
     assert data["fonte"] == "grv_postgres"
-    assert data["resumo"]["valor_total"] == 460
+    assert data["resumo"]["valor_total"] == 1260
     assert data["linhas"][0]["numero_nota"] == "312312"
     assert any(linha["categoria_id"] == "arames_solda" for linha in data["linhas"])
+    assert any(linha["categoria_id"] == "oleo_soluvel" and linha["codigo"] == "28-11-00342" for linha in data["linhas"])
     assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 25
     assert categorias["arames_solda"]["custo_medio_unitario"] == 20
+    assert categorias["oleo_soluvel"]["valor"] == 800
+    assert categorias["oleo_soluvel"]["custo_medio_unitario"] == 40
     arame = next(linha for linha in data["linhas"] if linha["categoria_id"] == "arames_solda")
     assert arame["familia"] == "N - 06 - INSUMOS DA PRODUCAO"
     assert arame["localizacao_estoque"] == "SOLDA"

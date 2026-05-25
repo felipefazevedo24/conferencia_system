@@ -3073,7 +3073,7 @@ CUSTO_RELATORIO_CATEGORIAS = [
     },
     {
         "id": "qualidade_medicao",
-        "label": "Qualidade / medicao",
+        "label": "Qualidade",
         "setor": "Qualidade",
         "icon": "fa-ruler-combined",
         "keywords": [
@@ -3091,20 +3091,24 @@ CUSTO_RELATORIO_CATEGORIAS = [
     },
     {
         "id": "energia_eletrica",
-        "label": "Energia eletrica",
-        "setor": "Fabrica",
+        "label": "Energia elétrica",
+        "setor": "GERAL",
         "icon": "fa-bolt",
         "keywords": ["ENERGIA ELETRICA", "ENERGIA", "ELETRICIDADE", "CPFL", "CONTA DE LUZ"],
     },
     {
         "id": "oxigenio_laser",
-        "label": "Oxigenio laser",
+        "label": "Oxigênio laser",
         "setor": "Laser",
         "icon": "fa-wind",
         "keywords": ["OXIGENIO", "OXIGENIO LIQUIDO", "GAS OXIGENIO", "LASER OXIGENIO"],
     },
 ]
 CUSTO_RELATORIO_CODIGOS_IGNORADOS = {"281100131", "28-11-00131"}
+CUSTO_RELATORIO_CODIGOS_CATEGORIA = {
+    "28-11-00342": "oleo_soluvel",
+    "281100342": "oleo_soluvel",
+}
 
 
 def _normalizar_codigo_custo(value) -> str:
@@ -3114,6 +3118,15 @@ def _normalizar_codigo_custo(value) -> str:
 def _codigo_custo_ignorado(*values) -> bool:
     ignorados = {_normalizar_codigo_custo(codigo) for codigo in CUSTO_RELATORIO_CODIGOS_IGNORADOS}
     return any(_normalizar_codigo_custo(value) in ignorados for value in values if str(value or "").strip())
+
+
+def _categoria_custo_por_codigo(*values) -> dict | None:
+    mapa = {_normalizar_codigo_custo(codigo): categoria_id for codigo, categoria_id in CUSTO_RELATORIO_CODIGOS_CATEGORIA.items()}
+    for value in values:
+        codigo = _normalizar_codigo_custo(value)
+        if codigo in mapa:
+            return _categoria_por_id(mapa[codigo])
+    return None
 
 
 def _texto_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> str:
@@ -3204,6 +3217,9 @@ def _categoria_custo_por_cadastro(row: dict) -> dict | None:
 def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilItem | None = None) -> dict | None:
     if _codigo_custo_ignorado(item.codigo, item.codigo_grv, getattr(classificacao, "codigo_item", "")):
         return None
+    categoria_codigo = _categoria_custo_por_codigo(item.codigo, item.codigo_grv, getattr(classificacao, "codigo_item", ""))
+    if categoria_codigo:
+        return categoria_codigo
     texto = _texto_custo_item(item, classificacao)
     for categoria in CUSTO_RELATORIO_CATEGORIAS:
         if any(keyword in texto for keyword in categoria["keywords"]):
@@ -3214,6 +3230,9 @@ def _categoria_custo_item(item: ItemNota, classificacao: ClassificacaoContabilIt
 def _categoria_custo_row(row: dict) -> dict | None:
     if _codigo_custo_ignorado(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item")):
         return None
+    categoria_codigo = _categoria_custo_por_codigo(row.get("codigo"), row.get("codigo_grv"), row.get("cod_interno"), row.get("codigo_item"))
+    if categoria_codigo:
+        return categoria_codigo
     categoria_cadastro = _categoria_custo_por_cadastro(row)
     if categoria_cadastro:
         return categoria_cadastro
