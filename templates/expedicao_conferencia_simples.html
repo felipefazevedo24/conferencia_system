@@ -360,6 +360,7 @@ let toastTimer = null;
 const SESSION_FOTOS_KEY = "exp_fotos_rascunho";
 let fotosRascunho = [];
 let filaUploadFotos = Promise.resolve();
+let nfConsultaOrigem = "";
 
 function salvarFotosSession() {
     try { sessionStorage.setItem(SESSION_FOTOS_KEY, JSON.stringify(fotosRascunho)); } catch(e) {}
@@ -411,6 +412,7 @@ function debounce(fn, wait = 250) {
 function resetNfState() {
     nfFeedback.textContent = "";
     nfFeedback.className = "exp-subtle";
+    nfConsultaOrigem = "";
     nomeClienteWrapper.classList.add("hidden");
     nomeClienteInput.required = false;
     nomeClienteInput.readOnly = false;
@@ -527,7 +529,7 @@ async function consultarNf() {
         resetNfState();
         return;
     }
-    nfFeedback.textContent = "Consultando a Consyste...";
+    nfFeedback.textContent = "Consultando NF no ERP...";
     btnConsultarNf.disabled = true;
     try {
         const response = await fetch(`/api/expedicao/conferencia-simples/consultar-nf?numero_nf=${encodeURIComponent(numero)}`);
@@ -536,6 +538,7 @@ async function consultarNf() {
         nfFeedback.textContent = data.warning || (data.encontrada ? `NF encontrada. Cliente: ${data.nome_cliente || "sem razão social retornada"}.` : "");
         nfFeedback.className = `exp-subtle ${data.encontrada ? "success" : (data.warning ? "warning" : "")}`;
         if (data.encontrada && data.nome_cliente) {
+            nfConsultaOrigem = data.origem || "ERP";
             nomeClienteWrapper.classList.remove("hidden");
             nomeClienteInput.readOnly = true;
             nomeClienteInput.required = false;
@@ -761,6 +764,10 @@ form.addEventListener("submit", async event => {
     btnSalvar.textContent = "Salvando...";
     try {
         const formData = new FormData(form);
+        if (nfConsultaOrigem) {
+            formData.set("cliente_origem", nfConsultaOrigem);
+            formData.set("nf_origem", nfConsultaOrigem);
+        }
         fotosRascunho.forEach(f => formData.append("fotos_rascunho", f.rascunho_id));
         const response = await fetch("/api/expedicao/conferencia-simples", { method: "POST", body: formData });
         const data = await response.json();

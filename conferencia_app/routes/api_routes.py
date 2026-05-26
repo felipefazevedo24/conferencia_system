@@ -232,6 +232,7 @@ def salvar_aviso_atualizacao_admin():
     return jsonify({"sucesso": True, "aviso": _serializar_aviso_atualizacao(aviso)})
 from ..services.consyste_service import listar_nfes_consyste_por_caixa
 from ..services.danfe_service import gerar_danfe, parse_nfe_xml
+from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.expedicao_service import (
     list_conferencia_reports,
     parse_conferencia_report,
@@ -3494,6 +3495,26 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
             }
         )
     categorias_lista.sort(key=lambda row: row["valor"], reverse=True)
+    top_fornecedores_lista = [
+        {"fornecedor": k, "valor": round(v, 2), "participacao": round((v / total * 100) if total else 0, 2)}
+        for k, v in sorted(por_fornecedor.items(), key=lambda item: item[1], reverse=True)[:8]
+    ]
+    top_itens_lista = sorted(
+        [
+            {
+                **row,
+                "valor": round(row["valor"], 2),
+                "quantidade": round(row["quantidade"], 4),
+                "valor_unitario_medio": round((row["valor"] / row["quantidade"]) if row["quantidade"] else 0, 2),
+            }
+            for row in por_item.values()
+        ],
+        key=lambda row: row["valor"],
+        reverse=True,
+    )[:10]
+    top_categoria = next((row for row in categorias_lista if row["valor"] > 0), None)
+    top_fornecedor = top_fornecedores_lista[0] if top_fornecedores_lista else None
+    participacao_top_3 = sum(row["valor"] for row in categorias_lista[:3])
     familias_custo_medio = [
         {
             "id": row["id"],
@@ -3515,26 +3536,26 @@ def _agrupar_relatorio_custos(linhas: list[dict]) -> dict:
             "quantidade_total": round(quantidade, 4),
             "itens": len(linhas),
             "notas": len(notas),
+            "fornecedores": len(por_fornecedor),
             "custo_medio_unitario": round(total / quantidade, 2) if quantidade else 0.0,
             "custo_medio_lancamento": round(total / len(linhas), 2) if linhas else 0.0,
             "custo_medio": round(total / len(linhas), 2) if linhas else 0.0,
+            "custo_medio_nf": round(total / len(notas), 2) if notas else 0.0,
+            "valor_medio_fornecedor": round(total / len(por_fornecedor), 2) if por_fornecedor else 0.0,
             "categorias_com_custo": sum(1 for row in categorias_lista if row["valor"] > 0),
+            "top_categoria": top_categoria["label"] if top_categoria else "",
+            "top_categoria_valor": top_categoria["valor"] if top_categoria else 0.0,
+            "top_categoria_participacao": top_categoria["participacao"] if top_categoria else 0.0,
+            "top_fornecedor": top_fornecedor["fornecedor"] if top_fornecedor else "",
+            "top_fornecedor_valor": top_fornecedor["valor"] if top_fornecedor else 0.0,
+            "top_fornecedor_participacao": top_fornecedor["participacao"] if top_fornecedor else 0.0,
+            "participacao_top_3": round((participacao_top_3 / total * 100) if total else 0, 2),
         },
         "categorias": categorias_lista,
         "familias_custo_medio": familias_custo_medio,
         "mensal": [{"competencia": k, "valor": round(v, 2)} for k, v in sorted(mensal.items())],
-        "top_fornecedores": [
-            {"fornecedor": k, "valor": round(v, 2)}
-            for k, v in sorted(por_fornecedor.items(), key=lambda item: item[1], reverse=True)[:8]
-        ],
-        "top_itens": sorted(
-            [
-                {**row, "valor": round(row["valor"], 2), "quantidade": round(row["quantidade"], 4)}
-                for row in por_item.values()
-            ],
-            key=lambda row: row["valor"],
-            reverse=True,
-        )[:10],
+        "top_fornecedores": top_fornecedores_lista,
+        "top_itens": top_itens_lista,
     }
 
 
@@ -8278,7 +8299,7 @@ def listar_registros_conferencia_simples():
 @api_bp.route("/api/expedicao/conferencia-simples/consultar-nf")
 @roles_required("Conferente", "Admin", "Fiscal", "Logística")
 def consultar_nf_conferencia_simples():
-    """Consulta uma ou mais NFs na Consyste (sem criar registro)."""
+    """Consulta uma ou mais NFs emitidas no ERP (sem criar registro)."""
     numeros_raw = request.args.get("numero_nf", "")
     # Suporta múltiplas NFs separadas por vírgula
     numeros = [n.strip() for n in numeros_raw.replace(";", ",").split(",") if n.strip()]
@@ -8292,42 +8313,11 @@ def consultar_nf_conferencia_simples():
     
     for numero in numeros:
         try:
-            ok, status_code, data = listar_nfes_consyste_por_caixa(
-                caixa="emitidos",
-                q=f"numero:{numero}",
-                timeout=15,
-            )
-            documentos = []
-            if ok and isinstance(data, dict):
-                documentos = data.get("documentos") or data.get("documents") or data.get("results") or []
-                if isinstance(documentos, dict):
-                    documentos = [documentos]
+            consulta = _consultar_nf_emitida_exp_conferencia(numero)
 
-            # Pega o doc cujo numero bate exatamente (a API as vezes traz vizinhos)
-            doc = None
-            for d in documentos:
-                if str(d.get("numero") or d.get("nNF") or "").strip() == numero:
-                    doc = d
-                    break
-            if doc is None and documentos:
-                doc = documentos[0]
-
-            if doc:
-                nome = (
-                    doc.get("dest_nome")
-                    or (doc.get("destinatario") or {}).get("razao_social")
-                    or (doc.get("destinatario") or {}).get("nome")
-                    or (doc.get("dest") or {}).get("xNome")
-                    or doc.get("cliente")
-                    or ""
-                )
-                cnpj = (
-                    doc.get("dest_cnpj")
-                    or (doc.get("destinatario") or {}).get("cnpj")
-                    or (doc.get("destinatario") or {}).get("cpf")
-                    or (doc.get("dest") or {}).get("CNPJ")
-                    or ""
-                )
+            if consulta.get("encontrada"):
+                nome = consulta.get("nome_cliente") or ""
+                cnpj = consulta.get("cnpj_cliente") or ""
 
                 # Valida se todas as NFs sao do mesmo cliente
                 if cnpj_cliente is None:
@@ -8345,7 +8335,8 @@ def consultar_nf_conferencia_simples():
                     "encontrada": True,
                     "nome_cliente": nome,
                     "cnpj": cnpj,
-                    "chave": doc.get("chave") or doc.get("chNFe"),
+                    "chave": consulta.get("chave") or "",
+                    "origem": consulta.get("origem") or "ERP",
                 })
             else:
                 todas_encontradas = False
@@ -8367,6 +8358,7 @@ def consultar_nf_conferencia_simples():
             "nome_cliente": nome_cliente_final,
             "cnpj": cnpj_cliente,
             "nfs": resultados,
+            "origem": resultados[0].get("origem") or "ERP",
             "manual_required": False,
         })
     elif any(r.get("encontrada") for r in resultados):
@@ -8375,14 +8367,15 @@ def consultar_nf_conferencia_simples():
             "nome_cliente": nome_cliente_final,
             "cnpj": cnpj_cliente,
             "nfs": resultados,
-            "warning": "Algumas NFs não foram encontradas na Consyste. Verifique os números.",
+            "origem": next((r.get("origem") for r in resultados if r.get("encontrada")), "ERP"),
+            "warning": "Algumas NFs não foram encontradas no ERP. Verifique os números.",
             "manual_required": True,
         })
     else:
         return jsonify({
             "encontrada": False,
             "nfs": resultados,
-            "warning": "Nenhuma NF encontrada na Consyste. Preencha o cliente manualmente.",
+            "warning": "Nenhuma NF encontrada no ERP. Preencha o cliente manualmente.",
             "manual_required": True,
         })
 
@@ -8392,6 +8385,23 @@ def _consultar_nf_emitida_exp_conferencia(numero_nf: str) -> dict:
     numero = str(numero_nf or "").strip()
     if not numero:
         return {"encontrada": False}
+    try:
+        doc_erp = buscar_nfe_emitida_erp(numero_nf=numero)
+    except Exception as exc:
+        current_app.logger.warning("Falha ao consultar NF %s no ERP para expedicao: %s", numero, exc)
+        doc_erp = None
+
+    if doc_erp and doc_erp.get("autorizada"):
+        return {
+            "encontrada": True,
+            "origem": "ERP",
+            "numero_nf": str(doc_erp.get("numero") or numero).strip(),
+            "nome_cliente": str(doc_erp.get("dest_nome") or "").strip(),
+            "cnpj_cliente": re.sub(r"\D", "", str(doc_erp.get("dest_cnpj") or "")),
+            "documento_id": str(doc_erp.get("cod_cliente") or ""),
+            "chave": re.sub(r"\D", "", str(doc_erp.get("chave") or "")),
+        }
+
     ok, _status_code, data = listar_nfes_consyste_por_caixa(
         caixa="emitidos",
         q=f"numero:{numero}",
@@ -8413,6 +8423,7 @@ def _consultar_nf_emitida_exp_conferencia(numero_nf: str) -> dict:
         return {"encontrada": False}
     return {
         "encontrada": True,
+        "origem": "Consyste",
         "numero_nf": numero,
         "nome_cliente": (
             doc.get("dest_nome")
@@ -8432,6 +8443,30 @@ def _consultar_nf_emitida_exp_conferencia(numero_nf: str) -> dict:
         "documento_id": doc.get("id") or doc.get("_id") or "",
         "chave": doc.get("chave") or doc.get("chNFe") or "",
     }
+
+
+def _validar_nfs_expedicao_mesmo_cliente(numero_nf: str) -> tuple[dict | None, list[dict]]:
+    numeros = [n.strip() for n in str(numero_nf or "").replace(";", ",").split(",") if n.strip()]
+    if len(numeros) < 2:
+        return None, []
+    cnpj_ref = None
+    consultas = []
+    for numero in numeros:
+        consulta = _consultar_nf_emitida_exp_conferencia(numero)
+        consultas.append(consulta)
+        if not consulta.get("encontrada"):
+            continue
+        cnpj = str(consulta.get("cnpj_cliente") or "").strip()
+        if not cnpj:
+            continue
+        if cnpj_ref is None:
+            cnpj_ref = cnpj
+        elif cnpj != cnpj_ref:
+            return {
+                "error": f"NF {numero} pertence a CNPJ diferente. Todas as NFs devem ser do mesmo cliente.",
+                "nfs": consultas,
+            }, consultas
+    return None, consultas
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/foto-rascunho", methods=["POST"])
@@ -8944,6 +8979,11 @@ def completar_registro_conferencia_simples(registro_id):
         nome_cliente = str(payload.get("nome_cliente") or "").strip()
         manter_pendente = bool(payload.get("manter_pendente"))
         fotos_files = []
+
+    if numero_nf:
+        erro_nfs, _consultas_nfs = _validar_nfs_expedicao_mesmo_cliente(numero_nf)
+        if erro_nfs:
+            return jsonify(erro_nfs), 409
 
     registro.transportadora = transportadora or registro.transportadora
     registro.placa = placa or registro.placa

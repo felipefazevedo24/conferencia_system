@@ -1357,8 +1357,15 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     data = response.get_json()
     assert data["resumo"]["valor_total"] == 2000
     assert data["resumo"]["itens"] == 3
+    assert data["resumo"]["fornecedores"] == 3
     assert data["resumo"]["custo_medio_unitario"] == 76.92
     assert data["resumo"]["custo_medio_lancamento"] == 666.67
+    assert data["resumo"]["custo_medio_nf"] == 666.67
+    assert data["resumo"]["top_categoria"] == "Energia elétrica"
+    assert data["resumo"]["top_categoria_participacao"] == 60
+    assert data["resumo"]["top_fornecedor"] == "CPFL"
+    assert data["resumo"]["top_fornecedor_participacao"] == 60
+    assert data["resumo"]["participacao_top_3"] == 100
     categorias = {row["id"]: row for row in data["categorias"]}
     assert categorias["insertos_ferramentas"]["valor"] == 500
     assert categorias["insertos_ferramentas"]["custo_medio_unitario"] == 50
@@ -1368,6 +1375,8 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     assert categorias["arames_solda"]["valor"] == 300
     assert categorias["arames_solda"]["custo_medio_unitario"] == 20
     assert data["familias_custo_medio"][0]["custo_medio_unitario"] == 1200
+    assert data["top_fornecedores"][0]["participacao"] == 60
+    assert data["top_itens"][0]["valor_unitario_medio"] == 1200
     assert all(linha["numero_nota"] != "CUSTO3" for linha in data["linhas"])
     assert all(linha["numero_nota"] != "CUSTO6" for linha in data["linhas"])
     assert all(linha["codigo"] != "28-11-00131" for linha in data["linhas"])
@@ -3207,6 +3216,33 @@ def test_cria_registro_expedicao_com_ordem_de_compra_e_cliente_manual(tmp_path):
         assert registro.orcamento == ""
         assert registro.numero_os is None
         assert registro.nome_cliente == "Fornecedor Manual"
+
+
+def test_consulta_nf_expedicao_usa_erp_emitidas(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "conferente_teste", "Conferente")
+
+    with patch(
+        "conferencia_app.routes.api_routes.buscar_nfe_emitida_erp",
+        return_value={
+            "autorizada": True,
+            "numero": "99881",
+            "dest_nome": "Cliente ERP Saida",
+            "dest_cnpj": "11.222.333/0001-44",
+            "chave": "3" * 44,
+            "cod_cliente": "C123",
+        },
+    ):
+        response = client.get("/api/expedicao/conferencia-simples/consultar-nf?numero_nf=99881")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["encontrada"] is True
+    assert data["origem"] == "ERP"
+    assert data["nome_cliente"] == "Cliente ERP Saida"
+    assert data["cnpj"] == "11222333000144"
+    assert data["nfs"][0]["chave"] == "3" * 44
 
 
 def test_cria_registro_expedicao_aceita_multiplas_nfs_do_mesmo_cnpj(tmp_path):

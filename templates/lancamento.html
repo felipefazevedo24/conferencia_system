@@ -136,143 +136,6 @@
         color: var(--doc-ink);
     }
 
-    .doc-entry-hero {
-        display: flex;
-        justify-content: space-between;
-        gap: 24px;
-        align-items: stretch;
-        padding: 28px 32px;
-        border-radius: 20px;
-        background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
-        border: 1px solid var(--doc-border);
-        box-shadow: var(--doc-shadow);
-        margin-bottom: 24px;
-        position: relative;
-        overflow: hidden;
-    }
-    .doc-entry-hero::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -10%;
-        width: 350px;
-        height: 350px;
-        background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
-        pointer-events: none;
-    }
-
-    .doc-hero-copy {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        min-width: 0;
-    }
-
-    .doc-kicker {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        width: fit-content;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        color: #ffffff;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-    }
-
-    .doc-title {
-        margin: 0;
-        font-size: 26px;
-        line-height: 1.2;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        color: var(--doc-ink);
-    }
-
-    .doc-subtitle {
-        margin: 0;
-        max-width: 680px;
-        color: var(--doc-muted);
-        font-size: 13px;
-        font-weight: 600;
-        line-height: 1.6;
-    }
-
-    .doc-shortcuts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 6px;
-    }
-
-    .doc-shortcut-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 7px 12px;
-        border-radius: 10px;
-        background: #f1f5f9;
-        border: 1px solid var(--doc-border);
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--doc-muted);
-    }
-
-    .doc-shortcut-pill kbd {
-        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-        color: #ffffff;
-        border-radius: 6px;
-        padding: 4px 8px;
-        font-size: 10px;
-        font-weight: 800;
-        min-width: 28px;
-        text-align: center;
-    }
-
-    .doc-hero-actions {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        gap: 14px;
-        min-width: 280px;
-    }
-
-    .doc-hero-summary {
-        padding: 18px 20px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        color: #e2e8f0;
-        box-shadow: 0 10px 30px rgba(30, 41, 59, 0.3);
-    }
-
-    .doc-hero-summary-label {
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #90a8bf;
-        font-weight: 800;
-    }
-
-    .doc-hero-summary-value {
-        display: block;
-        margin-top: 6px;
-        font-size: 23px;
-        font-weight: 800;
-        color: #ffffff;
-    }
-
-    .doc-hero-summary-text {
-        display: block;
-        margin-top: 6px;
-        font-size: 12px;
-        color: #c6d8ea;
-        line-height: 1.5;
-        font-weight: 600;
-    }
-
     .doc-btn {
         border: 1px solid transparent;
         border-radius: 14px;
@@ -1022,16 +885,11 @@
     }
 
     @media (max-width: 1120px) {
-        .doc-entry-hero,
         .doc-toolbar,
         .doc-workspace,
         .doc-meta-grid,
         .doc-two-col {
             grid-template-columns: 1fr;
-        }
-
-        .doc-entry-hero {
-            display: grid;
         }
 
         .doc-filter-row {
@@ -1066,7 +924,7 @@
 
 {% block content %}
 <div class="doc-entry-shell" style="max-width:1500px; margin:0 auto; padding:24px; background:#f4f6f9 !important; min-height:100vh;">
-    <section class="doc-entry-hero" style="display:flex; justify-content:space-between; gap:24px; padding:28px 32px; border-radius:20px; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%) !important; border:1px solid #e2e8f0; box-shadow:0 10px 40px rgba(0,0,0,0.08); margin-bottom:24px;">
+    <section class="doc-entry-hero hidden" style="display:none !important;">
         <div class="doc-hero-copy" style="display:flex; flex-direction:column; gap:12px;">
             <span class="doc-kicker" style="display:inline-flex; align-items:center; gap:8px; width:fit-content; padding:8px 14px; border-radius:999px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;"><i class="fas fa-file-invoice"></i> Documento de Entrada</span>
             <h1 class="doc-title" style="margin:0; font-size:26px; line-height:1.2; font-weight:800; letter-spacing:-0.02em; color:#1e293b !important;">Cockpit fiscal para escrituração, auditoria e trilha do documento.</h1>
