@@ -1,7 +1,8 @@
-"""Rotas publicas para consulta de boletos pelos clientes."""
+"""Rotas públicas para consulta de boletos pelos clientes."""
 
 import re
 from io import BytesIO
+from datetime import datetime
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 
@@ -16,9 +17,85 @@ def _only_digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
+def _parse_data_br(value: str):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
+    grupos: dict[tuple[str, str], dict] = {}
+    avulsos: list[dict] = []
+
+    for boleto in boletos:
+        orcamento = str(boleto.get("orcamento") or "").strip()
+        nota = str(boleto.get("numero_nota") or "").strip()
+        documento = str(boleto.get("documento") or "").strip()
+
+        if orcamento:
+            tipo, chave, label = "orçamento", orcamento, f"Orçamento {orcamento}"
+        elif nota:
+            tipo, chave, label = "nota fiscal", nota, f"NF {nota}"
+        elif documento:
+            tipo, chave, label = "documento", documento, documento
+        else:
+            avulsos.append(boleto)
+            continue
+
+        grupo = grupos.setdefault(
+            (tipo, chave),
+            {
+                "fonte": boleto.get("fonte") or "",
+                "tipo": "grupo_aberto",
+                "grupo_tipo": tipo,
+                "grupo_chave": chave,
+                "titulo": label,
+                "orcamento": orcamento,
+                "numero_nota": nota,
+                "documento": documento,
+                "nome_pagador": boleto.get("nome_pagador") or "",
+                "cpf_cnpj_pagador": boleto.get("cpf_cnpj_pagador") or "",
+                "valor": 0.0,
+                "valor_original": 0.0,
+                "valor_pago": 0.0,
+                "quantidade_titulos": 0,
+                "vencimento": boleto.get("vencimento") or "",
+                "vencimento_iso": boleto.get("vencimento_iso") or "",
+                "status": "Em aberto",
+                "banco": boleto.get("banco") or "Banco do Brasil",
+                "linha_digitavel": "",
+                "codigo_barras": "",
+                "pode_gerar_boleto": bool(boleto.get("pode_gerar_boleto")),
+            },
+        )
+        grupo["valor"] += float(boleto.get("valor") or 0)
+        grupo["valor_original"] += float(boleto.get("valor_original") or boleto.get("valor") or 0)
+        grupo["valor_pago"] += float(boleto.get("valor_pago") or 0)
+        grupo["quantidade_titulos"] += 1
+        grupo["pode_gerar_boleto"] = bool(grupo.get("pode_gerar_boleto") or boleto.get("pode_gerar_boleto"))
+
+        venc_atual = _parse_data_br(grupo.get("vencimento"))
+        venc_item = _parse_data_br(boleto.get("vencimento"))
+        if venc_item and (not venc_atual or venc_item < venc_atual):
+            grupo["vencimento"] = boleto.get("vencimento") or ""
+            grupo["vencimento_iso"] = boleto.get("vencimento_iso") or ""
+        if "venc" in str(boleto.get("status") or "").lower():
+            grupo["status"] = "Vencido"
+
+    resultado = list(grupos.values()) + avulsos
+    resultado.sort(key=lambda item: (_parse_data_br(item.get("vencimento")) or datetime.max.date(), item.get("titulo") or ""))
+    return resultado
+
+
 @boleto_bp.route("/boletos")
 def consulta_boletos_page():
-    """Pagina publica de consulta de boletos pelo cliente."""
+    """Página pública de consulta de boletos pelo cliente."""
     return render_template("consulta_boletos.html")
 
 
@@ -41,7 +118,7 @@ def portal_cobranca_page(token):
 def portal_cobranca_dados(token):
     payload = _payload_token_ou_404(token)
     if not payload:
-        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+        return jsonify({"sucesso": False, "error": "Link inválido ou expirado."}), 404
 
     numero_nf = str(payload.get("numero_nf") or "").strip()
     chave = str(payload.get("chave") or "").strip()
@@ -66,12 +143,12 @@ def portal_cobranca_dados(token):
 def portal_cobranca_xml(token):
     payload = _payload_token_ou_404(token)
     if not payload:
-        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+        return jsonify({"sucesso": False, "error": "Link inválido ou expirado."}), 404
     numero_nf = str(payload.get("numero_nf") or "").strip()
     chave = str(payload.get("chave") or "").strip()
     nota = buscar_nfe_emitida_erp(numero_nf, chave)
     if not nota or not nota.get("xml_bytes"):
-        return jsonify({"sucesso": False, "error": "XML nao encontrado."}), 404
+        return jsonify({"sucesso": False, "error": "XML não encontrado."}), 404
     return send_file(
         BytesIO(nota["xml_bytes"]),
         mimetype="application/xml",
@@ -84,12 +161,12 @@ def portal_cobranca_xml(token):
 def portal_cobranca_danfe(token):
     payload = _payload_token_ou_404(token)
     if not payload:
-        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+        return jsonify({"sucesso": False, "error": "Link inválido ou expirado."}), 404
     numero_nf = str(payload.get("numero_nf") or "").strip()
     chave = str(payload.get("chave") or "").strip()
     nota = buscar_nfe_emitida_erp(numero_nf, chave)
     if not nota or not nota.get("pdf_bytes"):
-        return jsonify({"sucesso": False, "error": "DANFE nao encontrado."}), 404
+        return jsonify({"sucesso": False, "error": "DANFE não encontrado."}), 404
     return send_file(
         BytesIO(nota["pdf_bytes"]),
         mimetype="application/pdf",
@@ -100,14 +177,14 @@ def portal_cobranca_danfe(token):
 
 @boleto_bp.route("/api/boletos/consultar", methods=["POST"])
 def consultar_boletos():
-    """Consulta boletos por CPF/CNPJ ou por numero da NF mais valor."""
+    """Consulta boletos por CPF/CNPJ, número da NF ou orçamento."""
     data = request.json or {}
     modo = str(data.get("modo") or "cpf_cnpj").strip()
 
     if modo == "nota":
         numero_nota = str(data.get("numero_nota") or "").strip()
         if not numero_nota:
-            return jsonify({"sucesso": False, "error": "Informe o numero da nota fiscal."}), 400
+            return jsonify({"sucesso": False, "error": "Informe o número da nota fiscal."}), 400
 
         try:
             valor = float(data.get("valor") or 0)
@@ -128,7 +205,7 @@ def consultar_boletos():
     if modo == "orcamento":
         orcamento = str(data.get("orcamento") or data.get("numero_orcamento") or "").strip()
         if not orcamento:
-            return jsonify({"sucesso": False, "error": "Informe o numero do orcamento."}), 400
+            return jsonify({"sucesso": False, "error": "Informe o número do orçamento."}), 400
         boletos = BBBoletoService.consultar_por_orcamento(orcamento)
         return jsonify(
             {
@@ -144,18 +221,21 @@ def consultar_boletos():
     doc = _only_digits(cpf_cnpj)
 
     if not doc or len(doc) < 11:
-        return jsonify({"sucesso": False, "error": "Informe um CPF (11 digitos) ou CNPJ (14 digitos) valido."}), 400
+        return jsonify({"sucesso": False, "error": "Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido."}), 400
 
     if len(doc) not in (11, 14):
-        return jsonify({"sucesso": False, "error": "CPF deve ter 11 digitos e CNPJ 14 digitos."}), 400
+        return jsonify({"sucesso": False, "error": "CPF deve ter 11 dígitos e CNPJ 14 dígitos."}), 400
 
     resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
+    boletos = _agrupar_titulos_abertos(resultado["boletos"]) if len(doc) == 14 else resultado["boletos"]
     return jsonify(
         {
             "sucesso": True,
             "fonte": resultado["fonte"],
-            "boletos": resultado["boletos"],
-            "total": len(resultado["boletos"]),
+            "boletos": boletos,
+            "total": len(boletos),
+            "total_titulos": len(resultado["boletos"]),
+            "agrupado": len(doc) == 14,
             "mensagem": resultado.get("mensagem", ""),
         }
     )

@@ -456,6 +456,45 @@ NFE_EMITIDA_SQL = """
 """
 
 
+CONTAS_RECEBER_ABERTO_SQL = """
+    select
+        r.codigo::text as codigo,
+        r.cod_cliente,
+        coalesce(nullif(r.cliente, ''), nullif(c.razao_social, ''), nullif(c.nome, ''), nullif(nf.razao_social, ''), nullif(nf.cliente, '')) as nome_pagador,
+        coalesce(nullif(c.rg_cgc, ''), nullif(nf.cgc_cpf, '')) as cpf_cnpj_pagador,
+        r.n_nf::text as numero_nota,
+        coalesce(nullif(r.documento, ''), r.n_nf::text, r.codigo::text) as documento,
+        coalesce(r.n_orcamento::text, r.cod_orcamento::text, '') as orcamento,
+        r.dt_vencimento as vencimento_raw,
+        coalesce(r.valor, 0) as valor,
+        coalesce(r.valor_pago, 0) as valor_pago,
+        r.parcela,
+        r.n_parcelas,
+        coalesce(r.nossonumero, '') as nossonumero,
+        coalesce(r.boleto_gerado, 0) as boleto_gerado,
+        coalesce(r.boleto_situacao, '') as boleto_situacao,
+        coalesce(nf.chv_nfe, '') as chave_acesso
+    from public.treceber r
+    left join public.tcliente c
+      on c.cod_empresa = r.cod_empresa
+     and c.codigo = r.cod_cliente
+    left join public.tnota_fiscal nf
+      on nf.cod_empresa = r.cod_empresa
+     and nf.numero = r.n_nf
+     and nf.cod_cliente = r.cod_cliente
+    where coalesce(r.pago, 0) = 0
+      and r.dt_pagamento is null
+      and coalesce(r.valor, 0) > coalesce(r.valor_pago, 0)
+      and (
+        (%s <> '' and regexp_replace(coalesce(c.rg_cgc, nf.cgc_cpf, ''), '\\D', '', 'g') = %s)
+        or (%s <> '' and (r.n_nf::text = %s or coalesce(r.documento, '') ilike %s))
+        or (%s <> '' and (r.n_orcamento::text = %s or r.cod_orcamento::text = %s or coalesce(r.documento, '') ilike %s or coalesce(r.historico, '') ilike %s))
+      )
+    order by r.dt_vencimento asc nulls last, r.codigo asc
+    limit %s
+"""
+
+
 ENTRADA_CHAPA_SQL = """
     select
         c.codigo::text as codigo_lancamento,
@@ -1344,6 +1383,57 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "nota": nota})
         except Exception as exc:
             app.logger.exception("Falha ao consultar NF-e emitida no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/contas-receber-aberto")
+    def consultar_contas_receber_aberto():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            cpf_cnpj = "".join(ch for ch in str(payload.get("cpf_cnpj") or "") if ch.isdigit())
+            numero_nota = str(payload.get("numero_nota") or "").strip()
+            orcamento = str(payload.get("orcamento") or "").strip()
+            if not cpf_cnpj and not numero_nota and not orcamento:
+                return jsonify({"sucesso": False, "erro": "cpf_cnpj_numero_nota_ou_orcamento_obrigatorio"}), 400
+            try:
+                limite = int(payload.get("limite") or 200)
+            except (TypeError, ValueError):
+                limite = 200
+            limite = max(1, min(limite, 500))
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        CONTAS_RECEBER_ABERTO_SQL,
+                        (
+                            cpf_cnpj,
+                            cpf_cnpj,
+                            numero_nota,
+                            numero_nota,
+                            f"%{numero_nota}%",
+                            orcamento,
+                            orcamento,
+                            orcamento,
+                            f"%{orcamento}%",
+                            f"%{orcamento}%",
+                            limite,
+                        ),
+                    )
+                    cols = [desc[0] for desc in cur.description]
+                    titulos = []
+                    for row in cur.fetchall():
+                        item = dict(zip(cols, row))
+                        item["vencimento_raw"] = _date_to_api(item.get("vencimento_raw"))
+                        titulos.append(item)
+
+            return jsonify({"sucesso": True, "titulos": titulos})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar contas a receber em aberto no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/entrada-chapa")

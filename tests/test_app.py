@@ -2240,6 +2240,68 @@ def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path
     assert payload["boletos"][0]["nome_pagador"] == "Cliente Portal"
 
 
+def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    titulos = [
+        {
+            "fonte": "grv_postgres",
+            "tipo": "titulo_aberto",
+            "id_grv": "1",
+            "nome_pagador": "Cliente Grupo",
+            "cpf_cnpj_pagador": "12345678000199",
+            "numero_nota": "9001",
+            "documento": "9001-A",
+            "orcamento": "3",
+            "valor": 100.0,
+            "valor_original": 100.0,
+            "valor_pago": 0.0,
+            "vencimento": "10/06/2026",
+            "status": "Em aberto",
+            "banco": "Banco do Brasil",
+        },
+        {
+            "fonte": "grv_postgres",
+            "tipo": "titulo_aberto",
+            "id_grv": "2",
+            "nome_pagador": "Cliente Grupo",
+            "cpf_cnpj_pagador": "12345678000199",
+            "numero_nota": "9002",
+            "documento": "9002-A",
+            "orcamento": "3",
+            "valor": 250.5,
+            "valor_original": 250.5,
+            "valor_pago": 0.0,
+            "vencimento": "05/06/2026",
+            "status": "Em aberto",
+            "banco": "Banco do Brasil",
+        },
+    ]
+
+    with patch(
+        "conferencia_app.routes.boleto_routes.BBBoletoService.consultar_boletos",
+        return_value={"fonte": "grv_postgres", "boletos": titulos},
+    ):
+        consulta = client.post(
+            "/api/boletos/consultar",
+            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
+        )
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["agrupado"] is True
+    assert payload["total"] == 1
+    assert payload["total_titulos"] == 2
+    grupo = payload["boletos"][0]
+    assert grupo["tipo"] == "grupo_aberto"
+    assert grupo["titulo"] == "Orçamento 3"
+    assert grupo["quantidade_titulos"] == 2
+    assert grupo["valor"] == 350.5
+    assert grupo["vencimento"] == "05/06/2026"
+
+
 def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -2301,7 +2363,12 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
     assert payload["total"] == 1
     assert payload["boletos"][0]["numero_nota"] == "NF900"
     assert payload["boletos"][0]["nome_pagador"] == "Cliente API"
-    assert any(params.get("numeroInscricaoPagador") == "12345678000199" for params in chamadas_get)
+    assert any(
+        params.get("cnpjPagador") == "123456780001"
+        and params.get("digitoCNPJPagador") == "99"
+        and params.get("numeroConvenio") == "1234567"
+        for params in chamadas_get
+    )
 
 
 def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
@@ -2360,7 +2427,11 @@ def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
     assert payload["total"] == 1
     assert payload["boletos"][0]["nosso_numero"] == "99887766"
     assert payload["boletos"][0]["valor"] == 5239.5
-    assert any(params.get("numeroTituloBeneficiario") == "11435" for params in chamadas_get)
+    assert any(
+        "numeroTituloBeneficiario" not in params
+        and params.get("numeroConvenio") == "1234567"
+        for params in chamadas_get
+    )
 
 
 def test_portal_cobranca_token_lista_documentos_e_boletos(tmp_path):

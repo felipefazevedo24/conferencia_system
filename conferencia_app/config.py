@@ -144,12 +144,36 @@ class Config:
     BB_DEVELOPER_APPLICATION_KEY = _bb_config_value(
         "BB_DEVELOPER_APPLICATION_KEY", "BB_COBRANCA_APP_KEY", "BB_DEV_APP_KEY", "BB_APP_KEY", "appKey"
     )
-    BB_API_BASE = str(os.environ.get("BB_API_BASE", "https://api.hm.bb.com.br/cobrancas/v2")).strip().rstrip("/")
-    BB_OAUTH_BASE = str(os.environ.get("BB_OAUTH_BASE", "https://oauth.hm.bb.com.br")).strip().rstrip("/")
-    BB_OAUTH_TOKEN_PATH = str(os.environ.get("BB_OAUTH_TOKEN_PATH", "/oauth/token")).strip()
-    BB_OAUTH_TOKEN_URL = str(os.environ.get("BB_OAUTH_TOKEN_URL", "")).strip()
-    BB_SCOPE = str(os.environ.get("BB_SCOPE", "cobrancas.boletos-info")).strip()
+    BB_API_BASE = (
+        _bb_config_value("BB_API_BASE", "bbApiBase", "apiBase") or "https://api.hm.bb.com.br/cobrancas/v2"
+    ).strip().rstrip("/")
+    BB_OAUTH_BASE = (
+        _bb_config_value("BB_OAUTH_BASE", "bbOauthBase", "oauthBase") or "https://oauth.hm.bb.com.br"
+    ).strip().rstrip("/")
+    BB_OAUTH_TOKEN_PATH = (
+        _bb_config_value("BB_OAUTH_TOKEN_PATH", "bbOauthTokenPath", "oauthTokenPath") or "/oauth/token"
+    ).strip()
+    BB_OAUTH_TOKEN_URL = _bb_config_value("BB_OAUTH_TOKEN_URL", "bbOauthTokenUrl", "oauthTokenUrl")
+    BB_SCOPE = (_bb_config_value("BB_SCOPE", "bbScope", "scope") or "cobrancas.boletos-info").strip()
     BB_CONVENIO = _bb_config_value("BB_CONVENIO", "BB_COBRANCA_CONVENIO", "convenio", "numeroConvenio")
+    BB_AGENCIA_BENEFICIARIO = _bb_config_value(
+        "BB_AGENCIA_BENEFICIARIO", "BB_COBRANCA_AGENCIA", "agenciaBeneficiario", "agencia"
+    )
+    BB_CONTA_BENEFICIARIO = _bb_config_value(
+        "BB_CONTA_BENEFICIARIO", "BB_COBRANCA_CONTA", "contaBeneficiario", "conta"
+    )
+    BB_CARTEIRA_CONVENIO = _bb_config_value(
+        "BB_CARTEIRA_CONVENIO", "BB_COBRANCA_CARTEIRA", "carteiraConvenio", "carteira"
+    )
+    BB_VARIACAO_CARTEIRA_CONVENIO = _bb_config_value(
+        "BB_VARIACAO_CARTEIRA_CONVENIO",
+        "BB_COBRANCA_VARIACAO",
+        "variacaoCarteiraConvenio",
+        "variacao",
+    )
+    BB_MODALIDADE_COBRANCA = _bb_config_value(
+        "BB_MODALIDADE_COBRANCA", "BB_COBRANCA_MODALIDADE", "modalidadeCobranca", "modalidade"
+    )
     BB_CONSULTA_DIAS_RETROATIVOS = int(os.environ.get("BB_CONSULTA_DIAS_RETROATIVOS", "730"))
     BB_CERT_PATH = str(os.environ.get("BB_CERT_PATH", "")).strip()
     BB_KEY_PATH = str(os.environ.get("BB_KEY_PATH", "")).strip()

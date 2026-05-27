@@ -60,6 +60,16 @@ def _api_date(value: datetime) -> str:
     return value.strftime("%d.%m.%Y")
 
 
+def _add_int_param(params: dict, key: str, value: str) -> None:
+    raw = str(value or "").strip()
+    if not raw:
+        return
+    try:
+        params[key] = int(raw)
+    except (TypeError, ValueError):
+        params[key] = raw
+
+
 class BBBoletoService:
     """Consulta e enriquecimento de boletos com dados do BB."""
 
@@ -159,20 +169,35 @@ class BBBoletoService:
     def _base_query_params(cls) -> dict | None:
         convenio = str(current_app.config.get("BB_CONVENIO", "")).strip()
         app_key = str(current_app.config.get("BB_DEVELOPER_APPLICATION_KEY", "")).strip()
-        if not convenio or not app_key:
+        agencia = str(current_app.config.get("BB_AGENCIA_BENEFICIARIO", "")).strip()
+        conta = str(current_app.config.get("BB_CONTA_BENEFICIARIO", "")).strip()
+        if not app_key or not convenio:
             return None
         try:
             dias = int(current_app.config.get("BB_CONSULTA_DIAS_RETROATIVOS", 730) or 730)
         except (TypeError, ValueError):
             dias = 730
         hoje = datetime.now()
-        return {
+        params = {
             "gw-dev-app-key": app_key,
             "numeroConvenio": convenio,
             "indicadorSituacao": "A",
-            "dataInicioVencimento": _api_date(hoje - timedelta(days=max(dias, 1))),
             "dataFimVencimento": _api_date(hoje + timedelta(days=730)),
         }
+        if agencia and conta:
+            _add_int_param(params, "agenciaBeneficiario", agencia)
+            _add_int_param(params, "contaBeneficiario", conta)
+        if dias > 0:
+            params["dataInicioVencimento"] = _api_date(hoje - timedelta(days=dias))
+
+        _add_int_param(params, "carteiraConvenio", current_app.config.get("BB_CARTEIRA_CONVENIO", ""))
+        _add_int_param(
+            params,
+            "variacaoCarteiraConvenio",
+            current_app.config.get("BB_VARIACAO_CARTEIRA_CONVENIO", ""),
+        )
+        _add_int_param(params, "modalidadeCobranca", current_app.config.get("BB_MODALIDADE_COBRANCA", ""))
+        return params
 
     @classmethod
     def _extrair_lista_boletos_api(cls, payload) -> list[dict]:
@@ -242,8 +267,10 @@ class BBBoletoService:
         return {
             "nosso_numero": str(
                 raw.get("numeroTituloCliente")
+                or raw.get("numeroBoletoBB")
                 or raw.get("nossoNumero")
                 or raw.get("numero")
+                or raw.get("id")
                 or ""
             ),
             "numero_nota": str(
@@ -373,17 +400,12 @@ class BBBoletoService:
 
         tentativas: list[dict] = []
         if doc:
-            tentativas.extend([
-                {"numeroInscricaoPagador": doc},
-                {"cpfCnpjPagador": doc},
-                {"cnpjCpfPagador": doc},
-            ])
+            if len(doc) == 14:
+                tentativas.append({"cnpjPagador": doc[:12], "digitoCNPJPagador": doc[12:]})
+            elif len(doc) == 11:
+                tentativas.append({"cpfPagador": int(doc[:9]), "digitoCPFPagador": int(doc[9:])})
         if nota:
-            tentativas.extend([
-                {"numeroTituloBeneficiario": nota},
-                {"seuNumero": nota},
-                {"numeroDocumento": nota},
-            ])
+            tentativas.append({})
 
         vistos = set()
         resultados: list[dict] = []

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Documentos e Boletos | Columbia Sync</title>
+  <title>Documentos e Boletos | Columbia Machine</title>
   <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f4f7fb; color: #172033; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f4f7fb; color: #172033; }
     header { background: #0f2f55; color: #fff; padding: 24px 28px; }
     .wrap { max-width: 1180px; margin: 0 auto; }
     .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; color: #b7d4ff; }
@@ -71,17 +71,17 @@
 
       <section class="grid">
         <div class="box">
-          <h2>Cobrancas</h2>
+          <h2>Cobranças</h2>
           <div id="boletos" class="loading">Consultando boletos...</div>
         </div>
         <div class="box">
-          <h2>Notas, XML e documentos</h2>
+          <h2>Documentos</h2>
           <div class="actions">
             <a class="btn" id="downloadDanfe" href="#"><i class="fas fa-file-pdf"></i> Baixar DANFE</a>
             <a class="btn secondary" id="downloadXml" href="#"><i class="fas fa-code"></i> Baixar XML</a>
             <a class="btn ghost" href="/boletos" target="_blank"><i class="fas fa-search"></i> Consultar por CNPJ</a>
           </div>
-          <p class="muted" style="margin-top:14px;">Para ver todas as cobrancas em aberto, use a consulta por CPF/CNPJ.</p>
+          <p class="muted" style="margin-top:14px;">Para ver todas as cobranças em aberto, use a consulta por CPF/CNPJ.</p>
         </div>
       </section>
     </div>
@@ -107,7 +107,7 @@
       el.innerHTML = lista.map((b) => `
         <div class="boleto">
           <div class="boleto-top">
-            <strong>Nosso No. ${esc(b.nosso_numero || '---')}</strong>
+            <strong>Nosso Nº ${esc(b.nosso_numero || '---')}</strong>
             <span class="badge ${statusClass(b.status)}">${esc(b.status || 'Gerado')}</span>
           </div>
           <div class="boleto-grid">
@@ -115,7 +115,7 @@
             <div class="field"><div class="label">Vencimento</div><span>${esc(b.vencimento || '---')}</span></div>
             <div class="field"><div class="label">Pagamento</div><span>${esc(b.data_pagamento || '---')}</span></div>
           </div>
-          ${b.linha_digitavel ? `<div class="linha">${esc(b.linha_digitavel)}</div><button class="btn ghost" style="margin-top:10px" onclick="navigator.clipboard.writeText('${esc(b.linha_digitavel)}')"><i class="fas fa-copy"></i> Copiar linha digitavel</button>` : ''}
+          ${b.linha_digitavel ? `<div class="linha">${esc(b.linha_digitavel)}</div><button class="btn ghost" style="margin-top:10px" onclick="navigator.clipboard.writeText('${esc(b.linha_digitavel)}')"><i class="fas fa-copy"></i> Copiar linha digitável</button>` : ''}
         </div>
       `).join('');
     }
@@ -123,18 +123,18 @@
     fetch(`/api/portal/cobranca/${token}`)
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
       .then(({ ok, data }) => {
-        if (!ok || !data.sucesso) throw new Error(data.error || 'Link invalido.');
+        if (!ok || !data.sucesso) throw new Error(data.error || 'Link inválido.');
         document.getElementById('nfNumero').textContent = data.nota.numero || '---';
         document.getElementById('totalBoletos').textContent = data.total_boletos;
-        document.getElementById('portalStatus').textContent = 'Disponivel';
+        document.getElementById('portalStatus').textContent = 'Disponível';
         document.getElementById('downloadDanfe').href = data.nota.download_danfe;
         document.getElementById('downloadXml').href = data.nota.download_xml;
         renderBoletos(data.boletos || []);
       })
       .catch((err) => {
-        document.getElementById('portalStatus').textContent = 'Indisponivel';
+        document.getElementById('portalStatus').textContent = 'Indisponível';
         document.getElementById('boletos').className = 'empty';
-        document.getElementById('boletos').textContent = err.message || 'Nao foi possivel carregar este link.';
+        document.getElementById('boletos').textContent = err.message || 'Não foi possível carregar este link.';
       });
   </script>
 </body>
