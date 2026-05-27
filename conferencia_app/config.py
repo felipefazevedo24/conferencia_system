@@ -154,8 +154,10 @@ class Config:
     BB_CERT_PATH = str(os.environ.get("BB_CERT_PATH", "")).strip()
     BB_KEY_PATH = str(os.environ.get("BB_KEY_PATH", "")).strip()
     BB_API_TIMEOUT_SECONDS = int(os.environ.get("BB_API_TIMEOUT_SECONDS", "30"))
-    PUBLIC_BASE_URL = str(os.environ.get("PUBLIC_BASE_URL", "")).strip().rstrip("/")
-    PORTAL_CLIENTE_BASE_URL = str(os.environ.get("PORTAL_CLIENTE_BASE_URL", PUBLIC_BASE_URL)).strip().rstrip("/")
+    PUBLIC_BASE_URL = _bb_config_value("PUBLIC_BASE_URL").rstrip("/")
+    PORTAL_CLIENTE_BASE_URL = (
+        _bb_config_value("PORTAL_CLIENTE_BASE_URL") or PUBLIC_BASE_URL
+    ).rstrip("/")
     PORTAL_CLIENTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get("PORTAL_CLIENTE_TOKEN_MAX_AGE_SECONDS", "31536000"))
 
     AGENDAMENTO_FORNECEDORES_XLSX = str(
