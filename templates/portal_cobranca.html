@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f4f7fb; color: #172033; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f4f7fb; color: #172033; }
     header { background: #0f2f55; color: #fff; padding: 24px 28px; }
     .wrap { max-width: 1180px; margin: 0 auto; }
-    .brand { font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; color: #b7d4ff; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; color: #b7d4ff; }
+    .brand img { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 8px; padding: 6px; }
     h1 { margin: 10px 0 4px; font-size: 28px; }
     .muted { color: #64748b; }
     header .muted { color: #c9d9ef; }
@@ -46,7 +47,7 @@
 <body>
   <header>
     <div class="wrap">
-      <div class="brand">Columbia Sync</div>
+      <div class="brand"><img src="/static/columbia_logo.png" alt="Columbia Machine Brasil"> Columbia Machine</div>
       <h1>Documentos e boletos</h1>
       <p class="muted">Acesse os arquivos da nota fiscal e as cobranças vinculadas.</p>
     </div>
@@ -80,7 +81,7 @@
             <a class="btn secondary" id="downloadXml" href="#"><i class="fas fa-code"></i> Baixar XML</a>
             <a class="btn ghost" href="/boletos" target="_blank"><i class="fas fa-search"></i> Consultar por CNPJ</a>
           </div>
-          <p class="muted" style="margin-top:14px;">Para ver todas as cobrancas em aberto ou pagas, use a consulta por CPF/CNPJ.</p>
+          <p class="muted" style="margin-top:14px;">Para ver todas as cobrancas em aberto, use a consulta por CPF/CNPJ.</p>
         </div>
       </section>
     </div>

@@ -11,6 +11,7 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import BoletoContaReceber
+from .grv_contas_receber_service import GRVContasReceberService
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +293,36 @@ class BBBoletoService:
         }
 
     @classmethod
+    def _is_aberto(cls, boleto: dict) -> bool:
+        status = str(boleto.get("status") or "").strip().lower()
+        if any(word in status for word in ("pago", "baixado", "liquid")):
+            return False
+        return not bool(boleto.get("data_pagamento"))
+
+    @classmethod
+    def _filtrar_abertos(cls, boletos: list[dict]) -> list[dict]:
+        return [boleto for boleto in boletos if cls._is_aberto(boleto)]
+
+    @classmethod
+    def _deduplicar(cls, boletos: list[dict]) -> list[dict]:
+        vistos = set()
+        resultado = []
+        for item in boletos:
+            chave = (
+                item.get("fonte") or "",
+                item.get("id_grv") or "",
+                item.get("nosso_numero") or "",
+                item.get("numero_nota") or "",
+                item.get("vencimento") or "",
+                round(float(item.get("valor") or 0), 2),
+            )
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultado.append(item)
+        return resultado
+
+    @classmethod
     def consultar_boleto_por_nosso_numero(cls, nosso_numero: str) -> dict | None:
         headers = cls._headers()
         if headers is None:
@@ -432,7 +463,7 @@ class BBBoletoService:
         return enriched, refreshed_any
 
     @classmethod
-    def consultar_boletos_local(cls, cpf_cnpj: str) -> list[dict]:
+    def consultar_boletos_local(cls, cpf_cnpj: str, somente_abertos: bool = False) -> list[dict]:
         doc = _only_digits(cpf_cnpj)
         if not doc:
             return []
@@ -451,7 +482,7 @@ class BBBoletoService:
             == doc,
         ).order_by(BoletoContaReceber.data_geracao.desc()).all()
 
-        return [
+        resultado = [
             {
                 "nosso_numero": b.nosso_numero,
                 "numero_nota": b.numero_nota,
@@ -468,13 +499,15 @@ class BBBoletoService:
             }
             for b in boletos
         ]
+        return cls._filtrar_abertos(resultado) if somente_abertos else resultado
 
     @classmethod
-    def consultar_por_nota_valor(cls, numero_nota: str, valor: float) -> list[dict]:
+    def consultar_por_nota_valor(cls, numero_nota: str, valor: float, somente_abertos: bool = False) -> list[dict]:
         nota = str(numero_nota or "").strip()
         if not nota:
             return []
 
+        titulos_grv = GRVContasReceberService.consultar_abertos(numero_nota=nota)
         query = BoletoContaReceber.query.filter(BoletoContaReceber.numero_nota == nota)
         if valor is not None and valor > 0:
             margem = valor * 0.01
@@ -498,41 +531,45 @@ class BBBoletoService:
             }
             for b in boletos
         ]
+        if somente_abertos:
+            resultado = cls._filtrar_abertos(resultado)
         enriched, _ = cls._enriquecer_boletos_com_api(resultado)
         api_result = cls.consultar_boletos_api(numero_nota=nota) if cls.is_configured() else []
+        if somente_abertos:
+            api_result = cls._filtrar_abertos(api_result)
         if valor is not None and valor > 0:
             margem = valor * 0.01
             api_result = [b for b in api_result if margem == 0 or (valor - margem) <= float(b.get("valor") or 0) <= (valor + margem)]
 
-        por_chave = {}
-        for item in enriched + api_result:
-            chave = item.get("nosso_numero") or item.get("linha_digitavel") or item.get("numero_nota")
-            if chave:
-                por_chave[str(chave)] = item
-        return list(por_chave.values())
+        return cls._deduplicar(titulos_grv + enriched + api_result)
 
     @classmethod
-    def consultar_boletos(cls, cpf_cnpj: str) -> dict:
+    def consultar_por_orcamento(cls, orcamento: str) -> list[dict]:
+        numero = str(orcamento or "").strip()
+        if not numero:
+            return []
+        return cls._deduplicar(GRVContasReceberService.consultar_abertos(orcamento=numero))
+
+    @classmethod
+    def consultar_boletos(cls, cpf_cnpj: str, somente_abertos: bool = False) -> dict:
         doc = _only_digits(cpf_cnpj)
         if not doc or len(doc) < 11:
             return {"fonte": "erro", "boletos": [], "mensagem": "CPF/CNPJ inválido."}
 
-        local_result = cls.consultar_boletos_local(doc)
+        titulos_grv = GRVContasReceberService.consultar_abertos(cpf_cnpj=doc)
+        local_result = cls.consultar_boletos_local(doc, somente_abertos=somente_abertos)
         enriched, refreshed = cls._enriquecer_boletos_com_api(local_result)
         api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
+        if somente_abertos:
+            api_result = cls._filtrar_abertos(api_result)
         if api_result:
-            por_chave = {}
-            for item in enriched + api_result:
-                chave = item.get("nosso_numero") or item.get("linha_digitavel") or item.get("numero_nota")
-                if chave:
-                    por_chave[str(chave)] = item
             return {
-                "fonte": "bb_api+local" if enriched else "bb_api",
-                "boletos": list(por_chave.values()),
+                "fonte": "grv_postgres+bb_api+local" if titulos_grv else ("bb_api+local" if enriched else "bb_api"),
+                "boletos": cls._deduplicar(titulos_grv + enriched + api_result),
             }
         return {
-            "fonte": "bb_api+local" if refreshed else "local",
-            "boletos": enriched,
+            "fonte": "grv_postgres+local" if titulos_grv else ("bb_api+local" if refreshed else "local"),
+            "boletos": cls._deduplicar(titulos_grv + enriched),
         }
 
     @staticmethod

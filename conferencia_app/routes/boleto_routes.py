@@ -46,7 +46,7 @@ def portal_cobranca_dados(token):
     numero_nf = str(payload.get("numero_nf") or "").strip()
     chave = str(payload.get("chave") or "").strip()
     cnpj = str(payload.get("cnpj") or "").strip()
-    boletos = BBBoletoService.consultar_por_nota_valor(numero_nf, 0)
+    boletos = BBBoletoService.consultar_por_nota_valor(numero_nf, 0, somente_abertos=True)
 
     return jsonify({
         "sucesso": True,
@@ -114,11 +114,26 @@ def consultar_boletos():
         except (TypeError, ValueError):
             valor = 0.0
 
-        boletos = BBBoletoService.consultar_por_nota_valor(numero_nota, valor)
+        boletos = BBBoletoService.consultar_por_nota_valor(numero_nota, valor, somente_abertos=True)
         return jsonify(
             {
                 "sucesso": True,
-                "fonte": "bb_api+local" if BBBoletoService.is_configured() else "local",
+                "fonte": "grv_postgres+bb_api+local" if BBBoletoService.is_configured() else "grv_postgres+local",
+                "boletos": boletos,
+                "total": len(boletos),
+                "mensagem": "",
+            }
+        )
+
+    if modo == "orcamento":
+        orcamento = str(data.get("orcamento") or data.get("numero_orcamento") or "").strip()
+        if not orcamento:
+            return jsonify({"sucesso": False, "error": "Informe o numero do orcamento."}), 400
+        boletos = BBBoletoService.consultar_por_orcamento(orcamento)
+        return jsonify(
+            {
+                "sucesso": True,
+                "fonte": "grv_postgres",
                 "boletos": boletos,
                 "total": len(boletos),
                 "mensagem": "",
@@ -134,7 +149,7 @@ def consultar_boletos():
     if len(doc) not in (11, 14):
         return jsonify({"sucesso": False, "error": "CPF deve ter 11 digitos e CNPJ 14 digitos."}), 400
 
-    resultado = BBBoletoService.consultar_boletos(doc)
+    resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
     return jsonify(
         {
             "sucesso": True,
