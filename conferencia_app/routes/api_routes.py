@@ -2295,6 +2295,30 @@ def _periodo_competencia(data: dict | None = None):
         except Exception:
             pass
 
+    competencia_inicio = str(source.get("competencia_inicio") or "").strip()
+    competencia_fim = str(source.get("competencia_fim") or "").strip()
+    if competencia_inicio or competencia_fim:
+        try:
+            inicio_ref = competencia_inicio or competencia_fim
+            fim_ref = competencia_fim or competencia_inicio
+            inicio = datetime.strptime(f"{inicio_ref}-01", "%Y-%m-%d")
+            fim_base = datetime.strptime(f"{fim_ref}-01", "%Y-%m-%d")
+            if fim_base < inicio:
+                inicio, fim_base = fim_base, inicio
+            if inicio < datetime(2026, 1, 1):
+                inicio = datetime(2026, 1, 1)
+            if fim_base.month == 12:
+                proximo = datetime(fim_base.year + 1, 1, 1)
+            else:
+                proximo = datetime(fim_base.year, fim_base.month + 1, 1)
+            fim = proximo - timedelta(microseconds=1)
+            comp_inicio = inicio.strftime("%Y-%m")
+            comp_fim = fim_base.strftime("%Y-%m")
+            competencia_label = comp_inicio if comp_inicio == comp_fim else f"{comp_inicio}_a_{comp_fim}"
+            return inicio, fim, competencia_label
+        except Exception:
+            pass
+
     inicio = _parse_data_filtro(source.get("inicio")) or datetime(2026, 1, 1)
     fim = _parse_data_filtro(source.get("fim"), fim=True)
     if inicio < datetime(2026, 1, 1):
@@ -7419,6 +7443,15 @@ def timeline_nota(nota):
                 }
             )
 
+        for log in LogEventoFiscalNota.query.filter_by(numero_nota=nota).all():
+            eventos.append(
+                {
+                    "data": log.data,
+                    "tipo": "Governanca Fiscal",
+                    "descricao": f"{log.usuario or '---'}: {log.evento} - {log.detalhe or log.status or 'Sem detalhe'}",
+                }
+            )
+
         lanc = next((i for i in itens if i.data_lancamento), None)
         if lanc:
             eventos.append(
@@ -7784,10 +7817,7 @@ def documento_entrada_kpis():
                 if 0 <= horas <= 24 * 365:
                     tempos_horas.append(horas)
 
-            usuario = next(
-                (i.usuario_lancamento for i in lista if i.usuario_lancamento),
-                "Não informado",
-            )
+            usuario = "FELAZE"
             bucket = produtividade.setdefault(
                 usuario, {"usuario": usuario, "notas_lancadas": 0, "tempos": []}
             )

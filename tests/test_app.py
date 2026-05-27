@@ -924,7 +924,7 @@ def test_documento_entrada_kpis_e_timeline_trazem_governanca(tmp_path):
     assert data_kpi["total_notas"] >= 1
     assert data_kpi["notas_lancadas"] >= 1
     assert data_kpi["tempo_medio_importacao_lancamento_horas"] > 0
-    assert any(item["usuario"] == "admin" for item in data_kpi["produtividade_usuarios"])
+    assert data_kpi["produtividade_usuarios"][0]["usuario"] == "FELAZE"
 
     response_timeline = client.get("/api/timeline/3000")
     assert response_timeline.status_code == 200
@@ -1384,6 +1384,53 @@ def test_financeiro_relatorio_custos_agrupa_lancamentos_reais(tmp_path):
     filtrado = client.get("/api/financeiro/relatorio-custos?competencia=2026-05&categoria=energia_eletrica")
     assert filtrado.status_code == 200
     assert filtrado.get_json()["resumo"]["valor_total"] == 1200
+
+
+def test_financeiro_relatorio_custos_aceita_intervalo_competencias(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "contador_teste", "Controladoria")
+
+    with app.app_context():
+        db.session.add_all(
+            [
+                ItemNota(
+                    numero_nota="CUSTO-MAI",
+                    fornecedor="Fornecedor Usinagem",
+                    codigo="INS-10",
+                    descricao="Inserto metal duro",
+                    qtd_real=2,
+                    unidade_comercial="UN",
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 5, 10, 10, 0),
+                    valor_produto=200,
+                    cfop="1556",
+                ),
+                ItemNota(
+                    numero_nota="CUSTO-JUN",
+                    fornecedor="CPFL",
+                    codigo="ENERGIA",
+                    descricao="Energia eletrica fabrica junho",
+                    qtd_real=1,
+                    unidade_comercial="UN",
+                    status="Lançado",
+                    data_lancamento=datetime(2026, 6, 8, 10, 0),
+                    valor_produto=800,
+                    cfop="1252",
+                ),
+            ]
+        )
+        db.session.commit()
+
+    response = client.get(
+        "/api/financeiro/relatorio-custos?competencia_inicio=2026-05&competencia_fim=2026-06"
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["competencia"] == "2026-05_a_2026-06"
+    assert data["resumo"]["valor_total"] == 1000
+    assert {row["competencia"]: row["valor"] for row in data["mensal"]} == {"2026-05": 200, "2026-06": 800}
 
 
 def test_financeiro_relatorio_custos_prefere_grv_postgres(tmp_path):
@@ -2242,6 +2289,94 @@ def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
         assert log is not None
         assert log.anexou_xml is True
         assert log.anexou_pdf is True
+
+
+def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config.update(
+        MAIL_SENDER="fiscal@teste.com",
+        MAIL_PASSWORD="senha",
+        MAIL_SENDER_NAME="Fiscal Teste",
+        NFE_EMAIL_MODO_TESTE=False,
+    )
+
+    chave = "9" * 44
+    xml_bytes = f"""
+    <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
+        <NFe>
+            <infNFe Id="NFe{chave}">
+                <ide><nNF>9150</nNF></ide>
+                <emit><xNome>COLUMBIA MACHINE BRASIL</xNome></emit>
+                <dest>
+                    <xNome>Fornecedor Industrializacao</xNome>
+                    <CNPJ>11222333000144</CNPJ>
+                </dest>
+                <det nItem="1">
+                    <prod>
+                        <cProd>IND-1</cProd>
+                        <xProd>Peca enviada para industrializacao</xProd>
+                        <CFOP>5901</CFOP>
+                        <xPed>11560</xPed>
+                        <qCom>2.0000</qCom>
+                    </prod>
+                </det>
+            </infNFe>
+        </NFe>
+    </nfeProc>
+    """.encode("utf-8")
+
+    mensagens = []
+
+    def fake_enviar_smtp(_app, msg, **_kwargs):
+        mensagens.append(msg)
+
+    with app.app_context(), patch(
+        "conferencia_app.services.nfe_email_service.buscar_nfe_emitida_erp",
+        return_value={
+            "numero": "9150",
+            "chave": chave,
+            "autorizada": True,
+            "dest_nome": "Fornecedor Industrializacao",
+            "dest_cnpj": "11222333000144",
+            "email_danfe": "",
+            "xml_bytes": xml_bytes,
+            "pdf_bytes": b"%PDF-1.4 DANFE ERP",
+        },
+    ), patch(
+        "conferencia_app.services.nfe_email_service.buscar_linhas_pedido",
+        return_value=[
+            {
+                "pedido_compra": "11560",
+                "codigo_material": "IND-1",
+                "descricao_material": "Peca enviada para industrializacao",
+                "qtd": 2,
+                "valor_unit": 15.5,
+                "fornecedor_nome": "Fornecedor Industrializacao",
+                "fornecedor_cnpj": "11222333000144",
+            }
+        ],
+    ) as buscar_pedido_mock, patch(
+        "conferencia_app.services.nfe_email_service.enviar_mensagem_smtp",
+        side_effect=fake_enviar_smtp,
+    ):
+        from conferencia_app.services.nfe_email_service import enviar_nfe_por_email
+
+        resultado = enviar_nfe_por_email(
+            "9150",
+            chave=chave,
+            override_email="cliente@teste.com",
+            envio_assincrono=False,
+        )
+
+        assert resultado["sucesso"] is True
+        assert resultado["anexou_pedido_compra"] is True
+        assert resultado["pedidos_compra_anexados"] == ["11560"]
+        buscar_pedido_mock.assert_called_once_with("11560")
+        assert mensagens
+        filenames = [part.get_filename() for part in mensagens[0].walk() if part.get_filename()]
+        assert f"NFe-{chave}.xml" in filenames
+        assert "DANFE-9150.pdf" in filenames
+        assert "PedidoCompra-11560.pdf" in filenames
 
 
 def test_scheduler_nfe_nao_repete_nota_duplicada_ou_aguardando_manual(tmp_path):

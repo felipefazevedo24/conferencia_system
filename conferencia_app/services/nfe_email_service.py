@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 import threading
 import os
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
 from email.mime.application import MIMEApplication
@@ -29,6 +30,7 @@ from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
 from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from .danfe_service import gerar_danfe
+from .pedidos_service import buscar_linhas_pedido
 from .planilhas_cadastros import buscar_email_por_cnpj
 from .smtp_service import enviar_mensagem_smtp
 
@@ -36,6 +38,7 @@ from .smtp_service import enviar_mensagem_smtp
 # ---------- Utilidades ----------
 
 _RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+CFOPS_INDUSTRIALIZACAO_COM_PEDIDO = {"5901", "6901"}
 
 
 def _somente_digitos(s: str | None) -> str:
@@ -142,6 +145,189 @@ def _parse_cfops_do_xml(xml_bytes: bytes | None) -> set[str]:
         if valor:
             cfops.add(valor[:4])
     return cfops
+
+
+def _parse_pedidos_do_xml(xml_bytes: bytes | None) -> list[str]:
+    """Retorna os pedidos de compra informados em <xPed> no XML da NF-e."""
+    if not xml_bytes:
+        return []
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return []
+    ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+    pedidos: list[str] = []
+    vistos: set[str] = set()
+    for el in root.findall(".//nfe:det/nfe:prod/nfe:xPed", ns):
+        pedido = str(el.text or "").strip()
+        if pedido and pedido not in vistos:
+            vistos.add(pedido)
+            pedidos.append(pedido)
+    return pedidos
+
+
+def _pedidos_compra_da_nota(nota: NotaEmitida) -> list[str]:
+    pedidos = _parse_pedidos_do_xml(nota.xml_bytes)
+    vistos = set(pedidos)
+
+    try:
+        itens = (
+            ItemNota.query
+            .filter(ItemNota.numero_nota == nota.numero)
+            .filter(ItemNota.pedido_compra.isnot(None))
+            .all()
+        )
+        for item in itens:
+            pedido = str(item.pedido_compra or "").strip()
+            if pedido and pedido not in vistos:
+                vistos.add(pedido)
+                pedidos.append(pedido)
+    except Exception:
+        current_app.logger.debug("Nao foi possivel consultar pedidos locais da NF-e %s.", nota.numero, exc_info=True)
+
+    return pedidos
+
+
+def _fmt_decimal(valor: Any, casas: int = 2) -> str:
+    try:
+        numero = float(valor or 0)
+    except (TypeError, ValueError):
+        numero = 0.0
+    texto = f"{numero:,.{casas}f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _texto_pdf(valor: Any, limite: int = 80) -> str:
+    texto = str(valor or "").strip()
+    if len(texto) > limite:
+        return texto[: limite - 3].rstrip() + "..."
+    return texto
+
+
+def _gerar_pdf_pedido_compra(numero_pedido: str, linhas: list[dict], nota: NotaEmitida) -> bytes | None:
+    if not numero_pedido or not linhas:
+        return None
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+    except Exception as exc:
+        current_app.logger.warning("ReportLab indisponivel para gerar PDF do pedido %s: %s", numero_pedido, exc)
+        return None
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    largura, altura = A4
+    margem = 16 * mm
+    y = altura - margem
+
+    fornecedor = linhas[0].get("fornecedor_nome") or linhas[0].get("fornecedor") or nota.dest_nome or ""
+    cnpj = linhas[0].get("fornecedor_cnpj") or ""
+
+    def header() -> None:
+        nonlocal y
+        pdf.setFillColor(colors.HexColor("#0f2f57"))
+        pdf.rect(0, altura - 32 * mm, largura, 32 * mm, fill=1, stroke=0)
+        pdf.setFillColor(colors.white)
+        pdf.setFont("Helvetica-Bold", 15)
+        pdf.drawString(margem, altura - 16 * mm, f"Pedido de Compra {numero_pedido}")
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(margem, altura - 23 * mm, f"Vinculado a NF-e {nota.numero} | Chave {nota.chave}")
+        y = altura - 43 * mm
+
+    def rodape() -> None:
+        pdf.setFont("Helvetica", 7)
+        pdf.setFillColor(colors.HexColor("#64748b"))
+        pdf.drawString(margem, 10 * mm, "Documento gerado automaticamente pelo Columbia Sync a partir dos dados do ERP.")
+
+    header()
+    pdf.setFillColor(colors.HexColor("#0f172a"))
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(margem, y, "Fornecedor")
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(margem + 28 * mm, y, _texto_pdf(fornecedor, 75))
+    y -= 6 * mm
+    if cnpj:
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(margem, y, "CNPJ")
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(margem + 28 * mm, y, _texto_pdf(cnpj, 40))
+        y -= 8 * mm
+    else:
+        y -= 2 * mm
+
+    total = 0.0
+    colunas = [
+        (margem, "Codigo"),
+        (margem + 34 * mm, "Descricao"),
+        (margem + 118 * mm, "Qtd"),
+        (margem + 140 * mm, "Unitario"),
+        (margem + 166 * mm, "Total"),
+    ]
+
+    def cabecalho_tabela() -> None:
+        nonlocal y
+        pdf.setFillColor(colors.HexColor("#e2e8f0"))
+        pdf.rect(margem, y - 4 * mm, largura - 2 * margem, 7 * mm, fill=1, stroke=0)
+        pdf.setFillColor(colors.HexColor("#0f172a"))
+        pdf.setFont("Helvetica-Bold", 8)
+        for x, titulo in colunas:
+            pdf.drawString(x, y - 1 * mm, titulo)
+        y -= 8 * mm
+
+    cabecalho_tabela()
+    pdf.setFont("Helvetica", 8)
+    for linha in linhas[:80]:
+        if y < 24 * mm:
+            rodape()
+            pdf.showPage()
+            header()
+            cabecalho_tabela()
+            pdf.setFont("Helvetica", 8)
+
+        qtd = float(linha.get("qtd") or linha.get("pendente") or 0)
+        unitario = float(linha.get("valor_unit") or linha.get("preco_unitario") or 0)
+        total_linha = float(linha.get("total_item") or linha.get("vl_pendente") or (qtd * unitario))
+        total += total_linha
+        pdf.setFillColor(colors.HexColor("#0f172a"))
+        pdf.drawString(margem, y, _texto_pdf(linha.get("codigo_material") or linha.get("cod_interno"), 18))
+        pdf.drawString(margem + 34 * mm, y, _texto_pdf(linha.get("descricao_material") or linha.get("descricao"), 60))
+        pdf.drawRightString(margem + 132 * mm, y, _fmt_decimal(qtd, 4))
+        pdf.drawRightString(margem + 158 * mm, y, _fmt_decimal(unitario, 2))
+        pdf.drawRightString(largura - margem, y, _fmt_decimal(total_linha, 2))
+        y -= 5 * mm
+
+    y -= 4 * mm
+    pdf.setStrokeColor(colors.HexColor("#cbd5e1"))
+    pdf.line(margem, y, largura - margem, y)
+    y -= 7 * mm
+    pdf.setFillColor(colors.HexColor("#0f172a"))
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawRightString(largura - margem, y, f"Total do pedido: R$ {_fmt_decimal(total, 2)}")
+    rodape()
+    pdf.save()
+    return buffer.getvalue()
+
+
+def _anexos_pedido_compra_industrializacao(nota: NotaEmitida, cfops_da_nota: set[str]) -> list[tuple[str, bytes]]:
+    if not (cfops_da_nota & CFOPS_INDUSTRIALIZACAO_COM_PEDIDO):
+        return []
+
+    anexos: list[tuple[str, bytes]] = []
+    for pedido in _pedidos_compra_da_nota(nota):
+        try:
+            linhas = buscar_linhas_pedido(pedido)
+        except Exception as exc:
+            current_app.logger.warning("Falha ao consultar pedido de compra %s para NF-e %s: %s", pedido, nota.numero, exc)
+            continue
+        pdf_bytes = _gerar_pdf_pedido_compra(pedido, linhas, nota)
+        if pdf_bytes:
+            anexos.append((pedido, pdf_bytes))
+        else:
+            current_app.logger.warning("NF-e %s CFOP industrializacao sem PDF gerado para pedido %s.", nota.numero, pedido)
+    return anexos
 
 
 def _gerar_pdf_danfe_do_xml(xml_bytes: bytes | None, numero_nf: str, chave: str) -> bytes | None:
@@ -284,7 +470,15 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
 # ---------- Envio propriamente dito ----------
 
 
-def _montar_corpo_html(numero_nf: str, chave: str, dest_nome: str, emit_nome: str, modo_teste: bool, destino_real: str) -> str:
+def _montar_corpo_html(
+    numero_nf: str,
+    chave: str,
+    dest_nome: str,
+    emit_nome: str,
+    modo_teste: bool,
+    destino_real: str,
+    inclui_pedido_compra: bool = False,
+) -> str:
     aviso_teste = ""
     if modo_teste:
         aviso_teste = f"""
@@ -298,6 +492,9 @@ def _montar_corpo_html(numero_nf: str, chave: str, dest_nome: str, emit_nome: st
     emit_nome_exib = (emit_nome or "COLUMBIA MACHINE BRASIL").upper()
     chave_fmt = " ".join([chave[i:i + 4] for i in range(0, len(chave), 4)]) if chave else ""
     consulta_url = f"https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=XbSeqxE8pl8=&nfe={chave}"
+    anexos_texto = "XML da NF-e, DANFE (PDF) e pedido de compra (PDF)"
+    if not inclui_pedido_compra:
+        anexos_texto = "XML da NF-e e DANFE (PDF)"
 
     return f"""\
     <!DOCTYPE html>
@@ -396,7 +593,7 @@ def _montar_corpo_html(numero_nf: str, chave: str, dest_nome: str, emit_nome: st
                 <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">
                   <tr>
                     <td style="padding-top:14px;font-size:13px;color:#334155;line-height:1.6">
-                      <strong style="color:#0f172a">Anexos:</strong> XML da NF-e e DANFE (PDF) seguem anexados para seus registros.
+                      <strong style="color:#0f172a">Anexos:</strong> {anexos_texto} seguem anexados para seus registros.
                     </td>
                   </tr>
                 </table>
@@ -493,11 +690,11 @@ def enviar_nfe_por_email(
     cfops_especiais = {
         c.strip() for c in re.split(r"[,;\s]+", cfops_cfg_raw) if c.strip().isdigit()
     }
-    cfops_da_nota: set[str] = set()
+    cfops_da_nota: set[str] = _parse_cfops_do_xml(nota.xml_bytes)
     cfop_match: list[str] = []
     if cfops_especiais:
-        cfops_da_nota = _parse_cfops_do_xml(nota.xml_bytes)
         cfop_match = sorted(cfops_da_nota & cfops_especiais)
+    anexos_pedido_compra = _anexos_pedido_compra_industrializacao(nota, cfops_da_nota)
 
     rota_especial_emails: list[str] = []
     if cfop_match:
@@ -595,7 +792,13 @@ def enviar_nfe_por_email(
         msg["Cc"] = ", ".join(cc_final)
 
     corpo_html = _montar_corpo_html(
-        nota.numero, nota.chave, nota.dest_nome, nota.emit_nome, modo_teste, destino_real,
+        nota.numero,
+        nota.chave,
+        nota.dest_nome,
+        nota.emit_nome,
+        modo_teste,
+        destino_real,
+        inclui_pedido_compra=bool(anexos_pedido_compra),
     )
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(f"NF-e {nota.numero} em anexo. Destinatário: {nota.dest_nome}", "plain", "utf-8"))
@@ -604,6 +807,7 @@ def enviar_nfe_por_email(
 
     anexou_xml = False
     anexou_pdf = False
+    pedidos_compra_anexados: list[str] = []
     if nota.xml_bytes:
         part = MIMEApplication(nota.xml_bytes, _subtype="xml")
         part.add_header("Content-Disposition", "attachment", filename=f"NFe-{nota.chave}.xml")
@@ -614,6 +818,11 @@ def enviar_nfe_por_email(
         part.add_header("Content-Disposition", "attachment", filename=f"DANFE-{nota.numero}.pdf")
         msg.attach(part)
         anexou_pdf = True
+    for pedido, pdf_pedido in anexos_pedido_compra:
+        part = MIMEApplication(pdf_pedido, _subtype="pdf")
+        part.add_header("Content-Disposition", "attachment", filename=f"PedidoCompra-{pedido}.pdf")
+        msg.attach(part)
+        pedidos_compra_anexados.append(pedido)
 
     # Log ANTES do envio (para idempotencia + rastreio de falha)
     log = EmailNFEnviado(
@@ -658,6 +867,8 @@ def enviar_nfe_por_email(
         "fonte_email": fonte,
         "anexou_xml": anexou_xml,
         "anexou_pdf": anexou_pdf,
+        "anexou_pedido_compra": bool(pedidos_compra_anexados),
+        "pedidos_compra_anexados": pedidos_compra_anexados,
         "status": log.status,
         "erro": log.erro_mensagem if log.status == "Falha" else None,
     }

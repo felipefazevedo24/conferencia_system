@@ -12,7 +12,7 @@
     .cost-actions{display:flex;gap:10px;flex-wrap:wrap}
     .cost-btn{border:0;border-radius:8px;min-height:40px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;font-weight:800;color:#fff;background:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.18)}
     .cost-btn.secondary{color:#0f172a;background:#fff;border:1px solid #dbe4ef;box-shadow:none}
-    .cost-filters{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;display:grid;grid-template-columns:170px 230px minmax(160px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
+    .cost-filters{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;display:grid;grid-template-columns:150px 150px 230px minmax(160px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
     .cost-field label{display:block;color:#64748b;font-size:.78rem;font-weight:800;margin-bottom:5px}
     .cost-field input,.cost-field select{width:100%;height:38px;border:1px solid #d9e2ef;border-radius:8px;padding:0 10px;background:#fbfdff;color:#0f172a}
     .cost-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
@@ -66,8 +66,12 @@
 
     <section class="cost-filters">
         <div class="cost-field">
-            <label>Competência</label>
-            <input id="f-competencia" type="month" min="2026-01">
+            <label>De</label>
+            <input id="f-competencia-inicio" type="month" min="2026-01">
+        </div>
+        <div class="cost-field">
+            <label>Até</label>
+            <input id="f-competencia-fim" type="month" min="2026-01">
         </div>
         <div class="cost-field">
             <label>Categoria</label>
@@ -114,7 +118,7 @@
             <div class="cost-chart"><canvas id="chart-categorias"></canvas></div>
         </div>
         <div class="cost-panel">
-            <div class="cost-panel-head"><h2>Custo total por família</h2><span class="cost-pill">R$</span></div>
+            <div class="cost-panel-head"><h2>Custo total por competência</h2><span class="cost-pill">R$</span></div>
             <div class="cost-chart"><canvas id="chart-mensal"></canvas></div>
         </div>
     </section>
@@ -168,7 +172,15 @@ function number(value){return Number(value || 0).toLocaleString("pt-BR",{maximum
 function percent(value){return `${Number(value || 0).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}%`;}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function competenciaAtual(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;}
-function periodo(){const c=document.getElementById("f-competencia").value || "2026-01";const [ano,mes]=c.split("-").map(Number);const fim=new Date(ano,mes,0);return {competencia:c,inicio:`${ano}-${String(mes).padStart(2,"0")}-01`,fim:`${ano}-${String(mes).padStart(2,"0")}-${String(fim.getDate()).padStart(2,"0")}`};}
+function periodo(){
+    let ini=document.getElementById("f-competencia-inicio").value || "2026-01";
+    let fimComp=document.getElementById("f-competencia-fim").value || ini;
+    if(fimComp < ini){const tmp=ini;ini=fimComp;fimComp=tmp;}
+    const [anoIni,mesIni]=ini.split("-").map(Number);
+    const [anoFim,mesFim]=fimComp.split("-").map(Number);
+    const fim=new Date(anoFim,mesFim,0);
+    return {competencia_inicio:ini,competencia_fim:fimComp,inicio:`${anoIni}-${String(mesIni).padStart(2,"0")}-01`,fim:`${anoFim}-${String(mesFim).padStart(2,"0")}-${String(fim.getDate()).padStart(2,"0")}`};
+}
 function params(){return new URLSearchParams({...periodo(),categoria:document.getElementById("f-categoria").value || "",limite:document.getElementById("f-limite").value || "80"});}
 
 async function carregar(){
@@ -217,7 +229,8 @@ function renderCharts(data){
     state.categoriaChart = new Chart(catCtx,{type:"bar",data:{labels:cats.map(c=>c.label),datasets:[{label:"Custo médio",data:cats.map(c=>c.custo_medio),backgroundColor:"#2563eb",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
     const mensalCtx=document.getElementById("chart-mensal");
     if(state.mensalChart) state.mensalChart.destroy();
-    state.mensalChart = new Chart(mensalCtx,{type:"doughnut",data:{labels:cats.map(c=>c.label),datasets:[{data:cats.map(c=>c.valor),backgroundColor:palette,borderWidth:2,borderColor:"#fff"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}}}});
+    const mensal=(data.mensal || []).filter(m=>Number(m.valor)>0);
+    state.mensalChart = new Chart(mensalCtx,{type:"bar",data:{labels:mensal.map(m=>m.competencia),datasets:[{label:"Custo total",data:mensal.map(m=>m.valor),backgroundColor:"#0891b2",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
     renderFamiliasMedias(cats);
 }
 
@@ -273,7 +286,8 @@ function exportar(){window.location.href = `/api/financeiro/relatorio-custos/exp
 document.getElementById("btn-filtrar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
 document.getElementById("btn-atualizar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
 document.getElementById("btn-exportar").addEventListener("click",exportar);
-document.getElementById("f-competencia").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
+document.getElementById("f-competencia-inicio").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
+document.getElementById("f-competencia-fim").value = document.getElementById("f-competencia-inicio").value;
 carregar().catch(err=>{document.getElementById("cost-empty").style.display="block";document.getElementById("cost-empty").textContent=err.message;});
 </script>
 {% endblock %}
