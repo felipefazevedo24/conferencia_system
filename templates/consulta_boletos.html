@@ -1,826 +1,761 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0f2f55">
-    <title>Consulta de Boletos | Columbia Sync</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
-    <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --bg: #eef3f8;
-            --surface: #ffffff;
-            --surface-soft: #f7fafc;
-            --primary: #165ca8;
-            --primary-dark: #0f2f55;
-            --primary-soft: #eaf3ff;
-            --ink: #102033;
-            --muted: #617187;
-            --line: #d9e3ef;
-            --success: #047857;
-            --success-bg: #e9f8f1;
-            --warning: #9a6700;
-            --warning-bg: #fff5d6;
-            --danger: #b42318;
-            --danger-bg: #fff0ed;
-            --shadow: 0 10px 28px rgba(16, 32, 51, 0.08);
-            --radius: 8px;
-            --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            --font-display: 'Space Grotesk', var(--font);
-        }
-
-        body {
-            font-family: var(--font);
-            background:
-                linear-gradient(180deg, #dfeaf5 0, #eef3f8 340px, #eef3f8 100%);
-            color: var(--ink);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .header {
-            background: #0f2f55;
-            color: #fff;
-            padding: 22px 0 70px;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-        }
-        .header-inner {
-            max-width: 1040px;
-            margin: 0 auto;
-            padding: 0 24px;
-        }
-        .header .brand {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 34px;
-        }
-        .header .brand-name {
-            font-family: var(--font-display);
-            font-size: 22px;
-            font-weight: 800;
-            letter-spacing: 0;
-        }
-        .header .brand-name .sync { color: #9cc8f7; }
-        .header .brand-pill {
-            border: 1px solid rgba(255,255,255,0.28);
-            border-radius: 999px;
-            color: #d8eaff;
-            font-size: 11px;
-            font-weight: 800;
-            padding: 8px 12px;
-            text-transform: uppercase;
-            letter-spacing: .7px;
-        }
-        .header h1 {
-            font-family: var(--font-display);
-            font-size: clamp(28px, 4vw, 42px);
-            font-weight: 800;
-            line-height: 1.05;
-            margin-bottom: 10px;
-            letter-spacing: 0;
-        }
-        .header p {
-            color: #c5d8ed;
-            font-size: 15px;
-            max-width: 620px;
-            line-height: 1.55;
-        }
-
-        .main {
-            flex: 1;
-            max-width: 1040px;
-            width: 100%;
-            margin: -46px auto 42px;
-            padding: 0 24px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .panel-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 320px;
-            gap: 18px;
-            align-items: start;
-        }
-
-        .search-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            border: 1px solid var(--line);
-            padding: 24px;
-            min-height: 278px;
-        }
-        .search-card h2 {
-            font-family: var(--font-display);
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--ink);
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .search-card h2 i { color: var(--primary); }
-        .search-card .subtext {
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.5;
-            margin-bottom: 18px;
-        }
-
-        .search-form {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 14px;
-            align-items: flex-end;
-        }
-        .search-form .field { min-width: 0; }
-        .search-form label {
-            display: block;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--muted);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0;
-        }
-        .search-form input {
-            width: 100%;
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 13px 14px;
-            font-size: 15px;
-            font-family: var(--font);
-            transition: border-color 0.2s, box-shadow 0.2s;
-            background: #fff;
-            color: var(--ink);
-        }
-        .search-form input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(22,92,168,0.12);
-        }
-        .search-form input::placeholder { color: #94a3b8; }
-
-        .btn-search {
-            border: none;
-            border-radius: var(--radius);
-            background: var(--primary);
-            color: #fff;
-            font-family: var(--font-display);
-            font-size: 14px;
-            font-weight: 800;
-            min-height: 48px;
-            padding: 0 22px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: background 0.15s, transform 0.15s;
-        }
-        .btn-search:hover {
-            background: #104f91;
-            transform: translateY(-1px);
-        }
-        .btn-search:active { transform: translateY(0); }
-        .btn-search:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-search i { margin-right: 6px; }
-
-        .side-card {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 20px;
-        }
-        .side-card h3 {
-            font-family: var(--font-display);
-            font-size: 15px;
-            font-weight: 800;
-            margin-bottom: 12px;
-        }
-        .side-list {
-            display: grid;
-            gap: 12px;
-            list-style: none;
-        }
-        .side-list li {
-            display: grid;
-            grid-template-columns: 34px 1fr;
-            gap: 10px;
-            align-items: start;
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.4;
-        }
-        .side-list i {
-            width: 34px;
-            height: 34px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: var(--radius);
-            background: var(--primary-soft);
-            color: var(--primary);
-        }
-        .side-list strong {
-            display: block;
-            color: var(--ink);
-            font-size: 13px;
-            margin-bottom: 2px;
-        }
-
-        .feedback {
-            display: none;
-            padding: 12px 14px;
-            border-radius: var(--radius);
-            font-size: 13px;
-            font-weight: 600;
-            margin-top: 14px;
-            border: 1px solid transparent;
-        }
-        .feedback.show { display: flex; align-items: center; gap: 8px; }
-        .feedback.error { background: var(--danger-bg); color: var(--danger); border-color: #ffd4cc; }
-        .feedback.info { background: var(--primary-soft); color: var(--primary-dark); border-color: #cbe1fb; }
-        .feedback.warning { background: var(--warning-bg); color: var(--warning); border-color: #ffe3a1; }
-
-        .results-section {
-            display: none;
-            margin-top: 20px;
-            background: rgba(255,255,255,0.72);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
-        }
-        .results-section.show { display: block; }
-
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 14px;
-        }
-        .results-header h3 {
-            font-family: var(--font-display);
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--ink);
-        }
-        .results-count {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--primary-dark);
-            background: var(--primary-soft);
-            border: 1px solid #cbe1fb;
-            padding: 5px 12px;
-            border-radius: 999px;
-        }
-
-        .boleto-card {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 18px;
-            margin-bottom: 12px;
-            transition: border-color 0.15s, box-shadow 0.15s;
-        }
-        .boleto-card:hover {
-            border-color: #bad1e8;
-            box-shadow: 0 8px 24px rgba(16, 32, 51, 0.08);
-        }
-
-        .boleto-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding-bottom: 14px;
-            margin-bottom: 14px;
-            border-bottom: 1px solid var(--line);
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .boleto-id {
-            font-family: var(--font-display);
-            font-size: 17px;
-            font-weight: 800;
-            color: var(--ink);
-        }
-        .boleto-id small {
-            display: block;
-            margin-top: 3px;
-            font-family: var(--font);
-            font-weight: 600;
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 11px;
-            font-weight: 800;
-            padding: 6px 10px;
-            border-radius: 999px;
-            text-transform: uppercase;
-            letter-spacing: .4px;
-        }
-        .status-gerado { background: var(--primary-soft); color: var(--primary); }
-        .status-pago { background: var(--success-bg); color: var(--success); }
-        .status-vencido { background: var(--danger-bg); color: var(--danger); }
-        .status-pendente { background: var(--warning-bg); color: var(--warning); }
-
-        .boleto-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-        .boleto-field {
-            background: var(--surface-soft);
-            border: 1px solid #e7eef6;
-            border-radius: var(--radius);
-            padding: 10px 12px;
-            min-width: 0;
-        }
-        .boleto-field label {
-            display: block;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: .4px;
-            margin-bottom: 4px;
-        }
-        .boleto-field span {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--ink);
-            overflow-wrap: anywhere;
-        }
-        .boleto-field .valor {
-            font-family: var(--font-display);
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--primary);
-        }
-
-        .boleto-linha {
-            background: #f8fbff;
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 12px 14px;
-            margin-top: 4px;
-        }
-        .boleto-linha label {
-            display: block;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: .4px;
-            margin-bottom: 6px;
-        }
-        .boleto-linha .linha-valor {
-            font-family: 'Courier New', monospace;
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--ink);
-            word-break: break-all;
-            line-height: 1.6;
-        }
-        .boleto-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .btn-copy {
-            border: 1px solid var(--line);
-            background: #fff;
-            border-radius: var(--radius);
-            padding: 8px 12px;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--primary);
-            cursor: pointer;
-            transition: background 0.15s, border-color 0.15s;
-        }
-        .btn-copy:hover { background: var(--primary-soft); border-color: #b8d5f3; }
-        .btn-copy.copied { background: var(--success-bg); color: var(--success); border-color: var(--success); }
-
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 18px;
-            flex-wrap: wrap;
-        }
-        .btn-tab {
-            border: 1px solid var(--line);
-            background: #fff;
-            border-radius: var(--radius);
-            padding: 9px 14px;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--muted);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-tab:hover { border-color: var(--primary); color: var(--primary); }
-        .btn-tab.active {
-            background: var(--primary-soft);
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        .btn-tab i { margin-right: 4px; }
-
-        .empty-state {
-            text-align: center;
-            padding: 46px 24px;
-            background: var(--surface);
-            border: 1px dashed #bfd0e1;
-            border-radius: var(--radius);
-        }
-        .empty-state i {
-            width: 54px;
-            height: 54px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: var(--radius);
-            background: var(--primary-soft);
-            color: var(--primary);
-            font-size: 24px;
-            margin-bottom: 14px;
-        }
-        .empty-state h3 {
-            font-family: var(--font-display);
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--ink);
-            margin-bottom: 6px;
-        }
-        .empty-state p {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 30px;
-            color: var(--muted);
-        }
-        .loading-spinner.show { display: block; }
-        .loading-spinner i { font-size: 32px; color: var(--primary); animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .footer {
-            text-align: center;
-            padding: 26px 20px;
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .footer a { color: var(--primary); text-decoration: none; }
-
-        @media (max-width: 860px) {
-            .panel-grid { grid-template-columns: 1fr; }
-            .side-card { order: -1; }
-            .search-form { grid-template-columns: 1fr; }
-            .boleto-grid { grid-template-columns: 1fr 1fr; }
-        }
-
-        @media (max-width: 600px) {
-            .header { padding-bottom: 58px; }
-            .header .brand { align-items: flex-start; margin-bottom: 24px; }
-            .header .brand-pill { display: none; }
-            .main { padding: 0 14px; }
-            .search-card, .side-card, .results-section { padding: 16px; }
-            .search-form { flex-direction: column; }
-            .btn-search { width: 100%; }
-            .boleto-grid { grid-template-columns: 1fr; }
-            .results-header { align-items: flex-start; gap: 10px; flex-direction: column; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b2f57">
+  <title>Consulta de Boletos | Columbia Machine Brasil</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --blue-950: #071f3a;
+      --blue-900: #0b2f57;
+      --blue-800: #104d86;
+      --blue-700: #1769c2;
+      --blue-100: #e9f3ff;
+      --ink: #142033;
+      --muted: #66758a;
+      --line: #d7e1ec;
+      --surface: #ffffff;
+      --soft: #f6f9fc;
+      --green: #047857;
+      --green-bg: #e7f8ef;
+      --yellow: #9a6700;
+      --yellow-bg: #fff4ce;
+      --red: #b42318;
+      --red-bg: #fff0ed;
+      --shadow: 0 18px 45px rgba(7, 31, 58, .12);
+      --radius: 8px;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, Arial, sans-serif;
+      color: var(--ink);
+      background: #edf3f8;
+    }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      color: #fff;
+      background:
+        linear-gradient(120deg, rgba(7,31,58,.98), rgba(11,47,87,.94)),
+        url("/static/columbia_logo.png");
+      background-size: auto, 420px;
+      background-position: center, right 8% center;
+      background-repeat: no-repeat;
+      padding: 28px 24px 88px;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 1px;
+      background: rgba(255,255,255,.18);
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 46px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .brand-logo {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 7px;
+      object-fit: contain;
+      box-shadow: 0 10px 24px rgba(0,0,0,.18);
+    }
+    .brand-text strong {
+      display: block;
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 18px;
+      letter-spacing: .02em;
+      line-height: 1;
+    }
+    .brand-text span {
+      display: block;
+      margin-top: 4px;
+      color: #b8d7f7;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .admin-link {
+      color: #d8eaff;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .hero-copy {
+      max-width: 680px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #cbe3ff;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      margin-bottom: 14px;
+    }
+    h1 {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      margin: 0 0 14px;
+      letter-spacing: 0;
+    }
+    .hero-copy p {
+      margin: 0;
+      color: #d5e6f7;
+      font-size: 17px;
+      line-height: 1.58;
+      max-width: 620px;
+    }
+    .main {
+      max-width: 1120px;
+      margin: -54px auto 0;
+      padding: 0 24px 42px;
+      position: relative;
+      z-index: 2;
+    }
+    .portal-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+    .search-card, .trust-card, .results-section {
+      background: rgba(255,255,255,.98);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .search-card { padding: 24px; }
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .card-head h2 {
+      margin: 0 0 5px;
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 22px;
+      color: var(--blue-950);
+    }
+    .card-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .shield {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius);
+      color: var(--blue-700);
+      background: var(--blue-100);
+      border: 1px solid #cfe3fa;
+      font-size: 18px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      padding: 4px;
+      background: #f1f6fb;
+      border: 1px solid #dce7f2;
+      border-radius: var(--radius);
+      width: fit-content;
+      max-width: 100%;
+    }
+    .btn-tab {
+      border: 0;
+      background: transparent;
+      border-radius: 7px;
+      padding: 10px 14px;
+      color: #526579;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn-tab.active {
+      background: #fff;
+      color: var(--blue-800);
+      box-shadow: 0 3px 10px rgba(16, 77, 134, .12);
+    }
+    .btn-tab i { margin-right: 6px; }
+    .search-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+      gap: 14px;
+      align-items: end;
+    }
+    .search-form label {
+      display: block;
+      margin-bottom: 7px;
+      color: #526579;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .search-form input {
+      width: 100%;
+      min-height: 50px;
+      border: 1px solid #cad8e6;
+      border-radius: var(--radius);
+      padding: 13px 14px;
+      font-size: 15px;
+      font-family: Inter, Arial, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color .16s, box-shadow .16s;
+    }
+    .search-form input:focus {
+      outline: none;
+      border-color: var(--blue-700);
+      box-shadow: 0 0 0 4px rgba(23,105,194,.14);
+    }
+    .btn-search {
+      min-height: 50px;
+      border: 0;
+      border-radius: var(--radius);
+      padding: 0 22px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--blue-700), var(--blue-900));
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 12px 24px rgba(23,105,194,.22);
+    }
+    .btn-search:disabled { opacity: .62; cursor: wait; }
+    .btn-search i { margin-right: 7px; }
+    .feedback {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .feedback.show { display: flex; gap: 8px; align-items: center; }
+    .feedback.error { background: var(--red-bg); color: var(--red); border-color: #ffd2ca; }
+    .feedback.info { background: var(--blue-100); color: var(--blue-900); border-color: #cbe1fb; }
+    .feedback.warning { background: var(--yellow-bg); color: var(--yellow); border-color: #ffe1a0; }
+    .trust-card { padding: 20px; }
+    .trust-card h3 {
+      margin: 0 0 14px;
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 17px;
+      color: var(--blue-950);
+    }
+    .trust-item {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 11px;
+      padding: 13px 0;
+      border-top: 1px solid #edf2f7;
+    }
+    .trust-item:first-of-type { border-top: 0; padding-top: 0; }
+    .trust-item i {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius);
+      color: var(--blue-800);
+      background: var(--blue-100);
+    }
+    .trust-item strong { display: block; font-size: 13px; margin-bottom: 3px; }
+    .trust-item span { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .loading-spinner {
+      display: none;
+      margin-top: 18px;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255,255,255,.7);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .loading-spinner.show { display: block; }
+    .loading-spinner i { color: var(--blue-700); font-size: 28px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .results-section {
+      display: none;
+      margin-top: 20px;
+      padding: 18px;
+    }
+    .results-section.show { display: block; }
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .results-header h3 {
+      margin: 0;
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 20px;
+      color: var(--blue-950);
+    }
+    .results-count {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: var(--blue-100);
+      color: var(--blue-900);
+      border: 1px solid #cfe3fa;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .boleto-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 12px;
+      box-shadow: 0 8px 22px rgba(7,31,58,.06);
+    }
+    .boleto-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #edf2f7;
+    }
+    .boleto-id {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--blue-950);
+    }
+    .boleto-id small {
+      display: block;
+      margin-top: 4px;
+      font-family: Inter, Arial, sans-serif;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .status-gerado { background: var(--blue-100); color: var(--blue-800); }
+    .status-pago { background: var(--green-bg); color: var(--green); }
+    .status-vencido { background: var(--red-bg); color: var(--red); }
+    .status-pendente { background: var(--yellow-bg); color: var(--yellow); }
+    .boleto-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .boleto-field {
+      min-width: 0;
+      background: var(--soft);
+      border: 1px solid #e4ebf3;
+      border-radius: var(--radius);
+      padding: 11px;
+    }
+    .boleto-field label {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin-bottom: 5px;
+    }
+    .boleto-field span { display: block; font-weight: 800; overflow-wrap: anywhere; }
+    .boleto-field .valor { color: var(--blue-800); font-size: 18px; }
+    .boleto-linha {
+      background: #f8fbff;
+      border: 1px dashed #b9ccdf;
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .boleto-linha label {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin-bottom: 6px;
+    }
+    .linha-valor {
+      font-family: Consolas, "Courier New", monospace;
+      font-weight: 800;
+      font-size: 14px;
+      line-height: 1.55;
+      word-break: break-all;
+    }
+    .btn-copy {
+      margin-top: 9px;
+      border: 1px solid #cbd9e8;
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--blue-800);
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .btn-copy.copied { background: var(--green-bg); color: var(--green); border-color: #8bd9b5; }
+    .empty-state {
+      text-align: center;
+      padding: 42px 22px;
+      background: #fff;
+      border: 1px dashed #bfd0e1;
+      border-radius: var(--radius);
+    }
+    .empty-state i {
+      width: 58px;
+      height: 58px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: var(--radius);
+      background: var(--blue-100);
+      color: var(--blue-800);
+      font-size: 24px;
+      margin-bottom: 13px;
+    }
+    .empty-state h3 {
+      margin: 0 0 6px;
+      font-family: "Space Grotesk", Inter, sans-serif;
+      color: var(--blue-950);
+    }
+    .empty-state p { margin: 0; color: var(--muted); }
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: #6f7d8d;
+      font-size: 12px;
+    }
+    .footer a { color: var(--blue-800); text-decoration: none; font-weight: 800; }
+    @media (max-width: 900px) {
+      .portal-grid { grid-template-columns: 1fr; }
+      .trust-card { order: -1; }
+      .search-form, .boleto-grid { grid-template-columns: 1fr; }
+      .hero { background-size: auto, 300px; background-position: center, right -80px center; }
+    }
+    @media (max-width: 620px) {
+      .hero { padding: 20px 16px 74px; }
+      .topbar { align-items: flex-start; margin-bottom: 32px; }
+      .admin-link { display: none; }
+      .main { padding: 0 14px 34px; }
+      .search-card, .trust-card, .results-section { padding: 16px; }
+      .card-head { align-items: flex-start; }
+      .tabs { width: 100%; }
+      .btn-tab { flex: 1; }
+      .boleto-top, .results-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-inner">
-            <div class="brand">
-                <span class="brand-name">Columbia <span class="sync">SYNC</span></span>
-                <span class="brand-pill">Consulta financeira</span>
-            </div>
-            <h1><i class="fas fa-barcode"></i> Consulta de Boletos</h1>
-            <p>Consulte seus boletos por CPF/CNPJ ou pelo número da nota fiscal</p>
-        </div>
-    </header>
+  <header class="hero">
+    <div class="wrap">
+      <div class="topbar">
+        <a class="brand" href="/boletos" aria-label="Columbia Machine Brasil">
+          <img class="brand-logo" src="/static/columbia_logo.png" alt="Columbia Machine Brasil">
+          <span class="brand-text">
+            <strong>Columbia Machine</strong>
+            <span>Portal financeiro</span>
+          </span>
+        </a>
+        <a class="admin-link" href="/login">Acesso administrativo</a>
+      </div>
+      <div class="hero-copy">
+        <div class="eyebrow"><i class="fas fa-shield-halved"></i> Consulta segura de cobrancas</div>
+        <h1>Boletos e documentos financeiros em um só lugar.</h1>
+        <p>Consulte cobranças por CPF/CNPJ ou pelo número da nota fiscal. Copie a linha digitável e acompanhe vencimentos com praticidade.</p>
+      </div>
+    </div>
+  </header>
 
-    <main class="main">
-        <!-- Search -->
-        <div class="search-card">
-            <h2><i class="fas fa-search"></i> Localizar boletos</h2>
-
-            <!-- Tabs de modo -->
-            <div style="display:flex;gap:4px;margin-bottom:16px;">
-                <button type="button" class="btn-tab active" data-modo="cpf_cnpj" id="tabCpf">
-                    <i class="fas fa-id-card"></i> CPF / CNPJ
-                </button>
-                <button type="button" class="btn-tab" data-modo="nota" id="tabNota">
-                    <i class="fas fa-file-invoice"></i> Nº da NF + Valor
-                </button>
-            </div>
-
-            <form class="search-form" id="searchForm" novalidate>
-                <!-- Modo CPF/CNPJ -->
-                <div class="field search-modo" id="modoCpf">
-                    <label for="cpfCnpj">CPF ou CNPJ</label>
-                    <input type="text" id="cpfCnpj" name="cpf_cnpj"
-                           placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                           maxlength="18" autocomplete="off" inputmode="numeric">
-                </div>
-
-                <!-- Modo NF + Valor -->
-                <div class="field search-modo" id="modoNota" style="display:none;">
-                    <label for="numeroNota">Número da NF</label>
-                    <input type="text" id="numeroNota" name="numero_nota"
-                           placeholder="Ex: 12345" maxlength="20" autocomplete="off">
-                </div>
-                <div class="field search-modo" id="modoValor" style="display:none;">
-                    <label for="valorNota">Valor (opcional)</label>
-                    <input type="text" id="valorNota" name="valor"
-                           placeholder="Ex: 1.500,00" autocomplete="off" inputmode="decimal">
-                </div>
-
-                <button type="submit" class="btn-search" id="btnSearch">
-                    <i class="fas fa-search"></i> Consultar
-                </button>
-            </form>
-            <div class="feedback" id="feedback" role="alert"></div>
+  <main class="main">
+    <div class="portal-grid">
+      <section class="search-card">
+        <div class="card-head">
+          <div>
+            <h2>Localizar boletos</h2>
+            <p>Informe os dados do pagador ou da nota fiscal para consultar as cobranças disponíveis.</p>
+          </div>
+          <div class="shield"><i class="fas fa-lock"></i></div>
         </div>
 
-        <!-- Loading -->
-        <div class="loading-spinner" id="loading">
-            <i class="fas fa-spinner"></i>
-            <p style="margin-top:8px;color:var(--text-muted);font-size:13px;font-weight:600;">Consultando boletos...</p>
+        <div class="tabs">
+          <button type="button" class="btn-tab active" data-modo="cpf_cnpj" id="tabCpf">
+            <i class="fas fa-id-card"></i> CPF / CNPJ
+          </button>
+          <button type="button" class="btn-tab" data-modo="nota" id="tabNota">
+            <i class="fas fa-file-invoice"></i> Numero da NF
+          </button>
         </div>
 
-        <!-- Results -->
-        <div class="results-section" id="resultsSection">
-            <div class="results-header">
-                <h3><i class="fas fa-file-invoice-dollar" style="color:var(--primary);margin-right:4px;"></i> Boletos encontrados</h3>
-                <span class="results-count" id="resultsCount">0 boletos</span>
-            </div>
-            <div id="resultsList"></div>
+        <form class="search-form" id="searchForm" novalidate>
+          <div class="field search-modo" id="modoCpf">
+            <label for="cpfCnpj">CPF ou CNPJ</label>
+            <input type="text" id="cpfCnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" autocomplete="off" inputmode="numeric">
+          </div>
+          <div class="field search-modo" id="modoNota" style="display:none;">
+            <label for="numeroNota">Numero da NF</label>
+            <input type="text" id="numeroNota" name="numero_nota" placeholder="Ex: 12345" maxlength="20" autocomplete="off">
+          </div>
+          <div class="field search-modo" id="modoValor" style="display:none;">
+            <label for="valorNota">Valor opcional</label>
+            <input type="text" id="valorNota" name="valor" placeholder="Ex: 1.500,00" autocomplete="off" inputmode="decimal">
+          </div>
+          <button type="submit" class="btn-search" id="btnSearch">
+            <i class="fas fa-search"></i> Consultar
+          </button>
+        </form>
+        <div class="feedback" id="feedback" role="alert"></div>
+      </section>
+
+      <aside class="trust-card">
+        <h3>Portal Columbia</h3>
+        <div class="trust-item">
+          <i class="fas fa-building-columns"></i>
+          <div><strong>Banco do Brasil</strong><span>Consulta integrada à cobrança bancária quando disponível.</span></div>
         </div>
-    </main>
+        <div class="trust-item">
+          <i class="fas fa-file-invoice-dollar"></i>
+          <div><strong>Notas e cobranças</strong><span>Busque por CNPJ ou pelo número da nota fiscal.</span></div>
+        </div>
+        <div class="trust-item">
+          <i class="fas fa-copy"></i>
+          <div><strong>Linha digitável</strong><span>Copie os dados do boleto para pagamento no seu banco.</span></div>
+        </div>
+      </aside>
+    </div>
 
-    <footer class="footer">
-        <p>Banco do Brasil &mdash; Cobrança &bull; Columbia Sync &copy; 2026</p>
-        <p style="margin-top:4px;"><a href="/login">Acesso administrativo</a></p>
-    </footer>
+    <div class="loading-spinner" id="loading">
+      <i class="fas fa-spinner"></i>
+      <p style="margin:10px 0 0;font-weight:700;">Consultando boletos...</p>
+    </div>
 
-    <script>
-    (function() {
-        const form = document.getElementById('searchForm');
-        const inputCpf = document.getElementById('cpfCnpj');
-        const inputNota = document.getElementById('numeroNota');
-        const inputValor = document.getElementById('valorNota');
-        const btn = document.getElementById('btnSearch');
-        const feedback = document.getElementById('feedback');
-        const loading = document.getElementById('loading');
-        const resultsSection = document.getElementById('resultsSection');
-        const resultsList = document.getElementById('resultsList');
-        const resultsCount = document.getElementById('resultsCount');
+    <section class="results-section" id="resultsSection">
+      <div class="results-header">
+        <h3><i class="fas fa-file-invoice-dollar" style="color:var(--blue-700);margin-right:6px;"></i> Boletos encontrados</h3>
+        <span class="results-count" id="resultsCount">0 boletos</span>
+      </div>
+      <div id="resultsList"></div>
+    </section>
+  </main>
 
-        let modoAtual = 'cpf_cnpj';
+  <footer class="footer">
+    <p>Banco do Brasil - Cobranca | Columbia Machine Brasil</p>
+  </footer>
 
-        /* ---------- Tabs ---------- */
-        document.querySelectorAll('.btn-tab').forEach(function(tab) {
-            tab.addEventListener('click', function() {
-                document.querySelectorAll('.btn-tab').forEach(function(t) { t.classList.remove('active'); });
-                this.classList.add('active');
-                modoAtual = this.getAttribute('data-modo');
+  <script>
+  (function() {
+    const form = document.getElementById('searchForm');
+    const inputCpf = document.getElementById('cpfCnpj');
+    const inputNota = document.getElementById('numeroNota');
+    const inputValor = document.getElementById('valorNota');
+    const btn = document.getElementById('btnSearch');
+    const feedback = document.getElementById('feedback');
+    const loading = document.getElementById('loading');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsList = document.getElementById('resultsList');
+    const resultsCount = document.getElementById('resultsCount');
+    let modoAtual = 'cpf_cnpj';
 
-                document.getElementById('modoCpf').style.display = modoAtual === 'cpf_cnpj' ? '' : 'none';
-                document.getElementById('modoNota').style.display = modoAtual === 'nota' ? '' : 'none';
-                document.getElementById('modoValor').style.display = modoAtual === 'nota' ? '' : 'none';
-                hideFeedback();
-            });
+    document.querySelectorAll('.btn-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.btn-tab').forEach(function(t) { t.classList.remove('active'); });
+        this.classList.add('active');
+        modoAtual = this.getAttribute('data-modo');
+        document.getElementById('modoCpf').style.display = modoAtual === 'cpf_cnpj' ? '' : 'none';
+        document.getElementById('modoNota').style.display = modoAtual === 'nota' ? '' : 'none';
+        document.getElementById('modoValor').style.display = modoAtual === 'nota' ? '' : 'none';
+        hideFeedback();
+      });
+    });
+
+    inputCpf.addEventListener('input', function() {
+      let v = this.value.replace(/\D/g, '');
+      if (v.length <= 11) {
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      } else {
+        v = v.substring(0, 14);
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d)/, '$1-$2');
+      }
+      this.value = v;
+    });
+
+    inputValor.addEventListener('input', function() {
+      this.value = this.value.replace(/[^\d,]/g, '');
+    });
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      hideFeedback();
+      resultsSection.classList.remove('show');
+      let body = {};
+
+      if (modoAtual === 'nota') {
+        const nota = inputNota.value.trim();
+        if (!nota) {
+          showFeedback('Informe o numero da nota fiscal.', 'error');
+          return;
+        }
+        const valorStr = inputValor.value.replace(/\./g, '').replace(',', '.').trim();
+        body = { modo: 'nota', numero_nota: nota, valor: valorStr ? parseFloat(valorStr) : 0 };
+      } else {
+        const doc = inputCpf.value.replace(/\D/g, '');
+        if (!doc || (doc.length !== 11 && doc.length !== 14)) {
+          showFeedback('Informe um CPF ou CNPJ valido.', 'error');
+          return;
+        }
+        body = { modo: 'cpf_cnpj', cpf_cnpj: doc };
+      }
+
+      loading.classList.add('show');
+      btn.disabled = true;
+      try {
+        const resp = await fetch('/api/boletos/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
         });
-
-        /* ---------- Máscara CPF/CNPJ ---------- */
-        inputCpf.addEventListener('input', function() {
-            let v = this.value.replace(/\D/g, '');
-            if (v.length <= 11) {
-                v = v.replace(/(\d{3})(\d)/, '$1.$2');
-                v = v.replace(/(\d{3})(\d)/, '$1.$2');
-                v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-            } else {
-                v = v.substring(0, 14);
-                v = v.replace(/^(\d{2})(\d)/, '$1.$2');
-                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
-                v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
-                v = v.replace(/(\d{4})(\d)/, '$1-$2');
-            }
-            this.value = v;
-        });
-
-        /* ---------- Máscara Valor ---------- */
-        inputValor.addEventListener('input', function() {
-            let v = this.value.replace(/[^\d,]/g, '');
-            this.value = v;
-        });
-
-        /* ---------- Submit ---------- */
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            hideFeedback();
-            resultsSection.classList.remove('show');
-
-            var body = {};
-
-            if (modoAtual === 'nota') {
-                var nota = inputNota.value.trim();
-                if (!nota) {
-                    showFeedback('Informe o número da nota fiscal.', 'error');
-                    return;
-                }
-                var valorStr = inputValor.value.replace(/\./g, '').replace(',', '.').trim();
-                body = { modo: 'nota', numero_nota: nota, valor: valorStr ? parseFloat(valorStr) : 0 };
-            } else {
-                var doc = inputCpf.value.replace(/\D/g, '');
-                if (!doc || (doc.length !== 11 && doc.length !== 14)) {
-                    showFeedback('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.', 'error');
-                    return;
-                }
-                body = { modo: 'cpf_cnpj', cpf_cnpj: doc };
-            }
-
-            loading.classList.add('show');
-            btn.disabled = true;
-
-            try {
-                const resp = await fetch('/api/boletos/consultar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await resp.json();
-
-                if (!resp.ok || !data.sucesso) {
-                    showFeedback(data.error || 'Erro ao consultar boletos.', 'error');
-                    return;
-                }
-
-                if (data.total === 0) {
-                    var msg = modoAtual === 'nota'
-                        ? 'Nenhum boleto encontrado para esta nota fiscal.'
-                        : 'Nenhum boleto encontrado para este CPF/CNPJ.';
-                    showFeedback(msg, 'info');
-                    renderEmpty();
-                    return;
-                }
-
-                if (data.mensagem) {
-                    showFeedback(data.mensagem, 'warning');
-                }
-
-                renderBoletos(data.boletos);
-            } catch (err) {
-                showFeedback('Erro de conexão. Tente novamente.', 'error');
-            } finally {
-                loading.classList.remove('show');
-                btn.disabled = false;
-            }
-        });
-
-        /* ---------- Render ---------- */
-        function renderBoletos(boletos) {
-            resultsList.innerHTML = '';
-            resultsCount.textContent = boletos.length + (boletos.length === 1 ? ' boleto' : ' boletos');
-            resultsSection.classList.add('show');
-
-            if (!boletos.length) {
-                renderEmpty();
-                return;
-            }
-
-            boletos.forEach(function(b) {
-                const statusClass = getStatusClass(b.status);
-                const card = document.createElement('div');
-                card.className = 'boleto-card';
-                card.innerHTML =
-                    '<div class="boleto-top">' +
-                        '<div class="boleto-id">' +
-                            'Nosso Nº <strong>' + esc(b.nosso_numero || '---') + '</strong>' +
-                            (b.numero_nota ? ' <small>Doc: ' + esc(b.numero_nota) + '</small>' : '') +
-                        '</div>' +
-                        '<span class="status-badge ' + statusClass + '">' +
-                            '<i class="fas fa-circle" style="font-size:6px;"></i> ' + esc(b.status || 'Gerado') +
-                        '</span>' +
-                    '</div>' +
-                    '<div class="boleto-grid">' +
-                        '<div class="boleto-field"><label>Valor</label><span class="valor">R$ ' + formatMoney(b.valor) + '</span></div>' +
-                        '<div class="boleto-field"><label>Vencimento</label><span>' + esc(b.vencimento || '---') + '</span></div>' +
-                        '<div class="boleto-field"><label>Pagamento</label><span>' + esc(b.data_pagamento || '---') + '</span></div>' +
-                        '<div class="boleto-field"><label>Banco</label><span>' + esc(b.banco || 'Banco do Brasil') + '</span></div>' +
-                    '</div>' +
-                    (b.linha_digitavel
-                        ? '<div class="boleto-linha">' +
-                            '<label>Linha Digitável</label>' +
-                            '<div class="linha-valor">' + esc(b.linha_digitavel) + '</div>' +
-                            '<button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '">' +
-                                '<i class="fas fa-copy"></i> Copiar linha digitável' +
-                            '</button>' +
-                          '</div>'
-                        : '') +
-                    (b.codigo_barras
-                        ? '<div style="margin-top:8px;">' +
-                            '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '">' +
-                                '<i class="fas fa-barcode"></i> Copiar código de barras' +
-                            '</button>' +
-                          '</div>'
-                        : '');
-                resultsList.appendChild(card);
-            });
+        const data = await resp.json();
+        if (!resp.ok || !data.sucesso) {
+          showFeedback(data.error || 'Erro ao consultar boletos.', 'error');
+          return;
         }
-
-        function renderEmpty() {
-            resultsList.innerHTML =
-                '<div class="empty-state">' +
-                    '<i class="fas fa-file-invoice"></i>' +
-                    '<h3>Nenhum boleto encontrado</h3>' +
-                    '<p>Verifique os dados informados e tente novamente.</p>' +
-                '</div>';
-            resultsSection.classList.add('show');
-            resultsCount.textContent = '0 boletos';
+        if (data.total === 0) {
+          showFeedback(modoAtual === 'nota' ? 'Nenhum boleto encontrado para esta nota fiscal.' : 'Nenhum boleto encontrado para este CPF/CNPJ.', 'info');
+          renderEmpty();
+          return;
         }
+        if (data.mensagem) showFeedback(data.mensagem, 'warning');
+        renderBoletos(data.boletos || []);
+      } catch (err) {
+        showFeedback('Erro de conexao. Tente novamente.', 'error');
+      } finally {
+        loading.classList.remove('show');
+        btn.disabled = false;
+      }
+    });
 
-        /* ---------- Copy ---------- */
-        document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.btn-copy');
-            if (!btn) return;
-            const text = btn.getAttribute('data-copy');
-            if (!text) return;
+    function renderBoletos(boletos) {
+      resultsList.innerHTML = '';
+      resultsCount.textContent = boletos.length + (boletos.length === 1 ? ' boleto' : ' boletos');
+      resultsSection.classList.add('show');
+      if (!boletos.length) {
+        renderEmpty();
+        return;
+      }
+      boletos.forEach(function(b) {
+        const card = document.createElement('div');
+        card.className = 'boleto-card';
+        card.innerHTML =
+          '<div class="boleto-top">' +
+            '<div class="boleto-id">Nosso No. <strong>' + esc(b.nosso_numero || '---') + '</strong>' +
+              (b.numero_nota ? '<small>Documento: ' + esc(b.numero_nota) + '</small>' : '') +
+            '</div>' +
+            '<span class="status-badge ' + getStatusClass(b.status) + '"><i class="fas fa-circle" style="font-size:6px;"></i> ' + esc(b.status || 'Gerado') + '</span>' +
+          '</div>' +
+          '<div class="boleto-grid">' +
+            '<div class="boleto-field"><label>Valor</label><span class="valor">R$ ' + formatMoney(b.valor) + '</span></div>' +
+            '<div class="boleto-field"><label>Vencimento</label><span>' + esc(b.vencimento || '---') + '</span></div>' +
+            '<div class="boleto-field"><label>Pagamento</label><span>' + esc(b.data_pagamento || '---') + '</span></div>' +
+            '<div class="boleto-field"><label>Banco</label><span>' + esc(b.banco || 'Banco do Brasil') + '</span></div>' +
+          '</div>' +
+          (b.linha_digitavel ? '<div class="boleto-linha"><label>Linha digitavel</label><div class="linha-valor">' + esc(b.linha_digitavel) + '</div><button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '"><i class="fas fa-copy"></i> Copiar linha digitavel</button></div>' : '') +
+          (b.codigo_barras ? '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '"><i class="fas fa-barcode"></i> Copiar codigo de barras</button>' : '');
+        resultsList.appendChild(card);
+      });
+    }
 
-            navigator.clipboard.writeText(text).then(function() {
-                btn.classList.add('copied');
-                btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
-                setTimeout(function() {
-                    btn.classList.remove('copied');
-                    if (btn.getAttribute('data-copy') === text) {
-                        const isBarcode = text.length > 50 && !text.includes(' ');
-                        btn.innerHTML = isBarcode
-                            ? '<i class="fas fa-barcode"></i> Copiar código de barras'
-                            : '<i class="fas fa-copy"></i> Copiar linha digitável';
-                    }
-                }, 2000);
-            });
-        });
+    function renderEmpty() {
+      resultsList.innerHTML = '<div class="empty-state"><i class="fas fa-file-invoice"></i><h3>Nenhum boleto encontrado</h3><p>Confira os dados informados ou entre em contato com a Columbia.</p></div>';
+      resultsSection.classList.add('show');
+      resultsCount.textContent = '0 boletos';
+    }
 
-        /* ---------- Helpers ---------- */
-        function showFeedback(msg, type) {
-            feedback.className = 'feedback show ' + type;
-            feedback.innerHTML = '<i class="fas fa-' + (type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle') + '"></i> ' + esc(msg);
-        }
-        function hideFeedback() { feedback.className = 'feedback'; feedback.innerHTML = ''; }
+    document.addEventListener('click', function(e) {
+      const copyBtn = e.target.closest('.btn-copy');
+      if (!copyBtn) return;
+      const text = copyBtn.getAttribute('data-copy') || '';
+      navigator.clipboard.writeText(text).then(function() {
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copiado';
+        setTimeout(function() {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = text.includes(' ') ? '<i class="fas fa-copy"></i> Copiar linha digitavel' : '<i class="fas fa-barcode"></i> Copiar codigo de barras';
+        }, 1800);
+      });
+    });
 
-        function getStatusClass(status) {
-            const s = (status || '').toLowerCase();
-            if (s === 'pago' || s === 'paid' || s === 'liquidado') return 'status-pago';
-            if (s === 'vencido' || s === 'overdue') return 'status-vencido';
-            if (s === 'pendente' || s === 'pending' || s === 'registrado') return 'status-pendente';
-            return 'status-gerado';
-        }
-
-        function formatMoney(v) {
-            return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-
-        function esc(s) {
-            const d = document.createElement('div');
-            d.textContent = s || '';
-            return d.innerHTML;
-        }
-
-        function escAttr(s) {
-            return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        }
-    })();
-    </script>
+    function showFeedback(msg, type) {
+      feedback.className = 'feedback show ' + type;
+      feedback.innerHTML = '<i class="fas fa-' + (type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle') + '"></i> ' + esc(msg);
+    }
+    function hideFeedback() { feedback.className = 'feedback'; feedback.innerHTML = ''; }
+    function getStatusClass(status) {
+      const s = String(status || '').toLowerCase();
+      if (s.includes('pago') || s.includes('liquid')) return 'status-pago';
+      if (s.includes('venc')) return 'status-vencido';
+      if (s.includes('pend') || s.includes('registr')) return 'status-pendente';
+      return 'status-gerado';
+    }
+    function formatMoney(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function escAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  })();
+  </script>
 </body>
 </html>
