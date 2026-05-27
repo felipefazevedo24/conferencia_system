@@ -2240,6 +2240,166 @@ def test_api_boletos_consulta_publica_por_cpf_cnpj_retorna_boleto_local(tmp_path
     assert payload["boletos"][0]["nome_pagador"] == "Cliente Portal"
 
 
+def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    app.config.update(
+        BB_CLIENT_ID="client-test",
+        BB_CLIENT_SECRET="secret-test",
+        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
+        BB_CONVENIO="1234567",
+    )
+
+    class FakeResp:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("erro bb")
+
+        def json(self):
+            return self._payload
+
+    chamadas_get = []
+
+    def fake_get(url, **kwargs):
+        chamadas_get.append(kwargs.get("params") or {})
+        return FakeResp(
+            {
+                "boletos": [
+                    {
+                        "numeroTituloCliente": "1234567890",
+                        "numeroTituloBeneficiario": "NF900",
+                        "valorOriginal": 450.25,
+                        "dataVencimento": "2026-06-15",
+                        "codigoLinhaDigitavel": "00190.00009 01234.567890 12345.678901 1 00000000045025",
+                        "descricaoEstadoTituloCobranca": "Registrado",
+                        "pagador": {"nome": "Cliente API", "numeroInscricao": "12345678000199"},
+                    }
+                ]
+            }
+        )
+
+    with app.app_context(), patch(
+        "conferencia_app.services.bb_boleto_service.requests.post",
+        return_value=FakeResp({"access_token": "token-bb", "expires_in": 3600}),
+    ), patch("conferencia_app.services.bb_boleto_service.requests.get", side_effect=fake_get):
+        from conferencia_app.services.bb_boleto_service import BBBoletoService
+
+        BBBoletoService._token_cache = {}
+        consulta = client.post(
+            "/api/boletos/consultar",
+            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
+        )
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["fonte"] == "bb_api"
+    assert payload["total"] == 1
+    assert payload["boletos"][0]["numero_nota"] == "NF900"
+    assert payload["boletos"][0]["nome_pagador"] == "Cliente API"
+    assert any(params.get("numeroInscricaoPagador") == "12345678000199" for params in chamadas_get)
+
+
+def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    app.config.update(
+        BB_CLIENT_ID="client-test",
+        BB_CLIENT_SECRET="secret-test",
+        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
+        BB_CONVENIO="1234567",
+    )
+
+    class FakeResp:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("erro bb")
+
+        def json(self):
+            return self._payload
+
+    chamadas_get = []
+
+    def fake_get(url, **kwargs):
+        chamadas_get.append(kwargs.get("params") or {})
+        return FakeResp(
+            {
+                "boletos": [
+                    {
+                        "numeroTituloCliente": "99887766",
+                        "numeroTituloBeneficiario": "11435",
+                        "valorOriginal": 5239.5,
+                        "dataVencimento": "2026-06-20",
+                        "descricaoEstadoTituloCobranca": "Registrado",
+                        "pagador": {"nome": "Cliente NF", "numeroInscricao": "30482274000125"},
+                    }
+                ]
+            }
+        )
+
+    with app.app_context(), patch(
+        "conferencia_app.services.bb_boleto_service.requests.post",
+        return_value=FakeResp({"access_token": "token-bb", "expires_in": 3600}),
+    ), patch("conferencia_app.services.bb_boleto_service.requests.get", side_effect=fake_get):
+        from conferencia_app.services.bb_boleto_service import BBBoletoService
+
+        BBBoletoService._token_cache = {}
+        consulta = client.post("/api/boletos/consultar", json={"modo": "nota", "numero_nota": "11435"})
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["total"] == 1
+    assert payload["boletos"][0]["nosso_numero"] == "99887766"
+    assert payload["boletos"][0]["valor"] == 5239.5
+    assert any(params.get("numeroTituloBeneficiario") == "11435" for params in chamadas_get)
+
+
+def test_portal_cobranca_token_lista_documentos_e_boletos(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        db.session.add(
+            BoletoContaReceber(
+                numero_nota="NFPORTAL",
+                chave_acesso="4" * 44,
+                banco="Banco do Brasil",
+                valor=199.9,
+                nosso_numero="PORTAL123",
+                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000019990",
+                codigo_barras="00190000000000000000000000000000000000000000",
+                status="Gerado",
+                usuario_geracao="teste",
+                cpf_cnpj_pagador="12345678000199",
+                nome_pagador="Cliente Portal Token",
+            )
+        )
+        db.session.commit()
+        from conferencia_app.services.cliente_portal_service import gerar_token_nf
+
+        token = gerar_token_nf("NFPORTAL", "4" * 44, "12345678000199")
+
+    page = client.get(f"/portal/cobranca/{token}")
+    assert page.status_code == 200
+
+    dados = client.get(f"/api/portal/cobranca/{token}")
+    assert dados.status_code == 200
+    payload = dados.get_json()
+    assert payload["sucesso"] is True
+    assert payload["nota"]["numero"] == "NFPORTAL"
+    assert payload["total_boletos"] == 1
+    assert payload["boletos"][0]["nosso_numero"] == "PORTAL123"
+
+
 def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
     app = build_test_app(tmp_path)
     app.config.update(
@@ -2247,7 +2407,9 @@ def test_envio_nfe_gera_danfe_quando_erp_nao_tem_pdf(tmp_path):
         MAIL_PASSWORD="senha",
         MAIL_SENDER_NAME="Fiscal Teste",
         NFE_EMAIL_MODO_TESTE=False,
+        NFE_EMAIL_PEDIDOS_PDF_DIR=str(tmp_path),
     )
+    (tmp_path / "PEDIDO 11560 27.05.26.pdf").write_bytes(b"%PDF-1.7 pedido oficial erp")
 
     xml_bytes = build_test_nfe_xml(
         "9100",
@@ -2298,7 +2460,9 @@ def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
         MAIL_PASSWORD="senha",
         MAIL_SENDER_NAME="Fiscal Teste",
         NFE_EMAIL_MODO_TESTE=False,
+        NFE_EMAIL_PEDIDOS_PDF_DIR=str(tmp_path),
     )
+    (tmp_path / "PEDIDO 11560 27.05.26.pdf").write_bytes(b"%PDF-1.7 pedido oficial erp")
 
     chave = "9" * 44
     xml_bytes = f"""
@@ -2316,10 +2480,10 @@ def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
                         <cProd>IND-1</cProd>
                         <xProd>Peca enviada para industrializacao</xProd>
                         <CFOP>5901</CFOP>
-                        <xPed>11560</xPed>
                         <qCom>2.0000</qCom>
                     </prod>
                 </det>
+                <infAdic><infCpl>ORDEM DE COMPRA: 11560</infCpl></infAdic>
             </infNFe>
         </NFe>
     </nfeProc>
@@ -2344,17 +2508,6 @@ def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
         },
     ), patch(
         "conferencia_app.services.nfe_email_service.buscar_linhas_pedido",
-        return_value=[
-            {
-                "pedido_compra": "11560",
-                "codigo_material": "IND-1",
-                "descricao_material": "Peca enviada para industrializacao",
-                "qtd": 2,
-                "valor_unit": 15.5,
-                "fornecedor_nome": "Fornecedor Industrializacao",
-                "fornecedor_cnpj": "11222333000144",
-            }
-        ],
     ) as buscar_pedido_mock, patch(
         "conferencia_app.services.nfe_email_service.enviar_mensagem_smtp",
         side_effect=fake_enviar_smtp,
@@ -2371,7 +2524,7 @@ def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
         assert resultado["sucesso"] is True
         assert resultado["anexou_pedido_compra"] is True
         assert resultado["pedidos_compra_anexados"] == ["11560"]
-        buscar_pedido_mock.assert_called_once_with("11560")
+        buscar_pedido_mock.assert_not_called()
         assert mensagens
         filenames = [part.get_filename() for part in mensagens[0].walk() if part.get_filename()]
         assert f"NFe-{chave}.xml" in filenames

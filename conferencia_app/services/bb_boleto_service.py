@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from flask import current_app
@@ -53,6 +53,10 @@ def _format_api_date(value) -> str | None:
         except ValueError:
             continue
     return raw
+
+
+def _api_date(value: datetime) -> str:
+    return value.strftime("%d.%m.%Y")
 
 
 class BBBoletoService:
@@ -149,6 +153,46 @@ class BBBoletoService:
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         }
+
+    @classmethod
+    def _base_query_params(cls) -> dict | None:
+        convenio = str(current_app.config.get("BB_CONVENIO", "")).strip()
+        app_key = str(current_app.config.get("BB_DEVELOPER_APPLICATION_KEY", "")).strip()
+        if not convenio or not app_key:
+            return None
+        try:
+            dias = int(current_app.config.get("BB_CONSULTA_DIAS_RETROATIVOS", 730) or 730)
+        except (TypeError, ValueError):
+            dias = 730
+        hoje = datetime.now()
+        return {
+            "gw-dev-app-key": app_key,
+            "numeroConvenio": convenio,
+            "indicadorSituacao": "A",
+            "dataInicioVencimento": _api_date(hoje - timedelta(days=max(dias, 1))),
+            "dataFimVencimento": _api_date(hoje + timedelta(days=730)),
+        }
+
+    @classmethod
+    def _extrair_lista_boletos_api(cls, payload) -> list[dict]:
+        if isinstance(payload, list):
+            return [x for x in payload if isinstance(x, dict)]
+        if not isinstance(payload, dict):
+            return []
+        for key in (
+            "boletos",
+            "listaBoletos",
+            "listaBoleto",
+            "titulos",
+            "listaTitulos",
+            "itens",
+            "items",
+            "data",
+        ):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [x for x in value if isinstance(x, dict)]
+        return [payload] if payload else []
 
     @classmethod
     def _normalize_bank_name(cls, value: str) -> str:
@@ -284,6 +328,66 @@ class BBBoletoService:
             return None
 
     @classmethod
+    def consultar_boletos_api(cls, *, cpf_cnpj: str = "", numero_nota: str = "") -> list[dict]:
+        headers = cls._headers()
+        params_base = cls._base_query_params()
+        base_url = str(current_app.config.get("BB_API_BASE", "")).strip().rstrip("/")
+        if headers is None or params_base is None or not base_url:
+            return []
+
+        doc = _only_digits(cpf_cnpj)
+        nota = str(numero_nota or "").strip()
+        if not doc and not nota:
+            return []
+
+        tentativas: list[dict] = []
+        if doc:
+            tentativas.extend([
+                {"numeroInscricaoPagador": doc},
+                {"cpfCnpjPagador": doc},
+                {"cnpjCpfPagador": doc},
+            ])
+        if nota:
+            tentativas.extend([
+                {"numeroTituloBeneficiario": nota},
+                {"seuNumero": nota},
+                {"numeroDocumento": nota},
+            ])
+
+        vistos = set()
+        resultados: list[dict] = []
+        for extra in tentativas:
+            params = dict(params_base)
+            params.update(extra)
+            try:
+                resp = requests.get(
+                    f"{base_url}/boletos",
+                    params=params,
+                    headers=headers,
+                    cert=cls._cert(),
+                    timeout=cls._timeout(),
+                )
+                if resp.status_code in (400, 404):
+                    continue
+                resp.raise_for_status()
+                for raw in cls._extrair_lista_boletos_api(resp.json()):
+                    boleto = cls._normalizar_boleto_api(raw)
+                    if doc and _only_digits(boleto.get("cpf_cnpj_pagador")) != doc:
+                        continue
+                    if nota and str(boleto.get("numero_nota") or "").strip() != nota:
+                        continue
+                    chave = boleto.get("nosso_numero") or boleto.get("linha_digitavel") or str(raw)
+                    if chave in vistos:
+                        continue
+                    vistos.add(chave)
+                    resultados.append(boleto)
+                if resultados:
+                    break
+            except Exception as exc:
+                logger.warning("BB: falha ao listar boletos (%s) - %s", extra, exc)
+        return resultados
+
+    @classmethod
     def _merge_boleto(cls, local_boleto: dict, api_boleto: dict | None) -> dict:
         merged = dict(local_boleto)
         if not api_boleto:
@@ -395,7 +499,17 @@ class BBBoletoService:
             for b in boletos
         ]
         enriched, _ = cls._enriquecer_boletos_com_api(resultado)
-        return enriched
+        api_result = cls.consultar_boletos_api(numero_nota=nota) if cls.is_configured() else []
+        if valor is not None and valor > 0:
+            margem = valor * 0.01
+            api_result = [b for b in api_result if margem == 0 or (valor - margem) <= float(b.get("valor") or 0) <= (valor + margem)]
+
+        por_chave = {}
+        for item in enriched + api_result:
+            chave = item.get("nosso_numero") or item.get("linha_digitavel") or item.get("numero_nota")
+            if chave:
+                por_chave[str(chave)] = item
+        return list(por_chave.values())
 
     @classmethod
     def consultar_boletos(cls, cpf_cnpj: str) -> dict:
@@ -405,6 +519,17 @@ class BBBoletoService:
 
         local_result = cls.consultar_boletos_local(doc)
         enriched, refreshed = cls._enriquecer_boletos_com_api(local_result)
+        api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
+        if api_result:
+            por_chave = {}
+            for item in enriched + api_result:
+                chave = item.get("nosso_numero") or item.get("linha_digitavel") or item.get("numero_nota")
+                if chave:
+                    por_chave[str(chave)] = item
+            return {
+                "fonte": "bb_api+local" if enriched else "bb_api",
+                "boletos": list(por_chave.values()),
+            }
         return {
             "fonte": "bb_api+local" if refreshed else "local",
             "boletos": enriched,

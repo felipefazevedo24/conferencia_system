@@ -15,6 +15,7 @@ import re
 import threading
 import os
 from io import BytesIO
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 from email.mime.application import MIMEApplication
@@ -31,6 +32,7 @@ from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
 from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from .danfe_service import gerar_danfe
 from .pedidos_service import buscar_linhas_pedido
+from .cliente_portal_service import gerar_token_nf, portal_base_url
 from .planilhas_cadastros import buscar_email_por_cnpj
 from .smtp_service import enviar_mensagem_smtp
 
@@ -148,7 +150,7 @@ def _parse_cfops_do_xml(xml_bytes: bytes | None) -> set[str]:
 
 
 def _parse_pedidos_do_xml(xml_bytes: bytes | None) -> list[str]:
-    """Retorna os pedidos de compra informados em <xPed> no XML da NF-e."""
+    """Retorna pedidos de compra informados em <xPed> ou nas informacoes complementares."""
     if not xml_bytes:
         return []
     try:
@@ -158,11 +160,30 @@ def _parse_pedidos_do_xml(xml_bytes: bytes | None) -> list[str]:
     ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
     pedidos: list[str] = []
     vistos: set[str] = set()
-    for el in root.findall(".//nfe:det/nfe:prod/nfe:xPed", ns):
-        pedido = str(el.text or "").strip()
+
+    def adicionar_pedido(valor: Any) -> None:
+        pedido = str(valor or "").strip()
         if pedido and pedido not in vistos:
             vistos.add(pedido)
             pedidos.append(pedido)
+
+    for el in root.findall(".//nfe:det/nfe:prod/nfe:xPed", ns):
+        adicionar_pedido(el.text)
+
+    textos_complementares = []
+    for caminho in (".//nfe:infAdic/nfe:infCpl", ".//nfe:infAdic/nfe:obsCont/nfe:xTexto"):
+        for el in root.findall(caminho, ns):
+            if el.text:
+                textos_complementares.append(el.text)
+
+    for texto in textos_complementares:
+        for match in re.finditer(
+            r"(?:ordem\s+de\s+compra|pedido\s+de\s+compra|pedido|oc)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})",
+            texto,
+            flags=re.IGNORECASE,
+        ):
+            pedido = match.group(1).strip(" .;,:")
+            adicionar_pedido(pedido)
     return pedidos
 
 
@@ -204,6 +225,33 @@ def _texto_pdf(valor: Any, limite: int = 80) -> str:
     return texto
 
 
+def _fmt_data_br(valor: Any) -> str:
+    raw = str(valor or "").strip()
+    if not raw:
+        return ""
+    try:
+        return datetime.fromisoformat(raw[:10]).strftime("%d/%m/%Y")
+    except ValueError:
+        return raw[:10]
+
+
+def _fmt_doc_br(valor: Any) -> str:
+    digitos = _somente_digitos(valor)
+    if len(digitos) == 14:
+        return f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
+    if len(digitos) == 11:
+        return f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
+    return str(valor or "").strip()
+
+
+def _meta_pedido(linhas: list[dict], chave: str, padrao: Any = "") -> Any:
+    for linha in linhas:
+        valor = linha.get(chave)
+        if valor not in (None, ""):
+            return valor
+    return padrao
+
+
 def _gerar_pdf_pedido_compra(numero_pedido: str, linhas: list[dict], nota: NotaEmitida) -> bytes | None:
     if not numero_pedido or not linhas:
         return None
@@ -212,103 +260,255 @@ def _gerar_pdf_pedido_compra(numero_pedido: str, linhas: list[dict], nota: NotaE
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm
-        from reportlab.pdfgen import canvas
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     except Exception as exc:
         current_app.logger.warning("ReportLab indisponivel para gerar PDF do pedido %s: %s", numero_pedido, exc)
         return None
 
+    app = current_app._get_current_object()
     buffer = BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    largura, altura = A4
-    margem = 16 * mm
-    y = altura - margem
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=10 * mm,
+        rightMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+        title=f"PEDIDO {numero_pedido}",
+    )
 
-    fornecedor = linhas[0].get("fornecedor_nome") or linhas[0].get("fornecedor") or nota.dest_nome or ""
-    cnpj = linhas[0].get("fornecedor_cnpj") or ""
+    normal = ParagraphStyle("normal", fontName="Helvetica", fontSize=7.2, leading=8.8, textColor=colors.black)
+    small = ParagraphStyle("small", parent=normal, fontSize=6.5, leading=8)
+    bold = ParagraphStyle("bold", parent=normal, fontName="Helvetica-Bold")
+    title = ParagraphStyle("title", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=15, alignment=1)
+    box_title = ParagraphStyle("box_title", parent=normal, fontName="Helvetica-Bold", fontSize=7, leading=8, textColor=colors.white)
 
-    def header() -> None:
-        nonlocal y
-        pdf.setFillColor(colors.HexColor("#0f2f57"))
-        pdf.rect(0, altura - 32 * mm, largura, 32 * mm, fill=1, stroke=0)
-        pdf.setFillColor(colors.white)
-        pdf.setFont("Helvetica-Bold", 15)
-        pdf.drawString(margem, altura - 16 * mm, f"Pedido de Compra {numero_pedido}")
-        pdf.setFont("Helvetica", 9)
-        pdf.drawString(margem, altura - 23 * mm, f"Vinculado a NF-e {nota.numero} | Chave {nota.chave}")
-        y = altura - 43 * mm
+    def p(texto: Any, style=normal) -> Paragraph:
+        return Paragraph(str(texto or "").replace("\n", "<br/>"), style)
 
-    def rodape() -> None:
-        pdf.setFont("Helvetica", 7)
-        pdf.setFillColor(colors.HexColor("#64748b"))
-        pdf.drawString(margem, 10 * mm, "Documento gerado automaticamente pelo Columbia Sync a partir dos dados do ERP.")
+    def label_val(label: str, valor: Any) -> Paragraph:
+        return p(f"<b>{label}</b> {valor or ''}")
 
-    header()
-    pdf.setFillColor(colors.HexColor("#0f172a"))
-    pdf.setFont("Helvetica-Bold", 9)
-    pdf.drawString(margem, y, "Fornecedor")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margem + 28 * mm, y, _texto_pdf(fornecedor, 75))
-    y -= 6 * mm
-    if cnpj:
-        pdf.setFont("Helvetica-Bold", 9)
-        pdf.drawString(margem, y, "CNPJ")
-        pdf.setFont("Helvetica", 9)
-        pdf.drawString(margem + 28 * mm, y, _texto_pdf(cnpj, 40))
-        y -= 8 * mm
-    else:
-        y -= 2 * mm
+    fornecedor = _meta_pedido(linhas, "fornecedor_nome") or _meta_pedido(linhas, "fornecedor") or nota.dest_nome or ""
+    cnpj = _fmt_doc_br(_meta_pedido(linhas, "fornecedor_cnpj"))
+    endereco = " ".join(
+        parte for parte in [
+            str(_meta_pedido(linhas, "logradouro") or "").strip(),
+            str(_meta_pedido(linhas, "numero") or "").strip(),
+            str(_meta_pedido(linhas, "complemento") or "").strip(),
+        ] if parte
+    )
+    cidade_uf = " / ".join(
+        parte for parte in [
+            str(_meta_pedido(linhas, "cidade") or "").strip(),
+            str(_meta_pedido(linhas, "uf") or "").strip(),
+        ] if parte
+    )
+    data_pedido = _fmt_data_br(_meta_pedido(linhas, "data_pedido"))
+    total_oficial = float(_meta_pedido(linhas, "totalgeral", 0) or 0)
+    subtotal_oficial = float(_meta_pedido(linhas, "subtotal", 0) or 0)
+    frete = float(_meta_pedido(linhas, "vl_frete", 0) or 0)
+    desconto = float(_meta_pedido(linhas, "vl_desconto", 0) or 0)
+    ipi_total = float(_meta_pedido(linhas, "ipi_total", 0) or 0)
+    icms_total = float(_meta_pedido(linhas, "icms_total", 0) or 0)
 
-    total = 0.0
-    colunas = [
-        (margem, "Codigo"),
-        (margem + 34 * mm, "Descricao"),
-        (margem + 118 * mm, "Qtd"),
-        (margem + 140 * mm, "Unitario"),
-        (margem + 166 * mm, "Total"),
+    logo_path = os.path.normpath(os.path.join(app.root_path, "..", "static", "columbia_logo.png"))
+    logo_cell: Any = ""
+    if os.path.exists(logo_path):
+        try:
+            logo_cell = Image(logo_path, width=22 * mm, height=15 * mm, kind="proportional")
+        except Exception:
+            logo_cell = ""
+
+    story: list[Any] = []
+    empresa = [
+        p("<b>COLUMBIA MACHINE BRASIL LTDA</b>", bold),
+        p("Rod. Waldomiro Correa de Camargo, Km 52,5 - Itu/SP", small),
+        p(f"CNPJ: {_fmt_doc_br(app.config.get('EMPRESA_CNPJ'))}", small),
     ]
+    header = Table(
+        [[logo_cell, empresa, p("ORDEM DE COMPRA", title), p(f"<b>No. {numero_pedido}</b><br/>Emissao: {data_pedido}", bold)]],
+        colWidths=[27 * mm, 64 * mm, 58 * mm, 42 * mm],
+        rowHeights=[23 * mm],
+    )
+    header.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (2, 0), (3, 0), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 3 * mm))
 
-    def cabecalho_tabela() -> None:
-        nonlocal y
-        pdf.setFillColor(colors.HexColor("#e2e8f0"))
-        pdf.rect(margem, y - 4 * mm, largura - 2 * margem, 7 * mm, fill=1, stroke=0)
-        pdf.setFillColor(colors.HexColor("#0f172a"))
-        pdf.setFont("Helvetica-Bold", 8)
-        for x, titulo in colunas:
-            pdf.drawString(x, y - 1 * mm, titulo)
-        y -= 8 * mm
+    fornecedor_tbl = Table(
+        [
+            [p("FORNECEDOR", box_title), p("DADOS DO PEDIDO", box_title)],
+            [
+                p(
+                    f"<b>{fornecedor}</b><br/>CNPJ: {cnpj}<br/>"
+                    f"Endereco: {endereco}<br/>Bairro: {_meta_pedido(linhas, 'bairro')}<br/>"
+                    f"Cidade/UF: {cidade_uf} CEP: {_meta_pedido(linhas, 'cep')}<br/>"
+                    f"Contato: {_meta_pedido(linhas, 'contato')} Tel.: {_meta_pedido(linhas, 'telefone')}<br/>"
+                    f"E-mail: {_meta_pedido(linhas, 'email')}"
+                ),
+                p(
+                    f"<b>Cond. Pagamento:</b> {_meta_pedido(linhas, 'cond_pagamento')}<br/>"
+                    f"<b>Forma Pagto:</b> {_meta_pedido(linhas, 'forma_pgto')}<br/>"
+                    f"<b>Prazo/Obs. Entrega:</b> {_meta_pedido(linhas, 'prazo_entrega') or _meta_pedido(linhas, 'observacoes')}<br/>"
+                    f"<b>Solicitante:</b> {_meta_pedido(linhas, 'solicitante')}<br/>"
+                    f"<b>Movimento:</b> {_meta_pedido(linhas, 'tipo_movimento')}<br/>"
+                    f"<b>NF-e vinculada:</b> {nota.numero}"
+                ),
+            ],
+        ],
+        colWidths=[116 * mm, 75 * mm],
+    )
+    fornecedor_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(fornecedor_tbl)
+    story.append(Spacer(1, 3 * mm))
 
-    cabecalho_tabela()
-    pdf.setFont("Helvetica", 8)
-    for linha in linhas[:80]:
-        if y < 24 * mm:
-            rodape()
-            pdf.showPage()
-            header()
-            cabecalho_tabela()
-            pdf.setFont("Helvetica", 8)
-
+    item_rows: list[list[Any]] = [[
+        p("ITEM", bold), p("CODIGO", bold), p("DESCRICAO", bold),
+        p("UN", bold), p("QTDE", bold), p("VL UNIT.", bold), p("VL TOTAL", bold),
+    ]]
+    total_calculado = 0.0
+    for idx, linha in enumerate(linhas, start=1):
         qtd = float(linha.get("qtd") or linha.get("pendente") or 0)
         unitario = float(linha.get("valor_unit") or linha.get("preco_unitario") or 0)
         total_linha = float(linha.get("total_item") or linha.get("vl_pendente") or (qtd * unitario))
-        total += total_linha
-        pdf.setFillColor(colors.HexColor("#0f172a"))
-        pdf.drawString(margem, y, _texto_pdf(linha.get("codigo_material") or linha.get("cod_interno"), 18))
-        pdf.drawString(margem + 34 * mm, y, _texto_pdf(linha.get("descricao_material") or linha.get("descricao"), 60))
-        pdf.drawRightString(margem + 132 * mm, y, _fmt_decimal(qtd, 4))
-        pdf.drawRightString(margem + 158 * mm, y, _fmt_decimal(unitario, 2))
-        pdf.drawRightString(largura - margem, y, _fmt_decimal(total_linha, 2))
-        y -= 5 * mm
+        total_calculado += total_linha
+        item_rows.append([
+            p(str(idx), small),
+            p(linha.get("codigo_material") or linha.get("cod_interno") or "", small),
+            p(linha.get("descricao_material") or linha.get("descricao") or "", small),
+            p(linha.get("unidade") or "UN", small),
+            p(_fmt_decimal(qtd, 4), small),
+            p(_fmt_decimal(unitario, 4), small),
+            p(_fmt_decimal(total_linha, 2), small),
+        ])
 
-    y -= 4 * mm
-    pdf.setStrokeColor(colors.HexColor("#cbd5e1"))
-    pdf.line(margem, y, largura - margem, y)
-    y -= 7 * mm
-    pdf.setFillColor(colors.HexColor("#0f172a"))
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawRightString(largura - margem, y, f"Total do pedido: R$ {_fmt_decimal(total, 2)}")
-    rodape()
-    pdf.save()
+    itens_tbl = Table(item_rows, colWidths=[10 * mm, 25 * mm, 83 * mm, 10 * mm, 20 * mm, 21 * mm, 22 * mm], repeatRows=1)
+    itens_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d9d9d9")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    story.append(itens_tbl)
+
+    total = total_oficial or total_calculado
+    totais_tbl = Table(
+        [
+            [label_val("Subtotal:", f"R$ {_fmt_decimal(subtotal_oficial or total_calculado, 2)}"),
+             label_val("Frete:", f"R$ {_fmt_decimal(frete, 2)}"),
+             label_val("Desconto:", f"R$ {_fmt_decimal(desconto, 2)}")],
+            [label_val("IPI:", f"R$ {_fmt_decimal(ipi_total, 2)}"),
+             label_val("ICMS:", f"R$ {_fmt_decimal(icms_total, 2)}"),
+             p(f"<b>TOTAL GERAL: R$ {_fmt_decimal(total, 2)}</b>", bold)],
+        ],
+        colWidths=[63.7 * mm, 63.7 * mm, 63.6 * mm],
+    )
+    totais_tbl.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
+        ("BACKGROUND", (2, 1), (2, 1), colors.HexColor("#eeeeee")),
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(totais_tbl)
+    story.append(Spacer(1, 3 * mm))
+
+    obs_texto = (
+        "IMPORTANTE: Favor mencionar o numero do pedido de compra na nota fiscal. "
+        "Somente receberemos material mediante nota fiscal. Horario de recebimento: das 7h as 16h."
+    )
+    story.append(Table([[p("OBSERVACOES", box_title)], [p(obs_texto)]], colWidths=[191 * mm], style=TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ])))
+
+    def add_page_number(canvas, doc_obj):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 6.5)
+        canvas.drawString(10 * mm, 6 * mm, "Gerado automaticamente a partir dos dados oficiais do ERP/Postgres.")
+        canvas.drawRightString(A4[0] - 10 * mm, 6 * mm, f"Pagina {doc_obj.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
     return buffer.getvalue()
+
+
+def _buscar_pdf_pedido_compra_oficial(numero_pedido: str) -> bytes | None:
+    """Busca o PDF oficial exportado pelo ERP em uma pasta configurada.
+
+    O ERP nao grava o PDF final da ordem de compra no Postgres como faz com o DANFE.
+    Para ficar identico ao relatorio do ERP, anexamos o PDF ja exportado pelo ERP.
+    """
+    pedido = str(numero_pedido or "").strip()
+    if not pedido:
+        return None
+
+    app = current_app._get_current_object()
+    pastas_raw = [
+        app.config.get("NFE_EMAIL_PEDIDOS_PDF_DIR"),
+        app.config.get("PEDIDOS_COMPRA_PDF_DIR"),
+        os.environ.get("NFE_EMAIL_PEDIDOS_PDF_DIR"),
+        os.environ.get("PEDIDOS_COMPRA_PDF_DIR"),
+        str(Path(app.instance_path) / "pedidos_pdf"),
+    ]
+    pastas = [Path(str(p)).expanduser() for p in pastas_raw if str(p or "").strip()]
+
+    padrao_pedido = re.compile(rf"(^|\D){re.escape(pedido)}(\D|$)", re.IGNORECASE)
+    candidatos: list[Path] = []
+    for pasta in pastas:
+        try:
+            if not pasta.exists() or not pasta.is_dir():
+                continue
+            for arquivo in pasta.glob("*.pdf"):
+                if padrao_pedido.search(arquivo.stem):
+                    candidatos.append(arquivo)
+        except Exception:
+            app.logger.debug("Nao foi possivel varrer pasta de PDFs de pedido: %s", pasta, exc_info=True)
+
+    if not candidatos:
+        return None
+
+    escolhido = max(candidatos, key=lambda p: p.stat().st_mtime)
+    try:
+        pdf = escolhido.read_bytes()
+        if pdf.startswith(b"%PDF"):
+            app.logger.info("PDF oficial do pedido %s anexado de %s.", pedido, escolhido)
+            return pdf
+        app.logger.warning("Arquivo encontrado para pedido %s nao parece PDF valido: %s", pedido, escolhido)
+    except Exception as exc:
+        app.logger.warning("Falha ao ler PDF oficial do pedido %s em %s: %s", pedido, escolhido, exc)
+    return None
 
 
 def _anexos_pedido_compra_industrializacao(nota: NotaEmitida, cfops_da_nota: set[str]) -> list[tuple[str, bytes]]:
@@ -317,6 +517,18 @@ def _anexos_pedido_compra_industrializacao(nota: NotaEmitida, cfops_da_nota: set
 
     anexos: list[tuple[str, bytes]] = []
     for pedido in _pedidos_compra_da_nota(nota):
+        pdf_oficial = _buscar_pdf_pedido_compra_oficial(pedido)
+        if pdf_oficial:
+            anexos.append((pedido, pdf_oficial))
+            continue
+
+        if not current_app.config.get("NFE_EMAIL_GERAR_PEDIDO_COMPRA_FALLBACK", True):
+            current_app.logger.warning(
+                "NF-e %s CFOP industrializacao sem PDF oficial exportado do pedido %s.",
+                nota.numero, pedido,
+            )
+            continue
+
         try:
             linhas = buscar_linhas_pedido(pedido)
         except Exception as exc:
@@ -478,6 +690,7 @@ def _montar_corpo_html(
     modo_teste: bool,
     destino_real: str,
     inclui_pedido_compra: bool = False,
+    portal_url: str = "",
 ) -> str:
     aviso_teste = ""
     if modo_teste:
@@ -495,6 +708,23 @@ def _montar_corpo_html(
     anexos_texto = "XML da NF-e, DANFE (PDF) e pedido de compra (PDF)"
     if not inclui_pedido_compra:
         anexos_texto = "XML da NF-e e DANFE (PDF)"
+    portal_bloco = ""
+    if portal_url:
+        portal_bloco = f"""
+            <tr>
+              <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                <table cellpadding="0" cellspacing="0">
+                  <tr><td bgcolor="#0f766e" style="border-radius:6px;background-color:#0f766e">
+                    <a href="{portal_url}" style="display:inline-block;padding:11px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
+                      Acessar NF, XML e boletos
+                    </a>
+                  </td></tr>
+                </table>
+                <div style="margin-top:8px;font-size:12px;color:#475569">
+                  Este link abre um portal seguro com os documentos desta nota fiscal e as cobranças vinculadas.
+                </div>
+              </td>
+            </tr>"""
 
     return f"""\
     <!DOCTYPE html>
@@ -588,6 +818,8 @@ def _montar_corpo_html(
             </tr>
 
             <!-- Anexos -->
+            {portal_bloco}
+
             <tr>
               <td style="padding:22px 28px 0;font-family:Arial,Helvetica,sans-serif">
                 <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0">
@@ -791,6 +1023,12 @@ def enviar_nfe_por_email(
     if cc_final:
         msg["Cc"] = ", ".join(cc_final)
 
+    portal_url = ""
+    base_url = portal_base_url()
+    if base_url:
+        token_nf = gerar_token_nf(nota.numero, nota.chave, nota.dest_cnpj)
+        portal_url = f"{base_url}/portal/cobranca/{token_nf}"
+
     corpo_html = _montar_corpo_html(
         nota.numero,
         nota.chave,
@@ -799,6 +1037,7 @@ def enviar_nfe_por_email(
         modo_teste,
         destino_real,
         inclui_pedido_compra=bool(anexos_pedido_compra),
+        portal_url=portal_url,
     )
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(f"NF-e {nota.numero} em anexo. Destinatário: {nota.dest_nome}", "plain", "utf-8"))

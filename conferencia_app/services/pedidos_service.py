@@ -342,6 +342,26 @@ def _linha_postgres_to_pedido(row: dict) -> dict:
         if valor not in (None, ""):
             linha[campo] = str(valor).strip()
 
+    for campo in (
+        "data_pedido",
+        "cond_pagamento",
+        "forma_pgto",
+        "prazo_entrega",
+        "solicitante",
+        "tipo_movimento",
+    ):
+        valor = row.get(campo)
+        if valor not in (None, ""):
+            linha[campo] = valor.isoformat() if hasattr(valor, "isoformat") else str(valor).strip()
+
+    for campo in ("subtotal", "totalgeral", "vl_frete", "vl_desconto", "ipi_total", "icms_total"):
+        valor = row.get(campo)
+        if valor not in (None, ""):
+            try:
+                linha[campo] = float(valor or 0)
+            except (TypeError, ValueError):
+                linha[campo] = 0.0
+
     extras = {
         "fornecedor_codigo": linha["cod_fornecedor"],
         "fornecedor_nome": linha["fornecedor"],
@@ -394,7 +414,19 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
                 coalesce(nullif(oc.fornecedor_cidade, ''), f.cidade) as cidade,
                 coalesce(nullif(oc.fornecedor_uf, ''), f.uf) as uf,
                 coalesce(nullif(oc.fornecedor_cep, ''), f.cep) as cep,
-                oc.prazo_entrega as observacoes
+                oc.prazo_entrega as observacoes,
+                oc.data as data_pedido,
+                oc.cond_pagamento,
+                oc.forma_pgto,
+                oc.prazo_entrega,
+                oc.solicitante,
+                oc.tipo_movimento,
+                coalesce(oc.subtotal, 0) as subtotal,
+                coalesce(oc.totalgeral, 0) as totalgeral,
+                coalesce(oc.vl_frete, 0) as vl_frete,
+                coalesce(oc.vl_desconto, 0) as vl_desconto,
+                coalesce(oc.ipi, 0) as ipi_total,
+                coalesce(oc.icms, 0) as icms_total
             from public.tord_com oc
             left join public.tfornece f
               on f.cod_empresa = oc.cod_empresa
@@ -432,6 +464,18 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
             oc.uf,
             oc.cep,
             oc.observacoes,
+            oc.data_pedido,
+            oc.cond_pagamento,
+            oc.forma_pgto,
+            oc.prazo_entrega,
+            oc.solicitante,
+            oc.tipo_movimento,
+            oc.subtotal,
+            oc.totalgeral,
+            oc.vl_frete,
+            oc.vl_desconto,
+            oc.ipi_total,
+            oc.icms_total,
             'CompraFornecedor' as tipo_pedido,
             'MaterialCompra' as classificacao_item,
             null::text as cfop_entrada_esperado,
@@ -472,6 +516,18 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
             oc.uf,
             oc.cep,
             oc.observacoes,
+            oc.data_pedido,
+            oc.cond_pagamento,
+            oc.forma_pgto,
+            oc.prazo_entrega,
+            oc.solicitante,
+            oc.tipo_movimento,
+            oc.subtotal,
+            oc.totalgeral,
+            oc.vl_frete,
+            oc.vl_desconto,
+            oc.ipi_total,
+            oc.icms_total,
             'ServicoTerceiros' as tipo_pedido,
             'ProducaoPropria' as classificacao_item,
             '5902' as cfop_entrada_esperado,
@@ -523,6 +579,18 @@ def _buscar_linhas_pedido_postgres(pedidos: list[str]) -> list:
             oc.uf,
             oc.cep,
             oc.observacoes,
+            oc.data_pedido,
+            oc.cond_pagamento,
+            oc.forma_pgto,
+            oc.prazo_entrega,
+            oc.solicitante,
+            oc.tipo_movimento,
+            oc.subtotal,
+            oc.totalgeral,
+            oc.vl_frete,
+            oc.vl_desconto,
+            oc.ipi_total,
+            oc.icms_total,
             'ServicoTerceiros' as tipo_pedido,
             'ProducaoTerceiros' as classificacao_item,
             '5124' as cfop_entrada_esperado,

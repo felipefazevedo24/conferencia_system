@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from datetime import timedelta
 
@@ -12,6 +13,32 @@ DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE = INSTANCE_DIR / "google-drive-oauth-token
 def _env_or_default(name: str, default: str = "") -> str:
     value = str(os.environ.get(name, "") or "").strip()
     return value or default
+
+
+def _load_instance_json(filename: str) -> dict:
+    path = INSTANCE_DIR / filename
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+_BB_COBRANCA_CONFIG = _load_instance_json("bb_cobranca_config.json")
+
+
+def _bb_config_value(*keys: str) -> str:
+    for key in keys:
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
+    for key in keys:
+        value = str(_BB_COBRANCA_CONFIG.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _normalize_database_url(raw_url: str) -> str:
@@ -110,20 +137,26 @@ class Config:
     BOLETO_PROVIDER = str(os.environ.get("BOLETO_PROVIDER", "BB")).strip().upper() or "BB"
     BOLETO_BANK_LABEL = str(os.environ.get("BOLETO_BANK_LABEL", "Banco do Brasil")).strip() or "Banco do Brasil"
 
-    BB_CLIENT_ID = str(os.environ.get("BB_CLIENT_ID", "")).strip()
-    BB_CLIENT_SECRET = str(os.environ.get("BB_CLIENT_SECRET", "")).strip()
-    BB_DEVELOPER_APPLICATION_KEY = str(
-        os.environ.get("BB_DEVELOPER_APPLICATION_KEY", os.environ.get("BB_DEV_APP_KEY", os.environ.get("BB_APP_KEY", "")))
-    ).strip()
+    BB_CLIENT_ID = _bb_config_value("BB_CLIENT_ID", "BB_COBRANCA_CLIENT_ID", "BB_CLIENTID", "clientID", "clientId")
+    BB_CLIENT_SECRET = _bb_config_value(
+        "BB_CLIENT_SECRET", "BB_COBRANCA_CLIENT_SECRET", "BB_CLIENTSECRET", "clientSecret"
+    )
+    BB_DEVELOPER_APPLICATION_KEY = _bb_config_value(
+        "BB_DEVELOPER_APPLICATION_KEY", "BB_COBRANCA_APP_KEY", "BB_DEV_APP_KEY", "BB_APP_KEY", "appKey"
+    )
     BB_API_BASE = str(os.environ.get("BB_API_BASE", "https://api.hm.bb.com.br/cobrancas/v2")).strip().rstrip("/")
     BB_OAUTH_BASE = str(os.environ.get("BB_OAUTH_BASE", "https://oauth.hm.bb.com.br")).strip().rstrip("/")
     BB_OAUTH_TOKEN_PATH = str(os.environ.get("BB_OAUTH_TOKEN_PATH", "/oauth/token")).strip()
     BB_OAUTH_TOKEN_URL = str(os.environ.get("BB_OAUTH_TOKEN_URL", "")).strip()
     BB_SCOPE = str(os.environ.get("BB_SCOPE", "cobrancas.boletos-info")).strip()
-    BB_CONVENIO = str(os.environ.get("BB_CONVENIO", "")).strip()
+    BB_CONVENIO = _bb_config_value("BB_CONVENIO", "BB_COBRANCA_CONVENIO", "convenio", "numeroConvenio")
+    BB_CONSULTA_DIAS_RETROATIVOS = int(os.environ.get("BB_CONSULTA_DIAS_RETROATIVOS", "730"))
     BB_CERT_PATH = str(os.environ.get("BB_CERT_PATH", "")).strip()
     BB_KEY_PATH = str(os.environ.get("BB_KEY_PATH", "")).strip()
     BB_API_TIMEOUT_SECONDS = int(os.environ.get("BB_API_TIMEOUT_SECONDS", "30"))
+    PUBLIC_BASE_URL = str(os.environ.get("PUBLIC_BASE_URL", "")).strip().rstrip("/")
+    PORTAL_CLIENTE_BASE_URL = str(os.environ.get("PORTAL_CLIENTE_BASE_URL", PUBLIC_BASE_URL)).strip().rstrip("/")
+    PORTAL_CLIENTE_TOKEN_MAX_AGE_SECONDS = int(os.environ.get("PORTAL_CLIENTE_TOKEN_MAX_AGE_SECONDS", "31536000"))
 
     AGENDAMENTO_FORNECEDORES_XLSX = str(
         os.environ.get("AGENDAMENTO_FORNECEDORES_XLSX", BASE_DIR / "fornecedores.xlsx")

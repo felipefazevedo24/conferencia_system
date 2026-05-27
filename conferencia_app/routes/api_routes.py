@@ -3760,6 +3760,7 @@ def financeiro_contas_receber_gerar_boleto():
             func.max(ItemNota.chave_acesso),
             func.max(ItemNota.valor_pagamento_xml),
             func.max(ItemNota.pagamento_xml),
+            func.max(ItemNota.vencimento_pagamento_xml),
         )
         .filter(ItemNota.numero_nota == nota)
         .first()
@@ -3768,17 +3769,22 @@ def financeiro_contas_receber_gerar_boleto():
         return jsonify({"sucesso": False, "error": "Nota sem informação de pagamento no XML."}), 400
 
     valor = float(nota_info[1] or 0.0)
+    cpf_cnpj_pagador = _only_digits(data.get("cpf_cnpj"))
+    nome_pagador = str(data.get("nome_pagador") or "").strip()
     nosso_numero, linha_digitavel, codigo_barras = _gerar_campos_boleto(nota, valor)
 
     boleto = BoletoContaReceber(
         numero_nota=nota,
         chave_acesso=str(nota_info[0] or ""),
-        banco="BOFA - Bank of America",
+        banco=current_app.config.get("BOLETO_BANK_LABEL", "Banco do Brasil"),
         valor=valor,
         nosso_numero=nosso_numero,
         linha_digitavel=linha_digitavel,
         codigo_barras=codigo_barras,
         status="Gerado",
+        cpf_cnpj_pagador=cpf_cnpj_pagador,
+        nome_pagador=nome_pagador,
+        vencimento=nota_info[3],
         usuario_geracao=session.get("username", "sistema"),
     )
     db.session.add(boleto)

@@ -612,7 +612,7 @@
         document.querySelectorAll('.btn-tab').forEach(function(tab) {
             tab.addEventListener('click', function() {
                 document.querySelectorAll('.btn-tab').forEach(function(t) { t.classList.remove('active'); });
-                this.classList.add('active');4
+                this.classList.add('active');
                 modoAtual = this.getAttribute('data-modo');
 
                 document.getElementById('modoCpf').style.display = modoAtual === 'cpf_cnpj' ? '' : 'none';

@@ -1,9 +1,12 @@
 """Rotas publicas para consulta de boletos pelos clientes."""
 
 import re
+from io import BytesIO
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, send_file
 
+from ..services.cliente_portal_service import ler_token_nf
+from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.bb_boleto_service import BBBoletoService
 
 boleto_bp = Blueprint("boleto", __name__)
@@ -17,6 +20,82 @@ def _only_digits(value: str) -> str:
 def consulta_boletos_page():
     """Pagina publica de consulta de boletos pelo cliente."""
     return render_template("consulta_boletos.html")
+
+
+def _payload_token_ou_404(token: str):
+    payload = ler_token_nf(token)
+    if not payload or not str(payload.get("numero_nf") or "").strip():
+        return None
+    return payload
+
+
+@boleto_bp.route("/portal/cobranca/<token>")
+def portal_cobranca_page(token):
+    payload = _payload_token_ou_404(token)
+    if not payload:
+        return render_template("acesso_negado.html"), 404
+    return render_template("portal_cobranca.html", token=token)
+
+
+@boleto_bp.route("/api/portal/cobranca/<token>")
+def portal_cobranca_dados(token):
+    payload = _payload_token_ou_404(token)
+    if not payload:
+        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    chave = str(payload.get("chave") or "").strip()
+    cnpj = str(payload.get("cnpj") or "").strip()
+    boletos = BBBoletoService.consultar_por_nota_valor(numero_nf, 0)
+
+    return jsonify({
+        "sucesso": True,
+        "nota": {
+            "numero": numero_nf,
+            "chave": chave,
+            "cnpj_destinatario": cnpj,
+            "download_xml": f"/portal/cobranca/{token}/xml",
+            "download_danfe": f"/portal/cobranca/{token}/danfe",
+        },
+        "boletos": boletos,
+        "total_boletos": len(boletos),
+    })
+
+
+@boleto_bp.route("/portal/cobranca/<token>/xml")
+def portal_cobranca_xml(token):
+    payload = _payload_token_ou_404(token)
+    if not payload:
+        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    chave = str(payload.get("chave") or "").strip()
+    nota = buscar_nfe_emitida_erp(numero_nf, chave)
+    if not nota or not nota.get("xml_bytes"):
+        return jsonify({"sucesso": False, "error": "XML nao encontrado."}), 404
+    return send_file(
+        BytesIO(nota["xml_bytes"]),
+        mimetype="application/xml",
+        as_attachment=True,
+        download_name=f"NFe-{chave or numero_nf}.xml",
+    )
+
+
+@boleto_bp.route("/portal/cobranca/<token>/danfe")
+def portal_cobranca_danfe(token):
+    payload = _payload_token_ou_404(token)
+    if not payload:
+        return jsonify({"sucesso": False, "error": "Link invalido ou expirado."}), 404
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    chave = str(payload.get("chave") or "").strip()
+    nota = buscar_nfe_emitida_erp(numero_nf, chave)
+    if not nota or not nota.get("pdf_bytes"):
+        return jsonify({"sucesso": False, "error": "DANFE nao encontrado."}), 404
+    return send_file(
+        BytesIO(nota["pdf_bytes"]),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"DANFE-{numero_nf}.pdf",
+    )
 
 
 @boleto_bp.route("/api/boletos/consultar", methods=["POST"])
@@ -39,7 +118,7 @@ def consultar_boletos():
         return jsonify(
             {
                 "sucesso": True,
-                "fonte": "local",
+                "fonte": "bb_api+local" if BBBoletoService.is_configured() else "local",
                 "boletos": boletos,
                 "total": len(boletos),
                 "mensagem": "",
