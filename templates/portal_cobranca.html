@@ -116,6 +116,7 @@
             <div class="field"><div class="label">Pagamento</div><span>${esc(b.data_pagamento || '---')}</span></div>
           </div>
           ${b.linha_digitavel ? `<div class="linha">${esc(b.linha_digitavel)}</div><button class="btn ghost" style="margin-top:10px" onclick="navigator.clipboard.writeText('${esc(b.linha_digitavel)}')"><i class="fas fa-copy"></i> Copiar linha digitável</button>` : ''}
+          ${b.url_boleto ? `<a class="btn" style="margin-top:10px" href="${esc(b.url_boleto)}" target="_blank" rel="noopener"><i class="fas fa-download"></i> Baixar boleto</a>` : ''}
         </div>
       `).join('');
     }

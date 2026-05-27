@@ -2260,6 +2260,7 @@ def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
             "vencimento": "10/06/2026",
             "status": "Em aberto",
             "banco": "Banco do Brasil",
+            "url_boleto": "https://bb.example/boleto/1.pdf",
         },
         {
             "fonte": "grv_postgres",
@@ -2276,6 +2277,7 @@ def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
             "vencimento": "05/06/2026",
             "status": "Em aberto",
             "banco": "Banco do Brasil",
+            "linha_digitavel": "00190.00009 00000.000000 00000.000000 1 00000000025050",
         },
     ]
 
@@ -2300,6 +2302,9 @@ def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
     assert grupo["quantidade_titulos"] == 2
     assert grupo["valor"] == 350.5
     assert grupo["vencimento"] == "05/06/2026"
+    assert len(grupo["titulos"]) == 2
+    assert grupo["titulos"][0]["url_boleto"] == "https://bb.example/boleto/1.pdf"
+    assert grupo["titulos"][1]["linha_digitavel"]
 
 
 def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
@@ -2337,6 +2342,7 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
                         "valorOriginal": 450.25,
                         "dataVencimento": "2026-06-15",
                         "codigoLinhaDigitavel": "00190.00009 01234.567890 12345.678901 1 00000000045025",
+                        "urlImagemBoleto": "https://bb.example/boleto/NF900.pdf",
                         "descricaoEstadoTituloCobranca": "Registrado",
                         "pagador": {"nome": "Cliente API", "numeroInscricao": "12345678000199"},
                     }
@@ -2363,6 +2369,7 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
     assert payload["total"] == 1
     assert payload["boletos"][0]["numero_nota"] == "NF900"
     assert payload["boletos"][0]["nome_pagador"] == "Cliente API"
+    assert payload["boletos"][0]["titulos"][0]["url_boleto"] == "https://bb.example/boleto/NF900.pdf"
     assert any(
         params.get("cnpjPagador") == "123456780001"
         and params.get("digitoCNPJPagador") == "99"

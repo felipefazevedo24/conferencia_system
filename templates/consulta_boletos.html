@@ -339,6 +339,8 @@
       margin-bottom: 12px;
       box-shadow: 0 8px 22px rgba(7,31,58,.06);
     }
+    .boleto-card.clickable { cursor: pointer; }
+    .boleto-card.clickable:hover { border-color: #9fc2e8; box-shadow: 0 10px 26px rgba(7,31,58,.10); }
     .boleto-top {
       display: flex;
       justify-content: space-between;
@@ -435,7 +437,44 @@
       font-weight: 900;
       cursor: pointer;
     }
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 9px;
+      margin-left: 6px;
+      border: 1px solid var(--blue-700);
+      border-radius: var(--radius);
+      background: var(--blue-700);
+      color: #fff;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+    }
     .btn-copy.copied { background: var(--green-bg); color: var(--green); border-color: #8bd9b5; }
+    .grupo-detalhe {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #edf2f7;
+    }
+    .boleto-card.open .grupo-detalhe { display: block; }
+    .grupo-item {
+      padding: 12px;
+      margin-top: 10px;
+      border: 1px solid #e1ebf5;
+      border-radius: var(--radius);
+      background: #fbfdff;
+    }
+    .grupo-item-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--blue-950);
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
     .empty-state {
       text-align: center;
       padding: 42px 22px;
@@ -714,11 +753,12 @@
         if (b.numero_nota && !String(titulo).includes(b.numero_nota)) subtitulos.push('NF: ' + b.numero_nota);
         if (b.orcamento && !String(titulo).includes(b.orcamento)) subtitulos.push('Orçamento: ' + b.orcamento);
         const card = document.createElement('div');
-        card.className = 'boleto-card';
+        card.className = 'boleto-card' + (isGrupo ? ' clickable' : '');
         card.innerHTML =
           '<div class="boleto-top">' +
             '<div class="boleto-id">' + esc(titulo) +
               (subtitulos.length ? '<small>' + esc(subtitulos.join(' · ')) + '</small>' : '') +
+              (isGrupo ? '<small><i class="fas fa-chevron-down"></i> Clique para detalhar</small>' : '') +
             '</div>' +
             '<span class="status-badge ' + getStatusClass(b.status) + '"><i class="fas fa-circle" style="font-size:6px;"></i> ' + esc(b.status || 'Gerado') + '</span>' +
           '</div>' +
@@ -728,10 +768,32 @@
             '<div class="boleto-field"><label>' + (isGrupo ? 'Quantidade' : 'Pagamento') + '</label><span>' + esc(isGrupo ? (qtd || 1) : (b.data_pagamento || '---')) + '</span></div>' +
             '<div class="boleto-field"><label>Banco</label><span>' + esc(b.banco || 'Banco do Brasil') + '</span></div>' +
           '</div>' +
-          (b.linha_digitavel ? '<div class="boleto-linha"><label>Linha digitável</label><div class="linha-valor">' + esc(b.linha_digitavel) + '</div><button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '"><i class="fas fa-copy"></i> Copiar linha digitável</button></div>' : '') +
-          (b.codigo_barras ? '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '"><i class="fas fa-barcode"></i> Copiar código de barras</button>' : '');
+          (isGrupo ? renderGrupoDetalhe(b.titulos || []) : renderAcoesBoleto(b));
         resultsList.appendChild(card);
       });
+    }
+
+    function renderGrupoDetalhe(titulos) {
+      if (!titulos.length) return '';
+      return '<div class="grupo-detalhe">' + titulos.map(function(t) {
+        const nome = t.nosso_numero ? 'Nosso Nº ' + t.nosso_numero : (t.documento || t.numero_nota || 'Título em aberto');
+        return '<div class="grupo-item">' +
+          '<div class="grupo-item-title"><span>' + esc(nome) + '</span><span>R$ ' + formatMoney(t.valor) + '</span></div>' +
+          '<div class="boleto-grid">' +
+            '<div class="boleto-field"><label>NF</label><span>' + esc(t.numero_nota || '---') + '</span></div>' +
+            '<div class="boleto-field"><label>Vencimento</label><span>' + esc(t.vencimento || '---') + '</span></div>' +
+            '<div class="boleto-field"><label>Status</label><span>' + esc(t.status || 'Em aberto') + '</span></div>' +
+            '<div class="boleto-field"><label>Banco</label><span>' + esc(t.banco || 'Banco do Brasil') + '</span></div>' +
+          '</div>' +
+          renderAcoesBoleto(t) +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    function renderAcoesBoleto(b) {
+      return (b.linha_digitavel ? '<div class="boleto-linha"><label>Linha digitável</label><div class="linha-valor">' + esc(b.linha_digitavel) + '</div><button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '"><i class="fas fa-copy"></i> Copiar linha digitável</button></div>' : '') +
+        (b.codigo_barras ? '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '"><i class="fas fa-barcode"></i> Copiar código de barras</button>' : '') +
+        (b.url_boleto ? '<a class="btn-download" href="' + escAttr(b.url_boleto) + '" target="_blank" rel="noopener"><i class="fas fa-download"></i> Baixar boleto</a>' : '');
     }
 
     function renderEmpty() {
@@ -741,6 +803,15 @@
     }
 
     document.addEventListener('click', function(e) {
+      const groupCard = e.target.closest('.boleto-card.clickable');
+      if (groupCard && !e.target.closest('.btn-copy') && !e.target.closest('.btn-download')) {
+        groupCard.classList.toggle('open');
+        const hint = groupCard.querySelector('.boleto-id small:last-child');
+        if (hint) hint.innerHTML = groupCard.classList.contains('open')
+          ? '<i class="fas fa-chevron-up"></i> Ocultar detalhe'
+          : '<i class="fas fa-chevron-down"></i> Clique para detalhar';
+      }
+
       const copyBtn = e.target.closest('.btn-copy');
       if (!copyBtn) return;
       const text = copyBtn.getAttribute('data-copy') || '';

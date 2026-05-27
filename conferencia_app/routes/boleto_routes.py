@@ -71,6 +71,8 @@ def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
                 "banco": boleto.get("banco") or "Banco do Brasil",
                 "linha_digitavel": "",
                 "codigo_barras": "",
+                "url_boleto": "",
+                "titulos": [],
                 "pode_gerar_boleto": bool(boleto.get("pode_gerar_boleto")),
             },
         )
@@ -79,6 +81,7 @@ def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
         grupo["valor_pago"] += float(boleto.get("valor_pago") or 0)
         grupo["quantidade_titulos"] += 1
         grupo["pode_gerar_boleto"] = bool(grupo.get("pode_gerar_boleto") or boleto.get("pode_gerar_boleto"))
+        grupo["titulos"].append(boleto)
 
         venc_atual = _parse_data_br(grupo.get("vencimento"))
         venc_item = _parse_data_br(boleto.get("vencimento"))

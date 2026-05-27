@@ -303,6 +303,12 @@ class BBBoletoService:
                 or raw.get("codigo_barras")
                 or ""
             ),
+            "url_boleto": str(
+                raw.get("urlImagemBoleto")
+                or raw.get("urlBoleto")
+                or raw.get("url_boleto")
+                or ""
+            ),
             "nome_pagador": str(
                 pagador.get("nome")
                 or raw.get("nomePagador")
@@ -452,6 +458,7 @@ class BBBoletoService:
             "numero_nota",
             "linha_digitavel",
             "codigo_barras",
+            "url_boleto",
             "nome_pagador",
             "cpf_cnpj_pagador",
             "status",
@@ -467,6 +474,50 @@ class BBBoletoService:
 
         merged["banco"] = cls.banco_label()
         return merged
+
+    @classmethod
+    def _api_bate_com_titulo(cls, titulo: dict, api_boleto: dict) -> bool:
+        nosso_titulo = _only_digits(titulo.get("nosso_numero"))
+        nosso_api = _only_digits(api_boleto.get("nosso_numero"))
+        if nosso_titulo and nosso_api and nosso_titulo == nosso_api:
+            return True
+
+        nota_titulo = str(titulo.get("numero_nota") or "").strip()
+        nota_api = str(api_boleto.get("numero_nota") or "").strip()
+        if not nota_titulo or not nota_api or nota_titulo != nota_api:
+            return False
+
+        valor_titulo = float(titulo.get("valor") or titulo.get("valor_original") or 0)
+        valor_api = float(api_boleto.get("valor") or 0)
+        if valor_api and abs(valor_titulo - valor_api) > 0.02:
+            return False
+
+        venc_titulo = _format_api_date(titulo.get("vencimento")) or ""
+        venc_api = _format_api_date(api_boleto.get("vencimento")) or ""
+        return not venc_titulo or not venc_api or venc_titulo == venc_api
+
+    @classmethod
+    def _mesclar_titulos_com_api(cls, titulos: list[dict], api_result: list[dict]) -> list[dict]:
+        if not titulos:
+            return api_result
+        if not api_result:
+            return titulos
+
+        usados: set[int] = set()
+        mesclados: list[dict] = []
+        for titulo in titulos:
+            indice_api = next(
+                (idx for idx, api_boleto in enumerate(api_result) if idx not in usados and cls._api_bate_com_titulo(titulo, api_boleto)),
+                None,
+            )
+            if indice_api is None:
+                mesclados.append(titulo)
+                continue
+            usados.add(indice_api)
+            mesclados.append(cls._merge_boleto(titulo, api_result[indice_api]))
+
+        mesclados.extend(api_boleto for idx, api_boleto in enumerate(api_result) if idx not in usados)
+        return mesclados
 
     @classmethod
     def _enriquecer_boletos_com_api(cls, boletos: list[dict]) -> tuple[list[dict], bool]:
@@ -514,6 +565,7 @@ class BBBoletoService:
                 "status": b.status,
                 "linha_digitavel": b.linha_digitavel,
                 "codigo_barras": b.codigo_barras,
+                "url_boleto": "",
                 "nome_pagador": b.nome_pagador or "",
                 "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
                 "banco": cls._normalize_bank_name(b.banco),
@@ -546,6 +598,7 @@ class BBBoletoService:
                 "status": b.status,
                 "linha_digitavel": b.linha_digitavel,
                 "codigo_barras": b.codigo_barras,
+                "url_boleto": "",
                 "nome_pagador": b.nome_pagador or "",
                 "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
                 "banco": cls._normalize_bank_name(b.banco),
@@ -563,14 +616,16 @@ class BBBoletoService:
             margem = valor * 0.01
             api_result = [b for b in api_result if margem == 0 or (valor - margem) <= float(b.get("valor") or 0) <= (valor + margem)]
 
-        return cls._deduplicar(titulos_grv + enriched + api_result)
+        return cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
 
     @classmethod
     def consultar_por_orcamento(cls, orcamento: str) -> list[dict]:
         numero = str(orcamento or "").strip()
         if not numero:
             return []
-        return cls._deduplicar(GRVContasReceberService.consultar_abertos(orcamento=numero))
+        titulos = GRVContasReceberService.consultar_abertos(orcamento=numero)
+        enriched, _ = cls._enriquecer_boletos_com_api(titulos)
+        return cls._deduplicar(enriched)
 
     @classmethod
     def consultar_boletos(cls, cpf_cnpj: str, somente_abertos: bool = False) -> dict:
@@ -584,14 +639,15 @@ class BBBoletoService:
         api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
         if somente_abertos:
             api_result = cls._filtrar_abertos(api_result)
+        boletos = cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result)
         if api_result:
             return {
                 "fonte": "grv_postgres+bb_api+local" if titulos_grv else ("bb_api+local" if enriched else "bb_api"),
-                "boletos": cls._deduplicar(titulos_grv + enriched + api_result),
+                "boletos": cls._deduplicar(boletos),
             }
         return {
             "fonte": "grv_postgres+local" if titulos_grv else ("bb_api+local" if refreshed else "local"),
-            "boletos": cls._deduplicar(titulos_grv + enriched),
+            "boletos": cls._deduplicar(boletos),
         }
 
     @staticmethod
