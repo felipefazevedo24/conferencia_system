@@ -96,6 +96,37 @@ def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
     return resultado
 
 
+def _deduplicar_boletos(boletos: list[dict]) -> list[dict]:
+    vistos = set()
+    resultado = []
+    for boleto in boletos:
+        chave = (
+            boleto.get("fonte") or "",
+            boleto.get("id_grv") or "",
+            boleto.get("nosso_numero") or "",
+            boleto.get("numero_nota") or "",
+            boleto.get("documento") or "",
+            boleto.get("linha_digitavel") or "",
+            round(float(boleto.get("valor") or 0), 2),
+        )
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        resultado.append(boleto)
+    return resultado
+
+
+def _filtrar_por_documento_ou_sem_doc(boletos: list[dict], doc: str) -> list[dict]:
+    if not doc:
+        return boletos
+    filtrados = []
+    for boleto in boletos:
+        boleto_doc = _only_digits(boleto.get("cpf_cnpj_pagador"))
+        if not boleto_doc or boleto_doc == doc:
+            filtrados.append(boleto)
+    return filtrados
+
+
 @boleto_bp.route("/boletos")
 def consulta_boletos_page():
     """Página pública de consulta de boletos pelo cliente."""
@@ -229,15 +260,20 @@ def consultar_boletos():
     if len(doc) not in (11, 14):
         return jsonify({"sucesso": False, "error": "CPF deve ter 11 dígitos e CNPJ 14 dígitos."}), 400
 
+    numero_nota_extra = str(data.get("numero_nota") or "").strip()
     resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
-    boletos = _agrupar_titulos_abertos(resultado["boletos"]) if len(doc) == 14 else resultado["boletos"]
+    boletos_base = list(resultado["boletos"])
+    if numero_nota_extra:
+        boletos_nf = BBBoletoService.consultar_por_nota_valor(numero_nota_extra, 0, somente_abertos=True)
+        boletos_base = _deduplicar_boletos(boletos_base + _filtrar_por_documento_ou_sem_doc(boletos_nf, doc))
+    boletos = _agrupar_titulos_abertos(boletos_base) if len(doc) == 14 else boletos_base
     return jsonify(
         {
             "sucesso": True,
             "fonte": resultado["fonte"],
             "boletos": boletos,
             "total": len(boletos),
-            "total_titulos": len(resultado["boletos"]),
+            "total_titulos": len(boletos_base),
             "agrupado": len(doc) == 14,
             "mensagem": resultado.get("mensagem", ""),
         }

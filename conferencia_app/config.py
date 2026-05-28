@@ -178,6 +178,7 @@ class Config:
     BB_CERT_PATH = str(os.environ.get("BB_CERT_PATH", "")).strip()
     BB_KEY_PATH = str(os.environ.get("BB_KEY_PATH", "")).strip()
     BB_API_TIMEOUT_SECONDS = int(os.environ.get("BB_API_TIMEOUT_SECONDS", "30"))
+    BB_USE_ENV_PROXY = _env_bool("BB_USE_ENV_PROXY", "0")
     PUBLIC_BASE_URL = _bb_config_value("PUBLIC_BASE_URL").rstrip("/")
     PORTAL_CLIENTE_BASE_URL = (
         _bb_config_value("PORTAL_CLIENTE_BASE_URL") or PUBLIC_BASE_URL

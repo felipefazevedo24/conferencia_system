@@ -70,6 +70,10 @@ def _add_int_param(params: dict, key: str, value: str) -> None:
         params[key] = raw
 
 
+def _sanitize_error(exc: Exception) -> str:
+    return re.sub(r"([?&]gw-dev-app-key=)[^&\s]+", r"\1***", str(exc))
+
+
 class BBBoletoService:
     """Consulta e enriquecimento de boletos com dados do BB."""
 
@@ -104,6 +108,15 @@ class BBBoletoService:
         return (cert_path, key_path) if cert_path and key_path else None
 
     @classmethod
+    def _request(cls, method: str, url: str, **kwargs):
+        session = requests.Session()
+        session.trust_env = bool(current_app.config.get("BB_USE_ENV_PROXY", False))
+        try:
+            return session.request(method, url, **kwargs)
+        finally:
+            session.close()
+
+    @classmethod
     def _token_url(cls) -> str:
         explicit = str(current_app.config.get("BB_OAUTH_TOKEN_URL", "")).strip()
         if explicit:
@@ -134,7 +147,8 @@ class BBBoletoService:
             data["scope"] = scope
 
         try:
-            resp = requests.post(
+            resp = cls._request(
+                "POST",
                 cls._token_url(),
                 data=data,
                 auth=(client_id, client_secret),
@@ -370,7 +384,8 @@ class BBBoletoService:
             return None
 
         try:
-            resp = requests.get(
+            resp = cls._request(
+                "GET",
                 f"{base_url}/boletos/{nosso_numero_digits}",
                 params={
                     "gw-dev-app-key": app_key,
@@ -388,7 +403,7 @@ class BBBoletoService:
                 return None
             return cls._normalizar_boleto_api(payload)
         except Exception as exc:
-            logger.warning("BB: falha ao consultar boleto %s - %s", nosso_numero_digits, exc)
+            logger.warning("BB: falha ao consultar boleto %s - %s", nosso_numero_digits, _sanitize_error(exc))
             return None
 
     @classmethod
@@ -419,7 +434,8 @@ class BBBoletoService:
             params = dict(params_base)
             params.update(extra)
             try:
-                resp = requests.get(
+                resp = cls._request(
+                    "GET",
                     f"{base_url}/boletos",
                     params=params,
                     headers=headers,
@@ -443,7 +459,7 @@ class BBBoletoService:
                 if resultados:
                     break
             except Exception as exc:
-                logger.warning("BB: falha ao listar boletos (%s) - %s", extra, exc)
+                logger.warning("BB: falha ao listar boletos (%s) - %s", extra, _sanitize_error(exc))
         return resultados
 
     @classmethod
@@ -555,24 +571,38 @@ class BBBoletoService:
             == doc,
         ).order_by(BoletoContaReceber.data_geracao.desc()).all()
 
-        resultado = [
-            {
-                "nosso_numero": b.nosso_numero,
-                "numero_nota": b.numero_nota,
-                "valor": float(b.valor or 0),
-                "vencimento": b.vencimento.strftime("%d/%m/%Y") if b.vencimento else None,
-                "data_pagamento": b.data_pagamento.strftime("%d/%m/%Y") if b.data_pagamento else None,
-                "status": b.status,
-                "linha_digitavel": b.linha_digitavel,
-                "codigo_barras": b.codigo_barras,
-                "url_boleto": "",
-                "nome_pagador": b.nome_pagador or "",
-                "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
-                "banco": cls._normalize_bank_name(b.banco),
-                "data_geracao": b.data_geracao.strftime("%d/%m/%Y %H:%M") if b.data_geracao else "",
-            }
-            for b in boletos
-        ]
+        resultado = [cls._serializar_boleto_local(b) for b in boletos]
+        return cls._filtrar_abertos(resultado) if somente_abertos else resultado
+
+    @classmethod
+    def _serializar_boleto_local(cls, b: BoletoContaReceber) -> dict:
+        return {
+            "nosso_numero": b.nosso_numero,
+            "numero_nota": b.numero_nota,
+            "valor": float(b.valor or 0),
+            "vencimento": b.vencimento.strftime("%d/%m/%Y") if b.vencimento else None,
+            "data_pagamento": b.data_pagamento.strftime("%d/%m/%Y") if b.data_pagamento else None,
+            "status": b.status,
+            "linha_digitavel": b.linha_digitavel,
+            "codigo_barras": b.codigo_barras,
+            "url_boleto": "",
+            "nome_pagador": b.nome_pagador or "",
+            "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
+            "banco": cls._normalize_bank_name(b.banco),
+            "data_geracao": b.data_geracao.strftime("%d/%m/%Y %H:%M") if b.data_geracao else "",
+        }
+
+    @classmethod
+    def consultar_boletos_locais_por_notas(cls, numeros_notas: list[str], somente_abertos: bool = False) -> list[dict]:
+        notas = sorted({str(nota or "").strip() for nota in numeros_notas if str(nota or "").strip()})
+        if not notas:
+            return []
+        boletos = (
+            BoletoContaReceber.query.filter(BoletoContaReceber.numero_nota.in_(notas))
+            .order_by(BoletoContaReceber.data_geracao.desc())
+            .all()
+        )
+        resultado = [cls._serializar_boleto_local(b) for b in boletos]
         return cls._filtrar_abertos(resultado) if somente_abertos else resultado
 
     @classmethod
@@ -588,24 +618,7 @@ class BBBoletoService:
             query = query.filter(BoletoContaReceber.valor.between(valor - margem, valor + margem))
 
         boletos = query.order_by(BoletoContaReceber.data_geracao.desc()).all()
-        resultado = [
-            {
-                "nosso_numero": b.nosso_numero,
-                "numero_nota": b.numero_nota,
-                "valor": float(b.valor or 0),
-                "vencimento": b.vencimento.strftime("%d/%m/%Y") if b.vencimento else None,
-                "data_pagamento": b.data_pagamento.strftime("%d/%m/%Y") if b.data_pagamento else None,
-                "status": b.status,
-                "linha_digitavel": b.linha_digitavel,
-                "codigo_barras": b.codigo_barras,
-                "url_boleto": "",
-                "nome_pagador": b.nome_pagador or "",
-                "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
-                "banco": cls._normalize_bank_name(b.banco),
-                "data_geracao": b.data_geracao.strftime("%d/%m/%Y %H:%M") if b.data_geracao else "",
-            }
-            for b in boletos
-        ]
+        resultado = [cls._serializar_boleto_local(b) for b in boletos]
         if somente_abertos:
             resultado = cls._filtrar_abertos(resultado)
         enriched, _ = cls._enriquecer_boletos_com_api(resultado)
@@ -635,6 +648,19 @@ class BBBoletoService:
 
         titulos_grv = GRVContasReceberService.consultar_abertos(cpf_cnpj=doc)
         local_result = cls.consultar_boletos_local(doc, somente_abertos=somente_abertos)
+        if titulos_grv:
+            notas_grv = [titulo.get("numero_nota") for titulo in titulos_grv]
+            locais_por_nota = cls.consultar_boletos_locais_por_notas(notas_grv, somente_abertos=somente_abertos)
+            chaves_locais = {
+                (item.get("nosso_numero") or "", item.get("numero_nota") or "", item.get("linha_digitavel") or "")
+                for item in local_result
+            }
+            local_result.extend(
+                item
+                for item in locais_por_nota
+                if (item.get("nosso_numero") or "", item.get("numero_nota") or "", item.get("linha_digitavel") or "")
+                not in chaves_locais
+            )
         enriched, refreshed = cls._enriquecer_boletos_com_api(local_result)
         api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
         if somente_abertos:

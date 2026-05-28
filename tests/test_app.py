@@ -2307,6 +2307,110 @@ def test_api_boletos_consulta_publica_por_cnpj_agrupa_por_orcamento(tmp_path):
     assert grupo["titulos"][1]["linha_digitavel"]
 
 
+def test_api_boletos_consulta_publica_por_cnpj_inclui_boleto_local_sem_documento_via_nf_grv(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        db.session.add(
+            BoletoContaReceber(
+                numero_nota="NFLOCALDOC",
+                chave_acesso="",
+                banco="Banco do Brasil",
+                valor=500.0,
+                nosso_numero="LOCALDOC1",
+                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000050000",
+                codigo_barras="0019000000000050000",
+                status="Gerado",
+                usuario_geracao="teste",
+                cpf_cnpj_pagador=None,
+                nome_pagador=None,
+            )
+        )
+        db.session.commit()
+
+    titulos = [
+        {
+            "fonte": "grv_postgres",
+            "tipo": "titulo_aberto",
+            "id_grv": "100",
+            "nome_pagador": "Cliente Antigo",
+            "cpf_cnpj_pagador": "12345678000199",
+            "numero_nota": "NFLOCALDOC",
+            "documento": "NFLOCALDOC-1/1",
+            "orcamento": "90",
+            "valor": 500.0,
+            "valor_original": 500.0,
+            "valor_pago": 0.0,
+            "vencimento": "10/06/2026",
+            "status": "Em aberto",
+            "banco": "Banco do Brasil",
+            "pode_gerar_boleto": True,
+        }
+    ]
+
+    with patch(
+        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
+        return_value=titulos,
+    ), patch("conferencia_app.services.bb_boleto_service.BBBoletoService.is_configured", return_value=False):
+        consulta = client.post(
+            "/api/boletos/consultar",
+            json={"modo": "cpf_cnpj", "cpf_cnpj": "12.345.678/0001-99"},
+        )
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["total_titulos"] == 2
+    assert any(
+        titulo.get("nosso_numero") == "LOCALDOC1"
+        for grupo in payload["boletos"]
+        for titulo in grupo.get("titulos", [])
+    )
+
+
+def test_api_boletos_consulta_publica_por_cnpj_e_nf_encontra_boleto_local_sem_documento(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        db.session.add(
+            BoletoContaReceber(
+                numero_nota="NFCPFNF",
+                chave_acesso="",
+                banco="Banco do Brasil",
+                valor=780.0,
+                nosso_numero="NFCPFNF1",
+                linha_digitavel="00190.00009 00000.000000 00000.000000 1 00000000078000",
+                codigo_barras="0019000000000078000",
+                status="Gerado",
+                usuario_geracao="teste",
+                cpf_cnpj_pagador=None,
+                nome_pagador=None,
+            )
+        )
+        db.session.commit()
+
+    with patch(
+        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
+        return_value=[],
+    ), patch("conferencia_app.services.bb_boleto_service.BBBoletoService.is_configured", return_value=False):
+        consulta = client.post(
+            "/api/boletos/consultar",
+            json={
+                "modo": "cpf_cnpj",
+                "cpf_cnpj": "12.345.678/0001-99",
+                "numero_nota": "NFCPFNF",
+            },
+        )
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["total_titulos"] == 1
+    assert payload["boletos"][0]["titulos"][0]["nosso_numero"] == "NFCPFNF1"
+
+
 def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -2331,7 +2435,9 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
 
     chamadas_get = []
 
-    def fake_get(url, **kwargs):
+    def fake_bb_request(method, url, **kwargs):
+        if method == "POST":
+            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
         chamadas_get.append(kwargs.get("params") or {})
         return FakeResp(
             {
@@ -2351,9 +2457,9 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
         )
 
     with app.app_context(), patch(
-        "conferencia_app.services.bb_boleto_service.requests.post",
-        return_value=FakeResp({"access_token": "token-bb", "expires_in": 3600}),
-    ), patch("conferencia_app.services.bb_boleto_service.requests.get", side_effect=fake_get):
+        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
+        side_effect=fake_bb_request,
+    ):
         from conferencia_app.services.bb_boleto_service import BBBoletoService
 
         BBBoletoService._token_cache = {}
@@ -2402,7 +2508,9 @@ def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
 
     chamadas_get = []
 
-    def fake_get(url, **kwargs):
+    def fake_bb_request(method, url, **kwargs):
+        if method == "POST":
+            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
         chamadas_get.append(kwargs.get("params") or {})
         return FakeResp(
             {
@@ -2420,9 +2528,9 @@ def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
         )
 
     with app.app_context(), patch(
-        "conferencia_app.services.bb_boleto_service.requests.post",
-        return_value=FakeResp({"access_token": "token-bb", "expires_in": 3600}),
-    ), patch("conferencia_app.services.bb_boleto_service.requests.get", side_effect=fake_get):
+        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
+        side_effect=fake_bb_request,
+    ):
         from conferencia_app.services.bb_boleto_service import BBBoletoService
 
         BBBoletoService._token_cache = {}
