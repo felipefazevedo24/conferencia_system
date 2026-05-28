@@ -27,7 +27,7 @@
       --yellow-bg: #fff4ce;
       --red: #b42318;
       --red-bg: #fff0ed;
-      --shadow: 0 10px 26px rgba(7, 31, 58, .10);
+      --shadow: 0 8px 22px rgba(7, 31, 58, .08);
       --radius: 8px;
     }
     body {
@@ -35,7 +35,7 @@
       min-height: 100vh;
       font-family: Arial, Helvetica, sans-serif;
       color: var(--ink);
-      background: #edf3f8;
+      background: #eef4f9;
     }
     .hero {
       position: relative;
@@ -45,7 +45,7 @@
       background-size: auto, 420px;
       background-position: center, right 8% center;
       background-repeat: no-repeat;
-      padding: 24px 24px 68px;
+      padding: 18px 24px 56px;
     }
     .hero::after {
       content: "";
@@ -60,7 +60,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 28px;
+      margin-bottom: 18px;
     }
     .brand {
       display: inline-flex;
@@ -104,7 +104,7 @@
       white-space: nowrap;
     }
     .hero-copy {
-      max-width: 680px;
+      max-width: 760px;
     }
     .eyebrow {
       display: inline-flex;
@@ -119,15 +119,22 @@
     }
     h1 {
       font-family: Arial, Helvetica, sans-serif;
-      font-size: clamp(34px, 5vw, 58px);
-      line-height: 1.02;
-      margin: 0 0 14px;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.06;
+      margin: 0;
       letter-spacing: 0;
     }
-    .hero-copy p { display: none; }
+    .hero-copy p {
+      display: block;
+      max-width: 620px;
+      margin: 10px 0 0;
+      color: #d5e7fb;
+      font-size: 15px;
+      line-height: 1.45;
+    }
     .main {
       max-width: 1120px;
-      margin: -54px auto 0;
+      margin: -42px auto 0;
       padding: 0 24px 42px;
       position: relative;
       z-index: 2;
@@ -144,7 +151,7 @@
       border-radius: var(--radius);
       box-shadow: var(--shadow);
     }
-    .search-card { padding: 24px; }
+    .search-card { padding: 20px; }
     .card-head {
       display: flex;
       align-items: flex-start;
@@ -335,12 +342,11 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 18px;
+      padding: 16px;
       margin-bottom: 12px;
-      box-shadow: 0 8px 22px rgba(7,31,58,.06);
+      box-shadow: 0 6px 18px rgba(7,31,58,.05);
     }
-    .boleto-card.clickable { cursor: pointer; }
-    .boleto-card.clickable:hover { border-color: #9fc2e8; box-shadow: 0 10px 26px rgba(7,31,58,.10); }
+    .boleto-card:hover { border-color: #bfd2e6; }
     .boleto-top {
       display: flex;
       justify-content: space-between;
@@ -363,6 +369,15 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .cliente-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 7px;
+      color: #44546a;
+      font-size: 12px;
+      font-weight: 800;
+    }
     .status-badge {
       display: inline-flex;
       align-items: center;
@@ -381,7 +396,7 @@
     .status-pendente { background: var(--yellow-bg); color: var(--yellow); }
     .boleto-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 12px;
     }
@@ -437,12 +452,20 @@
       font-weight: 900;
       cursor: pointer;
     }
+    .boleto-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .boleto-actions .btn-copy { margin-top: 0; }
     .btn-download {
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      margin-top: 9px;
-      margin-left: 6px;
+      margin-top: 0;
+      margin-left: 0;
       border: 1px solid var(--blue-700);
       border-radius: var(--radius);
       background: var(--blue-700);
@@ -452,14 +475,33 @@
       font-weight: 900;
       text-decoration: none;
     }
+    .btn-download:hover { background: var(--blue-800); }
+    .download-unavailable {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid #fed7aa;
+      border-radius: var(--radius);
+      background: #fff7ed;
+      color: #9a3412;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
     .btn-copy.copied { background: var(--green-bg); color: var(--green); border-color: #8bd9b5; }
     .grupo-detalhe {
-      display: none;
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid #edf2f7;
     }
-    .boleto-card.open .grupo-detalhe { display: block; }
+    .grupo-label {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
     .grupo-item {
       padding: 12px;
       margin-top: 10px;
@@ -752,13 +794,14 @@
         if (isGrupo && qtd) subtitulos.push(qtd + (qtd === 1 ? ' título em aberto' : ' títulos em aberto'));
         if (b.numero_nota && !String(titulo).includes(b.numero_nota)) subtitulos.push('NF: ' + b.numero_nota);
         if (b.orcamento && !String(titulo).includes(b.orcamento)) subtitulos.push('Orçamento: ' + b.orcamento);
+        const cliente = b.nome_pagador ? '<span class="cliente-line"><i class="fas fa-user"></i> ' + esc(b.nome_pagador) + '</span>' : '';
         const card = document.createElement('div');
-        card.className = 'boleto-card' + (isGrupo ? ' clickable' : '');
+        card.className = 'boleto-card';
         card.innerHTML =
           '<div class="boleto-top">' +
             '<div class="boleto-id">' + esc(titulo) +
               (subtitulos.length ? '<small>' + esc(subtitulos.join(' · ')) + '</small>' : '') +
-              (isGrupo ? '<small><i class="fas fa-chevron-down"></i> Clique para detalhar</small>' : '') +
+              cliente +
             '</div>' +
             '<span class="status-badge ' + getStatusClass(b.status) + '"><i class="fas fa-circle" style="font-size:6px;"></i> ' + esc(b.status || 'Gerado') + '</span>' +
           '</div>' +
@@ -775,7 +818,7 @@
 
     function renderGrupoDetalhe(titulos) {
       if (!titulos.length) return '';
-      return '<div class="grupo-detalhe">' + titulos.map(function(t) {
+      return '<div class="grupo-detalhe"><div class="grupo-label">Boletos do grupo</div>' + titulos.map(function(t) {
         const nome = t.nosso_numero ? 'Nosso Nº ' + t.nosso_numero : (t.documento || t.numero_nota || 'Título em aberto');
         return '<div class="grupo-item">' +
           '<div class="grupo-item-title"><span>' + esc(nome) + '</span><span>R$ ' + formatMoney(t.valor) + '</span></div>' +
@@ -791,9 +834,25 @@
     }
 
     function renderAcoesBoleto(b) {
-      return (b.linha_digitavel ? '<div class="boleto-linha"><label>Linha digitável</label><div class="linha-valor">' + esc(b.linha_digitavel) + '</div><button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '"><i class="fas fa-copy"></i> Copiar linha digitável</button></div>' : '') +
-        (b.codigo_barras ? '<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '"><i class="fas fa-barcode"></i> Copiar código de barras</button>' : '') +
-        (b.url_boleto ? '<a class="btn-download" href="' + escAttr(b.url_boleto) + '" target="_blank" rel="noopener"><i class="fas fa-download"></i> Baixar boleto</a>' : '');
+      const linha = b.linha_digitavel
+        ? '<div class="boleto-linha"><label>Linha digitável</label><div class="linha-valor">' + esc(b.linha_digitavel) + '</div></div>'
+        : '';
+      const actions = [];
+      if (b.url_boleto) {
+        actions.push('<a class="btn-download" href="' + escAttr(b.url_boleto) + '" target="_blank" rel="noopener"><i class="fas fa-download"></i> Baixar boleto</a>');
+      } else if (b.pode_gerar_boleto || b.boleto_gerado || b.nosso_numero) {
+        actions.push('<span class="download-unavailable"><i class="fas fa-triangle-exclamation"></i> PDF do boleto indisponível</span>');
+      }
+      if (b.linha_digitavel) {
+        actions.push('<button type="button" class="btn-copy" data-copy="' + escAttr(b.linha_digitavel) + '"><i class="fas fa-copy"></i> Copiar linha digitável</button>');
+      }
+      if (b.codigo_barras) {
+        actions.push('<button type="button" class="btn-copy" data-copy="' + escAttr(b.codigo_barras) + '"><i class="fas fa-barcode"></i> Copiar código de barras</button>');
+      }
+      if (!actions.length) {
+        actions.push('<span class="download-unavailable"><i class="fas fa-circle-info"></i> Boleto em processamento</span>');
+      }
+      return linha + '<div class="boleto-actions">' + actions.join('') + '</div>';
     }
 
     function renderEmpty() {
@@ -803,15 +862,6 @@
     }
 
     document.addEventListener('click', function(e) {
-      const groupCard = e.target.closest('.boleto-card.clickable');
-      if (groupCard && !e.target.closest('.btn-copy') && !e.target.closest('.btn-download')) {
-        groupCard.classList.toggle('open');
-        const hint = groupCard.querySelector('.boleto-id small:last-child');
-        if (hint) hint.innerHTML = groupCard.classList.contains('open')
-          ? '<i class="fas fa-chevron-up"></i> Ocultar detalhe'
-          : '<i class="fas fa-chevron-down"></i> Clique para detalhar';
-      }
-
       const copyBtn = e.target.closest('.btn-copy');
       if (!copyBtn) return;
       const text = copyBtn.getAttribute('data-copy') || '';
