@@ -501,52 +501,108 @@
     }
 
     @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+    /* === Overrides eui-* para alinhar rec-* com o design system Fiori === */
+    body { background: var(--eui-bg, #f5f7fb) !important; }
+    .rec-shell { padding: 20px; max-width: 1600px; margin: 0 auto; }
+    .rec-card {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+        padding: 0 !important;
+    }
+    .rec-card__head {
+        padding: 16px 20px !important;
+        border-bottom: 1px solid #eef2f7 !important;
+        background: #fff !important;
+    }
+    .rec-card__title { font-size: 14px !important; font-weight: 700 !important; color: #0f172a !important; text-transform: none !important; letter-spacing: 0 !important; }
+    .rec-card__sub { font-size: 12px !important; color: #64748b !important; margin-top: 2px !important; }
+    .rec-card__body { padding: 16px 20px !important; }
+    .rec-btn {
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        font-weight: 600 !important;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+        font-size: 13px !important;
+        padding: 8px 14px !important;
+        border: 1px solid #e2e8f0 !important;
+        background: #fff !important;
+        color: #0f172a !important;
+        transition: background 0.15s, border-color 0.15s !important;
+    }
+    .rec-btn:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; transform: none !important; }
+    .rec-btn--primary { background: #0f62c9 !important; border-color: #0f62c9 !important; color: #fff !important; }
+    .rec-btn--primary:hover { background: #0b4fa4 !important; border-color: #0b4fa4 !important; }
+    .rec-btn--success { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
+    .rec-btn--success:hover { background: #128a3d !important; border-color: #128a3d !important; }
+    .rec-btn--danger { background: #fff !important; border-color: #ef4444 !important; color: #dc2626 !important; }
+    .rec-btn--danger:hover { background: #fef2f2 !important; }
+    .rec-btn--warning { background: #f59e0b !important; border-color: #f59e0b !important; color: #fff !important; }
+    .rec-input, .rec-textarea, .rec-select {
+        border-radius: 8px !important;
+        border: 1px solid #cbd5e1 !important;
+        padding: 9px 12px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+    }
+    .rec-input:focus, .rec-textarea:focus, .rec-select:focus { border-color: #0f62c9 !important; box-shadow: 0 0 0 3px rgba(15,98,201,0.15) !important; }
+    .rec-table th { background: #f8fafc !important; font-weight: 700 !important; font-size: 11px !important; text-transform: uppercase !important; color: #475569 !important; }
+    .rec-table tr:hover td { background: #f8fafc !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="rec-shell">
+<div class="rec-shell eui-scope">
 
     <!-- PAGE HEADER -->
-    <header class="rec-page-header">
-        <div class="rec-page-header__left">
-            <div class="rec-page-header__icon"><i class="fas fa-clipboard-check"></i></div>
-            <div>
-                <h1 class="rec-page-header__title">Auditor de Compras</h1>
-                <p class="rec-page-header__sub">Validação fiscal e vinculação de Notas Fiscais importadas.</p>
-            </div>
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Recebimento · Compras</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-check"></i> Auditor de Compras</h1>
+            <p class="eui-page-header__sub">Validação fiscal e vinculação de Notas Fiscais importadas.</p>
         </div>
-        <div class="rec-page-header__right">
-            <a class="rec-btn" href="/upload"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
-            <button class="rec-btn rec-btn--primary" type="button" onclick="carregarNotas()"><i class="fas fa-sync"></i> Sincronizar</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <a class="eui-btn eui-btn--ghost" href="/upload"><i class="fas fa-cloud-upload-alt"></i> Importar XML</a>
+            <button class="eui-btn eui-btn--primary" type="button" onclick="carregarNotas()"><i class="fas fa-sync"></i> Sincronizar</button>
         </div>
     </header>
 
     <!-- KPI DASHBOARD -->
-    <section id="kpi-dashboard" class="rec-kpi-grid">
-        <div class="rec-kpi rec-kpi--warning">
-            <span class="rec-kpi__icon"><i class="fas fa-hourglass-half"></i></span>
-            <span class="rec-kpi__label">Pendentes</span>
-            <span class="rec-kpi__value" id="kpi-pendentes">--</span>
-            <span class="rec-kpi__hint">Aguardando auditoria</span>
+    <section id="kpi-dashboard" class="eui-stats" style="margin-bottom:18px;">
+        <div class="eui-stat">
+            <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div>
+            <div class="eui-stat__body">
+                <div class="eui-stat__label">Pendentes</div>
+                <div class="eui-stat__value" id="kpi-pendentes">--</div>
+                <div class="eui-stat__hint">Aguardando auditoria</div>
+            </div>
         </div>
-        <div class="rec-kpi rec-kpi--primary">
-            <span class="rec-kpi__icon"><i class="fas fa-search"></i></span>
-            <span class="rec-kpi__label">Auditadas</span>
-            <span class="rec-kpi__value" id="kpi-auditadas">--</span>
-            <span class="rec-kpi__hint">Em análise fiscal</span>
+        <div class="eui-stat">
+            <div class="eui-stat__icon"><i class="fas fa-search"></i></div>
+            <div class="eui-stat__body">
+                <div class="eui-stat__label">Auditadas</div>
+                <div class="eui-stat__value" id="kpi-auditadas">--</div>
+                <div class="eui-stat__hint">Em análise fiscal</div>
+            </div>
         </div>
-        <div class="rec-kpi rec-kpi--success">
-            <span class="rec-kpi__icon"><i class="fas fa-check-circle"></i></span>
-            <span class="rec-kpi__label">Aprovadas</span>
-            <span class="rec-kpi__value" id="kpi-aprovadas">--</span>
-            <span class="rec-kpi__hint">Liberadas no período</span>
+        <div class="eui-stat">
+            <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
+            <div class="eui-stat__body">
+                <div class="eui-stat__label">Aprovadas</div>
+                <div class="eui-stat__value" id="kpi-aprovadas">--</div>
+                <div class="eui-stat__hint">Liberadas no período</div>
+            </div>
         </div>
-        <div class="rec-kpi rec-kpi--danger">
-            <span class="rec-kpi__icon"><i class="fas fa-times-circle"></i></span>
-            <span class="rec-kpi__label">Recusadas</span>
-            <span class="rec-kpi__value" id="kpi-recusadas">--</span>
-            <span class="rec-kpi__hint">Com decisão de recusa</span>
+        <div class="eui-stat">
+            <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-times-circle"></i></div>
+            <div class="eui-stat__body">
+                <div class="eui-stat__label">Recusadas</div>
+                <div class="eui-stat__value" id="kpi-recusadas">--</div>
+                <div class="eui-stat__hint">Com decisão de recusa</div>
+            </div>
         </div>
     </section>
 
