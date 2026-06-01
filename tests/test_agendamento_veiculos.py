@@ -469,6 +469,39 @@ def test_busca_linhas_pedido_usa_erp_postgres():
     salvar_cache.assert_not_called()
 
 
+def test_consultar_nf_agendamento_usa_nfe_emitida_erp_postgres(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+
+    with app.app_context(), patch(
+        "conferencia_app.services.agendamento_service.buscar_nfe_emitida_erp",
+        return_value={
+            "autorizada": True,
+            "numero": "11140",
+            "dest_nome": "Cliente Teste",
+            "dest_cnpj": "55666777000188",
+            "chave": "4" * 44,
+            "email_danfe": "danfe@cliente.com",
+        },
+    ) as buscar_erp:
+        from conferencia_app.services.agendamento_service import consultar_nf_agendamento
+
+        resultado = consultar_nf_agendamento("11140")
+
+    assert resultado["encontrada"] is True
+    assert resultado["numero_nf"] == "11140"
+    assert resultado["fonte"]["tipo"] == "ERPPostgres"
+    assert resultado["cliente"]["nome"] == "Cliente Teste"
+    assert resultado["cliente"]["logradouro"] == "Avenida Beta"
+    assert resultado["cliente"]["cidade"] == "Campinas"
+    assert resultado["chave"] == "4" * 44
+    buscar_erp.assert_called_once_with("11140", "")
+
+
 def test_linha_postgres_preserva_codigo_material_do_erp_sem_formatar():
     linha = _linha_postgres_to_pedido(
         {

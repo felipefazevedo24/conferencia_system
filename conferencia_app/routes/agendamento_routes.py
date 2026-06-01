@@ -104,6 +104,7 @@ def _origem_documento_label(origem: str | None) -> str:
     mapping = {
         "GoogleSheets": "Google Sheets",
         "Consyste": "Consyste",
+        "ERPPostgres": "ERP/Postgres",
         "Manual": "Manual",
     }
     return mapping.get(str(origem or "").strip(), str(origem or "").strip() or "---")
@@ -821,7 +822,7 @@ def criar_solicitacao_agendamento():
     if tipo == "COLETA" and consulta.get("encontrada"):
         origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "GoogleSheets").strip() or "GoogleSheets"
     elif tipo == "ENTREGA" and consulta.get("encontrada"):
-        origem_documento = "Consyste"
+        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "ERPPostgres").strip() or "ERPPostgres"
 
     usuario = session.get("username", "desconhecido")
     agora = datetime.now()

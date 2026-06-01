@@ -74,6 +74,13 @@ def _sanitize_error(exc: Exception) -> str:
     return re.sub(r"([?&]gw-dev-app-key=)[^&\s]+", r"\1***", str(exc))
 
 
+def _normalizar_numero_nf(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw.split("-", 1)[0].strip()
+
+
 class BBBoletoService:
     """Consulta e enriquecimento de boletos com dados do BB."""
 
@@ -278,6 +285,13 @@ class BBBoletoService:
             or raw.get("status")
         )
 
+        numero_documento = str(
+            raw.get("numeroTituloBeneficiario")
+            or raw.get("numeroDocumento")
+            or raw.get("seuNumero")
+            or ""
+        ).strip()
+
         return {
             "nosso_numero": str(
                 raw.get("numeroTituloCliente")
@@ -287,12 +301,8 @@ class BBBoletoService:
                 or raw.get("id")
                 or ""
             ),
-            "numero_nota": str(
-                raw.get("numeroTituloBeneficiario")
-                or raw.get("numeroDocumento")
-                or raw.get("seuNumero")
-                or ""
-            ),
+            "numero_nota": _normalizar_numero_nf(numero_documento),
+            "documento": numero_documento,
             "valor": _to_float(raw.get("valorOriginal") or raw.get("valor") or raw.get("valorCobrado")),
             "vencimento": _format_api_date(
                 raw.get("dataVencimento")
@@ -370,43 +380,6 @@ class BBBoletoService:
         return resultado
 
     @classmethod
-    def consultar_boleto_por_nosso_numero(cls, nosso_numero: str) -> dict | None:
-        headers = cls._headers()
-        if headers is None:
-            return None
-
-        convenio = str(current_app.config.get("BB_CONVENIO", "")).strip()
-        app_key = str(current_app.config.get("BB_DEVELOPER_APPLICATION_KEY", "")).strip()
-        base_url = str(current_app.config.get("BB_API_BASE", "")).strip().rstrip("/")
-        nosso_numero_digits = _only_digits(nosso_numero)
-
-        if not convenio or not app_key or not base_url or not nosso_numero_digits:
-            return None
-
-        try:
-            resp = cls._request(
-                "GET",
-                f"{base_url}/boletos/{nosso_numero_digits}",
-                params={
-                    "gw-dev-app-key": app_key,
-                    "numeroConvenio": convenio,
-                },
-                headers=headers,
-                cert=cls._cert(),
-                timeout=cls._timeout(),
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-            if isinstance(payload, list):
-                payload = payload[0] if payload else {}
-            if not isinstance(payload, dict) or not payload:
-                return None
-            return cls._normalizar_boleto_api(payload)
-        except Exception as exc:
-            logger.warning("BB: falha ao consultar boleto %s - %s", nosso_numero_digits, _sanitize_error(exc))
-            return None
-
-    @classmethod
     def consultar_boletos_api(cls, *, cpf_cnpj: str = "", numero_nota: str = "") -> list[dict]:
         headers = cls._headers()
         params_base = cls._base_query_params()
@@ -415,7 +388,7 @@ class BBBoletoService:
             return []
 
         doc = _only_digits(cpf_cnpj)
-        nota = str(numero_nota or "").strip()
+        nota = _normalizar_numero_nf(numero_nota)
         if not doc and not nota:
             return []
 
@@ -449,7 +422,7 @@ class BBBoletoService:
                     boleto = cls._normalizar_boleto_api(raw)
                     if doc and _only_digits(boleto.get("cpf_cnpj_pagador")) != doc:
                         continue
-                    if nota and str(boleto.get("numero_nota") or "").strip() != nota:
+                    if nota and _normalizar_numero_nf(boleto.get("numero_nota") or boleto.get("documento")) != nota:
                         continue
                     chave = boleto.get("nosso_numero") or boleto.get("linha_digitavel") or str(raw)
                     if chave in vistos:
@@ -498,8 +471,8 @@ class BBBoletoService:
         if nosso_titulo and nosso_api and nosso_titulo == nosso_api:
             return True
 
-        nota_titulo = str(titulo.get("numero_nota") or "").strip()
-        nota_api = str(api_boleto.get("numero_nota") or "").strip()
+        nota_titulo = _normalizar_numero_nf(titulo.get("numero_nota") or titulo.get("documento"))
+        nota_api = _normalizar_numero_nf(api_boleto.get("numero_nota") or api_boleto.get("documento"))
         if not nota_titulo or not nota_api or nota_titulo != nota_api:
             return False
 
@@ -537,19 +510,7 @@ class BBBoletoService:
 
     @classmethod
     def _enriquecer_boletos_com_api(cls, boletos: list[dict]) -> tuple[list[dict], bool]:
-        if not boletos or not cls.is_configured():
-            return [cls._merge_boleto(item, None) for item in boletos], False
-
-        enriched = []
-        refreshed_any = False
-        for boleto in boletos:
-            api_boleto = None
-            nosso_numero = _only_digits(boleto.get("nosso_numero"))
-            if nosso_numero:
-                api_boleto = cls.consultar_boleto_por_nosso_numero(nosso_numero)
-            refreshed_any = refreshed_any or bool(api_boleto)
-            enriched.append(cls._merge_boleto(boleto, api_boleto))
-        return enriched, refreshed_any
+        return [cls._merge_boleto(item, None) for item in boletos], False
 
     @classmethod
     def consultar_boletos_local(cls, cpf_cnpj: str, somente_abertos: bool = False) -> list[dict]:
@@ -594,7 +555,7 @@ class BBBoletoService:
 
     @classmethod
     def consultar_boletos_locais_por_notas(cls, numeros_notas: list[str], somente_abertos: bool = False) -> list[dict]:
-        notas = sorted({str(nota or "").strip() for nota in numeros_notas if str(nota or "").strip()})
+        notas = sorted({_normalizar_numero_nf(nota) for nota in numeros_notas if _normalizar_numero_nf(nota)})
         if not notas:
             return []
         boletos = (
@@ -607,7 +568,7 @@ class BBBoletoService:
 
     @classmethod
     def consultar_por_nota_valor(cls, numero_nota: str, valor: float, somente_abertos: bool = False) -> list[dict]:
-        nota = str(numero_nota or "").strip()
+        nota = _normalizar_numero_nf(numero_nota)
         if not nota:
             return []
 

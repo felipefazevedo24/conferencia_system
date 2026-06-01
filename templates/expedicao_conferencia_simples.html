@@ -74,28 +74,48 @@
     .exp-summary-card span { display: block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--erp-muted); }
     .exp-summary-card strong { display: block; margin-top: 6px; font-size: 28px; line-height: 1; color: var(--erp-text); font-weight: 900; }
     .exp-toolbar { display: grid; grid-template-columns: 1fr 220px; gap: 16px; margin-bottom: 20px; }
-    .exp-list { display: grid; gap: 18px; }
-    .exp-record { padding: 22px; border-radius: 20px; border: 1px solid var(--erp-border); background: linear-gradient(135deg, #fff 0%, #f8fafc 100%); display: grid; gap: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); transition: all 0.2s ease; }
-    .exp-record:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-    .exp-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-    .exp-record-title { display: grid; gap: 8px; }
-    .exp-record-title strong { font-size: 20px; line-height: 1; color: var(--erp-text); font-weight: 800; }
-    .exp-record-title span, .exp-caption { font-size: 12px; color: var(--erp-muted); font-weight: 500; }
-    .exp-status { display: inline-flex; align-items: center; min-height: 34px; padding: 0 16px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-    .exp-status.pending { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #fbbf24; color: #92400e; }
-    .exp-status.expedido { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 1px solid #60a5fa; color: #1e40af; }
-    .exp-status.done { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #34d399; color: #065f46; }
-    .exp-record-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-    .exp-record-field { padding: 16px 18px; border-radius: 16px; background: #f8fafc; border: 1px solid var(--erp-border); }
-    .exp-record-field span { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--erp-muted); }
-    .exp-record-field strong { display: block; margin-top: 8px; font-size: 14px; color: var(--erp-text); font-weight: 700; word-break: break-word; }
-    .exp-record-actions { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .exp-list { display: grid; gap: 8px; }
+    .exp-record { border-radius: 12px; border: 1px solid var(--erp-border); background: #fff; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+    .exp-record:hover { border-color: #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .exp-record.open { border-color: var(--sap-blue); box-shadow: 0 4px 12px rgba(59,130,246,0.08); }
+    .exp-row { display: grid; grid-template-columns: 110px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; }
+    .exp-row-id { display: grid; gap: 2px; min-width: 0; }
+    .exp-row-id strong { font-size: 14px; color: var(--erp-text); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-row-id span, .exp-caption { font-size: 12px; color: var(--erp-muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-row-actions { display: flex; align-items: center; gap: 6px; }
+    .exp-status { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 10px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .exp-status.pending { background: #fef3c7; color: #92400e; }
+    .exp-status.expedido { background: #dbeafe; color: #1e40af; }
+    .exp-status.done { background: #d1fae5; color: #065f46; }
+    .exp-btn-mini { min-height: 32px; border-radius: 8px; padding: 0 12px; border: 1px solid var(--sap-blue); background: var(--sap-blue); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s ease; white-space: nowrap; }
+    .exp-btn-mini:hover { background: var(--sap-blue-dark); }
+    .exp-btn-mini.ghost { background: #fff; color: var(--erp-text); border-color: var(--erp-border); }
+    .exp-btn-mini.ghost:hover { background: #f8fafc; border-color: var(--sap-blue); color: var(--sap-blue); }
+    .exp-btn-icon { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--erp-border); background: #fff; color: var(--erp-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; transition: all 0.15s ease; }
+    .exp-btn-icon:hover { background: #f1f5f9; color: var(--erp-text); }
+    .exp-kebab { position: relative; }
+    .exp-kebab-menu { display: none; position: absolute; right: 0; top: calc(100% + 4px); min-width: 180px; background: #fff; border: 1px solid var(--erp-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px; z-index: 50; }
+    .exp-kebab.open .exp-kebab-menu { display: grid; gap: 2px; }
+    .exp-kebab-menu button { text-align: left; background: transparent; border: none; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: var(--erp-text); cursor: pointer; font-weight: 500; }
+    .exp-kebab-menu button:hover { background: #f1f5f9; }
+    .exp-kebab-menu button.danger { color: var(--erp-danger); }
+    .exp-kebab-menu button.danger:hover { background: #fef2f2; }
+    .exp-detail { display: none; padding: 0 16px 16px; border-top: 1px solid #f1f5f9; }
+    .exp-record.open .exp-detail { display: grid; gap: 12px; }
+    .exp-detail-info { display: flex; flex-wrap: wrap; gap: 16px 24px; padding-top: 12px; font-size: 12px; color: var(--erp-text); }
+    .exp-detail-info > div { display: grid; gap: 2px; min-width: 100px; }
+    .exp-detail-info span { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--erp-muted); }
+    .exp-detail-info strong { font-size: 13px; font-weight: 600; color: var(--erp-text); }
+    .exp-fotos-toggle { display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; border: 1px solid var(--erp-border); padding: 6px 12px; border-radius: 8px; font-size: 12px; color: var(--erp-text); cursor: pointer; font-weight: 600; width: fit-content; }
+    .exp-fotos-toggle:hover { border-color: var(--sap-blue); color: var(--sap-blue); }
+    .exp-fotos-wrap { display: none; }
+    .exp-fotos-wrap.show { display: block; }
     .exp-toast { position: fixed; right: 24px; bottom: 24px; min-width: 280px; max-width: 440px; padding: 16px 20px; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); opacity: 0; pointer-events: none; transform: translateY(12px); transition: all 0.25s ease; z-index: 80; font-weight: 600; }
     .exp-toast.show { opacity: 1; transform: translateY(0); }
     .exp-toast.success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
     .exp-toast.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-    @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } .exp-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar, .exp-record-grid { grid-template-columns: 1fr; } .exp-record-head, .exp-record-actions { display: grid; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } }
+    @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar { grid-template-columns: 1fr; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } .exp-row { grid-template-columns: 1fr; gap: 8px; } .exp-row-actions { justify-content: flex-end; flex-wrap: wrap; } }
 
     /* ===== ROMANEIO PRINT ===== */
     .romaneio-overlay { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.5); align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px; }
@@ -597,72 +617,107 @@ function renderHistorico(data) {
         const expedido = registro.status_slug === "expedido";
         const finalizado = registro.status_slug === "finalizado";
         const badgeClass = pending ? "pending" : (aguardando ? "pending" : (expedido ? "expedido" : "done"));
-        const fotosHtml = (registro.fotos || []).length
-            ? `<div class="exp-preview-grid">${registro.fotos.map(foto => `
-                <div style="position:relative;">
-                    <a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>
-                    ${isAdmin ? `<button class="exp-btn-secondary" type="button" data-action="delete-foto" data-id="${registro.id}" data-foto-id="${foto.id}" style="position:absolute;top:6px;right:6px;min-height:28px;padding:0 10px;border-color:#ef4444;color:#ef4444;background:#fff;">Excluir</button>` : ""}
-                </div>
-            `).join("")}</div>`
+        const fotosCount = (registro.fotos || []).length;
+        const fotosHtml = fotosCount
+            ? `<button type="button" class="exp-fotos-toggle" data-action="toggle-fotos">📷 ${fotosCount} ${fotosCount === 1 ? "foto" : "fotos"}</button>
+               <div class="exp-fotos-wrap"><div class="exp-preview-grid">${registro.fotos.map(foto => `
+                    <div style="position:relative;">
+                        <a class="exp-photo" href="${foto.url}" target="_blank" rel="noopener noreferrer"><img src="${foto.url}" alt="${foto.nome}"><span>${foto.nome}</span></a>
+                        ${isAdmin ? `<button class="exp-btn-secondary" type="button" data-action="delete-foto" data-id="${registro.id}" data-foto-id="${foto.id}" style="position:absolute;top:6px;right:6px;min-height:28px;padding:0 10px;border-color:#ef4444;color:#ef4444;background:#fff;">Excluir</button>` : ""}
+                    </div>
+               `).join("")}</div></div>`
             : `<div class="exp-caption">Sem fotos anexadas.</div>`;
-        
+
         // Título baseado no tipo de referência
         const tipoRef = registro.tipo_referencia === "OrdemCompra" ? "OC" : "Orç";
         const numRef = registro.tipo_referencia === "OrdemCompra" ? (registro.ordem_compra || "N/A") : (registro.orcamento || "N/A");
         const tituloRef = `${tipoRef} ${numRef}`;
-        
+        const nfTitulo = registro.numero_nf ? ` · NF ${registro.numero_nf}` : "";
+        const clienteResumo = registro.nome_cliente || "Cliente não informado";
+
         // Box de canhoto
         let canhotoHtml = "";
         if (expedido && !registro.canhoto_url) {
             canhotoHtml = `
-                <div style="margin-top:12px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#dbeafe 0%,#eff6ff 100%);border:1px dashed #3b82f6;">
-                    <div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:8px;">📸 Foto do Canhoto Pendente</div>
-                    <p style="margin:0 0 10px;font-size:12px;color:#1e40af;">Para finalizar, tire uma foto do canhoto assinado pelo motorista.</p>
+                <div style="padding:14px;border-radius:10px;background:#eff6ff;border:1px dashed #3b82f6;">
+                    <div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:6px;">📸 Foto do canhoto pendente</div>
+                    <p style="margin:0 0 10px;font-size:12px;color:#1e40af;">Tire uma foto do canhoto assinado pelo motorista para finalizar.</p>
                     <input type="file" accept="image/*" capture="environment" data-action="upload-canhoto" data-id="${registro.id}" style="display:none;" id="canhoto-input-${registro.id}">
-                    <button class="exp-btn" type="button" onclick="document.getElementById('canhoto-input-${registro.id}').click()">📷 Tirar foto do canhoto</button>
+                    <button class="exp-btn-mini" type="button" onclick="document.getElementById('canhoto-input-${registro.id}').click()">📷 Tirar foto do canhoto</button>
                 </div>`;
         } else if (finalizado && registro.canhoto_url) {
             canhotoHtml = `
-                <div style="margin-top:12px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%);border:1px solid #22c55e;">
-                    <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px;">✅ Canhoto anexado</div>
-                    <div style="display:flex;gap:10px;align-items:center;">
-                        <a href="${registro.canhoto_url}" target="_blank"><img src="${registro.canhoto_url}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:2px solid #22c55e;" alt="Canhoto"></a>
-                        <span style="font-size:12px;color:#166534;">Anexado em ${registro.canhoto_uploaded_at || "---"} por ${registro.canhoto_uploaded_by || "---"}</span>
-                        ${isAdmin ? `<button class="exp-btn-secondary" type="button" data-action="delete-canhoto" data-id="${registro.id}" style="min-height:32px;padding:0 10px;border-color:#ef4444;color:#ef4444;background:#fff;">Excluir canhoto</button>` : ""}
-                    </div>
+                <div style="padding:12px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;display:flex;gap:10px;align-items:center;">
+                    <a href="${registro.canhoto_url}" target="_blank"><img src="${registro.canhoto_url}" style="width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #22c55e;" alt="Canhoto"></a>
+                    <div style="flex:1;font-size:12px;color:#166534;"><strong style="display:block;font-size:13px;">✅ Canhoto anexado</strong>${registro.canhoto_uploaded_at || "---"} por ${registro.canhoto_uploaded_by || "---"}</div>
+                    ${isAdmin ? `<button class="exp-btn-mini ghost" type="button" data-action="delete-canhoto" data-id="${registro.id}" style="border-color:#ef4444;color:#ef4444;">Excluir</button>` : ""}
                 </div>`;
         }
-        
+
+        const captionStatus = finalizado
+            ? `Finalizado em ${registro.finalizado_at} por ${registro.finalizado_by || "sistema"}.`
+            : (expedido
+                ? `Expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}. Aguardando foto do canhoto.`
+                : (aguardando
+                    ? `Estorno solicitado por ${registro.estorno_pendente?.solicitante || "---"} em ${registro.estorno_pendente?.data || "---"}: ${registro.estorno_pendente?.motivo || ""}`
+                    : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`));
+
+        // Ação primária por estado
+        let primaryAction = "";
+        if (pending) {
+            primaryAction = `<button class="exp-btn-mini" data-action="completar" data-id="${registro.id}" data-orcamento="${registro.orcamento}" data-nf="${registro.numero_nf}" data-cliente="${registro.nome_cliente}" data-transportadora="${registro.transportadora || ''}" data-placa="${registro.placa || ''}" data-motorista="${registro.motorista || ''}" data-has-fotos="${fotosCount ? '1' : ''}" data-was-expedido="${registro.expedido_at ? '1' : ''}">${fotosCount ? 'Editar' : 'Completar'}</button>`;
+            if (!aguardando) {
+                primaryAction += `<button class="exp-btn-mini ghost" data-action="status" data-id="${registro.id}" data-status-slug="expedido" data-status-label="Expedido">Expedir</button>`;
+            }
+        } else if (aguardando && isAdmin && registro.estorno_pendente) {
+            primaryAction = `<button class="exp-btn-mini" style="background:#16a34a;border-color:#16a34a;" data-action="admin-estorno" data-estorno-id="${registro.estorno_pendente.id}" data-orcamento="${registro.orcamento}" data-motivo="${registro.estorno_pendente.motivo}" data-solicitante="${registro.estorno_pendente.solicitante}">Aprovar estorno</button>`;
+        } else if (aguardando && !isAdmin) {
+            primaryAction = `<span style="font-size:12px;color:#f59e0b;font-weight:600;white-space:nowrap;">⏳ Aguardando admin</span>`;
+        }
+
+        // Menu kebab
+        const menuItems = [];
+        menuItems.push(`<button data-action="romaneio" data-id="${registro.id}">Romaneio</button>`);
+        if ((expedido || finalizado) && !aguardando) {
+            if (isAdmin) {
+                menuItems.push(`<button data-action="status" data-id="${registro.id}" data-status-slug="pendente_expedicao" data-status-label="Pendente de expedição">Voltar para pendente</button>`);
+            } else {
+                menuItems.push(`<button data-action="solicitar-estorno" data-id="${registro.id}" data-orcamento="${registro.orcamento}" class="danger">Solicitar estorno</button>`);
+            }
+        }
+        if (isAdmin) {
+            menuItems.push(`<button data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}" class="danger">Excluir registro</button>`);
+        }
+        const kebabHtml = `
+            <div class="exp-kebab">
+                <button type="button" class="exp-btn-icon" data-action="toggle-kebab" title="Mais ações" aria-label="Mais ações">⋮</button>
+                <div class="exp-kebab-menu">${menuItems.join("")}</div>
+            </div>`;
+
         return `
-            <article class="exp-record">
-                <div class="exp-record-head">
-                    <div class="exp-record-title">
-                        <strong>${tituloRef}</strong>
-                        <span>${registro.data_conferencia} · Conferente ${registro.conferente}</span>
-                    </div>
+            <article class="exp-record" data-registro-id="${registro.id}">
+                <div class="exp-row">
                     <span class="exp-status ${badgeClass}">${registro.status}</span>
-                </div>
-                <div class="exp-record-grid">
-                    <div class="exp-record-field"><span>NF</span><strong>${registro.numero_nf || "Não informada"}</strong></div>
-                    <div class="exp-record-field"><span>Cliente</span><strong>${registro.nome_cliente || "Não informado"}</strong></div>
-                    <div class="exp-record-field"><span>Transportadora</span><strong>${registro.transportadora || "Não informada"}</strong></div>
-                    <div class="exp-record-field"><span>Placa</span><strong>${registro.placa || "Não informada"}</strong></div>
-                    <div class="exp-record-field"><span>Motorista</span><strong>${registro.motorista || "Não informado"}</strong></div>
-                    <div class="exp-record-field"><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
-                </div>
-                ${fotosHtml}
-                ${canhotoHtml}
-                <div class="exp-record-actions">
-                    <div class="exp-caption">${finalizado ? `Finalizado em ${registro.finalizado_at} por ${registro.finalizado_by || "sistema"}.` : (expedido ? `Expedido em ${registro.expedido_at} por ${registro.expedido_by || "sistema"}. Aguardando foto do canhoto.` : (aguardando ? `Estorno solicitado por ${registro.estorno_pendente?.solicitante || "---"} em ${registro.estorno_pendente?.data || "---"}: ${registro.estorno_pendente?.motivo || ""}` : `Origem do cliente: ${registro.cliente_origem || "Manual"}.`))}</div>
-                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                        ${pending ? `<button class="exp-btn" data-action="completar" data-id="${registro.id}" data-orcamento="${registro.orcamento}" data-nf="${registro.numero_nf}" data-cliente="${registro.nome_cliente}" data-transportadora="${registro.transportadora || ''}" data-placa="${registro.placa || ''}" data-motorista="${registro.motorista || ''}" data-has-fotos="${(registro.fotos || []).length ? '1' : ''}" data-was-expedido="${registro.expedido_at ? '1' : ''}">${(registro.fotos || []).length ? 'Editar conferência' : 'Completar conferência'}</button>` : ""}
-                        ${aguardando ? "" : (pending ? `<button class="exp-btn" data-action="status" data-id="${registro.id}" data-status-slug="expedido" data-status-label="Expedido">Marcar expedido</button>` : "")}
-                        ${(expedido || finalizado) && !aguardando ? (isAdmin ? `<button class="exp-btn-secondary" data-action="status" data-id="${registro.id}" data-status-slug="pendente_expedicao" data-status-label="Pendente de expedição">Voltar para pendente</button>` : `<button class="exp-btn-secondary" style="border-color:#ef4444;color:#ef4444;" data-action="solicitar-estorno" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Solicitar estorno</button>`) : ""}
-                        ${aguardando && isAdmin && registro.estorno_pendente ? `<button class="exp-btn" style="background:#16a34a;" data-action="admin-estorno" data-estorno-id="${registro.estorno_pendente.id}" data-orcamento="${registro.orcamento}" data-motivo="${registro.estorno_pendente.motivo}" data-solicitante="${registro.estorno_pendente.solicitante}">Aprovar / Rejeitar estorno</button>` : ""}
-                        ${aguardando && !isAdmin ? `<span style="font-size:13px;color:#f59e0b;font-weight:600;">&#9200; Aguardando aprovação do administrador</span>` : ""}
-                        <button class="exp-btn-secondary" data-action="romaneio" data-id="${registro.id}">Romaneio</button>
-                        ${isAdmin ? `<button class="exp-btn-secondary" data-action="delete" data-id="${registro.id}" data-orcamento="${registro.orcamento}">Excluir</button>` : ""}
+                    <div class="exp-row-id">
+                        <strong>${tituloRef}${nfTitulo} · ${clienteResumo}</strong>
+                        <span>${registro.data_conferencia} · Conferente ${registro.conferente}${fotosCount ? ` · ${fotosCount} ${fotosCount === 1 ? "foto" : "fotos"}` : ""}</span>
                     </div>
+                    <div class="exp-row-actions">
+                        ${primaryAction}
+                        <button type="button" class="exp-btn-icon" data-action="toggle-detail" title="Detalhes" aria-label="Detalhes">▾</button>
+                        ${kebabHtml}
+                    </div>
+                </div>
+                <div class="exp-detail">
+                    <div class="exp-detail-info">
+                        <div><span>Transportadora</span><strong>${registro.transportadora || "—"}</strong></div>
+                        <div><span>Placa</span><strong>${registro.placa || "—"}</strong></div>
+                        <div><span>Motorista</span><strong>${registro.motorista || "—"}</strong></div>
+                        <div><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
+                    </div>
+                    <div class="exp-caption">${captionStatus}</div>
+                    ${fotosHtml}
+                    ${canhotoHtml}
                 </div>
             </article>
         `;
@@ -810,6 +865,38 @@ fotosGaleriaInput.addEventListener("change", event => {
 buscaHistorico.addEventListener("input", debounce(loadHistorico, 250));
 filtroStatus.addEventListener("change", loadHistorico);
 historicoLista.addEventListener("click", event => {
+    // Toggle expandir/recolher detalhe
+    const toggleDetail = event.target.closest("[data-action='toggle-detail']");
+    if (toggleDetail) {
+        const record = toggleDetail.closest(".exp-record");
+        if (record) {
+            const willOpen = !record.classList.contains("open");
+            record.classList.toggle("open", willOpen);
+            toggleDetail.style.transform = willOpen ? "rotate(180deg)" : "";
+        }
+        return;
+    }
+
+    // Toggle kebab
+    const toggleKebab = event.target.closest("[data-action='toggle-kebab']");
+    if (toggleKebab) {
+        const kebab = toggleKebab.closest(".exp-kebab");
+        const wasOpen = kebab.classList.contains("open");
+        document.querySelectorAll(".exp-kebab.open").forEach(el => el.classList.remove("open"));
+        if (!wasOpen) kebab.classList.add("open");
+        return;
+    }
+
+    // Toggle fotos
+    const toggleFotos = event.target.closest("[data-action='toggle-fotos']");
+    if (toggleFotos) {
+        const wrap = toggleFotos.nextElementSibling;
+        if (wrap && wrap.classList.contains("exp-fotos-wrap")) {
+            wrap.classList.toggle("show");
+        }
+        return;
+    }
+
     const button = event.target.closest("[data-action='status']");
     if (button) {
         atualizarStatus(button.dataset.id, button.dataset.statusSlug, button.dataset.statusLabel);
@@ -870,6 +957,16 @@ historicoLista.addEventListener("click", event => {
             completarButton.dataset.hasFotos,
             completarButton.dataset.wasExpedido,
         );
+    }
+});
+
+// Fecha menus kebab ao clicar fora
+document.addEventListener("click", event => {
+    if (!event.target.closest(".exp-kebab")) {
+        document.querySelectorAll(".exp-kebab.open").forEach(el => el.classList.remove("open"));
+    } else if (event.target.closest(".exp-kebab-menu button")) {
+        // Clicou em item do menu — fecha após executar
+        document.querySelectorAll(".exp-kebab.open").forEach(el => el.classList.remove("open"));
     }
 });
 

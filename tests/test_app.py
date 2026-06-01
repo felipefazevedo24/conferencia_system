@@ -2457,6 +2457,9 @@ def test_api_boletos_consulta_publica_por_cnpj_usa_api_bb(tmp_path):
         )
 
     with app.app_context(), patch(
+        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
+        return_value=[],
+    ), patch(
         "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
         side_effect=fake_bb_request,
     ):
@@ -2528,6 +2531,9 @@ def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
         )
 
     with app.app_context(), patch(
+        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
+        return_value=[],
+    ), patch(
         "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
         side_effect=fake_bb_request,
     ):
@@ -2547,6 +2553,68 @@ def test_api_boletos_consulta_publica_por_nf_usa_api_bb(tmp_path):
         and params.get("numeroConvenio") == "1234567"
         for params in chamadas_get
     )
+
+
+def test_api_boletos_consulta_publica_por_nf_ignora_sufixo_parcela_bb(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    app.config.update(
+        BB_CLIENT_ID="client-test",
+        BB_CLIENT_SECRET="secret-test",
+        BB_DEVELOPER_APPLICATION_KEY="app-key-test",
+        BB_CONVENIO="1234567",
+    )
+
+    class FakeResp:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("erro bb")
+
+        def json(self):
+            return self._payload
+
+    def fake_bb_request(method, url, **kwargs):
+        if method == "POST":
+            return FakeResp({"access_token": "token-bb", "expires_in": 3600})
+        return FakeResp(
+            {
+                "boletos": [
+                    {
+                        "numeroTituloCliente": "PARCELA11439",
+                        "numeroTituloBeneficiario": "11439-1/2",
+                        "valorOriginal": 1000.0,
+                        "dataVencimento": "2026-06-20",
+                        "urlImagemBoleto": "https://bb.example/boleto/11439-1.pdf",
+                        "descricaoEstadoTituloCobranca": "Registrado",
+                        "pagador": {"nome": "Cliente Parcela", "numeroInscricao": "30482274000125"},
+                    }
+                ]
+            }
+        )
+
+    with app.app_context(), patch(
+        "conferencia_app.services.bb_boleto_service.GRVContasReceberService.consultar_abertos",
+        return_value=[],
+    ), patch(
+        "conferencia_app.services.bb_boleto_service.BBBoletoService._request",
+        side_effect=fake_bb_request,
+    ):
+        from conferencia_app.services.bb_boleto_service import BBBoletoService
+
+        BBBoletoService._token_cache = {}
+        consulta = client.post("/api/boletos/consultar", json={"modo": "nota", "numero_nota": "11439-1/2"})
+
+    assert consulta.status_code == 200
+    payload = consulta.get_json()
+    assert payload["sucesso"] is True
+    assert payload["total"] == 1
+    assert payload["boletos"][0]["numero_nota"] == "11439"
+    assert payload["boletos"][0]["documento"] == "11439-1/2"
+    assert payload["boletos"][0]["url_boleto"] == "https://bb.example/boleto/11439-1.pdf"
 
 
 def test_portal_cobranca_token_lista_documentos_e_boletos(tmp_path):

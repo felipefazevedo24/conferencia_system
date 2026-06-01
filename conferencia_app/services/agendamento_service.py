@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import io
 import json
@@ -24,7 +24,7 @@ from ..models import (
     ItemNota,
     Usuario,
 )
-from .consyste_service import listar_nfes_consyste_por_caixa
+from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from .pedidos_service import (
     PEDIDOS_FONTE_ERP_POSTGRES,
     buscar_linhas_pedido,
@@ -94,32 +94,26 @@ _HEADER_ALIASES = {
     },
 }
 
-_CONSYSTE_FIELDS = (
-    "id,chave,numero,dest_nome,dest_cnpj,dest_endereco,dest_numero,dest_complemento,"
-    "dest_bairro,dest_cidade,dest_uf,dest_cep,dest_telefone,dest_email,contato,"
-    "cliente_nome,cliente_cnpj,endereco,numero_endereco,bairro,cidade,uf,cep,"
-    "observacao,informacoes_complementares,itens"
-)
-
-
 def status_label_agendamento(status: str | None) -> str:
     mapping = {
         "Pendente": "Pendente",
-        "EmAnalise": "Em análise",
+        "EmAnalise": "Em anÃ¡lise",
         "Alocada": "Alocada",
         "EmRota": "Em rota",
-        "Concluida": "Concluída",
+        "Concluida": "ConcluÃ­da",
         "Cancelada": "Cancelada",
     }
+
     return mapping.get(str(status or "").strip(), str(status or "").strip() or "---")
+
 
 
 def prioridade_label_agendamento(prioridade: str | None) -> str:
     mapping = {
         "Baixa": "Baixa",
-        "Media": "Média",
+        "Media": "MÃ©dia",
         "Alta": "Alta",
-        "Critica": "Crítica",
+        "Critica": "CrÃ­tica",
     }
     return mapping.get(str(prioridade or "").strip(), str(prioridade or "").strip() or "---")
 
@@ -461,7 +455,7 @@ def _path_padrao_cadastro(tipo: str) -> Path:
 def _model_por_tipo(tipo: str):
     tipo_limpo = str(tipo or "").strip().lower()
     if tipo_limpo not in _CADASTRO_MODELS:
-        raise ValueError("Tipo de cadastro inválido.")
+        raise ValueError("Tipo de cadastro invÃ¡lido.")
     return tipo_limpo, _CADASTRO_MODELS[tipo_limpo]
 
 
@@ -475,13 +469,13 @@ def _resolve_header_map(tipo: str, headers: list) -> dict[str, int]:
                 mapping[campo] = normalized[alias]
                 break
     if "nome" not in mapping:
-        raise RuntimeError(f"Não foi possível identificar a coluna principal de nome em {tipo}.")
+        raise RuntimeError(f"NÃ£o foi possÃ­vel identificar a coluna principal de nome em {tipo}.")
     return mapping
 
 
 def _abrir_workbook(arquivo=None, caminho: Path | None = None):
     if load_workbook is None:
-        raise RuntimeError("Dependência openpyxl não disponível neste ambiente.")
+        raise RuntimeError("DependÃªncia openpyxl nÃ£o disponÃ­vel neste ambiente.")
     if arquivo is not None:
         data = arquivo.read()
         try:
@@ -490,7 +484,7 @@ def _abrir_workbook(arquivo=None, caminho: Path | None = None):
             pass
         return load_workbook(filename=io.BytesIO(data), read_only=True, data_only=True)
     if not caminho or not caminho.exists():
-        raise RuntimeError(f"Arquivo não encontrado: {caminho}")
+        raise RuntimeError(f"Arquivo nÃ£o encontrado: {caminho}")
     return load_workbook(filename=str(caminho), read_only=True, data_only=True)
 
 
@@ -542,7 +536,7 @@ def importar_cadastros_excel(tipo: str, arquivo=None, nome_arquivo: str | None =
         rows = ws.iter_rows(values_only=True)
         header_row = next(rows, None)
         if not header_row:
-            raise RuntimeError("O arquivo está vazio.")
+            raise RuntimeError("O arquivo estÃ¡ vazio.")
         header_map = _resolve_header_map(tipo_limpo, list(header_row))
 
         registros = []
@@ -555,7 +549,7 @@ def importar_cadastros_excel(tipo: str, arquivo=None, nome_arquivo: str | None =
             if not any(str(valor or "").strip() for valor in payload.values()):
                 continue
             if not payload["nome"]:
-                inconsistencias.append(f"Linha {idx}: nome não informado.")
+                inconsistencias.append(f"Linha {idx}: nome nÃ£o informado.")
                 continue
             payload["fonte_arquivo"] = arquivo_origem
             payload["importado_em"] = importado_em
@@ -776,13 +770,13 @@ def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
     numero_oc_limpo = str(numero_oc or "").strip()
     fonte = obter_fonte_pedidos_erp_postgres()
     if not numero_oc_limpo:
-        return {"encontrada": False, "error": "Informe o número da OC."}
+        return {"encontrada": False, "error": "Informe o nÃºmero da OC."}
 
     linhas = buscar_linhas_pedido(numero_oc_limpo)
     if not linhas:
         return {
             "encontrada": False,
-            "error": "OC não encontrada na integração atual.",
+            "error": "OC nÃ£o encontrada na integraÃ§Ã£o atual.",
             "numero_oc": numero_oc_limpo,
             "itens": [],
         }
@@ -834,9 +828,9 @@ def _consultar_oc_agendamento_legacy(numero_oc: str) -> dict:
 
     warning = ""
     if not parceiro.get("nome"):
-        warning = "Fornecedor não identificado automaticamente. Selecione ou digite o cadastro manualmente."
+        warning = "Fornecedor nÃ£o identificado automaticamente. Selecione ou digite o cadastro manualmente."
     elif not parceiro.get("logradouro"):
-        warning = "Fornecedor localizado, mas com endereço incompleto no cadastro."
+        warning = "Fornecedor localizado, mas com endereÃ§o incompleto no cadastro."
 
     return {
         "encontrada": True,
@@ -936,36 +930,53 @@ def _pick(documento: dict, *chaves: str) -> str:
     return ""
 
 
-def _normalizar_itens_consyste(documento: dict) -> list[dict]:
+def _normalizar_itens_nf_emitida(documento: dict, numero_nf: str) -> list[dict]:
     itens = documento.get("itens")
-    if not isinstance(itens, list):
-        return []
-    normalizados = []
-    for item in itens:
-        if not isinstance(item, dict):
-            continue
-        normalizados.append(
-            {
-                "codigo_item": _pick(item, "codigo", "cProd", "codigo_item"),
-                "descricao": _pick(item, "descricao", "xProd", "produto", "nome"),
-                "quantidade": float(item.get("qtd") or item.get("quantidade") or item.get("qtd_comercial") or 0.0),
-                "unidade": _pick(item, "unidade", "uCom", "sigla_unidade"),
-                "volumes": float(item.get("volumes") or 0.0),
-                "observacoes": _pick(item, "observacao", "obs"),
-            }
-        )
-    return normalizados
+    if isinstance(itens, list):
+        normalizados = []
+        for item in itens:
+            if not isinstance(item, dict):
+                continue
+            normalizados.append(
+                {
+                    "codigo_item": _pick(item, "codigo", "cProd", "codigo_item", "cod_interno"),
+                    "descricao": _pick(item, "descricao", "xProd", "produto", "nome"),
+                    "quantidade": float(item.get("qtd") or item.get("quantidade") or item.get("qtd_comercial") or 0.0),
+                    "unidade": _pick(item, "unidade", "uCom", "sigla_unidade"),
+                    "volumes": float(item.get("volumes") or 0.0),
+                    "observacoes": _pick(item, "observacao", "obs"),
+                }
+            )
+        return normalizados
+
+    itens_locais = (
+        ItemNota.query
+        .filter(ItemNota.numero_nota == str(numero_nf or "").strip())
+        .order_by(ItemNota.id.asc())
+        .all()
+    )
+    return [
+        {
+            "codigo_item": str(item.codigo or "").strip(),
+            "descricao": str(item.descricao or "").strip() or f"Item da NF {numero_nf}",
+            "quantidade": float(item.qtd_real or 0.0),
+            "unidade": str(item.unidade_comercial or "").strip(),
+            "volumes": 0.0,
+            "observacoes": "",
+        }
+        for item in itens_locais
+    ]
 
 
 def consultar_nf_agendamento(numero_nf: str) -> dict:
     numero_limpo = limpar_documento(numero_nf)
     if not numero_limpo:
-        return {"encontrada": False, "error": "Informe o número da NF."}
+        return {"encontrada": False, "error": "Informe o nÃºmero da NF."}
 
     alguma_caixa_respondeu = False
     autenticacao_falhou = False
     documento_encontrado = None
-    # "todos" e "recebidos" retornam HTTP 500 no ambiente atual — usamos apenas as caixas suportadas
+    # "todos" e "recebidos" retornam HTTP 500 no ambiente atual â€” usamos apenas as caixas suportadas
     for caixa in ("emitidos", "recebidos"):
         try:
             ok, status_code, payload = listar_nfes_consyste_por_caixa(
@@ -975,14 +986,14 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
                 timeout=20,
             )
         except Exception:
-            # Falha de rede nesta caixa: não marca como indisponível, tenta a próxima
+            # Falha de rede nesta caixa: nÃ£o marca como indisponÃ­vel, tenta a prÃ³xima
             continue
 
         if status_code in {401, 403}:
             autenticacao_falhou = True
             continue
         if not ok:
-            # 500 em uma caixa específica não significa que o serviço está fora —
+            # 500 em uma caixa especÃ­fica nÃ£o significa que o serviÃ§o estÃ¡ fora â€”
             # basta que pelo menos uma caixa responda com 200
             continue
 
@@ -990,7 +1001,7 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
         documentos = payload.get("documentos") if isinstance(payload, dict) else payload
         for documento in documentos or []:
             doc_num = limpar_documento(documento.get("numero"))
-            # Compara direto e também sem zeros à esquerda (Consyste pode armazenar "000012345")
+            # Compara direto e tambÃ©m sem zeros Ã  esquerda (Consyste pode armazenar "000012345")
             if doc_num == numero_limpo or (
                 doc_num and numero_limpo
                 and doc_num.lstrip("0") == numero_limpo.lstrip("0")
@@ -1005,18 +1016,18 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
             return {
                 "encontrada": False,
                 "numero_nf": numero_limpo,
-                "error": "A integração Consyste recusou a consulta. Confira o token configurado.",
+                "error": "A integraÃ§Ã£o Consyste recusou a consulta. Confira o token configurado.",
             }
         if not alguma_caixa_respondeu:
             return {
                 "encontrada": False,
                 "numero_nf": numero_limpo,
-                "error": "Consyste indisponível no momento. Tente novamente ou preencha os dados manualmente.",
+                "error": "Consyste indisponÃ­vel no momento. Tente novamente ou preencha os dados manualmente.",
             }
         return {
             "encontrada": False,
             "numero_nf": numero_limpo,
-            "error": f"NF {numero_limpo} não encontrada na Consyste. Verifique o número ou preencha os dados manualmente.",
+            "error": f"NF {numero_limpo} nÃ£o encontrada na Consyste. Verifique o nÃºmero ou preencha os dados manualmente.",
         }
 
     nome_cliente = _pick(documento_encontrado, "dest_nome", "cliente_nome", "destinatario_nome", "razao_social")
@@ -1066,7 +1077,7 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
 
     warning = ""
     if not parceiro["logradouro"] or not parceiro["cidade"] or not parceiro["uf"]:
-        warning = "A NF foi localizada, mas o endereço precisa ser complementado antes de salvar."
+        warning = "A NF foi localizada, mas o endereÃ§o precisa ser complementado antes de salvar."
 
     return {
         "encontrada": True,
@@ -1074,6 +1085,89 @@ def consultar_nf_agendamento(numero_nf: str) -> dict:
         "documento_id": str(documento_encontrado.get("id") or "").strip(),
         "chave": str(documento_encontrado.get("chave") or "").strip(),
         "cliente": parceiro,
-        "itens": _normalizar_itens_consyste(documento_encontrado),
+        "itens": _normalizar_itens_nf_emitida(documento_encontrado, numero_limpo),
         "warning": warning,
+    }
+
+
+def consultar_nf_agendamento(numero_nf: str) -> dict:
+    numero_limpo = limpar_documento(numero_nf)
+    if not numero_limpo:
+        return {"encontrada": False, "error": "Informe o numero da NF."}
+
+    try:
+        documento_encontrado = buscar_nfe_emitida_erp(numero_limpo, "")
+    except Exception:
+        current_app.logger.exception("Falha ao consultar NF-e emitida no ERP/Postgres")
+        return {
+            "encontrada": False,
+            "numero_nf": numero_limpo,
+            "error": "ERP/Postgres indisponivel no momento. Tente novamente ou preencha os dados manualmente.",
+        }
+
+    if not documento_encontrado:
+        return {
+            "encontrada": False,
+            "numero_nf": numero_limpo,
+            "error": f"NF {numero_limpo} nao encontrada nas NF-e emitidas do ERP/Postgres. Verifique o numero ou preencha os dados manualmente.",
+        }
+
+    nome_cliente = _pick(documento_encontrado, "dest_nome", "cliente_nome", "destinatario_nome", "razao_social")
+    cnpj_cliente = limpar_documento(_pick(documento_encontrado, "dest_cnpj", "cliente_cnpj", "cnpj", "cgc_cpf"))
+    cadastro = localizar_cadastro("cliente", documento=cnpj_cliente, nome=nome_cliente)
+    parceiro_base = serializar_cadastro(cadastro, "cliente") if cadastro else {
+        "id": None,
+        "tipo": "cliente",
+        "codigo": "",
+        "nome": "",
+        "razao_social": "",
+        "cnpj_cpf": "",
+        "contato": "",
+        "telefone": "",
+        "telefone_secundario": "",
+        "email": "",
+        "logradouro": "",
+        "numero": "",
+        "complemento": "",
+        "bairro": "",
+        "cidade": "",
+        "uf": "",
+        "cep": "",
+        "observacoes": "",
+        "ativo": True,
+        "endereco_formatado": "",
+    }
+
+    parceiro = dict(parceiro_base)
+    parceiro["nome"] = nome_cliente or parceiro.get("nome") or parceiro.get("razao_social") or ""
+    parceiro["razao_social"] = parceiro.get("razao_social") or parceiro["nome"]
+    parceiro["cnpj_cpf"] = cnpj_cliente or parceiro.get("cnpj_cpf") or ""
+    parceiro["contato"] = parceiro.get("contato") or _pick(documento_encontrado, "contato", "dest_contato")
+    parceiro["telefone"] = parceiro.get("telefone") or _pick(documento_encontrado, "dest_telefone", "telefone")
+    parceiro["email"] = parceiro.get("email") or _pick(documento_encontrado, "dest_email", "email", "email_danfe")
+    parceiro["logradouro"] = parceiro.get("logradouro") or _pick(documento_encontrado, "dest_endereco", "endereco", "logradouro")
+    parceiro["numero"] = parceiro.get("numero") or _pick(documento_encontrado, "dest_numero", "numero_endereco", "numero")
+    parceiro["complemento"] = parceiro.get("complemento") or _pick(documento_encontrado, "dest_complemento", "complemento")
+    parceiro["bairro"] = parceiro.get("bairro") or _pick(documento_encontrado, "dest_bairro", "bairro")
+    parceiro["cidade"] = parceiro.get("cidade") or _pick(documento_encontrado, "dest_cidade", "cidade")
+    parceiro["uf"] = (parceiro.get("uf") or _pick(documento_encontrado, "dest_uf", "uf"))[:2].upper()
+    parceiro["cep"] = parceiro.get("cep") or limpar_documento(_pick(documento_encontrado, "dest_cep", "cep"))
+    parceiro["observacoes"] = parceiro.get("observacoes") or _pick(
+        documento_encontrado, "observacao", "informacoes_complementares"
+    )
+    parceiro["endereco_formatado"] = formatar_endereco_logistico(parceiro)
+
+    warning = ""
+    if not parceiro["logradouro"] or not parceiro["cidade"] or not parceiro["uf"]:
+        warning = "A NF foi localizada no ERP/Postgres, mas o endereco precisa ser complementado antes de salvar."
+
+    return {
+        "encontrada": True,
+        "numero_nf": numero_limpo,
+        "documento_id": str(documento_encontrado.get("id") or documento_encontrado.get("numero") or "").strip(),
+        "chave": str(documento_encontrado.get("chave") or "").strip(),
+        "cliente": parceiro,
+        "itens": _normalizar_itens_nf_emitida(documento_encontrado, numero_limpo),
+        "warning": warning,
+        "fonte": {"tipo": PEDIDOS_FONTE_ERP_POSTGRES, "label": "ERP/Postgres", "url": "", "csv_url": ""},
     }

@@ -42,7 +42,7 @@
       overflow: hidden;
       color: #fff;
       background: #0b2f57;
-      padding: 18px 24px 50px;
+      padding: 18px 24px 34px;
     }
     .hero::after {
       content: "";
@@ -120,50 +120,12 @@
       font-weight: 750;
       letter-spacing: 0;
     }
-    .hero-copy p {
-      display: block;
-      max-width: 620px;
-      margin: 10px 0 0;
-      color: #d5e7fb;
-      font-size: 15px;
-      line-height: 1.45;
-    }
     .main {
       max-width: 1120px;
-      margin: -42px auto 0;
+      margin: -24px auto 0;
       padding: 0 24px 42px;
       position: relative;
       z-index: 2;
-    }
-    .status-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-    .status-item {
-      min-width: 0;
-      border: 1px solid #dfe7ef;
-      border-radius: var(--radius);
-      background: #fff;
-      padding: 11px 13px;
-      box-shadow: 0 4px 14px rgba(7,31,58,.05);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: #46566a;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .status-item i {
-      width: 28px;
-      height: 28px;
-      display: grid;
-      place-items: center;
-      border-radius: 7px;
-      background: var(--blue-100);
-      color: var(--blue-800);
-      flex: 0 0 auto;
     }
     .portal-grid {
       display: grid;
@@ -171,7 +133,7 @@
       gap: 18px;
       align-items: start;
     }
-    .search-card, .trust-card, .results-section {
+    .search-card, .results-section {
       background: #fff;
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -295,31 +257,6 @@
     .feedback.error { background: var(--red-bg); color: var(--red); border-color: #ffd2ca; }
     .feedback.info { background: var(--blue-100); color: var(--blue-900); border-color: #cbe1fb; }
     .feedback.warning { background: var(--yellow-bg); color: var(--yellow); border-color: #ffe1a0; }
-    .trust-card { display: none; }
-    .trust-card h3 {
-      margin: 0 0 14px;
-      font-size: 17px;
-      color: var(--blue-950);
-    }
-    .trust-item {
-      display: grid;
-      grid-template-columns: 38px 1fr;
-      gap: 11px;
-      padding: 13px 0;
-      border-top: 1px solid #edf2f7;
-    }
-    .trust-item:first-of-type { border-top: 0; padding-top: 0; }
-    .trust-item i {
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border-radius: var(--radius);
-      color: var(--blue-800);
-      background: var(--blue-100);
-    }
-    .trust-item strong { display: block; font-size: 13px; margin-bottom: 3px; }
-    .trust-item span { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
     .loading-spinner {
       display: none;
       margin-top: 18px;
@@ -562,12 +499,6 @@
       color: var(--blue-950);
     }
     .empty-state p { margin: 0; color: var(--muted); }
-    .empty-state .empty-tip {
-      margin-top: 14px;
-      color: #46566a;
-      font-size: 13px;
-      line-height: 1.5;
-    }
     .footer {
       text-align: center;
       padding: 24px;
@@ -577,15 +508,14 @@
     .footer a { color: var(--blue-800); text-decoration: none; font-weight: 800; }
     @media (max-width: 900px) {
       .portal-grid { grid-template-columns: 1fr; }
-      .trust-card { order: -1; }
       .search-form, .boleto-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 620px) {
-      .hero { padding: 20px 16px 74px; }
+      .hero { padding: 20px 16px 44px; }
       .topbar { align-items: flex-start; margin-bottom: 32px; }
       .admin-link { display: none; }
       .main { padding: 0 14px 34px; }
-      .search-card, .trust-card, .results-section { padding: 16px; }
+      .search-card, .results-section { padding: 16px; }
       .card-head { align-items: flex-start; }
       .tabs { width: 100%; }
       .btn-tab { flex: 1; }
@@ -608,18 +538,11 @@
       <div class="hero-copy">
         <div class="eyebrow"><i class="fas fa-shield-halved"></i> Consulta segura</div>
         <h1>Boletos em aberto</h1>
-        <p>Consulte cobranças em aberto por CPF/CNPJ, nota fiscal ou número do orçamento.</p>
       </div>
     </div>
   </header>
 
   <main class="main">
-    <section class="status-strip" aria-label="Informações do portal">
-      <div class="status-item"><i class="fas fa-building-columns"></i><span>Consulta integrada ao financeiro</span></div>
-      <div class="status-item"><i class="fas fa-file-invoice-dollar"></i><span>Boletos em aberto e títulos vinculados</span></div>
-      <div class="status-item"><i class="fas fa-lock"></i><span>Acesso por dados fiscais do cliente</span></div>
-    </section>
-
     <div class="portal-grid">
       <section class="search-card">
         <div class="card-head">
@@ -648,8 +571,8 @@
             <input type="text" id="cpfCnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18" autocomplete="off" inputmode="numeric">
           </div>
           <div class="field search-modo" id="modoCpfNota">
-            <label for="numeroNotaCpf">NF opcional</label>
-            <input type="text" id="numeroNotaCpf" name="numero_nota_cpf" placeholder="Ajuda a localizar boletos antigos" maxlength="20" autocomplete="off">
+            <label for="numeroNotaCpf">NF</label>
+            <input type="text" id="numeroNotaCpf" name="numero_nota_cpf" placeholder="11439" maxlength="20" autocomplete="off">
           </div>
           <div class="field search-modo" id="modoNota" style="display:none;">
             <label for="numeroNota">Número da NF</label>
@@ -669,22 +592,6 @@
         </form>
         <div class="feedback" id="feedback" role="alert"></div>
       </section>
-
-      <aside class="trust-card">
-        <h3>Portal Columbia</h3>
-        <div class="trust-item">
-          <i class="fas fa-building-columns"></i>
-          <div><strong>Banco do Brasil</strong><span>Consulta integrada à cobrança bancária quando disponível.</span></div>
-        </div>
-        <div class="trust-item">
-          <i class="fas fa-file-invoice-dollar"></i>
-          <div><strong>Notas e cobranças</strong><span>Busque por CNPJ, número da nota fiscal ou orçamento.</span></div>
-        </div>
-        <div class="trust-item">
-          <i class="fas fa-copy"></i>
-          <div><strong>Linha digitável</strong><span>Copie os dados do boleto para pagamento no seu banco.</span></div>
-        </div>
-      </aside>
     </div>
 
     <div class="loading-spinner" id="loading">
@@ -894,7 +801,7 @@
     }
 
     function renderEmpty() {
-      resultsList.innerHTML = '<div class="empty-state"><i class="fas fa-file-invoice"></i><h3>Nenhum boleto encontrado</h3><p>Confira os dados informados ou tente consultar pelo número da NF/orçamento.</p><div class="empty-tip">Alguns boletos antigos podem não estar vinculados ao CPF/CNPJ no cadastro local; nesses casos a busca pela nota fiscal costuma localizar o título.</div></div>';
+      resultsList.innerHTML = '<div class="empty-state"><i class="fas fa-file-invoice"></i><h3>Nenhum boleto encontrado</h3><p>Confira os dados informados.</p></div>';
       resultsSection.classList.add('show');
       resultsCount.textContent = '0 boletos';
     }

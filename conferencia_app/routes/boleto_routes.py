@@ -17,6 +17,13 @@ def _only_digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
+def _normalizar_numero_nf(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw.split("-", 1)[0].strip()
+
+
 def _parse_data_br(value: str):
     raw = str(value or "").strip()
     if not raw:
@@ -216,7 +223,7 @@ def consultar_boletos():
     modo = str(data.get("modo") or "cpf_cnpj").strip()
 
     if modo == "nota":
-        numero_nota = str(data.get("numero_nota") or "").strip()
+        numero_nota = _normalizar_numero_nf(data.get("numero_nota") or "")
         if not numero_nota:
             return jsonify({"sucesso": False, "error": "Informe o número da nota fiscal."}), 400
 
@@ -260,7 +267,7 @@ def consultar_boletos():
     if len(doc) not in (11, 14):
         return jsonify({"sucesso": False, "error": "CPF deve ter 11 dígitos e CNPJ 14 dígitos."}), 400
 
-    numero_nota_extra = str(data.get("numero_nota") or "").strip()
+    numero_nota_extra = _normalizar_numero_nf(data.get("numero_nota") or "")
     resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
     boletos_base = list(resultado["boletos"])
     if numero_nota_extra:
