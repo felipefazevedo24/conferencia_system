@@ -339,10 +339,53 @@
     .qf-chip { padding: 4px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 700; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; color: #475569; transition: all .15s; white-space: nowrap; }
     .qf-chip:hover { border-color: #2563eb; color: #2563eb; background: #f0f7ff; }
     .qf-chip.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; }
+
+    /* === Overrides eui-* — flatten Fiori/Linear === */
+    body { background: var(--eui-bg, #f5f7fb) !important; }
+    .doc-entry-shell { padding: 18px !important; }
+    .main-page-tabs { margin-bottom: 14px !important; }
+    .doc-kpi-card {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+        padding: 14px 16px !important;
+    }
+    .doc-kpi-icon { border-radius: 10px !important; box-shadow: none !important; }
+    .doc-kpi-icon.primary { background: #16a34a !important; }
+    .doc-kpi-icon.info { background: #0f62c9 !important; }
+    .doc-kpi-icon.warn { background: #f59e0b !important; }
+    .doc-kpi-icon.slate { background: #64748b !important; }
+    .doc-btn { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; font-size: 13px !important; padding: 8px 14px !important; }
+    .doc-btn:hover { transform: none !important; filter: brightness(0.95) !important; }
+    .doc-btn-primary { background: #0f62c9 !important; }
+    .doc-btn-outline { background: #fff !important; color: #0f172a !important; border: 1px solid #e2e8f0 !important; }
+    .doc-btn-outline:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; }
+    .doc-btn-success { background: #16a34a !important; }
+    .doc-btn-warning { background: #f59e0b !important; }
+    .doc-btn-danger { background: #fff !important; color: #dc2626 !important; border: 1px solid #ef4444 !important; }
+    .doc-btn-secondary { background: #f1f5f9 !important; color: #475569 !important; border: 1px solid #e2e8f0 !important; }
+    .doc-panel {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+    }
+    .doc-panel-head {
+        background: #fff !important;
+        padding: 14px 16px !important;
+        border-bottom: 1px solid #eef2f7 !important;
+    }
+    .doc-panel-title { font-size: 13px !important; font-weight: 700 !important; color: #0f172a !important; text-transform: none !important; letter-spacing: 0 !important; }
+    .doc-panel-count { background: #e0e7ff !important; color: #4338ca !important; border-radius: 6px !important; font-weight: 700 !important; }
+    .doc-filters select, .doc-filters input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 10px !important; font-size: 13px !important; }
+    .doc-modal { border-radius: 12px !important; box-shadow: 0 20px 50px rgba(15,23,42,0.18) !important; }
+    .doc-modal-head { background: #fff !important; border-bottom: 1px solid #eef2f7 !important; color: #0f172a !important; }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="eui-scope">
 <div class="rt-toast-container" id="toastContainer"></div>
 <div class="main-page-tabs">
     <button class="main-page-tab active" id="tab-btn-viagens" onclick="switchTab('viagens')"><i class="fa-solid fa-route"></i> Viagens</button>
@@ -350,18 +393,18 @@
 </div>
 <div id="pane-viagens">
 <div class="doc-entry-shell">
-    <div class="doc-entry-hero">
+    <header class="eui-page-header">
         <div>
-            <div class="doc-kicker"><i class="fa-solid fa-route"></i> Logística · Gestão de Viagens</div>
-            <h1 class="doc-title">Viagens</h1>
-            <p class="doc-subtitle">Planeje, execute e consolide cada viagem. Rastreamento por viagem com paradas, GPS, ocorrências, abastecimento e relatório final.</p>
+            <div class="eui-page-header__eyebrow">Logística · Gestão de Viagens</div>
+            <h1 class="eui-page-header__title"><i class="fa-solid fa-route"></i> Viagens</h1>
+            <p class="eui-page-header__sub">Planeje, execute e consolide cada viagem. Rastreamento por viagem com paradas, GPS, ocorrências, abastecimento e relatório final.</p>
         </div>
-        <div class="doc-hero-actions">
-            <a href="/logistica/frota" class="doc-btn doc-btn-outline"><i class="fa-solid fa-truck-field"></i> Frota</a>
-            <button class="doc-btn doc-btn-outline" onclick="abrirModalImportarRota()"><i class="fa-solid fa-map-marked-alt"></i> Importar Rota</button>
-            <button class="doc-btn doc-btn-primary" onclick="abrirModalNova()"><i class="fa-solid fa-plus"></i> Nova viagem</button>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <a href="/logistica/frota" class="eui-btn eui-btn--ghost"><i class="fa-solid fa-truck-field"></i> Frota</a>
+            <button class="eui-btn eui-btn--ghost" onclick="abrirModalImportarRota()"><i class="fa-solid fa-map-marked-alt"></i> Importar Rota</button>
+            <button class="eui-btn eui-btn--primary" onclick="abrirModalNova()"><i class="fa-solid fa-plus"></i> Nova viagem</button>
         </div>
-    </div>
+    </header>
 
     <div class="doc-kpi-grid" id="kpi-grid"></div>
 
@@ -894,6 +937,7 @@
     </div>
 </div>
 </div><!-- /pane-solicitacoes -->
+</div><!-- /eui-scope -->
 
 <!-- Bootstrap modals de solicitações (fora dos panes) -->
 <div class="modal fade" id="detalheModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Detalhe da solicitação</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="detalheBody"></div></div></div></div>

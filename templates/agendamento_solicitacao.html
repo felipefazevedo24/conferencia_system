@@ -216,23 +216,33 @@ body{font-family:var(--rec-font-ui) !important;background-color:var(--rec-bg) !i
 .rq-toast{border-radius:10px}
 @media (max-width:1180px){.rq-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.rq-grid{grid-template-columns:1fr}.rq-grid>.rq-panel:first-child{grid-row:auto}}
 @media (max-width:640px){.rq-shell{padding:10px}.rq-hero{padding:16px}.rq-flow{grid-template-columns:1fr}.rq-flow-step{min-height:52px}.rq-pad{padding:14px}.rq-form>.row,.rq-form>.table-responsive,.rq-form>div:not(.row){padding:12px}.rq-items{min-width:720px}.rq-toast-container{left:10px;right:10px;top:10px}.rq-toast{max-width:none}}
+
+/* === Overrides eui-* p/ alinhar ao design system === */
+body { background: var(--eui-bg, #f5f7fb) !important; }
+.rq-shell { padding: 18px !important; }
+.rq-panel { border-radius: 12px !important; box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important; }
+.rq-panel:hover, .rq-mini:hover, .rq-card:hover, .rq-disp-card:hover { box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important; }
+.btn-primary { box-shadow: none !important; }
+.btn-primary:hover { box-shadow: none !important; filter: brightness(0.95) !important; transform: none !important; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="rq-toast-container" id="toastContainer"></div>
-<div class="rq-shell">
-    <section class="rq-hero">
-        <div class="rq-top">
-            <div>
-                <h1 class="rq-title"><i class="fas fa-truck-fast" style="margin-right:10px;color:#0f766e"></i>Solicitação de Transporte</h1>
-                <p class="rq-copy">Diga <strong>onde</strong> precisa coletar ou entregar e <strong>quando</strong>. OC e NF são opcionais — a logística completa os documentos depois.</p>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_VIAGEM') %}<a class="btn" href="/logistica/viagens"><i class="fas fa-route"></i> Ir para gestão de viagens</a>{% endif %}
-                <button class="btn btn-primary" type="button" onclick="loadMinhasSolicitacoes()"><i class="fas fa-rotate"></i> Atualizar status</button>
-            </div>
+<div class="rq-shell eui-scope">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Solicitação</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-truck-fast"></i> Solicitação de Transporte</h1>
+            <p class="eui-page-header__sub">Diga <strong>onde</strong> precisa coletar ou entregar e <strong>quando</strong>. OC e NF são opcionais — a logística completa os documentos depois.</p>
         </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_VIAGEM') %}<a class="eui-btn eui-btn--ghost" href="/logistica/viagens"><i class="fas fa-route"></i> Gestão de viagens</a>{% endif %}
+            <button class="eui-btn eui-btn--primary" type="button" onclick="loadMinhasSolicitacoes()"><i class="fas fa-rotate"></i> Atualizar status</button>
+        </div>
+    </header>
+
+    <section class="rq-panel rq-pad" style="margin-bottom:14px;">
         <div class="rq-flow">
             <div class="rq-flow-step"><i class="fas fa-location-dot"></i><div><strong>1. Onde</strong><span>Local de coleta ou entrega</span></div></div>
             <div class="rq-flow-step"><i class="fas fa-calendar-day"></i><div><strong>2. Quando</strong><span>Data desejada</span></div></div>
