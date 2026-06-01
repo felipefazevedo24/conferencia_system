@@ -919,11 +919,73 @@
         .doc-item-code-card { grid-template-columns: 1fr; }
         .doc-modal-overlay { padding: 12px; }
     }
+
+    /* === Overrides eui-* p/ alinhar lancamento.html ao design system === */
+    body { background: var(--eui-bg, #f5f7fb) !important; }
+    /* Toolbar: flatten gradient e bordas */
+    .doc-toolbar {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+        padding: 14px 16px !important;
+    }
+    .doc-tabs { background: #f1f5f9 !important; border-radius: 8px !important; padding: 3px !important; }
+    .doc-tab { border-radius: 6px !important; text-transform: none !important; font-weight: 600 !important; letter-spacing: 0 !important; font-size: 13px !important; padding: 7px 14px !important; }
+    .doc-tab.active { background: #0f62c9 !important; box-shadow: none !important; }
+    .doc-input, .doc-select { border-radius: 8px !important; padding: 9px 12px !important; font-weight: 500 !important; font-size: 13px !important; border: 1px solid #cbd5e1 !important; }
+    .doc-input:focus, .doc-select:focus { border-color: #0f62c9 !important; box-shadow: 0 0 0 3px rgba(15,98,201,0.15) !important; }
+    /* Meta cards (fornecedores / produtividade) */
+    .doc-meta-card {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+        padding: 16px 18px !important;
+    }
+    .doc-meta-card h3 { color: #0f172a !important; font-size: 13px !important; font-weight: 700 !important; text-transform: none !important; letter-spacing: 0 !important; }
+    /* KPI cards (populated by JS) */
+    .doc-kpi-grid > * {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+    }
+    /* Painéis (lista + detalhe) */
+    .doc-panel {
+        background: #fff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+    }
+    /* Botões doc-btn */
+    .doc-btn { border-radius: 8px !important; text-transform: none !important; letter-spacing: 0 !important; font-weight: 600 !important; font-size: 13px !important; padding: 9px 14px !important; box-shadow: none !important; }
+    .doc-btn-primary { background: #0f62c9 !important; }
+    .doc-btn-primary:hover { background: #0b4fa4 !important; }
+    .doc-btn-success { background: #16a34a !important; }
+    .doc-btn-danger { background: #fff !important; color: #dc2626 !important; border: 1px solid #ef4444 !important; }
+    /* Modais */
+    .doc-modal { border-radius: 12px !important; box-shadow: 0 20px 50px rgba(15,23,42,0.18) !important; }
+    .doc-modal-head { background: #fff !important; border-bottom: 1px solid #eef2f7 !important; color: #0f172a !important; }
+    /* Feedback card flat */
+    .doc-feedback { border-radius: 10px !important; box-shadow: 0 1px 3px rgba(15,23,42,0.04) !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="doc-entry-shell" style="max-width:1500px; margin:0 auto; padding:24px; background:#f4f6f9 !important; min-height:100vh;">
+<div class="doc-entry-shell eui-scope" style="max-width:1500px; margin:0 auto; padding:24px; background:var(--eui-bg, #f5f7fb) !important; min-height:100vh;">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Fiscal · Lançamento</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-file-invoice"></i> Documento de Entrada</h1>
+            <p class="eui-page-header__sub">Cockpit fiscal para escrituração, auditoria e trilha do documento.</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="eui-btn eui-btn--ghost" type="button" onclick="window.location.href='/fiscal/liberadas'"><i class="fas fa-clipboard-list"></i> Notas liberadas</button>
+            <button class="eui-btn eui-btn--primary" type="button" onclick="carregarPainel(true)"><i class="fas fa-sync"></i> Atualizar</button>
+        </div>
+    </header>
+
     <section class="doc-entry-hero hidden" style="display:none !important;">
         <div class="doc-hero-copy" style="display:flex; flex-direction:column; gap:12px;">
             <span class="doc-kicker" style="display:inline-flex; align-items:center; gap:8px; width:fit-content; padding:8px 14px; border-radius:999px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;"><i class="fas fa-file-invoice"></i> Documento de Entrada</span>
