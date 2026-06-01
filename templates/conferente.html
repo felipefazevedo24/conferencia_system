@@ -459,31 +459,66 @@
         .result-status.ok { color: #15803d; }
         .result-status.warn { color: #b45309; }
         .module-shell {
-            border-radius: 16px;
+            border-radius: 14px;
             background: #fff;
-            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
+            padding: 22px;
         }
-        .erp-toolbar {
-            border-radius: 12px;
-            background: #fff;
-            color: #0f172a;
-            box-shadow: none;
-            border: 1px solid #dbe4ef;
+        body { background: var(--eui-bg, #f5f7fb) !important; }
+        .container-erp { padding: 22px; }
+        /* Notas grid: cards mais clean */
+        .notas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .nota-card {
+            background: #fff !important;
+            border-radius: 10px !important;
+            padding: 18px !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.04) !important;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            position: relative;
+            overflow: hidden;
         }
-        .erp-toolbar h2 { color: #0f172a; font-size: 20px; letter-spacing: 0; }
-        .toolbar-copy { color: #475569; font-weight: 500; }
-        .dash-card,
-        .nota-card,
+        .nota-card::before { background: #0f62c9 !important; height: 3px !important; }
+        .nota-card:hover {
+            transform: translateY(-2px);
+            border-color: #0f62c9 !important;
+            box-shadow: 0 6px 16px rgba(15,98,201,0.10) !important;
+        }
+        .nota-card strong { font-size: 17px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
+        /* Conf-panel & conf-header limpos */
         .conf-panel {
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+            border-radius: 12px !important;
+            background: #fff !important;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
+            border: 1px solid #e2e8f0 !important;
+            overflow: hidden !important;
         }
-        .nota-card:hover { transform: translateY(-2px); }
         .conf-header {
-            background: #0f2742;
-            border-bottom: 1px solid #0b1f34;
+            background: #0f2742 !important;
+            color: #fff !important;
+            padding: 18px 24px !important;
         }
+        .conf-header h3 { font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
+        .conf-progress {
+            background: #fafbfd !important;
+            padding: 14px 24px !important;
+            border-bottom: 1px solid #eef2f7 !important;
+        }
+        .conf-progress-fill { background: #0f62c9 !important; }
+        .conf-progress-fill.done { background: #16a34a !important; }
+        /* Inputs feedback achatados */
+        .qtd-input { border-radius: 8px !important; border-width: 1px !important; }
+        .qtd-input.input-ok { background: #f0fdf4 !important; border-color: #22c55e !important; color: #166534 !important; }
+        .qtd-input.input-warning { background: #fefce8 !important; border-color: #eab308 !important; color: #854d0e !important; }
+        .qtd-input.input-error { background: #fef2f2 !important; border-color: #ef4444 !important; color: #991b1b !important; }
+        /* Badge urgente sem gradient nem pulse */
+        .badge-urgente { background: #dc2626 !important; box-shadow: none !important; animation: none !important; border-radius: 6px !important; padding: 3px 8px !important; }
+        /* Botões mais clean */
+        .btn-sap { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; text-transform: none !important; font-size: 13px !important; padding: 9px 16px !important; letter-spacing: 0 !important; }
+        .btn-primary { background: #0f62c9 !important; }
+        .btn-success { background: #16a34a !important; }
+        .btn-sap:hover { transform: none !important; filter: brightness(0.95) !important; }
 
         @media (max-width: 900px) {
             .container-erp { padding: 12px; }
@@ -498,59 +533,60 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-erp">
+<div class="container-erp eui-scope">
     <div class="module-shell">
     <div id="lista-view">
-        <div class="erp-toolbar">
+        <header class="eui-page-header">
             <div>
-                <h2><i class="fas fa-barcode"></i> Conferência Cega</h2>
-                <div class="toolbar-copy">Fila operacional das NF-es liberadas para contagem física no recebimento.</div>
+                <div class="eui-page-header__eyebrow">Recebimento</div>
+                <h1 class="eui-page-header__title"><i class="fas fa-barcode"></i> Conferência Cega</h1>
+                <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
             </div>
-            <div class="toolbar-actions">
-                <input id="filtro-nota-pendente" class="filtro-nota" placeholder="Filtrar número da nota..." oninput="renderNotasPendentes()" />
-                <button class="btn-sap btn-primary" onclick="abrirConsultaOcorrencias()">
+            <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
+                <input id="filtro-nota-pendente" class="eui-input" placeholder="Filtrar número da nota..." oninput="renderNotasPendentes()" style="min-width:240px;" />
+                <button class="eui-btn eui-btn--primary" onclick="abrirConsultaOcorrencias()">
                     <i class="fas fa-history"></i> Histórico / Ocorrências
                 </button>
             </div>
-        </div>
+        </header>
 
         <!-- DASHBOARD RESUMO -->
-        <div class="dashboard-resumo" id="dashboard-resumo">
-            <div class="dash-card">
-                <div class="dash-icon pendentes"><i class="fas fa-inbox"></i></div>
-                <div class="dash-info">
-                    <h4>Pendentes</h4>
-                    <div class="dash-numero" id="dash-pendentes">0</div>
-                    <div class="dash-sub">Aguardando conferência</div>
+        <div class="eui-stats" id="dashboard-resumo" style="margin-bottom:18px;">
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Pendentes</div>
+                    <div class="eui-stat__value" id="dash-pendentes">0</div>
+                    <div class="eui-stat__hint">Aguardando conferência</div>
                 </div>
             </div>
-            <div class="dash-card">
-                <div class="dash-icon em-conf"><i class="fas fa-clipboard-check"></i></div>
-                <div class="dash-info">
-                    <h4>Em Conferência</h4>
-                    <div class="dash-numero" id="dash-em-conf">0</div>
-                    <div class="dash-sub">Sendo processadas</div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-clipboard-check"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Em Conferência</div>
+                    <div class="eui-stat__value" id="dash-em-conf">0</div>
+                    <div class="eui-stat__hint">Sendo processadas</div>
                 </div>
             </div>
-            <div class="dash-card">
-                <div class="dash-icon finalizadas"><i class="fas fa-check-circle"></i></div>
-                <div class="dash-info">
-                    <h4>Finalizadas Hoje</h4>
-                    <div class="dash-numero" id="dash-finalizadas">0</div>
-                    <div class="dash-sub">Conferidas com sucesso</div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Finalizadas Hoje</div>
+                    <div class="eui-stat__value" id="dash-finalizadas">0</div>
+                    <div class="eui-stat__hint">Conferidas com sucesso</div>
                 </div>
             </div>
-            <div class="dash-card">
-                <div class="dash-icon criticas"><i class="fas fa-exclamation-triangle"></i></div>
-                <div class="dash-info">
-                    <h4>Críticas</h4>
-                    <div class="dash-numero" id="dash-criticas">0</div>
-                    <div class="dash-sub">Urgência máxima</div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Críticas</div>
+                    <div class="eui-stat__value" id="dash-criticas">0</div>
+                    <div class="eui-stat__hint">Urgência máxima</div>
                 </div>
             </div>
         </div>
         
-        <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:12px;" class="alert-pendencia"></div>
+        <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:10px;" class="alert-pendencia"></div>
         
         <div class="notas-grid" id="notas-pendentes"></div>
     </div>
