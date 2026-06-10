@@ -494,6 +494,40 @@ def test_listas_documento_entrada_retorna_resumo_leve_por_status(tmp_path):
     assert lancadas["3101"]["manifestacao"]["status"] == "Falha"
 
 
+def test_erp_lancamento_bridge_401_tem_mensagem_configuravel():
+    from conferencia_app.services.erp_lancamento_service import (
+        ERPBridgeUnauthorizedError,
+        _raise_for_bridge_status,
+    )
+
+    resposta_401 = Mock(status_code=401)
+    resposta_401.raise_for_status = Mock()
+
+    try:
+        _raise_for_bridge_status(resposta_401, url="https://bridge.local/api/erp/lancamentos")
+    except ERPBridgeUnauthorizedError as exc:
+        mensagem = str(exc)
+    else:
+        raise AssertionError("401 da bridge deveria gerar ERPBridgeUnauthorizedError")
+
+    assert "ERP_LANCAMENTO_API_TOKEN" in mensagem
+    assert "ERP_BRIDGE_TOKEN" in mensagem
+
+
+def test_erp_lancamento_status_retorna_scheduler(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    response = client.get("/api/fiscal/erp_lancamento/status")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["sucesso"] is True
+    assert "rodando" in data["scheduler"]
+    assert "last_status" in data["scheduler"]
+
+
 def test_confirmar_lancamento_envia_manifestacao_do_destinatario(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

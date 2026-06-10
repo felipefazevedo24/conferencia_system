@@ -437,7 +437,8 @@
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.45);
+        background: rgba(248, 250, 252, 0.78);
+        backdrop-filter: blur(3px);
         z-index: 3000;
         align-items: center;
         justify-content: center;
@@ -446,7 +447,7 @@
     .modal-card {
         background: #fff;
         border-radius: 16px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
         padding: 32px 36px;
         max-width: 420px;
         width: 90%;
@@ -462,7 +463,7 @@
     .vinculacao-overlay-card {
         background: #fff;
         border-radius: 14px;
-        box-shadow: 0 22px 60px rgba(2, 6, 23, 0.35);
+        box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2);
         width: min(980px, 95vw);
         max-height: 86vh;
         overflow: hidden;
@@ -473,7 +474,7 @@
     .pendencia-card {
         background: #fff;
         border-radius: 16px;
-        box-shadow: 0 22px 60px rgba(2, 6, 23, 0.35);
+        box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2);
         width: min(560px, 94vw);
         padding: 24px;
         border: 2px solid #f59e0b;
@@ -1620,13 +1621,19 @@ async function salvarVinculacoes() {
             resultado.textContent = `Divergências após salvar: quantidade (${qtdDiv}) | valor (${valDiv}).`;
         }
 
+        const vinculacaoOverlay = document.getElementById('vinculacaoOverlay');
+        const reabrirVinculacaoAoCancelar = vinculacaoOverlay?.classList.contains('active');
+        if (vinculacaoOverlay) vinculacaoOverlay.classList.remove('active');
+
         const confirmar = await confirmarAcao(
             `Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`
         );
 
         if (!confirmar) {
             toast('Vínculos salvos. Ajuste as linhas divergentes para prosseguir.', 'err');
-            renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], notaSelecionada);
+            if (reabrirVinculacaoAoCancelar) {
+                renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], notaSelecionada);
+            }
             return;
         }
 

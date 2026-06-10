@@ -797,9 +797,15 @@ a:focus-visible {
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgba(7, 18, 30, 0.54);
-    backdrop-filter: blur(4px);
+    background: rgba(248, 250, 252, 0.76);
+    backdrop-filter: blur(3px);
     z-index: 2800;
+}
+
+.modal-backdrop.show {
+    opacity: 1;
+    background: rgba(248, 250, 252, 0.76);
+    backdrop-filter: blur(3px);
 }
 
 .modal-overlay > * {

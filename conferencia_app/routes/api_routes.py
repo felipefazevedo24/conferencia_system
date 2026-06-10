@@ -6772,6 +6772,17 @@ def fiscal_erp_lancamento_sincronizar():
     return jsonify({"sucesso": True, "resultado": resultado})
 
 
+@api_bp.route("/api/fiscal/erp_lancamento/status", methods=["GET"])
+@roles_required("Fiscal", "Admin")
+def fiscal_erp_lancamento_status():
+    """Retorna o status do scheduler automatico de lancamento ERP."""
+    try:
+        from ..services.erp_lancamento_scheduler import snapshot_status
+    except Exception as exc:
+        return jsonify({"sucesso": False, "msg": f"Scheduler indisponivel: {exc}"}), 500
+    return jsonify({"sucesso": True, "scheduler": snapshot_status()})
+
+
 @api_bp.route("/api/fiscal/estornar_lancamento", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def estornar_lancamento_fiscal():

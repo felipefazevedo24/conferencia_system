@@ -23,6 +23,26 @@ from ..models import ItemNota
 logger = logging.getLogger(__name__)
 
 
+class ERPBridgeUnauthorizedError(RuntimeError):
+    """Erro de autenticacao entre o app e a bridge ERP."""
+
+
+def _raise_for_bridge_status(resp: requests.Response, *, url: str) -> None:
+    if resp.status_code == 401:
+        raise ERPBridgeUnauthorizedError(
+            "Bridge ERP recusou a autenticacao (401). Confira se ERP_LANCAMENTO_API_TOKEN "
+            "no app e igual ao ERP_BRIDGE_TOKEN configurado na bridge."
+        )
+    if resp.status_code == 403:
+        raise ERPBridgeUnauthorizedError(
+            "Bridge ERP recusou a permissao (403). Confira o token e as regras da bridge."
+        )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(f"{exc} ({url})", response=resp) from exc
+
+
 # Cache em memoria do resultado da ultima consulta ao ERP por NF.
 # Estrutura: { numero_nota: {"motivo": str, "verificada_em": datetime} }
 # Usado pela tela /lancamento (Documento de Entrada) para sinalizar de forma
@@ -265,7 +285,7 @@ def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, date
         ]
     }
     resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
-    resp.raise_for_status()
+    _raise_for_bridge_status(resp, url=url)
     data = resp.json()
     if not isinstance(data, dict):
         raise ValueError("Resposta invalida da API ERP (esperava objeto JSON).")
@@ -313,7 +333,7 @@ def _consultar_lancamentos_periodo_via_api(cfg: dict[str, Any], data_inicio: dat
     resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 60)
     if resp.status_code == 404:
         return []
-    resp.raise_for_status()
+    _raise_for_bridge_status(resp, url=url)
     data = resp.json()
     if not isinstance(data, dict):
         return []
@@ -340,7 +360,7 @@ def _consultar_entrada_grv_via_api(cfg: dict[str, Any], numero_nota: str, codigo
         "chave": str(chave or "").strip(),
     }
     resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
-    resp.raise_for_status()
+    _raise_for_bridge_status(resp, url=url)
     data = resp.json()
     if not isinstance(data, dict):
         return None
@@ -367,7 +387,7 @@ def _consultar_entradas_grv_payload_via_api(cfg: dict[str, Any], entradas_payloa
             resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 60)
             if resp.status_code == 404:
                 return []
-            resp.raise_for_status()
+            _raise_for_bridge_status(resp, url=url)
             data = resp.json()
         except requests.HTTPError:
             raise

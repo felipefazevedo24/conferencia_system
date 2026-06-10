@@ -1626,6 +1626,62 @@
         }
     }
 
+    const sincronizarErpLancamentoManualOriginal = sincronizarErpLancamento;
+    let erpSyncEmAndamento = false;
+    let erpUltimaFalhaAuto = '';
+    const ERP_SYNC_AUTO_INTERVAL_MS = 5 * 60 * 1000;
+
+    sincronizarErpLancamento = async function(opcoes = {}) {
+        const silencioso = Boolean(opcoes && opcoes.silencioso);
+        const btn = document.getElementById('btn-sincronizar-erp');
+        if (!silencioso) {
+            return sincronizarErpLancamentoManualOriginal();
+        }
+        if (erpSyncEmAndamento) return null;
+        erpSyncEmAndamento = true;
+        try {
+            const resp = await fetch('/api/fiscal/erp_lancamento/sincronizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            const dados = await resp.json().catch(() => null);
+            if (!resp.ok || !dados || dados.sucesso === false) {
+                const msg = (dados && dados.msg) || 'Falha ao sincronizar com o ERP.';
+                if (erpUltimaFalhaAuto !== msg) {
+                    erpUltimaFalhaAuto = msg;
+                    console.warn('[sincronizar ERP auto]', msg);
+                }
+                return null;
+            }
+            const r = dados.resultado || {};
+            erpUltimaFalhaAuto = '';
+            if (Number(r.lancadas || 0) > 0) {
+                exibirFeedback('success', 'ERP sincronizado', `${Number(r.lancadas || 0)} documento(s) de entrada lancado(s) automaticamente.`);
+                await carregarPainel(true);
+            }
+            return r;
+        } catch (err) {
+            const msg = err && err.message ? err.message : String(err);
+            if (erpUltimaFalhaAuto !== msg) {
+                erpUltimaFalhaAuto = msg;
+                console.warn('[sincronizar ERP auto]', msg);
+            }
+            return null;
+        } finally {
+            erpSyncEmAndamento = false;
+            if (btn) btn.disabled = false;
+        }
+    };
+
+    async function iniciarSincronizacaoErpAutomatica() {
+        await sincronizarErpLancamento({ silencioso: true });
+        window.setInterval(() => {
+            if (document.hidden) return;
+            sincronizarErpLancamento({ silencioso: true });
+        }, ERP_SYNC_AUTO_INTERVAL_MS);
+    }
+
     async function carregarPainel(forcarDetalhes = false) {
         const safeJson = async (resp) => {
             if (!resp || !resp.ok) return null;
@@ -2032,6 +2088,7 @@
     document.addEventListener('keydown', tratarAtalhos);
     document.addEventListener('DOMContentLoaded', async () => {
         await carregarPainel();
+        iniciarSincronizacaoErpAutomatica();
     });
 </script>
 {% endblock %}
