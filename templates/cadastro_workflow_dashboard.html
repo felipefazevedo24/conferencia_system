@@ -61,22 +61,25 @@
   <div class="cw-list">
     {% for sol in solicitacoes %}
     {% set prazo = prazo_restante(sol) %}
-    <a class="cw-row {% if prazo.vencida %}vencida{% endif %}" href="{{ url_for('cadastro_workflow.detalhe', solicitacao_id=sol.id) }}">
-      <div class="cw-icon"><i class="fas {{ tipos[sol.tipo].icon }}"></i></div>
-      <div class="cw-main">
-        <strong>Solicitacao no {{ sol.numero }} - {{ tipos[sol.tipo].label }}</strong>
-        <div class="cw-meta">
-          <span>Status: {{ sol.status }}</span>
-          <span>Responsavel: {{ sol.responsavel_atual or 'Aguardando assumir' }}</span>
-          <span>Departamento: {{ sol.departamento_atual }}</span>
-          <span>Aberta em {{ sol.data_abertura.strftime('%d/%m/%Y %H:%M') }}</span>
-          <span>Tempo na etapa: {{ tempo_na_etapa(sol) }}</span>
+    {% set dados = get_dados(sol) %}
+    <a class="cw-ticket {% if prazo.vencida %}vencida{% endif %}" href="{{ url_for('cadastro_workflow.detalhe', solicitacao_id=sol.id) }}">
+      <div class="cw-avatar"><i class="fas {{ tipos[sol.tipo].icon }}"></i></div>
+      <div class="cw-ticket-body">
+        <div class="cw-ticket-top">
+          <strong>Numero: {{ sol.numero }}</strong>
+          <span><b>Requerente:</b> {{ sol.solicitante }}</span>
+          <span><b>Total:</b> {{ tempo_na_etapa(sol) }} <i class="fas fa-circle cw-dot-status {% if prazo.vencida %}red{% else %}green{% endif %}"></i></span>
         </div>
-      </div>
-      <div>
-        <span class="cw-badge {% if prazo.vencida %}red{% elif sol.status == 'Cadastrado' %}green{% else %}blue{% endif %}">
-          {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}{{ sol.etapa_atual }}{% endif %}
-        </span>
+        <div class="cw-ticket-sub">{{ tipos[sol.tipo].label }} - {{ dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or 'Aguardando dados' }}</div>
+        <div class="cw-ticket-box">
+          <p><b>Empresa:</b> {{ dados.get('documento') or '-' }}{% if dados.get('razao_social') %} | {{ dados.get('razao_social') }}{% endif %}</p>
+          <p><b>Prioridade:</b> Baixa</p>
+          <p><b>Categoria:</b> {{ tipos[sol.tipo].label }}</p>
+          <p><b>Etapa atual:</b> {{ sol.etapa_atual }}</p>
+          <p><b>SLA Etapa atual:</b> {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}Sem SLA pendente{% endif %}</p>
+          <p><b>Aberto por:</b> {{ sol.solicitante }} em {{ sol.data_abertura.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+          <p><b>Responsavel:</b> {{ sol.responsavel_atual or 'Chamado para minha celula' }}</p>
+        </div>
       </div>
     </a>
     {% else %}

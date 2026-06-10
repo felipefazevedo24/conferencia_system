@@ -3,6 +3,8 @@ import re
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 
+import requests
+
 from ..extensions import db
 from ..models import (
     CadastroWorkflowChecklist,
@@ -32,13 +34,19 @@ TIPOS_CADASTRO = {
     "cliente": {
         "label": "Cadastro de Cliente",
         "icon": "fa-user-tie",
+        "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
             ("razao_social", "Razao Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
-            ("documento", "CNPJ/CPF", True),
+            ("documento", "CNPJ", True),
             ("inscricao_estadual", "Inscricao Estadual", False),
             ("inscricao_municipal", "Inscricao Municipal", False),
             ("endereco", "Endereco completo", True),
+            ("cep", "CEP", False),
+            ("municipio", "Municipio", False),
+            ("uf", "UF", False),
+            ("cnae", "CNAE", False),
+            ("regime_tributario", "Regime tributario", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
             ("contato", "Contato", False),
@@ -47,12 +55,18 @@ TIPOS_CADASTRO = {
     "fornecedor": {
         "label": "Cadastro de Fornecedor",
         "icon": "fa-industry",
+        "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
             ("razao_social", "Razao Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
             ("inscricao_estadual", "Inscricao Estadual", False),
             ("endereco", "Endereco completo", True),
+            ("cep", "CEP", False),
+            ("municipio", "Municipio", False),
+            ("uf", "UF", False),
+            ("cnae", "CNAE", False),
+            ("regime_tributario", "Regime tributario", False),
             ("dados_bancarios", "Dados bancarios", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
@@ -109,9 +123,105 @@ CHECKLIST_FISCAL = [
     "Dados fiscais obrigatorios",
 ]
 
+CADASTROS_DIRETO_FISCAL = {"cliente", "fornecedor"}
+
 
 def normalizar_documento(value: str | None) -> str:
     return re.sub(r"\D+", "", value or "")
+
+
+def formatar_cnpj(cnpj: str | None) -> str:
+    doc = normalizar_documento(cnpj)[:14]
+    if len(doc) != 14:
+        return doc
+    return f"{doc[:2]}.{doc[2:5]}.{doc[5:8]}/{doc[8:12]}-{doc[12:]}"
+
+
+def _endereco_from_payload(payload: dict) -> str:
+    partes = [
+        payload.get("descricao_tipo_logradouro"),
+        payload.get("logradouro"),
+        payload.get("numero"),
+        payload.get("complemento"),
+        payload.get("bairro"),
+    ]
+    endereco = ", ".join(str(p).strip() for p in partes if str(p or "").strip())
+    cidade = " - ".join(str(p).strip() for p in (payload.get("municipio"), payload.get("uf")) if str(p or "").strip())
+    return f"{endereco} - {cidade}" if endereco and cidade else endereco or cidade
+
+
+def _inscricao_estadual_from_cnpj_ws(payload: dict) -> str:
+    estabelecimento = payload.get("estabelecimento") if isinstance(payload, dict) else {}
+    inscricoes = estabelecimento.get("inscricoes_estaduais") if isinstance(estabelecimento, dict) else []
+    if not isinstance(inscricoes, list):
+        return ""
+    ativas = [ie for ie in inscricoes if str(ie.get("ativo", "")).lower() in {"true", "1", "sim"}]
+    alvo = ativas[0] if ativas else (inscricoes[0] if inscricoes else {})
+    return str(alvo.get("inscricao_estadual") or "").strip()
+
+
+def consultar_cartao_cnpj(cnpj: str, timeout: int = 8) -> dict:
+    doc = normalizar_documento(cnpj)
+    if len(doc) != 14:
+        raise ValueError("Informe um CNPJ com 14 digitos.")
+
+    dados: dict = {"documento": formatar_cnpj(doc)}
+    erros = []
+    try:
+        resp = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{doc}", timeout=timeout)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+        dados.update(
+            {
+                "razao_social": payload.get("razao_social") or "",
+                "nome_fantasia": payload.get("nome_fantasia") or "",
+                "documento": formatar_cnpj(payload.get("cnpj") or doc),
+                "endereco": _endereco_from_payload(payload),
+                "cep": payload.get("cep") or "",
+                "municipio": payload.get("municipio") or "",
+                "uf": payload.get("uf") or "",
+                "telefone": payload.get("ddd_telefone_1") or payload.get("ddd_telefone_2") or "",
+                "email": payload.get("email") or "",
+                "cnae": str(payload.get("cnae_fiscal") or ""),
+                "regime_tributario": "MEI" if payload.get("opcao_pelo_mei") else "Simples Nacional" if payload.get("opcao_pelo_simples") else "",
+                "situacao_cadastral": payload.get("descricao_situacao_cadastral") or payload.get("situacao_cadastral") or "",
+                "fonte_cnpj": "BrasilAPI",
+            }
+        )
+    except Exception as exc:
+        erros.append(str(exc))
+
+    try:
+        resp_ie = requests.get(f"https://publica.cnpj.ws/cnpj/{doc}", timeout=timeout)
+        resp_ie.raise_for_status()
+        ie = _inscricao_estadual_from_cnpj_ws(resp_ie.json() or {})
+        if ie:
+            dados["inscricao_estadual"] = ie
+            dados["ie_consultada"] = "Sim"
+    except Exception as exc:
+        erros.append(str(exc))
+
+    dados.setdefault("inscricao_estadual", "")
+    dados.setdefault("ie_consultada", "Nao encontrada" if not dados.get("inscricao_estadual") else "Sim")
+    if erros and len(dados) <= 3:
+        raise ValueError("Nao foi possivel consultar o cartao CNPJ agora.")
+    return dados
+
+
+def enriquecer_dados_cnpj(tipo: str, dados: dict) -> dict:
+    if tipo not in CADASTROS_DIRETO_FISCAL:
+        return dados
+    doc = normalizar_documento(dados.get("documento"))
+    if len(doc) != 14:
+        return dados
+    try:
+        consulta = consultar_cartao_cnpj(doc)
+    except ValueError:
+        consulta = {"documento": formatar_cnpj(doc)}
+    enriquecido = dict(consulta)
+    enriquecido.update({k: v for k, v in dados.items() if str(v or "").strip()})
+    enriquecido["documento"] = formatar_cnpj(doc)
+    return enriquecido
 
 
 def get_dados(solicitacao: CadastroWorkflowSolicitacao) -> dict:
@@ -222,24 +332,30 @@ def buscar_duplicidades(tipo: str, dados: dict, ignorar_id: int | None = None) -
 def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = "") -> CadastroWorkflowSolicitacao:
     if tipo not in TIPOS_CADASTRO:
         raise ValueError("Tipo de cadastro invalido.")
-    for campo, label, obrigatorio in TIPOS_CADASTRO[tipo]["fields"]:
+    dados = enriquecer_dados_cnpj(tipo, dados)
+    campos_obrigatorios = TIPOS_CADASTRO[tipo].get("solicitante_fields") or TIPOS_CADASTRO[tipo]["fields"]
+    for campo, label, obrigatorio in campos_obrigatorios:
         if obrigatorio and not str(dados.get(campo) or "").strip():
             raise ValueError(f"Campo obrigatorio: {label}.")
     duplicidades = buscar_duplicidades(tipo, dados)
+    departamento_inicial = "Fiscal" if tipo in CADASTROS_DIRETO_FISCAL else "Compras"
+    status_inicial = "Em Validacao Fiscal" if departamento_inicial == "Fiscal" else "Em Validacao Compras"
     sol = CadastroWorkflowSolicitacao(
         numero=proximo_numero(),
         tipo=tipo,
-        status="Em Validacao Compras",
-        etapa_atual="Compras",
+        status=status_inicial,
+        etapa_atual=departamento_inicial,
         solicitante=solicitante,
-        departamento_atual="Compras",
+        departamento_atual=departamento_inicial,
         anexos=anexos,
         alerta_duplicidade=json.dumps(duplicidades, ensure_ascii=False) if duplicidades else None,
     )
     set_dados(sol, dados)
     db.session.add(sol)
-    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao criada", "Enviada para validacao de Compras.")
-    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao enviada", "Fluxo iniciado em Compras.")
+    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao criada", f"Enviada para validacao de {departamento_inicial}.")
+    if tipo in CADASTROS_DIRETO_FISCAL:
+        registrar_evento(sol, solicitante, "Sistema", "Cartao CNPJ consultado", "Dados cadastrais preenchidos automaticamente quando disponiveis.")
+    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao enviada", f"Fluxo iniciado em {departamento_inicial}.")
     db.session.flush()
     inicializar_checklists(sol)
     db.session.commit()
@@ -291,9 +407,24 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
             raise ValueError("Esta solicitacao nao esta em fila de atendimento.")
         solicitacao.responsavel_atual = usuario
         registrar_evento(solicitacao, usuario, depto_usuario, "Atendimento assumido", comentario)
+    elif acao == "salvar_dados":
+        if role not in {"Compras", "Fiscal", "Admin"}:
+            raise ValueError("Usuario sem permissao para editar dados.")
+        if role == "Compras" and solicitacao.departamento_atual != "Compras":
+            raise ValueError("Compras so pode editar solicitacoes na etapa de Compras.")
+        if role == "Fiscal" and solicitacao.departamento_atual != "Fiscal":
+            raise ValueError("Fiscal so pode editar solicitacoes na etapa Fiscal.")
+        dados = get_dados(solicitacao)
+        for key, value in form.items():
+            if key.startswith("campo_"):
+                dados[key.replace("campo_", "", 1)] = value
+        set_dados(solicitacao, dados)
+        registrar_evento(solicitacao, usuario, depto_usuario, "Dados atualizados", comentario or "Informacoes revisadas pelo departamento responsavel.")
     elif acao == "aprovar_compras":
         if role not in {"Compras", "Admin"}:
             raise ValueError("Somente Compras pode encaminhar ao Fiscal.")
+        if solicitacao.departamento_atual != "Compras":
+            raise ValueError("Esta solicitacao nao esta na etapa de Compras.")
         atualizar_checklist(solicitacao, "Compras", form, usuario)
         mover_etapa(solicitacao, "Em Validacao Fiscal", "Fiscal", "Fiscal")
         registrar_evento(solicitacao, usuario, "Compras", "Aprovado e encaminhado ao Fiscal", comentario)
@@ -316,12 +447,14 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
             if key.startswith("campo_"):
                 dados[key.replace("campo_", "", 1)] = value
         set_dados(solicitacao, dados)
-        destino = "Compras"
-        mover_etapa(solicitacao, "Em Validacao Compras", "Compras", "Compras")
+        destino = "Fiscal" if solicitacao.tipo in CADASTROS_DIRETO_FISCAL else "Compras"
+        mover_etapa(solicitacao, f"Em Validacao {destino}", destino, destino)
         registrar_evento(solicitacao, usuario, "Solicitante", f"Correcao respondida para {destino}", comentario or "Dados corrigidos.")
     elif acao == "finalizar":
         if role not in {"Fiscal", "Admin"}:
             raise ValueError("Somente Fiscal pode finalizar cadastro.")
+        if solicitacao.departamento_atual != "Fiscal":
+            raise ValueError("Esta solicitacao nao esta na etapa Fiscal.")
         atualizar_checklist(solicitacao, "Fiscal", form, usuario)
         mover_etapa(solicitacao, "Cadastrado", "Cadastro Concluido", "Concluido", usuario)
         solicitacao.concluido_em = datetime.now()

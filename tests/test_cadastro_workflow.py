@@ -2,6 +2,7 @@ from conferencia_app import create_app
 from conferencia_app.extensions import db
 from conferencia_app.models import CadastroWorkflowSolicitacao
 from conferencia_app.services.cadastro_workflow_service import executar_acao
+from unittest.mock import patch
 
 
 def build_test_app(tmp_path):
@@ -23,11 +24,10 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
     response = client.post(
         "/cadastros/novo",
         data={
-            "tipo": "fornecedor",
-            "razao_social": "Fornecedor Teste LTDA",
-            "documento": "12.345.678/0001-90",
-            "endereco": "Rua Teste, 100",
-            "email": "fornecedor@example.com",
+            "tipo": "material",
+            "descricao": "Parafuso inox",
+            "unidade_medida": "UN",
+            "grupo_produto": "Fixadores",
         },
         follow_redirects=False,
     )
@@ -50,6 +50,37 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
         assert sol.notificacoes
 
 
+def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "felipe", "Solicitante")
+
+    with patch(
+        "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj",
+        return_value={
+            "documento": "12.345.678/0001-90",
+            "razao_social": "Fornecedor Teste LTDA",
+            "nome_fantasia": "Fornecedor Teste",
+            "endereco": "Rua Teste, 100 - Sao Paulo/SP",
+            "inscricao_estadual": "110042490114",
+            "ie_consultada": "Sim",
+        },
+    ):
+        response = client.post(
+            "/cadastros/novo",
+            data={"tipo": "fornecedor", "documento": "12.345.678/0001-90"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    with app.app_context():
+        sol = CadastroWorkflowSolicitacao.query.one()
+        assert sol.status == "Em Validacao Fiscal"
+        assert sol.departamento_atual == "Fiscal"
+        assert "Fornecedor Teste LTDA" in sol.dados_json
+        assert "110042490114" in sol.dados_json
+
+
 def test_workflow_registra_alerta_de_duplicidade(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -61,8 +92,9 @@ def test_workflow_registra_alerta_de_duplicidade(tmp_path):
         "documento": "11.222.333/0001-44",
         "endereco": "Rua A",
     }
-    assert client.post("/cadastros/novo", data=payload).status_code == 302
-    assert client.post("/cadastros/novo", data=payload).status_code == 302
+    with patch("conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj", side_effect=ValueError("offline")):
+        assert client.post("/cadastros/novo", data=payload).status_code == 302
+        assert client.post("/cadastros/novo", data=payload).status_code == 302
 
     with app.app_context():
         rows = CadastroWorkflowSolicitacao.query.order_by(CadastroWorkflowSolicitacao.id).all()

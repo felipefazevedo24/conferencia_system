@@ -9,6 +9,7 @@ from ..services.cadastro_workflow_service import (
     STATUS,
     TIPOS_CADASTRO,
     buscar_duplicidades,
+    consultar_cartao_cnpj,
     criar_solicitacao,
     executar_acao,
     get_dados,
@@ -67,6 +68,7 @@ def dashboard():
         filtros=request.args,
         tempo_na_etapa=tempo_na_etapa,
         prazo_restante=prazo_restante,
+        get_dados=get_dados,
         indicadores=indicadores,
         can_compras=_can_operar_compras(),
         can_fiscal=_can_operar_fiscal(),
@@ -189,3 +191,15 @@ def api_duplicidade():
         "descricao": request.args.get("descricao", ""),
     }
     return jsonify({"duplicidades": buscar_duplicidades(tipo, dados)})
+
+
+@cadastro_workflow_bp.get("/api/cnpj")
+@login_required
+def api_cnpj():
+    if not has_permission("PAGE_CADASTRO_WORKFLOW"):
+        return jsonify({"error": "Acesso negado"}), 403
+    cnpj = request.args.get("cnpj", "")
+    try:
+        return jsonify({"ok": True, "dados": consultar_cartao_cnpj(cnpj)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "erro": str(exc)}), 400

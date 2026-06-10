@@ -5,90 +5,114 @@
 {% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <section class="cw-shell">
-  <div class="cw-head">
-    <div class="cw-title">
-      <h1>Solicitacao no {{ solicitacao.numero }}</h1>
-      <p>{{ tipos[solicitacao.tipo].label }} - {{ solicitacao.status }}</p>
+  {% set pode_editar = (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
+  <div class="cw-case-top">
+    <div class="cw-case-user"><i class="fas fa-user-circle"></i> {{ solicitacao.solicitante }}</div>
+    <div class="cw-case-title">{{ tipos[solicitacao.tipo].label|upper }}</div>
+    <div class="cw-case-number">#{{ solicitacao.numero }} <i class="far fa-copy"></i> <i class="far fa-folder"></i> <i class="far fa-star"></i></div>
+  </div>
+
+  <div class="cw-case-tabs">
+    <span class="active">Mensagem</span>
+    <span>Formularios</span>
+    <span>Detalhes</span>
+    <span>Conversas</span>
+  </div>
+
+  <div class="cw-progress-line">
+    {% set etapas = ['Abertura', 'Compras', 'Fiscal', 'Decisao', 'Conclusao'] %}
+    {% for etapa in etapas %}
+    {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusao' and solicitacao.status == 'Cadastrado') %}
+    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 or (solicitacao.tipo in ['cliente','fornecedor'] and etapa == 'Compras') %}done{% endif %}">
+      <div class="cw-progress-node">{{ loop.index if loop.index < 4 else ('?' if etapa == 'Decisao' else '✓') }}</div>
+      <span>{{ etapa }}</span>
     </div>
-    <div class="cw-actions">
-      <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
-      {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
-      <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
-        <input type="hidden" name="acao" value="cancelar">
-        <button class="cw-btn danger" type="submit"><i class="fas fa-ban"></i> Cancelar</button>
-      </form>
-      {% endif %}
-    </div>
+    {% endfor %}
   </div>
 
   {% if request.args.get('erro') %}<div class="cw-alert err">{{ request.args.get('erro') }}</div>{% endif %}
 
-  <div class="cw-stepper">
-    <div class="cw-step {% if solicitacao.departamento_atual == 'Solicitante' %}active{% elif solicitacao.status not in ['Rascunho'] %}done{% endif %}">Solicitante</div>
-    <div class="cw-step {% if solicitacao.departamento_atual == 'Compras' %}active{% elif solicitacao.status in ['Aprovado por Compras','Em Validacao Fiscal','Cadastrado'] %}done{% endif %}">Compras</div>
-    <div class="cw-step {% if solicitacao.departamento_atual == 'Fiscal' %}active{% elif solicitacao.status == 'Cadastrado' %}done{% endif %}">Fiscal</div>
-    <div class="cw-step {% if solicitacao.status == 'Cadastrado' %}done{% endif %}">Cadastro Concluido</div>
+  <div class="cw-case-summary">
+    <p><b>Empresa:</b> {{ dados.get('documento') or '-' }}{% if dados.get('razao_social') %} | {{ dados.get('razao_social') }}{% endif %}</p>
+    <p><b>Prioridade:</b> Baixa</p>
+    <p><b>Categoria:</b> {{ tipos[solicitacao.tipo].label }}</p>
+    <p><b>Etapa atual:</b> {{ solicitacao.etapa_atual }}</p>
+    <p><b>SLA Etapa atual:</b> {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}Sem SLA pendente{% endif %}</p>
+    <p><b>Aberto por:</b> {{ solicitacao.solicitante }} em {{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+    <p><b>Responsavel:</b> {{ solicitacao.responsavel_atual or 'Chamado para minha celula' }}</p>
   </div>
 
-  <div class="cw-grid">
-    <div class="cw-stat"><span>Status</span><strong style="font-size:18px">{{ solicitacao.status }}</strong></div>
-    <div class="cw-stat"><span>Responsavel atual</span><strong style="font-size:18px">{{ solicitacao.responsavel_atual or 'Aguardando' }}</strong></div>
-    <div class="cw-stat"><span>Departamento</span><strong style="font-size:18px">{{ solicitacao.departamento_atual }}</strong></div>
-    <div class="cw-stat"><span>Tempo na etapa</span><strong style="font-size:18px">{{ tempo_na_etapa }}</strong></div>
-  </div>
+  <div class="cw-workflow-board">
+    <div class="cw-stage-title">{{ solicitacao.etapa_atual }} - {{ solicitacao.status }}</div>
+    <div class="cw-message-card">
+      <div class="cw-message-icon"><i class="fas fa-play"></i></div>
+      <div>
+        <strong>{{ solicitacao.solicitante }}</strong>
+        <span>{{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M:%S') }}</span>
+        <p>Solicitacao aberta para {{ tipos[solicitacao.tipo].label }}.</p>
+        <em>Abertura</em>
+      </div>
+    </div>
 
-  <div class="cw-layout">
-    <div class="cw-panel">
-      <h2>Dados da solicitacao</h2>
+    <div class="cw-stage-title">{{ solicitacao.etapa_atual }} - Dados para Cadastro no ERP</div>
+    {% if pode_editar %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form">
+      <input type="hidden" name="acao" value="salvar_dados">
       <div class="cw-form-grid">
         {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
         <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
           <label>{{ label }}</label>
-          <div class="cw-input">{{ dados.get(campo) or '-' }}</div>
+          {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+          <textarea class="cw-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
+          {% else %}
+          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
+          {% endif %}
         </div>
         {% endfor %}
         <div class="cw-field full">
-          <label>Anexos</label>
-          <div class="cw-input">{{ solicitacao.anexos or '-' }}</div>
+          <label>Comentario da edicao</label>
+          <textarea class="cw-textarea" name="comentario" placeholder="Opcional"></textarea>
         </div>
       </div>
-
-      {% if solicitacao.alerta_duplicidade %}
-      <div class="cw-alert" style="margin-top:14px">Esta solicitacao foi aberta com alerta de possivel duplicidade registrado.</div>
-      {% endif %}
-
-      {% if is_solicitante and solicitacao.status == 'Pendente de Correcao' %}
-      <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin-top:18px">
-        <input type="hidden" name="acao" value="responder_correcao">
-        <h2>Responder correcao</h2>
-        <div class="cw-form-grid">
-          {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
-          <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
-            <label>{{ label }}</label>
-            <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
-          </div>
-          {% endfor %}
-          <div class="cw-field full"><label>Comentario</label><textarea class="cw-textarea" name="comentario" required></textarea></div>
+      <button class="cw-btn soft" type="submit" style="margin-top:12px"><i class="fas fa-save"></i> Salvar informacoes</button>
+    </form>
+    {% else %}
+    <div class="cw-filled-form">
+      <div class="cw-form-grid">
+        {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
+        <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+          <label>{{ label }}</label>
+          <div class="cw-read-value">{{ dados.get(campo) or '-' }}</div>
         </div>
-        <button class="cw-btn primary" type="submit" style="margin-top:12px"><i class="fas fa-paper-plane"></i> Reenviar</button>
-      </form>
-      {% endif %}
+        {% endfor %}
+      </div>
     </div>
+    {% endif %}
 
-    <aside class="cw-panel">
-      <h2>SLA</h2>
-      <div class="cw-meta">
-        <span>Ultima atualizacao: {{ solicitacao.data_ultima_movimentacao.strftime('%d/%m/%Y %H:%M') }}</span>
-        {% if prazo.horas is not none %}
-        <span class="cw-badge {% if prazo.vencida %}red{% else %}blue{% endif %}">{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}</span>
-        {% else %}
-        <span class="cw-badge green">Sem SLA pendente</span>
-        {% endif %}
+    {% if solicitacao.alerta_duplicidade %}
+    <div class="cw-alert" style="margin-top:14px">Esta solicitacao foi aberta com alerta de possivel duplicidade registrado.</div>
+    {% endif %}
+
+    {% if is_solicitante and solicitacao.status == 'Pendente de Correcao' %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" style="margin-top:18px">
+      <input type="hidden" name="acao" value="responder_correcao">
+      <div class="cw-stage-title">Correcao do Requerente</div>
+      <div class="cw-form-grid">
+        {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
+        <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+          <label>{{ label }}</label>
+          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
+        </div>
+        {% endfor %}
+        <div class="cw-field full"><label>Comentario</label><textarea class="cw-textarea" name="comentario" required></textarea></div>
       </div>
+      <button class="cw-btn primary" type="submit" style="margin-top:12px"><i class="fas fa-paper-plane"></i> Reenviar</button>
+    </form>
+    {% endif %}
 
-      {% if (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
-      <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin-top:16px">
-        <h2>Checklist {{ solicitacao.departamento_atual }}</h2>
+    {% if pode_editar %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" style="margin-top:16px">
+        <div class="cw-stage-title">Checklist {{ solicitacao.departamento_atual }}</div>
         <div class="cw-checks">
           {% for chk in solicitacao.checklists if chk.departamento == solicitacao.departamento_atual %}
           <label class="cw-check">
@@ -106,7 +130,6 @@
           <textarea class="cw-textarea" name="comentario"></textarea>
         </div>
         <div class="cw-actions" style="margin-top:12px">
-          <button class="cw-btn soft" name="acao" value="assumir" type="submit"><i class="fas fa-user-check"></i> Assumir</button>
           {% if solicitacao.departamento_atual == 'Compras' %}
           <button class="cw-btn ok" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
           <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Correcao</button>
@@ -117,20 +140,36 @@
           {% endif %}
           <button class="cw-btn danger" name="acao" value="reprovar" type="submit"><i class="fas fa-xmark"></i> Reprovar</button>
         </div>
+    </form>
+    {% endif %}
+
+    {% if pode_editar and not solicitacao.responsavel_atual %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin-top:16px">
+      <button class="cw-btn primary" name="acao" value="assumir" type="submit"><i class="fas fa-hand-paper"></i> Atender</button>
+    </form>
+    {% endif %}
+
+    <div class="cw-actions" style="margin-top:16px">
+      <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+      {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
+      <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+        <input type="hidden" name="acao" value="cancelar">
+        <button class="cw-btn danger" type="submit"><i class="fas fa-ban"></i> Cancelar</button>
       </form>
       {% endif %}
-    </aside>
+    </div>
   </div>
 
-  <div class="cw-panel">
-    <h2>Historico completo</h2>
-    <div class="cw-timeline">
+  <div class="cw-workflow-board">
+    <div class="cw-stage-title">Historico completo</div>
+    <div class="cw-stream">
       {% for h in solicitacao.historicos %}
-      <div class="cw-event">
-        <div class="cw-dot"></div>
-        <div class="cw-event-body">
+      <div class="cw-message-card">
+        <div class="cw-message-icon"><i class="fas fa-info"></i></div>
+        <div>
           <strong>{{ h.data_hora.strftime('%d/%m/%Y %H:%M') }} - {{ h.usuario }} - {{ h.departamento }} - {{ h.acao }}</strong>
-          <span>{{ h.comentario or 'Sem comentario.' }}</span>
+          <p>{{ h.comentario or 'Sem comentario.' }}</p>
+          <span>{{ h.data_hora.strftime('%d/%m/%Y %H:%M:%S') }}</span>
         </div>
       </div>
       {% endfor %}
