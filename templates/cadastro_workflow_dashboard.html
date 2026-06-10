@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Workflow de Cadastros | Columbia Sync{% endblock %}
+{% block shell_title %}Workflow de Cadastros{% endblock %}
+{% block shell_subtitle %}Solicitacoes, aprovacoes, SLA e historico auditavel.{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+{% block content %}
+{% set total = solicitacoes|length %}
+{% set pendentes = solicitacoes|selectattr('status', 'equalto', 'Em Validacao Compras')|list|length + solicitacoes|selectattr('status', 'equalto', 'Em Validacao Fiscal')|list|length %}
+{% set correcao = solicitacoes|selectattr('status', 'equalto', 'Pendente de Correcao')|list|length %}
+{% set concluidas = solicitacoes|selectattr('status', 'equalto', 'Cadastrado')|list|length %}
+<section class="cw-shell">
+  <div class="cw-head">
+    <div class="cw-title">
+      <h1>Workflow de Cadastros</h1>
+      <p>Acompanhe materiais, clientes, fornecedores e transportadoras em uma esteira unica.</p>
+    </div>
+    <div class="cw-actions">
+      <a class="cw-btn primary" href="{{ url_for('cadastro_workflow.novo') }}"><i class="fas fa-plus"></i> Nova solicitacao</a>
+      {% if session.get('role') == 'Admin' %}
+      <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.configurar_sla') }}"><i class="fas fa-clock"></i> Configurar SLA</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="cw-grid">
+    <div class="cw-stat"><span>Total filtrado</span><strong>{{ total }}</strong></div>
+    <div class="cw-stat"><span>Em atendimento</span><strong>{{ pendentes }}</strong></div>
+    <div class="cw-stat"><span>Correcao</span><strong>{{ correcao }}</strong></div>
+    <div class="cw-stat"><span>Cadastradas</span><strong>{{ concluidas }}</strong></div>
+  </div>
+
+  <form class="cw-filters" method="get">
+    <input class="cw-input" name="numero" value="{{ filtros.get('numero','') }}" placeholder="Pesquisar por numero da solicitacao">
+    <select class="cw-select" name="tipo">
+      <option value="">Todos os tipos</option>
+      {% for key, meta in tipos.items() %}
+      <option value="{{ key }}" {% if filtros.get('tipo') == key %}selected{% endif %}>{{ meta.label }}</option>
+      {% endfor %}
+    </select>
+    <select class="cw-select" name="status">
+      <option value="">Todos os status</option>
+      {% for status in statuses %}
+      <option value="{{ status }}" {% if filtros.get('status') == status %}selected{% endif %}>{{ status }}</option>
+      {% endfor %}
+    </select>
+    <button class="cw-btn soft" type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+  </form>
+
+  {% if indicadores %}
+  <div class="cw-panel">
+    <h2>Dashboard gerencial</h2>
+    <div class="cw-meta">
+      <span>Total geral: {{ indicadores.total }}</span>
+      <span>Vencidas: {{ indicadores.vencidas }}</span>
+      <span>Departamentos: {{ indicadores.por_departamento }}</span>
+      <span>Tipos: {{ indicadores.por_tipo }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="cw-list">
+    {% for sol in solicitacoes %}
+    {% set prazo = prazo_restante(sol) %}
+    <a class="cw-row {% if prazo.vencida %}vencida{% endif %}" href="{{ url_for('cadastro_workflow.detalhe', solicitacao_id=sol.id) }}">
+      <div class="cw-icon"><i class="fas {{ tipos[sol.tipo].icon }}"></i></div>
+      <div class="cw-main">
+        <strong>Solicitacao no {{ sol.numero }} - {{ tipos[sol.tipo].label }}</strong>
+        <div class="cw-meta">
+          <span>Status: {{ sol.status }}</span>
+          <span>Responsavel: {{ sol.responsavel_atual or 'Aguardando assumir' }}</span>
+          <span>Departamento: {{ sol.departamento_atual }}</span>
+          <span>Aberta em {{ sol.data_abertura.strftime('%d/%m/%Y %H:%M') }}</span>
+          <span>Tempo na etapa: {{ tempo_na_etapa(sol) }}</span>
+        </div>
+      </div>
+      <div>
+        <span class="cw-badge {% if prazo.vencida %}red{% elif sol.status == 'Cadastrado' %}green{% else %}blue{% endif %}">
+          {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}{{ sol.etapa_atual }}{% endif %}
+        </span>
+      </div>
+    </a>
+    {% else %}
+    <div class="cw-empty"><i class="fas fa-inbox"></i><br>Nenhuma solicitacao encontrada.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -45,6 +45,83 @@ class PermissaoAcesso(db.Model):
     )
 
 
+class CadastroWorkflowSolicitacao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(12), nullable=False, unique=True, index=True)
+    tipo = db.Column(db.String(30), nullable=False, index=True)
+    status = db.Column(db.String(40), nullable=False, default="Rascunho", index=True)
+    etapa_atual = db.Column(db.String(30), nullable=False, default="Solicitante", index=True)
+    solicitante = db.Column(db.String(100), nullable=False, index=True)
+    responsavel_atual = db.Column(db.String(100), nullable=True, index=True)
+    departamento_atual = db.Column(db.String(30), nullable=False, default="Solicitante", index=True)
+    dados_json = db.Column(db.Text, nullable=False, default="{}")
+    anexos = db.Column(db.Text)
+    alerta_duplicidade = db.Column(db.Text)
+    data_abertura = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    data_ultima_movimentacao = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    etapa_iniciada_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime, nullable=True)
+    cancelado_em = db.Column(db.DateTime, nullable=True)
+
+    historicos = db.relationship(
+        "CadastroWorkflowHistorico",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+        order_by="CadastroWorkflowHistorico.data_hora.desc()",
+    )
+    checklists = db.relationship(
+        "CadastroWorkflowChecklist",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+    )
+    notificacoes = db.relationship(
+        "CadastroWorkflowNotificacao",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+    )
+
+
+class CadastroWorkflowHistorico(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(db.Integer, db.ForeignKey("cadastro_workflow_solicitacao.id"), nullable=False, index=True)
+    data_hora = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    usuario = db.Column(db.String(100), nullable=False)
+    departamento = db.Column(db.String(30), nullable=False)
+    acao = db.Column(db.String(80), nullable=False, index=True)
+    comentario = db.Column(db.String(1000))
+
+
+class CadastroWorkflowChecklist(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(db.Integer, db.ForeignKey("cadastro_workflow_solicitacao.id"), nullable=False, index=True)
+    departamento = db.Column(db.String(30), nullable=False, index=True)
+    item = db.Column(db.String(120), nullable=False)
+    valor = db.Column(db.String(20), nullable=False, default="Nao se aplica")
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("solicitacao_id", "departamento", "item", name="ux_cadastro_checklist_item"),
+    )
+
+
+class CadastroWorkflowNotificacao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(db.Integer, db.ForeignKey("cadastro_workflow_solicitacao.id"), nullable=False, index=True)
+    usuario = db.Column(db.String(100), nullable=False, index=True)
+    mensagem = db.Column(db.String(240), nullable=False)
+    lida = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    criada_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class CadastroWorkflowSLAConfig(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    departamento = db.Column(db.String(30), nullable=False, unique=True, index=True)
+    horas = db.Column(db.Integer, nullable=False, default=48)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
 class ItemNota(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tipo_documento = db.Column(db.String(10), nullable=False, default="NFE", index=True)

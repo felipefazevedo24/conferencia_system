@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}SLA de Cadastros | Columbia Sync{% endblock %}
+{% block shell_title %}SLA de Cadastros{% endblock %}
+{% block shell_subtitle %}Prazos por etapa do workflow.{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<section class="cw-shell">
+  <div class="cw-head">
+    <div class="cw-title">
+      <h1>Configurar SLA</h1>
+      <p>Defina o prazo de atendimento, em horas, para Compras e Fiscal.</p>
+    </div>
+    <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+  </div>
+  <form class="cw-panel" method="post">
+    <div class="cw-form-grid">
+      <div class="cw-field">
+        <label>SLA Compras (horas)</label>
+        <input class="cw-input" type="number" min="1" name="sla_Compras" value="{{ sla_compras }}">
+      </div>
+      <div class="cw-field">
+        <label>SLA Fiscal (horas)</label>
+        <input class="cw-input" type="number" min="1" name="sla_Fiscal" value="{{ sla_fiscal }}">
+      </div>
+    </div>
+    <button class="cw-btn primary" type="submit" style="margin-top:16px"><i class="fas fa-save"></i> Salvar SLA</button>
+  </form>
+</section>
+{% endblock %}

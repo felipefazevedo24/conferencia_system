@@ -22,6 +22,7 @@ from .routes.api_routes import api_bp
 from .routes.agendamento_routes import agendamento_bp
 from .routes.auth_routes import auth_bp
 from .routes.boleto_routes import boleto_bp
+from .routes.cadastro_workflow_routes import cadastro_workflow_bp
 from .routes.conserto_routes import conserto_bp
 from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
@@ -50,6 +51,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(wms_bp)
     app.register_blueprint(conserto_bp)
     app.register_blueprint(boleto_bp)
+    app.register_blueprint(cadastro_workflow_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(rastreamento_bp)

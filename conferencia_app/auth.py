@@ -28,6 +28,7 @@ PERMISSION_CATALOG = {
     "PAGE_UPLOAD": "Compras > Pre-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
+    "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_WMS": "WMS > Enderecamento e relatorios",
     "PAGE_FINANCEIRO_FATURAMENTO": "Controladoria > Contas a receber > Faturamento",
     "PAGE_FINANCEIRO_CONTAS_RECEBER": "Controladoria > Contas a receber > Contas a Receber",
@@ -65,6 +66,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LANCAMENTO",
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_EXPEDICAO_CONFERENCIA",
+        "PAGE_CADASTRO_WORKFLOW",
     },
     "Financeiro": {
         "PAGE_FISCAL_LIBERADAS",
@@ -90,6 +92,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_RASTREAMENTO",
         "PAGE_LOGISTICA_FROTA",
         "PAGE_LOGISTICA_VIAGEM",
+        "PAGE_CADASTRO_WORKFLOW",
     },
     "Portaria": {
         "PAGE_PORTARIA",
@@ -103,9 +106,11 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_XML_AUDITOR",
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LOGISTICA_SOLICITACAO",
+        "PAGE_CADASTRO_WORKFLOW",
     },
     "Solicitante": {
         "PAGE_LOGISTICA_SOLICITACAO",
+        "PAGE_CADASTRO_WORKFLOW",
     },
 }
 

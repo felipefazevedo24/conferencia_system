@@ -1,0 +1,52 @@
+.cw-shell{display:grid;gap:18px;color:#172033}
+.cw-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.cw-title h1{font-size:26px;font-weight:800;margin:0;color:#0f172a;letter-spacing:0}
+.cw-title p{margin:6px 0 0;color:#64748b;font-size:14px}
+.cw-actions{display:flex;gap:8px;flex-wrap:wrap}
+.cw-btn{border:0;border-radius:8px;padding:10px 14px;font-weight:800;font-size:13px;display:inline-flex;align-items:center;gap:8px;text-decoration:none;cursor:pointer}
+.cw-btn.primary{background:#0f62c9;color:#fff}
+.cw-btn.soft{background:#e8f2ff;color:#0f4f9f}
+.cw-btn.warn{background:#fff7ed;color:#9a3412}
+.cw-btn.danger{background:#fee2e2;color:#991b1b}
+.cw-btn.ok{background:#dcfce7;color:#166534}
+.cw-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.cw-stat{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;box-shadow:0 1px 8px rgba(15,23,42,.04)}
+.cw-stat span{display:block;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase}
+.cw-stat strong{display:block;margin-top:6px;font-size:26px;color:#0f172a}
+.cw-filters{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;display:grid;grid-template-columns:1fr 180px 220px auto;gap:10px}
+.cw-input,.cw-select,.cw-textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;background:#fff;color:#0f172a;font-size:14px}
+.cw-textarea{min-height:92px;resize:vertical}
+.cw-list{display:grid;gap:10px}
+.cw-row{display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:8px;padding:14px;text-decoration:none;color:inherit}
+.cw-row:hover{box-shadow:0 8px 24px rgba(15,23,42,.08)}
+.cw-row.vencida{border-left-color:#dc2626;background:#fffafa}
+.cw-icon{width:40px;height:40px;border-radius:8px;display:grid;place-items:center;background:#edf7f5;color:#0f766e}
+.cw-main strong{font-size:15px;color:#0f172a}
+.cw-meta{display:flex;gap:12px;flex-wrap:wrap;color:#64748b;font-size:12px;margin-top:5px}
+.cw-badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 9px;background:#f1f5f9;color:#334155;font-size:12px;font-weight:800}
+.cw-badge.red{background:#fee2e2;color:#991b1b}
+.cw-badge.green{background:#dcfce7;color:#166534}
+.cw-badge.blue{background:#dbeafe;color:#1d4ed8}
+.cw-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px}
+.cw-panel{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px}
+.cw-panel h2{font-size:16px;font-weight:800;margin:0 0 14px;color:#0f172a}
+.cw-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cw-field label{display:block;margin-bottom:6px;color:#334155;font-weight:800;font-size:12px}
+.cw-field.full{grid-column:1/-1}
+.cw-alert{border-radius:8px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px}
+.cw-alert.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+.cw-timeline{display:grid;gap:12px}
+.cw-event{display:grid;grid-template-columns:24px 1fr;gap:10px}
+.cw-dot{width:12px;height:12px;border-radius:99px;background:#0f62c9;margin:4px auto 0}
+.cw-event-body{border-bottom:1px solid #e2e8f0;padding-bottom:12px}
+.cw-event-body strong{display:block;font-size:13px;color:#0f172a}
+.cw-event-body span{display:block;color:#64748b;font-size:12px;margin-top:3px}
+.cw-checks{display:grid;gap:8px}
+.cw-check{display:grid;grid-template-columns:1fr 150px;gap:8px;align-items:center}
+.cw-stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cw-step{border-radius:8px;background:#f1f5f9;color:#475569;padding:10px;text-align:center;font-size:12px;font-weight:800}
+.cw-step.active{background:#dbeafe;color:#1d4ed8}
+.cw-step.done{background:#dcfce7;color:#166534}
+.cw-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:30px;text-align:center;color:#64748b}
+@media(max-width:1050px){.cw-layout{grid-template-columns:1fr}.cw-grid{grid-template-columns:repeat(2,1fr)}.cw-filters{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.cw-head,.cw-row{display:grid}.cw-grid,.cw-form-grid,.cw-filters,.cw-stepper{grid-template-columns:1fr}.cw-check{grid-template-columns:1fr}.cw-actions .cw-btn{width:100%;justify-content:center}}

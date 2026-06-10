@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Nova Solicitacao de Cadastro | Columbia Sync{% endblock %}
+{% block shell_title %}Nova Solicitacao{% endblock %}
+{% block shell_subtitle %}Abertura com validacao de duplicidade antes do envio.{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<section class="cw-shell">
+  <div class="cw-head">
+    <div class="cw-title">
+      <h1>Nova solicitacao de cadastro</h1>
+      <p>Selecione o tipo e informe os dados minimos para iniciar o fluxo Compras -> Fiscal.</p>
+    </div>
+    <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+  </div>
+
+  {% if erro %}<div class="cw-alert err">{{ erro }}</div>{% endif %}
+  {% if duplicidades %}
+  <div class="cw-alert">
+    Foram encontrados registros semelhantes. A solicitacao ainda pode ser aberta, mas o alerta ficara registrado.
+    {% for dup in duplicidades %}
+      <div><strong>{{ dup.numero }}</strong> - {{ dup.motivo }} - {{ dup.resumo }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form class="cw-panel" method="post" id="cwForm">
+    <h2>Tipo de cadastro</h2>
+    <div class="cw-form-grid">
+      <div class="cw-field full">
+        <select class="cw-select" name="tipo" id="tipoSelect" onchange="window.location='{{ url_for('cadastro_workflow.novo') }}?tipo='+this.value">
+          {% for key, meta in tipos.items() %}
+          <option value="{{ key }}" {% if tipo == key %}selected{% endif %}>{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% for campo, label, obrigatorio in tipos[tipo].fields %}
+      <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+        <label for="{{ campo }}">{{ label }}{% if obrigatorio %} *{% endif %}</label>
+        {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+        <textarea class="cw-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
+        {% else %}
+        <input class="cw-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="cw-field full">
+        <label for="anexos">Anexos</label>
+        <textarea class="cw-textarea" id="anexos" name="anexos" placeholder="Informe links, nomes de arquivos ou observacoes sobre documentos anexos."></textarea>
+      </div>
+    </div>
+    <div class="cw-actions" style="margin-top:16px">
+      <button class="cw-btn primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para Compras</button>
+      <button class="cw-btn soft" type="button" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
+    </div>
+    <div id="dupBox" style="margin-top:12px"></div>
+  </form>
+</section>
+<script>
+async function verificarDuplicidade(){
+  const tipo = document.querySelector('[name="tipo"]').value;
+  const params = new URLSearchParams({tipo});
+  ['documento','codigo','descricao'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value) params.set(id, el.value);
+  });
+  const res = await fetch(`/cadastros/api/duplicidade?${params.toString()}`);
+  const data = await res.json();
+  const box = document.getElementById('dupBox');
+  if (!data.duplicidades || !data.duplicidades.length) {
+    box.innerHTML = '<div class="cw-alert" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">Nenhuma duplicidade encontrada.</div>';
+    return;
+  }
+  box.innerHTML = '<div class="cw-alert">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
+}
+</script>
+{% endblock %}
