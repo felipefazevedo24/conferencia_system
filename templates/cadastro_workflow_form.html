@@ -8,7 +8,7 @@
   <div class="cw-head">
     <div class="cw-title">
       <h1>Nova solicitacao de cadastro</h1>
-      <p>Para cliente e fornecedor, informe somente o CNPJ. O sistema consulta o cartao CNPJ e envia direto ao Fiscal.</p>
+      <p>Para cliente, fornecedor e transportadora, informe somente o CNPJ. A consulta do cartao CNPJ acontece na etapa Fiscal.</p>
     </div>
     <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
   </div>
@@ -44,18 +44,13 @@
         {% endif %}
       </div>
       {% endfor %}
-      {% if tipo in ['cliente','fornecedor'] %}
-      {% for campo, label, obrigatorio in tipos[tipo].fields %}
-      {% if campo != 'documento' %}
-      <input type="hidden" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}">
-      {% endif %}
-      {% endfor %}
+      {% if tipo in ['cliente','fornecedor','transportadora'] %}
       <div class="cw-field full">
         <div class="cw-cnpj-preview" id="cnpjPreview">
           <i class="fas fa-id-card"></i>
           <div>
-            <strong>Cartao CNPJ</strong>
-            <span>Digite o CNPJ para preencher razao social, endereco, telefone, CNAE e IE quando disponivel.</span>
+            <strong>Consulta na etapa Fiscal</strong>
+            <span>O Fiscal tera um botao dentro do chamado para buscar cartao CNPJ, endereco, CNAE e IE do PJ.</span>
           </div>
         </div>
       </div>
@@ -66,7 +61,7 @@
       </div>
     </div>
     <div class="cw-actions" style="margin-top:16px">
-      <button class="cw-btn primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ 'Fiscal' if tipo in ['cliente','fornecedor'] else 'Compras' }}</button>
+      <button class="cw-btn primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }}</button>
       <button class="cw-btn soft" type="button" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
     </div>
     <div id="dupBox" style="margin-top:12px"></div>
@@ -90,50 +85,5 @@ async function verificarDuplicidade(){
   box.innerHTML = '<div class="cw-alert">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
 }
 
-function setHiddenValue(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.value = value || '';
-}
-
-async function consultarCnpj() {
-  const tipo = document.querySelector('[name="tipo"]').value;
-  if (!['cliente', 'fornecedor'].includes(tipo)) return;
-  const doc = document.getElementById('documento');
-  const preview = document.getElementById('cnpjPreview');
-  if (!doc || !preview) return;
-  const digits = doc.value.replace(/\D/g, '');
-  if (digits.length !== 14) return;
-  preview.classList.add('loading');
-  preview.innerHTML = '<i class="fas fa-spinner fa-spin"></i><div><strong>Consultando cartao CNPJ...</strong><span>Aguarde alguns segundos.</span></div>';
-  try {
-    const res = await fetch(`/cadastros/api/cnpj?cnpj=${encodeURIComponent(digits)}`);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.erro || 'Falha na consulta.');
-    const d = data.dados || {};
-    Object.keys(d).forEach(key => setHiddenValue(key, d[key]));
-    doc.value = d.documento || doc.value;
-    preview.classList.remove('loading');
-    preview.innerHTML = `
-      <i class="fas fa-id-card"></i>
-      <div>
-        <strong>${d.razao_social || 'CNPJ encontrado'}</strong>
-        <span>${d.documento || ''}${d.inscricao_estadual ? ' | IE: ' + d.inscricao_estadual : ' | IE nao encontrada'}${d.municipio ? ' | ' + d.municipio + '/' + (d.uf || '') : ''}</span>
-        <small>${d.endereco || ''}</small>
-      </div>`;
-  } catch (err) {
-    preview.classList.remove('loading');
-    preview.innerHTML = `<i class="fas fa-triangle-exclamation"></i><div><strong>Nao foi possivel consultar agora</strong><span>${err.message || 'O Fiscal podera completar os dados no chamado.'}</span></div>`;
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const doc = document.getElementById('documento');
-  if (doc) {
-    doc.addEventListener('blur', consultarCnpj);
-    doc.addEventListener('input', () => {
-      if (doc.value.replace(/\D/g, '').length === 14) consultarCnpj();
-    });
-  }
-});
 </script>
 {% endblock %}

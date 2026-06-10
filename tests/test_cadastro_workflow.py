@@ -50,22 +50,15 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
         assert sol.notificacoes
 
 
-def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal(tmp_path):
+def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal_sem_consultar_na_abertura(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
     set_logged_user(client, "felipe", "Solicitante")
 
     with patch(
         "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj",
-        return_value={
-            "documento": "12.345.678/0001-90",
-            "razao_social": "Fornecedor Teste LTDA",
-            "nome_fantasia": "Fornecedor Teste",
-            "endereco": "Rua Teste, 100 - Sao Paulo/SP",
-            "inscricao_estadual": "110042490114",
-            "ie_consultada": "Sim",
-        },
-    ):
+        side_effect=AssertionError("nao deve consultar na abertura"),
+    ) as consulta:
         response = client.post(
             "/cadastros/novo",
             data={"tipo": "fornecedor", "documento": "12.345.678/0001-90"},
@@ -77,8 +70,57 @@ def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal(tmp_path):
         sol = CadastroWorkflowSolicitacao.query.one()
         assert sol.status == "Em Validacao Fiscal"
         assert sol.departamento_atual == "Fiscal"
+        assert "12.345.678/0001-90" in sol.dados_json
+        assert "Fornecedor Teste LTDA" not in sol.dados_json
+        consulta.assert_not_called()
+
+
+def test_fiscal_consulta_cnpj_e_preenche_dados_do_fornecedor(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        sol = CadastroWorkflowSolicitacao(
+            numero="000001",
+            tipo="fornecedor",
+            status="Em Validacao Fiscal",
+            etapa_atual="Fiscal",
+            solicitante="felipe",
+            departamento_atual="Fiscal",
+            dados_json='{"documento":"12.345.678/0001-90"}',
+        )
+        db.session.add(sol)
+        db.session.commit()
+
+        with patch(
+            "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj",
+            return_value={
+                "documento": "12.345.678/0001-90",
+                "razao_social": "Fornecedor Teste LTDA",
+                "endereco": "Rua Teste, 100",
+                "inscricao_estadual": "110042490114",
+            },
+        ):
+            executar_acao(sol, "consultar_cnpj", "joao", "Fiscal")
+
         assert "Fornecedor Teste LTDA" in sol.dados_json
         assert "110042490114" in sol.dados_json
+
+
+def test_transportadora_tambem_abre_direto_para_fiscal(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "felipe", "Solicitante")
+
+    response = client.post(
+        "/cadastros/novo",
+        data={"tipo": "transportadora", "documento": "98.765.432/0001-10"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    with app.app_context():
+        sol = CadastroWorkflowSolicitacao.query.one()
+        assert sol.status == "Em Validacao Fiscal"
+        assert sol.departamento_atual == "Fiscal"
 
 
 def test_workflow_registra_alerta_de_duplicidade(tmp_path):

@@ -76,6 +76,7 @@ TIPOS_CADASTRO = {
     "transportadora": {
         "label": "Cadastro de Transportadora",
         "icon": "fa-truck-fast",
+        "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
             ("razao_social", "Razao Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
@@ -83,6 +84,11 @@ TIPOS_CADASTRO = {
             ("inscricao_estadual", "Inscricao Estadual", False),
             ("antt", "ANTT", False),
             ("endereco", "Endereco completo", True),
+            ("cep", "CEP", False),
+            ("municipio", "Municipio", False),
+            ("uf", "UF", False),
+            ("cnae", "CNAE", False),
+            ("regime_tributario", "Regime tributario", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
             ("regiao_atendimento", "Regiao de atendimento", False),
@@ -123,7 +129,7 @@ CHECKLIST_FISCAL = [
     "Dados fiscais obrigatorios",
 ]
 
-CADASTROS_DIRETO_FISCAL = {"cliente", "fornecedor"}
+CADASTROS_DIRETO_FISCAL = {"cliente", "fornecedor", "transportadora"}
 
 
 def normalizar_documento(value: str | None) -> str:
@@ -206,22 +212,6 @@ def consultar_cartao_cnpj(cnpj: str, timeout: int = 8) -> dict:
     if erros and len(dados) <= 3:
         raise ValueError("Nao foi possivel consultar o cartao CNPJ agora.")
     return dados
-
-
-def enriquecer_dados_cnpj(tipo: str, dados: dict) -> dict:
-    if tipo not in CADASTROS_DIRETO_FISCAL:
-        return dados
-    doc = normalizar_documento(dados.get("documento"))
-    if len(doc) != 14:
-        return dados
-    try:
-        consulta = consultar_cartao_cnpj(doc)
-    except ValueError:
-        consulta = {"documento": formatar_cnpj(doc)}
-    enriquecido = dict(consulta)
-    enriquecido.update({k: v for k, v in dados.items() if str(v or "").strip()})
-    enriquecido["documento"] = formatar_cnpj(doc)
-    return enriquecido
 
 
 def get_dados(solicitacao: CadastroWorkflowSolicitacao) -> dict:
@@ -332,11 +322,12 @@ def buscar_duplicidades(tipo: str, dados: dict, ignorar_id: int | None = None) -
 def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = "") -> CadastroWorkflowSolicitacao:
     if tipo not in TIPOS_CADASTRO:
         raise ValueError("Tipo de cadastro invalido.")
-    dados = enriquecer_dados_cnpj(tipo, dados)
     campos_obrigatorios = TIPOS_CADASTRO[tipo].get("solicitante_fields") or TIPOS_CADASTRO[tipo]["fields"]
     for campo, label, obrigatorio in campos_obrigatorios:
         if obrigatorio and not str(dados.get(campo) or "").strip():
             raise ValueError(f"Campo obrigatorio: {label}.")
+    if tipo in CADASTROS_DIRETO_FISCAL:
+        dados = {"documento": formatar_cnpj(dados.get("documento"))}
     duplicidades = buscar_duplicidades(tipo, dados)
     departamento_inicial = "Fiscal" if tipo in CADASTROS_DIRETO_FISCAL else "Compras"
     status_inicial = "Em Validacao Fiscal" if departamento_inicial == "Fiscal" else "Em Validacao Compras"
@@ -353,8 +344,6 @@ def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = ""
     set_dados(sol, dados)
     db.session.add(sol)
     registrar_evento(sol, solicitante, "Solicitante", "Solicitacao criada", f"Enviada para validacao de {departamento_inicial}.")
-    if tipo in CADASTROS_DIRETO_FISCAL:
-        registrar_evento(sol, solicitante, "Sistema", "Cartao CNPJ consultado", "Dados cadastrais preenchidos automaticamente quando disponiveis.")
     registrar_evento(sol, solicitante, "Solicitante", "Solicitacao enviada", f"Fluxo iniciado em {departamento_inicial}.")
     db.session.flush()
     inicializar_checklists(sol)
@@ -420,6 +409,19 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
                 dados[key.replace("campo_", "", 1)] = value
         set_dados(solicitacao, dados)
         registrar_evento(solicitacao, usuario, depto_usuario, "Dados atualizados", comentario or "Informacoes revisadas pelo departamento responsavel.")
+    elif acao == "consultar_cnpj":
+        if role not in {"Fiscal", "Admin"}:
+            raise ValueError("Somente Fiscal pode consultar o cartao CNPJ nesta etapa.")
+        if solicitacao.departamento_atual != "Fiscal":
+            raise ValueError("A consulta do CNPJ deve ser feita na etapa Fiscal.")
+        if solicitacao.tipo not in CADASTROS_DIRETO_FISCAL:
+            raise ValueError("Consulta CNPJ automatica disponivel para cliente, fornecedor e transportadora.")
+        dados = get_dados(solicitacao)
+        consulta = consultar_cartao_cnpj(dados.get("documento") or form.get("campo_documento") or "")
+        atualizado = dict(dados)
+        atualizado.update({k: v for k, v in consulta.items() if str(v or "").strip()})
+        set_dados(solicitacao, atualizado)
+        registrar_evento(solicitacao, usuario, "Fiscal", "Cartao CNPJ consultado", "Dados do cartao CNPJ e IE preenchidos automaticamente quando disponiveis.")
     elif acao == "aprovar_compras":
         if role not in {"Compras", "Admin"}:
             raise ValueError("Somente Compras pode encaminhar ao Fiscal.")

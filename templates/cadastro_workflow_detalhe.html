@@ -23,7 +23,7 @@
     {% set etapas = ['Abertura', 'Compras', 'Fiscal', 'Decisao', 'Conclusao'] %}
     {% for etapa in etapas %}
     {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusao' and solicitacao.status == 'Cadastrado') %}
-    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 or (solicitacao.tipo in ['cliente','fornecedor'] and etapa == 'Compras') %}done{% endif %}">
+    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 or (solicitacao.tipo in ['cliente','fornecedor','transportadora'] and etapa == 'Compras') %}done{% endif %}">
       <div class="cw-progress-node">{{ loop.index if loop.index < 4 else ('?' if etapa == 'Decisao' else '✓') }}</div>
       <span>{{ etapa }}</span>
     </div>
@@ -55,6 +55,12 @@
     </div>
 
     <div class="cw-stage-title">{{ solicitacao.etapa_atual }} - Dados para Cadastro no ERP</div>
+    {% if can_fiscal and solicitacao.departamento_atual == 'Fiscal' and solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin:10px 0 14px">
+      <input type="hidden" name="acao" value="consultar_cnpj">
+      <button class="cw-btn primary" type="submit"><i class="fas fa-id-card"></i> Consultar CNPJ e IE</button>
+    </form>
+    {% endif %}
     {% if pode_editar %}
     <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form">
       <input type="hidden" name="acao" value="salvar_dados">
