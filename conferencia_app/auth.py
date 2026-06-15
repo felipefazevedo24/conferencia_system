@@ -28,6 +28,7 @@ PERMISSION_CATALOG = {
     "PAGE_UPLOAD": "Compras > Pre-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
+    "PAGE_COMPRAS_CPS": "Compras > Compras CPS",
     "PAGE_CADASTRO_WORKFLOW": "Cadastros ERP > Workflow de cadastro",
     "PAGE_WMS": "WMS > Enderecamento e relatorios",
     "PAGE_FINANCEIRO_FATURAMENTO": "Controladoria > Contas a receber > Faturamento",
@@ -104,6 +105,7 @@ BASE_ROLE_PERMISSIONS = {
     "Compras": {
         "PAGE_UPLOAD",
         "PAGE_XML_AUDITOR",
+        "PAGE_COMPRAS_CPS",
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",

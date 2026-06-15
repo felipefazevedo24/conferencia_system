@@ -134,6 +134,17 @@ class Config:
     ERP_LANCAMENTO_API_TOKEN = os.environ.get("ERP_LANCAMENTO_API_TOKEN", "")
     ERP_LANCAMENTO_API_TIMEOUT = int(os.environ.get("ERP_LANCAMENTO_API_TIMEOUT", "30"))
 
+    # Modulo Compras CPS (PostgreSQL ERP). Por padrao reaproveita as credenciais
+    # do lancamento ERP, mas permite separar host/base/usuario se necessario.
+    COMPRAS_PG_HOST = os.environ.get("COMPRAS_PG_HOST", ERP_LANCAMENTO_PG_HOST)
+    COMPRAS_PG_PORT = int(os.environ.get("COMPRAS_PG_PORT", str(ERP_LANCAMENTO_PG_PORT)))
+    COMPRAS_PG_DATABASE = os.environ.get("COMPRAS_PG_DATABASE", ERP_LANCAMENTO_PG_DB)
+    COMPRAS_PG_USER = os.environ.get("COMPRAS_PG_USER", ERP_LANCAMENTO_PG_USER)
+    COMPRAS_PG_PASSWORD = os.environ.get("COMPRAS_PG_PASSWORD", ERP_LANCAMENTO_PG_PASSWORD)
+    COMPRAS_PG_COD_EMPRESA = int(os.environ.get("COMPRAS_PG_COD_EMPRESA", str(ERP_ESTOQUE_PG_COMPANY)))
+    COMPRAS_PG_CONNECT_TIMEOUT = int(os.environ.get("COMPRAS_PG_CONNECT_TIMEOUT", "8"))
+    COMPRAS_DB_SLOW_MS = int(os.environ.get("COMPRAS_DB_SLOW_MS", "900"))
+
     BOLETO_PROVIDER = str(os.environ.get("BOLETO_PROVIDER", "BB")).strip().upper() or "BB"
     BOLETO_BANK_LABEL = str(os.environ.get("BOLETO_BANK_LABEL", "Banco do Brasil")).strip() or "Banco do Brasil"
 

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Compras CPS - Columbia Sync{% endblock %}
+{% block shell_title %}Compras CPS{% endblock %}
+{% block shell_subtitle %}Demand planning, spend baseline e visibilidade de compras.{% endblock %}
+
+{% block extra_head %}
+<style>
+    .compras-frame-shell {
+        min-height: calc(100vh - 136px);
+        margin: -10px -14px;
+        background: #0f172a;
+        border: 1px solid rgba(15, 23, 42, .14);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .compras-frame-shell iframe {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 138px);
+        min-height: 720px;
+        border: 0;
+        background: #0f172a;
+    }
+    @media (max-width: 992px) {
+        .compras-frame-shell {
+            margin: -6px -10px;
+            min-height: calc(100vh - 112px);
+        }
+        .compras-frame-shell iframe {
+            height: calc(100vh - 114px);
+            min-height: 680px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="compras-frame-shell" aria-label="Compras CPS">
+    <iframe src="/compras/ui" title="Compras CPS"></iframe>
+</section>
+{% endblock %}
+

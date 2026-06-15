@@ -1,0 +1,3326 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compras CPS — Painel</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111827; --line:#1f2937; --text:#e5e7eb; --muted:#94a3b8;
+    --accent:#22d3ee; --ok:#16a34a; --warn:#eab308; --err:#ef4444;
+    --row-alt:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{margin:0;font-size:18px;font-weight:600}
+  header .status{margin-left:auto;font-size:12px;color:var(--muted)}
+  .status .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+  .status.ok .dot{background:var(--ok)}
+  .status.err .dot{background:var(--err)}
+  .menu-main{display:flex;gap:8px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .menu-main button{background:#0b1220;color:var(--muted);border:1px solid var(--line);padding:8px 14px;cursor:pointer;font-size:13px;border-radius:8px}
+  .menu-main button.active{color:var(--text);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.2) inset}
+  .menu-main button:hover{color:var(--text)}
+  nav{display:flex;gap:4px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+  nav button{background:transparent;color:var(--muted);border:0;padding:12px 18px;cursor:pointer;font-size:14px;border-bottom:2px solid transparent}
+  nav button.active{color:var(--text);border-bottom-color:var(--accent)}
+  nav button:hover{color:var(--text)}
+  .link-btn{background:none;border:0;color:#60a5fa;cursor:pointer;padding:0;text-align:left;font:inherit;text-decoration:underline}
+  .link-btn:hover{color:#93c5fd}
+  main{padding:20px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .field input,.field select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;min-width:160px}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+  button.btn{background:var(--accent);color:#0f172a;border:0;padding:9px 16px;border-radius:6px;cursor:pointer;font-weight:600}
+  button.btn:hover{filter:brightness(1.1)}
+  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:120px}
+  .stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase}
+  .stat .val{font-size:18px;font-weight:600;margin-top:2px}
+  .table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{background:var(--panel);position:sticky;top:0;font-weight:600;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.5px;cursor:pointer;user-select:none}
+  th:hover{color:var(--text)}
+  th .arrow{opacity:.5;margin-left:4px}
+  thead tr.col-filters th{position:sticky;top:30px;background:var(--panel);padding:4px 6px;cursor:default;text-transform:none;letter-spacing:0;border-bottom:1px solid var(--line)}
+  thead tr.col-filters input{width:100%;background:#0b1220;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:11px;font-weight:400}
+  thead tr.col-filters input:focus{outline:none;border-color:var(--accent)}
+  thead tr.col-filters input::placeholder{color:#475569}
+  #col-popup{position:fixed;z-index:9999;background:var(--panel);border:1px solid var(--accent);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-height:320px;overflow:auto;min-width:200px;font-size:12px;display:none}
+  #col-popup .opt{padding:5px 10px;cursor:pointer;white-space:nowrap;color:var(--text);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  #col-popup .opt:last-child{border-bottom:0}
+  #col-popup .opt:hover{background:#1e293b}
+  #col-popup .opt input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
+  #col-popup .opt .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
+  #col-popup .opt .qtd{color:var(--muted);margin-left:12px;font-variant-numeric:tabular-nums}
+  #col-popup .opt.action{color:var(--accent);font-weight:600;font-style:normal;background:#0b1220;position:sticky;top:0;z-index:1}
+  #col-popup .opt.action:hover{background:#1e293b}
+  #col-popup .opt.muted{color:var(--muted);font-style:italic;cursor:default}
+  thead tr.col-filters input.has-selection{border-color:var(--accent);background:#0b1f3a}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  tbody tr:hover{background:#1e293b}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+  .badge.ok{background:rgba(22,163,74,.15);color:#4ade80}
+  .badge.warn{background:rgba(234,179,8,.15);color:#fde047}
+  .badge.err{background:rgba(239,68,68,.15);color:#fca5a5}
+  .badge.info{background:rgba(34,211,238,.15);color:#67e8f9}
+  .empty,.loading,.error{padding:24px;text-align:center;color:var(--muted)}
+  .error{color:#fca5a5}
+  .view{display:none}
+  .view.active{display:block}
+  .pill{display:inline-block;padding:2px 6px;background:#1e293b;border-radius:4px;font-family:ui-monospace,monospace;font-size:12px}
+  #view-historico .split{display:grid;grid-template-columns:1fr;gap:12px}
+  #view-historico .block-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:4px 0 6px}
+  #view-historico .h-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin:6px 0 10px}
+  #view-historico .h-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  #view-historico .h-card .ttl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px}
+  #view-historico .h-card .canvas-wrap{position:relative;height:290px}
+  #view-spend-dashboard .h-charts{display:grid;grid-template-columns:1fr;gap:12px;margin:6px 0 10px}
+  #view-spend-dashboard .h-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  #view-spend-dashboard .h-card .ttl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px}
+  #view-spend-dashboard .h-card .canvas-wrap{position:relative;height:260px}
+  #view-spend-dashboard .h-card .canvas-wrap.pareto{height:380px}
+  #view-spend-dashboard .h-card .canvas-wrap canvas{position:absolute;inset:0}
+  @media (max-width: 900px){
+    #view-spend-dashboard .h-card .canvas-wrap.pareto{height:300px}
+  }
+  #h-drill-banner{display:none;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:8px 12px;background:linear-gradient(90deg,#1e1b4b,#312e81);border:1px solid #6366f1;border-radius:6px;color:#e0e7ff;font-size:13px}
+
+  /* ====== Dashboard neon HUD ====== */
+  #view-dashboard{
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(168,85,247,.18), transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, rgba(34,211,238,.12), transparent 60%),
+      radial-gradient(1200px 800px at 50% 120%, rgba(236,72,153,.10), transparent 55%),
+      linear-gradient(180deg, #05070f 0%, #060814 60%, #04060e 100%);
+    min-height: calc(100vh - 60px);
+  }
+  #view-dashboard .toolbar{ background:transparent; border-bottom:1px solid rgba(99,102,241,.18) }
+
+  #view-dashboard #d-stats{
+    display:flex; flex-wrap:wrap; gap:14px; padding:18px 22px 4px;
+  }
+  #view-dashboard #d-stats > div{
+    flex:1 1 200px;
+    background: linear-gradient(160deg, rgba(20,16,48,.65), rgba(8,10,24,.65));
+    border:1px solid rgba(129,140,248,.18); border-radius:14px; padding:14px 18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 10px 26px rgba(0,0,0,.5);
+    backdrop-filter: blur(8px);
+  }
+  #view-dashboard #d-stats .label{font-size:10px; letter-spacing:.24em; color:#94a3ff; text-transform:uppercase}
+  #view-dashboard #d-stats .value{font-size:26px; font-weight:800; color:#f8fafc; margin-top:4px}
+
+  #view-dashboard #d-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
+    gap:22px; padding:22px;
+  }
+  #view-dashboard #d-grid-det{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
+    gap:22px; padding:22px;
+  }
+  #view-dashboard .d-block-title{
+    margin:18px 22px 0; padding:0 0 6px;
+    font-size:13px; font-weight:700; letter-spacing:.22em; text-transform:uppercase;
+    color:#a5b4fc; border-bottom:1px solid rgba(99,102,241,.25);
+  }
+  #view-dashboard .panel-chart{
+    position:relative;
+    background: linear-gradient(180deg, rgba(15,12,38,.55) 0%, rgba(8,10,24,.55) 100%);
+    border:1px solid rgba(129,140,248,.16);
+    border-radius:18px;
+    padding:22px 22px 18px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.04),
+      0 16px 36px rgba(0,0,0,.55);
+    backdrop-filter: blur(10px);
+  }
+  /* Linha neon no topo do card (HUD) */
+  #view-dashboard .panel-chart::before{
+    content:""; position:absolute; left:22px; right:22px; top:0; height:2px; border-radius:0 0 4px 4px;
+    background: linear-gradient(90deg, transparent, #22d3ee 20%, #a855f7 50%, #ec4899 80%, transparent);
+    opacity:.85; filter: drop-shadow(0 0 6px rgba(168,85,247,.6));
+  }
+
+  #view-dashboard .panel-chart h3{
+    margin:0 0 2px 0; font-size:12px; letter-spacing:.32em; text-transform:uppercase;
+    color:#e0e7ff; font-weight:700;
+  }
+  #view-dashboard .panel-chart .sub{
+    font-size:10px; letter-spacing:.22em; color:#7c83b8; text-transform:uppercase; margin-bottom:18px;
+  }
+
+  /* Layout: chart em cima ocupando a largura, legenda embaixo em grid 2 colunas */
+  #view-dashboard .chart-body{
+    display:flex; flex-direction:column; gap:14px;
+  }
+  #view-dashboard .chart-canvas-wrap{
+    position:relative; width:100%; aspect-ratio:1/1; max-width:340px; margin:6px auto 0;
+  }
+  #view-dashboard .chart-canvas-wrap.wide{
+    aspect-ratio:16/10; max-width:520px;
+  }
+  /* Reflexo embaixo (sombra elíptica) reforça profundidade */
+  #view-dashboard .chart-canvas-wrap::after{
+    content:""; position:absolute; left:18%; right:18%; bottom:-2%; height:18px; z-index:0; pointer-events:none;
+    background: radial-gradient(50% 100% at 50% 0%, rgba(0,0,0,.55), transparent 70%);
+    filter: blur(5px);
+  }
+  #view-dashboard .chart-canvas-wrap canvas{ position:relative; z-index:1 }
+
+  /* Bloco abaixo do donut com numero/cap/hi */
+  #view-dashboard .chart-center{
+    display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:8px;
+  }
+  #view-dashboard .chart-center .num{
+    font-size:34px; font-weight:800; line-height:1;
+    background: linear-gradient(180deg, #ffffff, #c7d2fe);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #view-dashboard .chart-center .cap{
+    font-size:10px; letter-spacing:.28em; color:#a5b4fc; text-transform:uppercase;
+  }
+  #view-dashboard .chart-center .hi{
+    font-size:11px; letter-spacing:.06em; margin-top:6px; font-weight:700;
+    padding:3px 10px; border-radius:99px;
+    background: rgba(255,255,255,.04); border:1px solid currentColor;
+    box-shadow: 0 0 10px currentColor;
+  }
+
+  .chart-legend{
+    display:grid; grid-template-columns: 1fr 1fr; gap:8px;
+  }
+  .chart-legend .chip{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 12px; border-radius:10px;
+    background: rgba(255,255,255,.025);
+    border:1px solid rgba(129,140,248,.16);
+    transition: transform .15s, border-color .15s, background .15s;
+  }
+  .chart-legend .chip:hover{
+    border-color: rgba(165,180,252,.5);
+    background: rgba(255,255,255,.05);
+  }
+  .chart-legend .chip .lbl{
+    display:flex; align-items:center; gap:9px; font-size:10px; color:#cbd5e1; letter-spacing:.1em; text-transform:uppercase;
+  }
+  .chart-legend .chip .sw{
+    display:inline-block; width:10px; height:10px; border-radius:50%;
+    box-shadow:0 0 10px currentColor, 0 0 2px currentColor;
+  }
+  .chart-legend .chip .qtd{font-weight:800; color:#fff; font-size:14px; font-variant-numeric:tabular-nums}
+  .chart-legend .chip .perc{
+    color:#94a3ff; margin-left:6px; font-size:11px; font-variant-numeric:tabular-nums;
+  }
+
+  @media (max-width: 720px){
+    .chart-legend{ grid-template-columns: 1fr }
+  }
+</style>
+</head>
+<body>
+
+<div id="col-popup"></div>
+
+<header>
+  <h1>Compras CPS — Painel</h1>
+  <span id="health" class="status"><span class="dot"></span><span class="txt">verificando…</span></span>
+</header>
+
+<div class="menu-main" id="menu-main">
+  <button data-menu="planning" class="active">Demand Planning</button>
+  <button data-menu="spend">Spend Baseline</button>
+  <button data-menu="visibility">Visibility</button>
+</div>
+
+<nav>
+  <button data-menu="planning" data-view="dashboard" class="active">Dashboard</button>
+  <button data-menu="planning" data-view="historico">Histórico OCs</button>
+  <button data-menu="planning" data-view="materiais">Materiais por OS</button>
+  <button data-menu="planning" data-view="gap">GAP de Compras</button>
+  <button data-menu="planning" data-view="painel">Painel OS</button>
+  <button data-menu="spend" data-view="spend-dashboard">Dashboard</button>
+  <button data-menu="spend" data-view="spend">Spend baseline</button>
+  <button data-menu="spend" data-view="spend-detail">Spend detalhado</button>
+  <button data-menu="visibility" data-view="visibility-header">Header</button>
+  <button data-menu="visibility" data-view="visibility-detail">Detalhada</button>
+</nav>
+
+<main>
+  <!-- ===== Materiais por OS ===== -->
+  <section id="view-materiais" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="m-os">N.º OS <span style="opacity:.6">(opcional)</span></label>
+        <input id="m-os" type="text" placeholder="vazio = todas no período" style="min-width:240px">
+      </div>
+      <div class="field">
+        <label for="m-empresa">Empresa</label>
+        <select id="m-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="m-classif">Classificação</label>
+        <select id="m-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="m-data-campo">Campo data</label>
+        <select id="m-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="m-data-de">De</label>
+        <input id="m-data-de" type="date">
+      </div>
+      <div class="field">
+        <label for="m-data-ate">Até</label>
+        <input id="m-data-ate" type="date">
+      </div>
+      <div class="field">
+        <label for="m-filter">Filtrar</label>
+        <input id="m-filter" type="text" placeholder="cód., descrição, status…">
+      </div>
+      <button class="btn" id="m-load">Buscar</button>
+      <button class="btn ghost" id="m-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="m-stats"></div>
+    <div id="m-drill-banner" style="display:none;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:8px 12px;background:linear-gradient(90deg,#1e1b4b,#312e81);border:1px solid #6366f1;border-radius:6px;color:#e0e7ff;font-size:13px"></div>
+    <div class="table-wrap"><table id="m-table"><thead></thead><tbody></tbody></table></div>
+    <div id="m-msg" class="empty">Informe um número de OS e clique em Buscar.</div>
+  </section>
+
+  <!-- ===== GAP ===== -->
+  <section id="view-gap" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="g-metodo">Método reposição</label>
+        <select id="g-metodo">
+          <option value="">Todos</option>
+          <option value="1" selected>1 — Compra</option>
+          <option value="2">2 — Produção</option>
+          <option value="0">0 — Sob demanda</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="g-empresa">Empresa</label>
+        <select id="g-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="g-classif">Classificação</label>
+        <select id="g-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="g-nos">N.º OS (separe múltiplas por vírgula)</label>
+        <input id="g-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:200px">
+      </div>
+      <div class="field">
+        <label for="g-data-campo">Campo data</label>
+        <select id="g-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="g-data-de">De</label>
+        <input id="g-data-de" type="date">
+      </div>
+      <div class="field">
+        <label for="g-data-ate">Até</label>
+        <input id="g-data-ate" type="date">
+      </div>
+      <div class="field">
+        <label for="g-filter">Filtrar</label>
+        <input id="g-filter" type="text" placeholder="cód., descrição…">
+      </div>
+      <button class="btn" id="g-load">Buscar</button>
+      <button class="btn ghost" id="g-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="g-stats"></div>
+    <div class="table-wrap"><table id="g-table"><thead></thead><tbody></tbody></table></div>
+    <div id="g-msg" class="empty">Selecione filtros e clique em Buscar.</div>
+  </section>
+
+  <!-- ===== Painel OS ===== -->
+  <section id="view-painel" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="p-empresa">Empresa</label>
+        <select id="p-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="p-classif">Classificação</label>
+        <select id="p-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="p-nos">N.º OS (separe múltiplas por vírgula)</label>
+        <input id="p-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:200px">
+      </div>
+      <div class="field">
+        <label for="p-abertas">Status</label>
+        <select id="p-abertas">
+          <option value="1">Somente abertas</option>
+          <option value="0" selected>Todas (incl. concluídas)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="p-data-campo">Campo data</label>
+        <select id="p-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="p-data-de">De</label>
+        <input id="p-data-de" type="date">
+      </div>
+      <div class="field">
+        <label for="p-data-ate">Até</label>
+        <input id="p-data-ate" type="date">
+      </div>
+      <div class="field">
+        <label for="p-filter">Filtrar</label>
+        <input id="p-filter" type="text" placeholder="OS, cliente, título…">
+      </div>
+      <button class="btn" id="p-load">Buscar</button>
+      <button class="btn ghost" id="p-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="p-stats"></div>
+    <div id="p-drill-banner" style="display:none;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:8px 12px;background:linear-gradient(90deg,#1e1b4b,#312e81);border:1px solid #6366f1;border-radius:6px;color:#e0e7ff;font-size:13px"></div>
+    <div class="table-wrap"><table id="p-table"><thead></thead><tbody></tbody></table></div>
+    <div id="p-msg" class="empty">Clique em Buscar para listar as OS.</div>
+  </section>
+
+  <!-- ===== Dashboard ===== -->
+  <section id="view-dashboard" class="view active">
+    <div class="toolbar">
+      <div class="field">
+        <label for="d-empresa">Empresa</label>
+        <select id="d-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="d-classif">Classificação</label>
+        <select id="d-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="d-nos">N.º OS (opcional)</label>
+        <input id="d-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:200px">
+      </div>
+      <div class="field">
+        <label for="d-abertas">Status</label>
+        <select id="d-abertas">
+          <option value="1" selected>Somente abertas</option>
+          <option value="0">Todas (incl. concluídas)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="d-data-campo">Campo data</label>
+        <select id="d-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field"><label for="d-data-de">De</label><input id="d-data-de" type="date"></div>
+      <div class="field"><label for="d-data-ate">Até</label><input id="d-data-ate" type="date"></div>
+      <button class="btn" id="d-load">Atualizar</button>
+    </div>
+
+    <div class="stats" id="d-stats"></div>
+
+    <h3 class="d-block-title">Consolidado (por OS)</h3>
+    <div id="d-grid">
+      <div class="panel-chart" data-key="engenharia">
+        <h3>Engenharia</h3>
+        <div class="sub" id="sub-engenharia">Demanda em tempo real</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="chart-engenharia"></canvas>
+          </div>
+          <div class="chart-center" id="center-engenharia"></div>
+          <div id="legend-engenharia" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="compras">
+        <h3>Compras</h3>
+        <div class="sub" id="sub-compras">Demanda em tempo real</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="chart-compras"></canvas>
+          </div>
+          <div class="chart-center" id="center-compras"></div>
+          <div id="legend-compras" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="producao">
+        <h3>Produção</h3>
+        <div class="sub" id="sub-producao">Demanda em tempo real</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="chart-producao"></canvas>
+          </div>
+          <div class="chart-center" id="center-producao"></div>
+          <div id="legend-producao" class="chart-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="d-block-title">Detalhado (por item da lista de materiais)</h3>
+    <div id="d-grid-det">
+      <div class="panel-chart" data-key="status-materiais">
+        <h3>Status dos itens</h3>
+        <div class="sub">Distribuição por status da lista de materiais</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap"><canvas id="chart-status-materiais"></canvas></div>
+          <div class="chart-center" id="center-status-materiais"></div>
+          <div id="legend-status-materiais" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="compras-d">
+        <h3>Compras</h3>
+        <div class="sub">Itens em A COMPRAR (necessidade real)</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap"><canvas id="chart-compras-d"></canvas></div>
+          <div class="chart-center" id="center-compras-d"></div>
+          <div id="legend-compras-d" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="prioridade-compras">
+        <h3>Prioridade de compras</h3>
+        <div class="sub">Itens A COMPRAR por bucket de prazo</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap wide"><canvas id="chart-prioridade-compras"></canvas></div>
+          <div class="chart-center" id="center-prioridade-compras"></div>
+          <div id="legend-prioridade-compras" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="funil-itens">
+        <h3>Funil dos itens</h3>
+        <div class="sub">Atendido x Em processo x A COMPRAR x Produção</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap wide"><canvas id="chart-funil-itens"></canvas></div>
+          <div class="chart-center" id="center-funil-itens"></div>
+          <div id="legend-funil-itens" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="tendencia-acomprar">
+        <h3>Tendência semanal</h3>
+        <div class="sub">Evolução semanal por status operacional</div>
+        <div class="field" style="margin:0 0 6px;max-width:240px">
+          <label for="trend-mode" style="font-size:10px">Base da tendência</label>
+          <select id="trend-mode">
+            <option value="a_comprar" selected>A COMPRAR</option>
+            <option value="em_processo">Em processo</option>
+            <option value="entregue">Entregue</option>
+            <option value="total">Total</option>
+          </select>
+        </div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap wide"><canvas id="chart-tendencia-acomprar"></canvas></div>
+          <div class="chart-center" id="center-tendencia-acomprar"></div>
+          <div id="legend-tendencia-acomprar" class="chart-legend"></div>
+        </div>
+      </div>
+      <div class="panel-chart" data-key="pareto-classificacao">
+        <h3>Pareto por classificação</h3>
+        <div class="sub">Concentração de itens A COMPRAR por classificação</div>
+        <div class="chart-body">
+          <div class="chart-canvas-wrap wide"><canvas id="chart-pareto-classificacao"></canvas></div>
+          <div class="chart-center" id="center-pareto-classificacao"></div>
+          <div id="legend-pareto-classificacao" class="chart-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="d-msg" class="empty" style="display:none"></div>
+  </section>
+
+  <!-- ===== Spend Dashboard ===== -->
+  <section id="view-spend-dashboard" class="view">
+    <div class="toolbar">
+      <div class="field" style="min-width:320px">
+        <label>Fonte</label>
+        <input type="text" value="Dados da aba Spend baseline (mesmos filtros)" readonly>
+      </div>
+      <div class="field" style="min-width:180px">
+        <label for="sdb-pareto-target">Alvo Pareto (%)</label>
+        <select id="sdb-pareto-target">
+          <option value="40">40%</option>
+          <option value="50">50%</option>
+          <option value="60">60%</option>
+          <option value="70">70%</option>
+          <option value="80" selected>80%</option>
+        </select>
+      </div>
+      <button class="btn" id="sdb-refresh">Atualizar</button>
+    </div>
+    <div id="sdb-periodo" class="sub" style="margin:0 0 8px">Período aplicado: não informado</div>
+    <div id="sdb-meta" class="sub" style="margin:0 0 10px;opacity:.85"></div>
+
+    <div class="stats" id="sdb-stats"></div>
+    <div class="h-charts">
+      <div class="h-card">
+        <h3 class="ttl">Pareto de Fornecedores</h3>
+        <div class="canvas-wrap pareto"><canvas id="chart-s-pareto"></canvas></div>
+      </div>
+      <div class="h-card">
+        <h3 class="ttl">Volume Mensal</h3>
+        <div class="canvas-wrap"><canvas id="chart-s-mensal"></canvas></div>
+      </div>
+    </div>
+    <div id="sdb-msg" class="empty">Carregue a aba Spend baseline para visualizar o dashboard.</div>
+  </section>
+
+  <!-- ===== Spend Baseline ===== -->
+  <section id="view-spend" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="s-empresa">Empresa</label>
+        <select id="s-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="s-tipo">Tipo item</label>
+        <select id="s-tipo">
+          <option value="">Todos</option>
+          <option value="PRODUTO">Produto</option>
+          <option value="SERVICO">Serviço</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="s-classif-item">Classificação item</label>
+        <input id="s-classif-item" type="text" placeholder="Ex.: NCM/CFOP (opcional)">
+      </div>
+      <div class="field">
+        <label for="s-dest-cnpj">CNPJ destinatário</label>
+        <input id="s-dest-cnpj" type="text" placeholder="Somente números (opcional)">
+      </div>
+      <div class="field"><label for="s-data-de">De</label><input id="s-data-de" type="date"></div>
+      <div class="field"><label for="s-data-ate">Até</label><input id="s-data-ate" type="date"></div>
+      <div class="field">
+        <label for="s-filter">Filtro rápido</label>
+        <input id="s-filter" type="text" placeholder="CNPJ, fornecedor, classificação...">
+      </div>
+      <button class="btn" id="s-load">Buscar</button>
+      <button class="btn ghost" id="s-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="s-stats"></div>
+    <div class="table-wrap"><table id="s-table"><thead></thead><tbody></tbody></table></div>
+    <div id="s-msg" class="empty">Selecione os filtros e clique em Buscar.</div>
+  </section>
+
+  <!-- ===== Spend Composição ===== -->
+  <section id="view-spend-detail" class="view">
+    <div class="toolbar">
+      <div class="field" style="min-width:320px">
+        <label for="sd-context">Contexto selecionado</label>
+        <input id="sd-context" type="text" readonly>
+      </div>
+      <div class="field">
+        <label for="sd-filter">Filtro rápido</label>
+        <input id="sd-filter" type="text" placeholder="NF, fornecedor, CFOP, chave...">
+      </div>
+      <button class="btn" id="sd-back">Voltar ao baseline</button>
+      <button class="btn ghost" id="sd-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="sd-stats"></div>
+    <div class="table-wrap"><table id="sd-table"><thead></thead><tbody></tbody></table></div>
+    <div id="sd-msg" class="empty">Clique em um fornecedor no baseline para abrir a composição por NF.</div>
+  </section>
+
+  <!-- ===== Histórico OCs ===== -->
+  <section id="view-historico" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="h-empresa">Empresa</label>
+        <select id="h-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="h-classif">Classificação</label>
+        <select id="h-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="h-nos">N.º OS (separe por vírgula)</label>
+        <input id="h-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:220px">
+      </div>
+      <div class="field">
+        <label for="h-situacao">Situação da OC</label>
+        <select id="h-situacao">
+          <option value="todas">Todas</option>
+          <option value="abertas">Abertas</option>
+          <option value="encerradas">Encerradas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="h-data-campo">Campo data</label>
+        <select id="h-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field"><label for="h-data-de">De</label><input id="h-data-de" type="date"></div>
+      <div class="field"><label for="h-data-ate">Até</label><input id="h-data-ate" type="date"></div>
+      <div class="field">
+        <label for="h-filter">Filtro rápido</label>
+        <input id="h-filter" type="text" placeholder="OC, produto, fornecedor, comprador...">
+      </div>
+      <div class="field">
+        <label for="h-chart-metric">Métrica do gráfico</label>
+        <select id="h-chart-metric">
+          <option value="ocs" selected>Qtd. OCs</option>
+          <option value="volume">Volume (qtde líquida)</option>
+          <option value="valor">Valor total OC</option>
+        </select>
+      </div>
+      <button class="btn" id="h-load">Buscar</button>
+      <button class="btn ghost" id="h-csv-head">CSV Headers</button>
+      <button class="btn ghost" id="h-csv-item">CSV Itens</button>
+    </div>
+
+    <div class="stats" id="h-stats"></div>
+    <div id="h-drill-banner"></div>
+    <div class="h-charts">
+      <div class="h-card">
+        <h3 class="ttl">Demanda Semanal</h3>
+        <div class="canvas-wrap"><canvas id="chart-h-semanal"></canvas></div>
+      </div>
+      <div class="h-card">
+        <h3 class="ttl">Demanda Mensal</h3>
+        <div class="canvas-wrap"><canvas id="chart-h-mensal"></canvas></div>
+      </div>
+      <div class="h-card">
+        <h3 class="ttl">Histórico e Tendência</h3>
+        <div class="canvas-wrap"><canvas id="chart-h-tendencia"></canvas></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="block-title">Visão Header (ordens de compra)</div>
+        <div class="table-wrap" style="max-height:34vh"><table id="h-head-table"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div>
+        <div class="block-title">Visão Itens (detalhada por OS/produto)</div>
+        <div class="table-wrap" style="max-height:34vh"><table id="h-item-table"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div id="h-msg" class="empty">Selecione filtros e clique em Buscar.</div>
+  </section>
+
+  <!-- ===== Visibility Header ===== -->
+  <section id="view-visibility-header" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="vh-empresa">Empresa</label>
+        <select id="vh-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vh-classif">Classificação</label>
+        <select id="vh-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="vh-nos">N.º OS (separe por vírgula)</label>
+        <input id="vh-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:220px">
+      </div>
+      <div class="field">
+        <label for="vh-data-campo">Campo data</label>
+        <select id="vh-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field"><label for="vh-data-de">De</label><input id="vh-data-de" type="date"></div>
+      <div class="field"><label for="vh-data-ate">Até</label><input id="vh-data-ate" type="date"></div>
+      <div class="field">
+        <label for="vh-filter">Filtro rápido</label>
+        <input id="vh-filter" type="text" placeholder="SC, OC, status, fornecedor...">
+      </div>
+      <div class="field" style="min-width:220px">
+        <label for="vh-sem-oc">Solicitações sem OC</label>
+        <select id="vh-sem-oc">
+          <option value="0" selected>Todas</option>
+          <option value="1">Somente sem OC</option>
+        </select>
+      </div>
+      <button class="btn" id="vh-load">Buscar</button>
+      <button class="btn ghost" id="vh-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="vh-stats"></div>
+    <div class="table-wrap"><table id="vh-table"><thead></thead><tbody></tbody></table></div>
+    <div id="vh-msg" class="empty">Selecione filtros e clique em Buscar.</div>
+  </section>
+
+  <!-- ===== Visibility Detalhada ===== -->
+  <section id="view-visibility-detail" class="view">
+    <div class="toolbar">
+      <div class="field">
+        <label for="vd-empresa">Empresa</label>
+        <select id="vd-empresa">
+          <option value="">(padrão)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vd-classif">Classificação</label>
+        <select id="vd-classif"><option value="">Todas</option></select>
+      </div>
+      <div class="field">
+        <label for="vd-nos">N.º OS (separe por vírgula)</label>
+        <input id="vd-nos" type="text" placeholder="ex.: 9204 ou 9204,8714" style="min-width:220px">
+      </div>
+      <div class="field">
+        <label for="vd-data-campo">Campo data</label>
+        <select id="vd-data-campo" class="data-campo">
+          <option value="dt_entrada">dt_entrada</option>
+          <option value="dt_aprovacao">dt_aprovacao</option>
+          <option value="dt_prevista">dt_prevista</option>
+        </select>
+      </div>
+      <div class="field"><label for="vd-data-de">De</label><input id="vd-data-de" type="date"></div>
+      <div class="field"><label for="vd-data-ate">Até</label><input id="vd-data-ate" type="date"></div>
+      <div class="field">
+        <label for="vd-filter">Filtro rápido</label>
+        <input id="vd-filter" type="text" placeholder="OS, produto, item, status...">
+      </div>
+      <button class="btn" id="vd-load">Buscar</button>
+      <button class="btn ghost" id="vd-csv">Exportar CSV</button>
+    </div>
+
+    <div class="stats" id="vd-stats"></div>
+    <div class="table-wrap"><table id="vd-table"><thead></thead><tbody></tbody></table></div>
+    <div id="vd-msg" class="empty">Aba detalhada mostra itens em estado A COMPRAR.</div>
+  </section>
+</main>
+
+<script>
+const fmtNum = v => v == null ? '' : new Intl.NumberFormat('pt-BR',{maximumFractionDigits:4}).format(v);
+const fmtDate = v => !v ? '' : new Date(v).toLocaleDateString('pt-BR');
+
+// Anexa filtro por campo-data (campo + de + ate) ao QueryString.
+// prefix = 'm' | 'g' | 'p' | 'h'
+function addDataParams(qs, prefix){
+  const campo = document.getElementById(`${prefix}-data-campo`)?.value || '';
+  const de    = document.getElementById(`${prefix}-data-de`)?.value    || '';
+  const ate   = document.getElementById(`${prefix}-data-ate`)?.value   || '';
+  if(de || ate){
+    if(campo) qs.set('data_campo', campo);
+    if(de)    qs.set('data_de',  de);
+    if(ate)   qs.set('data_ate', ate);
+  }
+}
+const badge = (txt, cls) => `<span class="badge ${cls}">${txt}</span>`;
+
+function statusBadge(s){
+  if(!s) return '';
+  const u = String(s).toUpperCase();
+  if(u === 'ENTREGUE')        return badge(s,'ok');
+  if(u === 'COBERTO ESTOQUE') return badge(s,'ok');
+  if(u === 'OC EMITIDA')      return badge(s,'info');
+  if(u === 'SOLICITACAO')     return badge(s,'warn');
+  if(u === 'RESERVADO')       return badge(s,'warn');
+  if(u === 'A COMPRAR')       return badge(s,'err');
+  if(u === 'PRODUÇÃO')        return badge('Produção','info');
+  // compat antiga
+  if(u.includes('ATENDIDO'))  return badge(s,'ok');
+  if(u.includes('ANDAMENTO')) return badge(s,'warn');
+  if(u.includes('PENDENTE'))  return badge(s,'err');
+  return badge(s,'info');
+}
+function situacaoBadge(s){
+  if(!s) return '';
+  const u = String(s).toUpperCase();
+  if(u === 'ENTREGUE')        return badge(s,'ok');
+  if(u === 'COBERTO ESTOQUE') return badge(s,'ok');
+  if(u === 'OC EMITIDA')      return badge(s,'info');
+  if(u === 'SOLICITACAO')     return badge(s,'warn');
+  if(u === 'RESERVADO')       return badge(s,'warn');
+  if(u === 'A COMPRAR')       return badge(s,'err');
+  return badge(s,'info');
+}
+function metodoLabel(m){
+  if(m===0||m==='0') return badge('Compras','warn');
+  if(m===1||m==='1') return badge('Serviços','info');
+  if(m===2||m==='2') return badge('Produção própria','ok');
+  if(m===3||m==='3') return badge('Produção terceira','info');
+  return m ?? '';
+}
+
+// ---------- Health ----------
+async function checkHealth(){
+  const el = document.getElementById('health');
+  try{
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch('/api/compras/health', {signal: ctrl.signal});
+    clearTimeout(t);
+    const j = await r.json();
+    const ok = j.app==='ok' && j.db===true;
+    el.className = 'status ' + (ok?'ok':'err');
+    el.querySelector('.txt').textContent = ok ? 'API + DB online' : 'DB offline';
+  }catch(e){
+    el.className='status err';
+    el.querySelector('.txt').textContent='API offline';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 15000);
+
+// ---------- Tabs ----------
+const MENU_DEFAULT_VIEW = {
+  planning: 'dashboard',
+  spend: 'spend-dashboard',
+  visibility: 'visibility-header',
+};
+
+function menuFromView(view){
+  if(view === 'spend' || view === 'spend-detail' || view === 'spend-dashboard') return 'spend';
+  if(view === 'visibility-header' || view === 'visibility-detail') return 'visibility';
+  return 'planning';
+}
+
+function activateMenu(menu){
+  document.querySelectorAll('#menu-main button').forEach(x => x.classList.remove('active'));
+  const menuBtn = document.querySelector(`#menu-main button[data-menu="${menu}"]`);
+  if(menuBtn) menuBtn.classList.add('active');
+
+  document.querySelectorAll('nav button[data-view]').forEach(btn => {
+    btn.style.display = btn.dataset.menu === menu ? '' : 'none';
+  });
+}
+
+function activateView(view, navView){
+  const menu = menuFromView(view);
+  activateMenu(menu);
+  const nav = navView || view;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  const navBtn = document.querySelector(`nav button[data-view="${nav}"]`);
+  if(navBtn) navBtn.classList.add('active');
+  const section = document.getElementById('view-'+view);
+  if(section) section.classList.add('active');
+}
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => activateView(b.dataset.view)));
+document.querySelectorAll('#menu-main button').forEach(b => b.addEventListener('click', () => {
+  const menu = b.dataset.menu;
+  activateView(MENU_DEFAULT_VIEW[menu] || 'dashboard');
+}));
+activateMenu('planning');
+
+// ---------- Tabela genérica ----------
+let state = {
+  materiais: {data:[], sortKey:null, sortDir:1, colFilters:{}},
+  gap:      {data:[], sortKey:null, sortDir:1, colFilters:{}},
+  painel:   {data:[], sortKey:null, sortDir:1, colFilters:{}},
+  spend:    {data:[], filtered:[], sortKey:null, sortDir:1, colFilters:{}},
+  spendDetail:{data:[], sortKey:null, sortDir:1, colFilters:{}},
+  visibilityHeader:{data:[], sortKey:null, sortDir:1, colFilters:{}},
+  visibilityDetail:{data:[], sortKey:null, sortDir:1, colFilters:{}},
+};
+const PREFIX_KEY = {m:'materiais', g:'gap', p:'painel', s:'spend', sd:'spendDetail', vh:'visibilityHeader', vd:'visibilityDetail'};
+const stateOf = prefix => state[PREFIX_KEY[prefix]];
+
+function renderTable(prefix, cols, rows){
+  const thead = document.querySelector(`#${prefix}-table thead`);
+  const tbody = document.querySelector(`#${prefix}-table tbody`);
+  const msg   = document.getElementById(`${prefix}-msg`);
+  if(!rows || !rows.length){
+    thead.innerHTML=''; tbody.innerHTML='';
+    msg.textContent = 'Nenhum registro.';
+    msg.className='empty'; msg.style.display='block';
+    return;
+  }
+  msg.style.display='none';
+  const s = stateOf(prefix);
+
+  // valores distintos por coluna com contagem (inclui marcador '' para vazios/nulos)
+  const distinct = {};
+  for(const c of cols){
+    const counts = new Map();
+    let nBlank = 0;
+    for(const r of s.data){
+      const v = r[c.key];
+      if(v == null || v === '') { nBlank++; continue; }
+      const key = String(v);
+      counts.set(key, (counts.get(key)||0)+1);
+    }
+    const list = [...counts.entries()]
+      .sort((a,b)=>a[0].localeCompare(b[0],'pt-BR',{numeric:true}));
+    if(nBlank) list.unshift(['', nBlank]); // entrada especial: chave '' = vazio
+    distinct[c.key] = list;
+  }
+
+  thead.innerHTML =
+    '<tr>' + cols.map(c =>
+      `<th data-key="${c.key}">${c.label}${s.sortKey===c.key?' <span class="arrow">'+(s.sortDir>0?'▲':'▼')+'</span>':''}</th>`
+    ).join('') + '</tr>' +
+    '<tr class="col-filters">' + cols.map(c => {
+      const sel = Array.isArray(s.colFilters[c.key]) ? s.colFilters[c.key] : [];
+      const count = distinct[c.key].length;
+      const ph = sel.length
+        ? `✓ ${sel.length} selecionado${sel.length>1?'s':''}`
+        : (count ? `${count} valor${count>1?'es':''}` : 'filtrar…');
+      const cls = sel.length ? 'has-selection' : '';
+      const title = sel.length ? sel.join(' | ').replace(/"/g,'&quot;') : '';
+      return `<th><input data-key="${c.key}" type="text" class="${cls}" placeholder="${ph}" title="${title}" autocomplete="off"></th>`;
+    }).join('') + '</tr>';
+  thead.querySelectorAll('tr:first-child th').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.key;
+    if(s.sortKey===k) s.sortDir = -s.sortDir; else { s.sortKey=k; s.sortDir=1; }
+    applyFilter(prefix);
+  }));
+  thead.querySelectorAll('tr.col-filters input').forEach(inp => {
+    inp.addEventListener('click', e => { e.stopPropagation(); openColPopup(inp, distinct[inp.dataset.key], prefix, s); });
+    inp.addEventListener('focus', () => openColPopup(inp, distinct[inp.dataset.key], prefix, s));
+    inp.addEventListener('input', () => {
+      // o input agora é apenas busca dentro do popup (não filtra direto)
+      openColPopup(inp, distinct[inp.dataset.key], prefix, s);
+    });
+  });
+  tbody.innerHTML = rows.map(r => '<tr>' + cols.map(c => {
+    const v = r[c.key];
+    const cell = c.render ? c.render(v,r) : (v ?? '');
+    return `<td class="${c.num?'num':''}">${cell}</td>`;
+  }).join('') + '</tr>').join('');
+}
+
+// ---------- Popup customizado para filtros de coluna (multi-seleção) ----------
+const colPopup = document.getElementById('col-popup');
+let popupAnchor = null;
+let popupCtx = null; // {values, prefix, s, key}
+
+function escHtml(v){
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openColPopup(inp, values, prefix, s){
+  popupAnchor = inp;
+  const key = inp.dataset.key;
+  popupCtx = {values, prefix, s, key};
+  const term = (inp.value||'').toLowerCase();
+  const selected = new Set(Array.isArray(s.colFilters[key]) ? s.colFilters[key] : []);
+  const matches = (v) => {
+    if(!term) return true;
+    if(v === '') return '(vazio)'.includes(term) || 'empty'.includes(term);
+    return v.toLowerCase().includes(term);
+  };
+  const filtered = values.filter(([v]) => matches(v));
+  const items = filtered.slice(0, 300);
+  const allVisibleChecked = items.length > 0 && items.every(([v]) => selected.has(v));
+  const html =
+    `<div class="opt action" data-act="toggle-all">` +
+      `<input type="checkbox" ${allVisibleChecked?'checked':''} tabindex="-1">` +
+      `<span class="lbl">${allVisibleChecked?'Desmarcar visíveis':'Marcar visíveis'}</span>` +
+      `<span class="qtd">${items.length}</span>` +
+    `</div>` +
+    (selected.size ? `<div class="opt action" data-act="clear"><span class="lbl">✕ Limpar seleção (${selected.size})</span></div>` : '') +
+    items.map(([v,q]) => {
+      const isBlank = v === '';
+      const label = isBlank ? '<em style="color:var(--muted)">(vazio)</em>' : escHtml(v);
+      const dataVal = isBlank ? '' : escHtml(v);
+      const chk = selected.has(v) ? 'checked' : '';
+      return `<div class="opt" data-val="${dataVal}" data-blank="${isBlank?'1':'0'}"><input type="checkbox" ${chk} tabindex="-1"><span class="lbl">${label}</span><span class="qtd">${q}</span></div>`;
+    }).join('') +
+    (filtered.length > items.length ? `<div class="opt muted">… +${filtered.length-items.length} ocultos (refine a busca)</div>` : '') +
+    (!items.length ? `<div class="opt muted">(nenhum valor)</div>` : '');
+  colPopup.innerHTML = html;
+  const r = inp.getBoundingClientRect();
+  const popupW = Math.max(r.width, 220);
+  colPopup.style.minWidth = popupW + 'px';
+  // posiciona: tenta abaixo; se não couber, encosta ao topo da viewport
+  colPopup.style.display = 'block';
+  const ph = colPopup.offsetHeight;
+  let top = r.bottom + 2;
+  if(top + ph > window.innerHeight - 8) top = Math.max(8, window.innerHeight - ph - 8);
+  let left = r.left;
+  if(left + popupW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - popupW - 8);
+  colPopup.style.left = left + 'px';
+  colPopup.style.top  = top + 'px';
+}
+function closeColPopup(){ colPopup.style.display='none'; popupAnchor=null; popupCtx=null; }
+
+function applyColSelection(prefix, key, selectedSet){
+  const s = stateOf(prefix);
+  if(selectedSet.size) s.colFilters[key] = [...selectedSet];
+  else delete s.colFilters[key];
+  applyFilter(prefix, {preserveFocus:key, keepPopup:true});
+}
+
+colPopup.addEventListener('mousedown', e => {
+  const opt = e.target.closest('.opt');
+  if(!opt || !popupCtx) return;
+  if(opt.classList.contains('muted')) return;
+  e.preventDefault(); // não tira o foco do input
+  const {prefix, key, s, values} = popupCtx;
+  const selected = new Set(Array.isArray(s.colFilters[key]) ? s.colFilters[key] : []);
+
+  if(opt.dataset.act === 'clear'){
+    selected.clear();
+  } else if(opt.dataset.act === 'toggle-all'){
+    const term = (popupAnchor.value||'').toLowerCase();
+    const matchesAll = (v) => {
+      if(!term) return true;
+      if(v === '') return '(vazio)'.includes(term) || 'empty'.includes(term);
+      return v.toLowerCase().includes(term);
+    };
+    const visible = values.filter(([v]) => matchesAll(v)).slice(0, 300);
+    const allChecked = visible.length>0 && visible.every(([v]) => selected.has(v));
+    if(allChecked) visible.forEach(([v]) => selected.delete(v));
+    else visible.forEach(([v]) => selected.add(v));
+  } else {
+    const v = opt.dataset.val;
+    if(v == null) return;
+    if(selected.has(v)) selected.delete(v); else selected.add(v);
+  }
+  applyColSelection(prefix, key, selected);
+});
+
+document.addEventListener('mousedown', e => {
+  if(e.target.closest('#col-popup')) return;
+  if(e.target.closest('tr.col-filters input')) return;
+  closeColPopup();
+});
+window.addEventListener('scroll', e => {
+  // não fechar quando o usuário está rolando dentro do próprio popup
+  if(e.target && e.target.nodeType === 1 && e.target.closest && e.target.closest('#col-popup')) return;
+  if(e.target === colPopup) return;
+  closeColPopup();
+}, true);
+window.addEventListener('resize', closeColPopup);
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeColPopup(); });
+
+function applyFilter(prefix, opts){
+  const s = stateOf(prefix);
+  const term = document.getElementById(`${prefix}-filter`).value.trim().toLowerCase();
+  let rows = s.data;
+  if(term){
+    rows = rows.filter(r => Object.values(r).some(v => v != null && String(v).toLowerCase().includes(term)));
+  }
+  // filtros por coluna (multi-seleção: igualdade exata em qualquer valor escolhido)
+  const colEntries = Object.entries(s.colFilters).filter(([,v]) =>
+    Array.isArray(v) ? v.length>0 : (v && String(v).trim()!=='')
+  );
+  if(colEntries.length){
+    rows = rows.filter(r => colEntries.every(([k,v]) => {
+      const raw = r[k];
+      if(Array.isArray(v)){
+        const isBlank = (raw == null || raw === '');
+        if(isBlank) return v.includes('');
+        return v.includes(String(raw));
+      }
+      if(raw == null) return false;
+      return String(raw).toLowerCase().includes(String(v).toLowerCase());
+    }));
+  }
+  if(s.sortKey){
+    rows = [...rows].sort((a,b) => {
+      const x=a[s.sortKey], y=b[s.sortKey];
+      if(x==null) return 1; if(y==null) return -1;
+      if(typeof x==='number' && typeof y==='number') return (x-y)*s.sortDir;
+      return String(x).localeCompare(String(y),'pt-BR',{numeric:true})*s.sortDir;
+    });
+  }
+  s.filtered = rows;
+  if(prefix==='m') renderMateriais(rows);
+  else if(prefix==='g') renderGap(rows);
+  else if(prefix==='s') renderSpend(rows);
+  else if(prefix==='sd') renderSpendDetail(rows);
+  else if(prefix==='vh') renderVisibilityHeader(rows);
+  else if(prefix==='vd') renderVisibilityDetail(rows);
+  else renderPainel(rows);
+  // restaura foco no input de coluna que disparou a filtragem
+  if(opts && opts.preserveFocus){
+    const sel = document.querySelector(`#${prefix}-table thead tr.col-filters input[data-key="${opts.preserveFocus}"]`);
+    if(sel){
+      sel.focus();
+      const len = sel.value.length; sel.setSelectionRange(len,len);
+      if(opts.keepPopup && popupCtx && popupCtx.key === opts.preserveFocus){
+        // reabre popup atualizando o estado dos checkboxes
+        openColPopup(sel, popupCtx.values, prefix, stateOf(prefix));
+      }
+    }
+  }
+}
+
+// ---------- Materiais ----------
+const colsMat = [
+  {key:'cod_empresa', label:'Emp.', num:true},
+  {key:'n_os',        label:'OS'},
+  {key:'cod_os_completo', label:'Sub-OS', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'classificacao', label:'Classificação', render:v=>v?badge(v,'info'):''},
+  {key:'cod_interno', label:'Cód. Interno', render:v=>`<span class="pill">${v??''}</span>`},
+  {key:'material_descricao', label:'Descrição'},
+  {key:'unidade',     label:'Un'},
+  {key:'qtde_necessaria',label:'Necessária',num:true,render:fmtNum},
+  {key:'qtde_solicitada',label:'Solicitada',num:true,render:fmtNum},
+  {key:'qtde_reservada',label:'Reservada',num:true,render:fmtNum},
+  {key:'qtde_entregue', label:'Entregue', num:true,render:fmtNum},
+  {key:'qtde_utilizada',label:'Utilizada',num:true,render:fmtNum},
+  {key:'dt_necessidade',label:'Dt. Necessidade',render:fmtDate},
+  {key:'metodo_reposicao',label:'Método',render:metodoLabel},
+  {key:'n_oc', label:'O.C.', render:v=>v?`<span class="pill" title="${String(v).replace(/"/g,'&quot;')}">${v}</span>`:''},
+  {key:'n_sc', label:'Sol. Compra', render:v=>v?`<span class="pill" title="${String(v).replace(/"/g,'&quot;')}">${v}</span>`:''},
+  {key:'status_material',label:'Status',render:(v,r)=>{
+    // Se método = 2, sempre exibe 'PRODUÇÃO'
+    if(r.metodo_reposicao === 2 || r.metodo_reposicao === '2') return statusBadge('PRODUÇÃO');
+    return statusBadge(v);
+  }},
+  {key:'engenharia_inicio', label:'Eng. Início',  render:fmtDate},
+  {key:'engenharia_prazo',  label:'Eng. Prazo',   render:fmtDate},
+  {key:'compras_inicio',    label:'Compras Início',render:fmtDate},
+  {key:'compras_prazo',     label:'Compras Prazo', render:fmtDate},
+  {key:'producao_inicio',   label:'Prod. Início',  render:fmtDate},
+  {key:'producao_prazo',    label:'Prod. Prazo',   render:fmtDate},
+  {key:'pendente_compras', label:'Pendente compras', render:v=>v===true?badge('Sim','err'):v===false?badge('Não','ok'):'', num:false},
+];
+
+function renderMateriais(rows){
+  renderTable('m', colsMat, rows);
+  // stats
+  const tot = rows.length;
+  // Corrige status para método 2 (Produção própria) sempre como 'PRODUÇÃO'
+  const sm = r => {
+    if(r.metodo_reposicao === 2 || r.metodo_reposicao === '2') return 'PRODUÇÃO';
+    return String(r.status_material||'').toUpperCase();
+  };
+  const ok    = rows.filter(r=>['ENTREGUE','COBERTO ESTOQUE'].includes(sm(r))).length;
+  const proc  = rows.filter(r=>['OC EMITIDA','SOLICITACAO','RESERVADO'].includes(sm(r))).length;
+  const pend  = rows.filter(r=>sm(r) === 'A COMPRAR').length;
+  document.getElementById('m-stats').innerHTML =
+    stat('Itens', tot) + stat('Atendidos', ok) + stat('Em andamento', proc) + stat('A comprar', pend);
+}
+
+async function loadMateriais(){
+  const os = document.getElementById('m-os').value.trim();
+  const emp = document.getElementById('m-empresa').value;
+  const cl  = document.getElementById('m-classif').value;
+  const msg = document.getElementById('m-msg');
+  const banner = document.getElementById('m-drill-banner');
+  if(banner) banner.style.display = 'none';
+  msg.textContent='Carregando…'; msg.className='loading'; msg.style.display='block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(cl)  qs.set('classificacao', cl);
+    addDataParams(qs, 'm');
+    let url;
+    if(os){
+      url = `/api/compras/os/${encodeURIComponent(os)}/materiais` + (qs.toString()?`?${qs}`:'');
+    } else {
+      url = `/api/compras/materiais` + (qs.toString()?`?${qs}`:'');
+    }
+    const r = await fetch(url);
+    if(r.status===404){ state.materiais.data=[]; renderMateriais([]); msg.textContent='OS sem materiais ou inexistente.'; msg.className='empty'; return; }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    state.materiais.data = j;
+    applyFilter('m');
+  }catch(e){
+    msg.textContent='Erro: '+e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+// ---------- GAP ----------
+const colsGap = [
+  {key:'cod_empresa', label:'Emp.', num:true},
+  {key:'cod_interno', label:'Cód. Interno', render:v=>`<span class="pill">${v??''}</span>`},
+  {key:'material_descricao', label:'Descrição'},
+  {key:'classificacao', label:'Classificação', render:v=>v?badge(v,'info'):''},
+  {key:'n_os', label:'OS', render:(v,r)=>{
+      if(!v) return '';
+      const list = String(v);
+      const short = list.length>40 ? list.slice(0,37)+'…' : list;
+      const count = r.qtd_os ?? '';
+      return `<span title="${list.replace(/"/g,'&quot;')}" class="pill">${short}</span>${count?` <span class="badge info">${count}</span>`:''}`;
+  }},
+  {key:'cod_os_completo', label:'Sub-OS', render:v=>{
+      if(!v) return '';
+      const list = String(v);
+      const short = list.length>40 ? list.slice(0,37)+'…' : list;
+      return `<span title="${list.replace(/"/g,'&quot;')}" class="pill">${short}</span>`;
+  }},
+  {key:'metodo_reposicao', label:'Método', render:metodoLabel},
+  {key:'qtd_necessaria', label:'Necessária', num:true, render:fmtNum},
+  {key:'qtd_solicitada', label:'Solicitada', num:true, render:fmtNum},
+  {key:'qtd_em_oc',      label:'Em OC',     num:true, render:fmtNum},
+  {key:'qtd_recebida',   label:'Recebida',  num:true, render:fmtNum},
+  {key:'gap',            label:'GAP',       num:true, render:v=>`<strong style="color:#fca5a5">${fmtNum(v)}</strong>`},
+];
+
+function renderGap(rows){
+  renderTable('g', colsGap, rows);
+  const tot = rows.length;
+  const sum = k => rows.reduce((a,r)=>a + (Number(r[k])||0), 0);
+  document.getElementById('g-stats').innerHTML =
+    stat('Itens', tot) +
+    stat('Σ Necessária', fmtNum(sum('qtd_necessaria'))) +
+    stat('Σ Em OC', fmtNum(sum('qtd_em_oc'))) +
+    stat('Σ Recebida', fmtNum(sum('qtd_recebida'))) +
+    stat('Σ GAP', fmtNum(sum('gap')));
+}
+
+async function loadGap(){
+  const m = document.getElementById('g-metodo').value;
+  const emp = document.getElementById('g-empresa').value;
+  const cl  = document.getElementById('g-classif').value;
+  const nos = document.getElementById('g-nos').value.trim();
+  const msg = document.getElementById('g-msg');
+  msg.textContent='Carregando…'; msg.className='loading'; msg.style.display='block';
+  try{
+    const qs = new URLSearchParams();
+    if(m!=='') qs.set('metodo', m);
+    if(emp)    qs.set('empresa', emp);
+    if(cl)     qs.set('classificacao', cl);
+    if(nos)    qs.set('n_os', nos);
+    addDataParams(qs, 'g');
+    const r = await fetch('/api/compras/gap' + (qs.toString()?`?${qs}`:''));
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    state.gap.data = j;
+    applyFilter('g');
+  }catch(e){
+    msg.textContent='Erro: '+e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+// ---------- Spend baseline ----------
+let chartSpendPareto = null;
+let chartSpendMensal = null;
+
+function spendDashboardPeriodLabel(){
+  const de = document.getElementById('s-data-de')?.value || '';
+  const ate = document.getElementById('s-data-ate')?.value || '';
+  if(de && ate) return `Período aplicado: ${fmtDate(de)} até ${fmtDate(ate)}`;
+  if(de) return `Período aplicado: a partir de ${fmtDate(de)}`;
+  if(ate) return `Período aplicado: até ${fmtDate(ate)}`;
+  return 'Período aplicado: padrão da API (sem recorte informado)';
+}
+
+function renderSpendDashboard(rows){
+  const msg = document.getElementById('sdb-msg');
+  const statsEl = document.getElementById('sdb-stats');
+  const periodoEl = document.getElementById('sdb-periodo');
+  const metaEl = document.getElementById('sdb-meta');
+  const ctxPareto = document.getElementById('chart-s-pareto')?.getContext('2d');
+  const ctxMensal = document.getElementById('chart-s-mensal')?.getContext('2d');
+  if(!statsEl || !msg || !ctxPareto || !ctxMensal) return;
+  const periodText = spendDashboardPeriodLabel();
+  const periodShort = periodText.replace('Período aplicado: ', '');
+  const paretoTargetRaw = Number(document.getElementById('sdb-pareto-target')?.value || 80);
+  const paretoTarget = Math.min(80, Math.max(1, paretoTargetRaw || 80));
+  const paretoTargetEl = document.getElementById('sdb-pareto-target');
+  if(paretoTargetEl && Number(paretoTargetEl.value) !== paretoTarget){
+    paretoTargetEl.value = String(paretoTarget);
+  }
+  if(periodoEl) periodoEl.textContent = periodText;
+
+  if(chartSpendPareto){ chartSpendPareto.destroy(); chartSpendPareto = null; }
+  if(chartSpendMensal){ chartSpendMensal.destroy(); chartSpendMensal = null; }
+
+  if(!rows || !rows.length){
+    statsEl.innerHTML = '';
+    if(metaEl) metaEl.textContent = 'Sem dados para o período/filtro atual.';
+    msg.textContent = 'Carregue a aba Spend baseline para visualizar o dashboard.';
+    msg.className = 'empty';
+    msg.style.display = 'block';
+    return;
+  }
+
+  if(metaEl){
+    metaEl.textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')} | Linhas analisadas: ${rows.length} | Alvo Pareto: ${paretoTarget}%`;
+  }
+
+  const sum = k => rows.reduce((a,r)=>a + (Number(r[k])||0), 0);
+  const total = sum('total_periodo');
+  const totalNF = sum('qtd_nf_total');
+  const totalItens = sum('qtd_itens_total');
+  const ticketNF = totalNF ? (total / totalNF) : 0;
+
+  // Consolida por fornecedor (CNPJ+nome) para manter o Pareto estável ao mudar alvo.
+  const fornecedorMap = new Map();
+  for(const r of rows){
+    const cnpj = String(r.cnpj || '').trim();
+    const nome = String(r.fornecedor || '(Sem fornecedor)').trim();
+    const key = `${cnpj}||${nome}`;
+    const current = fornecedorMap.get(key) || {fornecedor: nome, cnpj, valor: 0};
+    current.valor += Number(r.total_periodo) || 0;
+    fornecedorMap.set(key, current);
+  }
+  const porFornecedor = [...fornecedorMap.values()].sort((a,b) => b.valor - a.valor);
+  const fornecedores = porFornecedor.length;
+
+  const top5 = porFornecedor.slice(0,5).reduce((a,x)=>a+x.valor,0);
+  let paretoCut = [];
+  if(total > 0){
+    let running = 0;
+    for(const item of porFornecedor){
+      paretoCut.push(item);
+      running += item.valor;
+      if((running / total) * 100 >= paretoTarget) break;
+    }
+  } else {
+    paretoCut = porFornecedor.slice(0, 10);
+  }
+  if(!paretoCut.length && porFornecedor.length) paretoCut = [porFornecedor[0]];
+
+  const valorPareto = paretoCut.reduce((a,x)=>a+x.valor,0);
+  const coberturaPareto = total ? (valorPareto/total)*100 : 0;
+
+  let acumulado = 0;
+  const paretoPct = paretoCut.map(x => {
+    acumulado += x.valor;
+    return total ? (acumulado/total)*100 : 0;
+  });
+
+  const monthKeys = [...new Set(rows.flatMap(r => Object.keys(r).filter(k => /^mes_\d{4}_\d{2}$/.test(k))))]
+    .sort((a,b) => a.localeCompare(b, 'pt-BR', {numeric:true}));
+  const monthLabels = monthKeys.map(k => k.replace(/^mes_/, '').replace('_', '-'));
+  const monthVals = monthKeys.map(k => rows.reduce((a,r) => a + (Number(r[k])||0), 0));
+
+  statsEl.innerHTML =
+    stat('Fornecedores', fornecedores) +
+    stat('Σ Total período', fmtNum(total)) +
+    stat('Σ NFs', fmtNum(totalNF)) +
+    stat('Σ Itens', fmtNum(totalItens)) +
+    stat('Ticket médio/NF', fmtNum(ticketNF)) +
+    stat('Pareto Top 5', `${(total ? (top5/total)*100 : 0).toFixed(1)}%`) +
+    stat('Fornec. até alvo', fmtNum(paretoCut.length)) +
+    stat('Cobertura alvo', `${coberturaPareto.toFixed(1)}%`);
+
+  chartSpendPareto = new Chart(ctxPareto, {
+    data: {
+      labels: paretoCut.map(x => x.fornecedor.length > 32 ? x.fornecedor.slice(0,29) + '...' : x.fornecedor),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Valor fornecedor (até alvo)',
+          data: paretoCut.map(x => x.valor),
+          backgroundColor: 'rgba(34,211,238,0.45)',
+          borderColor: 'rgba(34,211,238,0.9)',
+          borderWidth: 1,
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'Pareto acumulado (%)',
+          data: paretoPct,
+          borderColor: 'rgba(236,72,153,0.95)',
+          backgroundColor: 'rgba(236,72,153,0.2)',
+          tension: 0.25,
+          pointRadius: 3,
+          yAxisID: 'y1',
+        },
+        {
+          type: 'line',
+          label: `Alvo (${paretoTarget}%)`,
+          data: paretoCut.map(() => paretoTarget),
+          borderColor: 'rgba(250,204,21,0.95)',
+          backgroundColor: 'rgba(250,204,21,0.15)',
+          borderDash: [6, 4],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#cbd5e1' } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const ds = ctx.dataset || {};
+              const y = Number(ctx.parsed?.y ?? 0);
+              if((ds.yAxisID || '') === 'y1') return `${ds.label}: ${y.toFixed(1)}%`;
+              return `${ds.label}: ${fmtNum(y)}`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: `Fornecedores até ${paretoTarget}% | ${periodShort}`,
+          color: '#e2e8f0',
+          font: { size: 12, weight: '600' },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#94a3b8',
+            autoSkip: true,
+            maxRotation: 0,
+            minRotation: 0,
+          },
+          grid: { color: 'rgba(148,163,184,0.1)' },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#94a3b8', callback: v => fmtNum(v) },
+          grid: { color: 'rgba(148,163,184,0.1)' },
+        },
+        y1: {
+          beginAtZero: true,
+          min: 0,
+          max: 100,
+          position: 'right',
+          ticks: { color: '#f9a8d4', stepSize: 10, callback: v => `${v}%` },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+
+  chartSpendMensal = new Chart(ctxMensal, {
+    type: 'bar',
+    data: {
+      labels: monthLabels,
+      datasets: [{
+        label: 'Volume mensal',
+        data: monthVals,
+        backgroundColor: 'rgba(168,85,247,0.45)',
+        borderColor: 'rgba(168,85,247,0.9)',
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#cbd5e1' } },
+        title: {
+          display: true,
+          text: `Evolução mensal | ${periodShort}`,
+          color: '#e2e8f0',
+          font: { size: 12, weight: '600' },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#94a3b8', callback: v => fmtNum(v) },
+          grid: { color: 'rgba(148,163,184,0.1)' },
+        },
+      },
+    },
+  });
+
+  msg.style.display = 'none';
+}
+
+const colsSpendBase = [
+  {key:'cod_empresa', label:'Emp.', num:true},
+  {key:'cnpj', label:'CNPJ', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'fornecedor', label:'Fornecedor', render:(v,r)=>{
+    if(!v) return '';
+    const cnpj = escHtml(r.cnpj || '');
+    const forn = escHtml(v);
+    return `<button class="link-btn spend-detail-open" data-cnpj="${cnpj}" data-fornecedor="${forn}" title="Abrir composição do fornecedor">${forn}</button>`;
+  }},
+  {key:'tipo_item', label:'Tipo', render:v=>{
+    const txt = String(v||'').toUpperCase();
+    if(txt.includes('SERVICO') && txt.includes('PRODUTO')) return badge('Misto','warn');
+    return txt === 'SERVICO' ? badge('Serviço','info') : badge('Produto','ok');
+  }},
+  {key:'classificacao_item', label:'Classificação interna', render:v=>v?badge(v,'warn'):''},
+  {key:'cfop_entrada', label:'CFOP entrada', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cfop_nf', label:'CFOP NF (espelho)', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'natureza_operacao', label:'Natureza da operação'},
+  {key:'total_periodo', label:'Total período', num:true, render:v=>`<strong>${fmtNum(v)}</strong>`},
+  {key:'qtd_itens_total', label:'Itens', num:true, render:fmtNum},
+  {key:'qtd_nf_total', label:'NFs', num:true, render:fmtNum},
+];
+let colsSpend = [...colsSpendBase];
+
+function buildSpendCols(rows){
+  const monthKeys = [...new Set(rows.flatMap(r => Object.keys(r).filter(k => /^mes_\d{4}_\d{2}$/.test(k))))]
+    .sort((a,b) => a.localeCompare(b, 'pt-BR', {numeric:true}));
+  const monthCols = monthKeys.map(key => ({
+    key,
+    label: key.replace(/^mes_/, '').replace('_', '-'),
+    num:true,
+    render:v=>fmtNum(v),
+  }));
+  return [...colsSpendBase.slice(0, 8), ...monthCols, ...colsSpendBase.slice(8)];
+}
+
+function renderSpend(rows){
+  colsSpend = buildSpendCols(rows);
+  renderTable('s', colsSpend, rows);
+  const sum = k => rows.reduce((a,r)=>a + (Number(r[k])||0), 0);
+  const fornecedores = new Set(rows.map(r => String(r.cnpj || ''))).size;
+  const valorPeriodo = sum('total_periodo');
+  document.getElementById('s-stats').innerHTML =
+    stat('Linhas', rows.length) +
+    stat('CNPJs', fornecedores) +
+    stat('Σ Total período', fmtNum(valorPeriodo)) +
+    stat('Σ NFs', fmtNum(sum('qtd_nf_total'))) +
+    stat('Σ Itens', fmtNum(sum('qtd_itens_total')));
+  renderSpendDashboard(rows);
+}
+
+const colsSpendDetail = [
+  {key:'data_entrada', label:'Data entrada', render:fmtDate},
+  {key:'numero_nf', label:'NF', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'modelo_nf', label:'Modelo', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'serie_nf', label:'Série', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'sub_serie', label:'Sub-série', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'fornecedor', label:'Fornecedor'},
+  {key:'cnpj', label:'CNPJ', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cfop', label:'CFOP', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'valor_nf', label:'Valor NF', num:true, render:v=>`<strong>${fmtNum(v)}</strong>`},
+  {key:'tipo_item', label:'Tipo', render:v=>String(v||'').toUpperCase()==='SERVICO'?badge('Serviço','info'):badge('Produto','ok')},
+  {key:'tipo_movimento', label:'Tipo movimento'},
+  {key:'chave_nfe', label:'Chave NFe', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cod_fornecedor', label:'Cód. fornecedor', num:true, render:fmtNum},
+];
+
+async function loadSpendDetail(cnpj, fornecedor){
+  const emp = document.getElementById('s-empresa').value;
+  const tipo = document.getElementById('s-tipo').value;
+  const de = document.getElementById('s-data-de').value;
+  const ate = document.getElementById('s-data-ate').value;
+  const msg = document.getElementById('sd-msg');
+  document.getElementById('sd-context').value = `${fornecedor || '(Sem fornecedor)'} | CNPJ ${cnpj || '(Sem CNPJ)'}`;
+  msg.textContent='Carregando composição…'; msg.className='loading'; msg.style.display='block';
+  activateView('spend-detail');
+  try{
+    const qs = new URLSearchParams();
+    const cnpjDigits = String(cnpj || '').replace(/\D/g,'');
+    if(emp) qs.set('empresa', emp);
+    if(tipo) qs.set('tipo_item', tipo);
+    if(cnpjDigits) qs.set('cnpj', cnpjDigits);
+    else if(fornecedor) qs.set('fornecedor', fornecedor);
+    if(de) qs.set('data_de', de);
+    if(ate) qs.set('data_ate', ate);
+    qs.set('limite', '50000');
+    const r = await fetch('/api/compras/spend/baseline/composicao?' + qs);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    state.spendDetail.data = j;
+    applyFilter('sd');
+  }catch(e){
+    msg.textContent='Erro: ' + e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+function renderSpendDetail(rows){
+  renderTable('sd', colsSpendDetail, rows);
+  const sum = k => rows.reduce((a,r)=>a + (Number(r[k])||0), 0);
+  document.getElementById('sd-stats').innerHTML =
+    stat('Notas', rows.length) +
+    stat('Σ Valor NF', fmtNum(sum('valor_nf'))) +
+    stat('CFOPs', new Set(rows.map(r=>String(r.cfop||''))).size) +
+    stat('Tipos', new Set(rows.map(r=>String(r.tipo_item||''))).size);
+}
+
+async function loadSpend(){
+  const emp = document.getElementById('s-empresa').value;
+  const tipo = document.getElementById('s-tipo').value;
+  const classif = document.getElementById('s-classif-item').value.trim();
+  const destCnpj = (document.getElementById('s-dest-cnpj').value || '').replace(/\D/g,'');
+  const de = document.getElementById('s-data-de').value;
+  const ate = document.getElementById('s-data-ate').value;
+  const msg = document.getElementById('s-msg');
+  msg.textContent='Carregando…'; msg.className='loading'; msg.style.display='block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(tipo) qs.set('tipo_item', tipo);
+    if(classif) qs.set('classificacao_item', classif);
+    if(destCnpj) qs.set('destinatario_cnpj', destCnpj);
+    if(de) qs.set('data_de', de);
+    if(ate) qs.set('data_ate', ate);
+    qs.set('limite', '20000');
+    const r = await fetch('/api/compras/spend/baseline?' + qs);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    state.spend.data = j;
+    state.spendDetail.data = [];
+    applyFilter('s');
+  }catch(e){
+    msg.textContent='Erro: '+e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+function stat(lbl,val){ return `<div class="stat"><div class="lbl">${lbl}</div><div class="val">${val}</div></div>`; }
+
+async function loadClassificacoes(){
+  try{
+    const r = await fetch('/api/compras/classificacoes');
+    if(!r.ok) return;
+    const j = await r.json();
+    const opts = j.map(x => `<option value="${x.classificacao}">${x.classificacao} (${x.qtd})</option>`).join('');
+    for(const id of ['m-classif','g-classif','p-classif','d-classif','h-classif','vh-classif','vd-classif']){
+      const el = document.getElementById(id);
+      el.innerHTML = '<option value="">Todas</option>' + opts;
+    }
+  }catch(e){ console.warn('classificacoes', e); }
+}
+
+function sortRows(rows, sortKey, sortDir){
+  if(!sortKey) return rows;
+  return [...rows].sort((a,b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if(x == null) return 1;
+    if(y == null) return -1;
+    if(typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir;
+    return String(x).localeCompare(String(y), 'pt-BR', {numeric:true}) * sortDir;
+  });
+}
+
+// ---------- Historico OCs ----------
+const hState = {
+  resumo: {},
+  headers: [],
+  itens: [],
+  filteredHeaders: [],
+  filteredItens: [],
+  timeFilter: null,
+  sortHeadKey: 'dt_lancamento',
+  sortHeadDir: -1,
+  sortItemKey: 'cod_ordem_compra',
+  sortItemDir: -1,
+};
+
+const colsHistHead = [
+  {key:'cod_ordem_compra', label:'OC', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'situacao_oc', label:'Situação', render:v=>String(v||'').toUpperCase()==='ENCERRADA'?badge('ENCERRADA','ok'):badge('ABERTA','warn')},
+  {key:'status_oc_nome', label:'Status OC'},
+  {key:'fornecedor', label:'Fornecedor'},
+  {key:'comprador', label:'Comprador'},
+  {key:'dt_lancamento', label:'Lançamento', render:fmtDate},
+  {key:'dt_recebimento', label:'Recebimento', render:fmtDate},
+  {key:'qtd_os', label:'OS', num:true, render:fmtNum},
+  {key:'qtd_produtos', label:'Produtos', num:true, render:fmtNum},
+  {key:'qtd_linhas', label:'Linhas', num:true, render:fmtNum},
+  {key:'qtd_liquida', label:'Qtde líquida', num:true, render:fmtNum},
+  {key:'total_produtos', label:'Total produtos', num:true, render:fmtNum},
+  {key:'total', label:'Total OC', num:true, render:fmtNum},
+];
+
+const colsHistItem = [
+  {key:'cod_ordem_compra', label:'OC', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'situacao_oc', label:'Situação', render:v=>String(v||'').toUpperCase()==='ENCERRADA'?badge('ENCERRADA','ok'):badge('ABERTA','warn')},
+  {key:'status_oc_nome', label:'Status OC'},
+  {key:'n_os', label:'OS'},
+  {key:'cod_os_completo', label:'Sub-OS', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'classificacao', label:'Classificação', render:v=>v?badge(v,'info'):''},
+  {key:'cod_interno', label:'Cód. interno', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cod_produto', label:'Cod produto', num:true, render:fmtNum},
+  {key:'material_descricao', label:'Material'},
+  {key:'qtde', label:'Qtde', num:true, render:fmtNum},
+  {key:'qtde_devolucao', label:'Devolução', num:true, render:fmtNum},
+  {key:'qtde_liquida', label:'Qtde líquida', num:true, render:fmtNum},
+  {key:'fornecedor', label:'Fornecedor'},
+  {key:'comprador', label:'Comprador'},
+  {key:'dt_lancamento', label:'Lançamento', render:fmtDate},
+  {key:'dt_recebimento', label:'Recebimento', render:fmtDate},
+];
+
+function renderHistTable(tableId, cols, rows, kind){
+  const thead = document.querySelector(`#${tableId} thead`);
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  const sortKey = kind === 'head' ? hState.sortHeadKey : hState.sortItemKey;
+  const sortDir = kind === 'head' ? hState.sortHeadDir : hState.sortItemDir;
+  thead.innerHTML = '<tr>' + cols.map(c =>
+    `<th data-kind="${kind}" data-key="${c.key}">${c.label}${sortKey===c.key?` <span class="arrow">${sortDir>0?'▲':'▼'}</span>`:''}</th>`
+  ).join('') + '</tr>';
+  tbody.innerHTML = rows.map(r => '<tr>' + cols.map(c => {
+    const v = r[c.key];
+    const cell = c.render ? c.render(v, r) : (v ?? '');
+    return `<td class="${c.num?'num':''}">${cell}</td>`;
+  }).join('') + '</tr>').join('');
+
+  thead.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.key;
+    if(kind === 'head'){
+      if(hState.sortHeadKey === k) hState.sortHeadDir *= -1;
+      else { hState.sortHeadKey = k; hState.sortHeadDir = 1; }
+    }else{
+      if(hState.sortItemKey === k) hState.sortItemDir *= -1;
+      else { hState.sortItemKey = k; hState.sortItemDir = 1; }
+    }
+    renderHistorico();
+  }));
+}
+
+function renderHistorico(){
+  const term = (document.getElementById('h-filter').value || '').trim().toLowerCase();
+  let headers = hState.headers;
+  let itens = hState.itens;
+
+  if(hState.timeFilter){
+    const tf = hState.timeFilter;
+    headers = headers.filter(h => {
+      const d = _histBaseDate(h);
+      const bucket = tf.gran === 'semana' ? _histWeekBucket(d) : _histMonthBucket(d);
+      return bucket === tf.label;
+    });
+    const ocSet = new Set(headers.map(h => String(h.cod_ordem_compra || '')));
+    itens = itens.filter(it => ocSet.has(String(it.cod_ordem_compra || '')));
+  }
+
+  if(term){
+    const has = r => Object.values(r).some(v => v != null && String(v).toLowerCase().includes(term));
+    headers = headers.filter(has);
+    itens = itens.filter(has);
+  }
+
+  headers = sortRows(headers, hState.sortHeadKey, hState.sortHeadDir);
+  itens = sortRows(itens, hState.sortItemKey, hState.sortItemDir);
+  hState.filteredHeaders = headers;
+  hState.filteredItens = itens;
+
+  renderHistTable('h-head-table', colsHistHead, headers, 'head');
+  renderHistTable('h-item-table', colsHistItem, itens, 'item');
+
+  const r = hState.resumo || {};
+  const comp = _histMonthCompare(headers);
+  document.getElementById('h-stats').innerHTML =
+    stat('OCs', fmtNum(r.qtd_oc ?? headers.length)) +
+    stat('Abertas', fmtNum(r.qtd_oc_abertas ?? headers.filter(x=>String(x.situacao_oc||'').toUpperCase()==='ABERTA').length)) +
+    stat('Encerradas', fmtNum(r.qtd_oc_encerradas ?? headers.filter(x=>String(x.situacao_oc||'').toUpperCase()==='ENCERRADA').length)) +
+    stat('Itens', fmtNum(r.qtd_itens ?? itens.length)) +
+    stat('OS atendidas', fmtNum(r.qtd_os ?? 0)) +
+    stat('Volume (qtde)', fmtNum(r.volume_qtd ?? 0)) +
+    stat('Mês atual OCs', fmtNum(comp.currOcs)) +
+    stat('Var OCs M/M', comp.varOcsTxt) +
+    stat('Mês atual valor', fmtNum(comp.currValor)) +
+    stat('Var valor M/M', comp.varValorTxt);
+
+  renderHistoricoDemandas(headers);
+
+  const banner = document.getElementById('h-drill-banner');
+  if(hState.timeFilter){
+    banner.innerHTML = `<span><strong>Drill-down</strong> · ${hState.timeFilter.gran} · ${hState.timeFilter.label}</span>` +
+      `<button class="btn ghost" id="h-drill-clear">✕ Limpar drill-down</button>`;
+    banner.style.display = 'flex';
+    document.getElementById('h-drill-clear').addEventListener('click', () => {
+      hState.timeFilter = null;
+      renderHistorico();
+    });
+  } else {
+    banner.style.display = 'none';
+  }
+
+  const msg = document.getElementById('h-msg');
+  if(!headers.length && !itens.length){
+    msg.textContent = 'Nenhum registro para os filtros informados.';
+    msg.className = 'empty';
+    msg.style.display = 'block';
+  } else {
+    msg.style.display = 'none';
+  }
+}
+
+function _histDate(v){
+  if(!v) return null;
+  const d = new Date(String(v).slice(0,10) + 'T00:00:00');
+  return isNaN(d) ? null : d;
+}
+
+function _histBaseDate(h){
+  return h.data_referencia || h.dt_lancamento || h.dt_recebimento || null;
+}
+
+function _histWeekBucket(v){
+  const d = _histDate(v);
+  if(!d) return 'Sem data';
+  const x = new Date(d);
+  const day = x.getDay() || 7;
+  x.setDate(x.getDate() + 4 - day);
+  const y0 = new Date(x.getFullYear(), 0, 1);
+  const wk = Math.ceil((((x - y0) / 86400000) + 1) / 7);
+  return `${x.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+}
+
+function _histMonthBucket(v){
+  const d = _histDate(v);
+  if(!d) return 'Sem data';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function _histAggr(headers, gran){
+  const m = new Map();
+  for(const h of (headers || [])){
+    const dt = _histBaseDate(h);
+    const k = gran === 'semana' ? _histWeekBucket(dt) : _histMonthBucket(dt);
+    const prev = m.get(k) || {ocs:0, volume:0, valor:0};
+    prev.ocs += 1;
+    prev.volume += Number(h.qtd_liquida || 0);
+    prev.valor += Number(h.total || 0);
+    m.set(k, prev);
+  }
+  const labels = [...m.keys()].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}));
+  return {
+    labels,
+    ocs: labels.map(l => m.get(l).ocs),
+    volume: labels.map(l => Math.round((m.get(l).volume || 0) * 100) / 100),
+    valor: labels.map(l => Math.round((m.get(l).valor || 0) * 100) / 100),
+  };
+}
+
+function _metricCfg(){
+  const m = document.getElementById('h-chart-metric')?.value || 'ocs';
+  if(m === 'volume') return {key:'volume', label:'Volume (qtde líquida)', color:'rgba(14,165,233,.62)', line:'#22d3ee'};
+  if(m === 'valor') return {key:'valor', label:'Valor total OC', color:'rgba(168,85,247,.62)', line:'#c084fc'};
+  return {key:'ocs', label:'Qtd. OCs', color:'rgba(34,211,238,.62)', line:'#22d3ee'};
+}
+
+function _drillByTime(gran, label){
+  if(!label) return;
+  if(hState.timeFilter && hState.timeFilter.gran === gran && hState.timeFilter.label === label){
+    hState.timeFilter = null;
+  } else {
+    hState.timeFilter = {gran, label};
+  }
+  renderHistorico();
+}
+
+function _histMonthCompare(headers){
+  const ag = _histAggr(headers, 'mes');
+  const labels = ag.labels.filter(l => l !== 'Sem data');
+  if(!labels.length) return {currOcs:0, varOcsTxt:'0%', currValor:0, varValorTxt:'0%'};
+  const curr = labels[labels.length - 1];
+  const prev = labels.length > 1 ? labels[labels.length - 2] : null;
+  const iCurr = ag.labels.indexOf(curr);
+  const iPrev = prev ? ag.labels.indexOf(prev) : -1;
+  const currOcs = ag.ocs[iCurr] || 0;
+  const prevOcs = iPrev >= 0 ? (ag.ocs[iPrev] || 0) : 0;
+  const currValor = ag.valor[iCurr] || 0;
+  const prevValor = iPrev >= 0 ? (ag.valor[iPrev] || 0) : 0;
+  const varOcs = prevOcs ? (((currOcs - prevOcs) / prevOcs) * 100) : (currOcs ? 100 : 0);
+  const varValor = prevValor ? (((currValor - prevValor) / prevValor) * 100) : (currValor ? 100 : 0);
+  const fmtPct = n => `${n >= 0 ? '+' : ''}${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(n)}%`;
+  return {
+    currOcs,
+    varOcsTxt: fmtPct(varOcs),
+    currValor: Math.round(currValor * 100) / 100,
+    varValorTxt: fmtPct(varValor),
+  };
+}
+
+function renderHistDemandChart(key, aggr){
+  const canvas = document.getElementById(`chart-${key}`);
+  if(!canvas) return;
+  const gran = key === 'h-semanal' ? 'semana' : 'mes';
+  const metric = _metricCfg();
+  const mdata = aggr[metric.key] || [];
+  const yMaxL = Math.max(100, Math.ceil(Math.max(...mdata, 0) / 10) * 10);
+  const yMaxR = Math.max(100, Math.ceil(Math.max(...(aggr.ocs || []), 0) / 10) * 10);
+  if(charts[key]) charts[key].destroy();
+  charts[key] = new Chart(canvas, {
+    data: {
+      labels: aggr.labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: metric.label,
+          data: mdata,
+          yAxisID: 'y',
+          borderRadius: 8,
+          borderSkipped: false,
+          backgroundColor: metric.color,
+          borderColor: metric.line,
+          borderWidth: 1,
+        },
+        {
+          type: 'line',
+          label: 'Qtd. OCs',
+          data: aggr.ocs,
+          yAxisID: 'y1',
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,.2)',
+          pointBackgroundColor: '#f59e0b',
+          tension: .3,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels:{color:'#cbd5e1'} },
+      },
+      scales: {
+        x: { ticks:{color:'#cbd5e1'}, grid:{display:false} },
+        y: { beginAtZero:true, min:0, max:yMaxL, ticks:{color:'#67e8f9', stepSize:10, autoSkip:false, maxTicksLimit:1000, precision:0}, grid:{color:'rgba(148,163,184,.15)'} },
+        y1: { beginAtZero:true, min:0, max:yMaxR, position:'right', ticks:{color:'#fcd34d', stepSize:10, autoSkip:false, maxTicksLimit:1000, precision:0}, grid:{drawOnChartArea:false} },
+      },
+      onClick: (evt, els, chart) => {
+        if(!els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _drillByTime(gran, label);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (els && els.length) ? 'pointer' : 'default';
+      },
+    },
+  });
+}
+
+function renderHistoricoDemandas(headers){
+  renderHistDemandChart('h-semanal', _histAggr(headers, 'semana'));
+  renderHistDemandChart('h-mensal', _histAggr(headers, 'mes'));
+  renderHistTrendChart(headers);
+}
+
+function _linearTrend(values){
+  const n = values.length;
+  if(n <= 1) return [...values];
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  for(let i = 0; i < n; i++){
+    const x = i;
+    const y = Number(values[i] || 0);
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
+  }
+  const den = (n * sumXX) - (sumX * sumX);
+  const b = den === 0 ? 0 : ((n * sumXY) - (sumX * sumY)) / den;
+  const a = (sumY - b * sumX) / n;
+  return values.map((_, i) => Math.round((a + b * i) * 100) / 100);
+}
+
+function renderHistTrendChart(headers){
+  const canvas = document.getElementById('chart-h-tendencia');
+  if(!canvas) return;
+
+  let gran = 'semana';
+  let aggr = _histAggr(headers, 'semana');
+  if(aggr.labels.filter(l => l !== 'Sem data').length < 4){
+    gran = 'mes';
+    aggr = _histAggr(headers, 'mes');
+  }
+
+  const metric = _metricCfg();
+  const series = aggr[metric.key] || [];
+  const mean = series.length ? series.reduce((a,b)=>a+b,0) / series.length : 0;
+  const meanSeries = series.map(() => Math.round(mean * 100) / 100);
+  const trend = _linearTrend(series);
+  const yMax = Math.max(100, Math.ceil(Math.max(...series, ...meanSeries, ...trend, 0) / 10) * 10);
+
+  if(charts['h-tendencia']) charts['h-tendencia'].destroy();
+  charts['h-tendencia'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: aggr.labels,
+      datasets: [
+        {
+          label: `${metric.label} (histórico)`,
+          data: series,
+          borderColor: metric.line,
+          backgroundColor: metric.color,
+          pointBackgroundColor: metric.line,
+          tension: .25,
+          fill: true,
+        },
+        {
+          label: `${metric.label} (média)`,
+          data: meanSeries,
+          borderColor: '#fbbf24',
+          borderDash: [8, 4],
+          pointRadius: 0,
+          tension: 0,
+          fill: false,
+        },
+        {
+          label: `${metric.label} (tendência)`,
+          data: trend,
+          borderColor: '#f59e0b',
+          borderDash: [6, 6],
+          pointRadius: 0,
+          tension: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { labels:{color:'#cbd5e1'} } },
+      scales: {
+        x: { ticks:{color:'#cbd5e1'}, grid:{display:false} },
+        y: { beginAtZero:true, min:0, max:yMax, ticks:{color:'#cbd5e1', stepSize:10, autoSkip:false, maxTicksLimit:1000, precision:0}, grid:{color:'rgba(148,163,184,.15)'} },
+      },
+      onClick: (evt, els, chart) => {
+        if(!els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _drillByTime(gran, label);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (els && els.length) ? 'pointer' : 'default';
+      },
+    },
+  });
+}
+
+async function loadHistoricoOC(){
+  const emp = document.getElementById('h-empresa').value;
+  const cl  = document.getElementById('h-classif').value;
+  const nos = document.getElementById('h-nos').value.trim();
+  const situacao = document.getElementById('h-situacao').value;
+  const hDe = document.getElementById('h-data-de')?.value || '';
+  const hAte = document.getElementById('h-data-ate')?.value || '';
+  const msg = document.getElementById('h-msg');
+  hState.timeFilter = null;
+  msg.textContent = 'Carregando…';
+  msg.className = 'loading';
+  msg.style.display = 'block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(cl) qs.set('classificacao', cl);
+    if(nos) qs.set('n_os', nos);
+    if(situacao) qs.set('situacao', situacao);
+    addDataParams(qs, 'h');
+    qs.set('limite', '12000');
+    const r = await fetch('/api/compras/historico/ordens-compra?' + qs);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    let j = await r.json();
+
+    // Se o período zerar o resultado, recarrega automaticamente sem recorte de data
+    // para evitar a percepção de pane e permitir análise do histórico completo.
+    if((Number(j?.resumo?.qtd_oc || 0) === 0) && (hDe || hAte)){
+      const qsFull = new URLSearchParams();
+      if(emp) qsFull.set('empresa', emp);
+      if(cl) qsFull.set('classificacao', cl);
+      if(nos) qsFull.set('n_os', nos);
+      if(situacao) qsFull.set('situacao', situacao);
+      qsFull.set('limite', '12000');
+      const r2 = await fetch('/api/compras/historico/ordens-compra?' + qsFull);
+      if(r2.ok){
+        j = await r2.json();
+        msg.textContent = 'Período sem dados. Exibindo histórico completo (sem filtro de data).';
+        msg.className = 'empty';
+        msg.style.display = 'block';
+      }
+    }
+
+    hState.resumo = j.resumo || {};
+    hState.headers = j.headers || [];
+    hState.itens = j.itens || [];
+    renderHistorico();
+  }catch(e){
+    msg.textContent = 'Erro: ' + e.message;
+    msg.className = 'error';
+    msg.style.display = 'block';
+  }
+}
+
+// ---------- Visibility ----------
+const visState = {
+  resumo: {},
+  headers: [],
+  itens: [],
+};
+
+function fluxoVisibilityBadge(v){
+  const t = String(v || '').toUpperCase();
+  if(t === 'ENCERRADA') return badge('Encerrada', 'ok');
+  if(t === 'OC EMITIDA') return badge('OC emitida', 'info');
+  if(t === 'SOLICITACAO ABERTA') return badge('Solicitação aberta', 'warn');
+  if(t === 'SOLICITACAO ENCERRADA') return badge('Solicitação encerrada', 'ok');
+  if(t === 'SOLICITACAO') return badge('Solicitação', 'warn');
+  if(t === 'A COMPRAR') return badge('A comprar', 'err');
+  return t ? badge(v, 'info') : '';
+}
+
+const colsVisibilityHeader = [
+  {key:'cod_empresa', label:'Emp.', num:true},
+  {key:'cod_solicitacao', label:'Solicitação', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cod_ordem_compra', label:'Ordem compra', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'dt_solicitacao', label:'Dt. solicitação', render:fmtDate},
+  {key:'dias_em_aberto', label:'Dias em aberto', num:true, render:fmtNum},
+  {key:'status_fluxo', label:'Status', render:fluxoVisibilityBadge},
+  {key:'status_oc_nome', label:'Status OC'},
+  {key:'fornecedor', label:'Fornecedor'},
+  {key:'n_os_lista', label:'OS'},
+  {key:'classificacao_lista', label:'Classificação'},
+  {key:'qtd_produtos', label:'Produtos', num:true, render:fmtNum},
+  {key:'qtd_liquida', label:'Qtd. líquida', num:true, render:fmtNum},
+  {key:'dt_lancamento', label:'Dt. lançamento', render:fmtDate},
+  {key:'dt_recebimento', label:'Dt. recebimento', render:fmtDate},
+];
+
+const colsVisibilityDetail = [
+  {key:'cod_empresa', label:'Emp.', num:true},
+  {key:'n_os', label:'OS', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cod_os_completo', label:'Sub-OS', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'classificacao', label:'Classificação'},
+  {key:'cod_interno', label:'Cód. interno'},
+  {key:'material_descricao', label:'Item'},
+  {key:'unidade', label:'Un.'},
+  {key:'qtde_necessaria', label:'Qtd. necessária', num:true, render:fmtNum},
+  {key:'qtde_entregue', label:'Qtd. entregue', num:true, render:fmtNum},
+  {key:'qtde_pendente', label:'Qtd. pendente', num:true, render:v=>`<strong>${fmtNum(v)}</strong>`},
+  {key:'estoque_disponivel_uso', label:'Estoque disponível', num:true, render:fmtNum},
+  {key:'n_sc', label:'Solicitação', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'n_oc', label:'Ordem compra', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'status_material', label:'Status', render:statusBadge},
+  {key:'data_referencia', label:'Data ref.', render:fmtDate},
+];
+
+function renderVisibilityHeader(rows){
+  renderTable('vh', colsVisibilityHeader, rows);
+  const r = visState.resumo || {};
+  document.getElementById('vh-stats').innerHTML =
+    stat('Solicitações em aberto', fmtNum(r.qtd_sc_abertas ?? r.qtd_sc ?? 0)) +
+    stat('Solicitações total', fmtNum(r.qtd_sc_total ?? 0)) +
+    stat('Ordens compra', fmtNum(r.qtd_oc || 0)) +
+    stat('Linhas header', fmtNum(r.qtd_headers || 0));
+}
+
+function renderVisibilityDetail(rows){
+  renderTable('vd', colsVisibilityDetail, rows);
+  const r = visState.resumo || {};
+  document.getElementById('vd-stats').innerHTML =
+    stat('Itens A COMPRAR', fmtNum(r.qtd_itens_acomprar || 0)) +
+    stat('OS no detalhe', fmtNum(r.qtd_os || 0)) +
+    stat('Produtos', fmtNum(r.qtd_produtos || 0)) +
+    stat('Volume pendente', fmtNum(r.volume_pendente || 0));
+}
+
+async function loadVisibility(prefix){
+  const p = prefix === 'vd' ? 'vd' : 'vh';
+  const emp = document.getElementById(`${p}-empresa`).value;
+  const cl  = document.getElementById(`${p}-classif`).value;
+  const nos = document.getElementById(`${p}-nos`).value.trim();
+  const semOc = (document.getElementById('vh-sem-oc')?.value || '0') === '1';
+  const msg = document.getElementById(`${p}-msg`);
+  msg.textContent = 'Carregando…';
+  msg.className = 'loading';
+  msg.style.display = 'block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(cl) qs.set('classificacao', cl);
+    if(nos) qs.set('n_os', nos);
+    if(semOc) qs.set('somente_sc_sem_oc', 'true');
+    addDataParams(qs, p);
+    qs.set('limite', '12000');
+    const r = await fetch('/api/compras/visibility?' + qs);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    visState.resumo = j.resumo || {};
+    visState.headers = j.headers || [];
+    visState.itens = j.itens || [];
+
+    state.visibilityHeader.data = visState.headers;
+    state.visibilityDetail.data = visState.itens;
+    applyFilter('vh');
+    applyFilter('vd');
+
+    // espelha filtros entre Header e Detalhada
+    ['empresa','classif','nos','data-campo','data-de','data-ate'].forEach(suf => {
+      const src = document.getElementById(`${p}-${suf}`);
+      const dstId = p === 'vh' ? `vd-${suf}` : `vh-${suf}`;
+      const dst = document.getElementById(dstId);
+      if(src && dst && 'value' in src && 'value' in dst) dst.value = src.value;
+    });
+  }catch(e){
+    msg.textContent = 'Erro: ' + e.message;
+    msg.className = 'error';
+    msg.style.display = 'block';
+  }
+}
+
+// CSV
+function toCSV(rows, cols){
+  const header = cols.map(c=>`"${c.label}"`).join(';');
+  const body = rows.map(r => cols.map(c => {
+    let v = r[c.key]; if(v==null) v=''; return `"${String(v).replace(/"/g,'""')}"`;
+  }).join(';')).join('\n');
+  return header+'\n'+body;
+}
+function download(name, content){
+  const blob = new Blob(['\uFEFF'+content], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Bindings
+document.getElementById('m-load').addEventListener('click', loadMateriais);
+document.getElementById('m-filter').addEventListener('input', () => applyFilter('m'));
+document.getElementById('m-os').addEventListener('keydown', e => { if(e.key==='Enter') loadMateriais(); });
+document.getElementById('m-csv').addEventListener('click', () => {
+  if(!state.materiais.data.length) return;
+  download(`materiais_os_${document.getElementById('m-os').value}.csv`, toCSV(state.materiais.data, colsMat));
+});
+
+document.getElementById('g-load').addEventListener('click', loadGap);
+document.getElementById('g-filter').addEventListener('input', () => applyFilter('g'));
+document.getElementById('g-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadGap(); });
+document.getElementById('g-csv').addEventListener('click', () => {
+  if(!state.gap.data.length) return;
+  download(`gap_compras.csv`, toCSV(state.gap.data, colsGap));
+});
+
+document.getElementById('s-load').addEventListener('click', loadSpend);
+document.getElementById('s-filter').addEventListener('input', () => applyFilter('s'));
+document.getElementById('s-classif-item').addEventListener('keydown', e => { if(e.key==='Enter') loadSpend(); });
+document.getElementById('s-table').addEventListener('click', (e) => {
+  const btn = e.target.closest('.spend-detail-open');
+  if(!btn) return;
+  loadSpendDetail(btn.dataset.cnpj || '', btn.dataset.fornecedor || '');
+});
+document.getElementById('s-csv').addEventListener('click', () => {
+  if(!state.spend.data.length) return;
+  download('spend_baseline.csv', toCSV(state.spend.data, colsSpend));
+});
+
+document.getElementById('sd-back').addEventListener('click', () => activateView('spend'));
+document.getElementById('sd-filter').addEventListener('input', () => applyFilter('sd'));
+document.getElementById('sdb-refresh').addEventListener('click', loadSpend);
+const sdbParetoTarget = document.getElementById('sdb-pareto-target');
+function refreshSpendDashboardFromCurrentState(){
+  const rows = (state.spend && Array.isArray(state.spend.filtered))
+    ? state.spend.filtered
+    : state.spend.data;
+  renderSpendDashboard(rows || []);
+}
+sdbParetoTarget.addEventListener('change', refreshSpendDashboardFromCurrentState);
+sdbParetoTarget.addEventListener('input', refreshSpendDashboardFromCurrentState);
+document.getElementById('sd-csv').addEventListener('click', () => {
+  if(!state.spendDetail.data.length) return;
+  download('spend_baseline_composicao.csv', toCSV(state.spendDetail.data, colsSpendDetail));
+});
+
+document.getElementById('h-load').addEventListener('click', loadHistoricoOC);
+document.getElementById('h-filter').addEventListener('input', renderHistorico);
+document.getElementById('h-chart-metric').addEventListener('change', renderHistorico);
+document.getElementById('h-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadHistoricoOC(); });
+document.getElementById('h-csv-head').addEventListener('click', () => {
+  if(!hState.filteredHeaders.length) return;
+  download('historico_oc_headers.csv', toCSV(hState.filteredHeaders, colsHistHead));
+});
+document.getElementById('h-csv-item').addEventListener('click', () => {
+  if(!hState.filteredItens.length) return;
+  download('historico_oc_itens.csv', toCSV(hState.filteredItens, colsHistItem));
+});
+
+document.getElementById('vh-load').addEventListener('click', () => loadVisibility('vh'));
+document.getElementById('vh-filter').addEventListener('input', () => applyFilter('vh'));
+document.getElementById('vh-sem-oc').addEventListener('change', () => loadVisibility('vh'));
+document.getElementById('vh-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadVisibility('vh'); });
+document.getElementById('vh-csv').addEventListener('click', () => {
+  if(!state.visibilityHeader.data.length) return;
+  download('visibility_header.csv', toCSV(state.visibilityHeader.data, colsVisibilityHeader));
+});
+
+document.getElementById('vd-load').addEventListener('click', () => loadVisibility('vd'));
+document.getElementById('vd-filter').addEventListener('input', () => applyFilter('vd'));
+document.getElementById('vd-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadVisibility('vd'); });
+document.getElementById('vd-csv').addEventListener('click', () => {
+  if(!state.visibilityDetail.data.length) return;
+  download('visibility_detalhada.csv', toCSV(state.visibilityDetail.data, colsVisibilityDetail));
+});
+
+// ---------- Painel OS ----------
+const WARN = ' ⚠';
+const colsPainel = [
+  {key:'cod_empresa',                label:'Emp.', num:true},
+  {key:'cod_os',                     label:'cod_os', num:true},
+  {key:'dt_entrada',                 label:'dt_entrada', render:fmtDate},
+  {key:'n_os',                       label:'n_os', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'cod_os_completo',            label:'Sub-OS', render:v=>v?`<span class="pill">${v}</span>`:''},
+  {key:'titulo',                     label:'titulo'},
+  {key:'n_orcamento',                label:'n_orcamento', num:true},
+  {key:'versao',                     label:'versao'},
+  {key:'cliente',                    label:'cliente'},
+  {key:'dt_aprovacao',               label:'dt_aprovacao', render:fmtDate},
+  {key:'dt_previsao_entrega',        label:'dt_previsao_entrega', render:fmtDate},
+  {key:'dt_prevista',                label:'dt_prevista', render:fmtDate},
+  {key:'prazo_entrega',              label:'prazo_entrega'+WARN, render:fmtDate},
+  {key:'dt_inicio',                  label:'dt_inicio', render:fmtDate},
+  {key:'semana_os',                  label:'semana_os', num:true},
+  {key:'classificacao',              label:'classificacao'},
+  {key:'u_classificacao',            label:'u_classificacao', render:v=>v?badge(v,'info'):''},
+  {key:'u_classificacao_ii',         label:'u_classificacao_ii'},
+  {key:'u_complexibilidade_do_pro',  label:'u_complexibilidade_do_pro'},
+  {key:'u_complexibilidade_produc',  label:'u_complexibilidade_produc'},
+  {key:'possui_engenharia',          label:'possui_engenharia'+WARN},
+  {key:'engf1_finalizada',           label:'engf1_finalizada'+WARN},
+  {key:'tp_dt_finalizacao',          label:'tp_dt_finalizacao'+WARN, render:fmtDate},
+  {key:'tp_molde',                   label:'tp_molde'},
+  {key:'det_finalizado',             label:'det_finalizado'+WARN},
+  {key:'status_lis_material',        label:'status_lis_material', render:statusBadge},
+  {key:'status_ordem_compra',        label:'status_ordem_compra', render:statusBadge},
+  {key:'status_processamento',       label:'status_processamento', render:statusBadge},
+  {key:'status_disponibilidade',     label:'status_disponibilidade'+WARN},
+  {key:'perc_real',                  label:'perc_real', num:true, render:fmtNum},
+  {key:'producao_finalizada',        label:'producao_finalizada', render:v=>v==null?'':(String(v).toLowerCase()==='sim'?badge('Sim','ok'):badge('Não','warn'))},
+  {key:'primeiro_apontamento',       label:'primeiro_apontamento'+WARN, render:fmtDate},
+  {key:'ultimo_apontamento',         label:'ultimo_apontamento'+WARN, render:fmtDate},
+  {key:'prazo_semanas',              label:'prazo_semanas', num:true, render:fmtNum},
+  {key:'origem',                     label:'origem'},
+  {key:'engenharia_inicio',          label:'engenharia_inicio', render:fmtDate},
+  {key:'engenharia_prazo',           label:'engenharia_prazo', render:fmtDate},
+  {key:'compras_inicio',             label:'compras_inicio', render:fmtDate},
+  {key:'compras_prazo',              label:'compras_prazo', render:fmtDate},
+  {key:'producao_inicio',            label:'producao_inicio', render:fmtDate},
+  {key:'producao_prazo',             label:'producao_prazo', render:fmtDate},
+];
+
+function renderPainel(rows){
+  renderTable('p', colsPainel, rows);
+  const tot = rows.length;
+  const conc = rows.filter(r=>r.producao_finalizada===1||r.producao_finalizada==='1').length;
+  const lmOk = rows.filter(r=>String(r.status_lis_material||'').toUpperCase()==='OK').length;
+  const ocPend = rows.filter(r=>String(r.status_ordem_compra||'').toUpperCase().includes('SEM')).length;
+  document.getElementById('p-stats').innerHTML =
+    stat('OS', tot) + stat('Finalizadas', conc) + stat('LM OK', lmOk) + stat('Sem OC', ocPend);
+}
+
+async function loadPainel(){
+  const emp = document.getElementById('p-empresa').value;
+  const cl  = document.getElementById('p-classif').value;
+  const nos = document.getElementById('p-nos').value.trim();
+  const abertas = document.getElementById('p-abertas').value;
+  const msg = document.getElementById('p-msg');
+  const banner = document.getElementById('p-drill-banner');
+  if(banner) banner.style.display = 'none';
+  msg.textContent='Carregando…'; msg.className='loading'; msg.style.display='block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(cl)  qs.set('classificacao', cl);
+    if(nos) qs.set('n_os', nos);
+    qs.set('somente_abertas', abertas==='1' ? 'true' : 'false');
+    addDataParams(qs, 'p');
+    const r = await fetch('/api/compras/os/painel?' + qs);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    state.painel.data = j;
+    applyFilter('p');
+  }catch(e){
+    msg.textContent='Erro: '+e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+document.getElementById('p-load').addEventListener('click', loadPainel);
+document.getElementById('p-filter').addEventListener('input', () => applyFilter('p'));
+document.getElementById('p-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadPainel(); });
+document.getElementById('p-csv').addEventListener('click', () => {
+  if(!state.painel.data.length) return;
+  download('painel_os.csv', toCSV(state.painel.data, colsPainel));
+});
+
+// Recarrega automaticamente quando o filtro de data muda em qualquer aba.
+const _reloaders = {m: loadMateriais, g: loadGap, p: loadPainel, h: loadHistoricoOC, vh:()=>loadVisibility('vh'), vd:()=>loadVisibility('vd')};
+for(const pref of ['m','g','p','h','vh','vd']){
+  for(const suf of ['data-campo','data-de','data-ate']){
+    const el = document.getElementById(`${pref}-${suf}`);
+    if(el) el.addEventListener('change', () => _reloaders[pref]());
+  }
+}
+
+// ---------- Dashboard ----------
+// Paleta com gradiente termico continuo (pior -> melhor):
+// laranja quente -> ambar -> esmeralda -> ciano.
+const BUCKET_COLORS = {
+  'Expired':            '#ea580c', // laranja-600 (urgencia)
+  'Pipeline next week': '#fbbf24', // ambar-400
+  'Planned':            '#10b981', // esmeralda-500
+  'On going':           '#0ea5e9', // sky-500
+  'Sem prazo':          '#6b7280', // cinza-500
+  // status_material (grafico Status dos itens)
+  'ENTREGUE':        '#10b981', // verde
+  'COBERTO ESTOQUE': '#22c55e', // verde claro
+  'OC EMITIDA':      '#0ea5e9', // azul
+  'SOLICITACAO':     '#fbbf24', // ambar
+  'RESERVADO':       '#a78bfa', // violeta
+  'A COMPRAR':       '#ef4444', // vermelho
+  'Atendido':        '#10b981',
+  'Em processo':     '#0ea5e9',
+  'Produção':        '#6366f1',
+};
+// Mantemos a estrutura por compat, mas com cor chapada (mesma nos 2 stops).
+const BUCKET_GRADIENT = {
+  'Expired':            ['#ea580c', '#ea580c'],
+  'Pipeline next week': ['#fbbf24', '#fbbf24'],
+  'Planned':            ['#10b981', '#10b981'],
+  'On going':           ['#0ea5e9', '#0ea5e9'],
+  'Sem prazo':          ['#6b7280', '#6b7280'],
+  'ENTREGUE':        ['#10b981', '#10b981'],
+  'COBERTO ESTOQUE': ['#22c55e', '#22c55e'],
+  'OC EMITIDA':      ['#0ea5e9', '#0ea5e9'],
+  'SOLICITACAO':     ['#fbbf24', '#fbbf24'],
+  'RESERVADO':       ['#a78bfa', '#a78bfa'],
+  'A COMPRAR':       ['#ef4444', '#ef4444'],
+};
+const BUCKET_GLOW = {
+  'Expired':            'rgba(234, 88, 12, 0.55)',
+  'Pipeline next week': 'rgba(251, 191, 36, 0.55)',
+  'Planned':            'rgba(16, 185, 129, 0.55)',
+  'On going':           'rgba(14, 165, 233, 0.55)',
+  'PRODUÇÃO':        'rgba(99,102,241,0.55)',
+};
+const charts = { engenharia:null, compras:null, producao:null,
+                 'compras-d':null, 'status-materiais':null,
+                 'prioridade-compras':null, 'funil-itens':null,
+                 'tendencia-acomprar':null, 'pareto-classificacao':null,
+                 'h-semanal':null, 'h-mensal':null, 'h-tendencia':null };
+const CHART_KEYS = [
+  ['engenharia', 'Engenharia'],
+  ['compras',    'Compras'],
+  ['producao',   'Produção'],
+];
+
+function _segGradient(ctx, area, label){
+  // Estilo flat: cor chapada (segunda cor do par, mais saturada).
+  // Mantemos a funcao para nao quebrar callbacks, mas sem gradiente.
+  const pair = BUCKET_GRADIENT[label];
+  return (pair && pair[1]) || BUCKET_COLORS[label] || '#94a3b8';
+}
+
+// Plugin: "botao" central escuro com sombra (efeito 3D estilo referencia)
+const centerKnobPlugin = {
+  id: 'centerKnob',
+  afterDatasetDraw(chart){
+    const meta = chart.getDatasetMeta(0);
+    const arc  = meta && meta.data && meta.data[0];
+    if(!arc) return;
+    const {x, y, innerRadius} = arc.getProps(['x','y','innerRadius'], true);
+    const r = innerRadius * 0.78;
+    const ctx = chart.ctx;
+    ctx.save();
+    // sombra projetada (parte inferior, simula profundidade)
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur  = 14;
+    ctx.shadowOffsetY = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = '#1c2333';
+    ctx.fill();
+    ctx.restore();
+
+    // brilho sutil no topo do knob
+    ctx.save();
+    const hl = ctx.createLinearGradient(x, y - r, x, y + r);
+    hl.addColorStop(0, 'rgba(255,255,255,0.07)');
+    hl.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+    hl.addColorStop(1, 'rgba(0,0,0,0.25)');
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = hl;
+    ctx.fill();
+    ctx.restore();
+  },
+};
+
+// Plugin antigo de glow mantido para compat. — desativado aqui:
+const neonGlowPlugin = { id:'neonGlow', beforeDatasetDraw(){}, afterDatasetDraw(){} };
+
+function renderPie(key, dep, opts){
+  opts = opts || {};
+  const drill = opts.drillDown !== false;
+  const canvas = document.getElementById(`chart-${key}`);
+  if(!canvas) return;
+  const labels = dep.buckets.map(b => b.label);
+  const data   = dep.buckets.map(b => b.qtd);
+  if(charts[key]) charts[key].destroy();
+  charts[key] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: (c) => _segGradient(c.chart.ctx, c.chart.chartArea, labels[c.dataIndex]),
+        hoverBackgroundColor: (c) => _segGradient(c.chart.ctx, c.chart.chartArea, labels[c.dataIndex]),
+        borderColor: 'transparent',
+        borderWidth: 0,
+        hoverOffset: 10,
+        spacing: 8,
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      cutout: '62%',
+      radius: '94%',
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor:'#0b0f24', borderColor:'rgba(129,140,248,.35)', borderWidth:1,
+          titleColor:'#e0e7ff', bodyColor:'#e0e7ff', padding:10, displayColors:true,
+          callbacks: { label: ctx => {
+            const b = dep.buckets[ctx.dataIndex];
+            return `${b.label}: ${b.qtd} (${b.perc}%)`;
+          } }
+        }
+      },
+      animation: { animateRotate:true, duration: 900, easing:'easeOutQuart' },
+      onClick: (evt, els, chart) => {
+        if(!drill || !els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _dispatchDrill(key, label, opts);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (drill && els && els.length) ? 'pointer' : 'default';
+      },
+    },
+    plugins: [],
+  });
+
+  // Centro: total pendente + bucket dominante
+  const dominante = [...dep.buckets].sort((a,b)=> b.qtd - a.qtd)[0];
+  const corDom = dominante ? BUCKET_COLORS[dominante.label] : '#a5b4fc';
+  document.getElementById(`center-${key}`).innerHTML = `
+    <div class="num">${dep.total}</div>
+    <div class="cap">${opts.centerCap || 'Pendentes'}</div>
+    ${dominante && dominante.qtd>0 ? `<div class="hi" style="color:${corDom}">${dominante.label} · ${dominante.perc}%</div>` : ''}
+  `;
+
+  // Legenda em chips, com swatch usando o gradiente do bucket
+  const legend = document.getElementById(`legend-${key}`);
+  legend.innerHTML = dep.buckets.map(b => {
+    const c = BUCKET_COLORS[b.label] || '#94a3b8';
+    const pair = BUCKET_GRADIENT[b.label] || [c, c];
+    return `<div class="chip" data-bucket="${b.label.replace(/"/g,'&quot;')}" style="cursor:${drill?'pointer':'default'}" title="${drill?'Clique para ver as OS deste grupo':''}">
+      <span class="lbl"><span class="sw" style="color:${c};background:linear-gradient(135deg, ${pair[0]}, ${pair[1]})"></span>${b.label}</span>
+      <span><span class="qtd">${b.qtd}</span><span class="perc">${b.perc}%</span></span>
+    </div>`;
+  }).join('');
+  if(drill){
+    legend.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => _dispatchDrill(key, chip.dataset.bucket, opts));
+    });
+  }
+}
+
+function renderBar(key, dep, opts){
+  opts = opts || {};
+  const drill = opts.drillDown !== false;
+  const canvas = document.getElementById(`chart-${key}`);
+  if(!canvas) return;
+
+  const labels = dep.buckets.map(b => b.label);
+  const data = dep.buckets.map(b => b.qtd);
+  if(charts[key]) charts[key].destroy();
+
+  charts[key] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderRadius: 10,
+        borderSkipped: false,
+        backgroundColor: labels.map(l => BUCKET_COLORS[l] || '#94a3b8'),
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor:'#0b0f24', borderColor:'rgba(129,140,248,.35)', borderWidth:1,
+          titleColor:'#e0e7ff', bodyColor:'#e0e7ff', padding:10,
+          callbacks: { label: ctx => {
+            const b = dep.buckets[ctx.dataIndex];
+            return `${b.qtd} (${b.perc}%)`;
+          } }
+        }
+      },
+      scales: {
+        x: { beginAtZero:true, ticks:{color:'#cbd5e1'}, grid:{color:'rgba(148,163,184,.2)'} },
+        y: { ticks:{color:'#cbd5e1'}, grid:{display:false} },
+      },
+      onClick: (evt, els, chart) => {
+        if(!drill || !els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _dispatchDrill(key, label, opts);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (drill && els && els.length) ? 'pointer' : 'default';
+      },
+    },
+  });
+
+  const dominante = [...dep.buckets].sort((a,b)=> b.qtd - a.qtd)[0];
+  const corDom = dominante ? BUCKET_COLORS[dominante.label] : '#a5b4fc';
+  document.getElementById(`center-${key}`).innerHTML = `
+    <div class="num">${dep.total}</div>
+    <div class="cap">${opts.centerCap || 'Total'}</div>
+    ${dominante && dominante.qtd>0 ? `<div class="hi" style="color:${corDom}">${dominante.label} · ${dominante.perc}%</div>` : ''}
+  `;
+
+  const legend = document.getElementById(`legend-${key}`);
+  legend.innerHTML = dep.buckets.map(b => {
+    const c = BUCKET_COLORS[b.label] || '#94a3b8';
+    return `<div class="chip" data-bucket="${b.label.replace(/"/g,'&quot;')}" style="cursor:${drill?'pointer':'default'}">
+      <span class="lbl"><span class="sw" style="color:${c};background:${c}"></span>${b.label}</span>
+      <span><span class="qtd">${b.qtd}</span><span class="perc">${b.perc}%</span></span>
+    </div>`;
+  }).join('');
+  if(drill){
+    legend.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => _dispatchDrill(key, chip.dataset.bucket, opts));
+    });
+  }
+}
+
+function renderLine(key, dep, opts){
+  opts = opts || {};
+  const drill = opts.drillDown !== false;
+  const canvas = document.getElementById(`chart-${key}`);
+  if(!canvas) return;
+  const labels = dep.buckets.map(b => b.label);
+  const data = dep.buckets.map(b => b.qtd);
+  const mean = data.length ? data.reduce((a,b)=>a+b,0) / data.length : 0;
+  const meanSeries = data.map(() => Math.round(mean * 100) / 100);
+  const trendSeries = _linearTrend(data);
+  const yMax = Math.max(100, Math.ceil(Math.max(...data, ...meanSeries, ...trendSeries, 0) / 10) * 10);
+  if(charts[key]) charts[key].destroy();
+
+  charts[key] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          label: dep.departamento,
+          borderColor: '#22d3ee',
+          backgroundColor: 'rgba(34,211,238,.2)',
+          pointBackgroundColor: '#22d3ee',
+          pointRadius: 4,
+          tension: .32,
+          fill: true,
+        },
+        {
+          data: meanSeries,
+          label: 'Média',
+          borderColor: '#fbbf24',
+          borderDash: [8, 4],
+          pointRadius: 0,
+          tension: 0,
+          fill: false,
+        },
+        {
+          data: trendSeries,
+          label: 'Tendência',
+          borderColor: '#fb7185',
+          borderDash: [10, 5],
+          pointRadius: 0,
+          tension: 0,
+          fill: false,
+        }
+      ],
+    },
+    options: {
+      maintainAspectRatio: true,
+      plugins: { legend: { labels:{color:'#cbd5e1'} } },
+      scales: {
+        x: { ticks:{color:'#cbd5e1'}, grid:{color:'rgba(148,163,184,.15)'} },
+        y: { beginAtZero:true, min:0, max:yMax, ticks:{color:'#cbd5e1', stepSize:10, autoSkip:false, maxTicksLimit:1000, precision:0}, grid:{color:'rgba(148,163,184,.15)'} },
+      },
+      onClick: (evt, els, chart) => {
+        if(!drill || !els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _dispatchDrill(key, label, opts);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (drill && els && els.length) ? 'pointer' : 'default';
+      },
+    },
+  });
+
+  const total = dep.total || data.reduce((a,b)=>a+b,0);
+  const max = dep.buckets.length ? [...dep.buckets].sort((a,b)=>b.qtd-a.qtd)[0] : null;
+  document.getElementById(`center-${key}`).innerHTML = `
+    <div class="num">${total}</div>
+    <div class="cap">${opts.centerCap || 'Total'}</div>
+    ${max ? `<div class="hi" style="color:#22d3ee">Pico: ${max.label} · ${max.qtd}</div>` : ''}
+  `;
+
+  const legend = document.getElementById(`legend-${key}`);
+  legend.innerHTML = dep.buckets.map(b => `
+    <div class="chip" data-bucket="${b.label.replace(/"/g,'&quot;')}" style="cursor:${drill?'pointer':'default'}">
+      <span class="lbl"><span class="sw" style="color:#22d3ee;background:#22d3ee"></span>${b.label}</span>
+      <span><span class="qtd">${b.qtd}</span><span class="perc">${b.perc}%</span></span>
+    </div>
+  `).join('');
+  if(drill){
+    legend.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => _dispatchDrill(key, chip.dataset.bucket, opts));
+    });
+  }
+}
+
+function renderPareto(key, pareto, opts){
+  opts = opts || {};
+  const drill = opts.drillDown !== false;
+  const canvas = document.getElementById(`chart-${key}`);
+  if(!canvas) return;
+  if(charts[key]) charts[key].destroy();
+
+  charts[key] = new Chart(canvas, {
+    data: {
+      labels: pareto.labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Itens',
+          data: pareto.values,
+          borderRadius: 8,
+          borderSkipped: false,
+          backgroundColor: '#6366f1',
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'Acumulado %',
+          data: pareto.cumulative,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,.2)',
+          pointBackgroundColor: '#f59e0b',
+          tension: .3,
+          yAxisID: 'y1',
+        }
+      ],
+    },
+    options: {
+      maintainAspectRatio: true,
+      plugins: { legend: { labels:{color:'#cbd5e1'} } },
+      scales: {
+        x: { ticks:{color:'#cbd5e1', maxRotation: 35, minRotation: 0}, grid:{display:false} },
+        y: { beginAtZero:true, ticks:{color:'#cbd5e1'}, grid:{color:'rgba(148,163,184,.15)'} },
+        y1: {
+          beginAtZero:true,
+          max:100,
+          position:'right',
+          ticks:{color:'#fbbf24', callback:v=>`${v}%`},
+          grid:{drawOnChartArea:false},
+        }
+      },
+      onClick: (evt, els, chart) => {
+        if(!drill || !els || !els.length) return;
+        const label = chart.data.labels[els[0].index];
+        _dispatchDrill(key, label, opts);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (drill && els && els.length) ? 'pointer' : 'default';
+      },
+    },
+  });
+
+  const top = pareto.items[0];
+  document.getElementById(`center-${key}`).innerHTML = `
+    <div class="num">${pareto.total}</div>
+    <div class="cap">${opts.centerCap || 'A COMPRAR'}</div>
+    ${top ? `<div class="hi" style="color:#f59e0b">Top: ${top.label} · ${top.qtd}</div>` : ''}
+  `;
+
+  const legend = document.getElementById(`legend-${key}`);
+  legend.innerHTML = pareto.items.slice(0, 8).map(it => `
+    <div class="chip" data-bucket="${it.label.replace(/"/g,'&quot;')}" style="cursor:${drill?'pointer':'default'}">
+      <span class="lbl"><span class="sw" style="color:#6366f1;background:#6366f1"></span>${it.label}</span>
+      <span><span class="qtd">${it.qtd}</span><span class="perc">${it.perc}%</span></span>
+    </div>
+  `).join('');
+  if(drill){
+    legend.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => _dispatchDrill(key, chip.dataset.bucket, opts));
+    });
+  }
+}
+
+function _dispatchDrill(key, label, opts){
+  const t = (opts && opts.drillType) || 'painel';
+  if(t === 'painel') return drillDownPainel(key, label);
+  if(t === 'materiais-compras') return drillDownMateriais({statusFilter:'A COMPRAR', bucketLabel:label, depKey:'compras', tituloExtra:`Compras / ${label}`});
+  if(t === 'materiais-status')  return drillDownMateriais({statusFilter:label, tituloExtra:`Status: ${label}`});
+  if(t === 'materiais-tendencia'){
+    const filters = (opts && opts.drillStatusFilters) || ['A COMPRAR'];
+    const cap = (opts && opts.centerCap) || 'A COMPRAR';
+    return drillDownMateriais({statusFilters:filters, weekFilter:label, tituloExtra:`Tendência ${cap} / ${label}`});
+  }
+  if(t === 'materiais-classificacao') return drillDownMateriais({statusFilter:'A COMPRAR', classificacaoFilter:label, tituloExtra:`Classificação ${label}`});
+  if(t === 'materiais-funil'){
+    if(label === 'Atendido') return drillDownMateriais({statusFilter:'ENTREGUE', tituloExtra:'Funil / Atendido'});
+    if(label === 'Em processo') return drillDownMateriais({statusFilters:['OC EMITIDA','SOLICITACAO','RESERVADO'], tituloExtra:'Funil / Em processo'});
+    if(label === 'A COMPRAR') return drillDownMateriais({statusFilter:'A COMPRAR', tituloExtra:'Funil / A COMPRAR'});
+    if(label === 'Produção') return drillDownMateriais({statusFilter:'PRODUÇÃO', tituloExtra:'Funil / Produção'});
+  }
+}
+
+function _bucketMap(dep){
+  const m = {};
+  for(const b of (dep?.buckets || [])) m[String(b.label||'').toUpperCase()] = Number(b.qtd)||0;
+  return m;
+}
+
+function _makeFunil(statusMateriais){
+  const m = _bucketMap(statusMateriais);
+  const atendido = (m['ENTREGUE']||0) + (m['COBERTO ESTOQUE']||0);
+  const emProc = (m['OC EMITIDA']||0) + (m['SOLICITACAO']||0) + (m['RESERVADO']||0);
+  const aComprar = (m['A COMPRAR']||0);
+  const producao = (m['PRODUÇÃO']||0) + (m['PRODUCAO']||0);
+  const buckets = [
+    {label:'Atendido', qtd:atendido},
+    {label:'Em processo', qtd:emProc},
+    {label:'A COMPRAR', qtd:aComprar},
+    {label:'Produção', qtd:producao},
+  ];
+  const total = buckets.reduce((a,b)=>a+b.qtd,0);
+  return {
+    departamento:'Funil dos itens',
+    total,
+    buckets: buckets.map(b => ({...b, perc: total ? Math.round((b.qtd*10000)/total)/100 : 0}))
+  };
+}
+
+function _itemDateForTrend(it){
+  return it.dt_necessidade || it.compras_prazo || it.dt_entrada || null;
+}
+
+function _weekLabel(v){
+  if(!v) return 'Sem data';
+  const d = new Date(String(v).slice(0,10) + 'T00:00:00');
+  if(isNaN(d)) return 'Sem data';
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() + 4 - day);
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+
+function _makeTrendByStatus(rows, statusList, deptLabel){
+  const wanted = new Set((statusList || []).map(s => String(s).toUpperCase()));
+  const filtered = rows.filter(it => wanted.has(String(it.status_material||'').toUpperCase()));
+  const m = new Map();
+  for(const it of filtered){
+    const k = _weekLabel(_itemDateForTrend(it));
+    m.set(k, (m.get(k)||0) + 1);
+  }
+  const entries = [...m.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const total = entries.reduce((a,[,q])=>a+q,0);
+  return {
+    departamento: deptLabel || 'Tendência semanal',
+    total,
+    buckets: entries.map(([label, qtd]) => ({
+      label,
+      qtd,
+      perc: total ? Math.round((qtd*10000)/total)/100 : 0,
+    }))
+  };
+}
+
+function _trendConfig(mode){
+  if(mode === 'total'){
+    return {
+      centerCap: 'Total',
+      statusFilters: ['A COMPRAR', 'OC EMITIDA', 'SOLICITACAO', 'RESERVADO', 'ENTREGUE', 'COBERTO ESTOQUE', 'PRODUÇÃO', 'PRODUCAO'],
+      deptLabel: 'Tendência semanal Total',
+    };
+  }
+  if(mode === 'entregue'){
+    return {
+      centerCap: 'Entregue',
+      statusFilters: ['ENTREGUE', 'COBERTO ESTOQUE'],
+      deptLabel: 'Tendência semanal Entregue',
+    };
+  }
+  if(mode === 'em_processo'){
+    return {
+      centerCap: 'Em processo',
+      statusFilters: ['OC EMITIDA', 'SOLICITACAO', 'RESERVADO'],
+      deptLabel: 'Tendência semanal Em processo',
+    };
+  }
+  return {
+    centerCap: 'A COMPRAR',
+    statusFilters: ['A COMPRAR'],
+    deptLabel: 'Tendência semanal A COMPRAR',
+  };
+}
+
+function _makeParetoClassificacao(rows){
+  const filtered = rows.filter(it => String(it.status_material||'').toUpperCase() === 'A COMPRAR');
+  const m = new Map();
+  for(const it of filtered){
+    const k = String(it.classificacao || '(Sem classificação)');
+    m.set(k, (m.get(k)||0) + 1);
+  }
+  const items = [...m.entries()]
+    .map(([label, qtd]) => ({label, qtd}))
+    .sort((a,b)=>b.qtd-a.qtd);
+  const total = items.reduce((a,b)=>a+b.qtd,0);
+  let acc = 0;
+  const labels = [];
+  const values = [];
+  const cumulative = [];
+  for(const it of items){
+    labels.push(it.label);
+    values.push(it.qtd);
+    acc += it.qtd;
+    cumulative.push(total ? Math.round((acc*10000)/total)/100 : 0);
+    it.perc = total ? Math.round((it.qtd*10000)/total)/100 : 0;
+  }
+  return {total, items, labels, values, cumulative};
+}
+
+function dStat(lbl, val){
+  return `<div><div class="label">${lbl}</div><div class="value">${val}</div></div>`;
+}
+
+// ---------- Drill-down: clicar num bucket -> abrir Painel filtrado ----------
+const DEP_KEYS = {
+  engenharia: { nome:'Engenharia', ini:'engenharia_inicio', fim:'engenharia_prazo' },
+  compras:    { nome:'Compras',    ini:'compras_inicio',    fim:'compras_prazo'    },
+  producao:   { nome:'Produção',   ini:'producao_inicio',   fim:'producao_prazo'   },
+};
+
+function _drillToDate(v){
+  if(v == null || v === '') return null;
+  const s = String(v).slice(0,10);
+  const d = new Date(s + 'T00:00:00');
+  return isNaN(d) ? null : d;
+}
+function _drillConcluido(depKey, r){
+  if(depKey === 'engenharia') return String(r.status_lis_material||'') === 'Com lista';
+  if(depKey === 'compras'){
+    const soc = String(r.status_ordem_compra||'').toUpperCase();
+    const sdisp = String(r.status_disponibilidade||'').toUpperCase();
+    return soc === 'EMITIDA' || (soc === 'SEM OC' && sdisp === 'DISPONIVEL');
+  }
+  const pf = String(r.producao_finalizada||'').toLowerCase();
+  return pf === 'sim' || pf === 'sem processos';
+}
+function _drillBucket(r, depKey, hoje, proxFim){
+  const cfg = DEP_KEYS[depKey];
+  if(_drillConcluido(depKey, r)) return null;
+  const ini = _drillToDate(r[cfg.ini]);
+  const fim = _drillToDate(r[cfg.fim]);
+  if(!ini || !fim) return 'Sem prazo';
+  if(fim < hoje) return 'Expired';
+  if(ini <= hoje && hoje <= fim) return 'On going';
+  if(ini <= proxFim) return 'Pipeline next week';
+  return 'Planned';
+}
+
+// Bucket no nível do item — usado pelo drill-down de Compras detalhado.
+// Itens "concluídos" (já entregues ou cobertos) não entram no Compras detail.
+function _drillBucketItem(it, depKey, hoje, proxFim){
+  const cfg = DEP_KEYS[depKey];
+  const ini = _drillToDate(it[cfg.ini]);
+  const fim = _drillToDate(it[cfg.fim]);
+  if(!ini || !fim) return 'Sem prazo';
+  if(fim < hoje) return 'Expired';
+  if(ini <= hoje && hoje <= fim) return 'On going';
+  if(ini <= proxFim) return 'Pipeline next week';
+  return 'Planned';
+}
+
+async function drillDownPainel(depKey, bucketLabel){
+  const msg = document.getElementById('p-msg');
+  msg.textContent = `Carregando OS de ${DEP_KEYS[depKey].nome} / ${bucketLabel}…`;
+  msg.className = 'loading'; msg.style.display = 'block';
+
+  // Reutiliza os filtros do dashboard
+  const emp     = document.getElementById('d-empresa').value;
+  const cl      = document.getElementById('d-classif').value;
+  const nos     = document.getElementById('d-nos').value.trim();
+  const abertas = document.getElementById('d-abertas').value;
+  const qs = new URLSearchParams();
+  if(emp) qs.set('empresa', emp);
+  if(cl)  qs.set('classificacao', cl);
+  if(nos) qs.set('n_os', nos);
+  qs.set('somente_abertas', abertas==='1' ? 'true' : 'false');
+  addDataParams(qs, 'd');
+  qs.set('limite', '10000');
+
+  try{
+    const r = await fetch('/api/compras/os/painel?' + qs);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows = await r.json();
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const proxFim = new Date(hoje); proxFim.setDate(hoje.getDate() + 7);
+    const filtered = rows.filter(row => _drillBucket(row, depKey, hoje, proxFim) === bucketLabel);
+
+    // Troca para a aba Painel
+    document.querySelector('nav button[data-view="painel"]').click();
+
+    // Aplica os dados filtrados na tabela do Painel, mantendo filtros de coluna
+    state.painel.data = filtered;
+    state.painel.colFilters = {};
+    state.painel.sortKey = null; state.painel.sortDir = 1;
+
+    // Banner indicando o drill-down ativo
+    const banner = document.getElementById('p-drill-banner');
+    if(banner){
+      banner.innerHTML = `<span><strong>${DEP_KEYS[depKey].nome}</strong> · <strong>${bucketLabel}</strong> · ${filtered.length} OS</span>` +
+        `<button class="btn ghost" id="p-drill-clear">✕ Limpar drill-down</button>`;
+      banner.style.display = 'flex';
+      document.getElementById('p-drill-clear').addEventListener('click', () => {
+        banner.style.display='none';
+        loadPainel();
+      });
+    }
+    applyFilter('p');
+  }catch(e){
+    msg.textContent = 'Erro no drill-down: ' + e.message;
+    msg.className = 'error'; msg.style.display = 'block';
+  }
+}
+
+// ---------- Drill-down para a aba Materiais (itens) ----------
+// opts: { statusFilter, bucketLabel, depKey, tituloExtra }
+async function drillDownMateriais(opts){
+  opts = opts || {};
+  const msg = document.getElementById('m-msg');
+  msg.textContent = `Carregando itens · ${opts.tituloExtra || ''}…`;
+  msg.className = 'loading'; msg.style.display = 'block';
+
+  // Reutiliza os filtros do dashboard
+  const emp = document.getElementById('d-empresa').value;
+  const cl  = document.getElementById('d-classif').value;
+  const qs = new URLSearchParams();
+  if(emp) qs.set('empresa', emp);
+  if(cl)  qs.set('classificacao', cl);
+  addDataParams(qs, 'd');
+
+  try{
+    const r = await fetch('/api/compras/materiais?' + qs);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    let rows = await r.json();
+
+    if(opts.statusFilter || (opts.statusFilters && opts.statusFilters.length)){
+      const alvoList = (opts.statusFilters && opts.statusFilters.length)
+        ? opts.statusFilters.map(x => String(x).toUpperCase())
+        : [String(opts.statusFilter).toUpperCase()];
+      rows = rows.filter(it => {
+        const st = String(it.status_material||'').toUpperCase();
+        const met = String(it.metodo_reposicao ?? '');
+        if(alvoList.includes('PRODUÇÃO') || alvoList.includes('PRODUCAO')){
+          return met === '2' || st === 'PRODUÇÃO' || st === 'PRODUCAO';
+        }
+        return alvoList.includes(st);
+      });
+    }
+    if(opts.classificacaoFilter){
+      rows = rows.filter(it => String(it.classificacao||'') === String(opts.classificacaoFilter));
+    }
+    if(opts.weekFilter){
+      rows = rows.filter(it => _weekLabel(_itemDateForTrend(it)) === String(opts.weekFilter));
+    }
+    if(opts.bucketLabel && opts.depKey){
+      const hoje = new Date(); hoje.setHours(0,0,0,0);
+      const proxFim = new Date(hoje); proxFim.setDate(hoje.getDate() + 7);
+      rows = rows.filter(it => _drillBucketItem(it, opts.depKey, hoje, proxFim) === opts.bucketLabel);
+    }
+
+    // Espelha os filtros de período no toolbar da aba Materiais (visual)
+    ['empresa','classif','data-campo','data-de','data-ate'].forEach(suf => {
+      const src = document.getElementById('d-'+suf);
+      const dst = document.getElementById('m-'+suf);
+      if(src && dst && 'value' in src && 'value' in dst) dst.value = src.value;
+    });
+
+    // Troca para a aba Materiais
+    document.querySelector('nav button[data-view="materiais"]').click();
+
+    state.materiais.data = rows;
+    state.materiais.colFilters = {};
+    state.materiais.sortKey = null; state.materiais.sortDir = 1;
+
+    const banner = document.getElementById('m-drill-banner');
+    if(banner){
+      banner.innerHTML = `<span><strong>Drill-down</strong> · ${opts.tituloExtra || ''} · ${rows.length} itens</span>` +
+        `<button class="btn ghost" id="m-drill-clear">✕ Limpar drill-down</button>`;
+      banner.style.display = 'flex';
+      document.getElementById('m-drill-clear').addEventListener('click', () => {
+        banner.style.display='none';
+        document.getElementById('m-os').value = '';
+        loadMateriais();
+      });
+    }
+    applyFilter('m');
+    msg.style.display = 'none';
+  }catch(e){
+    msg.textContent = 'Erro no drill-down: ' + e.message;
+    msg.className = 'error'; msg.style.display = 'block';
+  }
+}
+
+async function loadDashboard(){
+  const emp     = document.getElementById('d-empresa').value;
+  const cl      = document.getElementById('d-classif').value;
+  const nos     = document.getElementById('d-nos').value.trim();
+  const abertas = document.getElementById('d-abertas').value;
+  const msg     = document.getElementById('d-msg');
+  msg.textContent='Carregando…'; msg.className='loading'; msg.style.display='block';
+  try{
+    const qs = new URLSearchParams();
+    if(emp) qs.set('empresa', emp);
+    if(cl)  qs.set('classificacao', cl);
+    if(nos) qs.set('n_os', nos);
+    qs.set('somente_abertas', abertas==='1' ? 'true' : 'false');
+    addDataParams(qs, 'd');
+    const [r, rMat] = await Promise.all([
+      fetch('/api/compras/dashboard/performance?' + qs),
+      fetch('/api/compras/materiais?' + qs),
+    ]);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const materiaisDash = rMat.ok ? await rMat.json() : [];
+    msg.style.display='none';
+    document.getElementById('d-stats').innerHTML =
+      dStat('OS no escopo', j.total_os) +
+      dStat('Itens', j.total_itens ?? 0) +
+      dStat('Hoje', j.hoje) +
+      dStat('Pipeline até', j.pipeline_ate);
+    // Bloco 1: consolidado (por OS) — com drill-down para o Painel
+    const cons = j.consolidado || j.departamentos || [];
+    const byNomeC = Object.fromEntries(cons.map(d => [d.departamento, d]));
+    for(const [key, nome] of CHART_KEYS){
+      if(byNomeC[nome]) renderPie(key, byNomeC[nome], {drillDown:true});
+    }
+    // Bloco 2: detalhado (por item) — apenas Compras + Status dos itens
+    const det = j.detalhado || [];
+    const byNomeD = Object.fromEntries(det.map(d => [d.departamento, d]));
+    if(byNomeD['Compras']) renderPie('compras-d', byNomeD['Compras'], {drillDown:true, drillType:'materiais-compras'});
+    if(j.status_materiais) renderPie('status-materiais', j.status_materiais, {drillDown:true, drillType:'materiais-status', centerCap:'Itens'});
+
+    // Extras: prioridade de compras por prazo + funil operacional de itens
+    if(byNomeD['Compras']){
+      renderBar('prioridade-compras', byNomeD['Compras'], {
+        drillDown:true,
+        drillType:'materiais-compras',
+        centerCap:'A COMPRAR',
+      });
+    }
+    if(j.status_materiais){
+      renderBar('funil-itens', _makeFunil(j.status_materiais), {
+        drillDown:true,
+        drillType:'materiais-funil',
+        centerCap:'Itens',
+      });
+    }
+    if(materiaisDash.length){
+      const trendMode = document.getElementById('trend-mode')?.value || 'a_comprar';
+      const trendCfg = _trendConfig(trendMode);
+      const trend = _makeTrendByStatus(materiaisDash, trendCfg.statusFilters, trendCfg.deptLabel);
+      renderLine('tendencia-acomprar', trend, {
+        drillDown:true,
+        drillType:'materiais-tendencia',
+        centerCap:trendCfg.centerCap,
+        drillStatusFilters:trendCfg.statusFilters,
+      });
+      const pareto = _makeParetoClassificacao(materiaisDash);
+      renderPareto('pareto-classificacao', pareto, {
+        drillDown:true,
+        drillType:'materiais-classificacao',
+        centerCap:'A COMPRAR',
+      });
+    }
+  }catch(e){
+    msg.textContent='Erro: '+e.message; msg.className='error'; msg.style.display='block';
+  }
+}
+
+document.getElementById('d-load').addEventListener('click', loadDashboard);
+for(const id of ['d-empresa','d-classif','d-abertas','d-data-campo','d-data-de','d-data-ate']){
+  document.getElementById(id).addEventListener('change', loadDashboard);
+}
+document.getElementById('trend-mode').addEventListener('change', loadDashboard);
+document.getElementById('d-nos').addEventListener('keydown', e => { if(e.key==='Enter') loadDashboard(); });
+
+// Quando a aba Dashboard \u00e9 ativada pela primeira vez, carrega autom.
+let _dashLoadedOnce = false;
+let _histLoadedOnce = false;
+let _spendLoadedOnce = false;
+let _visibilityLoadedOnce = false;
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if(btn.dataset.view === 'dashboard' && !_dashLoadedOnce){
+      _dashLoadedOnce = true;
+      loadDashboard();
+    }
+    if(btn.dataset.view === 'historico' && !_histLoadedOnce){
+      _histLoadedOnce = true;
+      loadHistoricoOC();
+    }
+    if(btn.dataset.view === 'spend' && !_spendLoadedOnce){
+      _spendLoadedOnce = true;
+      loadSpend();
+    }
+    if((btn.dataset.view === 'visibility-header' || btn.dataset.view === 'visibility-detail') && !_visibilityLoadedOnce){
+      _visibilityLoadedOnce = true;
+      loadVisibility('vh');
+    }
+  });
+});
+
+// Default: últimos 45 dias em todas as abas (m, g, p) e no dashboard (d).
+(function setDefaultDates(){
+  const fmt = d => d.toISOString().slice(0,10);
+  const hoje = new Date();
+  const ini  = new Date(); ini.setDate(hoje.getDate() - 45);
+  const sHoje = fmt(hoje), sIni = fmt(ini);
+  for(const prefix of ['m','g','p','d','s','vh','vd']){
+    const de  = document.getElementById(`${prefix}-data-de`);
+    const ate = document.getElementById(`${prefix}-data-ate`);
+    if(de  && !de.value)  de.value  = sIni;
+    if(ate && !ate.value) ate.value = sHoje;
+  }
+})();
+
+// Carrega OS 9204 de cara
+loadClassificacoes().then(loadDashboard);
+</script>
+</body>
+</html>
