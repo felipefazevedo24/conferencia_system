@@ -20,6 +20,7 @@ import re
 import sys
 import time
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from xml.etree import ElementTree as et
 
@@ -902,6 +903,28 @@ def _local_request() -> bool:
     return host in {"127.0.0.1", "::1", "localhost"}
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, Decimal):
+        return float(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _compras_query_catalog() -> dict[str, str]:
+    from conferencia_app.compras import queries as compras_queries
+
+    return {
+        name: value
+        for name, value in vars(compras_queries).items()
+        if name.startswith("SQL_") and isinstance(value, str)
+    }
+
+
 def _registrar_facilities_na_bridge(app: Flask) -> None:
     app.config.from_object(Config)
     os.makedirs(app.instance_path, exist_ok=True)
@@ -1087,6 +1110,39 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "resultados": resultados, "status": status})
         except Exception as exc:
             app.logger.exception("Falha ao consultar lancamentos no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/compras/query")
+    def compras_query():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            query_name = str(payload.get("query") or "").strip()
+            params = payload.get("params") or {}
+            one = bool(payload.get("one"))
+            catalog = _compras_query_catalog()
+            sql = catalog.get(query_name)
+            if not sql:
+                return jsonify({"sucesso": False, "erro": "query_nao_permitida"}), 400
+            if not isinstance(params, dict):
+                return jsonify({"sucesso": False, "erro": "params_deve_ser_objeto"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    cols = [desc[0] for desc in (cur.description or [])]
+                    if one:
+                        row = cur.fetchone()
+                        return jsonify({"sucesso": True, "row": _json_safe(dict(zip(cols, row)) if row else None)})
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                    return jsonify({"sucesso": True, "rows": _json_safe(rows)})
+        except Exception as exc:
+            app.logger.exception("Falha ao executar query de Compras na bridge")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/lancamentos-periodo")

@@ -60,6 +60,9 @@ class ComprasSettings:
     PG_COD_EMPRESA: int
     PG_CONNECT_TIMEOUT: int
     APP_DB_SLOW_MS: int
+    API_URL: str
+    API_TOKEN: str
+    API_TIMEOUT: int
 
     @property
     def dsn(self) -> str:
@@ -82,6 +85,9 @@ def get_settings() -> ComprasSettings:
         PG_COD_EMPRESA=_cfg_int("COMPRAS_PG_COD_EMPRESA", _cfg_int("ERP_ESTOQUE_PG_COMPANY", 1)),
         PG_CONNECT_TIMEOUT=_cfg_int("COMPRAS_PG_CONNECT_TIMEOUT", 8),
         APP_DB_SLOW_MS=_cfg_int("COMPRAS_DB_SLOW_MS", 900),
+        API_URL=str(_first_value(_cfg("COMPRAS_API_URL"), _cfg("ERP_LANCAMENTO_API_URL"), arquivo.get("api_url"), default="")).rstrip("/"),
+        API_TOKEN=str(_first_value(_cfg("COMPRAS_API_TOKEN"), _cfg("ERP_LANCAMENTO_API_TOKEN"), arquivo.get("api_token"), default="")),
+        API_TIMEOUT=int(_first_value(_cfg("COMPRAS_API_TIMEOUT"), _cfg("ERP_LANCAMENTO_API_TIMEOUT"), arquivo.get("api_timeout"), default=60)),
     )
 
 
