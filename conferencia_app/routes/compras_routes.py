@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session
-from psycopg2 import OperationalError
+from psycopg2 import Error as PostgresError
 
 from ..auth import permission_required
 from ..compras.services import compras_service
@@ -65,11 +65,11 @@ def _json_safe(value):
 def _json_response(factory):
     try:
         return jsonify(_json_safe(factory()))
-    except OperationalError as exc:
+    except PostgresError as exc:
         current_app.logger.exception("Falha de banco no modulo Compras")
         return jsonify(
             {
-                "detail": "Banco de dados indisponivel no momento. Tente novamente em instantes.",
+                "detail": "Falha ao consultar o PostgreSQL do ERP. Confira conexao, credenciais e schema.",
                 "error_type": type(exc).__name__,
             }
         ), 503
