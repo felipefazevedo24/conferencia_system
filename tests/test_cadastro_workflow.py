@@ -27,7 +27,7 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
             "tipo": "material",
             "descricao": "Parafuso inox",
             "unidade_medida": "UN",
-            "grupo_produto": "Fixadores",
+            "utilizacao": "07",
         },
         follow_redirects=False,
     )
@@ -38,6 +38,8 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
         assert sol.numero == "000001"
         assert sol.status == "Em Validacao Compras"
         assert sol.departamento_atual == "Compras"
+        assert '"codigo"' not in sol.dados_json
+        assert '"utilizacao": "07"' in sol.dados_json
 
         executar_acao(sol, "assumir", "maria", "Compras")
         executar_acao(sol, "aprovar_compras", "maria", "Compras")
@@ -154,7 +156,7 @@ def test_workflow_exige_comentario_para_devolucao(tmp_path):
             etapa_atual="Compras",
             solicitante="felipe",
             departamento_atual="Compras",
-            dados_json='{"descricao":"Item","unidade_medida":"UN","grupo_produto":"Teste"}',
+            dados_json='{"descricao":"Item","unidade_medida":"UN","utilizacao":"07"}',
         )
         db.session.add(sol)
         db.session.commit()
@@ -176,7 +178,7 @@ def test_solicitante_nao_aprova_compras(tmp_path):
             etapa_atual="Compras",
             solicitante="felipe",
             departamento_atual="Compras",
-            dados_json='{"descricao":"Item","unidade_medida":"UN","grupo_produto":"Teste"}',
+            dados_json='{"descricao":"Item","unidade_medida":"UN","utilizacao":"07"}',
         )
         db.session.add(sol)
         db.session.commit()

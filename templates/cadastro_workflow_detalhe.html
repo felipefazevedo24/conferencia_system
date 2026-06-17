@@ -68,7 +68,14 @@
         {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
         <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
           <label>{{ label }}</label>
-          {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+          {% if campo_opcoes.get(campo) %}
+          <select class="cw-select" name="campo_{{ campo }}">
+            <option value="">Selecione...</option>
+            {% for valor, texto in campo_opcoes.get(campo) %}
+            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+          {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
           <textarea class="cw-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
           {% else %}
           <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
@@ -88,7 +95,15 @@
         {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
         <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
           <label>{{ label }}</label>
-          <div class="cw-read-value">{{ dados.get(campo) or '-' }}</div>
+          {% if campo_opcoes.get(campo) %}
+            {% set selecionado = namespace(texto='') %}
+            {% for valor, texto in campo_opcoes.get(campo) %}
+              {% if dados.get(campo) == valor %}{% set selecionado.texto = texto %}{% endif %}
+            {% endfor %}
+            <div class="cw-read-value">{{ selecionado.texto or dados.get(campo) or '-' }}</div>
+          {% else %}
+            <div class="cw-read-value">{{ dados.get(campo) or '-' }}</div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -107,7 +122,16 @@
         {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
         <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
           <label>{{ label }}</label>
-          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
+          {% if campo_opcoes.get(campo) %}
+          <select class="cw-select" name="campo_{{ campo }}" {% if obrigatorio %}required{% endif %}>
+            <option value="">Selecione...</option>
+            {% for valor, texto in campo_opcoes.get(campo) %}
+            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
+          {% endif %}
         </div>
         {% endfor %}
         <div class="cw-field full"><label>Comentario</label><textarea class="cw-textarea" name="comentario" required></textarea></div>

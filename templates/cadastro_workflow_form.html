@@ -37,7 +37,14 @@
       {% for campo, label, obrigatorio in campos_form %}
       <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
         <label for="{{ campo }}">{{ label }}{% if obrigatorio %} *{% endif %}</label>
-        {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+        {% if campo_opcoes.get(campo) %}
+        <select class="cw-select" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>
+          <option value="">Selecione...</option>
+          {% for valor, texto in campo_opcoes.get(campo) %}
+          <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+          {% endfor %}
+        </select>
+        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
         <textarea class="cw-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
         {% else %}
         <input class="cw-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>

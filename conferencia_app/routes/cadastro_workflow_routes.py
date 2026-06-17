@@ -6,6 +6,7 @@ from ..auth import has_permission, login_required, permission_required
 from ..extensions import db
 from ..models import CadastroWorkflowSLAConfig, CadastroWorkflowSolicitacao
 from ..services.cadastro_workflow_service import (
+    CAMPO_OPCOES,
     STATUS,
     TIPOS_CADASTRO,
     buscar_duplicidades,
@@ -110,6 +111,7 @@ def novo():
         erro=erro,
         dados=dados,
         duplicidades=duplicidades,
+        campo_opcoes=CAMPO_OPCOES,
     )
 
 
@@ -125,6 +127,7 @@ def detalhe(solicitacao_id):
         solicitacao=sol,
         dados=get_dados(sol),
         tipos=TIPOS_CADASTRO,
+        campo_opcoes=CAMPO_OPCOES,
         tempo_na_etapa=tempo_na_etapa(sol),
         prazo=prazo_restante(sol),
         can_compras=_can_operar_compras(),

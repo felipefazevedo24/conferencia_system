@@ -15,20 +15,55 @@ from ..models import (
 )
 
 
+UNIDADES_MEDIDA_MATERIAL = [
+    ("UN", "UN - Unidade"),
+    ("PC", "PC - Peca"),
+    ("KG", "KG - Quilograma"),
+    ("G", "G - Grama"),
+    ("MT", "MT - Metro"),
+    ("M2", "M2 - Metro quadrado"),
+    ("M3", "M3 - Metro cubico"),
+    ("L", "L - Litro"),
+    ("ML", "ML - Mililitro"),
+    ("CX", "CX - Caixa"),
+    ("PCT", "PCT - Pacote"),
+    ("PAR", "PAR - Par"),
+    ("RL", "RL - Rolo"),
+    ("BR", "BR - Barra"),
+    ("CH", "CH - Chapa"),
+    ("JG", "JG - Jogo"),
+    ("SV", "SV - Servico"),
+]
+
+UTILIZACOES_MATERIAL = [
+    ("00", "00 - Mercadoria para Revenda"),
+    ("01", "01 - Materia-Prima"),
+    ("02", "02 - Embalagem"),
+    ("03", "03 - Produto em Processo"),
+    ("04", "04 - Produto Acabado"),
+    ("05", "05 - Subproduto"),
+    ("06", "06 - Produto Intermediario"),
+    ("07", "07 - Material de Uso e Consumo"),
+    ("08", "08 - Ativo Imobilizado"),
+    ("09", "09 - Servicos"),
+    ("10", "10 - Outros insumos"),
+    ("99", "99 - Outras"),
+]
+
+CAMPO_OPCOES = {
+    "unidade_medida": UNIDADES_MEDIDA_MATERIAL,
+    "utilizacao": UTILIZACOES_MATERIAL,
+}
+
+
 TIPOS_CADASTRO = {
     "material": {
         "label": "Cadastro de Material",
         "icon": "fa-boxes-stacked",
         "fields": [
-            ("codigo", "Codigo", False),
             ("descricao", "Descricao", True),
-            ("descricao_complementar", "Descricao complementar", False),
-            ("unidade_medida", "Unidade de medida", True),
-            ("grupo_produto", "Grupo de produto", True),
-            ("ncm", "NCM", False),
-            ("aplicacao", "Aplicacao/Finalidade", False),
-            ("fabricante", "Fabricante", False),
-            ("fornecedor_sugerido", "Fornecedor sugerido", False),
+            ("unidade_medida", "Unidade de medida para compra", True),
+            ("utilizacao", "Utilizacao", True),
         ],
     },
     "cliente": {
@@ -326,6 +361,11 @@ def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = ""
     for campo, label, obrigatorio in campos_obrigatorios:
         if obrigatorio and not str(dados.get(campo) or "").strip():
             raise ValueError(f"Campo obrigatorio: {label}.")
+        opcoes = CAMPO_OPCOES.get(campo)
+        if opcoes and str(dados.get(campo) or "").strip():
+            valores_validos = {value for value, _label in opcoes}
+            if str(dados.get(campo) or "").strip() not in valores_validos:
+                raise ValueError(f"Valor invalido para {label}.")
     if tipo in CADASTROS_DIRETO_FISCAL:
         dados = {"documento": formatar_cnpj(dados.get("documento"))}
     duplicidades = buscar_duplicidades(tipo, dados)
