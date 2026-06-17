@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Nova Solicitacao de Cadastro | Columbia Sync{% endblock %}
-{% block shell_title %}Nova Solicitacao{% endblock %}
-{% block shell_subtitle %}Abertura com validacao de duplicidade antes do envio.{% endblock %}
+{% block title %}Nova Solicitação de Cadastro | Columbia Sync{% endblock %}
+{% block shell_title %}Nova Solicitação{% endblock %}
+{% block shell_subtitle %}Abertura com validação de duplicidade antes do envio.{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <section class="cw-shell">
   <div class="cw-head">
     <div class="cw-title">
-      <h1>Nova solicitacao de cadastro</h1>
-      <p>Para cliente, fornecedor e transportadora, informe somente o CNPJ. A consulta do cartao CNPJ acontece na etapa Fiscal.</p>
+      <h1>Nova solicitação de cadastro</h1>
+      <p>Para cliente, fornecedor e transportadora, informe somente o CNPJ. A consulta do cartão CNPJ acontece na etapa Fiscal.</p>
     </div>
     <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
   </div>
@@ -16,17 +16,27 @@
   {% if erro %}<div class="cw-alert err">{{ erro }}</div>{% endif %}
   {% if duplicidades %}
   <div class="cw-alert">
-    Foram encontrados registros semelhantes. A solicitacao ainda pode ser aberta, mas o alerta ficara registrado.
+    Foram encontrados registros semelhantes. A solicitação ainda pode ser aberta, mas o alerta ficará registrado.
     {% for dup in duplicidades %}
       <div><strong>{{ dup.numero }}</strong> - {{ dup.motivo }} - {{ dup.resumo }}</div>
     {% endfor %}
   </div>
   {% endif %}
 
-  <form class="cw-panel" method="post" id="cwForm">
-    <h2>Tipo de cadastro</h2>
+  <form class="cw-panel" method="post" id="cwForm" enctype="multipart/form-data">
+    <div class="cw-panel-head">
+      <div>
+        <h2>Dados da solicitação</h2>
+        <p>{{ tipos[tipo].label }} segue para {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }} após o envio.</p>
+      </div>
+      <span class="cw-route-pill">
+        <i class="fas fa-route"></i>
+        Solicitante -> {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }}
+      </span>
+    </div>
     <div class="cw-form-grid">
       <div class="cw-field full">
+        <label for="tipoSelect">Tipo de cadastro</label>
         <select class="cw-select" name="tipo" id="tipoSelect" onchange="window.location='{{ url_for('cadastro_workflow.novo') }}?tipo='+this.value">
           {% for key, meta in tipos.items() %}
           <option value="{{ key }}" {% if tipo == key %}selected{% endif %}>{{ meta.label }}</option>
@@ -57,14 +67,29 @@
           <i class="fas fa-id-card"></i>
           <div>
             <strong>Consulta na etapa Fiscal</strong>
-            <span>O Fiscal tera um botao dentro do chamado para buscar cartao CNPJ, endereco, CNAE e IE do PJ.</span>
+            <span>O Fiscal terá um botão dentro do chamado para buscar cartão CNPJ, endereço, CNAE e IE do PJ.</span>
           </div>
         </div>
       </div>
       {% endif %}
+      {% if tipo == 'material' %}
       <div class="cw-field full">
-        <label for="anexos">Anexos</label>
-        <textarea class="cw-textarea" id="anexos" name="anexos" placeholder="Informe links, nomes de arquivos ou observacoes sobre documentos anexos."></textarea>
+        <div class="cw-cnpj-preview material">
+          <i class="fas fa-box-open"></i>
+          <div>
+            <strong>Cadastro enxuto de material</strong>
+            <span>Informe a descrição, a unidade desejada para compra, a utilização e, se tiver, uma imagem do produto. O código será tratado na etapa responsável.</span>
+          </div>
+        </div>
+      </div>
+      <div class="cw-field full">
+        <label for="imagem_produto">Imagem do produto</label>
+        <input class="cw-input" id="imagem_produto" name="imagem_produto" type="file" accept="image/png,image/jpeg,image/webp">
+      </div>
+      {% endif %}
+      <div class="cw-field full">
+        <label for="anexos">Anexos e observações</label>
+        <textarea class="cw-textarea" id="anexos" name="anexos" placeholder="Informe links, nomes de arquivos ou observações sobre documentos anexos."></textarea>
       </div>
     </div>
     <div class="cw-actions" style="margin-top:16px">
@@ -78,7 +103,7 @@
 async function verificarDuplicidade(){
   const tipo = document.querySelector('[name="tipo"]').value;
   const params = new URLSearchParams({tipo});
-  ['documento','codigo','descricao'].forEach(id => {
+  ['documento','descricao'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.value) params.set(id, el.value);
   });

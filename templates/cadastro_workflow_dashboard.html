@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Workflow de Cadastros | Columbia Sync{% endblock %}
 {% block shell_title %}Workflow de Cadastros{% endblock %}
-{% block shell_subtitle %}Solicitacoes, aprovacoes, SLA e historico auditavel.{% endblock %}
+{% block shell_subtitle %}Solicitações, aprovações, SLA e histórico auditável.{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
 {% block content %}
 {% set total = solicitacoes|length %}
@@ -12,10 +12,10 @@
   <div class="cw-head">
     <div class="cw-title">
       <h1>Workflow de Cadastros</h1>
-      <p>Acompanhe materiais, clientes, fornecedores e transportadoras em uma esteira unica.</p>
+      <p>Acompanhe materiais, clientes, fornecedores e transportadoras em uma esteira única.</p>
     </div>
     <div class="cw-actions">
-      <a class="cw-btn primary" href="{{ url_for('cadastro_workflow.novo') }}"><i class="fas fa-plus"></i> Nova solicitacao</a>
+      <a class="cw-btn primary" href="{{ url_for('cadastro_workflow.novo') }}"><i class="fas fa-plus"></i> Nova solicitação</a>
       {% if session.get('role') == 'Admin' %}
       <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.configurar_sla') }}"><i class="fas fa-clock"></i> Configurar SLA</a>
       {% endif %}
@@ -23,14 +23,30 @@
   </div>
 
   <div class="cw-grid">
-    <div class="cw-stat"><span>Total filtrado</span><strong>{{ total }}</strong></div>
-    <div class="cw-stat"><span>Em atendimento</span><strong>{{ pendentes }}</strong></div>
-    <div class="cw-stat"><span>Correcao</span><strong>{{ correcao }}</strong></div>
-    <div class="cw-stat"><span>Cadastradas</span><strong>{{ concluidas }}</strong></div>
+    <div class="cw-stat">
+      <i class="fas fa-list-check"></i>
+      <span>Total filtrado</span>
+      <strong>{{ total }}</strong>
+    </div>
+    <div class="cw-stat blue">
+      <i class="fas fa-user-clock"></i>
+      <span>Em atendimento</span>
+      <strong>{{ pendentes }}</strong>
+    </div>
+    <div class="cw-stat amber">
+      <i class="fas fa-rotate-left"></i>
+      <span>Correção</span>
+      <strong>{{ correcao }}</strong>
+    </div>
+    <div class="cw-stat green">
+      <i class="fas fa-circle-check"></i>
+      <span>Cadastradas</span>
+      <strong>{{ concluidas }}</strong>
+    </div>
   </div>
 
   <form class="cw-filters" method="get">
-    <input class="cw-input" name="numero" value="{{ filtros.get('numero','') }}" placeholder="Pesquisar por numero da solicitacao">
+    <input class="cw-input" name="numero" value="{{ filtros.get('numero','') }}" placeholder="Pesquisar por número da solicitação">
     <select class="cw-select" name="tipo">
       <option value="">Todos os tipos</option>
       {% for key, meta in tipos.items() %}
@@ -40,10 +56,13 @@
     <select class="cw-select" name="status">
       <option value="">Todos os status</option>
       {% for status in statuses %}
-      <option value="{{ status }}" {% if filtros.get('status') == status %}selected{% endif %}>{{ status }}</option>
+      <option value="{{ status }}" {% if filtros.get('status') == status %}selected{% endif %}>{{ status|replace('Validacao','Validação')|replace('Correcao','Correção') }}</option>
       {% endfor %}
     </select>
-    <button class="cw-btn soft" type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+    <div class="cw-filter-actions">
+      <button class="cw-btn soft" type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+      <a class="cw-btn ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-eraser"></i> Limpar</a>
+    </div>
   </form>
 
   {% if indicadores %}
@@ -62,28 +81,32 @@
     {% for sol in solicitacoes %}
     {% set prazo = prazo_restante(sol) %}
     {% set dados = get_dados(sol) %}
+    {% set titulo = dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or 'Aguardando dados' %}
+    {% set status_label = sol.status|replace('Validacao','Validação')|replace('Correcao','Correção') %}
+    {% set etapa_label = sol.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído') %}
     <a class="cw-ticket {% if prazo.vencida %}vencida{% endif %}" href="{{ url_for('cadastro_workflow.detalhe', solicitacao_id=sol.id) }}">
       <div class="cw-avatar"><i class="fas {{ tipos[sol.tipo].icon }}"></i></div>
       <div class="cw-ticket-body">
         <div class="cw-ticket-top">
-          <strong>Numero: {{ sol.numero }}</strong>
-          <span><b>Requerente:</b> {{ sol.solicitante }}</span>
-          <span><b>Total:</b> {{ tempo_na_etapa(sol) }} <i class="fas fa-circle cw-dot-status {% if prazo.vencida %}red{% else %}green{% endif %}"></i></span>
+          <strong>#{{ sol.numero }}</strong>
+          <span class="cw-status-badge {{ 'danger' if prazo.vencida else 'info' }}">{{ status_label }}</span>
+          <span class="cw-sla {{ 'danger' if prazo.vencida else '' }}">
+            <i class="fas fa-clock"></i>
+            {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h' }}{% else %}Sem SLA{% endif %}
+          </span>
         </div>
-        <div class="cw-ticket-sub">{{ tipos[sol.tipo].label }} - {{ dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or 'Aguardando dados' }}</div>
-        <div class="cw-ticket-box">
-          <p><b>Empresa:</b> {{ dados.get('documento') or '-' }}{% if dados.get('razao_social') %} | {{ dados.get('razao_social') }}{% endif %}</p>
-          <p><b>Prioridade:</b> Baixa</p>
-          <p><b>Categoria:</b> {{ tipos[sol.tipo].label }}</p>
-          <p><b>Etapa atual:</b> {{ sol.etapa_atual }}</p>
-          <p><b>SLA Etapa atual:</b> {% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}Sem SLA pendente{% endif %}</p>
-          <p><b>Aberto por:</b> {{ sol.solicitante }} em {{ sol.data_abertura.strftime('%d/%m/%Y %H:%M:%S') }}</p>
-          <p><b>Responsavel:</b> {{ sol.responsavel_atual or 'Chamado para minha celula' }}</p>
+        <div class="cw-ticket-sub">{{ titulo }}</div>
+        <div class="cw-ticket-meta">
+          <span><i class="fas fa-layer-group"></i> {{ tipos[sol.tipo].label }}</span>
+          <span><i class="fas fa-location-dot"></i> {{ etapa_label }}</span>
+          <span><i class="fas fa-user"></i> {{ sol.solicitante }}</span>
+          <span><i class="fas fa-calendar-day"></i> {{ sol.data_abertura.strftime('%d/%m/%Y %H:%M') }}</span>
+          <span><i class="fas fa-headset"></i> {{ sol.responsavel_atual or 'Fila da célula' }}</span>
         </div>
       </div>
     </a>
     {% else %}
-    <div class="cw-empty"><i class="fas fa-inbox"></i><br>Nenhuma solicitacao encontrada.</div>
+    <div class="cw-empty"><i class="fas fa-inbox"></i><br>Nenhuma solicitação encontrada.</div>
     {% endfor %}
   </div>
 </section>

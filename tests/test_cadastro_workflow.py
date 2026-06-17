@@ -28,11 +28,18 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
             "descricao": "Parafuso inox",
             "unidade_medida": "UN",
             "utilizacao": "07",
+            "fornecedor_sugerido": "Fornecedor ABC",
         },
         follow_redirects=False,
     )
 
     assert response.status_code == 302
+    detail = client.get(response.headers["Location"])
+    assert detail.status_code == 200
+    assert "Validação de Compras".encode("utf-8") in detail.data
+    assert "NCM sugerido".encode("utf-8") in detail.data
+    assert b"Fornecedor ABC" in detail.data
+
     with app.app_context():
         sol = CadastroWorkflowSolicitacao.query.one()
         assert sol.numero == "000001"
@@ -40,6 +47,9 @@ def test_workflow_cria_solicitacao_e_encaminha_ate_cadastro(tmp_path):
         assert sol.departamento_atual == "Compras"
         assert '"codigo"' not in sol.dados_json
         assert '"utilizacao": "07"' in sol.dados_json
+        assert '"fornecedor_sugerido": "Fornecedor ABC"' in sol.dados_json
+        assert '"unidade_compra": "UN"' in sol.dados_json
+        assert '"ncm_sugerido": "73181500"' in sol.dados_json
 
         executar_acao(sol, "assumir", "maria", "Compras")
         executar_acao(sol, "aprovar_compras", "maria", "Compras")
@@ -143,7 +153,7 @@ def test_workflow_registra_alerta_de_duplicidade(tmp_path):
     with app.app_context():
         rows = CadastroWorkflowSolicitacao.query.order_by(CadastroWorkflowSolicitacao.id).all()
         assert rows[1].alerta_duplicidade
-        assert "Documento ja usado" in rows[1].alerta_duplicidade
+        assert "Documento já usado" in rows[1].alerta_duplicidade
 
 
 def test_workflow_exige_comentario_para_devolucao(tmp_path):
@@ -165,7 +175,7 @@ def test_workflow_exige_comentario_para_devolucao(tmp_path):
             executar_acao(sol, "devolver_solicitante", "maria", "Compras")
             assert False, "acao deveria exigir comentario"
         except ValueError as exc:
-            assert "Comentario obrigatorio" in str(exc)
+            assert "Comentário obrigatório" in str(exc)
 
 
 def test_solicitante_nao_aprova_compras(tmp_path):

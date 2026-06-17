@@ -1,6 +1,9 @@
+import json
+import os
 from datetime import datetime
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from werkzeug.utils import secure_filename
 
 from ..auth import has_permission, login_required, permission_required
 from ..extensions import db
@@ -22,6 +25,7 @@ from ..services.cadastro_workflow_service import (
 
 
 cadastro_workflow_bp = Blueprint("cadastro_workflow", __name__, url_prefix="/cadastros")
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def _can_operar_compras() -> bool:
@@ -30,6 +34,48 @@ def _can_operar_compras() -> bool:
 
 def _can_operar_fiscal() -> bool:
     return session.get("role") in {"Fiscal", "Admin"}
+
+
+def _parse_anexos(anexos: str | None) -> dict:
+    raw = (anexos or "").strip()
+    if not raw:
+        return {"observacoes": "", "imagem": None}
+    try:
+        dados = json.loads(raw)
+        if isinstance(dados, dict):
+            dados.setdefault("observacoes", "")
+            dados.setdefault("imagem", None)
+            return dados
+    except json.JSONDecodeError:
+        pass
+    return {"observacoes": raw, "imagem": None}
+
+
+def _salvar_imagem_produto():
+    arquivo = request.files.get("imagem_produto")
+    if not arquivo or not getattr(arquivo, "filename", ""):
+        return None
+    nome_original = secure_filename(arquivo.filename or "produto.jpg")
+    extensao = os.path.splitext(nome_original)[1].lower()
+    if extensao not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError("Envie a imagem do produto em JPG, PNG ou WEBP.")
+    pasta = os.path.join(current_app.instance_path, "cadastro_workflow")
+    os.makedirs(pasta, exist_ok=True)
+    nome_final = secure_filename(f"material_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{extensao}")
+    arquivo.save(os.path.join(pasta, nome_final))
+    return {
+        "nome": nome_original,
+        "arquivo": nome_final,
+        "url": url_for("cadastro_workflow.anexo_imagem", filename=nome_final),
+    }
+
+
+def _montar_anexos(imagem: dict | None = None) -> str:
+    anexos = {
+        "observacoes": request.form.get("anexos", "").strip(),
+        "imagem": imagem,
+    }
+    return json.dumps(anexos, ensure_ascii=False)
 
 
 def _query_solicitacoes():
@@ -89,16 +135,18 @@ def novo():
         tipo = request.form.get("tipo", tipo)
         meta = TIPOS_CADASTRO.get(tipo)
         if not meta:
-            erro = "Tipo de cadastro invalido."
+            erro = "Tipo de cadastro inválido."
         else:
-            dados = {campo: request.form.get(campo, "").strip() for campo, _label, _req in meta["fields"]}
+            campos_abertura = meta.get("solicitante_fields") or meta["fields"]
+            dados = {campo: request.form.get(campo, "").strip() for campo, _label, _req in campos_abertura}
             duplicidades = buscar_duplicidades(tipo, dados)
             try:
+                imagem = _salvar_imagem_produto() if tipo == "material" else None
                 sol = criar_solicitacao(
                     tipo=tipo,
                     dados=dados,
                     solicitante=session.get("username", "usuario"),
-                    anexos=request.form.get("anexos", "").strip(),
+                    anexos=_montar_anexos(imagem),
                 )
                 return redirect(url_for("cadastro_workflow.detalhe", solicitacao_id=sol.id))
             except ValueError as exc:
@@ -128,12 +176,22 @@ def detalhe(solicitacao_id):
         dados=get_dados(sol),
         tipos=TIPOS_CADASTRO,
         campo_opcoes=CAMPO_OPCOES,
+        anexos_info=_parse_anexos(sol.anexos),
         tempo_na_etapa=tempo_na_etapa(sol),
         prazo=prazo_restante(sol),
         can_compras=_can_operar_compras(),
         can_fiscal=_can_operar_fiscal(),
         is_solicitante=sol.solicitante == session.get("username"),
     )
+
+
+@cadastro_workflow_bp.get("/anexos/<path:filename>")
+@login_required
+def anexo_imagem(filename):
+    if not has_permission("PAGE_CADASTRO_WORKFLOW"):
+        return jsonify({"error": "Acesso negado"}), 403
+    pasta = os.path.join(current_app.instance_path, "cadastro_workflow")
+    return send_from_directory(pasta, secure_filename(filename))
 
 
 @cadastro_workflow_bp.post("/<int:solicitacao_id>/acao")

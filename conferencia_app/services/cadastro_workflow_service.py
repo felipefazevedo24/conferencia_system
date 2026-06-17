@@ -17,12 +17,12 @@ from ..models import (
 
 UNIDADES_MEDIDA_MATERIAL = [
     ("UN", "UN - Unidade"),
-    ("PC", "PC - Peca"),
+    ("PC", "PC - Peça"),
     ("KG", "KG - Quilograma"),
     ("G", "G - Grama"),
     ("MT", "MT - Metro"),
     ("M2", "M2 - Metro quadrado"),
-    ("M3", "M3 - Metro cubico"),
+    ("M3", "M3 - Metro cúbico"),
     ("L", "L - Litro"),
     ("ML", "ML - Mililitro"),
     ("CX", "CX - Caixa"),
@@ -32,7 +32,7 @@ UNIDADES_MEDIDA_MATERIAL = [
     ("BR", "BR - Barra"),
     ("CH", "CH - Chapa"),
     ("JG", "JG - Jogo"),
-    ("SV", "SV - Servico"),
+    ("SV", "SV - Serviço"),
 ]
 
 UTILIZACOES_MATERIAL = [
@@ -50,38 +50,79 @@ UTILIZACOES_MATERIAL = [
     ("99", "99 - Outras"),
 ]
 
+METODOS_ATUALIZACAO_CUSTO = [
+    ("nao_atualiza", "Não atualiza custo"),
+    ("custo_medio", "Custo Médio"),
+    ("ultimo_processamento", "Custo do último Processamento"),
+]
+
+METODOS_REPOSICAO = [
+    ("manual", "Manual"),
+    ("por_demanda", "Por demanda"),
+    ("estoque_minimo", "Estoque mínimo"),
+    ("ponto_reposicao", "Ponto de reposição"),
+    ("mrp", "MRP / Planejamento"),
+]
+
 CAMPO_OPCOES = {
     "unidade_medida": UNIDADES_MEDIDA_MATERIAL,
+    "unidade_compra": UNIDADES_MEDIDA_MATERIAL,
     "utilizacao": UTILIZACOES_MATERIAL,
+    "metodo_atualizacao_custo": METODOS_ATUALIZACAO_CUSTO,
+    "metodo_reposicao": METODOS_REPOSICAO,
 }
+
+MATERIAL_SOLICITANTE_FIELDS = [
+    ("descricao", "Descrição", True),
+    ("unidade_medida", "Unidade de medida desejada", True),
+    ("utilizacao", "Utilização", True),
+    ("fornecedor_sugerido", "Fornecedor sugerido", False),
+]
+
+MATERIAL_COMPRAS_FIELDS = [
+    ("unidade_compra", "Unidade de compra", False),
+    ("metodo_reposicao", "Método de reposição", False),
+]
+
+MATERIAL_FISCAL_FIELDS = [
+    ("ncm_sugerido", "NCM sugerido", False),
+    ("ncm_validado", "NCM validado", False),
+    ("codigo_beneficio_fiscal", "Cód. de benefício fiscal", False),
+    ("codigo_classificacao_tributaria", "Cód. da classificação tributária", False),
+    ("metodo_atualizacao_custo", "Método de atualização de custo", False),
+]
+
+MATERIAL_FIELD_GROUPS = [
+    ("solicitante", "Informações do solicitante", MATERIAL_SOLICITANTE_FIELDS),
+    ("compras", "Validação de Compras", MATERIAL_COMPRAS_FIELDS),
+    ("fiscal", "Validação Fiscal", MATERIAL_FISCAL_FIELDS),
+]
 
 
 TIPOS_CADASTRO = {
     "material": {
         "label": "Cadastro de Material",
         "icon": "fa-boxes-stacked",
-        "fields": [
-            ("descricao", "Descricao", True),
-            ("unidade_medida", "Unidade de medida para compra", True),
-            ("utilizacao", "Utilizacao", True),
-        ],
+        "solicitante_fields": MATERIAL_SOLICITANTE_FIELDS,
+        "fields": MATERIAL_SOLICITANTE_FIELDS + MATERIAL_COMPRAS_FIELDS + MATERIAL_FISCAL_FIELDS,
+        "field_groups": MATERIAL_FIELD_GROUPS,
     },
     "cliente": {
         "label": "Cadastro de Cliente",
         "icon": "fa-user-tie",
         "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
-            ("razao_social", "Razao Social", True),
+            ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
-            ("inscricao_estadual", "Inscricao Estadual", False),
-            ("inscricao_municipal", "Inscricao Municipal", False),
-            ("endereco", "Endereco completo", True),
+            ("inscricao_estadual", "Inscrição Estadual", False),
+            ("inscricao_municipal", "Inscrição Municipal", False),
+            ("endereco", "Endereço completo", True),
             ("cep", "CEP", False),
-            ("municipio", "Municipio", False),
+            ("municipio", "Município", False),
             ("uf", "UF", False),
             ("cnae", "CNAE", False),
-            ("regime_tributario", "Regime tributario", False),
+            ("regime_tributario", "Regime tributário", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
             ("contato", "Contato", False),
@@ -92,17 +133,17 @@ TIPOS_CADASTRO = {
         "icon": "fa-industry",
         "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
-            ("razao_social", "Razao Social", True),
+            ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
-            ("inscricao_estadual", "Inscricao Estadual", False),
-            ("endereco", "Endereco completo", True),
+            ("inscricao_estadual", "Inscrição Estadual", False),
+            ("endereco", "Endereço completo", True),
             ("cep", "CEP", False),
-            ("municipio", "Municipio", False),
+            ("municipio", "Município", False),
             ("uf", "UF", False),
             ("cnae", "CNAE", False),
-            ("regime_tributario", "Regime tributario", False),
-            ("dados_bancarios", "Dados bancarios", False),
+            ("regime_tributario", "Regime tributário", False),
+            ("dados_bancarios", "Dados bancários", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
             ("tipo_fornecimento", "Tipo de fornecimento", False),
@@ -113,20 +154,20 @@ TIPOS_CADASTRO = {
         "icon": "fa-truck-fast",
         "solicitante_fields": [("documento", "CNPJ", True)],
         "fields": [
-            ("razao_social", "Razao Social", True),
+            ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
-            ("inscricao_estadual", "Inscricao Estadual", False),
+            ("inscricao_estadual", "Inscrição Estadual", False),
             ("antt", "ANTT", False),
-            ("endereco", "Endereco completo", True),
+            ("endereco", "Endereço completo", True),
             ("cep", "CEP", False),
-            ("municipio", "Municipio", False),
+            ("municipio", "Município", False),
             ("uf", "UF", False),
             ("cnae", "CNAE", False),
-            ("regime_tributario", "Regime tributario", False),
+            ("regime_tributario", "Regime tributário", False),
             ("email", "E-mail", False),
             ("telefone", "Telefone", False),
-            ("regiao_atendimento", "Regiao de atendimento", False),
+            ("regiao_atendimento", "Região de atendimento", False),
             ("modal_transporte", "Modal de transporte", False),
         ],
     },
@@ -146,22 +187,22 @@ STATUS = [
 
 CHECKLIST_COMPRAS = [
     "Necessidade do cadastro",
-    "Existencia de cadastro semelhante",
-    "Dados comerciais minimos",
-    "Documentacao obrigatoria",
-    "Fornecedor/cliente/material ja existente",
+    "Existência de cadastro semelhante",
+    "Dados comerciais mínimos",
+    "Documentação obrigatória",
+    "Fornecedor/cliente/material já existente",
 ]
 
 CHECKLIST_FISCAL = [
-    "CNPJ valido",
-    "Inscricao Estadual",
-    "Inscricao Municipal",
-    "Regime tributario",
+    "CNPJ válido",
+    "Inscrição Estadual",
+    "Inscrição Municipal",
+    "Regime tributário",
     "CNAE",
-    "NCM quando aplicavel",
-    "Tributacao padrao",
-    "Retencoes aplicaveis",
-    "Dados fiscais obrigatorios",
+    "NCM quando aplicável",
+    "Tributação padrão",
+    "Retenções aplicáveis",
+    "Dados fiscais obrigatórios",
 ]
 
 CADASTROS_DIRETO_FISCAL = {"cliente", "fornecedor", "transportadora"}
@@ -243,9 +284,9 @@ def consultar_cartao_cnpj(cnpj: str, timeout: int = 8) -> dict:
         erros.append(str(exc))
 
     dados.setdefault("inscricao_estadual", "")
-    dados.setdefault("ie_consultada", "Nao encontrada" if not dados.get("inscricao_estadual") else "Sim")
+    dados.setdefault("ie_consultada", "Não encontrada" if not dados.get("inscricao_estadual") else "Sim")
     if erros and len(dados) <= 3:
-        raise ValueError("Nao foi possivel consultar o cartao CNPJ agora.")
+        raise ValueError("Não foi possível consultar o cartão CNPJ agora.")
     return dados
 
 
@@ -309,7 +350,7 @@ def registrar_evento(solicitacao, usuario, departamento, acao, comentario="", no
                 CadastroWorkflowNotificacao(
                     solicitacao=solicitacao,
                     usuario=destinatario,
-                    mensagem=f"Solicitacao {solicitacao.numero}: {acao}",
+                    mensagem=f"Solicitação {solicitacao.numero}: {acao}",
                 )
             )
 
@@ -330,16 +371,16 @@ def buscar_duplicidades(tipo: str, dados: dict, ignorar_id: int | None = None) -
         if tipo in {"cliente", "fornecedor", "transportadora"}:
             doc_atual = normalizar_documento(atual_dados.get("documento"))
             if documento and doc_atual and documento == doc_atual:
-                motivo, score = "Documento ja usado", 1.0
+                motivo, score = "Documento já usado", 1.0
         elif tipo == "material":
             codigo_atual = (atual_dados.get("codigo") or "").strip().lower()
             desc_atual = (atual_dados.get("descricao") or "").strip().lower()
             if codigo and codigo_atual and codigo == codigo_atual:
-                motivo, score = "Codigo ja usado", 1.0
+                motivo, score = "Código já usado", 1.0
             elif descricao and desc_atual:
                 score = SequenceMatcher(None, descricao, desc_atual).ratio()
                 if score >= 0.72:
-                    motivo = "Descricao semelhante"
+                    motivo = "Descrição semelhante"
         if motivo:
             encontrados.append(
                 {
@@ -354,20 +395,49 @@ def buscar_duplicidades(tipo: str, dados: dict, ignorar_id: int | None = None) -
     return encontrados
 
 
+def sugerir_ncm_material(descricao: str | None) -> dict:
+    texto = (descricao or "").lower()
+    regras = [
+        (("parafuso", "porca", "arruela", "prisioneiro"), "73181500", "Parafusos, porcas, arruelas e artefatos semelhantes de ferro ou aço"),
+        (("rolamento", "mancal"), "84821010", "Rolamentos de esferas"),
+        (("correia", "esteira"), "40103900", "Correias transportadoras ou de transmissão de borracha vulcanizada"),
+        (("motor elétrico", "motor eletrico"), "85015210", "Motores elétricos de corrente alternada"),
+        (("sensor", "fim de curso", "chave indutiva"), "85365090", "Aparelhos para interrupção, seccionamento ou proteção de circuitos elétricos"),
+        (("cabo elétrico", "cabo eletrico", "fio elétrico", "fio eletrico"), "85444900", "Fios e cabos elétricos isolados"),
+        (("tinta", "verniz"), "32089010", "Tintas e vernizes à base de polímeros sintéticos"),
+        (("óleo", "oleo", "lubrificante", "graxa"), "27101932", "Óleos lubrificantes"),
+        (("embalagem", "caixa papelão", "caixa papelao", "papelão", "papelao"), "48191000", "Caixas de papel ou cartão ondulados"),
+        (("etiqueta", "rótulo", "rotulo"), "48211000", "Etiquetas de papel ou cartão"),
+        (("luva", "epi"), "40151900", "Luvas de borracha vulcanizada não endurecida"),
+        (("fresa", "broca", "ferramenta corte"), "82075011", "Ferramentas de furar ou fresar para metais"),
+        (("chapa aço", "chapa aco", "aço carbono", "aco carbono"), "72085100", "Produtos laminados planos de ferro ou aço não ligado"),
+        (("tubo", "perfil aço", "perfil aco"), "73069090", "Tubos e perfis ocos de ferro ou aço"),
+    ]
+    for termos, ncm, justificativa in regras:
+        if any(termo in texto for termo in termos):
+            return {"ncm": ncm, "justificativa": justificativa}
+    return {"ncm": "", "justificativa": "Sem sugestão automática. Fiscal deve classificar manualmente."}
+
+
 def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = "") -> CadastroWorkflowSolicitacao:
     if tipo not in TIPOS_CADASTRO:
-        raise ValueError("Tipo de cadastro invalido.")
+        raise ValueError("Tipo de cadastro inválido.")
     campos_obrigatorios = TIPOS_CADASTRO[tipo].get("solicitante_fields") or TIPOS_CADASTRO[tipo]["fields"]
     for campo, label, obrigatorio in campos_obrigatorios:
         if obrigatorio and not str(dados.get(campo) or "").strip():
-            raise ValueError(f"Campo obrigatorio: {label}.")
+            raise ValueError(f"Campo obrigatório: {label}.")
         opcoes = CAMPO_OPCOES.get(campo)
         if opcoes and str(dados.get(campo) or "").strip():
             valores_validos = {value for value, _label in opcoes}
             if str(dados.get(campo) or "").strip() not in valores_validos:
-                raise ValueError(f"Valor invalido para {label}.")
+                raise ValueError(f"Valor inválido para {label}.")
     if tipo in CADASTROS_DIRETO_FISCAL:
         dados = {"documento": formatar_cnpj(dados.get("documento"))}
+    elif tipo == "material":
+        sugestao_ncm = sugerir_ncm_material(dados.get("descricao"))
+        dados.setdefault("unidade_compra", dados.get("unidade_medida") or "")
+        dados.setdefault("ncm_sugerido", sugestao_ncm["ncm"])
+        dados.setdefault("ncm_sugestao_justificativa", sugestao_ncm["justificativa"])
     duplicidades = buscar_duplicidades(tipo, dados)
     departamento_inicial = "Fiscal" if tipo in CADASTROS_DIRETO_FISCAL else "Compras"
     status_inicial = "Em Validacao Fiscal" if departamento_inicial == "Fiscal" else "Em Validacao Compras"
@@ -383,8 +453,8 @@ def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = ""
     )
     set_dados(sol, dados)
     db.session.add(sol)
-    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao criada", f"Enviada para validacao de {departamento_inicial}.")
-    registrar_evento(sol, solicitante, "Solicitante", "Solicitacao enviada", f"Fluxo iniciado em {departamento_inicial}.")
+    registrar_evento(sol, solicitante, "Solicitante", "Solicitação criada", f"Enviada para validação de {departamento_inicial}.")
+    registrar_evento(sol, solicitante, "Solicitante", "Solicitação enviada", f"Fluxo iniciado em {departamento_inicial}.")
     db.session.flush()
     inicializar_checklists(sol)
     db.session.commit()
@@ -402,7 +472,7 @@ def inicializar_checklists(solicitacao):
 def atualizar_checklist(solicitacao, departamento, valores: dict, usuario: str):
     inicializar_checklists(solicitacao)
     agora = datetime.now()
-    permitidos = {"Sim", "Nao", "Nao se aplica"}
+    permitidos = {"Sim", "Não", "Não se aplica", "Nao", "Nao se aplica"}
     for chk in solicitacao.checklists:
         if chk.departamento != departamento:
             continue
@@ -427,55 +497,55 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
     depto_usuario = "Compras" if role == "Compras" else "Fiscal" if role == "Fiscal" else "Administrador" if role == "Admin" else "Solicitante"
     exige_comentario = {"corrigir", "devolver_solicitante", "devolver_compras", "reprovar"}
     if acao in exige_comentario and not comentario:
-        raise ValueError("Comentario obrigatorio para esta acao.")
+        raise ValueError("Comentário obrigatório para esta ação.")
 
     if acao == "assumir":
         if role not in {"Compras", "Fiscal", "Admin"}:
-            raise ValueError("Usuario sem permissao para assumir atendimento.")
+            raise ValueError("Usuário sem permissão para assumir atendimento.")
         if solicitacao.departamento_atual not in {"Compras", "Fiscal"}:
-            raise ValueError("Esta solicitacao nao esta em fila de atendimento.")
+            raise ValueError("Esta solicitação não está em fila de atendimento.")
         solicitacao.responsavel_atual = usuario
         registrar_evento(solicitacao, usuario, depto_usuario, "Atendimento assumido", comentario)
     elif acao == "salvar_dados":
         if role not in {"Compras", "Fiscal", "Admin"}:
-            raise ValueError("Usuario sem permissao para editar dados.")
+            raise ValueError("Usuário sem permissão para editar dados.")
         if role == "Compras" and solicitacao.departamento_atual != "Compras":
-            raise ValueError("Compras so pode editar solicitacoes na etapa de Compras.")
+            raise ValueError("Compras só pode editar solicitações na etapa de Compras.")
         if role == "Fiscal" and solicitacao.departamento_atual != "Fiscal":
-            raise ValueError("Fiscal so pode editar solicitacoes na etapa Fiscal.")
+            raise ValueError("Fiscal só pode editar solicitações na etapa Fiscal.")
         dados = get_dados(solicitacao)
         for key, value in form.items():
             if key.startswith("campo_"):
                 dados[key.replace("campo_", "", 1)] = value
         set_dados(solicitacao, dados)
-        registrar_evento(solicitacao, usuario, depto_usuario, "Dados atualizados", comentario or "Informacoes revisadas pelo departamento responsavel.")
+        registrar_evento(solicitacao, usuario, depto_usuario, "Dados atualizados", comentario or "Informações revisadas pelo departamento responsável.")
     elif acao == "consultar_cnpj":
         if role not in {"Fiscal", "Admin"}:
-            raise ValueError("Somente Fiscal pode consultar o cartao CNPJ nesta etapa.")
+            raise ValueError("Somente Fiscal pode consultar o cartão CNPJ nesta etapa.")
         if solicitacao.departamento_atual != "Fiscal":
             raise ValueError("A consulta do CNPJ deve ser feita na etapa Fiscal.")
         if solicitacao.tipo not in CADASTROS_DIRETO_FISCAL:
-            raise ValueError("Consulta CNPJ automatica disponivel para cliente, fornecedor e transportadora.")
+            raise ValueError("Consulta CNPJ automática disponível para cliente, fornecedor e transportadora.")
         dados = get_dados(solicitacao)
         consulta = consultar_cartao_cnpj(dados.get("documento") or form.get("campo_documento") or "")
         atualizado = dict(dados)
         atualizado.update({k: v for k, v in consulta.items() if str(v or "").strip()})
         set_dados(solicitacao, atualizado)
-        registrar_evento(solicitacao, usuario, "Fiscal", "Cartao CNPJ consultado", "Dados do cartao CNPJ e IE preenchidos automaticamente quando disponiveis.")
+        registrar_evento(solicitacao, usuario, "Fiscal", "Cartão CNPJ consultado", "Dados do cartão CNPJ e IE preenchidos automaticamente quando disponíveis.")
     elif acao == "aprovar_compras":
         if role not in {"Compras", "Admin"}:
             raise ValueError("Somente Compras pode encaminhar ao Fiscal.")
         if solicitacao.departamento_atual != "Compras":
-            raise ValueError("Esta solicitacao nao esta na etapa de Compras.")
+            raise ValueError("Esta solicitação não está na etapa de Compras.")
         atualizar_checklist(solicitacao, "Compras", form, usuario)
         mover_etapa(solicitacao, "Em Validacao Fiscal", "Fiscal", "Fiscal")
         registrar_evento(solicitacao, usuario, "Compras", "Aprovado e encaminhado ao Fiscal", comentario)
     elif acao == "devolver_solicitante":
         if role not in {"Compras", "Fiscal", "Admin"}:
-            raise ValueError("Usuario sem permissao para solicitar correcao.")
+            raise ValueError("Usuário sem permissão para solicitar correção.")
         origem = solicitacao.departamento_atual
         mover_etapa(solicitacao, "Pendente de Correcao", "Solicitante", "Solicitante", solicitacao.solicitante)
-        registrar_evento(solicitacao, usuario, depto_usuario, f"Devolvido para correcao pelo solicitante ({origem})", comentario)
+        registrar_evento(solicitacao, usuario, depto_usuario, f"Devolvido para correção pelo solicitante ({origem})", comentario)
     elif acao == "devolver_compras":
         if role not in {"Fiscal", "Admin"}:
             raise ValueError("Somente Fiscal pode devolver para Compras.")
@@ -483,7 +553,7 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
         registrar_evento(solicitacao, usuario, "Fiscal", "Devolvido para Compras", comentario)
     elif acao == "responder_correcao":
         if usuario != solicitacao.solicitante and role != "Admin":
-            raise ValueError("Somente o solicitante pode responder a correcao.")
+            raise ValueError("Somente o solicitante pode responder à correção.")
         dados = get_dados(solicitacao)
         for key, value in form.items():
             if key.startswith("campo_"):
@@ -491,31 +561,31 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
         set_dados(solicitacao, dados)
         destino = "Fiscal" if solicitacao.tipo in CADASTROS_DIRETO_FISCAL else "Compras"
         mover_etapa(solicitacao, f"Em Validacao {destino}", destino, destino)
-        registrar_evento(solicitacao, usuario, "Solicitante", f"Correcao respondida para {destino}", comentario or "Dados corrigidos.")
+        registrar_evento(solicitacao, usuario, "Solicitante", f"Correção respondida para {destino}", comentario or "Dados corrigidos.")
     elif acao == "finalizar":
         if role not in {"Fiscal", "Admin"}:
             raise ValueError("Somente Fiscal pode finalizar cadastro.")
         if solicitacao.departamento_atual != "Fiscal":
-            raise ValueError("Esta solicitacao nao esta na etapa Fiscal.")
+            raise ValueError("Esta solicitação não está na etapa Fiscal.")
         atualizar_checklist(solicitacao, "Fiscal", form, usuario)
-        mover_etapa(solicitacao, "Cadastrado", "Cadastro Concluido", "Concluido", usuario)
+        mover_etapa(solicitacao, "Cadastrado", "Cadastro Concluído", "Concluido", usuario)
         solicitacao.concluido_em = datetime.now()
-        registrar_evento(solicitacao, usuario, "Fiscal", "Cadastro concluido", comentario)
+        registrar_evento(solicitacao, usuario, "Fiscal", "Cadastro concluído", comentario)
     elif acao == "reprovar":
         if role not in {"Compras", "Fiscal", "Admin"}:
-            raise ValueError("Usuario sem permissao para reprovar.")
+            raise ValueError("Usuário sem permissão para reprovar.")
         mover_etapa(solicitacao, "Reprovado", "Encerrado", "Encerrado", usuario)
-        registrar_evento(solicitacao, usuario, depto_usuario, "Solicitacao reprovada", comentario)
+        registrar_evento(solicitacao, usuario, depto_usuario, "Solicitação reprovada", comentario)
     elif acao == "cancelar":
         if usuario != solicitacao.solicitante and role != "Admin":
             raise ValueError("Somente o solicitante pode cancelar.")
         if solicitacao.status == "Cadastrado":
-            raise ValueError("Solicitacao concluida nao pode ser cancelada.")
+            raise ValueError("Solicitação concluída não pode ser cancelada.")
         mover_etapa(solicitacao, "Cancelado", "Encerrado", "Encerrado", usuario)
         solicitacao.cancelado_em = datetime.now()
-        registrar_evento(solicitacao, usuario, "Solicitante", "Solicitacao cancelada", comentario or "Cancelada pelo solicitante.")
+        registrar_evento(solicitacao, usuario, "Solicitante", "Solicitação cancelada", comentario or "Cancelada pelo solicitante.")
     else:
-        raise ValueError("Acao invalida.")
+        raise ValueError("Ação inválida.")
     db.session.commit()
 
 
