@@ -316,6 +316,16 @@ def test_wms_avancado_volume_sugestao_inventario_movimentacao_e_separacao(tmp_pa
         assert WMSPedidoSeparacao.query.count() == 1
 
 
+def test_wms_inventario_page_renderiza(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    resp = client.get("/wms/inventario")
+    assert resp.status_code == 200
+    assert b"Inventario ciclico" in resp.data
+
+
 def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

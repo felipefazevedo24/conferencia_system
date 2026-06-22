@@ -193,6 +193,20 @@ HOME_MODULES = [
         "metric_key": "wms_pendente",
     },
     {
+        "id": "wms_inventario",
+        "title": "Inventario Ciclico WMS",
+        "subtitle": "Acuracidade",
+        "description": "Abra contagens por SKU/local e aprove ajustes de saldo com rastreabilidade.",
+        "href": "/wms/inventario",
+        "icon": "fa-clipboard-list-check",
+        "permission": "PAGE_WMS",
+        "section": "Logistica",
+        "tone": "cyan",
+        "priority": 86,
+        "keywords": ["wms", "inventario", "contagem", "acuracidade", "estoque"],
+        "metric_key": "wms_pendente",
+    },
+    {
         "id": "wms_enderecos",
         "title": "Cadastro de Endereços WMS",
         "subtitle": "Admin logística",
@@ -861,6 +875,12 @@ def wms_enderecamento_page():
 @permission_required("PAGE_WMS")
 def wms_coletor_page():
     return render_template("wms_coletor.html", user=session["username"])
+
+
+@page_bp.route("/wms/inventario")
+@permission_required("PAGE_WMS")
+def wms_inventario_page():
+    return render_template("wms_inventario.html", user=session["username"])
 
 
 @page_bp.route("/financeiro/faturamento")
