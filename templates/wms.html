@@ -1096,7 +1096,7 @@
                 </div>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <p class="muted" style="margin:0;">* Requisito: pelo menos uma Ordem (OS/OC). Quando a OC já estiver na NF, o sistema preenche sozinho.</p>
+                <p class="muted" style="margin:0;">* OS/OC sao opcionais para conciliacao. Para enderecar, basta informar o local de destino.</p>
                 <div style="display:flex; gap:10px;">
                     <button class="sap-btn" onclick="fecharModalEndereco()">Cancelar</button>
                     <button class="sap-btn primary" onclick="confirmarEnderecamento()"><i class="fas fa-check"></i> Confirmar</button>
@@ -1250,7 +1250,7 @@ function classePrioridade(prioridade) {
 function resumoVinculo(item) {
     if (item.ordem_servico_sugerida) return `OS ${item.ordem_servico_sugerida}`;
     if (item.ordem_compra_sugerida) return `OC ${item.ordem_compra_sugerida}`;
-    return item.ordem_vinculada ? 'Com vinculo' : 'Sem OS/OC';
+    return item.ordem_vinculada ? 'Com vinculo' : 'Pendente conciliacao ERP';
 }
 
 function renderListaCockpit(containerId, items, renderItem, emptyMessage) {
@@ -1676,8 +1676,8 @@ async function confirmarEnderecamento() {
     const ordem_servico = document.getElementById('modalOs').value.trim();
     const ordem_compra = document.getElementById('modalOc').value.trim();
 
-    if (!localizacao_id || (!ordem_servico && !ordem_compra)) {
-        alert('Preencha local de destino e OS/OC.');
+    if (!localizacao_id) {
+        alert('Preencha local de destino.');
         return;
     }
 

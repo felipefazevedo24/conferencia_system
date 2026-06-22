@@ -1010,6 +1010,8 @@ class ItemWMS(db.Model):
     codigo_grv = db.Column(db.String(80), index=True)
     ordem_servico = db.Column(db.String(80), index=True)
     ordem_compra = db.Column(db.String(80), index=True)
+    unidade_logistica_id = db.Column(db.Integer, db.ForeignKey("wms_unidade_logistica.id"), index=True)
+    status_estoque = db.Column(db.String(30), nullable=False, default="Disponivel", index=True)  # Disponivel|Bloqueado|Quarentena|Avaria|Qualidade
     localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
     usuario_armazenamento = db.Column(db.String(100))
     data_armazenamento = db.Column(db.DateTime)
@@ -1044,6 +1046,22 @@ class EstoqueWMS(db.Model):
     qtd_bloqueada = db.Column(db.Float, nullable=False, default=0.0)  # Quarentena, avaria, qualidade
     data_atualizacao = db.Column(db.DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
     __table_args__ = (db.UniqueConstraint("codigo_item", "localizacao_id", name="_sku_localizacao_uc"),)
+
+
+class WMSUnidadeLogistica(db.Model):
+    """Unidade logistica rastreavel: pallet, caixa, gaiola ou volume interno."""
+    __tablename__ = "wms_unidade_logistica"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    tipo = db.Column(db.String(20), nullable=False, default="PALLET", index=True)  # PALLET|CAIXA|GAIOLA|VOLUME
+    status = db.Column(db.String(20), nullable=False, default="Aberta", index=True)  # Aberta|Fechada|Movimentando|Concluida|Cancelada
+    deposito_id = db.Column(db.Integer, db.ForeignKey("deposito_wms.id"), index=True)
+    localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
+    observacao = db.Column(db.String(400))
+    criado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    fechado_em = db.Column(db.DateTime)
 
 
 class WMSIntegracaoEvento(db.Model):
@@ -1151,6 +1169,47 @@ class WMSTarefaOperacional(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     iniciado_em = db.Column(db.DateTime)
     concluido_em = db.Column(db.DateTime)
+
+
+class WMSInventarioCiclico(db.Model):
+    """Contagem ciclica operacional por SKU/local."""
+    __tablename__ = "wms_inventario_ciclico"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    status = db.Column(db.String(20), nullable=False, default="Aberto", index=True)  # Aberto|Contado|Aprovado|Rejeitado|Cancelado
+    localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), nullable=False, index=True)
+    codigo_item = db.Column(db.String(50), nullable=False, index=True)
+    qtd_sistema = db.Column(db.Float, nullable=False, default=0.0)
+    qtd_contada = db.Column(db.Float)
+    diferenca = db.Column(db.Float)
+    tarefa_id = db.Column(db.Integer, db.ForeignKey("wms_tarefa_operacional.id"), index=True)
+    criado_por = db.Column(db.String(100))
+    contado_por = db.Column(db.String(100))
+    aprovado_por = db.Column(db.String(100))
+    motivo = db.Column(db.String(400))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    contado_em = db.Column(db.DateTime)
+    aprovado_em = db.Column(db.DateTime)
+
+
+class WMSPedidoSeparacao(db.Model):
+    """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""
+    __tablename__ = "wms_pedido_separacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    referencia = db.Column(db.String(80), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default="Aberto", index=True)  # Aberto|Separando|Separado|Cancelado
+    codigo_item = db.Column(db.String(50), nullable=False, index=True)
+    qtd_solicitada = db.Column(db.Float, nullable=False, default=0.0)
+    qtd_separada = db.Column(db.Float, nullable=False, default=0.0)
+    localizacao_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
+    tarefa_id = db.Column(db.Integer, db.ForeignKey("wms_tarefa_operacional.id"), index=True)
+    criado_por = db.Column(db.String(100))
+    separado_por = db.Column(db.String(100))
+    observacao = db.Column(db.String(400))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    separado_em = db.Column(db.DateTime)
 
 
 

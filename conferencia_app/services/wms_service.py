@@ -15,8 +15,13 @@ from ..models import (
     WMSParametroOperacional,
     WMSReconciliacaoDivergencia,
     WMSAlertaOperacional,
+    WMSSkuMestre,
     DepositoWMS,
     WMSIntegracaoEvento,
+    WMSUnidadeLogistica,
+    WMSInventarioCiclico,
+    WMSPedidoSeparacao,
+    WMSTarefaOperacional,
 )
 
 
@@ -911,9 +916,6 @@ class WMSService:
         if not codigo_grv_final:
             return None
 
-        if not ordem_servico and not ordem_compra:
-            return None
-
         if not WMSService._can_transition_status(item_wms.status, 'Armazenado'):
             return None
 
@@ -1202,6 +1204,347 @@ class WMSService:
                 for d in divergencias_abertas
             ],
         }
+
+    @staticmethod
+    def sugerir_localizacao_inteligente(item_wms):
+        """Sugere endereco por preferencia de SKU, agrupamento existente e capacidade."""
+        if not item_wms:
+            return None
+        deposito_id = item_wms.deposito_id
+        qtd = float(item_wms.qtd_atual or 0)
+        sku = WMSSkuMestre.query.filter_by(codigo_item=item_wms.codigo_item, ativo=True).first()
+
+        candidatos = []
+        if sku and sku.endereco_preferencial:
+            loc = LocalizacaoArmazem.query.filter_by(codigo=str(sku.endereco_preferencial).strip(), ativo=True).first()
+            if loc:
+                candidatos.append((0, loc, "Endereco preferencial do SKU"))
+
+        existentes = (
+            db.session.query(LocalizacaoArmazem, func.sum(EstoqueWMS.qtd_total).label("saldo"))
+            .join(EstoqueWMS, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+            .filter(
+                EstoqueWMS.codigo_item == item_wms.codigo_item,
+                LocalizacaoArmazem.ativo == True,
+            )
+            .group_by(LocalizacaoArmazem.id)
+            .order_by(func.sum(EstoqueWMS.qtd_total).desc())
+            .limit(5)
+            .all()
+        )
+        for loc, saldo in existentes:
+            candidatos.append((1, loc, f"Mesmo SKU ja armazenado ({float(saldo or 0):.3f})"))
+
+        vazios = (
+            LocalizacaoArmazem.query
+            .filter(LocalizacaoArmazem.ativo == True)
+            .order_by(LocalizacaoArmazem.capacidade_atual.asc(), LocalizacaoArmazem.codigo.asc())
+            .limit(20)
+            .all()
+        )
+        for loc in vazios:
+            candidatos.append((2, loc, "Menor ocupacao disponivel"))
+
+        vistos = set()
+        for prioridade, loc, motivo in candidatos:
+            if not loc or loc.id in vistos:
+                continue
+            vistos.add(loc.id)
+            if deposito_id and loc.deposito_id and int(loc.deposito_id) != int(deposito_id):
+                continue
+            capacidade = float(loc.capacidade_maxima or 0) - float(loc.capacidade_atual or 0)
+            if qtd > capacidade:
+                continue
+            return {
+                "localizacao": loc,
+                "motivo": motivo,
+                "prioridade": prioridade,
+                "capacidade_disponivel": capacidade,
+            }
+        return None
+
+    @staticmethod
+    def criar_unidade_logistica(tipo, usuario, item_ids=None, codigo=None, localizacao_id=None, observacao=None):
+        tipo = str(tipo or "PALLET").strip().upper()
+        if tipo not in {"PALLET", "CAIXA", "GAIOLA", "VOLUME"}:
+            tipo = "VOLUME"
+        if not codigo:
+            codigo = f"{tipo[:3]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        codigo = str(codigo).strip().upper()
+        if not codigo or WMSUnidadeLogistica.query.filter_by(codigo=codigo).first():
+            return None
+
+        itens = []
+        if item_ids:
+            itens = ItemWMS.query.filter(ItemWMS.id.in_([int(i) for i in item_ids])).all()
+        deposito_id = next((i.deposito_id for i in itens if i.deposito_id), None)
+        unidade = WMSUnidadeLogistica(
+            codigo=codigo,
+            tipo=tipo,
+            status="Aberta",
+            deposito_id=deposito_id,
+            localizacao_id=localizacao_id,
+            observacao=observacao,
+            criado_por=usuario,
+        )
+        db.session.add(unidade)
+        db.session.flush()
+        for item in itens:
+            item.unidade_logistica_id = unidade.id
+            if localizacao_id and not item.localizacao_id:
+                item.localizacao_id = localizacao_id
+        db.session.commit()
+        return unidade
+
+    @staticmethod
+    def abrir_inventario_ciclico(localizacao_id, codigo_item, usuario, motivo=None):
+        loc = LocalizacaoArmazem.query.get(localizacao_id)
+        codigo_item = str(codigo_item or "").strip()
+        if not loc or not codigo_item:
+            return None
+        estoque = EstoqueWMS.query.filter_by(codigo_item=codigo_item, localizacao_id=loc.id).first()
+        qtd_sistema = float(estoque.qtd_total if estoque else 0)
+        inv = WMSInventarioCiclico(
+            codigo=f"INV-{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
+            localizacao_id=loc.id,
+            codigo_item=codigo_item,
+            qtd_sistema=qtd_sistema,
+            criado_por=usuario,
+            motivo=motivo,
+        )
+        tarefa = WMSTarefaOperacional(
+            tipo="INVENTARIO",
+            status="PENDENTE",
+            localizacao_origem_id=loc.id,
+            qtd_planejada=qtd_sistema,
+            prioridade="ALTA",
+            criado_por=usuario,
+            observacao=f"Contar {codigo_item} em {loc.codigo}",
+        )
+        db.session.add_all([inv, tarefa])
+        db.session.flush()
+        inv.tarefa_id = tarefa.id
+        db.session.commit()
+        return inv
+
+    @staticmethod
+    def registrar_contagem_inventario(inventario_id, qtd_contada, usuario, aprovar=False):
+        inv = WMSInventarioCiclico.query.get(inventario_id)
+        if not inv or inv.status not in {"Aberto", "Contado"}:
+            return None
+        qtd_contada = float(qtd_contada or 0)
+        inv.qtd_contada = qtd_contada
+        inv.diferenca = qtd_contada - float(inv.qtd_sistema or 0)
+        inv.status = "Aprovado" if aprovar else "Contado"
+        inv.contado_por = usuario
+        inv.contado_em = datetime.now()
+        if inv.tarefa_id:
+            tarefa = WMSTarefaOperacional.query.get(inv.tarefa_id)
+            if tarefa:
+                tarefa.status = "CONCLUIDA" if aprovar else "EM_EXECUCAO"
+                tarefa.qtd_executada = qtd_contada
+                tarefa.concluido_por = usuario if aprovar else None
+                tarefa.concluido_em = datetime.now() if aprovar else None
+        if abs(float(inv.diferenca or 0)) > 0:
+            db.session.add(
+                WMSReconciliacaoDivergencia(
+                    numero_nota="INVENTARIO",
+                    codigo_item=inv.codigo_item,
+                    qtd_erp=inv.qtd_sistema,
+                    qtd_wms=qtd_contada,
+                    diferenca=inv.diferenca,
+                    origem="InventarioCiclico",
+                    observacao=f"Contagem {inv.codigo}",
+                )
+            )
+        if aprovar:
+            estoque = EstoqueWMS.query.filter_by(codigo_item=inv.codigo_item, localizacao_id=inv.localizacao_id).first()
+            if estoque:
+                estoque.qtd_total = qtd_contada
+                estoque.data_atualizacao = datetime.now()
+            else:
+                db.session.add(EstoqueWMS(codigo_item=inv.codigo_item, localizacao_id=inv.localizacao_id, qtd_total=qtd_contada))
+            inv.aprovado_por = usuario
+            inv.aprovado_em = datetime.now()
+        db.session.commit()
+        return inv
+
+    @staticmethod
+    def bloquear_estoque(codigo_item, localizacao_id, qtd, usuario, motivo=None, status="Bloqueado"):
+        estoque = EstoqueWMS.query.filter_by(codigo_item=str(codigo_item).strip(), localizacao_id=int(localizacao_id)).first()
+        qtd = float(qtd or 0)
+        if not estoque or qtd <= 0 or qtd > float((estoque.qtd_total or 0) - (estoque.qtd_bloqueada or 0)):
+            return None
+        item = ItemWMS.query.filter_by(codigo_item=estoque.codigo_item, localizacao_id=localizacao_id).first()
+        if not item:
+            return None
+        estoque.qtd_bloqueada = float(estoque.qtd_bloqueada or 0) + qtd
+        estoque.data_atualizacao = datetime.now()
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item.id,
+                numero_nota="BLOQUEIO",
+                tipo_movimentacao=status,
+                localizacao_origem_id=localizacao_id,
+                localizacao_destino_id=localizacao_id,
+                qtd_movimentada=qtd,
+                motivo=motivo or status,
+                usuario=usuario,
+            )
+        )
+        db.session.commit()
+        return estoque
+
+    @staticmethod
+    def movimentar_estoque_guiado(codigo_item, origem_id, destino_id, qtd, usuario, motivo=None):
+        origem = EstoqueWMS.query.filter_by(codigo_item=str(codigo_item).strip(), localizacao_id=int(origem_id)).first()
+        destino_loc = LocalizacaoArmazem.query.get(destino_id)
+        qtd = float(qtd or 0)
+        if not origem or not destino_loc or qtd <= 0 or qtd > float(origem.qtd_total or 0):
+            return None
+        capacidade = float(destino_loc.capacidade_maxima or 0) - float(destino_loc.capacidade_atual or 0)
+        if qtd > capacidade:
+            return None
+        item = ItemWMS.query.filter_by(codigo_item=origem.codigo_item, localizacao_id=int(origem_id)).first()
+        if not item:
+            return None
+        destino = EstoqueWMS.query.filter_by(codigo_item=origem.codigo_item, localizacao_id=int(destino_id)).first()
+        if not destino:
+            destino = EstoqueWMS(codigo_item=origem.codigo_item, localizacao_id=int(destino_id), qtd_total=0, qtd_separada=0, qtd_bloqueada=0)
+            db.session.add(destino)
+        origem.qtd_total = float(origem.qtd_total or 0) - qtd
+        destino.qtd_total = float(destino.qtd_total or 0) + qtd
+        loc_origem = LocalizacaoArmazem.query.get(origem_id)
+        if loc_origem:
+            loc_origem.capacidade_atual = max(float(loc_origem.capacidade_atual or 0) - qtd, 0)
+        destino_loc.capacidade_atual = float(destino_loc.capacidade_atual or 0) + qtd
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item.id,
+                numero_nota=item.numero_nota,
+                tipo_movimentacao="Reposicionamento",
+                localizacao_origem_id=int(origem_id),
+                localizacao_destino_id=int(destino_id),
+                qtd_movimentada=qtd,
+                motivo=motivo or "Movimentacao guiada por coletor",
+                usuario=usuario,
+            )
+        )
+        db.session.commit()
+        return destino
+
+    @staticmethod
+    def criar_pedido_separacao(referencia, codigo_item, qtd, usuario, observacao=None):
+        codigo_item = str(codigo_item or "").strip()
+        qtd = float(qtd or 0)
+        if not referencia or not codigo_item or qtd <= 0:
+            return None
+        estoque = (
+            EstoqueWMS.query
+            .filter(EstoqueWMS.codigo_item == codigo_item)
+            .order_by((EstoqueWMS.qtd_total - EstoqueWMS.qtd_separada - EstoqueWMS.qtd_bloqueada).desc())
+            .first()
+        )
+        if not estoque or float((estoque.qtd_total or 0) - (estoque.qtd_separada or 0) - (estoque.qtd_bloqueada or 0)) < qtd:
+            return None
+        estoque.qtd_separada = float(estoque.qtd_separada or 0) + qtd
+        pedido = WMSPedidoSeparacao(
+            referencia=str(referencia).strip(),
+            codigo_item=codigo_item,
+            qtd_solicitada=qtd,
+            localizacao_id=estoque.localizacao_id,
+            criado_por=usuario,
+            observacao=observacao,
+        )
+        tarefa = WMSTarefaOperacional(
+            tipo="SEPARACAO",
+            status="PENDENTE",
+            localizacao_origem_id=estoque.localizacao_id,
+            qtd_planejada=qtd,
+            prioridade="MEDIA",
+            criado_por=usuario,
+            observacao=f"Separar {qtd:g} de {codigo_item} para {referencia}",
+        )
+        db.session.add_all([pedido, tarefa])
+        db.session.flush()
+        pedido.tarefa_id = tarefa.id
+        db.session.commit()
+        return pedido
+
+    @staticmethod
+    def confirmar_separacao(pedido_id, usuario):
+        pedido = WMSPedidoSeparacao.query.get(pedido_id)
+        if not pedido or pedido.status in {"Separado", "Cancelado"}:
+            return None
+        estoque = EstoqueWMS.query.filter_by(codigo_item=pedido.codigo_item, localizacao_id=pedido.localizacao_id).first()
+        if not estoque:
+            return None
+        qtd = float(pedido.qtd_solicitada or 0)
+        estoque.qtd_total = max(float(estoque.qtd_total or 0) - qtd, 0)
+        estoque.qtd_separada = max(float(estoque.qtd_separada or 0) - qtd, 0)
+        pedido.qtd_separada = qtd
+        pedido.status = "Separado"
+        pedido.separado_por = usuario
+        pedido.separado_em = datetime.now()
+        if pedido.tarefa_id:
+            tarefa = WMSTarefaOperacional.query.get(pedido.tarefa_id)
+            if tarefa:
+                tarefa.status = "CONCLUIDA"
+                tarefa.qtd_executada = qtd
+                tarefa.concluido_por = usuario
+                tarefa.concluido_em = datetime.now()
+        item = ItemWMS.query.filter_by(codigo_item=pedido.codigo_item, localizacao_id=pedido.localizacao_id).first()
+        if not item:
+            return None
+        db.session.add(
+            MovimentacaoWMS(
+                item_wms_id=item.id,
+                numero_nota=pedido.referencia,
+                tipo_movimentacao="Separacao",
+                localizacao_origem_id=pedido.localizacao_id,
+                qtd_movimentada=qtd,
+                motivo="Picking confirmado",
+                usuario=usuario,
+            )
+        )
+        db.session.commit()
+        return pedido
+
+    @staticmethod
+    def produtividade_operadores(dias=7):
+        inicio = datetime.now() - timedelta(days=int(dias or 7))
+        movs = (
+            db.session.query(
+                MovimentacaoWMS.usuario,
+                func.count(MovimentacaoWMS.id).label("movimentacoes"),
+                func.sum(MovimentacaoWMS.qtd_movimentada).label("qtd_total"),
+            )
+            .filter(MovimentacaoWMS.data_movimentacao >= inicio)
+            .group_by(MovimentacaoWMS.usuario)
+            .all()
+        )
+        tarefas = (
+            db.session.query(
+                WMSTarefaOperacional.concluido_por,
+                func.count(WMSTarefaOperacional.id).label("tarefas"),
+            )
+            .filter(WMSTarefaOperacional.concluido_em >= inicio, WMSTarefaOperacional.concluido_por.isnot(None))
+            .group_by(WMSTarefaOperacional.concluido_por)
+            .all()
+        )
+        mapa = {}
+        for row in movs:
+            mapa[row.usuario or "Sistema"] = {
+                "usuario": row.usuario or "Sistema",
+                "movimentacoes": int(row.movimentacoes or 0),
+                "qtd_total": float(row.qtd_total or 0),
+                "tarefas_concluidas": 0,
+            }
+        for row in tarefas:
+            usuario = row.concluido_por or "Sistema"
+            mapa.setdefault(usuario, {"usuario": usuario, "movimentacoes": 0, "qtd_total": 0.0, "tarefas_concluidas": 0})
+            mapa[usuario]["tarefas_concluidas"] = int(row.tarefas or 0)
+        return sorted(mapa.values(), key=lambda x: (x["tarefas_concluidas"], x["movimentacoes"], x["qtd_total"]), reverse=True)
 
     @staticmethod
     def analisar_pendencia_enderecamento(item):

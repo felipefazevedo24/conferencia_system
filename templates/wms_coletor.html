@@ -24,6 +24,11 @@
     .collector-result { border:1px solid #dbeafe; background:#f8fbff; border-radius:14px; padding:13px; min-height:74px; }
     .collector-result strong { display:block; font-size:15px; color:#0f172a; }
     .collector-result small { display:block; color:var(--wms-muted); margin-top:4px; line-height:1.4; }
+    .collector-item-head { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:start; }
+    .collector-qty { min-width:96px; border:1px solid #bbf7d0; background:#f0fdf4; color:#14532d; border-radius:13px; padding:8px 10px; text-align:center; }
+    .collector-qty span { display:block; font-size:10px; line-height:1; font-weight:900; text-transform:uppercase; letter-spacing:.5px; color:#15803d; }
+    .collector-qty strong { font-size:24px; line-height:1.08; color:#14532d; }
+    .collector-qty small { margin:1px 0 0; color:#166534; font-size:11px; font-weight:800; }
     .collector-pill { display:inline-flex; align-items:center; border-radius:999px; padding:4px 9px; font-size:10px; font-weight:800; background:#eff6ff; color:#1d4ed8; text-transform:uppercase; margin:4px 5px 0 0; }
     .collector-pill.ok { background:#dcfce7; color:#166534; }
     .collector-pill.warn { background:#ffedd5; color:#9a3412; }
@@ -42,6 +47,8 @@
         .collector-hero { align-items:flex-start; flex-direction:column; }
         .collector-grid { grid-template-columns:1fr; }
         .collector-scan { grid-template-columns:1fr; }
+        .collector-item-head { grid-template-columns:1fr; }
+        .collector-qty { width:100%; }
         .collector-input { font-size:16px; }
         .collector-btn { width:100%; }
     }
@@ -145,16 +152,40 @@
         statusBox.className = `collector-status show ${tipo}`;
         statusBox.textContent = msg;
     }
+    function formatQtd(valor) {
+        return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+    }
+    function totalQtd(lista) {
+        return (lista || []).reduce((soma, item) => soma + Number(item?.qtd_atual || 0), 0);
+    }
+    function quantidadeBox(item) {
+        return `<div class="collector-qty">
+            <span>Qtd</span>
+            <strong>${formatQtd(item?.qtd_atual)}</strong>
+            <small>${htmlEscape(item?.unidade || 'UN')}</small>
+        </div>`;
+    }
     function itemResumo(item) {
         if (!item) return '<strong>Sem item</strong><small>Nenhum item selecionado.</small>';
         return `<strong>${htmlEscape(item.codigo_item)} · NF ${htmlEscape(item.numero_nota)}</strong>
             <small>${htmlEscape(item.descricao || '-')}<br>Qtd: ${Number(item.qtd_atual || 0).toLocaleString('pt-BR')} ${htmlEscape(item.unidade || '')} · Depósito: ${htmlEscape(item.deposito_codigo || '-')}</small>
             ${item.localizacao_codigo ? `<span class="collector-pill ok">${htmlEscape(item.localizacao_codigo)}</span>` : '<span class="collector-pill warn">Pendente</span>'}`;
     }
+    function itemResumoColetor(item) {
+        if (!item) return '<strong>Sem item</strong><small>Nenhum item selecionado.</small>';
+        return `<div class="collector-item-head">
+                <div>
+                    <strong>${htmlEscape(item.codigo_item)} - NF ${htmlEscape(item.numero_nota)}</strong>
+                    <small>${htmlEscape(item.descricao || '-')}<br>Deposito: ${htmlEscape(item.deposito_codigo || '-')}</small>
+                </div>
+                ${quantidadeBox(item)}
+            </div>
+            ${item.localizacao_codigo ? `<span class="collector-pill ok">${htmlEscape(item.localizacao_codigo)}</span>` : '<span class="collector-pill warn">Pendente</span>'}`;
+    }
     function selecionarItem(item, tarefa = null) {
         itemSelecionado = item;
         tarefaSelecionada = tarefa;
-        tarefaBox.innerHTML = itemResumo(item);
+        tarefaBox.innerHTML = itemResumoColetor(item);
         document.querySelectorAll('.collector-item').forEach(el => el.classList.toggle('active', Number(el.dataset.id) === Number(item?.id)));
         status(`Item ${item.codigo_item} selecionado. Agora bipe o local de destino.`, 'info');
         localInput.focus();
@@ -168,9 +199,9 @@
             <div class="collector-item" data-id="${item.id}">
                 <div class="collector-item-top">
                     <span>${htmlEscape(item.codigo_item)}</span>
-                    <span class="collector-pill warn">${htmlEscape(item.prioridade_operacional || item.status || 'Pendente')}</span>
+                    <span class="collector-pill ok">Qtd ${formatQtd(item.qtd_atual)} ${htmlEscape(item.unidade || 'UN')}</span>
                 </div>
-                <div class="collector-item-sub">NF ${htmlEscape(item.numero_nota)} · ${htmlEscape(item.descricao || '-')} · Qtd ${Number(item.qtd_atual || 0).toLocaleString('pt-BR')} · Dep. ${htmlEscape(item.deposito_codigo || '-')}</div>
+                <div class="collector-item-sub">NF ${htmlEscape(item.numero_nota)} - ${htmlEscape(item.descricao || '-')} - Dep. ${htmlEscape(item.deposito_codigo || '-')} - ${htmlEscape(item.prioridade_operacional || item.status || 'Pendente')}</div>
             </div>
         `).join('');
         pendentesList.querySelectorAll('.collector-item').forEach(el => {
@@ -199,14 +230,14 @@
             status('Local validado. Confira o item e confirme.', 'ok');
         } else if (data.tipo === 'ITEM_WMS') {
             selecionarItem(data.item);
-            resultadoBox.innerHTML = itemResumo(data.item) + (data.localizacao_sugerida ? `<small>Sugestão: ${htmlEscape(data.localizacao_sugerida.codigo)}</small>` : '');
+            resultadoBox.innerHTML = itemResumoColetor(data.item) + (data.localizacao_sugerida ? `<small>Sugestao: ${htmlEscape(data.localizacao_sugerida.codigo)}${data.sugestao_motivo ? ` - ${htmlEscape(data.sugestao_motivo)}` : ''}</small>` : '');
         } else if (data.tipo === 'NOTA') {
             renderPendentes(data.pendentes || []);
-            resultadoBox.innerHTML = `<strong>NF ${htmlEscape(data.numero_nota)}</strong><small>${(data.pendentes || []).length} pendente(s), ${(data.enderecados || []).length} endereçado(s).</small>`;
+            resultadoBox.innerHTML = `<strong>NF ${htmlEscape(data.numero_nota)}</strong><small>${(data.pendentes || []).length} pendente(s), qtd total pendente ${formatQtd(totalQtd(data.pendentes || []))}, ${(data.enderecados || []).length} enderecado(s).</small>`;
             status('NF encontrada. Selecione uma pendência.', 'info');
         } else if (data.tipo === 'SKU') {
             renderPendentes(data.pendentes || []);
-            resultadoBox.innerHTML = `<strong>SKU ${htmlEscape(data.codigo_item)}</strong><small>${(data.estoque || []).length} endereço(s) com saldo, ${(data.pendentes || []).length} pendência(s).</small>`;
+            resultadoBox.innerHTML = `<strong>SKU ${htmlEscape(data.codigo_item)}</strong><small>${(data.estoque || []).length} endereco(s) com saldo, ${(data.pendentes || []).length} pendencia(s), qtd pendente ${formatQtd(totalQtd(data.pendentes || []))}.</small>`;
             status('SKU encontrado.', 'info');
         } else {
             resultadoBox.innerHTML = `<strong>${htmlEscape(data.codigo)}</strong><small>${htmlEscape(data.mensagem || 'Código não identificado.')}</small>`;

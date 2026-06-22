@@ -19,6 +19,9 @@ from ..models import (
     WMSTarefaOperacional,
     WMSIntegracaoEvento,
     DepositoWMS,
+    WMSUnidadeLogistica,
+    WMSInventarioCiclico,
+    WMSPedidoSeparacao,
 )
 from ..services import InventreeService, WMSService
 
@@ -79,17 +82,77 @@ def _item_wms_payload(item):
         'numero_nota': item.numero_nota,
         'codigo_item': item.codigo_item,
         'descricao': item.descricao,
+        'qtd_recebida': item.qtd_recebida,
         'qtd_atual': item.qtd_atual,
         'unidade': item.unidade,
         'status': item.status,
         'codigo_grv': item.codigo_grv,
         'ordem_servico': item.ordem_servico,
         'ordem_compra': item.ordem_compra,
+        'unidade_logistica_id': item.unidade_logistica_id,
+        'status_estoque': getattr(item, 'status_estoque', 'Disponivel'),
         'deposito_id': item.deposito_id,
         'deposito_codigo': deposito.codigo if deposito else None,
         'deposito_nome': deposito.nome if deposito else None,
         'localizacao_id': item.localizacao_id,
         'localizacao_codigo': localizacao.codigo if localizacao else None,
+    }
+
+
+def _unidade_logistica_payload(unidade):
+    if not unidade:
+        return None
+    loc = LocalizacaoArmazem.query.get(unidade.localizacao_id) if unidade.localizacao_id else None
+    itens = ItemWMS.query.filter_by(unidade_logistica_id=unidade.id, ativo=True).all()
+    return {
+        'id': unidade.id,
+        'codigo': unidade.codigo,
+        'tipo': unidade.tipo,
+        'status': unidade.status,
+        'localizacao_id': unidade.localizacao_id,
+        'localizacao_codigo': loc.codigo if loc else None,
+        'qtd_itens': len(itens),
+        'qtd_total': sum(float(i.qtd_atual or 0) for i in itens),
+        'criado_por': unidade.criado_por,
+        'criado_em': unidade.criado_em.isoformat() if unidade.criado_em else None,
+    }
+
+
+def _inventario_payload(inv):
+    if not inv:
+        return None
+    loc = LocalizacaoArmazem.query.get(inv.localizacao_id) if inv.localizacao_id else None
+    return {
+        'id': inv.id,
+        'codigo': inv.codigo,
+        'status': inv.status,
+        'codigo_item': inv.codigo_item,
+        'localizacao_id': inv.localizacao_id,
+        'localizacao_codigo': loc.codigo if loc else None,
+        'qtd_sistema': inv.qtd_sistema,
+        'qtd_contada': inv.qtd_contada,
+        'diferenca': inv.diferenca,
+        'tarefa_id': inv.tarefa_id,
+        'motivo': inv.motivo,
+        'criado_em': inv.criado_em.isoformat() if inv.criado_em else None,
+    }
+
+
+def _separacao_payload(pedido):
+    if not pedido:
+        return None
+    loc = LocalizacaoArmazem.query.get(pedido.localizacao_id) if pedido.localizacao_id else None
+    return {
+        'id': pedido.id,
+        'referencia': pedido.referencia,
+        'status': pedido.status,
+        'codigo_item': pedido.codigo_item,
+        'qtd_solicitada': pedido.qtd_solicitada,
+        'qtd_separada': pedido.qtd_separada,
+        'localizacao_id': pedido.localizacao_id,
+        'localizacao_codigo': loc.codigo if loc else None,
+        'tarefa_id': pedido.tarefa_id,
+        'criado_em': pedido.criado_em.isoformat() if pedido.criado_em else None,
     }
 
 
@@ -934,14 +997,18 @@ def coletor_bipar():
         ).order_by(ItemWMS.id.desc()).first()
     if item:
         sugestao = None
+        sugestao_motivo = None
         if item.deposito_id:
-            sugestao_resp = sugerir_localizacao_para_item(item)
-            sugestao = _localizacao_payload(sugestao_resp) if sugestao_resp else None
+            sugestao_resp = WMSService.sugerir_localizacao_inteligente(item)
+            if sugestao_resp:
+                sugestao = _localizacao_payload(sugestao_resp['localizacao'])
+                sugestao_motivo = sugestao_resp.get('motivo')
         return jsonify({
             'tipo': 'ITEM_WMS',
             'codigo': codigo,
             'item': _item_wms_payload(item),
             'localizacao_sugerida': sugestao,
+            'sugestao_motivo': sugestao_motivo,
             'proximas_acoes': ['BIPAR_LOCAL_DESTINO'] if item.localizacao_id is None else ['CONSULTAR_ITEM', 'MOVIMENTAR'],
         }), 200
 
@@ -1129,9 +1196,6 @@ def coletor_enderecar():
         ).order_by(ItemNota.id.desc()).first()
         if item_nota and item_nota.pedido_compra:
             ordem_compra = str(item_nota.pedido_compra).strip()
-    if not ordem_servico and not ordem_compra:
-        return jsonify({'erro': 'Informe ou vincule OS/OC antes de enderecar.'}), 400
-
     if tarefa and tarefa.status == 'PENDENTE':
         tarefa.status = 'EM_EXECUCAO'
         tarefa.iniciado_por = usuario
@@ -1164,6 +1228,171 @@ def coletor_enderecar():
         'localizacao': _localizacao_payload(loc),
         'tarefa': _tarefa_payload(tarefa) if tarefa else None,
     }), 200
+
+
+@wms_bp.route('/unidades-logisticas', methods=['GET', 'POST'])
+@requer_wms_operacao
+def unidades_logisticas():
+    usuario = session.get('username', 'Sistema')
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        unidade = WMSService.criar_unidade_logistica(
+            tipo=data.get('tipo'),
+            usuario=usuario,
+            item_ids=data.get('item_ids') or [],
+            codigo=data.get('codigo'),
+            localizacao_id=data.get('localizacao_id') or None,
+            observacao=data.get('observacao'),
+        )
+        if not unidade:
+            return jsonify({'erro': 'Nao foi possivel criar unidade logistica. Verifique codigo, tipo e itens.'}), 400
+        return jsonify({'sucesso': True, 'unidade': _unidade_logistica_payload(unidade)}), 201
+
+    status = (request.args.get('status') or '').strip()
+    query = WMSUnidadeLogistica.query
+    if status:
+        query = query.filter_by(status=status)
+    return jsonify([_unidade_logistica_payload(u) for u in query.order_by(WMSUnidadeLogistica.criado_em.desc()).limit(100).all()]), 200
+
+
+@wms_bp.route('/itens/<int:item_wms_id>/sugestao-endereco', methods=['GET'])
+@requer_wms_operacao
+def sugestao_endereco_item(item_wms_id):
+    item = ItemWMS.query.get(item_wms_id)
+    sugestao = WMSService.sugerir_localizacao_inteligente(item)
+    if not sugestao:
+        return jsonify({'sugestao': None, 'mensagem': 'Nenhum endereco compativel encontrado.'}), 200
+    return jsonify({
+        'sugestao': {
+            'localizacao': _localizacao_payload(sugestao['localizacao']),
+            'motivo': sugestao['motivo'],
+            'capacidade_disponivel': sugestao['capacidade_disponivel'],
+        }
+    }), 200
+
+
+@wms_bp.route('/inventarios-ciclicos', methods=['GET', 'POST'])
+@requer_wms_operacao
+def inventarios_ciclicos():
+    usuario = session.get('username', 'Sistema')
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        loc = None
+        if data.get('localizacao_id'):
+            loc = LocalizacaoArmazem.query.get(int(data.get('localizacao_id')))
+        elif data.get('localizacao_codigo'):
+            loc = _localizacao_por_codigo(data.get('localizacao_codigo'))
+        inv = WMSService.abrir_inventario_ciclico(
+            localizacao_id=loc.id if loc else None,
+            codigo_item=data.get('codigo_item'),
+            usuario=usuario,
+            motivo=data.get('motivo'),
+        )
+        if not inv:
+            return jsonify({'erro': 'Informe SKU e localizacao validos para abrir contagem.'}), 400
+        return jsonify({'sucesso': True, 'inventario': _inventario_payload(inv)}), 201
+
+    status = (request.args.get('status') or '').strip()
+    query = WMSInventarioCiclico.query
+    if status:
+        query = query.filter_by(status=status)
+    return jsonify([_inventario_payload(i) for i in query.order_by(WMSInventarioCiclico.criado_em.desc()).limit(100).all()]), 200
+
+
+@wms_bp.route('/inventarios-ciclicos/<int:inventario_id>/contar', methods=['POST'])
+@requer_wms_operacao
+def contar_inventario_ciclico(inventario_id):
+    data = request.get_json() or {}
+    inv = WMSService.registrar_contagem_inventario(
+        inventario_id,
+        data.get('qtd_contada'),
+        session.get('username', 'Sistema'),
+        aprovar=bool(data.get('aprovar')),
+    )
+    if not inv:
+        return jsonify({'erro': 'Inventario nao encontrado ou ja finalizado.'}), 400
+    return jsonify({'sucesso': True, 'inventario': _inventario_payload(inv)}), 200
+
+
+@wms_bp.route('/estoque/bloquear', methods=['POST'])
+@requer_wms_operacao
+def bloquear_estoque_wms():
+    data = request.get_json() or {}
+    loc = LocalizacaoArmazem.query.get(int(data.get('localizacao_id'))) if data.get('localizacao_id') else _localizacao_por_codigo(data.get('localizacao_codigo'))
+    if not loc:
+        return jsonify({'erro': 'Localizacao nao encontrada.'}), 400
+    estoque = WMSService.bloquear_estoque(
+        data.get('codigo_item'),
+        loc.id if loc else None,
+        data.get('qtd'),
+        session.get('username', 'Sistema'),
+        motivo=data.get('motivo'),
+        status=data.get('status') or 'Bloqueado',
+    )
+    if not estoque:
+        return jsonify({'erro': 'Nao foi possivel bloquear: saldo insuficiente ou item sem rastreio local.'}), 400
+    return jsonify({'sucesso': True, 'estoque': {'codigo_item': estoque.codigo_item, 'qtd_total': estoque.qtd_total, 'qtd_bloqueada': estoque.qtd_bloqueada}}), 200
+
+
+@wms_bp.route('/estoque/movimentar', methods=['POST'])
+@requer_wms_operacao
+def movimentar_estoque_wms():
+    data = request.get_json() or {}
+    origem = LocalizacaoArmazem.query.get(int(data.get('origem_id'))) if data.get('origem_id') else _localizacao_por_codigo(data.get('origem_codigo'))
+    destino = LocalizacaoArmazem.query.get(int(data.get('destino_id'))) if data.get('destino_id') else _localizacao_por_codigo(data.get('destino_codigo'))
+    if not origem or not destino:
+        return jsonify({'erro': 'Localizacao de origem ou destino nao encontrada.'}), 400
+    estoque = WMSService.movimentar_estoque_guiado(
+        data.get('codigo_item'),
+        origem.id if origem else None,
+        destino.id if destino else None,
+        data.get('qtd'),
+        session.get('username', 'Sistema'),
+        motivo=data.get('motivo'),
+    )
+    if not estoque:
+        return jsonify({'erro': 'Nao foi possivel movimentar: saldo, local ou item rastreavel invalido.'}), 400
+    return jsonify({'sucesso': True, 'destino': {'codigo_item': estoque.codigo_item, 'localizacao_id': estoque.localizacao_id, 'qtd_total': estoque.qtd_total}}), 200
+
+
+@wms_bp.route('/separacoes', methods=['GET', 'POST'])
+@requer_wms_operacao
+def separacoes_wms():
+    usuario = session.get('username', 'Sistema')
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        pedido = WMSService.criar_pedido_separacao(
+            data.get('referencia'),
+            data.get('codigo_item'),
+            data.get('qtd'),
+            usuario,
+            observacao=data.get('observacao'),
+        )
+        if not pedido:
+            return jsonify({'erro': 'Saldo disponivel insuficiente para criar separacao.'}), 400
+        return jsonify({'sucesso': True, 'separacao': _separacao_payload(pedido)}), 201
+
+    status = (request.args.get('status') or '').strip()
+    query = WMSPedidoSeparacao.query
+    if status:
+        query = query.filter_by(status=status)
+    return jsonify([_separacao_payload(p) for p in query.order_by(WMSPedidoSeparacao.criado_em.desc()).limit(100).all()]), 200
+
+
+@wms_bp.route('/separacoes/<int:pedido_id>/confirmar', methods=['POST'])
+@requer_wms_operacao
+def confirmar_separacao_wms(pedido_id):
+    pedido = WMSService.confirmar_separacao(pedido_id, session.get('username', 'Sistema'))
+    if not pedido:
+        return jsonify({'erro': 'Nao foi possivel confirmar separacao.'}), 400
+    return jsonify({'sucesso': True, 'separacao': _separacao_payload(pedido)}), 200
+
+
+@wms_bp.route('/produtividade', methods=['GET'])
+@requer_wms_operacao
+def produtividade_wms():
+    dias = int(request.args.get('dias') or 7)
+    return jsonify({'dias': dias, 'operadores': WMSService.produtividade_operadores(dias=dias)}), 200
 
 
 @wms_bp.route('/cockpit', methods=['GET'])
@@ -1293,9 +1522,6 @@ def enderecar_item_manual():
         ).order_by(ItemNota.id.desc()).first()
         if item_nota and item_nota.pedido_compra:
             ordem_compra = str(item_nota.pedido_compra).strip()
-
-    if not ordem_servico and not ordem_compra:
-        return jsonify({'erro': 'Não encontramos OS/OC para este item. Vincule o pedido na NF ou informe manualmente.'}), 400
 
     item = WMSService.enderecar_item_pendente(
         item_wms_id,
@@ -1855,6 +2081,20 @@ def preview_estoque_erp():
     limite = min(int(request.args.get('limite') or 200), 500)
     try:
         resultado = ERPSyncService.preview_estoque_erp(filtro=filtro, limite=limite)
+        return jsonify(resultado), 200
+    except Exception as exc:
+        return jsonify({'erro': str(exc)}), 502
+
+
+@wms_bp.route('/erp-sync/diagnostico', methods=['GET'])
+@requer_wms_operacao
+def diagnostico_estoque_erp_wms():
+    """Compara o estoque atual do ERP/Postgres com o consolidado local do WMS."""
+    from ..services.erp_sync_service import ERPSyncService
+    filtro = (request.args.get('filtro') or '').strip() or None
+    limite = min(int(request.args.get('limite') or 100), 500)
+    try:
+        resultado = ERPSyncService.diagnosticar_estoque_postgres_vs_wms(filtro=filtro, limite=limite)
         return jsonify(resultado), 200
     except Exception as exc:
         return jsonify({'erro': str(exc)}), 502

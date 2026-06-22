@@ -460,6 +460,124 @@ class ERPSyncService:
     # ── sincronização completa ───────────────────────────────────────────
 
     @classmethod
+    def comparar_estoque_erp_wms(cls, itens_erp, filtro=None, limite=100):
+        """Compara snapshot vivo do ERP com o saldo consolidado local do WMS."""
+        filtro_norm = (filtro or "").strip().lower()
+
+        def _chave(codigo, localizacao):
+            return ((codigo or "").strip().lower(), (localizacao or "").strip().upper())
+
+        def _inclui(codigo, localizacao, descricao=""):
+            if not filtro_norm:
+                return True
+            texto = " ".join([str(codigo or ""), str(localizacao or ""), str(descricao or "")]).lower()
+            return filtro_norm in texto
+
+        erp_por_chave = {}
+        for item in itens_erp or []:
+            codigo = (item.get("codigo_interno") or "").strip()
+            localizacao = (item.get("localizacao_estoque") or "").strip()
+            if not codigo or not localizacao or not _inclui(codigo, localizacao, item.get("item")):
+                continue
+            chave = _chave(codigo, localizacao)
+            atual = erp_por_chave.setdefault(
+                chave,
+                {
+                    "codigo_item": codigo,
+                    "localizacao": localizacao.upper(),
+                    "descricao": item.get("item") or "",
+                    "qtd_erp": 0.0,
+                    "qtd_reservada_erp": 0.0,
+                },
+            )
+            atual["qtd_erp"] += float(item.get("qtde_total") or 0)
+            atual["qtd_reservada_erp"] += float(item.get("qtde_reservada") or 0)
+
+        wms_por_chave = {}
+        registros = (
+            db.session.query(EstoqueWMS, LocalizacaoArmazem)
+            .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+            .all()
+        )
+        for estoque, loc in registros:
+            codigo = (estoque.codigo_item or "").strip()
+            localizacao = (loc.codigo or "").strip()
+            if not codigo or not localizacao or not _inclui(codigo, localizacao):
+                continue
+            chave = _chave(codigo, localizacao)
+            atual = wms_por_chave.setdefault(
+                chave,
+                {
+                    "codigo_item": codigo,
+                    "localizacao": localizacao.upper(),
+                    "qtd_wms": 0.0,
+                    "qtd_separada_wms": 0.0,
+                },
+            )
+            atual["qtd_wms"] += float(estoque.qtd_total or 0)
+            atual["qtd_separada_wms"] += float(estoque.qtd_separada or 0)
+
+        divergencias = []
+        resumo = {
+            "faltando_no_wms": 0,
+            "sobrando_no_wms": 0,
+            "quantidade_divergente": 0,
+            "ok": 0,
+            "total_divergencias": 0,
+        }
+        for chave in sorted(set(erp_por_chave) | set(wms_por_chave)):
+            erp = erp_por_chave.get(chave)
+            wms = wms_por_chave.get(chave)
+            qtd_erp = float((erp or {}).get("qtd_erp") or 0)
+            qtd_wms = float((wms or {}).get("qtd_wms") or 0)
+            diferenca = round(qtd_wms - qtd_erp, 6)
+
+            if erp and wms and abs(diferenca) < 0.000001:
+                resumo["ok"] += 1
+                continue
+            if erp and not wms:
+                tipo = "FALTANDO_NO_WMS"
+                resumo["faltando_no_wms"] += 1
+            elif wms and not erp:
+                tipo = "SOBRANDO_NO_WMS"
+                resumo["sobrando_no_wms"] += 1
+            else:
+                tipo = "QUANTIDADE_DIVERGENTE"
+                resumo["quantidade_divergente"] += 1
+
+            base = erp or wms or {}
+            divergencias.append(
+                {
+                    "tipo": tipo,
+                    "codigo_item": base.get("codigo_item") or chave[0],
+                    "localizacao": base.get("localizacao") or chave[1],
+                    "descricao": (erp or {}).get("descricao") or "",
+                    "qtd_erp": qtd_erp,
+                    "qtd_wms": qtd_wms,
+                    "diferenca_wms_menos_erp": diferenca,
+                    "qtd_reservada_erp": float((erp or {}).get("qtd_reservada_erp") or 0),
+                    "qtd_separada_wms": float((wms or {}).get("qtd_separada_wms") or 0),
+                }
+            )
+
+        resumo["total_divergencias"] = len(divergencias)
+        return {
+            "resumo": resumo,
+            "divergencias": divergencias[: max(int(limite or 100), 0)],
+            "limite": limite,
+            "total_erp": len(erp_por_chave),
+            "total_wms": len(wms_por_chave),
+        }
+
+    @classmethod
+    def diagnosticar_estoque_postgres_vs_wms(cls, filtro=None, limite=100):
+        itens_erp = cls.buscar_estoque_erp()
+        resultado = cls.comparar_estoque_erp_wms(itens_erp, filtro=filtro, limite=limite)
+        resultado["total_itens_erp_lidos"] = len(itens_erp)
+        resultado["gerado_em"] = datetime.now().isoformat()
+        return resultado
+
+    @classmethod
     def _remover_estoque_obsoleto(cls, codigos_erp_ativos, pares_erp):
         if not codigos_erp_ativos:
             return 0

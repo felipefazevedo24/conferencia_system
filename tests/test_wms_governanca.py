@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSTarefaOperacional, WMSIntegracaoEvento
+from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSTarefaOperacional, WMSIntegracaoEvento, WMSInventarioCiclico, WMSPedidoSeparacao, WMSUnidadeLogistica
 from conferencia_app.services.erp_sync_service import ERPSyncService
 
 
@@ -146,6 +146,174 @@ def test_erp_sync_remove_endereco_local_quando_erp_nao_traz_mais_endereco():
         ERPSyncService.popular_estoque_wms([])
 
         assert EstoqueWMS.query.filter_by(codigo_item="19-03-00018").first() is None
+
+
+def test_erp_sync_diagnostico_compara_postgres_com_wms_local():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+
+    with app.app_context():
+        deposito = DepositoWMS.query.filter_by(codigo="AL").first()
+        if not deposito:
+            deposito = DepositoWMS(codigo="AL", nome="Almoxarifado", ativo=True)
+            db.session.add(deposito)
+            db.session.flush()
+        loc_ok = LocalizacaoArmazem(
+            codigo="AL-A-01",
+            deposito_id=deposito.id,
+            rua="A",
+            predio="01",
+            nivel="01",
+            corredor="A",
+            prateleira="01",
+            posicao="01",
+            ativo=True,
+        )
+        loc_sobra = LocalizacaoArmazem(
+            codigo="AL-SOBRA",
+            deposito_id=deposito.id,
+            rua="S",
+            predio="01",
+            nivel="01",
+            corredor="S",
+            prateleira="01",
+            posicao="01",
+            ativo=True,
+        )
+        db.session.add_all([loc_ok, loc_sobra])
+        db.session.flush()
+        db.session.add_all(
+            [
+                EstoqueWMS(codigo_item="SKU-DIV", localizacao_id=loc_ok.id, qtd_total=7, qtd_separada=0),
+                EstoqueWMS(codigo_item="SKU-SOBRA", localizacao_id=loc_sobra.id, qtd_total=2, qtd_separada=0),
+            ]
+        )
+        db.session.commit()
+
+        resultado = ERPSyncService.comparar_estoque_erp_wms(
+            [
+                {"codigo_interno": "SKU-DIV", "item": "Divergente", "localizacao_estoque": "AL-A-01", "qtde_total": 5},
+                {"codigo_interno": "SKU-FALTA", "item": "Faltando", "localizacao_estoque": "AL-FALTA", "qtde_total": 3},
+            ]
+        )
+
+        tipos = {item["codigo_item"]: item["tipo"] for item in resultado["divergencias"]}
+        assert resultado["resumo"]["quantidade_divergente"] == 1
+        assert resultado["resumo"]["faltando_no_wms"] == 1
+        assert resultado["resumo"]["sobrando_no_wms"] == 1
+        assert tipos["SKU-DIV"] == "QUANTIDADE_DIVERGENTE"
+        assert tipos["SKU-FALTA"] == "FALTANDO_NO_WMS"
+        assert tipos["SKU-SOBRA"] == "SOBRANDO_NO_WMS"
+
+
+def test_wms_avancado_volume_sugestao_inventario_movimentacao_e_separacao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        deposito = DepositoWMS.query.filter_by(codigo="AL").first()
+        if not deposito:
+            deposito = DepositoWMS(codigo="AL", nome="Almoxarifado", ativo=True)
+            db.session.add(deposito)
+            db.session.flush()
+        loc_a = LocalizacaoArmazem(
+            codigo="AL-A-01-01",
+            deposito_id=deposito.id,
+            rua="A",
+            predio="01",
+            nivel="01",
+            corredor="A",
+            prateleira="01",
+            posicao="01",
+            capacidade_maxima=100,
+            capacidade_atual=10,
+            ativo=True,
+        )
+        loc_b = LocalizacaoArmazem(
+            codigo="AL-B-01-01",
+            deposito_id=deposito.id,
+            rua="B",
+            predio="01",
+            nivel="01",
+            corredor="B",
+            prateleira="01",
+            posicao="01",
+            capacidade_maxima=100,
+            capacidade_atual=0,
+            ativo=True,
+        )
+        db.session.add_all([loc_a, loc_b])
+        db.session.flush()
+        item = ItemWMS(
+            numero_nota="WMS900",
+            codigo_item="SKU-ADV",
+            descricao="Item avancado",
+            qtd_recebida=10,
+            qtd_atual=10,
+            unidade="UN",
+            status="Armazenado",
+            deposito_id=deposito.id,
+            localizacao_id=loc_a.id,
+            ativo=True,
+        )
+        db.session.add(item)
+        db.session.add(EstoqueWMS(codigo_item="SKU-ADV", localizacao_id=loc_a.id, qtd_total=10, qtd_separada=0, qtd_bloqueada=0))
+        db.session.commit()
+        item_id = item.id
+        loc_a_id = loc_a.id
+        loc_b_id = loc_b.id
+
+    volume = client.post("/api/wms/unidades-logisticas", json={"tipo": "PALLET", "item_ids": [item_id]})
+    assert volume.status_code == 201
+    assert volume.get_json()["unidade"]["qtd_itens"] == 1
+
+    sugestao = client.get(f"/api/wms/itens/{item_id}/sugestao-endereco")
+    assert sugestao.status_code == 200
+    assert sugestao.get_json()["sugestao"]["localizacao"]["codigo"] == "AL-A-01-01"
+
+    inv_resp = client.post(
+        "/api/wms/inventarios-ciclicos",
+        json={"localizacao_id": loc_a_id, "codigo_item": "SKU-ADV", "motivo": "Teste"},
+    )
+    assert inv_resp.status_code == 201
+    inv_id = inv_resp.get_json()["inventario"]["id"]
+    contagem = client.post(f"/api/wms/inventarios-ciclicos/{inv_id}/contar", json={"qtd_contada": 9, "aprovar": True})
+    assert contagem.status_code == 200
+    assert contagem.get_json()["inventario"]["status"] == "Aprovado"
+
+    bloqueio = client.post(
+        "/api/wms/estoque/bloquear",
+        json={"codigo_item": "SKU-ADV", "localizacao_id": loc_a_id, "qtd": 1, "motivo": "Qualidade"},
+    )
+    assert bloqueio.status_code == 200
+    assert bloqueio.get_json()["estoque"]["qtd_bloqueada"] == 1
+
+    mov = client.post(
+        "/api/wms/estoque/movimentar",
+        json={"codigo_item": "SKU-ADV", "origem_id": loc_a_id, "destino_id": loc_b_id, "qtd": 2},
+    )
+    assert mov.status_code == 200
+
+    separacao = client.post("/api/wms/separacoes", json={"referencia": "PED-1", "codigo_item": "SKU-ADV", "qtd": 1})
+    assert separacao.status_code == 201
+    sep_id = separacao.get_json()["separacao"]["id"]
+    confirma_sep = client.post(f"/api/wms/separacoes/{sep_id}/confirmar", json={})
+    assert confirma_sep.status_code == 200
+    assert confirma_sep.get_json()["separacao"]["status"] == "Separado"
+
+    produtividade = client.get("/api/wms/produtividade")
+    assert produtividade.status_code == 200
+    assert produtividade.get_json()["operadores"]
+
+    with app.app_context():
+        assert WMSUnidadeLogistica.query.count() == 1
+        assert WMSInventarioCiclico.query.count() == 1
+        assert WMSPedidoSeparacao.query.count() == 1
 
 
 def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):
@@ -556,7 +724,6 @@ def test_wms_coletor_bipa_local_cria_tarefa_e_endereca_item(tmp_path):
             unidade='UN',
             status='Pendente Enderecamento',
             deposito_id=deposito.id,
-            ordem_compra='45000001',
             ativo=True,
         )
         db.session.add_all([localizacao, item])

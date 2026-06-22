@@ -1372,6 +1372,24 @@ def _ensure_wms_tables() -> None:
         if "ordem_compra" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN ordem_compra VARCHAR(80)"))
             conn.commit()
+        if "unidade_logistica_id" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN unidade_logistica_id INTEGER"))
+            conn.commit()
+            _create_index_if_missing(
+                conn,
+                "item_wms",
+                "ix_item_wms_unidade_logistica_id",
+                "CREATE INDEX ix_item_wms_unidade_logistica_id ON item_wms (unidade_logistica_id)",
+            )
+        if "status_estoque" not in cols_item_wms:
+            conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN status_estoque VARCHAR(30) NOT NULL DEFAULT 'Disponivel'"))
+            conn.commit()
+            _create_index_if_missing(
+                conn,
+                "item_wms",
+                "ix_item_wms_status_estoque",
+                "CREATE INDEX ix_item_wms_status_estoque ON item_wms (status_estoque)",
+            )
         if "deposito_id" not in cols_item_wms:
             conn.execute(db.text("ALTER TABLE item_wms ADD COLUMN deposito_id INTEGER"))
             conn.commit()
@@ -1483,6 +1501,90 @@ def _ensure_wms_tables() -> None:
             "ix_wms_tarefa_local_destino",
             "CREATE INDEX ix_wms_tarefa_local_destino ON wms_tarefa_operacional (localizacao_destino_id)",
         )
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_unidade_logistica (
+                    id INTEGER PRIMARY KEY,
+                    codigo VARCHAR(80) NOT NULL UNIQUE,
+                    tipo VARCHAR(20) NOT NULL DEFAULT 'PALLET',
+                    status VARCHAR(20) NOT NULL DEFAULT 'Aberta',
+                    deposito_id INTEGER,
+                    localizacao_id INTEGER,
+                    observacao VARCHAR(400),
+                    criado_por VARCHAR(100),
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    fechado_em DATETIME,
+                    FOREIGN KEY (deposito_id) REFERENCES deposito_wms(id),
+                    FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        _create_index_if_missing(conn, "wms_unidade_logistica", "ix_wms_unidade_codigo", "CREATE INDEX ix_wms_unidade_codigo ON wms_unidade_logistica (codigo)")
+        _create_index_if_missing(conn, "wms_unidade_logistica", "ix_wms_unidade_status", "CREATE INDEX ix_wms_unidade_status ON wms_unidade_logistica (status)")
+        _create_index_if_missing(conn, "wms_unidade_logistica", "ix_wms_unidade_localizacao", "CREATE INDEX ix_wms_unidade_localizacao ON wms_unidade_logistica (localizacao_id)")
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_inventario_ciclico (
+                    id INTEGER PRIMARY KEY,
+                    codigo VARCHAR(80) NOT NULL UNIQUE,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Aberto',
+                    localizacao_id INTEGER NOT NULL,
+                    codigo_item VARCHAR(50) NOT NULL,
+                    qtd_sistema FLOAT NOT NULL DEFAULT 0.0,
+                    qtd_contada FLOAT,
+                    diferenca FLOAT,
+                    tarefa_id INTEGER,
+                    criado_por VARCHAR(100),
+                    contado_por VARCHAR(100),
+                    aprovado_por VARCHAR(100),
+                    motivo VARCHAR(400),
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    contado_em DATETIME,
+                    aprovado_em DATETIME,
+                    FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id),
+                    FOREIGN KEY (tarefa_id) REFERENCES wms_tarefa_operacional(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        _create_index_if_missing(conn, "wms_inventario_ciclico", "ix_wms_inv_status", "CREATE INDEX ix_wms_inv_status ON wms_inventario_ciclico (status)")
+        _create_index_if_missing(conn, "wms_inventario_ciclico", "ix_wms_inv_codigo_item", "CREATE INDEX ix_wms_inv_codigo_item ON wms_inventario_ciclico (codigo_item)")
+        _create_index_if_missing(conn, "wms_inventario_ciclico", "ix_wms_inv_localizacao", "CREATE INDEX ix_wms_inv_localizacao ON wms_inventario_ciclico (localizacao_id)")
+
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_pedido_separacao (
+                    id INTEGER PRIMARY KEY,
+                    referencia VARCHAR(80) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'Aberto',
+                    codigo_item VARCHAR(50) NOT NULL,
+                    qtd_solicitada FLOAT NOT NULL DEFAULT 0.0,
+                    qtd_separada FLOAT NOT NULL DEFAULT 0.0,
+                    localizacao_id INTEGER,
+                    tarefa_id INTEGER,
+                    criado_por VARCHAR(100),
+                    separado_por VARCHAR(100),
+                    observacao VARCHAR(400),
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    separado_em DATETIME,
+                    FOREIGN KEY (localizacao_id) REFERENCES localizacao_armazem(id),
+                    FOREIGN KEY (tarefa_id) REFERENCES wms_tarefa_operacional(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+        _create_index_if_missing(conn, "wms_pedido_separacao", "ix_wms_sep_status", "CREATE INDEX ix_wms_sep_status ON wms_pedido_separacao (status)")
+        _create_index_if_missing(conn, "wms_pedido_separacao", "ix_wms_sep_codigo_item", "CREATE INDEX ix_wms_sep_codigo_item ON wms_pedido_separacao (codigo_item)")
+        _create_index_if_missing(conn, "wms_pedido_separacao", "ix_wms_sep_referencia", "CREATE INDEX ix_wms_sep_referencia ON wms_pedido_separacao (referencia)")
         
         # Tabela estoque_wms
         conn.execute(
