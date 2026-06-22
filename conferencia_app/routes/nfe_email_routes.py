@@ -163,6 +163,11 @@ def api_nfe_email_config():
                 parcial["NFE_EMAIL_POLL_INTERVAL_SECONDS"] = int(payload["poll_intervalo"])
             except (TypeError, ValueError):
                 pass
+        if "smtp_timeout" in payload:
+            try:
+                parcial["MAIL_SMTP_TIMEOUT"] = max(1, int(payload["smtp_timeout"]))
+            except (TypeError, ValueError):
+                pass
         if "cfops_especiais" in payload:
             valor = payload["cfops_especiais"]
             if isinstance(valor, list):
@@ -231,6 +236,7 @@ def api_nfe_email_config():
         "auto_desde": normalizar_data_minima(current_app.config.get("NFE_EMAIL_AUTO_DESDE")),
         "cc": current_app.config.get("NFE_EMAIL_CC", ""),
         "poll_intervalo": int(current_app.config.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", 300)),
+        "smtp_timeout": int(current_app.config.get("MAIL_SMTP_TIMEOUT", 90)),
         "cfops_especiais": current_app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS", ""),
         "destinatarios_especiais": current_app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS", ""),
         "entrada_chapa_enabled": bool(current_app.config.get("ENTRADA_CHAPA_EMAIL_ENABLED", True)),

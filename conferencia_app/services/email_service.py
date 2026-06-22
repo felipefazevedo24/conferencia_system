@@ -17,7 +17,6 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password):
                 smtp_port=smtp_port,
                 sender=sender,
                 password=password,
-                timeout=15,
             )
             app.logger.info("E-mail enviado para %s", msg["To"])
         except Exception as e:

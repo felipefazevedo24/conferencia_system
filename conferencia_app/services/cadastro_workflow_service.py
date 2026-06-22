@@ -57,11 +57,15 @@ METODOS_ATUALIZACAO_CUSTO = [
 ]
 
 METODOS_REPOSICAO = [
-    ("manual", "Manual"),
-    ("por_demanda", "Por demanda"),
-    ("estoque_minimo", "Estoque mínimo"),
-    ("ponto_reposicao", "Ponto de reposição"),
-    ("mrp", "MRP / Planejamento"),
+    ("compras", "Compras"),
+    ("producao_terceiros", "Produção por terceiros"),
+    ("producao_propria", "Produção própria"),
+]
+
+CONTRIBUINTE_ICMS = [
+    ("1", "1 - Contribuinte ICMS"),
+    ("2", "2 - Contribuinte Isento de IE"),
+    ("9", "9 - Não Contribuinte"),
 ]
 
 CAMPO_OPCOES = {
@@ -70,6 +74,7 @@ CAMPO_OPCOES = {
     "utilizacao": UTILIZACOES_MATERIAL,
     "metodo_atualizacao_custo": METODOS_ATUALIZACAO_CUSTO,
     "metodo_reposicao": METODOS_REPOSICAO,
+    "contribuinte_icms": CONTRIBUINTE_ICMS,
 }
 
 MATERIAL_SOLICITANTE_FIELDS = [
@@ -110,11 +115,12 @@ TIPOS_CADASTRO = {
     "cliente": {
         "label": "Cadastro de Cliente",
         "icon": "fa-user-tie",
-        "solicitante_fields": [("documento", "CNPJ", True)],
+        "solicitante_fields": [("documento", "CNPJ", True), ("contribuinte_icms", "Contribuinte ICMS", True)],
         "fields": [
             ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
+            ("contribuinte_icms", "Contribuinte ICMS", True),
             ("inscricao_estadual", "Inscrição Estadual", False),
             ("inscricao_municipal", "Inscrição Municipal", False),
             ("endereco", "Endereço completo", True),
@@ -131,11 +137,12 @@ TIPOS_CADASTRO = {
     "fornecedor": {
         "label": "Cadastro de Fornecedor",
         "icon": "fa-industry",
-        "solicitante_fields": [("documento", "CNPJ", True)],
+        "solicitante_fields": [("documento", "CNPJ", True), ("contribuinte_icms", "Contribuinte ICMS", True)],
         "fields": [
             ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
+            ("contribuinte_icms", "Contribuinte ICMS", True),
             ("inscricao_estadual", "Inscrição Estadual", False),
             ("endereco", "Endereço completo", True),
             ("cep", "CEP", False),
@@ -152,11 +159,12 @@ TIPOS_CADASTRO = {
     "transportadora": {
         "label": "Cadastro de Transportadora",
         "icon": "fa-truck-fast",
-        "solicitante_fields": [("documento", "CNPJ", True)],
+        "solicitante_fields": [("documento", "CNPJ", True), ("contribuinte_icms", "Contribuinte ICMS", True)],
         "fields": [
             ("razao_social", "Razão Social", True),
             ("nome_fantasia", "Nome Fantasia", False),
             ("documento", "CNPJ", True),
+            ("contribuinte_icms", "Contribuinte ICMS", True),
             ("inscricao_estadual", "Inscrição Estadual", False),
             ("antt", "ANTT", False),
             ("endereco", "Endereço completo", True),
@@ -186,30 +194,62 @@ STATUS = [
 ]
 
 CHECKLIST_COMPRAS = [
-    "Necessidade do cadastro",
-    "Existência de cadastro semelhante",
-    "Dados comerciais mínimos",
-    "Documentação obrigatória",
-    "Fornecedor/cliente/material já existente",
+    "Descrição e unidade de compra conferidas",
+    "Método de reposição definido",
+    "Fornecedor sugerido avaliado quando informado",
+    "Cadastro semelhante pesquisado",
 ]
 
-CHECKLIST_FISCAL = [
-    "CNPJ válido",
-    "Inscrição Estadual",
-    "Inscrição Municipal",
-    "Regime tributário",
-    "CNAE",
-    "NCM quando aplicável",
-    "Tributação padrão",
-    "Retenções aplicáveis",
-    "Dados fiscais obrigatórios",
-]
+CHECKLIST_FISCAL_POR_TIPO = {
+    "material": [
+        "NCM validado",
+        "Classificação tributária definida",
+        "Benefício fiscal revisado quando aplicável",
+        "Método de atualização de custo definido",
+    ],
+    "cliente": [
+        "CNPJ consultado e válido",
+        "Contribuinte ICMS conferido",
+        "Inscrição Estadual coerente com contribuinte",
+        "Endereço e UF conferidos",
+        "CNAE e regime tributário revisados",
+    ],
+    "fornecedor": [
+        "CNPJ consultado e válido",
+        "Contribuinte ICMS conferido",
+        "Inscrição Estadual coerente com contribuinte",
+        "CNAE e regime tributário revisados",
+        "Dados fiscais obrigatórios conferidos",
+    ],
+    "transportadora": [
+        "CNPJ consultado e válido",
+        "Contribuinte ICMS conferido",
+        "Inscrição Estadual coerente com contribuinte",
+        "ANTT/modal revisados quando aplicável",
+        "UF e região de atendimento conferidas",
+    ],
+}
 
 CADASTROS_DIRETO_FISCAL = {"cliente", "fornecedor", "transportadora"}
 
 
 def normalizar_documento(value: str | None) -> str:
     return re.sub(r"\D+", "", value or "")
+
+
+def cnpj_valido(value: str | None) -> bool:
+    doc = normalizar_documento(value)
+    if len(doc) != 14 or len(set(doc)) == 1:
+        return False
+    pesos_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    pesos_2 = [6] + pesos_1
+
+    def digito(base: str, pesos: list[int]) -> str:
+        soma = sum(int(numero) * peso for numero, peso in zip(base, pesos))
+        resto = soma % 11
+        return "0" if resto < 2 else str(11 - resto)
+
+    return doc[-2:] == digito(doc[:12], pesos_1) + digito(doc[:13], pesos_2)
 
 
 def formatar_cnpj(cnpj: str | None) -> str:
@@ -244,8 +284,8 @@ def _inscricao_estadual_from_cnpj_ws(payload: dict) -> str:
 
 def consultar_cartao_cnpj(cnpj: str, timeout: int = 8) -> dict:
     doc = normalizar_documento(cnpj)
-    if len(doc) != 14:
-        raise ValueError("Informe um CNPJ com 14 digitos.")
+    if not cnpj_valido(doc):
+        raise ValueError("Informe um CNPJ válido com 14 dígitos.")
 
     dados: dict = {"documento": formatar_cnpj(doc)}
     erros = []
@@ -432,7 +472,12 @@ def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = ""
             if str(dados.get(campo) or "").strip() not in valores_validos:
                 raise ValueError(f"Valor inválido para {label}.")
     if tipo in CADASTROS_DIRETO_FISCAL:
-        dados = {"documento": formatar_cnpj(dados.get("documento"))}
+        if not cnpj_valido(dados.get("documento")):
+            raise ValueError("Informe um CNPJ válido com 14 dígitos.")
+        dados = {
+            "documento": formatar_cnpj(dados.get("documento")),
+            "contribuinte_icms": str(dados.get("contribuinte_icms") or "").strip(),
+        }
     elif tipo == "material":
         sugestao_ncm = sugerir_ncm_material(dados.get("descricao"))
         dados.setdefault("unidade_compra", dados.get("unidade_medida") or "")
@@ -463,7 +508,10 @@ def criar_solicitacao(tipo: str, dados: dict, solicitante: str, anexos: str = ""
 
 def inicializar_checklists(solicitacao):
     existentes = {(c.departamento, c.item) for c in solicitacao.checklists}
-    for depto, itens in (("Compras", CHECKLIST_COMPRAS), ("Fiscal", CHECKLIST_FISCAL)):
+    grupos = [("Fiscal", CHECKLIST_FISCAL_POR_TIPO.get(solicitacao.tipo, []))]
+    if solicitacao.tipo not in CADASTROS_DIRETO_FISCAL:
+        grupos.insert(0, ("Compras", CHECKLIST_COMPRAS))
+    for depto, itens in grupos:
         for item in itens:
             if (depto, item) not in existentes:
                 db.session.add(CadastroWorkflowChecklist(solicitacao=solicitacao, departamento=depto, item=item))
@@ -549,6 +597,8 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
     elif acao == "devolver_compras":
         if role not in {"Fiscal", "Admin"}:
             raise ValueError("Somente Fiscal pode devolver para Compras.")
+        if solicitacao.tipo in CADASTROS_DIRETO_FISCAL:
+            raise ValueError("Este tipo de cadastro é tratado somente pelo Fiscal.")
         mover_etapa(solicitacao, "Em Validacao Compras", "Compras", "Compras")
         registrar_evento(solicitacao, usuario, "Fiscal", "Devolvido para Compras", comentario)
     elif acao == "responder_correcao":

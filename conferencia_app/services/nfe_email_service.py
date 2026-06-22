@@ -874,7 +874,6 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password, log_id):
                 smtp_port=smtp_port,
                 sender=sender,
                 password=password,
-                timeout=30,
             )
             row = db.session.get(EmailNFEnviado, log_id)
             if row:

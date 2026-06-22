@@ -1543,22 +1543,29 @@ def _build_estornos_records(search_nota=None):
         eventos.append(
             {
                 "nota": item.numero_nota,
-                "tipo": "Ajuste",
+                "tipo": "Estorno de conferência",
                 "usuario": item.usuario_reversao,
                 "motivo": item.motivo,
                 "data": item.data_reversao,
+                "ordem": item.id,
                 "data_fmt": item.data_reversao.strftime("%d/%m/%Y %H:%M"),
             }
         )
 
     for item in estornos_lanc:
+        motivo = item.motivo or ""
+        tipo = "Estorno de lançamento"
+        if motivo.startswith("[ESTORNO CONFER"):
+            tipo = "Estorno de conferência"
+            motivo = motivo.split("]", 1)[-1].strip() or motivo
         eventos.append(
             {
                 "nota": item.numero_nota,
-                "tipo": "Ajuste",
+                "tipo": tipo,
                 "usuario": item.usuario_estorno,
-                "motivo": item.motivo,
+                "motivo": motivo,
                 "data": item.data_estorno,
+                "ordem": item.id,
                 "data_fmt": item.data_estorno.strftime("%d/%m/%Y %H:%M"),
             }
         )
@@ -1571,14 +1578,176 @@ def _build_estornos_records(search_nota=None):
                 "usuario": item.usuario_exclusao,
                 "motivo": item.motivo,
                 "data": item.data_exclusao,
+                "ordem": item.id,
                 "data_fmt": item.data_exclusao.strftime("%d/%m/%Y %H:%M"),
             }
         )
 
-    eventos.sort(key=lambda e: e["data"], reverse=True)
+    eventos.sort(key=lambda e: (e["data"], e["ordem"]), reverse=True)
     for e in eventos:
         del e["data"]
+        del e["ordem"]
     return eventos
+
+
+def _format_dt_br(value):
+    return value.strftime("%d/%m/%Y %H:%M") if value else "---"
+
+
+def _build_documento_entrada_timeline(numero_nota: str, itens: list[ItemNota] | None = None):
+    numero_nota = str(numero_nota)
+    itens = itens if itens is not None else ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    eventos = []
+    if itens:
+        primeiro_import = next((i for i in itens if i.data_importacao), None)
+        if primeiro_import:
+            eventos.append(
+                {
+                    "data": primeiro_import.data_importacao,
+                    "tipo": "Importacao",
+                    "descricao": f"Importada por {primeiro_import.usuario_importacao or '---'}",
+                }
+            )
+
+        ini_conf = next((i for i in itens if i.inicio_conferencia), None)
+        if ini_conf:
+            eventos.append(
+                {
+                    "data": ini_conf.inicio_conferencia,
+                    "tipo": "Conferencia",
+                    "descricao": "Inicio da conferencia",
+                }
+            )
+
+        fim_conf = next((i for i in itens if i.fim_conferencia), None)
+        if fim_conf:
+            eventos.append(
+                {
+                    "data": fim_conf.fim_conferencia,
+                    "tipo": "Conferencia",
+                    "descricao": f"Finalizada por {fim_conf.usuario_conferencia or '---'}",
+                }
+            )
+
+        for log in LogDivergencia.query.filter_by(numero_nota=numero_nota).all():
+            eventos.append(
+                {
+                    "data": log.data_erro,
+                    "tipo": "Divergencia",
+                    "descricao": f"{log.item_descricao} - usuario {log.usuario_erro}",
+                }
+            )
+
+        for log in LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).all():
+            eventos.append(
+                {
+                    "data": log.data_reversao,
+                    "tipo": "Estorno Conferencia",
+                    "descricao": f"{log.usuario_reversao}: {log.motivo}",
+                }
+            )
+
+        for log in LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).all():
+            eventos.append(
+                {
+                    "data": log.data_estorno,
+                    "tipo": "Estorno Lancamento",
+                    "descricao": f"{log.usuario_estorno}: {log.motivo}",
+                }
+            )
+
+        for log in LogManifestacaoDestinatario.query.filter_by(numero_nota=numero_nota).all():
+            eventos.append(
+                {
+                    "data": log.data,
+                    "tipo": f"Manifestacao {log.manifestacao}",
+                    "descricao": f"{log.usuario}: {log.status} - {log.detalhe or 'Sem detalhe'}",
+                }
+            )
+
+        for log in LogEventoFiscalNota.query.filter_by(numero_nota=numero_nota).all():
+            eventos.append(
+                {
+                    "data": log.data,
+                    "tipo": "Governanca Fiscal",
+                    "descricao": f"{log.usuario or '---'}: {log.evento} - {log.detalhe or log.status or 'Sem detalhe'}",
+                }
+            )
+
+        lanc = next((i for i in itens if i.data_lancamento), None)
+        if lanc:
+            eventos.append(
+                {
+                    "data": lanc.data_lancamento,
+                    "tipo": "Lancamento",
+                    "descricao": f"Lancada por {lanc.usuario_lancamento or '---'} ({lanc.numero_lancamento or '---'})",
+                }
+            )
+
+    for log in LogExclusaoNota.query.filter_by(numero_nota=numero_nota).all():
+        eventos.append(
+            {
+                "data": log.data_exclusao,
+                "tipo": "Exclusao",
+                "descricao": f"{log.usuario_exclusao}: {log.motivo}",
+            }
+        )
+
+    eventos = [e for e in eventos if e.get("data")]
+    eventos.sort(key=lambda e: e["data"])
+    return [
+        {
+            "data": _format_dt_br(e["data"]),
+            "tipo": e["tipo"],
+            "descricao": e["descricao"],
+        }
+        for e in eventos
+    ]
+
+
+def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota], pedido_compra: str | None):
+    pendencias = []
+    resumo_divergencia = _summarize_divergencia_nota(numero_nota)
+    if resumo_divergencia["divergencia"] == "Sim":
+        pendencias.append(
+            {
+                "tipo": "divergencia",
+                "titulo": "Divergencia",
+                "severidade": "warning",
+                "descricao": resumo_divergencia["detalhe_divergencia"] or "Divergencia ativa na conferencia.",
+            }
+        )
+    elif resumo_divergencia.get("tentativas_invalidas", 0) > 0:
+        pendencias.append(
+            {
+                "tipo": "divergencia",
+                "titulo": "Divergencia resolvida",
+                "severidade": "info",
+                "descricao": resumo_divergencia["detalhe_divergencia"],
+            }
+        )
+
+    if itens and bool(itens[0].remessa) and _remessa_exige_codigo_material(itens):
+        pendencias.append(
+            {
+                "tipo": "remessa",
+                "titulo": "Codigo material",
+                "severidade": "warning",
+                "descricao": "Remessa de industrializacao exige codigo do material por item.",
+            }
+        )
+
+    if not pedido_compra and itens and not bool(itens[0].material_cliente) and not bool(itens[0].remessa):
+        pendencias.append(
+            {
+                "tipo": "pedido",
+                "titulo": "Sem pedido",
+                "severidade": "info",
+                "descricao": "NF sem pedido de compra vinculado.",
+            }
+        )
+
+    return pendencias
 
 
 def _build_notas_liberadas_records(search_nota=None):
@@ -6511,6 +6680,11 @@ def listar_concluidas():
         data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
         fim_conferencia = max((i.fim_conferencia for i in itens_nota if i.fim_conferencia), default=None)
         usuario_conferencia = next((i.usuario_conferencia for i in itens_nota if i.usuario_conferencia), None)
+        ultimo_estorno_lancamento = (
+            LogEstornoLancamento.query.filter_by(numero_nota=numero_nota)
+            .order_by(LogEstornoLancamento.data_estorno.desc())
+            .first()
+        )
 
         pendencias = []
         if motivo:
@@ -6552,7 +6726,7 @@ def listar_concluidas():
                 "exige_codigo_material_remessa": exige_codigo_material_remessa,
                 "motivo_pendencia": motivo,
                 "divergencia_status": resumo_divergencia["divergencia_status"],
-                "etapa_atual": "Liberada",
+                "etapa_atual": "Estornada" if ultimo_estorno_lancamento else "Liberada",
                 "status_atual": "Concluído",
                 "pedido_compra": pedido_compra,
                 "conferido_por": usuario_conferencia or "---",
@@ -7185,18 +7359,59 @@ def detalhes_nf(numero):
 
     ultimo_estorno_log = (
         LogEstornoLancamento.query.filter_by(numero_nota=str(numero))
-        .order_by(LogEstornoLancamento.data_estorno.desc())
+        .order_by(LogEstornoLancamento.data_estorno.desc(), LogEstornoLancamento.id.desc())
         .first()
     )
     ultimo_estorno = None
     if ultimo_estorno_log:
+        motivo_estorno = ultimo_estorno_log.motivo or "---"
+        tipo_estorno = "Estorno de lançamento"
+        if motivo_estorno.startswith("[ESTORNO CONFER"):
+            tipo_estorno = "Estorno de conferência"
+            motivo_estorno = motivo_estorno.split("]", 1)[-1].strip() or motivo_estorno
         ultimo_estorno = {
-            "motivo": ultimo_estorno_log.motivo or "---",
+            "tipo": tipo_estorno,
+            "motivo": motivo_estorno,
             "usuario": ultimo_estorno_log.usuario_estorno or "---",
             "data": ultimo_estorno_log.data_estorno.strftime("%d/%m/%Y %H:%M")
             if ultimo_estorno_log.data_estorno
             else "---",
         }
+
+    ultimo_evento_fiscal_log = (
+        LogEventoFiscalNota.query.filter_by(numero_nota=str(numero))
+        .order_by(LogEventoFiscalNota.data.desc(), LogEventoFiscalNota.id.desc())
+        .first()
+    )
+    ultimo_evento_fiscal = None
+    if ultimo_evento_fiscal_log:
+        ultimo_evento_fiscal = {
+            "evento": ultimo_evento_fiscal_log.evento,
+            "etapa": ultimo_evento_fiscal_log.etapa,
+            "status": ultimo_evento_fiscal_log.status,
+            "detalhe": ultimo_evento_fiscal_log.detalhe,
+            "usuario": ultimo_evento_fiscal_log.usuario,
+            "data": _format_dt_br(ultimo_evento_fiscal_log.data),
+        }
+
+    pendencias = _build_documento_entrada_pendencias(str(numero), itens, pedido_compra)
+    timeline = _build_documento_entrada_timeline(str(numero), itens)
+    workflow = [
+        {"nome": "Importada", "estado": "done" if data_importacao else "pending"},
+        {"nome": "Conferida", "estado": "done" if fim_conferencia else "pending"},
+        {
+            "nome": "Liberada",
+            "estado": "done" if "ConcluÃ­do" in statuses or "LanÃ§ado" in statuses else "pending",
+        },
+        {"nome": "Lancada", "estado": "done" if data_lancamento else "pending"},
+        {"nome": "Manifestada", "estado": "done" if manifestacao else "pending"},
+    ]
+    motivos_estorno_padrao = [
+        "Erro no codigo de lancamento do ERP",
+        "Divergencia fiscal identificada apos lancamento",
+        "Solicitacao de reprocessamento da conferencia",
+        "Ajuste operacional autorizado",
+    ]
 
     return jsonify(
         {
@@ -7224,10 +7439,15 @@ def detalhes_nf(numero):
             "sem_conferencia_logistica": bool(itens[0].sem_conferencia_logistica),
             "manifestacao": manifestacao,
             "ultimo_estorno": ultimo_estorno,
+            "ultimo_evento_fiscal": ultimo_evento_fiscal,
             "documentos_disponiveis": any(
                 str(i.chave_acesso or "").strip() for i in itens
             ),
             "checklist": checklist_info,
+            "workflow": workflow,
+            "pendencias": pendencias,
+            "timeline": timeline,
+            "motivos_estorno_padrao": motivos_estorno_padrao,
             "itens": lista_itens,
         }
     )

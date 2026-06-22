@@ -219,6 +219,7 @@ class Config:
     MAIL_SMTP_USER = os.environ.get("MAIL_SMTP_USER", "")
     MAIL_SMTP_USE_SSL = os.environ.get("MAIL_SMTP_USE_SSL", "0") == "1"
     MAIL_SMTP_STARTTLS = os.environ.get("MAIL_SMTP_STARTTLS", "1") == "1"
+    MAIL_SMTP_TIMEOUT = int(os.environ.get("MAIL_SMTP_TIMEOUT", "90"))
     MAIL_SENDER = os.environ.get("MAIL_SENDER", "nfe@columbiamachine.com.br")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
     MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "NF-e | Columbia Machine Brasil")

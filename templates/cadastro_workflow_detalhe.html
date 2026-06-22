@@ -27,10 +27,11 @@
   </div>
 
   <div class="cw-progress-line">
-    {% set etapas = ['Abertura', 'Compras', 'Fiscal', 'Decisão', 'Conclusão'] %}
+    {% set cadastro_direto_fiscal = solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
+    {% set etapas = ['Abertura', 'Fiscal', 'Conclusão'] if cadastro_direto_fiscal else ['Abertura', 'Compras', 'Fiscal', 'Decisão', 'Conclusão'] %}
     {% for etapa in etapas %}
     {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusão' and solicitacao.status == 'Cadastrado') %}
-    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 or (solicitacao.tipo in ['cliente','fornecedor','transportadora'] and etapa == 'Compras') %}done{% endif %}">
+    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 %}done{% endif %}">
       <div class="cw-progress-node">
         {% if etapa == 'Decisão' %}<i class="fas fa-question"></i>{% elif etapa == 'Conclusão' %}<i class="fas fa-check"></i>{% else %}{{ loop.index }}{% endif %}
       </div>
@@ -252,7 +253,9 @@
           {% elif solicitacao.departamento_atual == 'Fiscal' %}
           <button class="cw-btn ok" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
           <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Correção</button>
+          {% if not cadastro_direto_fiscal %}
           <button class="cw-btn soft" name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Compras</button>
+          {% endif %}
           {% endif %}
           <button class="cw-btn danger" name="acao" value="reprovar" type="submit"><i class="fas fa-xmark"></i> Reprovar</button>
         </div>

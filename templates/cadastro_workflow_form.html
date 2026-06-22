@@ -61,27 +61,7 @@
         {% endif %}
       </div>
       {% endfor %}
-      {% if tipo in ['cliente','fornecedor','transportadora'] %}
-      <div class="cw-field full">
-        <div class="cw-cnpj-preview" id="cnpjPreview">
-          <i class="fas fa-id-card"></i>
-          <div>
-            <strong>Consulta na etapa Fiscal</strong>
-            <span>O Fiscal terá um botão dentro do chamado para buscar cartão CNPJ, endereço, CNAE e IE do PJ.</span>
-          </div>
-        </div>
-      </div>
-      {% endif %}
       {% if tipo == 'material' %}
-      <div class="cw-field full">
-        <div class="cw-cnpj-preview material">
-          <i class="fas fa-box-open"></i>
-          <div>
-            <strong>Cadastro enxuto de material</strong>
-            <span>Informe a descrição, a unidade desejada para compra, a utilização e, se tiver, uma imagem do produto. O código será tratado na etapa responsável.</span>
-          </div>
-        </div>
-      </div>
       <div class="cw-field full">
         <label for="imagem_produto">Imagem do produto</label>
         <input class="cw-input" id="imagem_produto" name="imagem_produto" type="file" accept="image/png,image/jpeg,image/webp">
@@ -100,6 +80,22 @@
   </form>
 </section>
 <script>
+const tipoAtual = "{{ tipo }}";
+const tiposPessoaJuridica = new Set(["cliente", "fornecedor", "transportadora"]);
+const docInput = document.getElementById("documento");
+if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
+  docInput.setAttribute("inputmode", "numeric");
+  docInput.setAttribute("maxlength", "18");
+  docInput.setAttribute("placeholder", "00.000.000/0000-00");
+  docInput.addEventListener("input", () => {
+    const v = docInput.value.replace(/\D/g, "").slice(0, 14);
+    docInput.value = v
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  });
+}
 async function verificarDuplicidade(){
   const tipo = document.querySelector('[name="tipo"]').value;
   const params = new URLSearchParams({tipo});

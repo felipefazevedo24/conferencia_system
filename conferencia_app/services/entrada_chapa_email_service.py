@@ -313,7 +313,6 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
             smtp_port=smtp_port,
             sender=sender,
             password=password,
-            timeout=30,
         )
 
         log.status = "Enviado"

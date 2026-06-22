@@ -224,6 +224,32 @@ def test_login_invalid_password(tmp_path):
     assert response.get_json()["sucesso"] is False
 
 
+def test_registrar_usuario_solicitante(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "ADMIN", "Admin")
+
+    response = client.post(
+        "/api/registrar",
+        json={
+            "username": "solicitante.teste",
+            "email": "solicitante.teste@example.com",
+            "role": "Solicitante",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+
+    with app.app_context():
+        from conferencia_app.models import Usuario
+
+        usuario = Usuario.query.filter_by(username="SOLICITANTE.TESTE").first()
+        assert usuario is not None
+        assert usuario.email == "solicitante.teste@example.com"
+        assert usuario.role == "Solicitante"
+
+
 def test_login_recovers_legacy_plaintext_admin_password(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

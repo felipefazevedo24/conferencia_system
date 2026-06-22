@@ -73,7 +73,7 @@ def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal_sem_consultar
     ) as consulta:
         response = client.post(
             "/cadastros/novo",
-            data={"tipo": "fornecedor", "documento": "12.345.678/0001-90"},
+            data={"tipo": "fornecedor", "documento": "11.222.333/0001-81", "contribuinte_icms": "1"},
             follow_redirects=False,
         )
 
@@ -82,8 +82,11 @@ def test_fornecedor_abre_somente_com_cnpj_e_vai_direto_para_fiscal_sem_consultar
         sol = CadastroWorkflowSolicitacao.query.one()
         assert sol.status == "Em Validacao Fiscal"
         assert sol.departamento_atual == "Fiscal"
-        assert "12.345.678/0001-90" in sol.dados_json
+        assert "11.222.333/0001-81" in sol.dados_json
+        assert '"contribuinte_icms": "1"' in sol.dados_json
         assert "Fornecedor Teste LTDA" not in sol.dados_json
+        assert {chk.departamento for chk in sol.checklists} == {"Fiscal"}
+        assert "Contribuinte ICMS conferido" in {chk.item for chk in sol.checklists}
         consulta.assert_not_called()
 
 
@@ -97,7 +100,7 @@ def test_fiscal_consulta_cnpj_e_preenche_dados_do_fornecedor(tmp_path):
             etapa_atual="Fiscal",
             solicitante="felipe",
             departamento_atual="Fiscal",
-            dados_json='{"documento":"12.345.678/0001-90"}',
+            dados_json='{"documento":"11.222.333/0001-81","contribuinte_icms":"1"}',
         )
         db.session.add(sol)
         db.session.commit()
@@ -105,7 +108,7 @@ def test_fiscal_consulta_cnpj_e_preenche_dados_do_fornecedor(tmp_path):
         with patch(
             "conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj",
             return_value={
-                "documento": "12.345.678/0001-90",
+                "documento": "11.222.333/0001-81",
                 "razao_social": "Fornecedor Teste LTDA",
                 "endereco": "Rua Teste, 100",
                 "inscricao_estadual": "110042490114",
@@ -124,7 +127,7 @@ def test_transportadora_tambem_abre_direto_para_fiscal(tmp_path):
 
     response = client.post(
         "/cadastros/novo",
-        data={"tipo": "transportadora", "documento": "98.765.432/0001-10"},
+        data={"tipo": "transportadora", "documento": "30.482.274/0001-25", "contribuinte_icms": "9"},
         follow_redirects=False,
     )
 
@@ -135,6 +138,53 @@ def test_transportadora_tambem_abre_direto_para_fiscal(tmp_path):
         assert sol.departamento_atual == "Fiscal"
 
 
+def test_cliente_exige_cnpj_valido_para_abrir_solicitacao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "felipe", "Solicitante")
+
+    response = client.post(
+        "/cadastros/novo",
+        data={"tipo": "cliente", "documento": "12345", "contribuinte_icms": "1"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Informe um CNPJ válido com 14 dígitos.".encode("utf-8") in response.data
+
+    with app.app_context():
+        assert CadastroWorkflowSolicitacao.query.count() == 0
+
+
+def test_cadastro_direto_fiscal_nao_pode_retornar_para_compras(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    set_logged_user(client, "joao", "Fiscal")
+    with app.app_context():
+        sol = CadastroWorkflowSolicitacao(
+            numero="000001",
+            tipo="cliente",
+            status="Em Validacao Fiscal",
+            etapa_atual="Fiscal",
+            solicitante="felipe",
+            departamento_atual="Fiscal",
+            dados_json='{"documento":"11.222.333/0001-81","contribuinte_icms":"1"}',
+        )
+        db.session.add(sol)
+        db.session.commit()
+        sol_id = sol.id
+
+        try:
+            executar_acao(sol, "devolver_compras", "joao", "Fiscal", comentario="voltar")
+            assert False, "cliente nao deveria voltar para compras"
+        except ValueError as exc:
+            assert "somente pelo Fiscal" in str(exc)
+
+    detail = client.get(f"/cadastros/{sol_id}")
+    assert detail.status_code == 200
+    assert b'value="devolver_compras"' not in detail.data
+
+
 def test_workflow_registra_alerta_de_duplicidade(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
@@ -143,7 +193,8 @@ def test_workflow_registra_alerta_de_duplicidade(tmp_path):
     payload = {
         "tipo": "cliente",
         "razao_social": "Cliente Duplicado",
-        "documento": "11.222.333/0001-44",
+        "documento": "11.222.333/0001-81",
+        "contribuinte_icms": "1",
         "endereco": "Rua A",
     }
     with patch("conferencia_app.services.cadastro_workflow_service.consultar_cartao_cnpj", side_effect=ValueError("offline")):
