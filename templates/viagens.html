@@ -458,12 +458,11 @@
                     </div>
                     <div class="doc-form-block">
                         <label class="doc-form-label">Tipo</label>
-                        <select name="tipo" class="doc-select" onchange="this.dataset.userModified='1'">
+                        <select name="tipo" class="doc-select" id="nova-tipo" onchange="this.dataset.userModified='1';atualizarModoViagemAleatoria()">
                             <option value="MISTA">Mista</option>
                             <option value="COLETA">Coleta</option>
                             <option value="ENTREGA">Entrega</option>
-                            <option value="TRANSFERENCIA">Transferência</option>
-                            <option value="OUTRO">Outro</option>
+                            <option value="ALEATORIA">Aleatória</option>
                         </select>
                     </div>
                 </div>
@@ -491,7 +490,7 @@
                         <input type="text" name="origem_label" class="doc-input" placeholder="Ex: Hortolândia-SP">
                     </div>
                 </div>
-                <div class="doc-form-block">
+                <div class="doc-form-block" id="sol-pick-block">
                     <label class="doc-form-label">Paradas de solicitações pendentes</label>
                     <div class="sol-pick-list" id="sol-pick-list"></div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px">
@@ -500,7 +499,7 @@
                     </div>
                 </div>
                 <!-- Paradas manuais -->
-                <div class="doc-form-block" style="border:1px dashed #bfdbfe;border-radius:10px;padding:12px 14px;background:#f8fbff;">
+                <div class="doc-form-block" id="manual-paradas-block" style="border:1px dashed #bfdbfe;border-radius:10px;padding:12px 14px;background:#f8fbff;">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;" onclick="toggleManualParadas()">
                         <label class="doc-form-label" style="cursor:pointer;margin:0;display:flex;align-items:center;gap:7px;">
                             <i class="fa-solid fa-location-plus" style="color:#2563eb"></i> Adicionar paradas manuais
@@ -544,8 +543,8 @@
                     </div>
                 </div>
                 <div class="doc-form-block">
-                    <label class="doc-form-label">Observação</label>
-                    <textarea name="observacao" class="doc-textarea"></textarea>
+                    <label class="doc-form-label" id="nova-observacao-label">Observação</label>
+                    <textarea name="observacao" id="nova-observacao" class="doc-textarea"></textarea>
                 </div>
             </div>
             <div class="doc-modal-foot">
@@ -577,8 +576,7 @@
                             <option value="MISTA">Mista</option>
                             <option value="COLETA">Coleta</option>
                             <option value="ENTREGA">Entrega</option>
-                            <option value="TRANSFERENCIA">Transferência</option>
-                            <option value="OUTRO">Outro</option>
+                            <option value="ALEATORIA">Aleatória</option>
                         </select>
                     </div>
                 </div>
@@ -1672,8 +1670,43 @@ async function abrirModalNova() {
     document.querySelectorAll('#form-nova [data-user-modified]').forEach(el => delete el.dataset.userModified);
     const badge = document.getElementById('sol-count-badge');
     if (badge) badge.style.display = 'none';
+    atualizarModoViagemAleatoria();
     await carregarAuxiliares();
     document.getElementById('modal-nova').classList.add('show');
+}
+
+function atualizarModoViagemAleatoria() {
+    const form = document.getElementById('form-nova');
+    if (!form) return;
+    const tipo = (form.querySelector('[name=tipo]')?.value || '').toUpperCase();
+    const aleatoria = tipo === 'ALEATORIA';
+    const solBlock = document.getElementById('sol-pick-block');
+    const manualBlock = document.getElementById('manual-paradas-block');
+    const obs = document.getElementById('nova-observacao');
+    const obsLabel = document.getElementById('nova-observacao-label');
+
+    if (solBlock) solBlock.style.display = aleatoria ? 'none' : '';
+    if (manualBlock) manualBlock.style.display = aleatoria ? 'none' : '';
+    if (obs) {
+        obs.required = aleatoria;
+        obs.placeholder = aleatoria ? 'Descreva obrigatoriamente o motivo/destino da viagem aleatória.' : '';
+    }
+    if (obsLabel) obsLabel.textContent = aleatoria ? 'Descrição obrigatória *' : 'Observação';
+
+    if (aleatoria) {
+        solSelecionadas.clear();
+        paradasManuais = [];
+        renderParadasManuais();
+        const badge = document.getElementById('sol-count-badge');
+        if (badge) badge.style.display = 'none';
+        document.querySelectorAll('#sol-pick-list .sol-pick').forEach(el => {
+            el.classList.remove('selected');
+            const cb = el.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = false;
+        });
+        const secMP = document.getElementById('manual-paradas-section');
+        if (secMP) secMP.style.display = 'none';
+    }
 }
 
 async function abrirModalEditar() {
@@ -1848,10 +1881,15 @@ document.getElementById('form-nova').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const payload = Object.fromEntries(f.entries());
-    payload.solicitacao_ids = Array.from(solSelecionadas);
-    payload.paradas = paradasManuais;
-    if (!payload.motorista_id && solSelecionadas.size === 0 && paradasManuais.length === 0) {
-        toast('Adicione pelo menos uma solicitação ou parada manual, ou selecione um motorista.', 'error');
+    const aleatoria = String(payload.tipo || '').toUpperCase() === 'ALEATORIA';
+    payload.solicitacao_ids = aleatoria ? [] : Array.from(solSelecionadas);
+    payload.paradas = aleatoria ? [] : paradasManuais;
+    if (aleatoria && !String(payload.observacao || '').trim()) {
+        toast('Informe a descrição obrigatória da viagem aleatória.', 'error');
+        return;
+    }
+    if (!aleatoria && payload.solicitacao_ids.length === 0 && payload.paradas.length === 0) {
+        toast('Selecione pelo menos uma solicitação pendente ou adicione uma parada manual.', 'error');
         return;
     }
     try {

@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem, ViagemPosicao
+from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem, ViagemParada, ViagemPosicao
 from conferencia_app.services.pedidos_service import _linha_postgres_to_pedido, buscar_linhas_pedido
 
 
@@ -283,6 +283,99 @@ def test_viagem_bloqueia_conflito_de_motorista(tmp_path):
 
     assert response.status_code == 409
     assert "outra viagem" in response.get_json()["msg"]
+
+
+def test_viagem_aleatoria_exige_descricao(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo = AgendamentoVeiculo.query.filter_by(codigo="VAN-ALE").first()
+        if not veiculo:
+            veiculo = AgendamentoVeiculo(codigo="VAN-ALE", nome_exibicao="Van Aleatoria", ativo=True)
+            db.session.add(veiculo)
+            db.session.commit()
+        veiculo_id = veiculo.id
+
+    response = client.post(
+        "/api/viagem",
+        json={"veiculo_id": veiculo_id, "tipo": "ALEATORIA", "observacao": "   "},
+    )
+
+    assert response.status_code == 400
+    assert "Descricao obrigatoria" in response.get_json()["msg"]
+
+
+def test_viagem_aleatoria_pode_ser_criada_sem_solicitacoes(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo = AgendamentoVeiculo.query.filter_by(codigo="VAN-ALE-OK").first()
+        if not veiculo:
+            veiculo = AgendamentoVeiculo(codigo="VAN-ALE-OK", nome_exibicao="Van Aleatoria OK", ativo=True)
+            db.session.add(veiculo)
+            db.session.commit()
+        veiculo_id = veiculo.id
+
+    response = client.post(
+        "/api/viagem",
+        json={
+            "veiculo_id": veiculo_id,
+            "tipo": "ALEATORIA",
+            "observacao": "Buscar documento e resolver demanda externa.",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["viagem"]["tipo"] == "ALEATORIA"
+    assert data["viagem"]["observacao"] == "Buscar documento e resolver demanda externa."
+    with app.app_context():
+        assert ViagemParada.query.filter_by(viagem_id=data["viagem"]["id"]).count() == 0
+
+
+def test_viagem_rejeita_tipos_removidos(tmp_path):
+    fornecedores = tmp_path / "fornecedores.xlsx"
+    clientes = tmp_path / "clientes.xlsx"
+    criar_excel_fornecedores(fornecedores)
+    criar_excel_clientes(clientes)
+
+    app = build_test_app(tmp_path, fornecedores, clientes)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        veiculo = AgendamentoVeiculo.query.filter_by(codigo="VAN-TIPO").first()
+        if not veiculo:
+            veiculo = AgendamentoVeiculo(codigo="VAN-TIPO", nome_exibicao="Van Tipo", ativo=True)
+            db.session.add(veiculo)
+            db.session.commit()
+        veiculo_id = veiculo.id
+
+    for tipo in ("OUTRO", "TRANSFERENCIA"):
+        response = client.post(
+            "/api/viagem",
+            json={
+                "veiculo_id": veiculo_id,
+                "tipo": tipo,
+                "paradas": [{"tipo": "ENTREGA", "parceiro_nome": "Cliente", "cidade": "Campinas", "uf": "SP"}],
+            },
+        )
+        assert response.status_code == 400
+        assert "Tipo de viagem invalido" in response.get_json()["msg"]
 
 
 def test_viagem_agenda_e_torre_controle_retorna_dados(tmp_path):

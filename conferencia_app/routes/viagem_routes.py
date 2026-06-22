@@ -901,7 +901,19 @@ def criar():
         return jsonify({"sucesso": False, "msg": "Veículo obrigatório."}), 400
     motorista_id = _parse_int(p.get("motorista_id"))
     motorista = AgendamentoMotorista.query.get(motorista_id) if motorista_id else None
+    tipo = str(p.get("tipo") or "MISTA").upper().strip()
+    if tipo not in {"MISTA", "COLETA", "ENTREGA", "ALEATORIA"}:
+        return jsonify({"sucesso": False, "msg": "Tipo de viagem invalido."}), 400
+    observacao = str(p.get("observacao") or "").strip()
+    if tipo == "ALEATORIA" and not observacao:
+        return jsonify({"sucesso": False, "msg": "Descricao obrigatoria para viagem aleatoria."}), 400
     sol_ids = p.get("solicitacao_ids") or []
+    paradas_livres = p.get("paradas") or []
+    if tipo == "ALEATORIA":
+        sol_ids = []
+        paradas_livres = []
+    elif not sol_ids and not paradas_livres:
+        return jsonify({"sucesso": False, "msg": "Selecione pelo menos uma solicitacao pendente ou parada manual."}), 400
     if sol_ids and not motorista_id:
         return jsonify({"sucesso": False, "msg": "Selecione um motorista para assumir as solicitações da viagem."}), 400
 
@@ -921,10 +933,10 @@ def criar():
         veiculo_id=veiculo_id,
         motorista_id=motorista_id,
         motorista_nome=(p.get("motorista_nome") or (motorista.nome if motorista else None)),
-        tipo=str(p.get("tipo") or "MISTA").upper().strip(),
+        tipo=tipo,
         status="Planejada",
         titulo=str(p.get("titulo") or "").strip() or None,
-        observacao=str(p.get("observacao") or "").strip() or None,
+        observacao=observacao or None,
         saida_prevista=saida_prevista,
         retorno_previsto=retorno_previsto,
         km_previsto=_parse_float(p.get("km_previsto")),
@@ -963,7 +975,7 @@ def criar():
         seq += 1
 
     # Paradas livres
-    for par in (p.get("paradas") or []):
+    for par in paradas_livres:
         db.session.add(ViagemParada(
             viagem_id=v.id,
             sequencia=seq,
@@ -992,9 +1004,18 @@ def editar(vid: int):
     if v.status in ("Concluida", "Cancelada"):
         return jsonify({"sucesso": False, "msg": "Viagem finalizada não pode ser editada."}), 400
     p = request.get_json(silent=True) or {}
+    novo_tipo = str(p.get("tipo") or v.tipo or "MISTA").upper().strip()
+    nova_observacao = str(p.get("observacao") if "observacao" in p else (v.observacao or "")).strip()
+    if "tipo" in p and novo_tipo not in {"MISTA", "COLETA", "ENTREGA", "ALEATORIA"}:
+        return jsonify({"sucesso": False, "msg": "Tipo de viagem invalido."}), 400
+    if novo_tipo == "ALEATORIA" and not nova_observacao:
+        return jsonify({"sucesso": False, "msg": "Descricao obrigatoria para viagem aleatoria."}), 400
     for campo in ("titulo", "observacao", "origem_label", "destino_label", "tipo"):
         if campo in p:
-            setattr(v, campo, str(p[campo] or "").strip() or None)
+            valor = str(p[campo] or "").strip()
+            if campo == "tipo":
+                valor = valor.upper()
+            setattr(v, campo, valor or None)
     if "motorista_id" in p:
         mid = _parse_int(p["motorista_id"])
         v.motorista_id = mid

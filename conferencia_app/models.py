@@ -765,7 +765,7 @@ class Viagem(db.Model):
     veiculo_id = db.Column(db.Integer, db.ForeignKey("agendamento_veiculo.id"), nullable=False, index=True)
     motorista_id = db.Column(db.Integer, db.ForeignKey("agendamento_motorista.id"), index=True)
     motorista_nome = db.Column(db.String(160))
-    tipo = db.Column(db.String(20), nullable=False, default="MISTA", index=True)  # COLETA|ENTREGA|MISTA|TRANSFERENCIA|OUTRO
+    tipo = db.Column(db.String(20), nullable=False, default="MISTA", index=True)  # COLETA|ENTREGA|MISTA|ALEATORIA
     status = db.Column(db.String(20), nullable=False, default="Planejada", index=True)  # Planejada|EmAndamento|Concluida|Cancelada
     titulo = db.Column(db.String(200))
     observacao = db.Column(db.String(600))
