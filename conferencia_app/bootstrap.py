@@ -1427,6 +1427,62 @@ def _ensure_wms_tables() -> None:
             "ix_movimentacao_wms_numero_nota",
             "CREATE INDEX ix_movimentacao_wms_numero_nota ON movimentacao_wms (numero_nota)",
         )
+
+        # Tarefas operacionais para fluxo de coletor/bipagem.
+        conn.execute(
+            db.text(
+                """
+                CREATE TABLE IF NOT EXISTS wms_tarefa_operacional (
+                    id INTEGER PRIMARY KEY,
+                    tipo VARCHAR(30) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
+                    item_wms_id INTEGER,
+                    localizacao_origem_id INTEGER,
+                    localizacao_destino_id INTEGER,
+                    qtd_planejada FLOAT,
+                    qtd_executada FLOAT,
+                    prioridade VARCHAR(10) NOT NULL DEFAULT 'MEDIA',
+                    atribuido_para VARCHAR(100),
+                    criado_por VARCHAR(100),
+                    iniciado_por VARCHAR(100),
+                    concluido_por VARCHAR(100),
+                    observacao VARCHAR(500),
+                    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    iniciado_em DATETIME,
+                    concluido_em DATETIME,
+                    FOREIGN KEY (item_wms_id) REFERENCES item_wms(id),
+                    FOREIGN KEY (localizacao_origem_id) REFERENCES localizacao_armazem(id),
+                    FOREIGN KEY (localizacao_destino_id) REFERENCES localizacao_armazem(id)
+                )
+                """
+            )
+        )
+        conn.commit()
+
+        _create_index_if_missing(
+            conn,
+            "wms_tarefa_operacional",
+            "ix_wms_tarefa_status",
+            "CREATE INDEX ix_wms_tarefa_status ON wms_tarefa_operacional (status)",
+        )
+        _create_index_if_missing(
+            conn,
+            "wms_tarefa_operacional",
+            "ix_wms_tarefa_tipo",
+            "CREATE INDEX ix_wms_tarefa_tipo ON wms_tarefa_operacional (tipo)",
+        )
+        _create_index_if_missing(
+            conn,
+            "wms_tarefa_operacional",
+            "ix_wms_tarefa_item",
+            "CREATE INDEX ix_wms_tarefa_item ON wms_tarefa_operacional (item_wms_id)",
+        )
+        _create_index_if_missing(
+            conn,
+            "wms_tarefa_operacional",
+            "ix_wms_tarefa_local_destino",
+            "CREATE INDEX ix_wms_tarefa_local_destino ON wms_tarefa_operacional (localizacao_destino_id)",
+        )
         
         # Tabela estoque_wms
         conn.execute(

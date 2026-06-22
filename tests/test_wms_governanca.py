@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
-from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSIntegracaoEvento
+from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSTarefaOperacional, WMSIntegracaoEvento
 from conferencia_app.services.erp_sync_service import ERPSyncService
 
 
@@ -520,3 +520,77 @@ def test_wms_cockpit_operacional_e_pendencia_priorizada(tmp_path):
     assert dados['cards']['movimentacoes_24h'] >= 1
     assert dados['prioridades']['Critica'] >= 1
     assert any(n['numero_nota'] == 'WMS500' for n in dados['notas_pendentes'])
+
+
+def test_wms_coletor_bipa_local_cria_tarefa_e_endereca_item(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        deposito = DepositoWMS.query.filter_by(codigo='AL').first()
+        if not deposito:
+            deposito = DepositoWMS(codigo='AL', nome='Almoxarifado', ativo=True)
+            db.session.add(deposito)
+            db.session.flush()
+        localizacao = LocalizacaoArmazem(
+            codigo='AL-PA-01-01',
+            deposito_id=deposito.id,
+            rua='PA',
+            predio='01',
+            nivel='01',
+            apartamento='',
+            corredor='PA',
+            prateleira='01',
+            posicao='01',
+            capacidade_maxima=100,
+            capacidade_atual=0,
+            ativo=True,
+        )
+        item = ItemWMS(
+            numero_nota='WMSC01',
+            codigo_item='SKU-COL-1',
+            descricao='Item coletor',
+            qtd_recebida=5,
+            qtd_atual=5,
+            unidade='UN',
+            status='Pendente Enderecamento',
+            deposito_id=deposito.id,
+            ordem_compra='45000001',
+            ativo=True,
+        )
+        db.session.add_all([localizacao, item])
+        db.session.commit()
+        item_id = item.id
+
+    bip_local = client.post('/api/wms/coletor/bipar', json={'codigo': 'LOC:AL-PA-01-01'})
+    assert bip_local.status_code == 200
+    assert bip_local.get_json()['tipo'] == 'LOCALIZACAO'
+
+    tarefa_resp = client.post(
+        '/api/wms/coletor/tarefas',
+        json={'tipo': 'ENDERECAMENTO', 'item_wms_id': item_id, 'prioridade': 'ALTA'},
+    )
+    assert tarefa_resp.status_code == 201
+    tarefa_id = tarefa_resp.get_json()['tarefa']['id']
+
+    confirma = client.post(
+        '/api/wms/coletor/enderecar',
+        json={'tarefa_id': tarefa_id, 'localizacao_codigo': 'AL-PA-01-01'},
+    )
+    assert confirma.status_code == 200
+    data = confirma.get_json()
+    assert data['sucesso'] is True
+    assert data['item']['localizacao_codigo'] == 'AL-PA-01-01'
+    assert data['tarefa']['status'] == 'CONCLUIDA'
+
+    with app.app_context():
+        item_atual = db.session.get(ItemWMS, item_id)
+        tarefa = db.session.get(WMSTarefaOperacional, tarefa_id)
+        estoque = EstoqueWMS.query.filter_by(codigo_item='SKU-COL-1', localizacao_id=item_atual.localizacao_id).first()
+        mov = MovimentacaoWMS.query.filter_by(item_wms_id=item_id, tipo_movimentacao='Armazenamento').first()
+        assert item_atual.status == 'Armazenado'
+        assert tarefa.status == 'CONCLUIDA'
+        assert estoque is not None
+        assert estoque.qtd_total == 5
+        assert mov is not None

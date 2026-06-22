@@ -1130,6 +1130,29 @@ class WMSAlertaOperacional(db.Model):
     resolvido_em = db.Column(db.DateTime)
 
 
+class WMSTarefaOperacional(db.Model):
+    """Tarefa guiada para coletor WMS (enderecamento, movimentacao, inventario, separacao)."""
+    __tablename__ = "wms_tarefa_operacional"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(30), nullable=False, index=True)  # ENDERECAMENTO|MOVIMENTACAO|INVENTARIO|SEPARACAO
+    status = db.Column(db.String(20), nullable=False, default="PENDENTE", index=True)  # PENDENTE|EM_EXECUCAO|CONCLUIDA|CANCELADA
+    item_wms_id = db.Column(db.Integer, db.ForeignKey("item_wms.id"), index=True)
+    localizacao_origem_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
+    localizacao_destino_id = db.Column(db.Integer, db.ForeignKey("localizacao_armazem.id"), index=True)
+    qtd_planejada = db.Column(db.Float)
+    qtd_executada = db.Column(db.Float)
+    prioridade = db.Column(db.String(10), nullable=False, default="MEDIA", index=True)  # BAIXA|MEDIA|ALTA|CRITICA
+    atribuido_para = db.Column(db.String(100), index=True)
+    criado_por = db.Column(db.String(100))
+    iniciado_por = db.Column(db.String(100))
+    concluido_por = db.Column(db.String(100))
+    observacao = db.Column(db.String(500))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    iniciado_em = db.Column(db.DateTime)
+    concluido_em = db.Column(db.DateTime)
+
+
 
 class ConsertoEstoque(db.Model):
     __tablename__ = 'conserto_estoque'

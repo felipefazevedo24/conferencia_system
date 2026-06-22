@@ -857,6 +857,12 @@ def wms_enderecamento_page():
     return render_template("wms.html", user=session["username"])
 
 
+@page_bp.route("/wms/coletor")
+@permission_required("PAGE_WMS")
+def wms_coletor_page():
+    return render_template("wms_coletor.html", user=session["username"])
+
+
 @page_bp.route("/financeiro/faturamento")
 @permission_required("PAGE_FINANCEIRO_FATURAMENTO")
 def financeiro_faturamento_page():

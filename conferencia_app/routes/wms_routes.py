@@ -16,6 +16,7 @@ from ..models import (
     WMSAlertaOperacional,
     WMSReconciliacaoDivergencia,
     WMSSkuMestre,
+    WMSTarefaOperacional,
     WMSIntegracaoEvento,
     DepositoWMS,
 )
@@ -50,6 +51,90 @@ def requer_wms_operacao(f):
             return jsonify({'erro': 'Acesso restrito ao módulo WMS (Fiscal/Admin).'}), 403
         return f(*args, **kwargs)
     return wrapper
+
+
+def _normalizar_bip(valor):
+    return str(valor or '').strip().upper()
+
+
+def _localizacao_por_codigo(codigo):
+    codigo = _normalizar_bip(codigo)
+    if codigo.startswith('LOC:'):
+        codigo = codigo[4:].strip()
+    if not codigo:
+        return None
+    return LocalizacaoArmazem.query.filter(
+        func.upper(func.trim(LocalizacaoArmazem.codigo)) == codigo,
+        LocalizacaoArmazem.ativo == True,
+    ).first()
+
+
+def _item_wms_payload(item):
+    if not item:
+        return None
+    deposito = DepositoWMS.query.get(item.deposito_id) if item.deposito_id else None
+    localizacao = LocalizacaoArmazem.query.get(item.localizacao_id) if item.localizacao_id else None
+    return {
+        'id': item.id,
+        'numero_nota': item.numero_nota,
+        'codigo_item': item.codigo_item,
+        'descricao': item.descricao,
+        'qtd_atual': item.qtd_atual,
+        'unidade': item.unidade,
+        'status': item.status,
+        'codigo_grv': item.codigo_grv,
+        'ordem_servico': item.ordem_servico,
+        'ordem_compra': item.ordem_compra,
+        'deposito_id': item.deposito_id,
+        'deposito_codigo': deposito.codigo if deposito else None,
+        'deposito_nome': deposito.nome if deposito else None,
+        'localizacao_id': item.localizacao_id,
+        'localizacao_codigo': localizacao.codigo if localizacao else None,
+    }
+
+
+def _localizacao_payload(loc):
+    if not loc:
+        return None
+    deposito = DepositoWMS.query.get(loc.deposito_id) if loc.deposito_id else None
+    return {
+        'id': loc.id,
+        'codigo': loc.codigo,
+        'deposito_id': loc.deposito_id,
+        'deposito_codigo': deposito.codigo if deposito else None,
+        'deposito_nome': deposito.nome if deposito else None,
+        'rua': loc.rua,
+        'predio': loc.predio,
+        'nivel': loc.nivel,
+        'apartamento': loc.apartamento,
+        'capacidade_maxima': loc.capacidade_maxima,
+        'capacidade_atual': loc.capacidade_atual,
+        'capacidade_disponivel': max(float(loc.capacidade_maxima or 0) - float(loc.capacidade_atual or 0), 0),
+    }
+
+
+def _tarefa_payload(tarefa):
+    if not tarefa:
+        return None
+    item = ItemWMS.query.get(tarefa.item_wms_id) if tarefa.item_wms_id else None
+    destino = LocalizacaoArmazem.query.get(tarefa.localizacao_destino_id) if tarefa.localizacao_destino_id else None
+    origem = LocalizacaoArmazem.query.get(tarefa.localizacao_origem_id) if tarefa.localizacao_origem_id else None
+    return {
+        'id': tarefa.id,
+        'tipo': tarefa.tipo,
+        'status': tarefa.status,
+        'prioridade': tarefa.prioridade,
+        'qtd_planejada': tarefa.qtd_planejada,
+        'qtd_executada': tarefa.qtd_executada,
+        'atribuido_para': tarefa.atribuido_para,
+        'observacao': tarefa.observacao,
+        'criado_em': tarefa.criado_em.isoformat() if tarefa.criado_em else None,
+        'iniciado_em': tarefa.iniciado_em.isoformat() if tarefa.iniciado_em else None,
+        'concluido_em': tarefa.concluido_em.isoformat() if tarefa.concluido_em else None,
+        'item': _item_wms_payload(item),
+        'localizacao_origem': _localizacao_payload(origem),
+        'localizacao_destino': _localizacao_payload(destino),
+    }
 
 
 # ============================================================================
@@ -801,6 +886,284 @@ def obter_hub_resumo():
     cockpit['divergencias'] = painel.get('divergencias', [])
     cockpit['resumo_denso'] = denso
     return jsonify(cockpit), 200
+
+
+@wms_bp.route('/coletor/bipar', methods=['POST'])
+@requer_wms_operacao
+def coletor_bipar():
+    data = request.get_json() or {}
+    codigo = _normalizar_bip(data.get('codigo') or data.get('barcode') or data.get('bip'))
+    if not codigo:
+        return jsonify({'erro': 'Informe o codigo bipado.'}), 400
+
+    # Endereco fisico do armazem.
+    loc = _localizacao_por_codigo(codigo)
+    if loc:
+        estoque = EstoqueWMS.query.filter_by(localizacao_id=loc.id).order_by(EstoqueWMS.codigo_item.asc()).all()
+        return jsonify({
+            'tipo': 'LOCALIZACAO',
+            'codigo': codigo,
+            'localizacao': _localizacao_payload(loc),
+            'estoque': [
+                {
+                    'codigo_item': e.codigo_item,
+                    'qtd_total': e.qtd_total,
+                    'qtd_disponivel': (e.qtd_total or 0) - (e.qtd_separada or 0) - (e.qtd_bloqueada or 0),
+                }
+                for e in estoque
+            ],
+            'proximas_acoes': ['ENDERECAR_AQUI', 'CONSULTAR_LOCAL'],
+        }), 200
+
+    bruto = codigo
+    if ':' in bruto:
+        prefixo, valor = bruto.split(':', 1)
+        prefixo = prefixo.strip()
+        valor = valor.strip()
+    else:
+        prefixo, valor = '', bruto
+
+    # Item WMS por ID explicito ou GRV.
+    item = None
+    if prefixo in {'ITEM', 'WMS'} and valor.isdigit():
+        item = ItemWMS.query.get(int(valor))
+    if not item:
+        item = ItemWMS.query.filter(
+            ItemWMS.ativo == True,
+            func.upper(func.trim(ItemWMS.codigo_grv)) == valor,
+        ).order_by(ItemWMS.id.desc()).first()
+    if item:
+        sugestao = None
+        if item.deposito_id:
+            sugestao_resp = sugerir_localizacao_para_item(item)
+            sugestao = _localizacao_payload(sugestao_resp) if sugestao_resp else None
+        return jsonify({
+            'tipo': 'ITEM_WMS',
+            'codigo': codigo,
+            'item': _item_wms_payload(item),
+            'localizacao_sugerida': sugestao,
+            'proximas_acoes': ['BIPAR_LOCAL_DESTINO'] if item.localizacao_id is None else ['CONSULTAR_ITEM', 'MOVIMENTAR'],
+        }), 200
+
+    # Nota fiscal ou NF prefixada.
+    nota = valor if prefixo in {'NF', 'NOTA'} else bruto
+    itens_nota = ItemWMS.query.filter(
+        ItemWMS.ativo == True,
+        func.upper(func.trim(ItemWMS.numero_nota)) == nota,
+    ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
+    if itens_nota:
+        return jsonify({
+            'tipo': 'NOTA',
+            'codigo': codigo,
+            'numero_nota': nota,
+            'pendentes': [_item_wms_payload(i) for i in itens_nota if i.localizacao_id is None],
+            'enderecados': [_item_wms_payload(i) for i in itens_nota if i.localizacao_id is not None],
+            'proximas_acoes': ['ENDERECAR_PENDENTES'],
+        }), 200
+
+    # SKU/material.
+    sku = valor if prefixo in {'SKU', 'MAT', 'ITEM'} else bruto
+    estoque_sku = EstoqueWMS.query.filter(
+        func.upper(func.trim(EstoqueWMS.codigo_item)) == sku,
+    ).order_by(EstoqueWMS.qtd_total.desc()).limit(50).all()
+    pendentes_sku = ItemWMS.query.filter(
+        ItemWMS.ativo == True,
+        ItemWMS.localizacao_id.is_(None),
+        func.upper(func.trim(ItemWMS.codigo_item)) == sku,
+    ).order_by(ItemWMS.data_criacao.asc()).limit(50).all()
+    if estoque_sku or pendentes_sku:
+        return jsonify({
+            'tipo': 'SKU',
+            'codigo': codigo,
+            'codigo_item': sku,
+            'estoque': [
+                {
+                    'codigo_item': e.codigo_item,
+                    'localizacao': _localizacao_payload(LocalizacaoArmazem.query.get(e.localizacao_id)),
+                    'qtd_total': e.qtd_total,
+                    'qtd_disponivel': (e.qtd_total or 0) - (e.qtd_separada or 0) - (e.qtd_bloqueada or 0),
+                }
+                for e in estoque_sku
+            ],
+            'pendentes': [_item_wms_payload(i) for i in pendentes_sku],
+            'proximas_acoes': ['CONSULTAR_SKU', 'ENDERECAR_PENDENTES'],
+        }), 200
+
+    return jsonify({'tipo': 'DESCONHECIDO', 'codigo': codigo, 'mensagem': 'Codigo nao encontrado no WMS.'}), 404
+
+
+def sugerir_localizacao_para_item(item):
+    if not item or not item.deposito_id:
+        return None
+    sku_mestre = WMSSkuMestre.query.filter_by(codigo_item=item.codigo_item, ativo=True).first()
+    if sku_mestre and sku_mestre.endereco_preferencial:
+        loc_pref = LocalizacaoArmazem.query.filter_by(
+            codigo=str(sku_mestre.endereco_preferencial).strip(),
+            deposito_id=item.deposito_id,
+            ativo=True,
+        ).first()
+        if loc_pref:
+            return loc_pref
+    ultimo = (
+        db.session.query(ItemWMS, LocalizacaoArmazem)
+        .join(LocalizacaoArmazem, ItemWMS.localizacao_id == LocalizacaoArmazem.id)
+        .filter(
+            ItemWMS.ativo == True,
+            func.lower(func.trim(ItemWMS.codigo_item)) == str(item.codigo_item or '').strip().lower(),
+            LocalizacaoArmazem.ativo == True,
+            LocalizacaoArmazem.deposito_id == item.deposito_id,
+        )
+        .order_by(ItemWMS.data_armazenamento.desc(), ItemWMS.id.desc())
+        .first()
+    )
+    if ultimo:
+        return ultimo[1]
+    return (
+        LocalizacaoArmazem.query.filter_by(ativo=True, deposito_id=item.deposito_id)
+        .order_by(LocalizacaoArmazem.capacidade_atual.asc(), LocalizacaoArmazem.codigo.asc())
+        .first()
+    )
+
+
+@wms_bp.route('/coletor/tarefas', methods=['GET', 'POST'])
+@requer_wms_operacao
+def coletor_tarefas():
+    usuario = session.get('username', 'Sistema')
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        tipo = _normalizar_bip(data.get('tipo') or 'ENDERECAMENTO')
+        if tipo not in {'ENDERECAMENTO', 'MOVIMENTACAO', 'INVENTARIO', 'SEPARACAO'}:
+            return jsonify({'erro': 'Tipo de tarefa invalido.'}), 400
+        item_wms_id = data.get('item_wms_id')
+        item = ItemWMS.query.get(int(item_wms_id)) if item_wms_id else None
+        if tipo == 'ENDERECAMENTO' and not item:
+            return jsonify({'erro': 'item_wms_id e obrigatorio para tarefa de enderecamento.'}), 400
+        prioridade = _normalizar_bip(data.get('prioridade') or 'MEDIA')
+        if prioridade not in {'BAIXA', 'MEDIA', 'ALTA', 'CRITICA'}:
+            prioridade = 'MEDIA'
+        tarefa = WMSTarefaOperacional(
+            tipo=tipo,
+            status='PENDENTE',
+            item_wms_id=item.id if item else None,
+            localizacao_origem_id=data.get('localizacao_origem_id') or None,
+            localizacao_destino_id=data.get('localizacao_destino_id') or None,
+            qtd_planejada=float(data.get('qtd_planejada') or (item.qtd_atual if item else 0) or 0),
+            prioridade=prioridade,
+            atribuido_para=(data.get('atribuido_para') or '').strip() or None,
+            criado_por=usuario,
+            observacao=(data.get('observacao') or '').strip() or None,
+        )
+        db.session.add(tarefa)
+        db.session.commit()
+        return jsonify({'sucesso': True, 'tarefa': _tarefa_payload(tarefa)}), 201
+
+    status = _normalizar_bip(request.args.get('status') or 'PENDENTE')
+    query = WMSTarefaOperacional.query
+    if status and status != 'TODAS':
+        query = query.filter(WMSTarefaOperacional.status == status)
+    query = query.order_by(
+        WMSTarefaOperacional.prioridade.desc(),
+        WMSTarefaOperacional.criado_em.asc(),
+    )
+    return jsonify([_tarefa_payload(t) for t in query.limit(100).all()]), 200
+
+
+@wms_bp.route('/coletor/proxima-tarefa', methods=['GET'])
+@requer_wms_operacao
+def coletor_proxima_tarefa():
+    tarefa = (
+        WMSTarefaOperacional.query
+        .filter(WMSTarefaOperacional.status.in_(['PENDENTE', 'EM_EXECUCAO']))
+        .order_by(WMSTarefaOperacional.criado_em.asc())
+        .first()
+    )
+    if tarefa:
+        return jsonify({'tarefa': _tarefa_payload(tarefa)}), 200
+
+    item = (
+        ItemWMS.query
+        .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None))
+        .order_by(ItemWMS.data_criacao.asc(), ItemWMS.id.asc())
+        .first()
+    )
+    return jsonify({'tarefa': None, 'item_sugerido': _item_wms_payload(item)}), 200
+
+
+@wms_bp.route('/coletor/enderecar', methods=['POST'])
+@requer_wms_operacao
+def coletor_enderecar():
+    data = request.get_json() or {}
+    usuario = session.get('username', 'Sistema')
+    tarefa_id = data.get('tarefa_id')
+    item_wms_id = data.get('item_wms_id')
+    local_codigo = data.get('localizacao_codigo') or data.get('codigo_local') or data.get('local')
+    localizacao_id = data.get('localizacao_id')
+
+    tarefa = WMSTarefaOperacional.query.get(int(tarefa_id)) if tarefa_id else None
+    if tarefa and not item_wms_id:
+        item_wms_id = tarefa.item_wms_id
+    if not item_wms_id:
+        return jsonify({'erro': 'Informe item_wms_id ou tarefa_id.'}), 400
+
+    loc = None
+    if localizacao_id:
+        loc = LocalizacaoArmazem.query.filter_by(id=int(localizacao_id), ativo=True).first()
+    elif local_codigo:
+        loc = _localizacao_por_codigo(local_codigo)
+    if not loc:
+        return jsonify({'erro': 'Localizacao bipada nao encontrada.'}), 404
+
+    item = ItemWMS.query.get(int(item_wms_id))
+    if not item:
+        return jsonify({'erro': 'Item WMS nao encontrado.'}), 404
+
+    codigo_grv = (data.get('codigo_grv') or item.codigo_grv or item.codigo_item or '').strip()
+    ordem_servico = (data.get('ordem_servico') or item.ordem_servico or '').strip()
+    ordem_compra = (data.get('ordem_compra') or item.ordem_compra or '').strip()
+    if not ordem_compra:
+        item_nota = ItemNota.query.filter(
+            func.trim(ItemNota.numero_nota) == str(item.numero_nota or '').strip(),
+            func.trim(ItemNota.codigo) == str(item.codigo_item or '').strip(),
+            ItemNota.pedido_compra.isnot(None),
+            func.trim(ItemNota.pedido_compra) != '',
+        ).order_by(ItemNota.id.desc()).first()
+        if item_nota and item_nota.pedido_compra:
+            ordem_compra = str(item_nota.pedido_compra).strip()
+    if not ordem_servico and not ordem_compra:
+        return jsonify({'erro': 'Informe ou vincule OS/OC antes de enderecar.'}), 400
+
+    if tarefa and tarefa.status == 'PENDENTE':
+        tarefa.status = 'EM_EXECUCAO'
+        tarefa.iniciado_por = usuario
+        tarefa.iniciado_em = datetime.now()
+
+    item = WMSService.enderecar_item_pendente(
+        item.id,
+        loc.id,
+        usuario,
+        codigo_grv,
+        ordem_servico=ordem_servico or None,
+        ordem_compra=ordem_compra or None,
+    )
+    if not item:
+        db.session.rollback()
+        return jsonify({'erro': 'Nao foi possivel enderecar: item invalido, ja enderecado, deposito divergente ou sem capacidade.'}), 400
+
+    if tarefa:
+        tarefa.status = 'CONCLUIDA'
+        tarefa.localizacao_destino_id = loc.id
+        tarefa.qtd_executada = item.qtd_atual
+        tarefa.concluido_por = usuario
+        tarefa.concluido_em = datetime.now()
+        db.session.commit()
+
+    return jsonify({
+        'sucesso': True,
+        'mensagem': f'Item {item.codigo_item} enderecado em {loc.codigo}.',
+        'item': _item_wms_payload(item),
+        'localizacao': _localizacao_payload(loc),
+        'tarefa': _tarefa_payload(tarefa) if tarefa else None,
+    }), 200
 
 
 @wms_bp.route('/cockpit', methods=['GET'])
