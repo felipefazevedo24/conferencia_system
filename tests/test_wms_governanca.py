@@ -5,6 +5,7 @@ from conferencia_app import create_app
 from conferencia_app.extensions import db
 from conferencia_app.models import DepositoWMS, EstoqueWMS, ItemNota, ItemWMS, LocalizacaoArmazem, MovimentacaoWMS, WMSTarefaOperacional, WMSIntegracaoEvento, WMSInventarioCiclico, WMSPedidoSeparacao, WMSUnidadeLogistica
 from conferencia_app.services.erp_sync_service import ERPSyncService
+from conferencia_app.services.wms_service import WMSService
 
 
 def build_test_app(tmp_path):
@@ -375,6 +376,51 @@ def test_confirmar_lancamento_enfileira_integracao_wms_e_agrega_sku(tmp_path):
         pendencia = ItemWMS.query.filter_by(numero_nota="WMS100", codigo_item="SKU-1", localizacao_id=None, ativo=True).first()
         assert pendencia is not None
         assert float(pendencia.qtd_atual or 0) == 5.0
+
+
+def test_wms_nota_lancada_usa_quantidade_do_erp_postgres(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="WMSERP1",
+                fornecedor="Fornecedor Local",
+                codigo="SKU-ERP",
+                descricao="Descricao local",
+                qtd_real=999.0,
+                status="Lançado",
+                numero_lancamento="GRV-ERP-1",
+                chave_acesso="1" * 44,
+            )
+        )
+        db.session.commit()
+
+        entrada_erp = {
+            "numero_nota": "WMSERP1",
+            "codigo_lancamento": "GRV-ERP-1",
+            "chave_acesso": "1" * 44,
+            "parceiro_nome": "Fornecedor ERP",
+            "itens": [
+                {"cod_interno": "SKU-ERP", "descricao": "Descricao ERP A", "quantidade": 2.5, "unidade": "PC"},
+                {"cod_interno": "SKU-ERP", "descricao": "Descricao ERP B", "quantidade": 3.5, "unidade": "PC"},
+            ],
+        }
+
+        with patch(
+            "conferencia_app.services.erp_lancamento_service._resolver_config",
+            return_value={"api_url": "https://bridge.local", "api_token": "token", "api_timeout": 30},
+        ), patch(
+            "conferencia_app.services.erp_lancamento_service._consultar_entrada_grv_via_api",
+            return_value=entrada_erp,
+        ):
+            resultado = WMSService.sincronizar_nota_lancada_erp("WMSERP1", "tester")
+
+        assert resultado["sucesso"] is True
+        assert resultado["fonte"] == "ERPPostgres"
+        item = ItemWMS.query.filter_by(numero_nota="WMSERP1", codigo_item="SKU-ERP", ativo=True).one()
+        assert item.fornecedor == "Fornecedor ERP"
+        assert item.descricao == "Descricao ERP A"
+        assert float(item.qtd_atual or 0) == 6.0
 
 
 def test_wms_governanca_parametros_e_reconciliacao(tmp_path):

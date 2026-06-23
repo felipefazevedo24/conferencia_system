@@ -67,6 +67,214 @@ class WMSService:
         return DepositoWMS.query.filter_by(codigo='AL', ativo=True).first()
 
     @staticmethod
+    def _float(valor, padrao=0.0):
+        try:
+            return float(valor if valor is not None else padrao)
+        except (TypeError, ValueError):
+            return float(padrao)
+
+    @staticmethod
+    def _normalizar_linhas_entrada_erp(entrada):
+        linhas_por_sku = {}
+        for item in (entrada or {}).get('itens') or []:
+            if not isinstance(item, dict):
+                continue
+            codigo = str(item.get('cod_interno') or item.get('codigo_item') or '').strip()
+            if not codigo:
+                continue
+            qtd = WMSService._float(item.get('quantidade') or item.get('qtd') or item.get('qtde'), 0.0)
+            if qtd <= 0:
+                continue
+            atual = linhas_por_sku.setdefault(
+                codigo,
+                {
+                    'codigo_item': codigo,
+                    'descricao': str(item.get('descricao') or codigo).strip(),
+                    'qtd': 0.0,
+                    'unidade': str(item.get('unidade') or '').strip() or None,
+                    'lote': str(item.get('lote') or '').strip() or None,
+                    'localizacao_estoque': str(item.get('localizacao_estoque') or '').strip() or None,
+                },
+            )
+            atual['qtd'] += qtd
+            if not atual.get('descricao') or atual['descricao'] == codigo:
+                atual['descricao'] = str(item.get('descricao') or codigo).strip()
+            if not atual.get('unidade') and item.get('unidade'):
+                atual['unidade'] = str(item.get('unidade')).strip()
+            if not atual.get('lote') and item.get('lote'):
+                atual['lote'] = str(item.get('lote')).strip()
+            if not atual.get('localizacao_estoque') and item.get('localizacao_estoque'):
+                atual['localizacao_estoque'] = str(item.get('localizacao_estoque')).strip()
+        return list(linhas_por_sku.values())
+
+    @staticmethod
+    def _entrada_local_para_testes(numero_nota):
+        itens = ItemNota.query.filter_by(numero_nota=str(numero_nota), status='Lançado').all()
+        if not itens:
+            return None
+        return {
+            'numero_nota': str(numero_nota),
+            'codigo_lancamento': str(itens[0].numero_lancamento or '').strip(),
+            'chave_acesso': str(itens[0].chave_acesso or '').strip(),
+            'parceiro_nome': str(itens[0].fornecedor or '').strip(),
+            'fonte': 'ItemNotaLocal',
+            'itens': [
+                {
+                    'cod_interno': item.codigo,
+                    'descricao': item.descricao,
+                    'quantidade': item.qtd_real,
+                    'unidade': getattr(item, 'unidade_comercial', None),
+                }
+                for item in itens
+            ],
+        }
+
+    @staticmethod
+    def consultar_entrada_erp_para_wms(numero_nota):
+        """Busca no ERP/Postgres os itens oficiais da entrada que alimenta o WMS."""
+        numero_nota = str(numero_nota or '').strip()
+        if not numero_nota:
+            return {'encontrada': False, 'entrada': None, 'linhas': [], 'fonte': None}
+
+        try:
+            from .erp_lancamento_service import (
+                _consultar_entrada_grv_direto,
+                _consultar_entrada_grv_via_api,
+                _resolver_config,
+            )
+
+            cfg = _resolver_config()
+            item_ref = (
+                ItemNota.query.filter_by(numero_nota=numero_nota)
+                .order_by(ItemNota.data_lancamento.desc(), ItemNota.id.desc())
+                .first()
+            )
+            codigo_lancamento = str(getattr(item_ref, 'numero_lancamento', '') or '').strip()
+            chave = str(getattr(item_ref, 'chave_acesso', '') or '').strip()
+            entrada = (
+                _consultar_entrada_grv_via_api(cfg, numero_nota, codigo_lancamento, chave)
+                if cfg.get('api_url')
+                else _consultar_entrada_grv_direto(cfg, numero_nota, codigo_lancamento, chave)
+            )
+            if entrada:
+                linhas = WMSService._normalizar_linhas_entrada_erp(entrada)
+                return {
+                    'encontrada': True,
+                    'entrada': entrada,
+                    'linhas': linhas,
+                    'fonte': 'ERPPostgres',
+                }
+        except Exception as exc:
+            current_app.logger.warning("WMS: falha ao consultar NF %s no ERP/Postgres: %s", numero_nota, exc)
+            if not current_app.config.get('TESTING') and not current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False):
+                raise
+
+        if current_app.config.get('TESTING') or current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False):
+            entrada_local = WMSService._entrada_local_para_testes(numero_nota)
+            if entrada_local:
+                return {
+                    'encontrada': True,
+                    'entrada': entrada_local,
+                    'linhas': WMSService._normalizar_linhas_entrada_erp(entrada_local),
+                    'fonte': 'ItemNotaLocal',
+                }
+
+        return {'encontrada': False, 'entrada': None, 'linhas': [], 'fonte': None}
+
+    @staticmethod
+    def sincronizar_nota_lancada_erp(numero_nota, usuario):
+        """Cria/atualiza pendencias WMS usando a entrada oficial do ERP/Postgres."""
+        numero_nota = str(numero_nota or '').strip()
+        usuario = str(usuario or 'Integrador').strip() or 'Integrador'
+        consulta = WMSService.consultar_entrada_erp_para_wms(numero_nota)
+        if not consulta.get('encontrada'):
+            return {
+                'sucesso': False,
+                'itens_pendentes': 0,
+                'itens_atualizados': 0,
+                'fonte': consulta.get('fonte'),
+                'mensagem': f'NF {numero_nota} nao encontrada no ERP/Postgres para gerar pendencias WMS.',
+            }
+
+        entrada = consulta.get('entrada') or {}
+        linhas = consulta.get('linhas') or []
+        if not linhas:
+            return {
+                'sucesso': True,
+                'itens_pendentes': 0,
+                'itens_atualizados': 0,
+                'fonte': consulta.get('fonte'),
+                'mensagem': f'NF {numero_nota} encontrada no ERP, mas sem itens validos para WMS.',
+            }
+
+        deposito = WMSService._obter_deposito_padrao_al()
+        deposito_id = deposito.id if deposito else None
+        codigo_lancamento = str(entrada.get('codigo_lancamento') or entrada.get('numero_ar') or '').strip()
+        fornecedor = str(entrada.get('parceiro_nome') or entrada.get('fornecedor_nome') or '').strip()
+        chave_acesso = str(entrada.get('chave_acesso') or '').strip()
+        agora = datetime.now()
+        criados = 0
+        atualizados = 0
+
+        for linha in linhas:
+            codigo_item = str(linha.get('codigo_item') or '').strip()
+            qtd = WMSService._float(linha.get('qtd'), 0.0)
+            if not codigo_item or qtd <= 0:
+                continue
+
+            existente = ItemWMS.query.filter_by(
+                numero_nota=numero_nota,
+                codigo_item=codigo_item,
+                ativo=True,
+            ).first()
+            if existente:
+                if existente.localizacao_id is None:
+                    existente.qtd_recebida = qtd
+                    existente.qtd_atual = qtd
+                    existente.descricao = linha.get('descricao') or existente.descricao
+                    existente.unidade = linha.get('unidade') or existente.unidade
+                    existente.lote = linha.get('lote') or existente.lote
+                    existente.codigo_grv = codigo_lancamento or existente.codigo_grv or codigo_item
+                    existente.chave_acesso = chave_acesso or existente.chave_acesso
+                    existente.fornecedor = fornecedor or existente.fornecedor
+                    existente.deposito_id = existente.deposito_id or deposito_id
+                    existente.status = 'Pendente Enderecamento'
+                    atualizados += 1
+                continue
+
+            db.session.add(
+                ItemWMS(
+                    numero_nota=numero_nota,
+                    chave_acesso=chave_acesso or None,
+                    fornecedor=fornecedor or None,
+                    codigo_item=codigo_item,
+                    descricao=linha.get('descricao') or codigo_item,
+                    qtd_recebida=qtd,
+                    qtd_atual=qtd,
+                    unidade=linha.get('unidade'),
+                    lote=linha.get('lote'),
+                    codigo_grv=codigo_lancamento or codigo_item,
+                    localizacao_id=None,
+                    usuario_armazenamento=usuario,
+                    data_armazenamento=None,
+                    status='Pendente Enderecamento',
+                    deposito_id=deposito_id,
+                    ativo=True,
+                    data_criacao=agora,
+                )
+            )
+            criados += 1
+
+        db.session.commit()
+        return {
+            'sucesso': True,
+            'itens_pendentes': criados,
+            'itens_atualizados': atualizados,
+            'fonte': consulta.get('fonte'),
+            'mensagem': f'WMS: {criados} itens pendentes criados e {atualizados} atualizados com base {consulta.get("fonte")}.',
+        }
+
+    @staticmethod
     def formatar_codigo_localizacao(deposito_codigo, rua, coluna, nivel):
         dep = WMSService._normalizar_bloco_endereco(deposito_codigo, 2)
         rua_fmt = WMSService._normalizar_bloco_endereco(rua, 2)

@@ -1165,66 +1165,9 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
 
 
 def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
-    """Registra itens da NF no WMS como pendentes de endereçamento."""
+    """Registra itens da NF no WMS como pendentes usando a base oficial ERP/Postgres."""
     try:
-        itens = ItemNota.query.filter_by(numero_nota=numero_nota, status='Lançado').all()
-
-        if not itens:
-            return {
-                'sucesso': True,
-                'itens_pendentes': 0,
-                'mensagem': 'Nenhum item para armazenar'
-            }
-
-        itens_pendentes = 0
-        itens_atualizados = 0
-        qtd_por_sku = {}
-
-        for item in itens:
-            codigo_item = (item.codigo or '').strip()
-            if not codigo_item:
-                continue
-            qtd_por_sku[codigo_item] = float(qtd_por_sku.get(codigo_item, 0.0)) + float(item.qtd_real or 0)
-
-        for codigo_item, qtd in qtd_por_sku.items():
-            try:
-                existente = ItemWMS.query.filter_by(
-                    numero_nota=numero_nota,
-                    codigo_item=codigo_item,
-                    ativo=True,
-                ).first()
-                if existente:
-                    if existente.localizacao_id is None:
-                        existente.qtd_recebida = qtd
-                        existente.qtd_atual = qtd
-                        existente.status = 'Pendente Enderecamento'
-                        itens_atualizados += 1
-                    continue
-
-                item_criado = WMSService.armazenar_item_nota(
-                    numero_nota=numero_nota,
-                    codigo_item=codigo_item,
-                    localizacao_id=None,
-                    usuario=usuario,
-                    qtd_recebida=qtd
-                )
-                if item_criado:
-                    itens_pendentes += 1
-
-            except Exception as e:
-                current_app.logger.warning(f"Erro ao armazenar item {codigo_item} da nota {numero_nota}: {str(e)}")
-                continue
-
-        if itens_atualizados:
-            db.session.commit()
-
-        mensagem = f"WMS: {itens_pendentes} itens pendentes criados e {itens_atualizados} atualizados"
-
-        return {
-            'sucesso': True,
-            'itens_pendentes': itens_pendentes,
-            'mensagem': mensagem
-        }
+        return WMSService.sincronizar_nota_lancada_erp(numero_nota, usuario)
 
     except Exception as e:
         current_app.logger.error(f"Erro ao integrar WMS para nota {numero_nota}: {str(e)}")

@@ -2,7 +2,18 @@
 from __future__ import annotations
 
 import smtplib
+import time
 from email.message import Message
+
+
+def _as_bool(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "sim"}
 
 
 def enviar_mensagem_smtp(
@@ -20,13 +31,21 @@ def enviar_mensagem_smtp(
     remetente = sender or app.config.get("MAIL_SENDER") or ""
     senha = password or app.config.get("MAIL_PASSWORD") or ""
     usuario = app.config.get("MAIL_SMTP_USER") or remetente
-    use_ssl = bool(app.config.get("MAIL_SMTP_USE_SSL")) or server_port == 465
-    use_starttls = bool(app.config.get("MAIL_SMTP_STARTTLS", True)) and not use_ssl
+    use_ssl = _as_bool(app.config.get("MAIL_SMTP_USE_SSL"), False) or server_port == 465
+    use_starttls = _as_bool(app.config.get("MAIL_SMTP_STARTTLS"), True) and not use_ssl
     timeout_s = timeout if timeout is not None else app.config.get("MAIL_SMTP_TIMEOUT", 90)
     try:
         timeout_s = max(1, int(timeout_s))
     except (TypeError, ValueError):
         timeout_s = 90
+    try:
+        max_tentativas = max(1, int(app.config.get("MAIL_SMTP_MAX_ATTEMPTS", 3)))
+    except (TypeError, ValueError):
+        max_tentativas = 3
+    try:
+        retry_delay_s = max(0, float(app.config.get("MAIL_SMTP_RETRY_DELAY_SECONDS", 2)))
+    except (TypeError, ValueError):
+        retry_delay_s = 2
 
     if not server_host or not remetente or not senha:
         raise RuntimeError("SMTP nao configurado (MAIL_SMTP_SERVER/MAIL_SENDER/MAIL_PASSWORD).")
@@ -50,17 +69,22 @@ def enviar_mensagem_smtp(
             etapa = "enviar mensagem"
             server.send_message(msg)
 
+    ultimo_erro = None
     try:
-        for tentativa in range(2):
+        for tentativa in range(max_tentativas):
             try:
                 _enviar_uma_vez()
                 return
-            except smtplib.SMTPServerDisconnected:
-                if tentativa == 1:
+            except (smtplib.SMTPServerDisconnected, TimeoutError, OSError) as exc:
+                ultimo_erro = exc
+                if tentativa >= max_tentativas - 1:
                     raise
+                if retry_delay_s:
+                    time.sleep(retry_delay_s)
     except TimeoutError as exc:
         raise TimeoutError(
-            f"Timeout SMTP ao {etapa} apos {timeout_s}s ({server_host}:{server_port})."
+            f"Timeout SMTP ao {etapa} apos {timeout_s}s ({server_host}:{server_port}, "
+            f"tentativas {max_tentativas})."
         ) from exc
     except smtplib.SMTPServerDisconnected as exc:
         tls_config = (
@@ -68,6 +92,15 @@ def enviar_mensagem_smtp(
         )
         raise RuntimeError(
             f"Servidor SMTP desconectou ao {etapa} ({server_host}:{server_port}, "
-            f"timeout {timeout_s}s, {tls_config}): {exc}. "
+            f"timeout {timeout_s}s, tentativas {max_tentativas}, {tls_config}): {exc}. "
             "Confira a combinacao de porta e TLS: normalmente 587 usa STARTTLS e 465 usa SSL."
+        ) from exc
+    except OSError as exc:
+        tls_config = (
+            f"SSL={'1' if use_ssl else '0'}, STARTTLS={'1' if use_starttls else '0'}"
+        )
+        detalhe = f": {ultimo_erro}" if ultimo_erro else ""
+        raise RuntimeError(
+            f"Falha de rede SMTP ao {etapa} ({server_host}:{server_port}, "
+            f"timeout {timeout_s}s, tentativas {max_tentativas}, {tls_config}){detalhe}."
         ) from exc
