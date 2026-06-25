@@ -799,7 +799,7 @@ def test_wms_coletor_bipa_local_cria_tarefa_e_endereca_item(tmp_path):
 
     confirma = client.post(
         '/api/wms/coletor/enderecar',
-        json={'tarefa_id': tarefa_id, 'localizacao_codigo': 'AL-PA-01-01'},
+        json={'tarefa_id': tarefa_id, 'localizacao_codigo': 'AL-PA-01-01', 'qtd': 5},
     )
     assert confirma.status_code == 200
     data = confirma.get_json()

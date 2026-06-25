@@ -1097,7 +1097,7 @@ class WMSService:
             db.session.commit()
 
     @staticmethod
-    def enderecar_item_pendente(item_wms_id, localizacao_id, usuario, codigo_grv, ordem_servico=None, ordem_compra=None):
+    def enderecar_item_pendente(item_wms_id, localizacao_id, usuario, codigo_grv, ordem_servico=None, ordem_compra=None, qtd_guardada=None):
         item_wms = ItemWMS.query.get(item_wms_id)
         localizacao = LocalizacaoArmazem.query.get(localizacao_id)
 
@@ -1105,15 +1105,19 @@ class WMSService:
             return None
 
         if item_wms.deposito_id and localizacao.deposito_id and int(item_wms.deposito_id) != int(localizacao.deposito_id):
-            return None
+            if item_wms.localizacao_id is None and str(item_wms.status or '').strip() == 'Pendente Enderecamento':
+                item_wms.deposito_id = localizacao.deposito_id
+            else:
+                return None
         if not item_wms.deposito_id and localizacao.deposito_id:
             item_wms.deposito_id = localizacao.deposito_id
 
         if item_wms.localizacao_id is not None:
             return None
 
-        qtd = float(item_wms.qtd_atual or 0)
-        if qtd <= 0:
+        qtd_pendente = float(item_wms.qtd_atual or 0)
+        qtd = WMSService._float(qtd_guardada, qtd_pendente) if qtd_guardada is not None else qtd_pendente
+        if qtd <= 0 or qtd_pendente <= 0 or qtd > qtd_pendente:
             return None
 
         capacidade_disponivel = float(localizacao.capacidade_maxima or 0) - float(localizacao.capacidade_atual or 0)
@@ -1127,17 +1131,49 @@ class WMSService:
         if not WMSService._can_transition_status(item_wms.status, 'Armazenado'):
             return None
 
-        item_wms.localizacao_id = localizacao_id
-        item_wms.usuario_armazenamento = usuario
-        item_wms.data_armazenamento = datetime.now()
-        item_wms.codigo_grv = codigo_grv_final
-        item_wms.ordem_servico = str(ordem_servico).strip() if ordem_servico else None
-        item_wms.ordem_compra = str(ordem_compra).strip() if ordem_compra else None
-        item_wms.status = 'Armazenado'
+        agora = datetime.now()
+        if qtd < qtd_pendente:
+            item_wms.qtd_atual = qtd_pendente - qtd
+            item_wms.qtd_recebida = max(float(item_wms.qtd_recebida or 0) - qtd, item_wms.qtd_atual)
+            item_enderecado = ItemWMS(
+                numero_nota=item_wms.numero_nota,
+                chave_acesso=item_wms.chave_acesso,
+                fornecedor=item_wms.fornecedor,
+                codigo_item=item_wms.codigo_item,
+                descricao=item_wms.descricao,
+                qtd_recebida=qtd,
+                qtd_atual=qtd,
+                unidade=item_wms.unidade,
+                lote=item_wms.lote,
+                data_validade=item_wms.data_validade,
+                codigo_grv=codigo_grv_final,
+                ordem_servico=str(ordem_servico).strip() if ordem_servico else None,
+                ordem_compra=str(ordem_compra).strip() if ordem_compra else None,
+                status_estoque=item_wms.status_estoque,
+                localizacao_id=localizacao_id,
+                usuario_armazenamento=usuario,
+                data_armazenamento=agora,
+                status='Armazenado',
+                deposito_id=item_wms.deposito_id,
+                origem_estoque_inicial=item_wms.origem_estoque_inicial,
+                ativo=True,
+                data_criacao=agora,
+            )
+            db.session.add(item_enderecado)
+            db.session.flush()
+        else:
+            item_wms.localizacao_id = localizacao_id
+            item_wms.usuario_armazenamento = usuario
+            item_wms.data_armazenamento = agora
+            item_wms.codigo_grv = codigo_grv_final
+            item_wms.ordem_servico = str(ordem_servico).strip() if ordem_servico else None
+            item_wms.ordem_compra = str(ordem_compra).strip() if ordem_compra else None
+            item_wms.status = 'Armazenado'
+            item_enderecado = item_wms
 
         movimentacao = MovimentacaoWMS(
-            item_wms_id=item_wms.id,
-            numero_nota=item_wms.numero_nota,
+            item_wms_id=item_enderecado.id,
+            numero_nota=item_enderecado.numero_nota,
             tipo_movimentacao='Armazenamento',
             localizacao_origem_id=None,
             localizacao_destino_id=localizacao_id,
@@ -1149,7 +1185,7 @@ class WMSService:
         db.session.add(movimentacao)
 
         estoque = EstoqueWMS.query.filter_by(
-            codigo_item=item_wms.codigo_item,
+            codigo_item=item_enderecado.codigo_item,
             localizacao_id=localizacao_id,
         ).first()
         if estoque:
@@ -1168,7 +1204,7 @@ class WMSService:
 
         localizacao.capacidade_atual += qtd
         db.session.commit()
-        return item_wms
+        return item_enderecado
 
     @staticmethod
     def listar_itens_enderecados(numero_nota=None):

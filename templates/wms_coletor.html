@@ -95,6 +95,8 @@
                 <input id="localInput" class="collector-input" autocomplete="off" placeholder="Bipe o endereço">
                 <button class="collector-btn ok" id="btnConfirmar"><i class="fas fa-check"></i> Confirmar</button>
             </div>
+            <label class="collector-label" for="qtdInput" style="margin-top:10px">Quantidade a guardar</label>
+            <input id="qtdInput" class="collector-input" type="number" step="0.001" min="0" inputmode="decimal" autocomplete="off" placeholder="Informe a quantidade">
             <div class="collector-result" id="localBox" style="margin-top:10px">
                 <strong>Destino não bipado</strong>
                 <small>Use etiqueta de endereço WMS. Aceita com ou sem prefixo LOC:.</small>
@@ -130,6 +132,7 @@
 (function () {
     const scanInput = document.getElementById('scanInput');
     const localInput = document.getElementById('localInput');
+    const qtdInput = document.getElementById('qtdInput');
     const statusBox = document.getElementById('statusBox');
     const resultadoBox = document.getElementById('resultadoBox');
     const pendentesList = document.getElementById('pendentesList');
@@ -138,6 +141,7 @@
     let itemSelecionado = null;
     let tarefaSelecionada = null;
     let localSelecionado = null;
+    let confirmandoEnderecamento = false;
 
     function htmlEscape(v) {
         return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -186,8 +190,9 @@
         itemSelecionado = item;
         tarefaSelecionada = tarefa;
         tarefaBox.innerHTML = itemResumoColetor(item);
+        qtdInput.value = item?.qtd_atual ? Number(item.qtd_atual) : '';
         document.querySelectorAll('.collector-item').forEach(el => el.classList.toggle('active', Number(el.dataset.id) === Number(item?.id)));
-        status(`Item ${item.codigo_item} selecionado. Agora bipe o local de destino.`, 'info');
+        status(`Item ${item.codigo_item} selecionado. Agora bipe o local de destino e informe a quantidade.`, 'info');
         localInput.focus();
     }
     function renderPendentes(lista) {
@@ -227,7 +232,13 @@
             localSelecionado = data.localizacao;
             localInput.value = data.localizacao.codigo;
             localBox.innerHTML = `<strong>${htmlEscape(data.localizacao.codigo)}</strong><small>${htmlEscape(data.localizacao.deposito_codigo || '-')} · Cap. disp.: ${Number(data.localizacao.capacidade_disponivel || 0).toLocaleString('pt-BR')}</small>`;
-            status('Local validado. Confira o item e confirme.', 'ok');
+            if (itemSelecionado) {
+                status('Local validado. Informe a quantidade e confirme.', 'info');
+                qtdInput.focus();
+                qtdInput.select();
+            } else {
+                status('Local validado. Bipe ou selecione o item pendente.', 'ok');
+            }
         } else if (data.tipo === 'ITEM_WMS') {
             selecionarItem(data.item);
             resultadoBox.innerHTML = itemResumoColetor(data.item) + (data.localizacao_sugerida ? `<small>Sugestao: ${htmlEscape(data.localizacao_sugerida.codigo)}${data.sugestao_motivo ? ` - ${htmlEscape(data.sugestao_motivo)}` : ''}</small>` : '');
@@ -237,8 +248,11 @@
             status('NF encontrada. Selecione uma pendência.', 'info');
         } else if (data.tipo === 'SKU') {
             renderPendentes(data.pendentes || []);
+            if ((data.pendentes || []).length === 1) {
+                selecionarItem(data.pendentes[0]);
+            }
             resultadoBox.innerHTML = `<strong>SKU ${htmlEscape(data.codigo_item)}</strong><small>${(data.estoque || []).length} endereco(s) com saldo, ${(data.pendentes || []).length} pendencia(s), qtd pendente ${formatQtd(totalQtd(data.pendentes || []))}.</small>`;
-            status('SKU encontrado.', 'info');
+            status((data.pendentes || []).length === 1 ? 'SKU selecionado. Agora bipe o local de destino e informe a quantidade.' : 'SKU encontrado. Selecione a pendencia.', 'info');
         } else {
             resultadoBox.innerHTML = `<strong>${htmlEscape(data.codigo)}</strong><small>${htmlEscape(data.mensagem || 'Código não identificado.')}</small>`;
         }
@@ -257,9 +271,15 @@
         }
     }
     async function confirmarEnderecamento() {
+        if (confirmandoEnderecamento) return;
+        confirmandoEnderecamento = true;
         const localCodigo = localInput.value.trim();
-        if (!itemSelecionado) { status('Selecione ou bipe um item pendente primeiro.', 'err'); return; }
-        if (!localCodigo) { status('Bipe o local de destino antes de confirmar.', 'err'); return; }
+        const qtd = Number(String(qtdInput.value || '').replace(',', '.'));
+        if (!itemSelecionado) { confirmandoEnderecamento = false; status('Selecione ou bipe um item pendente primeiro.', 'err'); return; }
+        if (!localCodigo) { confirmandoEnderecamento = false; status('Bipe o local de destino antes de confirmar.', 'err'); return; }
+        if (!qtd || qtd <= 0) { confirmandoEnderecamento = false; status('Informe a quantidade que vai guardar no endereco.', 'err'); return; }
+        if (qtd > Number(itemSelecionado.qtd_atual || 0)) { confirmandoEnderecamento = false; status('Quantidade maior que a pendencia do item.', 'err'); return; }
+        try {
         const data = await fetchJson('/api/wms/coletor/enderecar', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -267,6 +287,7 @@
                 tarefa_id: tarefaSelecionada?.id || null,
                 item_wms_id: itemSelecionado.id,
                 localizacao_codigo: localCodigo,
+                qtd,
             }),
         });
         status(data.mensagem || 'Endereçamento confirmado.', 'ok');
@@ -276,10 +297,14 @@
         localSelecionado = null;
         scanInput.value = '';
         localInput.value = '';
+        qtdInput.value = '';
         localBox.innerHTML = '<strong>Destino não bipado</strong><small>Use etiqueta de endereço WMS.</small>';
         tarefaBox.innerHTML = '<strong>Pronto para próxima tarefa</strong><small>Clique em Próxima ou bipe outro item.</small>';
         await carregarPendentes();
         scanInput.focus();
+        } finally {
+            confirmandoEnderecamento = false;
+        }
     }
 
     document.getElementById('btnBipar').addEventListener('click', () => bipar(scanInput.value).catch(e => status(e.message, 'err')));
@@ -291,6 +316,9 @@
     });
     localInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); bipar(localInput.value).catch(err => status(err.message, 'err')); }
+    });
+    qtdInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); confirmarEnderecamento().catch(err => status(err.message, 'err')); }
     });
     carregarPendentes().catch(e => status(e.message, 'err'));
 })();

@@ -72,6 +72,45 @@ def _localizacao_por_codigo(codigo):
     ).first()
 
 
+def _sincronizar_pendencias_lancadas_por_sku(codigo_item, usuario, limite=10):
+    codigo_item = str(codigo_item or '').strip()
+    if not codigo_item:
+        return []
+
+    notas = []
+    rows = (
+        db.session.query(ItemNota.numero_nota)
+        .filter(ItemNota.status.in_(["Lançado", "LanÃ§ado", "Lancado"]))
+        .filter(ItemNota.numero_lancamento.isnot(None))
+        .filter(func.trim(ItemNota.numero_lancamento) != '')
+        .filter(func.upper(func.trim(ItemNota.codigo)) == codigo_item.upper())
+        .order_by(ItemNota.data_lancamento.desc(), ItemNota.id.desc())
+        .limit(max(1, int(limite or 10)) * 3)
+        .all()
+    )
+    for row in rows:
+        numero_nota = str(row[0] or '').strip()
+        if numero_nota and numero_nota not in notas:
+            notas.append(numero_nota)
+        if len(notas) >= max(1, int(limite or 10)):
+            break
+
+    for numero_nota in notas:
+        WMSService.sincronizar_nota_lancada_erp(numero_nota, usuario)
+
+    return (
+        ItemWMS.query
+        .filter(
+            ItemWMS.ativo == True,
+            ItemWMS.localizacao_id.is_(None),
+            func.upper(func.trim(ItemWMS.codigo_item)) == codigo_item.upper(),
+        )
+        .order_by(ItemWMS.data_criacao.asc(), ItemWMS.id.asc())
+        .limit(50)
+        .all()
+    )
+
+
 def _item_wms_payload(item):
     if not item:
         return None
@@ -955,6 +994,7 @@ def obter_hub_resumo():
 @requer_wms_operacao
 def coletor_bipar():
     data = request.get_json() or {}
+    usuario = session.get('username', 'Sistema')
     codigo = _normalizar_bip(data.get('codigo') or data.get('barcode') or data.get('bip'))
     if not codigo:
         return jsonify({'erro': 'Informe o codigo bipado.'}), 400
@@ -1018,6 +1058,12 @@ def coletor_bipar():
         ItemWMS.ativo == True,
         func.upper(func.trim(ItemWMS.numero_nota)) == nota,
     ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
+    if not itens_nota and prefixo in {'NF', 'NOTA'}:
+        WMSService.sincronizar_nota_lancada_erp(nota, usuario)
+        itens_nota = ItemWMS.query.filter(
+            ItemWMS.ativo == True,
+            func.upper(func.trim(ItemWMS.numero_nota)) == nota,
+        ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
     if itens_nota:
         return jsonify({
             'tipo': 'NOTA',
@@ -1038,6 +1084,8 @@ def coletor_bipar():
         ItemWMS.localizacao_id.is_(None),
         func.upper(func.trim(ItemWMS.codigo_item)) == sku,
     ).order_by(ItemWMS.data_criacao.asc()).limit(50).all()
+    if not pendentes_sku:
+        pendentes_sku = _sincronizar_pendencias_lancadas_por_sku(sku, usuario)
     if estoque_sku or pendentes_sku:
         return jsonify({
             'tipo': 'SKU',
@@ -1165,6 +1213,7 @@ def coletor_enderecar():
     item_wms_id = data.get('item_wms_id')
     local_codigo = data.get('localizacao_codigo') or data.get('codigo_local') or data.get('local')
     localizacao_id = data.get('localizacao_id')
+    qtd_guardada = WMSService._float(data.get('qtd') or data.get('quantidade') or data.get('qtd_guardada'), 0.0)
 
     tarefa = WMSTarefaOperacional.query.get(int(tarefa_id)) if tarefa_id else None
     if tarefa and not item_wms_id:
@@ -1183,6 +1232,10 @@ def coletor_enderecar():
     item = ItemWMS.query.get(int(item_wms_id))
     if not item:
         return jsonify({'erro': 'Item WMS nao encontrado.'}), 404
+    if qtd_guardada <= 0:
+        return jsonify({'erro': 'Informe a quantidade que sera guardada no endereco.'}), 400
+    if qtd_guardada > float(item.qtd_atual or 0):
+        return jsonify({'erro': 'Quantidade maior que a pendencia disponivel para este item.'}), 400
 
     codigo_grv = (data.get('codigo_grv') or item.codigo_grv or item.codigo_item or '').strip()
     ordem_servico = (data.get('ordem_servico') or item.ordem_servico or '').strip()
@@ -1208,6 +1261,7 @@ def coletor_enderecar():
         codigo_grv,
         ordem_servico=ordem_servico or None,
         ordem_compra=ordem_compra or None,
+        qtd_guardada=qtd_guardada,
     )
     if not item:
         db.session.rollback()
@@ -1216,7 +1270,7 @@ def coletor_enderecar():
     if tarefa:
         tarefa.status = 'CONCLUIDA'
         tarefa.localizacao_destino_id = loc.id
-        tarefa.qtd_executada = item.qtd_atual
+        tarefa.qtd_executada = qtd_guardada
         tarefa.concluido_por = usuario
         tarefa.concluido_em = datetime.now()
         db.session.commit()
