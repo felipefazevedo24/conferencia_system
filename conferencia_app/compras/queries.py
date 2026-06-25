@@ -917,7 +917,6 @@ SELECT
     qtd_nf
 FROM agg
 ORDER BY ano DESC, mes DESC, cnpj, tipo_item, classificacao_item
-LIMIT %(limite)s;
 """
 
 
