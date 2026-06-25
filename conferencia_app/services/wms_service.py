@@ -3,6 +3,7 @@ Serviço WMS - Warehouse Management System
 Gerencia localização, estoque e movimentação de itens no armazém
 """
 from datetime import datetime, timedelta
+import unicodedata
 from flask import current_app
 from sqlalchemy import func
 from ..extensions import db
@@ -45,9 +46,15 @@ class WMSService:
     }
 
     @staticmethod
+    def _normalizar_status(status):
+        texto = unicodedata.normalize("NFKD", str(status or "").strip())
+        texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+        return texto
+
+    @staticmethod
     def _can_transition_status(status_atual, status_novo):
-        status_atual = str(status_atual or '').strip()
-        status_novo = str(status_novo or '').strip()
+        status_atual = WMSService._normalizar_status(status_atual)
+        status_novo = WMSService._normalizar_status(status_novo)
         if status_atual == status_novo:
             return True
         permitidos = WMSService.STATUS_TRANSITIONS.get(status_atual)
@@ -130,7 +137,7 @@ class WMSService:
         }
 
     @staticmethod
-    def consultar_entrada_erp_para_wms(numero_nota):
+    def consultar_entrada_erp_para_wms(numero_nota, permitir_fallback_local=True):
         """Busca no ERP/Postgres os itens oficiais da entrada que alimenta o WMS."""
         numero_nota = str(numero_nota or '').strip()
         if not numero_nota:
@@ -166,10 +173,18 @@ class WMSService:
                 }
         except Exception as exc:
             current_app.logger.warning("WMS: falha ao consultar NF %s no ERP/Postgres: %s", numero_nota, exc)
-            if not current_app.config.get('TESTING') and not current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False):
+            if (
+                not permitir_fallback_local
+                or (
+                    not current_app.config.get('TESTING')
+                    and not current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False)
+                )
+            ):
                 raise
 
-        if current_app.config.get('TESTING') or current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False):
+        if permitir_fallback_local and (
+            current_app.config.get('TESTING') or current_app.config.get('WMS_ALLOW_LOCAL_FALLBACK', False)
+        ):
             entrada_local = WMSService._entrada_local_para_testes(numero_nota)
             if entrada_local:
                 return {
@@ -182,11 +197,33 @@ class WMSService:
         return {'encontrada': False, 'entrada': None, 'linhas': [], 'fonte': None}
 
     @staticmethod
-    def sincronizar_nota_lancada_erp(numero_nota, usuario):
+    def sincronizar_nota_lancada_erp(numero_nota, usuario, exigir_postgres=False):
         """Cria/atualiza pendencias WMS usando a entrada oficial do ERP/Postgres."""
         numero_nota = str(numero_nota or '').strip()
         usuario = str(usuario or 'Integrador').strip() or 'Integrador'
-        consulta = WMSService.consultar_entrada_erp_para_wms(numero_nota)
+        try:
+            consulta = WMSService.consultar_entrada_erp_para_wms(
+                numero_nota,
+                permitir_fallback_local=not exigir_postgres,
+            )
+        except Exception:
+            if not exigir_postgres:
+                raise
+            return {
+                'sucesso': False,
+                'itens_pendentes': 0,
+                'itens_atualizados': 0,
+                'fonte': None,
+                'mensagem': f'NF {numero_nota} nao confirmada no ERP/Postgres para gerar pendencias WMS.',
+            }
+        if exigir_postgres and consulta.get('fonte') != 'ERPPostgres':
+            return {
+                'sucesso': False,
+                'itens_pendentes': 0,
+                'itens_atualizados': 0,
+                'fonte': consulta.get('fonte'),
+                'mensagem': f'NF {numero_nota} nao confirmada no ERP/Postgres para gerar pendencias WMS.',
+            }
         if not consulta.get('encontrada'):
             return {
                 'sucesso': False,
@@ -1105,7 +1142,7 @@ class WMSService:
             return None
 
         if item_wms.deposito_id and localizacao.deposito_id and int(item_wms.deposito_id) != int(localizacao.deposito_id):
-            if item_wms.localizacao_id is None and str(item_wms.status or '').strip() == 'Pendente Enderecamento':
+            if item_wms.localizacao_id is None and WMSService._normalizar_status(item_wms.status) == 'Pendente Enderecamento':
                 item_wms.deposito_id = localizacao.deposito_id
             else:
                 return None
@@ -1120,9 +1157,11 @@ class WMSService:
         if qtd <= 0 or qtd_pendente <= 0 or qtd > qtd_pendente:
             return None
 
-        capacidade_disponivel = float(localizacao.capacidade_maxima or 0) - float(localizacao.capacidade_atual or 0)
-        if qtd > capacidade_disponivel:
-            return None
+        capacidade_maxima = float(localizacao.capacidade_maxima or 0)
+        if capacidade_maxima > 0:
+            capacidade_disponivel = capacidade_maxima - float(localizacao.capacidade_atual or 0)
+            if qtd > capacidade_disponivel:
+                return None
 
         codigo_grv_final = str(codigo_grv or item_wms.codigo_grv or item_wms.codigo_item or '').strip()
         if not codigo_grv_final:

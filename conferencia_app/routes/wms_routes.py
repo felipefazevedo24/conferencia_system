@@ -95,14 +95,21 @@ def _sincronizar_pendencias_lancadas_por_sku(codigo_item, usuario, limite=10):
         if len(notas) >= max(1, int(limite or 10)):
             break
 
+    notas_postgres = []
     for numero_nota in notas:
-        WMSService.sincronizar_nota_lancada_erp(numero_nota, usuario)
+        resultado = WMSService.sincronizar_nota_lancada_erp(numero_nota, usuario, exigir_postgres=True)
+        if resultado.get('sucesso') and resultado.get('fonte') == 'ERPPostgres':
+            notas_postgres.append(numero_nota)
+
+    if not notas_postgres:
+        return []
 
     return (
         ItemWMS.query
         .filter(
             ItemWMS.ativo == True,
             ItemWMS.localizacao_id.is_(None),
+            ItemWMS.numero_nota.in_(notas_postgres),
             func.upper(func.trim(ItemWMS.codigo_item)) == codigo_item.upper(),
         )
         .order_by(ItemWMS.data_criacao.asc(), ItemWMS.id.asc())
@@ -1036,6 +1043,17 @@ def coletor_bipar():
             func.upper(func.trim(ItemWMS.codigo_grv)) == valor,
         ).order_by(ItemWMS.id.desc()).first()
     if item:
+        resultado_pg = None
+        if item.numero_nota:
+            resultado_pg = WMSService.sincronizar_nota_lancada_erp(
+                item.numero_nota,
+                usuario,
+                exigir_postgres=True,
+            )
+        if not resultado_pg or not resultado_pg.get('sucesso') or resultado_pg.get('fonte') != 'ERPPostgres':
+            item = None
+    if item:
+        item = ItemWMS.query.get(item.id)
         sugestao = None
         sugestao_motivo = None
         if item.deposito_id:
@@ -1054,16 +1072,14 @@ def coletor_bipar():
 
     # Nota fiscal ou NF prefixada.
     nota = valor if prefixo in {'NF', 'NOTA'} else bruto
-    itens_nota = ItemWMS.query.filter(
-        ItemWMS.ativo == True,
-        func.upper(func.trim(ItemWMS.numero_nota)) == nota,
-    ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
-    if not itens_nota and prefixo in {'NF', 'NOTA'}:
-        WMSService.sincronizar_nota_lancada_erp(nota, usuario)
-        itens_nota = ItemWMS.query.filter(
-            ItemWMS.ativo == True,
-            func.upper(func.trim(ItemWMS.numero_nota)) == nota,
-        ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
+    itens_nota = []
+    if prefixo in {'NF', 'NOTA'}:
+        resultado_pg = WMSService.sincronizar_nota_lancada_erp(nota, usuario, exigir_postgres=True)
+        if resultado_pg.get('sucesso') and resultado_pg.get('fonte') == 'ERPPostgres':
+            itens_nota = ItemWMS.query.filter(
+                ItemWMS.ativo == True,
+                func.upper(func.trim(ItemWMS.numero_nota)) == nota,
+            ).order_by(ItemWMS.localizacao_id.asc(), ItemWMS.codigo_item.asc()).limit(50).all()
     if itens_nota:
         return jsonify({
             'tipo': 'NOTA',
@@ -1079,14 +1095,8 @@ def coletor_bipar():
     estoque_sku = EstoqueWMS.query.filter(
         func.upper(func.trim(EstoqueWMS.codigo_item)) == sku,
     ).order_by(EstoqueWMS.qtd_total.desc()).limit(50).all()
-    pendentes_sku = ItemWMS.query.filter(
-        ItemWMS.ativo == True,
-        ItemWMS.localizacao_id.is_(None),
-        func.upper(func.trim(ItemWMS.codigo_item)) == sku,
-    ).order_by(ItemWMS.data_criacao.asc()).limit(50).all()
-    if not pendentes_sku:
-        pendentes_sku = _sincronizar_pendencias_lancadas_por_sku(sku, usuario)
-    if estoque_sku or pendentes_sku:
+    pendentes_sku = _sincronizar_pendencias_lancadas_por_sku(sku, usuario)
+    if pendentes_sku:
         return jsonify({
             'tipo': 'SKU',
             'codigo': codigo,
@@ -1978,6 +1988,269 @@ def listar_depositos():
     ]), 200
 
 
+def _estoque_linha_payload(est, loc, dep=None, sku=None):
+    qtd_disponivel = (est.qtd_total or 0) - (est.qtd_separada or 0) - (est.qtd_bloqueada or 0)
+    return {
+        'estoque_id': est.id,
+        'codigo_item': est.codigo_item,
+        'localizacao_id': loc.id if loc else None,
+        'localizacao_codigo': loc.codigo if loc else None,
+        'rua': loc.rua if loc else None,
+        'predio': loc.predio if loc else None,
+        'nivel': loc.nivel if loc else None,
+        'deposito_id': dep.id if dep else None,
+        'deposito_codigo': dep.codigo if dep else None,
+        'deposito_nome': dep.nome if dep else None,
+        'qtd_total': float(est.qtd_total or 0),
+        'qtd_separada': float(est.qtd_separada or 0),
+        'qtd_bloqueada': float(est.qtd_bloqueada or 0),
+        'qtd_disponivel': round(float(qtd_disponivel or 0), 2),
+        'unidade': sku.unidade if sku else 'UN',
+        'curva_abc': sku.curva_abc if sku else None,
+        'estoque_minimo': float(sku.estoque_minimo or 0) if sku else None,
+        'estoque_maximo': float(sku.estoque_maximo or 0) if sku else None,
+        'endereco_preferencial': sku.endereco_preferencial if sku else None,
+        'data_atualizacao': est.data_atualizacao.isoformat() if est.data_atualizacao else None,
+    }
+
+
+def _movimentacao_payload(mov):
+    origem = LocalizacaoArmazem.query.get(mov.localizacao_origem_id) if mov.localizacao_origem_id else None
+    destino = LocalizacaoArmazem.query.get(mov.localizacao_destino_id) if mov.localizacao_destino_id else None
+    return {
+        'id': mov.id,
+        'numero_nota': mov.numero_nota,
+        'tipo_movimentacao': mov.tipo_movimentacao,
+        'localizacao_origem': origem.codigo if origem else None,
+        'localizacao_destino': destino.codigo if destino else None,
+        'qtd_movimentada': float(mov.qtd_movimentada or 0),
+        'motivo': mov.motivo,
+        'usuario': mov.usuario,
+        'data_movimentacao': mov.data_movimentacao.isoformat() if mov.data_movimentacao else None,
+    }
+
+
+def _resolver_deposito(ref):
+    ref_norm = str(ref or '').strip()
+    if not ref_norm:
+        return None
+    if ref_norm.isdigit():
+        deposito = DepositoWMS.query.get(int(ref_norm))
+        if deposito:
+            return deposito
+    return DepositoWMS.query.filter(
+        func.upper(func.trim(DepositoWMS.codigo)) == ref_norm.upper(),
+        DepositoWMS.ativo == True,
+    ).first()
+
+
+@wms_bp.route('/depositos/<deposito_ref>/detalhe', methods=['GET'])
+@requer_wms_operacao
+def detalhe_deposito(deposito_ref):
+    deposito = _resolver_deposito(deposito_ref)
+    if not deposito:
+        return jsonify({'erro': 'Deposito nao encontrado.'}), 404
+
+    locais = LocalizacaoArmazem.query.filter_by(deposito_id=deposito.id, ativo=True).all()
+    local_ids = [loc.id for loc in locais]
+    estoque_rows = (
+        db.session.query(EstoqueWMS, LocalizacaoArmazem, WMSSkuMestre)
+        .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+        .outerjoin(
+            WMSSkuMestre,
+            func.lower(func.trim(WMSSkuMestre.codigo_item)) == func.lower(func.trim(EstoqueWMS.codigo_item)),
+        )
+        .filter(LocalizacaoArmazem.deposito_id == deposito.id, LocalizacaoArmazem.ativo == True)
+        .order_by(LocalizacaoArmazem.codigo.asc(), EstoqueWMS.codigo_item.asc())
+        .all()
+    )
+
+    saldo_total = sum(float(est.qtd_total or 0) for est, _loc, _sku in estoque_rows)
+    qtd_separada = sum(float(est.qtd_separada or 0) for est, _loc, _sku in estoque_rows)
+    qtd_bloqueada = sum(float(est.qtd_bloqueada or 0) for est, _loc, _sku in estoque_rows)
+    skus = {str(est.codigo_item or '').strip() for est, _loc, _sku in estoque_rows if str(est.codigo_item or '').strip()}
+    locais_ocupados = {loc.id for est, loc, _sku in estoque_rows if float(est.qtd_total or 0) > 0}
+
+    top_skus = (
+        db.session.query(
+            EstoqueWMS.codigo_item,
+            func.sum(EstoqueWMS.qtd_total).label('qtd_total'),
+            func.count(func.distinct(EstoqueWMS.localizacao_id)).label('enderecos'),
+        )
+        .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+        .filter(LocalizacaoArmazem.deposito_id == deposito.id)
+        .group_by(EstoqueWMS.codigo_item)
+        .order_by(func.sum(EstoqueWMS.qtd_total).desc(), EstoqueWMS.codigo_item.asc())
+        .limit(12)
+        .all()
+    )
+    pendentes = (
+        ItemWMS.query
+        .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None), ItemWMS.deposito_id == deposito.id)
+        .order_by(ItemWMS.data_criacao.desc(), ItemWMS.id.desc())
+        .limit(20)
+        .all()
+    )
+    movimentos_query = MovimentacaoWMS.query
+    if local_ids:
+        movimentos_query = movimentos_query.filter(
+            or_(
+                MovimentacaoWMS.localizacao_origem_id.in_(local_ids),
+                MovimentacaoWMS.localizacao_destino_id.in_(local_ids),
+            )
+        )
+    else:
+        movimentos_query = movimentos_query.filter(MovimentacaoWMS.id == -1)
+    movimentos = movimentos_query.order_by(MovimentacaoWMS.data_movimentacao.desc(), MovimentacaoWMS.id.desc()).limit(20).all()
+
+    capacidade_total = sum(float(loc.capacidade_maxima or 0) for loc in locais)
+    capacidade_atual = sum(float(loc.capacidade_atual or 0) for loc in locais)
+    return jsonify({
+        'deposito': {
+            'id': deposito.id,
+            'codigo': deposito.codigo,
+            'nome': deposito.nome,
+            'descricao': deposito.descricao,
+            'tipo': getattr(deposito, 'tipo', None),
+        },
+        'resumo': {
+            'localizacoes': len(locais),
+            'localizacoes_ocupadas': len(locais_ocupados),
+            'localizacoes_vazias': max(len(locais) - len(locais_ocupados), 0),
+            'skus': len(skus),
+            'saldo_total': round(saldo_total, 2),
+            'qtd_separada': round(qtd_separada, 2),
+            'qtd_bloqueada': round(qtd_bloqueada, 2),
+            'qtd_disponivel': round(saldo_total - qtd_separada - qtd_bloqueada, 2),
+            'capacidade_total': round(capacidade_total, 2),
+            'capacidade_atual': round(capacidade_atual, 2),
+            'ocupacao_percentual': round((capacidade_atual / capacidade_total) * 100, 2) if capacidade_total else 0,
+            'pendentes_enderecamento': len(pendentes),
+        },
+        'top_skus': [
+            {'codigo_item': row.codigo_item, 'qtd_total': float(row.qtd_total or 0), 'enderecos': int(row.enderecos or 0)}
+            for row in top_skus
+        ],
+        'localizacoes': [
+            {
+                'id': loc.id,
+                'codigo': loc.codigo,
+                'rua': loc.rua,
+                'predio': loc.predio,
+                'nivel': loc.nivel,
+                'capacidade_maxima': float(loc.capacidade_maxima or 0),
+                'capacidade_atual': float(loc.capacidade_atual or 0),
+            }
+            for loc in sorted(locais, key=lambda l: str(l.codigo or ''))
+        ],
+        'estoque': [_estoque_linha_payload(est, loc, deposito, sku) for est, loc, sku in estoque_rows[:200]],
+        'pendentes': [_item_wms_payload(item) for item in pendentes],
+        'movimentacoes': [_movimentacao_payload(mov) for mov in movimentos],
+    }), 200
+
+
+@wms_bp.route('/skus/<path:codigo_item>/detalhe', methods=['GET'])
+@requer_wms_operacao
+def detalhe_sku(codigo_item):
+    codigo = str(codigo_item or '').strip()
+    if not codigo:
+        return jsonify({'erro': 'codigo_item obrigatorio.'}), 400
+
+    sku = WMSSkuMestre.query.filter(func.lower(func.trim(WMSSkuMestre.codigo_item)) == codigo.lower()).first()
+    estoque_rows = (
+        db.session.query(EstoqueWMS, LocalizacaoArmazem, DepositoWMS)
+        .join(LocalizacaoArmazem, EstoqueWMS.localizacao_id == LocalizacaoArmazem.id)
+        .outerjoin(DepositoWMS, LocalizacaoArmazem.deposito_id == DepositoWMS.id)
+        .filter(func.lower(func.trim(EstoqueWMS.codigo_item)) == codigo.lower())
+        .order_by(DepositoWMS.codigo.asc(), LocalizacaoArmazem.codigo.asc())
+        .all()
+    )
+    pendentes = (
+        ItemWMS.query
+        .filter(ItemWMS.ativo == True, ItemWMS.localizacao_id.is_(None), func.lower(func.trim(ItemWMS.codigo_item)) == codigo.lower())
+        .order_by(ItemWMS.data_criacao.desc(), ItemWMS.id.desc())
+        .limit(50)
+        .all()
+    )
+    itens_wms = (
+        ItemWMS.query
+        .filter(ItemWMS.ativo == True, func.lower(func.trim(ItemWMS.codigo_item)) == codigo.lower())
+        .order_by(ItemWMS.data_criacao.desc(), ItemWMS.id.desc())
+        .limit(80)
+        .all()
+    )
+    movimentos = (
+        MovimentacaoWMS.query
+        .join(ItemWMS, MovimentacaoWMS.item_wms_id == ItemWMS.id)
+        .filter(func.lower(func.trim(ItemWMS.codigo_item)) == codigo.lower())
+        .order_by(MovimentacaoWMS.data_movimentacao.desc(), MovimentacaoWMS.id.desc())
+        .limit(30)
+        .all()
+    )
+    divergencias = (
+        WMSReconciliacaoDivergencia.query
+        .filter(func.lower(func.trim(WMSReconciliacaoDivergencia.codigo_item)) == codigo.lower())
+        .order_by(WMSReconciliacaoDivergencia.criado_em.desc(), WMSReconciliacaoDivergencia.id.desc())
+        .limit(20)
+        .all()
+    )
+
+    saldo_total = sum(float(est.qtd_total or 0) for est, _loc, _dep in estoque_rows)
+    qtd_separada = sum(float(est.qtd_separada or 0) for est, _loc, _dep in estoque_rows)
+    qtd_bloqueada = sum(float(est.qtd_bloqueada or 0) for est, _loc, _dep in estoque_rows)
+    qtd_pendente = sum(float(item.qtd_atual or 0) for item in pendentes)
+    erp_snapshot = None
+    erp_erro = None
+    try:
+        from ..services.erp_sync_service import ERPSyncService
+        erp_snapshot = ERPSyncService.preview_estoque_erp(filtro=codigo, limite=20)
+    except Exception as exc:
+        erp_erro = str(exc)
+
+    return jsonify({
+        'sku': {
+            'codigo_item': codigo,
+            'codigo_erp': sku.codigo_erp if sku else None,
+            'unidade': sku.unidade if sku else None,
+            'curva_abc': sku.curva_abc if sku else None,
+            'politica_validade': sku.politica_validade if sku else None,
+            'estoque_minimo': float(sku.estoque_minimo or 0) if sku else None,
+            'estoque_maximo': float(sku.estoque_maximo or 0) if sku else None,
+            'endereco_preferencial': sku.endereco_preferencial if sku else None,
+            'ativo': bool(sku.ativo) if sku else None,
+        },
+        'resumo': {
+            'enderecos': len(estoque_rows),
+            'saldo_total': round(saldo_total, 2),
+            'qtd_separada': round(qtd_separada, 2),
+            'qtd_bloqueada': round(qtd_bloqueada, 2),
+            'qtd_disponivel': round(saldo_total - qtd_separada - qtd_bloqueada, 2),
+            'qtd_pendente_enderecamento': round(qtd_pendente, 2),
+            'notas_ativas': len({str(item.numero_nota or '') for item in itens_wms if str(item.numero_nota or '')}),
+        },
+        'estoque': [_estoque_linha_payload(est, loc, dep, sku) for est, loc, dep in estoque_rows],
+        'pendentes': [_item_wms_payload(item) for item in pendentes],
+        'itens_wms': [_item_wms_payload(item) for item in itens_wms],
+        'movimentacoes': [_movimentacao_payload(mov) for mov in movimentos],
+        'divergencias': [
+            {
+                'id': div.id,
+                'numero_nota': div.numero_nota,
+                'qtd_erp': float(div.qtd_erp or 0),
+                'qtd_wms': float(div.qtd_wms or 0),
+                'diferenca': float(div.diferenca or 0),
+                'status': div.status,
+                'origem': div.origem,
+                'observacao': div.observacao,
+                'criado_em': div.criado_em.isoformat() if div.criado_em else None,
+            }
+            for div in divergencias
+        ],
+        'erp': erp_snapshot,
+        'erp_erro': erp_erro,
+    }), 200
+
+
 @wms_bp.route('/inventree/status', methods=['GET'])
 @requer_admin
 def inventree_status_admin():
@@ -2086,18 +2359,51 @@ def estoque_tempo_real():
 
     # Totais por localização para o resumo
     loc_resumo = {}
+    dep_resumo = {}
     for r in resultado:
         key = r['localizacao_codigo']
         if key not in loc_resumo:
             loc_resumo[key] = {'skus': 0, 'qtd_total': 0, 'rua': r['rua'], 'deposito': r['deposito_codigo']}
         loc_resumo[key]['skus'] += 1
         loc_resumo[key]['qtd_total'] += r['qtd_total']
+        dep_key = r['deposito_codigo'] or 'SEM_DEP'
+        if dep_key not in dep_resumo:
+            dep_resumo[dep_key] = {
+                'deposito_codigo': r['deposito_codigo'],
+                'deposito_nome': r['deposito_nome'],
+                'skus_set': set(),
+                'localizacoes_set': set(),
+                'qtd_total': 0.0,
+                'qtd_disponivel': 0.0,
+                'qtd_separada': 0.0,
+                'qtd_bloqueada': 0.0,
+            }
+        dep_resumo[dep_key]['skus_set'].add(r['codigo_item'])
+        dep_resumo[dep_key]['localizacoes_set'].add(r['localizacao_codigo'])
+        dep_resumo[dep_key]['qtd_total'] += float(r['qtd_total'] or 0)
+        dep_resumo[dep_key]['qtd_disponivel'] += float(r['qtd_disponivel'] or 0)
+        dep_resumo[dep_key]['qtd_separada'] += float(r['qtd_separada'] or 0)
+        dep_resumo[dep_key]['qtd_bloqueada'] += float(r['qtd_bloqueada'] or 0)
+
+    resumo_depositos = []
+    for dep in dep_resumo.values():
+        resumo_depositos.append({
+            'deposito_codigo': dep['deposito_codigo'],
+            'deposito_nome': dep['deposito_nome'],
+            'skus': len(dep['skus_set']),
+            'localizacoes': len(dep['localizacoes_set']),
+            'qtd_total': round(dep['qtd_total'], 2),
+            'qtd_disponivel': round(dep['qtd_disponivel'], 2),
+            'qtd_separada': round(dep['qtd_separada'], 2),
+            'qtd_bloqueada': round(dep['qtd_bloqueada'], 2),
+        })
 
     return jsonify({
         'itens': resultado,
         'total_registros': len(resultado),
         'total_localizacoes_com_saldo': len(loc_resumo),
         'resumo_por_localizacao': loc_resumo,
+        'resumo_por_deposito': sorted(resumo_depositos, key=lambda d: str(d.get('deposito_codigo') or '')),
     }), 200
 
 
