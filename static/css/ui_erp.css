@@ -554,12 +554,12 @@ a:hover {
 }
 
 .top-nav-center {
-    flex: 1;
-    min-width: 220px;
-    max-width: 780px;
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: none;
     position: relative;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
 }
 
 .shell-search-toggle {
@@ -1626,8 +1626,12 @@ code {
     }
 
     .top-nav-center {
-        order: 3;
-        width: 100%;
+        order: 0;
+        width: auto;
+    }
+
+    .shell-search-toggle span {
+        display: none;
     }
 
     .shell-search-panel {

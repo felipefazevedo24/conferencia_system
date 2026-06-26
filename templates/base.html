@@ -235,35 +235,35 @@
             <div class="nav-left">
                 <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
             </div>
-            <div class="top-nav-center">
-                <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
-                    <i class="fas fa-search"></i>
-                    <span>Pesquisar</span>
-                </button>
-                <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
-                    <div class="shell-search-input-wrap">
-                        <i class="fas fa-search"></i>
-                        <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
-                    </div>
-                    <section class="shell-search-group">
-                        <header>
-                            <strong>Favoritos</strong>
-                        </header>
-                        <div id="shell-search-favorites" class="shell-search-list">
-                            <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
-                        </div>
-                    </section>
-                    <section class="shell-search-group">
-                        <header>
-                            <strong>Resultados</strong>
-                        </header>
-                        <div id="shell-search-results" class="shell-search-list">
-                            <div class="shell-search-empty">Digite para buscar módulos.</div>
-                        </div>
-                    </section>
-                </div>
-            </div>
             <div class="nav-right">
+                <div class="top-nav-center">
+                    <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
+                        <i class="fas fa-search"></i>
+                        <span>Pesquisar</span>
+                    </button>
+                    <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
+                        <div class="shell-search-input-wrap">
+                            <i class="fas fa-search"></i>
+                            <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
+                        </div>
+                        <section class="shell-search-group">
+                            <header>
+                                <strong>Favoritos</strong>
+                            </header>
+                            <div id="shell-search-favorites" class="shell-search-list">
+                                <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
+                            </div>
+                        </section>
+                        <section class="shell-search-group">
+                            <header>
+                                <strong>Resultados</strong>
+                            </header>
+                            <div id="shell-search-results" class="shell-search-list">
+                                <div class="shell-search-empty">Digite para buscar módulos.</div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
                 <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
                     <i class="fas fa-user-circle"></i>
                     <span>{{ user|upper }}</span>
