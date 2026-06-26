@@ -160,11 +160,11 @@
         .mini-table tr:last-child td { border-bottom: none; }
         .mini-table tr:hover td { background: var(--sap-light-blue); }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* Custom Scrollbar (escopado para o conteúdo da pré-nota) */
+        .eui-scope ::-webkit-scrollbar { width: 8px; }
+        .eui-scope ::-webkit-scrollbar-track { background: #f1f1f1; }
+        .eui-scope ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .eui-scope ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .card-danger { border: 1px solid #fee2e2; }
         .danger-note {
