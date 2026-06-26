@@ -26,7 +26,7 @@ body.auth-page {
     width: 100%;
     min-height: 100vh;
     display: grid;
-    grid-template-columns: minmax(560px, 1.45fr) minmax(460px, 1fr);
+    grid-template-columns: minmax(520px, 1.3fr) minmax(620px, 1fr);
     border-radius: 0;
     overflow: hidden;
     background: #dde3ea;
@@ -48,7 +48,7 @@ body.auth-page {
 .login-panel {
     grid-column: 2;
     grid-row: 1;
-    padding: 36px 42px;
+    padding: clamp(32px, 3.2vw, 56px);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -62,8 +62,9 @@ body.auth-page {
 
 .login-card,
 .error-card {
-    width: min(520px, 100%);
-    margin-top: clamp(72px, 12vh, 140px);
+    width: clamp(560px, 38vw, 760px);
+    max-width: 100%;
+    margin-top: clamp(48px, 8vh, 108px);
 }
 
 .login-brand {
@@ -74,46 +75,22 @@ body.auth-page {
 
 .brand-logo-img {
     display: block;
-    width: clamp(210px, 26vw, 320px);
+    width: clamp(260px, 24vw, 390px);
     height: auto;
-}
-
-.trial-link {
-    position: absolute;
-    top: 28px;
-    right: 42px;
-    border: 1px solid rgba(11, 24, 42, 0.32);
-    border-radius: 12px;
-    min-height: 48px;
-    padding: 0 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #f2f4f7;
-    color: #0e1b2e;
-    text-decoration: none;
-    font-size: 15px;
-    font-weight: 600;
-    transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.trial-link:hover {
-    background: #ffffff;
-    transform: translateY(-1px);
 }
 
 .card-title {
     margin: 0 0 12px;
     font-family: var(--font-display);
-    font-size: clamp(40px, 2vw, 46px);
+    font-size: clamp(46px, 2.6vw, 58px);
     line-height: 1;
     letter-spacing: -0.03em;
     color: #0c1524;
 }
 
 .card-copy {
-    margin: 0 0 26px;
-    font-size: 15px;
+    margin: 0 0 30px;
+    font-size: 20px;
     line-height: 1.5;
     color: #4b5663;
 }
@@ -176,14 +153,14 @@ body.auth-page {
     gap: 10px;
     margin-bottom: 9px;
     color: #5d6670;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: 0;
 }
 
 .field-note {
-    font-size: 11px;
+    font-size: 14px;
     color: var(--color-text-soft);
     text-transform: none;
     letter-spacing: 0;
@@ -197,10 +174,10 @@ body.auth-page {
     width: 100%;
     border: 1px solid rgba(15, 23, 42, 0.18);
     border-radius: 7px;
-    padding: 16px 16px;
+    padding: 19px 18px;
     background: #f2f4f7;
     color: var(--color-brand-900);
-    font-size: 16px;
+    font-size: 24px;
     font-weight: 500;
     outline: none;
     box-shadow: none;
@@ -226,10 +203,10 @@ body.auth-page {
     background: transparent;
     color: #7a8695;
     cursor: pointer;
-    min-width: 54px;
-    height: 36px;
+    min-width: 64px;
+    height: 40px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: 0.06em;
     padding: 0 10px;
@@ -242,7 +219,7 @@ body.auth-page {
 .field-meta {
     min-height: 18px;
     margin-top: 8px;
-    font-size: 12px;
+    font-size: 14px;
     color: var(--color-text-soft);
 }
 
@@ -264,7 +241,7 @@ body.auth-page {
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    font-size: 14px;
+    font-size: 17px;
     color: #3f4a57;
     font-weight: 500;
     letter-spacing: 0;
@@ -284,10 +261,10 @@ body.auth-page {
     margin-top: 16px;
     border: none;
     border-radius: 6px;
-    padding: 15px 18px;
+    padding: 18px 20px;
     background: #175bb8;
     color: #ffffff;
-    font-size: 16px;
+    font-size: 24px;
     font-weight: 700;
     letter-spacing: 0;
     text-transform: none;
@@ -307,7 +284,7 @@ body.auth-page {
 
 .back-link {
     color: #1657b2;
-    font-size: 13px;
+    font-size: 16px;
     text-decoration: none;
     font-weight: 600;
 }
@@ -374,7 +351,7 @@ body.auth-page {
 
 .footnote {
     margin-top: 22px;
-    font-size: 13px;
+    font-size: 15px;
     color: #616d7c;
     line-height: 1.7;
 }
@@ -413,44 +390,8 @@ body.auth-page {
     color: #ffffff;
 }
 
-.brand-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-}
-
-.brand-mark {
-    width: clamp(210px, 23vw, 310px);
-    height: auto;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 12px;
-    padding: 8px 12px;
-    filter: drop-shadow(0 8px 24px rgba(3, 14, 29, 0.28));
-}
-
-.help-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    padding: 0 18px;
-    border-radius: 12px;
-    background: #0b1831;
-    color: #ffffff;
-    font-size: 15px;
-    font-weight: 700;
-    text-decoration: none;
-    box-shadow: 0 8px 18px rgba(11, 24, 49, 0.32);
-}
-
-.help-chip:hover {
-    color: #ffffff;
-    filter: brightness(1.05);
-}
-
 .brand-message {
-    margin-top: auto;
+    margin-top: clamp(24px, 7vh, 90px);
     max-width: 700px;
 }
 
@@ -458,7 +399,7 @@ body.auth-page {
     margin: 0;
     max-width: 700px;
     font-family: var(--font-display);
-    font-size: clamp(42px, 4vw, 64px);
+    font-size: clamp(52px, 4.2vw, 74px);
     line-height: 1;
     letter-spacing: -0.03em;
 }
@@ -473,7 +414,7 @@ body.auth-page {
     border-radius: 18px;
     background: rgba(7, 42, 92, 0.46);
     color: rgba(255, 255, 255, 0.92);
-    font-size: 18px;
+    font-size: clamp(20px, 1.2vw, 24px);
     font-weight: 600;
 }
 
@@ -616,11 +557,27 @@ body.auth-page {
     }
 
     .login-card {
-        margin-top: 88px;
+        width: 100%;
+        margin-top: 42px;
     }
 
-    .trial-link {
-        right: 24px;
+    .card-title {
+        font-size: clamp(36px, 8vw, 52px);
+    }
+
+    .card-copy {
+        font-size: 17px;
+    }
+
+    .input-shell input {
+        font-size: 18px;
+        padding: 16px;
+    }
+
+    .login-button,
+    .error-button {
+        font-size: 18px;
+        padding: 16px;
     }
 }
 
@@ -644,32 +601,22 @@ body.auth-page {
     }
 
     .login-card {
-        margin-top: 78px;
+        margin-top: 22px;
         width: 100%;
     }
 
-    .trial-link {
-        position: static;
-        margin-left: auto;
-        margin-top: 0;
-        margin-bottom: 18px;
-        min-height: 42px;
-        padding: 0 14px;
-        font-size: 13px;
-    }
-
     .card-title {
-        font-size: clamp(30px, 10vw, 40px);
+        font-size: clamp(34px, 10vw, 44px);
     }
 
     .input-shell input {
-        font-size: 16px;
+        font-size: 17px;
         padding: 14px;
     }
 
     .login-button,
     .error-button {
-        font-size: 16px;
+        font-size: 18px;
     }
 
     .brand-panel {
@@ -677,8 +624,7 @@ body.auth-page {
     }
 
     .brand-banner,
-    .brand-pill,
-    .help-chip {
+    .brand-pill {
         display: none;
     }
 
