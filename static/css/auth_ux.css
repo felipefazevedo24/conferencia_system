@@ -47,6 +47,7 @@ body.auth-page {
 
 .login-panel {
     grid-column: 2;
+    grid-row: 1;
     padding: 36px 42px;
     display: flex;
     align-items: flex-start;
@@ -56,6 +57,7 @@ body.auth-page {
 
 .brand-panel {
     grid-column: 1;
+    grid-row: 1;
 }
 
 .login-card,
@@ -606,6 +608,7 @@ body.auth-page {
     .brand-panel,
     .login-panel {
         grid-column: auto;
+        grid-row: auto;
     }
 
     .brand-panel {
