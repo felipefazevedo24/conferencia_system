@@ -1,4 +1,6 @@
 :root {
+    --sidebar-width: 292px;
+    --sidebar-width-compact: 68px;
     --color-brand-950: #081523;
     --color-brand-900: #0f2235;
     --color-brand-800: #16324d;
@@ -132,39 +134,37 @@ body {
 #sidebar-wrapper {
     position: relative;
     z-index: 1500;
-    width: 292px;
-    min-width: 292px;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
     display: flex;
     flex-direction: column;
-    background:
-        radial-gradient(circle at 14% 0%, rgba(125, 196, 255, 0.12), transparent 22%),
-        linear-gradient(180deg, #0a1828 0%, #0f2235 42%, #16324d 100%);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 16px 0 42px rgba(8, 21, 35, 0.22);
+    background: linear-gradient(180deg, #050d18 0%, #081120 100%);
+    border-right: 1px solid rgba(126, 196, 255, 0.14);
+    box-shadow: 16px 0 36px rgba(3, 12, 24, 0.36);
     transition: transform 0.22s ease, width 0.22s ease, min-width 0.22s ease;
     overflow: hidden;
 }
 
 #wrapper.toggled #sidebar-wrapper {
-    transform: translateX(-100%);
-    min-width: 0;
-    width: 0;
+    transform: translateX(0);
+    min-width: var(--sidebar-width-compact);
+    width: var(--sidebar-width-compact);
 }
 
 .sidebar-heading {
-    padding: 22px 20px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid rgba(126, 196, 255, 0.16);
+    background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.00) 100%);
 }
 
 .sidebar-brand {
     display: inline-flex;
     align-items: center;
     gap: 0;
-    padding: 6px 8px;
+    padding: 8px 10px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(15, 98, 201, 0.14);
+    border: 1px solid rgba(126, 196, 255, 0.28);
     text-decoration: none;
 }
 
@@ -204,7 +204,7 @@ body {
     padding: 14px 16px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
@@ -233,7 +233,7 @@ body {
 .sidebar-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 12px 18px;
+    padding: 12px 10px 14px;
 }
 
 .sidebar-scroll::-webkit-scrollbar {
@@ -269,7 +269,7 @@ a:hover {
 #sidebar-wrapper .list-group {
     width: 100%;
     border-radius: 0;
-    gap: 10px;
+    gap: 8px;
 }
 
 #sidebar-wrapper .menu-item {
@@ -279,9 +279,9 @@ a:hover {
 
 #sidebar-wrapper .list-group-item {
     border: none;
-    padding: 12px 14px;
+    padding: 12px 12px;
     margin: 0;
-    border-radius: 16px;
+    border-radius: 12px;
     background: transparent;
     color: #d8e4ef;
     font-size: 13px;
@@ -320,15 +320,15 @@ a:hover {
 }
 
 #sidebar-wrapper .list-group-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(15, 98, 201, 0.16);
     color: #ffffff;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    box-shadow: inset 0 0 0 1px rgba(126, 196, 255, 0.22);
 }
 
 #sidebar-wrapper .list-group-item.active {
-    background: linear-gradient(135deg, #1c86f2 0%, #0f62c9 100%);
+    background: linear-gradient(135deg, #0f62c9 0%, #0a4ea2 100%);
     color: #ffffff;
-    box-shadow: 0 12px 28px rgba(15, 98, 201, 0.28), inset 0 1px 0 rgba(255,255,255,0.08);
+    box-shadow: 0 10px 22px rgba(15, 98, 201, 0.34), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
 #sidebar-wrapper .submenu-panel {
@@ -415,8 +415,65 @@ a:hover {
     display: grid;
     gap: 12px;
     padding: 18px 18px 22px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background: linear-gradient(180deg, rgba(7,18,30,0.22) 0%, rgba(7,18,30,0.38) 100%);
+    border-top: 1px solid rgba(126, 196, 255, 0.16);
+    background: linear-gradient(180deg, rgba(7,18,30,0.28) 0%, rgba(7,18,30,0.46) 100%);
+}
+
+/* Sidebar compacta no desktop (estilo TruckPag: barra de ícones). */
+#wrapper.toggled .sidebar-heading {
+    padding: 14px 8px 10px;
+}
+
+#wrapper.toggled .sidebar-brand {
+    width: 100%;
+    justify-content: center;
+    padding: 7px 0;
+}
+
+#wrapper.toggled .brand-logo-mask {
+    width: 34px;
+    height: 34px;
+    background-image: url('/static/favicon16x16.png');
+}
+
+#wrapper.toggled .sidebar-context,
+#wrapper.toggled .sidebar-footer,
+#wrapper.toggled #sidebar-wrapper .nav-group-title span,
+#wrapper.toggled #sidebar-wrapper .submenu-panel,
+#wrapper.toggled #sidebar-wrapper .submenu-subgroup,
+#wrapper.toggled #sidebar-wrapper .nav-chevron {
+    display: none !important;
+}
+
+#wrapper.toggled #sidebar-wrapper .sidebar-scroll {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+#wrapper.toggled #sidebar-wrapper .list-group {
+    gap: 6px;
+}
+
+#wrapper.toggled #sidebar-wrapper .menu-item {
+    gap: 0;
+}
+
+#wrapper.toggled #sidebar-wrapper .list-group-item {
+    min-height: 46px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 12px;
+}
+
+#wrapper.toggled #sidebar-wrapper .nav-group-title {
+    width: 100%;
+    justify-content: center;
+    gap: 0;
+}
+
+#wrapper.toggled #sidebar-wrapper .nav-group-title i {
+    width: 20px;
+    font-size: 18px;
 }
 
 .sidebar-user {
@@ -1249,8 +1306,8 @@ code {
     }
 
     #wrapper.toggled #sidebar-wrapper {
-        width: 292px;
-        min-width: 292px;
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-width);
         transform: translateX(-100%);
     }
 
@@ -1308,6 +1365,10 @@ code {
 /* Centraliza modais Bootstrap na área de conteúdo (ignora a sidebar de 292px) */
 @media (min-width: 901px) {
     #wrapper:not(.toggled) .modal {
-        padding-left: 292px;
+        padding-left: var(--sidebar-width);
+    }
+
+    #wrapper.toggled .modal {
+        padding-left: var(--sidebar-width-compact);
     }
 }

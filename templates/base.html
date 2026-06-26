@@ -300,6 +300,8 @@ const shellBackdrop = document.getElementById("shell-backdrop");
 function setShellCollapsed(collapsed) {
     wrapper.classList.toggle("toggled", collapsed);
     shellBackdrop.classList.toggle("active", window.innerWidth < 992 && !collapsed);
+    menuToggle.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
+    menuToggle.setAttribute("title", collapsed ? "Expandir menu" : "Recolher menu");
 }
 
 function confirmarLogout() {
