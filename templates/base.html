@@ -220,12 +220,12 @@
 
         <div class="sidebar-footer">
             <div class="sidebar-user">
-                <span>Sessao atual</span>
+                <span>Sessão atual</span>
                 <strong>{{ user }}</strong>
             </div>
             <a href="javascript:void(0)" onclick="confirmarLogout()" class="sidebar-footer-link">
                 <i class="fas fa-sign-out-alt"></i>
-                <span>Encerrar sessao</span>
+                <span>Encerrar sessão</span>
             </a>
         </div>
     </aside>
@@ -236,8 +236,32 @@
                 <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
             </div>
             <div class="top-nav-center">
-                <i class="fas fa-search"></i>
-                <input id="shell-nav-search" type="text" placeholder="Navegação rápida no sistema...">
+                <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
+                    <i class="fas fa-search"></i>
+                    <span>Pesquisar</span>
+                </button>
+                <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
+                    <div class="shell-search-input-wrap">
+                        <i class="fas fa-search"></i>
+                        <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
+                    </div>
+                    <section class="shell-search-group">
+                        <header>
+                            <strong>Favoritos</strong>
+                        </header>
+                        <div id="shell-search-favorites" class="shell-search-list">
+                            <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
+                        </div>
+                    </section>
+                    <section class="shell-search-group">
+                        <header>
+                            <strong>Resultados</strong>
+                        </header>
+                        <div id="shell-search-results" class="shell-search-list">
+                            <div class="shell-search-empty">Digite para buscar módulos.</div>
+                        </div>
+                    </section>
+                </div>
             </div>
             <div class="nav-right">
                 <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
@@ -296,6 +320,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const RECENTS_KEY = "columbia_sync_home_recents";
+const FAVORITES_KEY = "columbia_sync_home_favorites";
 const wrapper = document.getElementById("wrapper");
 const menuToggle = document.getElementById("menu-toggle");
 const shellBackdrop = document.getElementById("shell-backdrop");
@@ -312,6 +337,33 @@ function confirmarLogout() {
         window.location.href = "/logout";
     }
 }
+
+function renderShellFavorites() {
+    const favoritesHost = document.getElementById("shell-search-favorites");
+    if (!favoritesHost) return;
+
+    let favorites = [];
+    try {
+        favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+        if (!Array.isArray(favorites)) favorites = [];
+    } catch (_) {
+        favorites = [];
+    }
+
+    if (!favorites.length) {
+        favoritesHost.innerHTML = '<div class="shell-search-empty">Você ainda não fixou favoritos.</div>';
+        return;
+    }
+
+    favoritesHost.innerHTML = favorites.slice(0, 8).map((item) => `
+        <a href="${item.href || '/'}" class="shell-search-item">
+            <i class="fas ${item.icon || "fa-window-maximize"}"></i>
+            <span>${item.title || "Módulo"}</span>
+        </a>
+    `).join("");
+}
+
+window.refreshShellFavorites = renderShellFavorites;
 
 function trackRecentLink(link, currentPath) {
     if (!link || !currentPath || currentPath === "/") return;
@@ -368,6 +420,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const currentPath = window.location.pathname;
     const allLinks = Array.from(document.querySelectorAll("#accordionSidebar a.list-group-item[href]"));
     const menuButtons = Array.from(document.querySelectorAll(".menu-toggle"));
+    const searchToggle = document.getElementById("shell-search-toggle");
+    const searchPanel = document.getElementById("shell-search-panel");
+    const searchInput = document.getElementById("shell-nav-search");
     const userProfileToggle = document.getElementById("user-profile-toggle");
     const userProfilePanel = document.getElementById("user-profile-panel");
 
@@ -381,6 +436,39 @@ document.addEventListener("DOMContentLoaded", function () {
     shellBackdrop.addEventListener("click", function () {
         setShellCollapsed(true);
     });
+
+    if (searchToggle && searchPanel) {
+        const closeSearchPanel = () => {
+            searchToggle.setAttribute("aria-expanded", "false");
+            searchPanel.classList.remove("open");
+            searchPanel.setAttribute("aria-hidden", "true");
+        };
+
+        searchToggle.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const shouldOpen = !searchPanel.classList.contains("open");
+            if (!shouldOpen) {
+                closeSearchPanel();
+                return;
+            }
+
+            searchToggle.setAttribute("aria-expanded", "true");
+            searchPanel.classList.add("open");
+            searchPanel.setAttribute("aria-hidden", "false");
+            searchInput?.focus();
+        });
+
+        searchPanel.addEventListener("click", function (e) {
+            e.stopPropagation();
+        });
+
+        document.addEventListener("click", closeSearchPanel);
+
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeSearchPanel();
+        });
+    }
 
     if (userProfileToggle && userProfilePanel) {
         const closeUserPanel = () => {
@@ -483,6 +571,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     trackRecentLink(recentCandidate, currentPath);
+    renderShellFavorites();
     loadUpdateNotice();
 });
 

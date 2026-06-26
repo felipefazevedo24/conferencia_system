@@ -642,6 +642,8 @@
                             class="module-card home-module-card"
                             data-search="{{ module.search_blob|lower }}"
                             data-section="{{ section.name|lower }}"
+                            data-title="{{ module.title }}"
+                            data-icon="{{ module.icon }}"
                         >
                             <div class="module-top">
                                 <div class="module-icon"><i class="fas {{ module.icon }}"></i></div>
@@ -684,11 +686,110 @@
 <script>
     (function () {
         const searchInput = document.getElementById("shell-nav-search");
+        const searchFavorites = document.getElementById("shell-search-favorites");
+        const searchResults = document.getElementById("shell-search-results");
         const cards = Array.from(document.querySelectorAll(".home-module-card"));
         const sections = Array.from(document.querySelectorAll(".home-section"));
         const emptyState = document.getElementById("home-empty-state");
         const recentList = document.getElementById("home-recent-list");
         const RECENTS_STORAGE_KEY = "columbia_sync_home_recents";
+        const FAVORITES_STORAGE_KEY = "columbia_sync_home_favorites";
+
+        const modules = cards.map((card) => {
+            const title = card.dataset.title || card.querySelector(".module-title strong")?.textContent?.trim() || "Módulo";
+            const iconClass = card.dataset.icon || card.querySelector(".module-icon i")?.className?.split(" ").find((cls) => cls.startsWith("fa-")) || "fa-window-maximize";
+            const href = card.getAttribute("href") || "/";
+            const searchBlob = card.dataset.search || "";
+            return { title, iconClass, href, searchBlob };
+        });
+
+        function loadFavorites() {
+            try {
+                const value = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
+                return Array.isArray(value) ? value : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function saveFavorites(items) {
+            localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(items.slice(0, 12)));
+        }
+
+        function isFavorite(href) {
+            return loadFavorites().some((item) => item && item.href === href);
+        }
+
+        function toggleFavorite(moduleHref) {
+            const module = modules.find((item) => item.href === moduleHref);
+            if (!module) return;
+
+            const current = loadFavorites();
+            const exists = current.some((item) => item && item.href === moduleHref);
+            const next = exists
+                ? current.filter((item) => item && item.href !== moduleHref)
+                : [{ href: module.href, title: module.title, icon: module.iconClass }, ...current.filter((item) => item && item.href !== moduleHref)];
+
+            saveFavorites(next);
+            renderFavoritesPanel();
+            renderSearchResults(searchInput?.value || "");
+        }
+
+        function renderFavoritesPanel() {
+            if (!searchFavorites) return;
+
+            const favorites = loadFavorites();
+            if (!favorites.length) {
+                searchFavorites.innerHTML = '<div class="shell-search-empty">Você ainda não fixou favoritos.</div>';
+                return;
+            }
+
+            searchFavorites.innerHTML = favorites.slice(0, 8).map((item) => `
+                <div class="shell-search-row">
+                    <a href="${item.href || '/'}" class="shell-search-item">
+                        <i class="fas ${item.icon || 'fa-window-maximize'}"></i>
+                        <span>${item.title || 'Módulo'}</span>
+                    </a>
+                    <button class="shell-search-action is-active" type="button" data-fav-remove="${item.href || '/'}" title="Desafixar favorito" aria-label="Desafixar favorito">
+                        <i class="fas fa-star"></i>
+                    </button>
+                </div>
+            `).join("");
+        }
+
+        function renderSearchResults(term) {
+            if (!searchResults) return;
+
+            const normalizedTerm = (term || "").trim().toLowerCase();
+            if (!normalizedTerm) {
+                searchResults.innerHTML = '<div class="shell-search-empty">Digite para buscar módulos.</div>';
+                return;
+            }
+
+            const found = modules
+                .filter((item) => item.searchBlob.includes(normalizedTerm))
+                .slice(0, 10);
+
+            if (!found.length) {
+                searchResults.innerHTML = '<div class="shell-search-empty">Nenhum módulo encontrado para esse termo.</div>';
+                return;
+            }
+
+            searchResults.innerHTML = found.map((item) => {
+                const favorite = isFavorite(item.href);
+                return `
+                    <div class="shell-search-row">
+                        <a href="${item.href}" class="shell-search-item">
+                            <i class="fas ${item.iconClass}"></i>
+                            <span>${item.title}</span>
+                        </a>
+                        <button class="shell-search-action ${favorite ? 'is-active' : ''}" type="button" data-fav-toggle="${item.href}" title="${favorite ? 'Desafixar favorito' : 'Fixar favorito'}" aria-label="${favorite ? 'Desafixar favorito' : 'Fixar favorito'}">
+                            <i class="fas fa-star"></i>
+                        </button>
+                    </div>
+                `;
+            }).join("");
+        }
 
         function filterModules() {
             const term = (searchInput?.value || "").trim().toLowerCase();
@@ -708,6 +809,7 @@
             });
 
             emptyState.classList.toggle("visible", visibleCards === 0);
+            renderSearchResults(term);
         }
 
         function renderRecents() {
@@ -737,6 +839,24 @@
         }
 
         searchInput?.addEventListener("input", filterModules);
+
+        window.refreshShellFavorites = renderFavoritesPanel;
+
+        searchFavorites?.addEventListener("click", function (e) {
+            const button = e.target.closest("[data-fav-remove]");
+            if (!button) return;
+            e.preventDefault();
+            toggleFavorite(button.getAttribute("data-fav-remove"));
+        });
+
+        searchResults?.addEventListener("click", function (e) {
+            const button = e.target.closest("[data-fav-toggle]");
+            if (!button) return;
+            e.preventDefault();
+            toggleFavorite(button.getAttribute("data-fav-toggle"));
+        });
+
+        renderFavoritesPanel();
         filterModules();
         renderRecents();
     })();
