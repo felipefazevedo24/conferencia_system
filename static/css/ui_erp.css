@@ -132,13 +132,13 @@ body {
 #sidebar-wrapper {
     position: relative;
     z-index: 1500;
-    width: 286px;
-    min-width: 286px;
+    width: 292px;
+    min-width: 292px;
     display: flex;
     flex-direction: column;
     background:
-        radial-gradient(circle at 12% -2%, rgba(125, 196, 255, 0.2), transparent 28%),
-        linear-gradient(180deg, #081726 0%, #10273e 46%, #163b5d 100%);
+        radial-gradient(circle at 14% 0%, rgba(125, 196, 255, 0.12), transparent 22%),
+        linear-gradient(180deg, #0a1828 0%, #0f2235 42%, #16324d 100%);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 16px 0 42px rgba(8, 21, 35, 0.22);
     transition: transform 0.22s ease, width 0.22s ease, min-width 0.22s ease;
@@ -152,7 +152,7 @@ body {
 }
 
 .sidebar-heading {
-    padding: 20px 18px 14px;
+    padding: 22px 20px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
 }
@@ -160,21 +160,45 @@ body {
 .sidebar-brand {
     display: inline-flex;
     align-items: center;
-    padding: 8px 10px;
+    gap: 0;
+    padding: 6px 8px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
     text-decoration: none;
 }
 
-.sidebar-brand-logo {
-    display: block;
-    width: 164px;
-    height: auto;
+.brand-logo-mask {
+    width: 158px;
+    height: 44px;
+    background: url('/static/columbia_sync_logo_v2.png') center / contain no-repeat;
+    flex-shrink: 0;
+}
+
+.sidebar-brand-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.sidebar-brand-copy span {
+    color: rgba(216, 232, 247, 0.76);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.sidebar-brand-copy strong {
+    color: #ffffff;
+    font-family: var(--font-display);
+    font-size: 18px;
+    line-height: 1;
+    letter-spacing: -0.04em;
 }
 
 .sidebar-context {
-    margin-top: 14px;
+    margin-top: 18px;
     display: grid;
     gap: 8px;
     padding: 14px 16px;
@@ -450,12 +474,12 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    min-height: 74px;
-    padding: 0 20px;
-    border-bottom: 1px solid rgba(199, 216, 232, 0.86);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(247, 251, 255, 0.94) 100%);
+    min-height: 76px;
+    padding: 0 24px;
+    border-bottom: 1px solid rgba(209, 221, 233, 0.88);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(16px);
-    box-shadow: 0 10px 24px rgba(29, 52, 77, 0.08);
+    box-shadow: 0 12px 30px rgba(29, 52, 77, 0.08);
 }
 
 .nav-left,
@@ -996,7 +1020,7 @@ code {
 
 .top-route {
     display: grid;
-    gap: 0;
+    gap: 2px;
 }
 
 .top-route span {
@@ -1010,14 +1034,14 @@ code {
 .top-route strong {
     color: var(--color-brand-900);
     font-family: var(--font-display);
-    font-size: 34px;
-    line-height: 0.95;
+    font-size: 24px;
+    line-height: 1;
     letter-spacing: -0.04em;
 }
 
 .top-route small {
     color: var(--color-text-muted);
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.4;
 }
 
@@ -1029,8 +1053,8 @@ code {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 38px;
-    padding: 0 12px;
+    min-height: 42px;
+    padding: 0 14px;
     border: 1px solid rgba(28, 134, 242, 0.18);
     border-radius: 999px;
     background: rgba(28, 134, 242, 0.08);
@@ -1046,8 +1070,8 @@ code {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: 40px;
-    padding: 0 12px;
+    min-height: 44px;
+    padding: 0 14px;
     border-radius: 999px;
     background: linear-gradient(180deg, #ffffff 0%, #f4f8fb 100%);
     border: 1px solid rgba(209, 221, 233, 0.92);
@@ -1066,8 +1090,8 @@ code {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 38px;
-    padding: 0 12px;
+    min-height: 42px;
+    padding: 0 14px;
     border-radius: 14px;
     border: 1px solid rgba(209, 221, 233, 0.92);
     background: #f4f8fb;
@@ -1210,7 +1234,7 @@ code {
     }
 
     .top-route strong {
-        font-size: 30px;
+        font-size: 22px;
     }
 }
 
@@ -1222,8 +1246,8 @@ code {
     }
 
     #wrapper.toggled #sidebar-wrapper {
-        width: 286px;
-        min-width: 286px;
+        width: 292px;
+        min-width: 292px;
         transform: translateX(-100%);
     }
 
@@ -1237,7 +1261,7 @@ code {
     }
 
     .top-route strong {
-        font-size: 24px;
+        font-size: 18px;
     }
 
     .top-status-pill {
