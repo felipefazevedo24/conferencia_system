@@ -29,7 +29,7 @@
 
                     <h1 class="card-title" id="card-title">Acessar minha conta</h1>
                     <p class="card-copy" id="card-copy">
-                        Entre com seu usuario e senha corporativos.
+                        Entre com seu usuário e senha corporativos.
                     </p>
 
                     <div
@@ -50,7 +50,7 @@
                                 <span class="field-note">Seu login interno</span>
                             </label>
                             <div class="input-shell">
-                                <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuario" style="text-transform:uppercase">
+                                <input type="text" id="user" name="user" autocomplete="username" placeholder="Digite seu usuário" style="text-transform:uppercase">
                             </div>
                             <div class="field-meta" id="user-meta"></div>
                         </div>
@@ -72,7 +72,7 @@
                         <div class="toolbar">
                             <label class="remember">
                                 <input type="checkbox" id="remember-user">
-                                <span>Lembrar meu usuario neste navegador</span>
+                                <span>Lembrar meu usuário neste navegador</span>
                             </label>
                             <span class="field-note" id="caps-lock-hint"></span>
                         </div>
@@ -163,7 +163,7 @@
                         </div>
                         <div class="portfolio-card-copy">
                             <span class="portfolio-card-kicker">Portfolio Columbia Machine</span>
-                            <strong>Conheca as linhas de equipamentos, automacao e solucoes para producao industrial.</strong>
+                            <strong>Conheça as linhas de equipamentos, automação e soluções para produção industrial.</strong>
                         </div>
                         <span class="portfolio-card-cta">Conhecer produtos <i class="fas fa-arrow-right"></i></span>
                     </a>
@@ -319,7 +319,7 @@
             registerForm.style.display = "none";
             loginForm.style.display = "";
             cardTitle.textContent = "Acessar minha conta";
-            cardCopy.textContent = "Entre com seu usuario e senha corporativos.";
+            cardCopy.textContent = "Entre com seu usuário e senha corporativos.";
             feedback.className = "feedback";
             feedback.innerHTML = "";
             userInput.focus();
@@ -404,14 +404,14 @@
 
             if (!username || !password) {
                 if (!username) {
-                    setFieldWarning(userInput, userMeta, "Informe seu usuario para continuar.");
+                    setFieldWarning(userInput, userMeta, "Informe seu usuário para continuar.");
                 }
 
                 if (!password) {
                     setFieldWarning(passInput, passMeta, "Informe sua senha para continuar.");
                 }
 
-                showFeedback("warning", "Preencha usuario e senha para acessar o sistema.");
+                showFeedback("warning", "Preencha usuário e senha para acessar o sistema.");
                 pulseError();
                 return;
             }
