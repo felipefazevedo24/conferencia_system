@@ -373,17 +373,17 @@ body.auth-page {
 .brand-panel::before {
     content: "";
     position: absolute;
-    top: -18%;
-    right: -12%;
-    width: min(48%, 420px);
-    height: min(38%, 290px);
+    top: -12%;
+    right: -8%;
+    width: min(52%, 470px);
+    height: min(42%, 330px);
     border-radius: 70% 0 0 72%;
     transform: rotate(-8deg);
     clip-path: ellipse(76% 64% at 76% 30%);
     background:
-        radial-gradient(circle at 74% 24%, rgba(191, 219, 254, 0.2), transparent 56%),
-        repeating-linear-gradient(146deg, rgba(125, 211, 252, 0.34) 0 3px, rgba(125, 211, 252, 0) 3px 16px);
-    opacity: 0.4;
+        radial-gradient(circle at 74% 24%, rgba(191, 219, 254, 0.28), transparent 56%),
+        repeating-linear-gradient(146deg, rgba(125, 211, 252, 0.52) 0 3px, rgba(125, 211, 252, 0) 3px 16px);
+    opacity: 0.7;
     pointer-events: none;
 }
 
@@ -392,9 +392,9 @@ body.auth-page {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(ellipse at 86% -12%, rgba(191, 219, 254, 0.42) 0%, rgba(191, 219, 254, 0) 58%),
-        linear-gradient(150deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 40%),
-        linear-gradient(180deg, rgba(3, 15, 33, 0.08) 0%, rgba(3, 15, 33, 0.34) 100%);
+        radial-gradient(ellipse at 86% -12%, rgba(191, 219, 254, 0.52) 0%, rgba(191, 219, 254, 0) 58%),
+        linear-gradient(150deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 40%),
+        linear-gradient(180deg, rgba(3, 15, 33, 0.05) 0%, rgba(3, 15, 33, 0.26) 100%);
     pointer-events: none;
 }
 
@@ -412,8 +412,8 @@ body.auth-page {
 
 .brand-message {
     margin-top: clamp(78px, 13vh, 156px);
-    max-width: min(640px, 84%);
-    padding-right: min(16%, 120px);
+    max-width: min(660px, 88%);
+    padding-right: min(12%, 86px);
 }
 
 .brand-title {
@@ -421,8 +421,9 @@ body.auth-page {
     max-width: 700px;
     font-family: var(--font-display);
     font-size: clamp(38px, 3.2vw, 54px);
-    line-height: 1;
+    line-height: 1.02;
     letter-spacing: -0.03em;
+    text-shadow: 0 10px 28px rgba(4, 20, 42, 0.18);
 }
 
 .brand-pill {
@@ -433,10 +434,11 @@ body.auth-page {
     min-height: 42px;
     padding: 0 18px;
     border-radius: 18px;
-    background: rgba(7, 42, 92, 0.46);
-    color: rgba(255, 255, 255, 0.92);
+    background: rgba(7, 42, 92, 0.62);
+    color: #ffffff;
     font-size: clamp(14px, 1vw, 16px);
     font-weight: 600;
+    box-shadow: 0 14px 26px rgba(3, 24, 54, 0.18);
 }
 
 .brand-pill-text {
@@ -451,17 +453,17 @@ body.auth-page {
 
 .portfolio-card {
     margin-top: auto;
-    min-height: 130px;
+    min-height: 138px;
     border-radius: 16px;
     padding: 16px 18px;
     display: grid;
-    grid-template-columns: 148px 1fr auto;
+    grid-template-columns: 172px 1fr auto;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
     text-decoration: none;
     color: #ffffff;
     background:
-        linear-gradient(120deg, rgba(4, 35, 76, 0.82) 0%, rgba(6, 49, 102, 0.76) 40%, rgba(8, 69, 133, 0.72) 100%);
+        linear-gradient(120deg, rgba(4, 35, 76, 0.9) 0%, rgba(6, 49, 102, 0.84) 40%, rgba(8, 69, 133, 0.8) 100%);
     border: 1px solid rgba(191, 219, 254, 0.32);
     box-shadow: 0 18px 32px rgba(3, 24, 54, 0.34);
     transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
@@ -475,17 +477,17 @@ body.auth-page {
 }
 
 .portfolio-card-logo-wrap {
-    height: 94px;
+    height: 102px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.96);
     display: grid;
     place-items: center;
-    padding: 8px;
+    padding: 10px 12px;
 }
 
 .portfolio-card-logo-wrap img {
     width: 100%;
-    max-width: 124px;
+    max-width: 146px;
     height: auto;
 }
 
@@ -502,8 +504,8 @@ body.auth-page {
 }
 
 .portfolio-card-copy strong {
-    font-size: 15px;
-    line-height: 1.35;
+    font-size: 16px;
+    line-height: 1.32;
     color: #ffffff;
 }
 
@@ -514,7 +516,7 @@ body.auth-page {
     min-height: 42px;
     padding: 0 14px;
     border-radius: 999px;
-    background: rgba(30, 110, 194, 0.9);
+    background: rgba(30, 110, 194, 0.98);
     color: #ffffff;
     font-size: 13px;
     font-weight: 700;
@@ -531,13 +533,17 @@ body.auth-page {
     .portfolio-card {
         min-height: 108px;
         padding: 12px 14px;
-        grid-template-columns: 116px 1fr auto;
+        grid-template-columns: 132px 1fr auto;
         gap: 10px;
     }
 
     .portfolio-card-logo-wrap {
-        height: 76px;
+        height: 82px;
         border-radius: 10px;
+    }
+
+    .portfolio-card-logo-wrap img {
+        max-width: 118px;
     }
 
     .portfolio-card-copy strong {
