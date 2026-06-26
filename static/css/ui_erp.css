@@ -171,8 +171,8 @@ body {
 }
 
 .brand-logo-mask {
-    width: 192px;
-    height: 56px;
+    width: 220px;
+    height: 64px;
     background: url('/static/columbia_sync_logo_v2.png') center / contain no-repeat;
     flex-shrink: 0;
 }
@@ -557,17 +557,22 @@ a:hover {
     max-width: 780px;
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    min-height: 44px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.02);
-    padding: 0 14px;
+    gap: 12px;
+    min-height: 42px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+    background: transparent;
+    padding: 0 4px 2px;
+    transition: border-color 0.18s ease;
+}
+
+.top-nav-center:focus-within {
+    border-bottom-color: rgba(15, 98, 201, 0.84);
 }
 
 .top-nav-center i {
-    color: rgba(212, 226, 243, 0.78);
-    font-size: 14px;
+    color: rgba(226, 236, 247, 0.92);
+    font-size: 15px;
 }
 
 .top-nav-center input {
@@ -578,11 +583,16 @@ a:hover {
     background: transparent;
     color: #f5f9ff;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
+    padding-bottom: 2px;
 }
 
 .top-nav-center input::placeholder {
-    color: rgba(195, 214, 234, 0.62);
+    color: rgba(201, 218, 236, 0.72);
+}
+
+.top-status-pill {
+    display: none !important;
 }
 
 #menu-toggle {
@@ -1180,6 +1190,91 @@ code {
     color: #7ec4ff;
 }
 
+.nav-right {
+    position: relative;
+}
+
+.user-profile-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: #f0f8ff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.user-profile-btn:hover {
+    border-color: rgba(15, 98, 201, 0.54);
+    background: rgba(15, 98, 201, 0.16);
+}
+
+.user-profile-btn .fa-user-circle {
+    color: #7ec4ff;
+}
+
+.user-profile-btn .fa-chevron-down {
+    font-size: 11px;
+    opacity: 0.78;
+}
+
+.user-profile-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 62px;
+    width: 230px;
+    display: none;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #0a0f18;
+    box-shadow: 0 20px 32px rgba(2, 10, 20, 0.48);
+    z-index: 1700;
+}
+
+.user-profile-panel.open {
+    display: grid;
+}
+
+.user-profile-panel-label {
+    color: rgba(198, 219, 239, 0.7);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.user-profile-panel-role {
+    color: #f4f9ff;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.user-profile-config-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(15, 98, 201, 0.58);
+    background: rgba(15, 98, 201, 0.22);
+    color: #deeeff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.user-profile-config-btn:hover {
+    background: rgba(15, 98, 201, 0.34);
+}
+
 .btn-logout {
     display: inline-flex;
     align-items: center;
@@ -1387,6 +1482,11 @@ code {
     .nav-right {
         width: 100%;
         justify-content: space-between;
+    }
+
+    .user-profile-panel {
+        right: 0;
+        top: calc(100% + 8px);
     }
 
     .top-nav-center {

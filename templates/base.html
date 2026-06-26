@@ -240,8 +240,19 @@
                 <input id="shell-nav-search" type="text" placeholder="Navegação rápida no sistema...">
             </div>
             <div class="nav-right">
-                <div class="top-status-pill"><i class="fas fa-sparkles"></i><span>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</span></div>
-                <div class="user-profile"><i class="fas fa-user-circle"></i><span>{{ user|upper }}</span></div>
+                <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
+                    <i class="fas fa-user-circle"></i>
+                    <span>{{ user|upper }}</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div id="user-profile-panel" class="user-profile-panel" aria-hidden="true">
+                    <div class="user-profile-panel-label">Nível de acesso</div>
+                    <strong class="user-profile-panel-role">{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
+                    <button type="button" class="user-profile-config-btn">
+                        <i class="fas fa-gear"></i>
+                        <span>Configurações</span>
+                    </button>
+                </div>
                 <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
         </nav>
@@ -357,6 +368,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const currentPath = window.location.pathname;
     const allLinks = Array.from(document.querySelectorAll("#accordionSidebar a.list-group-item[href]"));
     const menuButtons = Array.from(document.querySelectorAll(".menu-toggle"));
+    const userProfileToggle = document.getElementById("user-profile-toggle");
+    const userProfilePanel = document.getElementById("user-profile-panel");
 
     if (window.innerWidth < 992) setShellCollapsed(true);
 
@@ -368,6 +381,38 @@ document.addEventListener("DOMContentLoaded", function () {
     shellBackdrop.addEventListener("click", function () {
         setShellCollapsed(true);
     });
+
+    if (userProfileToggle && userProfilePanel) {
+        const closeUserPanel = () => {
+            userProfileToggle.setAttribute("aria-expanded", "false");
+            userProfilePanel.classList.remove("open");
+            userProfilePanel.setAttribute("aria-hidden", "true");
+        };
+
+        userProfileToggle.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const shouldOpen = !userProfilePanel.classList.contains("open");
+            if (!shouldOpen) {
+                closeUserPanel();
+                return;
+            }
+
+            userProfileToggle.setAttribute("aria-expanded", "true");
+            userProfilePanel.classList.add("open");
+            userProfilePanel.setAttribute("aria-hidden", "false");
+        });
+
+        userProfilePanel.addEventListener("click", function (e) {
+            e.stopPropagation();
+        });
+
+        document.addEventListener("click", closeUserPanel);
+
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeUserPanel();
+        });
+    }
 
     menuButtons.forEach(button => {
         const target = document.getElementById(button.dataset.shellTarget);
