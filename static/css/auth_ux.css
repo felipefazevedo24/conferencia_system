@@ -367,7 +367,9 @@ body.auth-page {
     position: relative;
     overflow: hidden;
     background:
-        linear-gradient(140deg, #082a63 0%, #0c4f98 48%, #1170c4 100%);
+    radial-gradient(circle at 18% 80%, rgba(125, 211, 252, 0.18) 0%, rgba(125, 211, 252, 0) 24%),
+    radial-gradient(circle at 82% 16%, rgba(191, 219, 254, 0.22) 0%, rgba(191, 219, 254, 0) 28%),
+    linear-gradient(140deg, #082a63 0%, #0c4f98 48%, #1170c4 100%);
 }
 
 .brand-panel::before {
@@ -375,15 +377,15 @@ body.auth-page {
     position: absolute;
     top: -12%;
     right: -8%;
-    width: min(52%, 470px);
-    height: min(42%, 330px);
+    width: min(54%, 490px);
+    height: min(44%, 350px);
     border-radius: 70% 0 0 72%;
     transform: rotate(-8deg);
     clip-path: ellipse(76% 64% at 76% 30%);
     background:
-        radial-gradient(circle at 74% 24%, rgba(191, 219, 254, 0.28), transparent 56%),
-        repeating-linear-gradient(146deg, rgba(125, 211, 252, 0.52) 0 3px, rgba(125, 211, 252, 0) 3px 16px);
-    opacity: 0.7;
+        radial-gradient(circle at 74% 24%, rgba(191, 219, 254, 0.34), transparent 56%),
+        repeating-linear-gradient(146deg, rgba(125, 211, 252, 0.56) 0 3px, rgba(125, 211, 252, 0) 3px 15px);
+    opacity: 0.82;
     pointer-events: none;
 }
 
@@ -392,9 +394,10 @@ body.auth-page {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(ellipse at 86% -12%, rgba(191, 219, 254, 0.52) 0%, rgba(191, 219, 254, 0) 58%),
-        linear-gradient(150deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 40%),
-        linear-gradient(180deg, rgba(3, 15, 33, 0.05) 0%, rgba(3, 15, 33, 0.26) 100%);
+        radial-gradient(circle at 22% 78%, rgba(11, 183, 255, 0.16) 0%, rgba(11, 183, 255, 0) 24%),
+        radial-gradient(ellipse at 86% -12%, rgba(191, 219, 254, 0.56) 0%, rgba(191, 219, 254, 0) 58%),
+        linear-gradient(150deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 40%),
+        linear-gradient(180deg, rgba(3, 15, 33, 0.04) 0%, rgba(3, 15, 33, 0.28) 100%);
     pointer-events: none;
 }
 
@@ -410,8 +413,23 @@ body.auth-page {
     color: #ffffff;
 }
 
+.brand-overlay::before {
+    content: "";
+    position: absolute;
+    right: 8%;
+    bottom: 24%;
+    width: min(32%, 260px);
+    height: min(22%, 160px);
+    border-radius: 28px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01));
+    border: 1px solid rgba(191, 219, 254, 0.18);
+    backdrop-filter: blur(4px);
+    opacity: 0.48;
+    pointer-events: none;
+}
+
 .brand-message {
-    margin-top: clamp(78px, 13vh, 156px);
+    margin-top: clamp(118px, 18vh, 190px);
     max-width: min(660px, 88%);
     padding-right: min(12%, 86px);
 }
@@ -423,7 +441,7 @@ body.auth-page {
     font-size: clamp(38px, 3.2vw, 54px);
     line-height: 1.02;
     letter-spacing: -0.03em;
-    text-shadow: 0 10px 28px rgba(4, 20, 42, 0.18);
+    text-shadow: 0 14px 32px rgba(4, 20, 42, 0.22);
 }
 
 .brand-pill {
@@ -463,7 +481,7 @@ body.auth-page {
     text-decoration: none;
     color: #ffffff;
     background:
-        linear-gradient(120deg, rgba(4, 35, 76, 0.9) 0%, rgba(6, 49, 102, 0.84) 40%, rgba(8, 69, 133, 0.8) 100%);
+        linear-gradient(120deg, rgba(3, 28, 63, 0.96) 0%, rgba(5, 41, 86, 0.92) 40%, rgba(9, 71, 137, 0.84) 100%);
     border: 1px solid rgba(191, 219, 254, 0.32);
     box-shadow: 0 18px 32px rgba(3, 24, 54, 0.34);
     transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
@@ -479,15 +497,17 @@ body.auth-page {
 .portfolio-card-logo-wrap {
     height: 102px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.96);
+    background: linear-gradient(135deg, rgba(6, 26, 54, 0.98), rgba(11, 52, 102, 0.94));
+    border: 1px solid rgba(255, 255, 255, 0.12);
     display: grid;
     place-items: center;
     padding: 10px 12px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .portfolio-card-logo-wrap img {
     width: 100%;
-    max-width: 146px;
+    max-width: 154px;
     height: auto;
 }
 
@@ -525,9 +545,15 @@ body.auth-page {
 
 @media (max-height: 780px) {
     .brand-message {
-        margin-top: clamp(26px, 7vh, 68px);
+        margin-top: clamp(52px, 10vh, 92px);
         max-width: min(620px, 88%);
         padding-right: min(10%, 80px);
+    }
+
+    .brand-overlay::before {
+        bottom: 18%;
+        width: min(28%, 210px);
+        height: min(18%, 120px);
     }
 
     .portfolio-card {
