@@ -430,18 +430,19 @@ body.auth-page {
 
 .brand-message {
     margin-top: clamp(118px, 18vh, 190px);
-    max-width: min(660px, 88%);
-    padding-right: min(12%, 86px);
+    max-width: min(760px, 94%);
+    padding-right: min(6%, 42px);
 }
 
 .brand-title {
     margin: 0;
-    max-width: 700px;
+    max-width: 760px;
     font-family: var(--font-display);
-    font-size: clamp(38px, 3.2vw, 54px);
-    line-height: 1.02;
-    letter-spacing: -0.03em;
+    font-size: clamp(42px, 3.4vw, 62px);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
     text-shadow: 0 14px 32px rgba(4, 20, 42, 0.22);
+    text-wrap: balance;
 }
 
 .brand-pill {
@@ -546,8 +547,8 @@ body.auth-page {
 @media (max-height: 780px) {
     .brand-message {
         margin-top: clamp(52px, 10vh, 92px);
-        max-width: min(620px, 88%);
-        padding-right: min(10%, 80px);
+        max-width: min(700px, 92%);
+        padding-right: min(6%, 42px);
     }
 
     .brand-overlay::before {
@@ -581,6 +582,19 @@ body.auth-page {
         min-height: 34px;
         padding: 0 10px;
         font-size: 12px;
+    }
+}
+
+@media (max-width: 980px) {
+    .brand-message {
+        max-width: min(760px, 100%);
+        padding-right: 0;
+    }
+
+    .brand-title {
+        max-width: 100%;
+        font-size: clamp(40px, 7vw, 56px);
+        line-height: 1.08;
     }
 }
 
