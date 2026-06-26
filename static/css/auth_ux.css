@@ -4,18 +4,20 @@
 
 html,
 body {
-    min-height: 100%;
+    height: 100%;
 }
 
 body.auth-page {
     margin: 0;
-    min-height: 100vh;
+    min-height: 100dvh;
     background: #dde3ea;
     color: var(--color-brand-900);
+    overflow: hidden;
 }
 
 .auth-page-shell {
-    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
     display: flex;
     align-items: stretch;
     justify-content: stretch;
@@ -24,9 +26,10 @@ body.auth-page {
 
 .auth-shell {
     width: 100%;
-    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
     display: grid;
-    grid-template-columns: minmax(520px, 1.3fr) minmax(620px, 1fr);
+    grid-template-columns: minmax(520px, 1.2fr) minmax(500px, 1fr);
     border-radius: 0;
     overflow: hidden;
     background: #dde3ea;
@@ -48,9 +51,9 @@ body.auth-page {
 .login-panel {
     grid-column: 2;
     grid-row: 1;
-    padding: clamp(32px, 3.2vw, 56px);
+    padding: clamp(20px, 2.1vw, 32px);
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     position: relative;
 }
@@ -62,9 +65,9 @@ body.auth-page {
 
 .login-card,
 .error-card {
-    width: clamp(560px, 38vw, 760px);
+    width: clamp(420px, 34vw, 560px);
     max-width: 100%;
-    margin-top: clamp(48px, 8vh, 108px);
+    margin-top: 0;
 }
 
 .login-brand {
@@ -75,32 +78,32 @@ body.auth-page {
 
 .brand-logo-img {
     display: block;
-    width: clamp(260px, 24vw, 390px);
+    width: clamp(170px, 15vw, 250px);
     height: auto;
 }
 
 .card-title {
     margin: 0 0 12px;
     font-family: var(--font-display);
-    font-size: clamp(46px, 2.6vw, 58px);
+    font-size: clamp(34px, 2.2vw, 44px);
     line-height: 1;
     letter-spacing: -0.03em;
     color: #0c1524;
 }
 
 .card-copy {
-    margin: 0 0 30px;
-    font-size: 20px;
+    margin: 0 0 18px;
+    font-size: clamp(14px, 1vw, 16px);
     line-height: 1.5;
     color: #4b5663;
 }
 
 .feedback {
     display: none;
-    margin-bottom: 18px;
-    padding: 14px 16px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
     border-radius: 16px;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.6;
     font-weight: 600;
     border: 1px solid transparent;
@@ -143,7 +146,7 @@ body.auth-page {
 }
 
 .field {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .field label {
@@ -151,16 +154,16 @@ body.auth-page {
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    margin-bottom: 9px;
+    margin-bottom: 6px;
     color: #5d6670;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: 0;
 }
 
 .field-note {
-    font-size: 14px;
+    font-size: 11px;
     color: var(--color-text-soft);
     text-transform: none;
     letter-spacing: 0;
@@ -174,10 +177,10 @@ body.auth-page {
     width: 100%;
     border: 1px solid rgba(15, 23, 42, 0.18);
     border-radius: 7px;
-    padding: 19px 18px;
+    padding: 12px 14px;
     background: #f2f4f7;
     color: var(--color-brand-900);
-    font-size: 24px;
+    font-size: 16px;
     font-weight: 500;
     outline: none;
     box-shadow: none;
@@ -191,7 +194,7 @@ body.auth-page {
 }
 
 .input-shell.has-action input {
-    padding-right: 84px;
+    padding-right: 72px;
 }
 
 .field-action {
@@ -203,10 +206,10 @@ body.auth-page {
     background: transparent;
     color: #7a8695;
     cursor: pointer;
-    min-width: 64px;
-    height: 40px;
+    min-width: 50px;
+    height: 32px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.06em;
     padding: 0 10px;
@@ -218,8 +221,8 @@ body.auth-page {
 
 .field-meta {
     min-height: 18px;
-    margin-top: 8px;
-    font-size: 14px;
+    margin-top: 5px;
+    font-size: 11px;
     color: var(--color-text-soft);
 }
 
@@ -233,7 +236,7 @@ body.auth-page {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: 10px 0 6px;
+    margin: 6px 0 4px;
     flex-wrap: wrap;
 }
 
@@ -241,7 +244,7 @@ body.auth-page {
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    font-size: 17px;
+    font-size: 13px;
     color: #3f4a57;
     font-weight: 500;
     letter-spacing: 0;
@@ -258,13 +261,13 @@ body.auth-page {
 .login-button,
 .error-button {
     width: 100%;
-    margin-top: 16px;
+    margin-top: 10px;
     border: none;
     border-radius: 6px;
-    padding: 18px 20px;
+    padding: 12px 14px;
     background: #175bb8;
     color: #ffffff;
-    font-size: 24px;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: 0;
     text-transform: none;
@@ -284,7 +287,7 @@ body.auth-page {
 
 .back-link {
     color: #1657b2;
-    font-size: 16px;
+    font-size: 13px;
     text-decoration: none;
     font-weight: 600;
 }
@@ -350,10 +353,10 @@ body.auth-page {
 }
 
 .footnote {
-    margin-top: 22px;
-    font-size: 15px;
+    margin-top: 10px;
+    font-size: 11px;
     color: #616d7c;
-    line-height: 1.7;
+    line-height: 1.4;
 }
 
 .footnote strong {
@@ -384,14 +387,14 @@ body.auth-page {
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 24px;
-    padding: 30px 40px;
+    justify-content: center;
+    gap: 20px;
+    padding: clamp(20px, 2.2vw, 32px);
     color: #ffffff;
 }
 
 .brand-message {
-    margin-top: clamp(24px, 7vh, 90px);
+    margin-top: 0;
     max-width: 700px;
 }
 
@@ -399,7 +402,7 @@ body.auth-page {
     margin: 0;
     max-width: 700px;
     font-family: var(--font-display);
-    font-size: clamp(52px, 4.2vw, 74px);
+    font-size: clamp(38px, 3.2vw, 54px);
     line-height: 1;
     letter-spacing: -0.03em;
 }
@@ -408,19 +411,19 @@ body.auth-page {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    margin-top: 26px;
-    min-height: 56px;
-    padding: 0 28px;
+    margin-top: 16px;
+    min-height: 42px;
+    padding: 0 18px;
     border-radius: 18px;
     background: rgba(7, 42, 92, 0.46);
     color: rgba(255, 255, 255, 0.92);
-    font-size: clamp(20px, 1.2vw, 24px);
+    font-size: clamp(14px, 1vw, 16px);
     font-weight: 600;
 }
 
 .brand-banner {
-    margin-top: auto;
-    padding: 18px 22px;
+    margin-top: 0;
+    padding: 12px 14px;
     border-radius: 14px;
     background: rgba(5, 31, 68, 0.3);
     border: 1px solid rgba(191, 219, 254, 0.3);
@@ -429,16 +432,22 @@ body.auth-page {
 }
 
 .brand-banner span {
-    font-size: 12px;
+    font-size: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(219, 234, 254, 0.92);
 }
 
 .brand-banner strong {
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: 12px;
+    line-height: 1.35;
     color: #ffffff;
+}
+
+@media (max-height: 780px) {
+    .brand-banner {
+        display: none;
+    }
 }
 
 .shake {
@@ -541,6 +550,16 @@ body.auth-page {
 }
 
 @media (max-width: 980px) {
+    body.auth-page {
+        overflow: auto;
+    }
+
+    .auth-page-shell,
+    .auth-shell {
+        min-height: 100vh;
+        height: auto;
+    }
+
     .auth-shell {
         grid-template-columns: 1fr;
         min-height: auto;
@@ -558,7 +577,7 @@ body.auth-page {
 
     .login-card {
         width: 100%;
-        margin-top: 42px;
+        margin-top: 16px;
     }
 
     .card-title {
@@ -566,18 +585,18 @@ body.auth-page {
     }
 
     .card-copy {
-        font-size: 17px;
+        font-size: 15px;
     }
 
     .input-shell input {
-        font-size: 18px;
-        padding: 16px;
+        font-size: 16px;
+        padding: 14px;
     }
 
     .login-button,
     .error-button {
-        font-size: 18px;
-        padding: 16px;
+        font-size: 16px;
+        padding: 12px;
     }
 }
 
