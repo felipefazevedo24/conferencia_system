@@ -42,54 +42,6 @@
         box-shadow: var(--home-shadow);
     }
 
-    .home-command {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-        padding: 14px 16px;
-        border-radius: 20px;
-        border: 1px solid var(--home-border);
-        background: #ffffff;
-        box-shadow: 0 6px 16px rgba(12, 26, 43, 0.06);
-    }
-
-    .home-command-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        color: #445e7f;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-    }
-
-    .home-command-search {
-        flex: 1;
-        min-width: 240px;
-        min-height: 46px;
-        border-radius: 13px;
-        border: 1px solid rgba(195, 208, 222, 0.95);
-        padding: 0 14px;
-        background: #f8fbff;
-        color: #122842;
-        font-size: 13px;
-        font-weight: 600;
-        transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
-    }
-
-    .home-command-search::placeholder {
-        color: #7d92aa;
-    }
-
-    .home-command-search:focus {
-        outline: none;
-        border-color: rgba(15, 98, 201, 0.42);
-        box-shadow: 0 0 0 3px rgba(15, 98, 201, 0.16);
-        background: #ffffff;
-    }
-
     .home-hero-panel,
     .home-side-panel,
     .section-shell,
@@ -632,10 +584,6 @@
             grid-template-columns: 1fr;
         }
 
-        .home-command {
-            align-items: stretch;
-        }
-
         .recent-shell {
             position: static;
         }
@@ -655,11 +603,6 @@
             border-radius: 24px;
         }
 
-        .home-command-search {
-            width: 100%;
-            min-width: 0;
-        }
-
         .section-head,
         .module-foot {
             display: grid;
@@ -672,11 +615,6 @@
 {% block content %}
 <div class="main-content">
     <section class="home-shell">
-        <section class="home-command">
-            <label for="home-module-search" class="home-command-label"><i class="fas fa-compass"></i> Navegação rápida</label>
-            <input id="home-module-search" class="home-command-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
-        </section>
-
         <section class="home-main">
             <div class="sections-stack">
                 <div id="home-empty-state" class="home-empty">
@@ -744,7 +682,7 @@
 {% block extra_js %}
 <script>
     (function () {
-        const searchInput = document.getElementById("home-module-search");
+        const searchInput = document.getElementById("shell-nav-search");
         const cards = Array.from(document.querySelectorAll(".home-module-card"));
         const sections = Array.from(document.querySelectorAll(".home-section"));
         const emptyState = document.getElementById("home-empty-state");

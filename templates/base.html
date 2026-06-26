@@ -37,13 +37,6 @@
             <a href="/" class="sidebar-brand">
                 <div class="brand-logo-mask"></div>
             </a>
-            <div class="sidebar-context">
-                <div class="sidebar-context-label">Perfil atual</div>
-                <div class="sidebar-context-role">
-                    <i class="fas fa-layer-group"></i>
-                    <span>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operacao") }}</span>
-                </div>
-            </div>
         </div>
 
         <div class="sidebar-scroll">
@@ -241,11 +234,10 @@
         <nav class="top-nav">
             <div class="nav-left">
                 <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
-                <div class="top-route">
-                    <span>Columbia Sync</span>
-                    <strong>{% block shell_title %}Painel{% endblock %}</strong>
-                    <small>{% block shell_subtitle %}Um unico shell para navegar todo o sistema.{% endblock %}</small>
-                </div>
+            </div>
+            <div class="top-nav-center">
+                <i class="fas fa-search"></i>
+                <input id="shell-nav-search" type="text" placeholder="Navegação rápida no sistema...">
             </div>
             <div class="nav-right">
                 <div class="top-status-pill"><i class="fas fa-sparkles"></i><span>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</span></div>
