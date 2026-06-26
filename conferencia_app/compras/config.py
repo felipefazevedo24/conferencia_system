@@ -29,6 +29,11 @@ def _cfg_int(name: str, default: int) -> int:
         return default
 
 
+def _cfg_bool(name: str, default: bool = False) -> bool:
+    raw = str(_cfg(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on", "sim"}
+
+
 def _load_erp_file_config() -> dict:
     if not has_app_context():
         return {}
@@ -63,6 +68,7 @@ class ComprasSettings:
     API_URL: str
     API_TOKEN: str
     API_TIMEOUT: int
+    USE_API_BRIDGE: bool
 
     @property
     def dsn(self) -> str:
@@ -88,6 +94,7 @@ def get_settings() -> ComprasSettings:
         API_URL=str(_first_value(_cfg("COMPRAS_API_URL"), _cfg("ERP_LANCAMENTO_API_URL"), arquivo.get("api_url"), default="")).rstrip("/"),
         API_TOKEN=str(_first_value(_cfg("COMPRAS_API_TOKEN"), _cfg("ERP_LANCAMENTO_API_TOKEN"), arquivo.get("api_token"), default="")),
         API_TIMEOUT=int(_first_value(_cfg("COMPRAS_API_TIMEOUT"), _cfg("ERP_LANCAMENTO_API_TIMEOUT"), arquivo.get("api_timeout"), default=60)),
+        USE_API_BRIDGE=_cfg_bool("COMPRAS_USE_API_BRIDGE", False),
     )
 
 

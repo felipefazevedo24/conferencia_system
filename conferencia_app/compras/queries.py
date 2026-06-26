@@ -853,22 +853,10 @@ WITH base AS (
         END::numeric(18,2) AS valor_item
     FROM public.tcompras tc
     WHERE tc.cod_empresa = %(cod_empresa)s
-            AND tc.cod_tp_mov = 20
         AND (CASE
             WHEN COALESCE(tc.vl_servicos, 0) <> 0 THEN COALESCE(tc.vl_servicos, 0)
             ELSE COALESCE(NULLIF(tc.vl_total_nf, 0), NULLIF(tc.total, 0), 0)
             END) <> 0
-        AND EXISTS (
-            SELECT 1
-            FROM regexp_matches(COALESCE(tc.cfop, ''), '([0-9]{4})', 'g') AS m(cfop_arr)
-            WHERE m.cfop_arr[1] IS NOT NULL
-        )
-        AND NOT EXISTS (
-            SELECT 1
-            FROM regexp_matches(COALESCE(tc.cfop, ''), '([0-9]{4})', 'g') AS m(cfop_arr)
-            WHERE m.cfop_arr[1] IS NOT NULL
-              AND m.cfop_arr[1] <> ALL(%(cfop_ap_list)s::text[])
-        )
       AND COALESCE(tc.dt_recebimento::date, tc.dt_nf::date, tc.dt_emissao::date)
           BETWEEN COALESCE(%(data_de)s::date, '1900-01-01'::date)
               AND COALESCE(%(data_ate)s::date, '9999-12-31'::date)
@@ -949,22 +937,10 @@ SELECT
     END AS tipo_item
 FROM public.tcompras tc
 WHERE tc.cod_empresa = %(cod_empresa)s
-  AND tc.cod_tp_mov = 20
     AND (CASE
                 WHEN COALESCE(tc.vl_servicos, 0) <> 0 THEN COALESCE(tc.vl_servicos, 0)
                 ELSE COALESCE(NULLIF(tc.vl_total_nf, 0), NULLIF(tc.total, 0), 0)
             END) <> 0
-    AND EXISTS (
-                SELECT 1
-                FROM regexp_matches(COALESCE(tc.cfop, ''), '([0-9]{4})', 'g') AS m(cfop_arr)
-                WHERE m.cfop_arr[1] IS NOT NULL
-    )
-    AND NOT EXISTS (
-                SELECT 1
-                FROM regexp_matches(COALESCE(tc.cfop, ''), '([0-9]{4})', 'g') AS m(cfop_arr)
-                WHERE m.cfop_arr[1] IS NOT NULL
-                    AND m.cfop_arr[1] <> ALL(%(cfop_ap_list)s::text[])
-    )
   AND COALESCE(tc.dt_recebimento::date, tc.dt_nf::date, tc.dt_emissao::date)
       BETWEEN COALESCE(%(data_de)s::date, '1900-01-01'::date)
           AND COALESCE(%(data_ate)s::date, '9999-12-31'::date)
