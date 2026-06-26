@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260407-ux1">
-    <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260526-1">
+    <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260626-1">
 </head>
 <body class="auth-page">
     <a class="skip-link" href="#login-card">Ir para o login</a>
@@ -31,6 +31,7 @@
                         </div>
                     </a>
 
+                    <span class="auth-kicker"><i class="fas fa-shield-halved"></i> acesso corporativo</span>
                     <h1 class="card-title" id="card-title">Seja bem-vindo de volta!</h1>
                     <p class="card-copy" id="card-copy">
                         Use seu usuário para entrar no sistema.
@@ -135,7 +136,7 @@
                         </button>
 
                         <div style="text-align:center;margin-top:12px">
-                            <a href="#" id="back-to-login" style="color:var(--sap-blue,#0a6ed1);font-size:13px;text-decoration:none">← Voltar para o login</a>
+                            <a href="#" id="back-to-login" class="back-link">← Voltar para o login</a>
                         </div>
                     </form>
 
@@ -149,6 +150,28 @@
                 <video class="showcase-video" autoplay muted loop playsinline preload="auto">
                     <source src="/static/Home-Page-Hero-Video.mp4" type="video/mp4">
                 </video>
+                <div class="brand-overlay">
+                    <span class="brand-badge"><i class="fas fa-industry"></i> Columbia Machine</span>
+                    <h2 class="brand-title">Gestao operacional com precisao industrial.</h2>
+                    <p class="brand-copy">
+                        Centralize conferencia, expedicao e fluxo logistico em um unico ambiente.
+                        Acesso rapido, rastreabilidade e execucao orientada por processo.
+                    </p>
+                    <div class="brand-stats" aria-hidden="true">
+                        <div class="brand-stat">
+                            <span>Operacao</span>
+                            <strong>24/7</strong>
+                        </div>
+                        <div class="brand-stat">
+                            <span>Rastreio</span>
+                            <strong>Tempo real</strong>
+                        </div>
+                        <div class="brand-stat">
+                            <span>Conferencia</span>
+                            <strong>Padrao unico</strong>
+                        </div>
+                    </div>
+                </div>
             </section>
         </div>
     </main>
