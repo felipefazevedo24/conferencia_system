@@ -33,7 +33,7 @@ def get_connection() -> Iterable[psycopg2.extensions.connection]:
 def _exec_fetch(sql: str, params: tuple | dict | None, *, one: bool):
     started = perf_counter()
     settings = get_settings()
-    if settings.USE_API_BRIDGE and settings.API_URL:
+    if settings.API_URL and settings.USE_API_BRIDGE:
         try:
             return _exec_fetch_bridge(sql, params, one=one)
         except Exception as exc:
