@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="/static/css/ui_erp.css?v=20260407-ux1">
-    <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260626-5">
+    <link rel="stylesheet" href="/static/css/auth_ux.css?v=20260626-8">
 </head>
 <body class="auth-page">
     <a class="skip-link" href="#login-card">Ir para o login</a>
@@ -145,13 +145,28 @@
                 <div class="brand-overlay">
                     <div class="brand-message">
                         <h2 class="brand-title">Sincronizamos seus processos e elevamos seus resultados.</h2>
-                        <div class="brand-pill"><i class="fas fa-check"></i> Operacao 100% integrada</div>
+                        <div class="brand-pill" aria-live="polite">
+                            <i class="fas fa-check"></i>
+                            <span id="brand-pill-text" class="brand-pill-text">Operacao 100% integrada</span>
+                        </div>
                     </div>
 
-                    <div class="brand-banner" aria-hidden="true">
-                        <span>Columbia Machine Brasil</span>
-                        <strong>Projetar, construir e dar suporte as mais inovadoras, seguras e confiáveis soluções de produção automáticas do mundo.</strong>
-                    </div>
+                    <a
+                        class="portfolio-card"
+                        href="https://dossie.columbiamachine.com.br/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Conhecer portfolio de produtos Columbia"
+                    >
+                        <div class="portfolio-card-logo-wrap" aria-hidden="true">
+                            <img src="/static/columbia_sync_logo_v2.png?v=20260626-1" alt="">
+                        </div>
+                        <div class="portfolio-card-copy">
+                            <span class="portfolio-card-kicker">Portfolio Columbia Machine</span>
+                            <strong>Conheca as linhas de equipamentos, automacao e solucoes para producao industrial.</strong>
+                        </div>
+                        <span class="portfolio-card-cta">Conhecer produtos <i class="fas fa-arrow-right"></i></span>
+                    </a>
                 </div>
             </section>
         </div>
@@ -174,6 +189,36 @@
         const togglePassIcon = document.getElementById("toggle-pass-icon");
         const cardTitle = document.getElementById("card-title");
         const cardCopy = document.getElementById("card-copy");
+        const brandPillText = document.getElementById("brand-pill-text");
+
+        const BRAND_PILL_MESSAGES = [
+            "Conferência de recebimento",
+            "Registro de expedição",
+            "Registro de documentos fiscais",
+            "Estoque integrado",
+            "Workflow de cadastros"
+        ];
+
+        function startBrandPillRotation() {
+            if (!brandPillText || BRAND_PILL_MESSAGES.length < 2) {
+                return;
+            }
+
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                brandPillText.textContent = BRAND_PILL_MESSAGES[0];
+                return;
+            }
+
+            let currentIndex = 0;
+            setInterval(() => {
+                brandPillText.classList.add("is-swapping");
+                setTimeout(() => {
+                    currentIndex = (currentIndex + 1) % BRAND_PILL_MESSAGES.length;
+                    brandPillText.textContent = BRAND_PILL_MESSAGES[currentIndex];
+                    brandPillText.classList.remove("is-swapping");
+                }, 170);
+            }, 3200);
+        }
 
         function setFieldWarning(input, metaTarget, message) {
             input.setAttribute("aria-invalid", "true");
@@ -447,6 +492,7 @@
         });
 
         hydrateRememberedUser();
+        startBrandPillRotation();
     </script>
 </body>
 </html>
