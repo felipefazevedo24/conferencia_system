@@ -563,6 +563,8 @@ CONTAS_RECEBER_ABERTO_SQL = """
         r.dt_vencimento as vencimento_raw,
         coalesce(r.valor, 0) as valor,
         coalesce(r.valor_pago, 0) as valor_pago,
+        coalesce(r.pago, 0) as pago,
+        r.dt_pagamento as data_pagamento,
         r.parcela,
         r.n_parcelas,
         coalesce(r.nossonumero, '') as nossonumero,
@@ -577,9 +579,10 @@ CONTAS_RECEBER_ABERTO_SQL = """
       on nf.cod_empresa = r.cod_empresa
      and nf.numero = r.n_nf
      and nf.cod_cliente = r.cod_cliente
-    where coalesce(r.pago, 0) = 0
-      and r.dt_pagamento is null
-      and coalesce(r.valor, 0) > coalesce(r.valor_pago, 0)
+        where (
+                %s = true
+                or (coalesce(r.pago, 0) = 0 and r.dt_pagamento is null and coalesce(r.valor, 0) > coalesce(r.valor_pago, 0))
+            )
       and (
         (%s <> '' and regexp_replace(coalesce(c.rg_cgc, nf.cgc_cpf, ''), '\\D', '', 'g') = %s)
         or (%s <> '' and (r.n_nf::text = %s or coalesce(r.documento, '') ilike %s))
@@ -1594,6 +1597,7 @@ def create_app() -> Flask:
             cpf_cnpj = "".join(ch for ch in str(payload.get("cpf_cnpj") or "") if ch.isdigit())
             numero_nota = str(payload.get("numero_nota") or "").strip()
             orcamento = str(payload.get("orcamento") or "").strip()
+            incluir_pagos = bool(payload.get("incluir_pagos"))
             if not cpf_cnpj and not numero_nota and not orcamento:
                 return jsonify({"sucesso": False, "erro": "cpf_cnpj_numero_nota_ou_orcamento_obrigatorio"}), 400
             try:
@@ -1607,6 +1611,7 @@ def create_app() -> Flask:
                     cur.execute(
                         CONTAS_RECEBER_ABERTO_SQL,
                         (
+                            incluir_pagos,
                             cpf_cnpj,
                             cpf_cnpj,
                             numero_nota,

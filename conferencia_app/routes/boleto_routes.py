@@ -82,6 +82,8 @@ def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
                 "url_boleto": "",
                 "titulos": [],
                 "pode_gerar_boleto": bool(boleto.get("pode_gerar_boleto")),
+                "_qtd_pago": 0,
+                "_qtd_vencido": 0,
             },
         )
         grupo["valor"] += float(boleto.get("valor") or 0)
@@ -91,13 +93,28 @@ def _agrupar_titulos_abertos(boletos: list[dict]) -> list[dict]:
         grupo["pode_gerar_boleto"] = bool(grupo.get("pode_gerar_boleto") or boleto.get("pode_gerar_boleto"))
         grupo["titulos"].append(boleto)
 
+        status_item = str(boleto.get("status") or "").lower()
+        if any(p in status_item for p in ("pago", "liquid")):
+            grupo["_qtd_pago"] += 1
+        elif "venc" in status_item:
+            grupo["_qtd_vencido"] += 1
+
         venc_atual = _parse_data_br(grupo.get("vencimento"))
         venc_item = _parse_data_br(boleto.get("vencimento"))
         if venc_item and (not venc_atual or venc_item < venc_atual):
             grupo["vencimento"] = boleto.get("vencimento") or ""
             grupo["vencimento_iso"] = boleto.get("vencimento_iso") or ""
-        if "venc" in str(boleto.get("status") or "").lower():
+
+    for grupo in grupos.values():
+        qtd_pago = int(grupo.pop("_qtd_pago", 0) or 0)
+        qtd_vencido = int(grupo.pop("_qtd_vencido", 0) or 0)
+        total = int(grupo.get("quantidade_titulos") or 0)
+        if total and qtd_pago == total:
+            grupo["status"] = "Pago"
+        elif qtd_vencido > 0:
             grupo["status"] = "Vencido"
+        else:
+            grupo["status"] = "Em aberto"
 
     resultado = list(grupos.values()) + avulsos
     resultado.sort(key=lambda item: (_parse_data_br(item.get("vencimento")) or datetime.max.date(), item.get("titulo") or ""))
@@ -233,7 +250,12 @@ def consultar_boletos():
         except (TypeError, ValueError):
             valor = 0.0
 
-        boletos = BBBoletoService.consultar_por_nota_valor(numero_nota, valor, somente_abertos=True)
+        boletos = BBBoletoService.consultar_por_nota_valor(
+            numero_nota,
+            valor,
+            somente_abertos=False,
+            incluir_pagos=True,
+        )
         return jsonify(
             {
                 "sucesso": True,
@@ -248,7 +270,7 @@ def consultar_boletos():
         orcamento = str(data.get("orcamento") or data.get("numero_orcamento") or "").strip()
         if not orcamento:
             return jsonify({"sucesso": False, "error": "Informe o número do orçamento."}), 400
-        boletos = BBBoletoService.consultar_por_orcamento(orcamento)
+        boletos = BBBoletoService.consultar_por_orcamento(orcamento, incluir_pagos=True)
         return jsonify(
             {
                 "sucesso": True,
@@ -269,10 +291,15 @@ def consultar_boletos():
         return jsonify({"sucesso": False, "error": "CPF deve ter 11 dígitos e CNPJ 14 dígitos."}), 400
 
     numero_nota_extra = _normalizar_numero_nf(data.get("numero_nota") or "")
-    resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
+    resultado = BBBoletoService.consultar_boletos(doc, somente_abertos=False, incluir_pagos=True)
     boletos_base = list(resultado["boletos"])
     if numero_nota_extra:
-        boletos_nf = BBBoletoService.consultar_por_nota_valor(numero_nota_extra, 0, somente_abertos=True)
+        boletos_nf = BBBoletoService.consultar_por_nota_valor(
+            numero_nota_extra,
+            0,
+            somente_abertos=False,
+            incluir_pagos=True,
+        )
         boletos_base = _deduplicar_boletos(boletos_base + _filtrar_por_documento_ou_sem_doc(boletos_nf, doc))
     boletos = _agrupar_titulos_abertos(boletos_base) if len(doc) == 14 else boletos_base
     return jsonify(

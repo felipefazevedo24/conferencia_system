@@ -719,12 +719,18 @@ class BBBoletoService:
         return cls._filtrar_abertos(resultado) if somente_abertos else resultado
 
     @classmethod
-    def consultar_por_nota_valor(cls, numero_nota: str, valor: float, somente_abertos: bool = False) -> list[dict]:
+    def consultar_por_nota_valor(
+        cls,
+        numero_nota: str,
+        valor: float,
+        somente_abertos: bool = False,
+        incluir_pagos: bool = False,
+    ) -> list[dict]:
         nota = _normalizar_numero_nf(numero_nota)
         if not nota:
             return []
 
-        titulos_grv = GRVContasReceberService.consultar_abertos(numero_nota=nota)
+        titulos_grv = GRVContasReceberService.consultar_abertos(numero_nota=nota, incluir_pagos=incluir_pagos)
         query = BoletoContaReceber.query.filter(BoletoContaReceber.numero_nota == nota)
         if valor is not None and valor > 0:
             margem = valor * 0.01
@@ -747,21 +753,21 @@ class BBBoletoService:
         return cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
 
     @classmethod
-    def consultar_por_orcamento(cls, orcamento: str) -> list[dict]:
+    def consultar_por_orcamento(cls, orcamento: str, incluir_pagos: bool = False) -> list[dict]:
         numero = str(orcamento or "").strip()
         if not numero:
             return []
-        titulos = GRVContasReceberService.consultar_abertos(orcamento=numero)
+        titulos = GRVContasReceberService.consultar_abertos(orcamento=numero, incluir_pagos=incluir_pagos)
         enriched, _ = cls._enriquecer_boletos_com_api(titulos)
         return cls._deduplicar(enriched)
 
     @classmethod
-    def consultar_boletos(cls, cpf_cnpj: str, somente_abertos: bool = False) -> dict:
+    def consultar_boletos(cls, cpf_cnpj: str, somente_abertos: bool = False, incluir_pagos: bool = False) -> dict:
         doc = _only_digits(cpf_cnpj)
         if not doc or len(doc) < 11:
             return {"fonte": "erro", "boletos": [], "mensagem": "CPF/CNPJ inválido."}
 
-        titulos_grv = GRVContasReceberService.consultar_abertos(cpf_cnpj=doc)
+        titulos_grv = GRVContasReceberService.consultar_abertos(cpf_cnpj=doc, incluir_pagos=incluir_pagos)
         local_result = cls.consultar_boletos_local(doc, somente_abertos=somente_abertos)
         if titulos_grv:
             notas_grv = [titulo.get("numero_nota") for titulo in titulos_grv]

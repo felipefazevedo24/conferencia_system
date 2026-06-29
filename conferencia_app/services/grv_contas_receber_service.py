@@ -1,4 +1,4 @@
-"""Consulta de titulos em aberto no contas a receber do GRV/Postgres."""
+"""Consulta de titulos do contas a receber no GRV/Postgres."""
 
 from __future__ import annotations
 
@@ -56,7 +56,9 @@ def _float(value: Any) -> float:
         return 0.0
 
 
-def _status_aberto(vencimento: Any) -> str:
+def _status_titulo(vencimento: Any, pago: Any, data_pagamento: Any, valor: float, valor_pago: float) -> str:
+    if bool(pago) or data_pagamento or valor_pago >= max(valor, 0.0):
+        return "Pago"
     if isinstance(vencimento, datetime):
         venc = vencimento.date()
     elif isinstance(vencimento, date):
@@ -94,9 +96,12 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
     # estiver com boleto emitido, expomos o link para tentativa de download oficial.
     url_boleto = f"/api/boletos/grv/pdf?{query}" if codigo and (tem_pdf_flag or boleto_gerado) else ""
 
+    data_pagamento = row.get("data_pagamento") or row.get("dt_pagamento")
+    status = _status_titulo(vencimento_raw, row.get("pago"), data_pagamento, valor, valor_pago)
+
     return {
         "fonte": "grv_postgres",
-        "tipo": "titulo_aberto",
+        "tipo": "titulo",
         "id_grv": codigo,
         "cod_cliente": str(row.get("cod_cliente") or ""),
         "nome_pagador": str(row.get("nome_pagador") or "").strip(),
@@ -105,13 +110,13 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
         "documento": documento,
         "orcamento": str(row.get("orcamento") or "").strip(),
         "nosso_numero": str(row.get("nossonumero") or "").strip(),
-        "valor": saldo or valor,
+        "valor": valor if status == "Pago" else (saldo or valor),
         "valor_original": valor,
         "valor_pago": valor_pago,
         "vencimento": _date_str(vencimento_raw),
         "vencimento_iso": _iso_date(vencimento_raw),
-        "data_pagamento": None,
-        "status": _status_aberto(vencimento_raw),
+        "data_pagamento": _date_str(data_pagamento),
+        "status": status,
         "parcela": str(parcela or "").strip(),
         "n_parcelas": str(total_parcelas or "").strip(),
         "linha_digitavel": "",
@@ -125,7 +130,7 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
 
 
 class GRVContasReceberService:
-    """Le o contas a receber do GRV, sempre filtrando apenas titulos abertos."""
+    """Le o contas a receber do GRV."""
 
     @staticmethod
     def is_configured() -> bool:
@@ -139,6 +144,7 @@ class GRVContasReceberService:
         cpf_cnpj: str = "",
         numero_nota: str = "",
         orcamento: str = "",
+        incluir_pagos: bool = False,
         limite: int = 200,
     ) -> list[dict[str, Any]]:
         cfg = _resolver_config()
@@ -146,12 +152,26 @@ class GRVContasReceberService:
             return []
         if cfg.get("api_url"):
             try:
-                return cls._consultar_abertos_via_api(cfg, cpf_cnpj=cpf_cnpj, numero_nota=numero_nota, orcamento=orcamento, limite=limite)
+                return cls._consultar_abertos_via_api(
+                    cfg,
+                    cpf_cnpj=cpf_cnpj,
+                    numero_nota=numero_nota,
+                    orcamento=orcamento,
+                    incluir_pagos=incluir_pagos,
+                    limite=limite,
+                )
             except Exception:
                 logger.exception("Falha ao consultar contas a receber GRV via bridge")
         if cfg.get("host") and cfg.get("database") and cfg.get("user"):
             try:
-                return cls._consultar_abertos_postgres(cfg, cpf_cnpj=cpf_cnpj, numero_nota=numero_nota, orcamento=orcamento, limite=limite)
+                return cls._consultar_abertos_postgres(
+                    cfg,
+                    cpf_cnpj=cpf_cnpj,
+                    numero_nota=numero_nota,
+                    orcamento=orcamento,
+                    incluir_pagos=incluir_pagos,
+                    limite=limite,
+                )
             except Exception:
                 logger.exception("Falha ao consultar contas a receber GRV direto no Postgres")
         return []
@@ -164,6 +184,7 @@ class GRVContasReceberService:
         cpf_cnpj: str = "",
         numero_nota: str = "",
         orcamento: str = "",
+        incluir_pagos: bool = False,
         limite: int = 200,
     ) -> list[dict[str, Any]]:
         url = f"{cfg['api_url'].rstrip('/')}/api/erp/contas-receber-aberto"
@@ -179,6 +200,7 @@ class GRVContasReceberService:
             "cpf_cnpj": _only_digits(cpf_cnpj),
             "numero_nota": str(numero_nota or "").strip(),
             "orcamento": str(orcamento or "").strip(),
+            "incluir_pagos": bool(incluir_pagos),
             "limite": limite,
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=cfg.get("api_timeout") or 30)
@@ -230,6 +252,7 @@ class GRVContasReceberService:
         cpf_cnpj: str = "",
         numero_nota: str = "",
         orcamento: str = "",
+        incluir_pagos: bool = False,
         limite: int = 200,
     ) -> list[dict[str, Any]]:
         doc = _only_digits(cpf_cnpj)
@@ -267,6 +290,8 @@ class GRVContasReceberService:
                 r.dt_vencimento as vencimento_raw,
                 coalesce(r.valor, 0) as valor,
                 coalesce(r.valor_pago, 0) as valor_pago,
+                coalesce(r.pago, 0) as pago,
+                r.dt_pagamento as data_pagamento,
                 r.parcela,
                 r.n_parcelas,
                 coalesce(r.nossonumero, '') as nossonumero,
@@ -282,9 +307,7 @@ class GRVContasReceberService:
               on nf.cod_empresa = r.cod_empresa
              and nf.numero = r.n_nf
              and nf.cod_cliente = r.cod_cliente
-            where coalesce(r.pago, 0) = 0
-              and r.dt_pagamento is null
-              and coalesce(r.valor, 0) > coalesce(r.valor_pago, 0)
+                        where ({'true' if incluir_pagos else '(coalesce(r.pago, 0) = 0 and r.dt_pagamento is null and coalesce(r.valor, 0) > coalesce(r.valor_pago, 0))'})
               and ({' or '.join(filtros)})
             order by r.dt_vencimento asc nulls last, r.codigo asc
             limit %s
