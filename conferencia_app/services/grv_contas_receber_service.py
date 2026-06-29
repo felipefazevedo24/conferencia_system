@@ -272,9 +272,9 @@ class GRVContasReceberService:
             params.extend([nf, f"%{nf}%"])
         if orc:
             filtros.append(
-                "(r.n_orcamento::text = %s or r.cod_orcamento::text = %s or coalesce(r.documento, '') ilike %s or coalesce(r.historico, '') ilike %s)"
+                "(r.n_orcamento::text = %s or r.cod_orcamento::text = %s)"
             )
-            params.extend([orc, orc, f"%{orc}%", f"%{orc}%"])
+            params.extend([orc, orc])
         if not filtros:
             return []
 

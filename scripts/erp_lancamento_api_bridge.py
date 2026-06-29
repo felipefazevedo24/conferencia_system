@@ -586,7 +586,7 @@ CONTAS_RECEBER_ABERTO_SQL = """
       and (
         (%s <> '' and regexp_replace(coalesce(c.rg_cgc, nf.cgc_cpf, ''), '\\D', '', 'g') = %s)
         or (%s <> '' and (r.n_nf::text = %s or coalesce(r.documento, '') ilike %s))
-        or (%s <> '' and (r.n_orcamento::text = %s or r.cod_orcamento::text = %s or coalesce(r.documento, '') ilike %s or coalesce(r.historico, '') ilike %s))
+        or (%s <> '' and (r.n_orcamento::text = %s or r.cod_orcamento::text = %s))
       )
     order by r.dt_vencimento asc nulls last, r.codigo asc
     limit %s
@@ -1620,8 +1620,6 @@ def create_app() -> Flask:
                             orcamento,
                             orcamento,
                             orcamento,
-                            f"%{orcamento}%",
-                            f"%{orcamento}%",
                             limite,
                         ),
                     )
