@@ -81,25 +81,27 @@
     .topbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       gap: 16px;
       margin-bottom: 24px;
     }
     .brand {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 16px;
+      flex-direction: column;
+      gap: 12px;
       min-width: 0;
       text-decoration: none;
+      text-align: center;
     }
     .brand-logo {
-      width: 84px;
-      height: 84px;
-      border-radius: 14px;
-      background: #fff;
-      padding: 8px;
+      width: 108px;
+      height: 108px;
+      border-radius: 0;
+      background: transparent;
+      padding: 0;
       object-fit: contain;
-      box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 18px 28px rgba(0,0,0,.45);
+      filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .45));
     }
     .brand-text strong {
       display: block;
@@ -111,7 +113,7 @@
     }
     .brand-text span {
       display: block;
-      margin-top: 9px;
+      margin-top: 7px;
       color: #a9cdff;
       font-size: 12px;
       font-weight: 700;
@@ -543,13 +545,14 @@
       .admin-link { display: none; }
       .brand {
         width: 100%;
+        align-items: center;
       }
       .brand-logo {
-        width: 72px;
-        height: 72px;
+        width: 86px;
+        height: 86px;
       }
       .brand-text strong {
-        font-size: 22px;
+        font-size: 21px;
       }
       .brand-text span {
         font-size: 11px;
