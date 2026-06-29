@@ -5,13 +5,10 @@ from io import BytesIO
 from datetime import datetime
 
 from flask import Blueprint, jsonify, render_template, request, send_file
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
 
 from ..services.cliente_portal_service import ler_token_nf
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.bb_boleto_service import BBBoletoService
-from ..models import BoletoContaReceber
 
 boleto_bp = Blueprint("boleto", __name__)
 
@@ -236,13 +233,14 @@ def consultar_boletos():
             valor = 0.0
 
         boletos = BBBoletoService.consultar_por_nota_valor(numero_nota, valor, somente_abertos=True)
+        mensagem = BBBoletoService.config_warning()
         return jsonify(
             {
                 "sucesso": True,
                 "fonte": "grv_postgres+bb_api+local" if BBBoletoService.is_configured() else "grv_postgres+local",
                 "boletos": boletos,
                 "total": len(boletos),
-                "mensagem": "",
+                "mensagem": mensagem,
             }
         )
 
@@ -277,6 +275,7 @@ def consultar_boletos():
         boletos_nf = BBBoletoService.consultar_por_nota_valor(numero_nota_extra, 0, somente_abertos=True)
         boletos_base = _deduplicar_boletos(boletos_base + _filtrar_por_documento_ou_sem_doc(boletos_nf, doc))
     boletos = _agrupar_titulos_abertos(boletos_base) if len(doc) == 14 else boletos_base
+    mensagem = resultado.get("mensagem", "") or BBBoletoService.config_warning()
     return jsonify(
         {
             "sucesso": True,
@@ -285,68 +284,6 @@ def consultar_boletos():
             "total": len(boletos),
             "total_titulos": len(boletos_base),
             "agrupado": len(doc) == 14,
-            "mensagem": resultado.get("mensagem", ""),
+            "mensagem": mensagem,
         }
-    )
-
-
-@boleto_bp.route("/api/boletos/local/<nosso_numero>/pdf")
-def baixar_boleto_local_pdf(nosso_numero):
-    numero = str(nosso_numero or "").strip()
-    if not numero:
-        return jsonify({"sucesso": False, "error": "Nosso número inválido."}), 400
-
-    boleto = BoletoContaReceber.query.filter_by(nosso_numero=numero).first()
-    if not boleto:
-        return jsonify({"sucesso": False, "error": "Boleto não encontrado."}), 404
-
-    arquivo = BytesIO()
-    pdf = canvas.Canvas(arquivo, pagesize=A4)
-    largura, altura = A4
-
-    y = altura - 72
-    pdf.setTitle(f"Boleto-{boleto.numero_nota}")
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(48, y, "Boleto para Pagamento")
-
-    y -= 28
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(48, y, f"Banco: {boleto.banco or 'Banco do Brasil'}")
-    y -= 18
-    pdf.drawString(48, y, f"Nosso numero: {boleto.nosso_numero or '-'}")
-    y -= 18
-    pdf.drawString(48, y, f"Nota fiscal: {boleto.numero_nota or '-'}")
-    y -= 18
-    pdf.drawString(48, y, f"Valor: R$ {float(boleto.valor or 0):.2f}")
-    y -= 18
-    pdf.drawString(48, y, f"Vencimento: {boleto.vencimento.strftime('%d/%m/%Y') if boleto.vencimento else '-'}")
-    y -= 18
-    pdf.drawString(48, y, f"Pagador: {boleto.nome_pagador or '-'}")
-    y -= 18
-    pdf.drawString(48, y, f"CPF/CNPJ: {boleto.cpf_cnpj_pagador or '-'}")
-
-    y -= 28
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(48, y, "Linha digitavel")
-    y -= 16
-    pdf.setFont("Helvetica", 12)
-    pdf.drawString(48, y, boleto.linha_digitavel or "-")
-
-    y -= 32
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(
-        48,
-        y,
-        "Documento gerado automaticamente pelo portal para facilitar o pagamento."
-    )
-
-    pdf.showPage()
-    pdf.save()
-    arquivo.seek(0)
-
-    return send_file(
-        arquivo,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=f"boleto-{boleto.numero_nota}.pdf",
     )

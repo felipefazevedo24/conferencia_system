@@ -274,13 +274,6 @@ class BBBoletoService:
         return text or "Gerado"
 
     @classmethod
-    def _local_boleto_download_url(cls, nosso_numero: str) -> str:
-        numero = str(nosso_numero or "").strip()
-        if not numero:
-            return ""
-        return f"/api/boletos/local/{numero}/pdf"
-
-    @classmethod
     def _normalizar_boleto_api(cls, raw: dict) -> dict:
         pagador = raw.get("pagador") or {}
         if not isinstance(pagador, dict):
@@ -520,6 +513,38 @@ class BBBoletoService:
         return [cls._merge_boleto(item, None) for item in boletos], False
 
     @classmethod
+    def _buscar_api_para_nota_via_docs_grv(cls, nota: str, titulos_grv: list[dict]) -> list[dict]:
+        """Fallback: consulta BB por CPF/CNPJ dos titulos GRV quando nota direta nao retorna."""
+        docs = sorted({
+            _only_digits(item.get("cpf_cnpj_pagador"))
+            for item in titulos_grv
+            if _only_digits(item.get("cpf_cnpj_pagador"))
+        })
+        if not docs:
+            return []
+
+        nossos_grv = {
+            _only_digits(item.get("nosso_numero"))
+            for item in titulos_grv
+            if _only_digits(item.get("nosso_numero"))
+        }
+
+        coletados: list[dict] = []
+        for doc in docs:
+            coletados.extend(cls.consultar_boletos_api(cpf_cnpj=doc))
+
+        if not coletados:
+            return []
+
+        filtrados: list[dict] = []
+        for item in coletados:
+            nota_item = _normalizar_numero_nf(item.get("numero_nota") or item.get("documento"))
+            nosso_item = _only_digits(item.get("nosso_numero"))
+            if nota_item == nota or (nosso_item and nosso_item in nossos_grv):
+                filtrados.append(item)
+        return cls._deduplicar(filtrados)
+
+    @classmethod
     def consultar_boletos_local(cls, cpf_cnpj: str, somente_abertos: bool = False) -> list[dict]:
         doc = _only_digits(cpf_cnpj)
         if not doc:
@@ -545,7 +570,6 @@ class BBBoletoService:
     @classmethod
     def _serializar_boleto_local(cls, b: BoletoContaReceber) -> dict:
         return {
-            "fonte": "local",
             "nosso_numero": b.nosso_numero,
             "numero_nota": b.numero_nota,
             "valor": float(b.valor or 0),
@@ -554,52 +578,12 @@ class BBBoletoService:
             "status": b.status,
             "linha_digitavel": b.linha_digitavel,
             "codigo_barras": b.codigo_barras,
-            "url_boleto": cls._local_boleto_download_url(b.nosso_numero),
+            "url_boleto": "",
             "nome_pagador": b.nome_pagador or "",
             "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
             "banco": cls._normalize_bank_name(b.banco),
             "data_geracao": b.data_geracao.strftime("%d/%m/%Y %H:%M") if b.data_geracao else "",
         }
-
-    @classmethod
-    def _propagar_boleto_local_por_nota(cls, boletos: list[dict]) -> list[dict]:
-        """Quando houver 1 boleto local por NF, replica dados de pagamento nos titulos GRV da mesma NF."""
-        if not boletos:
-            return boletos
-
-        por_nota: dict[str, dict] = {}
-        for item in boletos:
-            nota = _normalizar_numero_nf(item.get("numero_nota"))
-            if not nota:
-                continue
-            if not (item.get("nosso_numero") or item.get("linha_digitavel") or item.get("url_boleto")):
-                continue
-            atual = por_nota.get(nota)
-            if not atual or str(item.get("fonte") or "") == "local":
-                por_nota[nota] = item
-
-        if not por_nota:
-            return boletos
-
-        campos = ("nosso_numero", "linha_digitavel", "codigo_barras", "url_boleto", "banco")
-        resultado: list[dict] = []
-        for item in boletos:
-            nota = _normalizar_numero_nf(item.get("numero_nota"))
-            ref = por_nota.get(nota)
-            if not ref:
-                resultado.append(item)
-                continue
-
-            if item.get("nosso_numero") or item.get("linha_digitavel") or item.get("url_boleto"):
-                resultado.append(item)
-                continue
-
-            merged = dict(item)
-            for campo in campos:
-                if ref.get(campo):
-                    merged[campo] = ref[campo]
-            resultado.append(merged)
-        return resultado
 
     @classmethod
     def consultar_boletos_locais_por_notas(cls, numeros_notas: list[str], somente_abertos: bool = False) -> list[dict]:
@@ -632,14 +616,15 @@ class BBBoletoService:
             resultado = cls._filtrar_abertos(resultado)
         enriched, _ = cls._enriquecer_boletos_com_api(resultado)
         api_result = cls.consultar_boletos_api(numero_nota=nota) if cls.is_configured() else []
+        if not api_result and cls.is_configured() and titulos_grv:
+            api_result = cls._buscar_api_para_nota_via_docs_grv(nota, titulos_grv)
         if somente_abertos:
             api_result = cls._filtrar_abertos(api_result)
         if valor is not None and valor > 0:
             margem = valor * 0.01
             api_result = [b for b in api_result if margem == 0 or (valor - margem) <= float(b.get("valor") or 0) <= (valor + margem)]
 
-        mesclados = cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
-        return cls._propagar_boleto_local_por_nota(mesclados)
+        return cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
 
     @classmethod
     def consultar_por_orcamento(cls, orcamento: str) -> list[dict]:
@@ -675,7 +660,7 @@ class BBBoletoService:
         api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
         if somente_abertos:
             api_result = cls._filtrar_abertos(api_result)
-        boletos = cls._propagar_boleto_local_por_nota(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
+        boletos = cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result)
         if api_result:
             return {
                 "fonte": "grv_postgres+bb_api+local" if titulos_grv else ("bb_api+local" if enriched else "bb_api"),
@@ -692,5 +677,15 @@ class BBBoletoService:
         client_secret = str(current_app.config.get("BB_CLIENT_SECRET", "")).strip()
         app_key = str(current_app.config.get("BB_DEVELOPER_APPLICATION_KEY", "")).strip()
         convenio = str(current_app.config.get("BB_CONVENIO", "")).strip()
+        agencia = str(current_app.config.get("BB_AGENCIA_BENEFICIARIO", "")).strip()
+        conta = str(current_app.config.get("BB_CONTA_BENEFICIARIO", "")).strip()
         base_url = str(current_app.config.get("BB_API_BASE", "")).strip()
-        return bool(client_id and client_secret and app_key and convenio and base_url)
+        return bool(client_id and client_secret and app_key and convenio and agencia and conta and base_url)
+
+    @staticmethod
+    def config_warning() -> str:
+        agencia = str(current_app.config.get("BB_AGENCIA_BENEFICIARIO", "")).strip()
+        conta = str(current_app.config.get("BB_CONTA_BENEFICIARIO", "")).strip()
+        if not agencia or not conta:
+            return "PDF oficial do Banco do Brasil indisponivel: configure agencia e conta do beneficiario na integracao BB."
+        return ""
