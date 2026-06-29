@@ -3,126 +3,143 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b2f57">
-  <title>Consulta de Boletos | Columbia Machine Brasil</title>
+  <meta name="theme-color" content="#06070a">
+  <title>Consulta de Boletos | Columbia Sync</title>
   <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
   <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     :root {
-      --blue-950: #071f3a;
-      --blue-900: #0b2f57;
-      --blue-800: #104d86;
-      --blue-700: #1463a8;
-      --blue-100: #eaf3fb;
-      --ink: #17202c;
-      --muted: #627083;
-      --line: #d9e2eb;
-      --surface: #ffffff;
-      --soft: #f7fafc;
-      --green: #047857;
-      --green-bg: #e7f8ef;
-      --yellow: #9a6700;
-      --yellow-bg: #fff4ce;
-      --red: #b42318;
-      --red-bg: #fff0ed;
-      --shadow: 0 8px 22px rgba(7, 31, 58, .08);
-      --radius: 8px;
+      --bg: #06070a;
+      --bg-soft: #111319;
+      --panel: rgba(16, 18, 24, .9);
+      --panel-2: rgba(20, 24, 32, .78);
+      --line: rgba(160, 184, 215, .24);
+      --line-strong: rgba(160, 184, 215, .42);
+      --text: #eef5ff;
+      --muted: #92a3bd;
+      --accent: #2f89ff;
+      --accent-soft: rgba(47, 137, 255, .2);
+      --accent-glow: rgba(47, 137, 255, .45);
+      --green: #34d399;
+      --green-bg: rgba(52, 211, 153, .16);
+      --yellow: #f6c15d;
+      --yellow-bg: rgba(246, 193, 93, .16);
+      --red: #fb7185;
+      --red-bg: rgba(251, 113, 133, .16);
+      --radius: 12px;
+      --shadow: 0 14px 40px rgba(0, 0, 0, .5);
     }
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: var(--ink);
-      background: #f3f6f9;
+      font-family: "Sora", "Trebuchet MS", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 460px at 12% -5%, rgba(47, 137, 255, .24), transparent 58%),
+        radial-gradient(900px 420px at 90% 3%, rgba(18, 197, 153, .14), transparent 56%),
+        linear-gradient(180deg, #090b10 0%, #05060a 100%);
+      animation: pageIn .55s ease-out;
+    }
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .hero {
       position: relative;
       overflow: hidden;
       color: #fff;
-      background: #0b2f57;
-      padding: 18px 24px 34px;
+      background: linear-gradient(160deg, rgba(15, 18, 25, .95), rgba(8, 9, 13, .98));
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      padding: 22px 24px 38px;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      width: 520px;
+      height: 520px;
+      left: -110px;
+      top: -330px;
+      background: radial-gradient(circle, rgba(47, 137, 255, .34), transparent 70%);
+      pointer-events: none;
     }
     .hero::after {
       content: "";
       position: absolute;
-      inset: auto 0 0;
-      height: 1px;
-      background: rgba(255,255,255,.18);
+      width: 460px;
+      height: 460px;
+      right: -170px;
+      top: -260px;
+      background: radial-gradient(circle, rgba(52, 211, 153, .24), transparent 74%);
+      pointer-events: none;
     }
-    .wrap { max-width: 1120px; margin: 0 auto; }
+    .wrap { max-width: 1140px; margin: 0 auto; }
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 18px;
+      margin-bottom: 24px;
     }
     .brand {
       display: inline-flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       min-width: 0;
+      text-decoration: none;
     }
     .brand-logo {
-      width: 54px;
-      height: 54px;
-      border-radius: 8px;
+      width: 58px;
+      height: 58px;
+      border-radius: 12px;
       background: #fff;
-      padding: 7px;
+      padding: 6px;
       object-fit: contain;
-      box-shadow: 0 8px 20px rgba(0,0,0,.16);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 16px 24px rgba(0,0,0,.4);
     }
     .brand-text strong {
       display: block;
-      font-size: 18px;
-      letter-spacing: .02em;
+      font-size: 20px;
       line-height: 1;
+      letter-spacing: .02em;
+      color: #f4f8ff;
     }
     .brand-text span {
       display: block;
-      margin-top: 4px;
-      color: #b8d7f7;
-      font-size: 12px;
+      margin-top: 6px;
+      color: #7fb6ff;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: .16em;
     }
-    .admin-link {
-      color: #d8eaff;
-      text-decoration: none;
-      border: 1px solid rgba(255,255,255,.28);
-      border-radius: 999px;
-      padding: 9px 13px;
-      font-size: 12px;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-    .hero-copy {
-      max-width: 760px;
-    }
+    .hero-copy { max-width: 760px; }
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: #cfe2f5;
+      color: #9fc4f6;
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: .09em;
+      letter-spacing: .14em;
       margin-bottom: 14px;
     }
     h1 {
-      font-size: clamp(30px, 4vw, 48px);
-      line-height: 1.06;
+      font-size: clamp(32px, 4vw, 52px);
+      line-height: 1.05;
       margin: 0;
-      font-weight: 750;
-      letter-spacing: 0;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      color: #ffffff;
     }
     .main {
-      max-width: 1120px;
-      margin: -24px auto 0;
+      max-width: 1140px;
+      margin: -18px auto 0;
       padding: 0 24px 42px;
       position: relative;
       z-index: 2;
@@ -134,10 +151,11 @@
       align-items: start;
     }
     .search-card, .results-section {
-      background: #fff;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
     }
     .search-card { padding: 20px; }
     .card-head {
@@ -149,9 +167,9 @@
     }
     .card-head h2 {
       margin: 0 0 5px;
-      font-size: 20px;
-      color: var(--blue-950);
-      font-weight: 750;
+      font-size: 22px;
+      color: #f5f9ff;
+      font-weight: 800;
     }
     .card-head p {
       margin: 0;
@@ -160,15 +178,15 @@
       line-height: 1.45;
     }
     .shield {
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
       flex: 0 0 auto;
       display: grid;
       place-items: center;
       border-radius: var(--radius);
-      color: var(--blue-700);
-      background: var(--blue-100);
-      border: 1px solid #cfe3fa;
+      color: #8fc0ff;
+      background: rgba(47, 137, 255, .14);
+      border: 1px solid rgba(96, 168, 255, .45);
       font-size: 18px;
     }
     .tabs {
@@ -177,8 +195,8 @@
       flex-wrap: wrap;
       margin-bottom: 18px;
       padding: 4px;
-      background: #f1f6fb;
-      border: 1px solid #dce7f2;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.12);
       border-radius: var(--radius);
       width: fit-content;
       max-width: 100%;
@@ -188,15 +206,16 @@
       background: transparent;
       border-radius: 7px;
       padding: 10px 14px;
-      color: #526579;
+      color: #9eb0cb;
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 700;
       cursor: pointer;
+      transition: .18s ease;
     }
     .btn-tab.active {
-      background: #fff;
-      color: var(--blue-800);
-      box-shadow: 0 3px 10px rgba(16, 77, 134, .12);
+      background: rgba(47, 137, 255, .22);
+      color: #ecf4ff;
+      box-shadow: inset 0 0 0 1px rgba(143, 192, 255, .5);
     }
     .btn-tab i { margin-right: 6px; }
     .search-form {
@@ -208,7 +227,7 @@
     .search-form label {
       display: block;
       margin-bottom: 7px;
-      color: #526579;
+      color: #99acc8;
       font-size: 11px;
       font-weight: 900;
       text-transform: uppercase;
@@ -217,18 +236,19 @@
     .search-form input {
       width: 100%;
       min-height: 50px;
-      border: 1px solid #cad8e6;
+      border: 1px solid rgba(171, 193, 222, .35);
       border-radius: var(--radius);
       padding: 13px 14px;
       font-size: 15px;
-      color: var(--ink);
-      background: #fff;
+      color: var(--text);
+      background: rgba(3, 8, 18, .5);
       transition: border-color .16s, box-shadow .16s;
     }
+    .search-form input::placeholder { color: #788aa6; }
     .search-form input:focus {
       outline: none;
-      border-color: var(--blue-700);
-      box-shadow: 0 0 0 4px rgba(23,105,194,.14);
+      border-color: #6eaefc;
+      box-shadow: 0 0 0 4px rgba(47,137,255,.2);
     }
     .btn-search {
       min-height: 50px;
@@ -236,12 +256,14 @@
       border-radius: var(--radius);
       padding: 0 22px;
       color: #fff;
-      background: var(--blue-800);
+      background: linear-gradient(135deg, #277af0, #1f64c5);
       font-size: 14px;
       font-weight: 900;
       cursor: pointer;
-      box-shadow: 0 12px 24px rgba(23,105,194,.22);
+      box-shadow: 0 10px 24px rgba(24, 91, 198, .45);
+      transition: transform .14s ease, box-shadow .14s ease;
     }
+    .btn-search:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(24, 91, 198, .5); }
     .btn-search:disabled { opacity: .62; cursor: wait; }
     .btn-search i { margin-right: 7px; }
     .feedback {
@@ -254,21 +276,21 @@
       border: 1px solid transparent;
     }
     .feedback.show { display: flex; gap: 8px; align-items: center; }
-    .feedback.error { background: var(--red-bg); color: var(--red); border-color: #ffd2ca; }
-    .feedback.info { background: var(--blue-100); color: var(--blue-900); border-color: #cbe1fb; }
-    .feedback.warning { background: var(--yellow-bg); color: var(--yellow); border-color: #ffe1a0; }
+    .feedback.error { background: var(--red-bg); color: #fecdd3; border-color: rgba(251,113,133,.45); }
+    .feedback.info { background: rgba(47,137,255,.18); color: #cfe5ff; border-color: rgba(47,137,255,.45); }
+    .feedback.warning { background: var(--yellow-bg); color: #ffe5a7; border-color: rgba(246,193,93,.45); }
     .loading-spinner {
       display: none;
       margin-top: 18px;
       padding: 24px;
       text-align: center;
       color: var(--muted);
-      background: rgba(255,255,255,.7);
+      background: linear-gradient(180deg, rgba(15, 19, 28, .9), rgba(10, 12, 18, .95));
       border: 1px solid var(--line);
       border-radius: var(--radius);
     }
     .loading-spinner.show { display: block; }
-    .loading-spinner i { color: var(--blue-700); font-size: 28px; animation: spin 1s linear infinite; }
+    .loading-spinner i { color: #84beff; font-size: 28px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .results-section {
       display: none;
@@ -286,27 +308,27 @@
     .results-header h3 {
       margin: 0;
       font-size: 20px;
-      color: var(--blue-950);
+      color: #f4f8ff;
     }
     .results-count {
       display: inline-flex;
       border-radius: 999px;
       padding: 6px 12px;
-      background: var(--blue-100);
-      color: var(--blue-900);
-      border: 1px solid #cfe3fa;
+      background: rgba(47, 137, 255, .22);
+      color: #d6eaff;
+      border: 1px solid rgba(143, 192, 255, .5);
       font-size: 12px;
       font-weight: 900;
     }
     .boleto-card {
-      background: var(--surface);
+      background: rgba(6, 10, 16, .68);
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 16px;
       margin-bottom: 12px;
-      box-shadow: 0 6px 18px rgba(7,31,58,.05);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), 0 10px 18px rgba(0,0,0,.3);
     }
-    .boleto-card:hover { border-color: #bfd2e6; }
+    .boleto-card:hover { border-color: var(--line-strong); }
     .boleto-top {
       display: flex;
       justify-content: space-between;
@@ -314,18 +336,18 @@
       gap: 12px;
       margin-bottom: 14px;
       padding-bottom: 14px;
-      border-bottom: 1px solid #edf2f7;
+      border-bottom: 1px solid rgba(255,255,255,.1);
     }
     .boleto-id {
       font-size: 17px;
       font-weight: 800;
-      color: var(--blue-950);
+      color: #f3f8ff;
     }
     .boleto-id small {
       display: block;
       margin-top: 4px;
-      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: var(--muted);
+      font-family: "Sora", "Trebuchet MS", sans-serif;
+      color: #96a9c5;
       font-size: 12px;
     }
     .cliente-line {
@@ -333,7 +355,7 @@
       align-items: center;
       gap: 6px;
       margin-top: 7px;
-      color: #44546a;
+      color: #d0def3;
       font-size: 12px;
       font-weight: 800;
     }
@@ -349,10 +371,10 @@
       letter-spacing: .04em;
       white-space: nowrap;
     }
-    .status-gerado { background: var(--blue-100); color: var(--blue-800); }
-    .status-pago { background: var(--green-bg); color: var(--green); }
-    .status-vencido { background: var(--red-bg); color: var(--red); }
-    .status-pendente { background: var(--yellow-bg); color: var(--yellow); }
+    .status-gerado { background: rgba(47, 137, 255, .2); color: #cfe4ff; }
+    .status-pago { background: var(--green-bg); color: #9af0d0; }
+    .status-vencido { background: var(--red-bg); color: #ffc5ce; }
+    .status-pendente { background: var(--yellow-bg); color: #ffe6af; }
     .boleto-grid {
       display: grid;
       grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
@@ -361,14 +383,14 @@
     }
     .boleto-field {
       min-width: 0;
-      background: var(--soft);
-      border: 1px solid #e4ebf3;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(167, 190, 217, .22);
       border-radius: var(--radius);
       padding: 11px;
     }
     .boleto-field label {
       display: block;
-      color: var(--muted);
+      color: #91a6c4;
       font-size: 10px;
       font-weight: 900;
       text-transform: uppercase;
@@ -376,17 +398,17 @@
       margin-bottom: 5px;
     }
     .boleto-field span { display: block; font-weight: 800; overflow-wrap: anywhere; }
-    .boleto-field .valor { color: var(--blue-800); font-size: 18px; }
+    .boleto-field .valor { color: #89bfff; font-size: 18px; }
     .boleto-linha {
-      background: #f8fbff;
-      border: 1px dashed #b9ccdf;
+      background: rgba(47, 137, 255, .08);
+      border: 1px dashed rgba(130, 177, 237, .55);
       border-radius: var(--radius);
       padding: 12px;
       margin-top: 10px;
     }
     .boleto-linha label {
       display: block;
-      color: var(--muted);
+      color: #9bb0cd;
       font-size: 10px;
       font-weight: 900;
       text-transform: uppercase;
@@ -394,18 +416,19 @@
       margin-bottom: 6px;
     }
     .linha-valor {
-      font-family: Consolas, "Courier New", monospace;
+      font-family: "JetBrains Mono", "Courier New", monospace;
       font-weight: 800;
       font-size: 14px;
       line-height: 1.55;
       word-break: break-all;
+      color: #ddeafd;
     }
     .btn-copy {
       margin-top: 9px;
-      border: 1px solid #cbd9e8;
+      border: 1px solid rgba(154, 187, 224, .45);
       border-radius: var(--radius);
-      background: #fff;
-      color: var(--blue-800);
+      background: rgba(255,255,255,.04);
+      color: #d9e9ff;
       padding: 9px 12px;
       font-size: 12px;
       font-weight: 900;
@@ -425,37 +448,37 @@
       gap: 7px;
       margin-top: 0;
       margin-left: 0;
-      border: 1px solid var(--blue-700);
+      border: 1px solid #4b9bff;
       border-radius: var(--radius);
-      background: var(--blue-700);
+      background: linear-gradient(135deg, #2a7cf0, #1e62be);
       color: #fff;
       padding: 9px 12px;
       font-size: 12px;
       font-weight: 900;
       text-decoration: none;
     }
-    .btn-download:hover { background: var(--blue-800); }
+    .btn-download:hover { filter: brightness(1.06); }
     .download-unavailable {
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      border: 1px solid #fed7aa;
+      border: 1px solid rgba(246,193,93,.45);
       border-radius: var(--radius);
-      background: #fff7ed;
-      color: #9a3412;
+      background: rgba(246,193,93,.16);
+      color: #ffe1a2;
       padding: 9px 12px;
       font-size: 12px;
       font-weight: 900;
     }
-    .btn-copy.copied { background: var(--green-bg); color: var(--green); border-color: #8bd9b5; }
+    .btn-copy.copied { background: var(--green-bg); color: #9af0d0; border-color: rgba(52,211,153,.45); }
     .grupo-detalhe {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #edf2f7;
+      border-top: 1px solid rgba(255,255,255,.1);
     }
     .grupo-label {
       margin-bottom: 8px;
-      color: var(--muted);
+      color: #9aacc7;
       font-size: 10px;
       font-weight: 900;
       text-transform: uppercase;
@@ -464,23 +487,23 @@
     .grupo-item {
       padding: 12px;
       margin-top: 10px;
-      border: 1px solid #e1ebf5;
+      border: 1px solid rgba(161, 188, 219, .24);
       border-radius: var(--radius);
-      background: #fbfdff;
+      background: rgba(255,255,255,.03);
     }
     .grupo-item-title {
       display: flex;
       justify-content: space-between;
       gap: 10px;
-      color: var(--blue-950);
+      color: #edf4ff;
       font-weight: 900;
       margin-bottom: 8px;
     }
     .empty-state {
       text-align: center;
       padding: 42px 22px;
-      background: #fff;
-      border: 1px dashed #bfd0e1;
+      background: rgba(255,255,255,.03);
+      border: 1px dashed rgba(161, 188, 219, .34);
       border-radius: var(--radius);
     }
     .empty-state i {
@@ -489,23 +512,23 @@
       display: inline-grid;
       place-items: center;
       border-radius: var(--radius);
-      background: var(--blue-100);
-      color: var(--blue-800);
+      background: rgba(47, 137, 255, .2);
+      color: #cfe5ff;
       font-size: 24px;
       margin-bottom: 13px;
     }
     .empty-state h3 {
       margin: 0 0 6px;
-      color: var(--blue-950);
+      color: #f2f8ff;
     }
     .empty-state p { margin: 0; color: var(--muted); }
     .footer {
       text-align: center;
       padding: 24px;
-      color: #6f7d8d;
+      color: #8ea3c0;
       font-size: 12px;
     }
-    .footer a { color: var(--blue-800); text-decoration: none; font-weight: 800; }
+    .footer a { color: #91c3ff; text-decoration: none; font-weight: 800; }
     @media (max-width: 900px) {
       .portal-grid { grid-template-columns: 1fr; }
       .search-form, .boleto-grid { grid-template-columns: 1fr; }
@@ -527,10 +550,10 @@
   <header class="hero">
     <div class="wrap">
       <div class="topbar">
-        <a class="brand" href="/boletos" aria-label="Columbia Machine Brasil">
-          <img class="brand-logo" src="/static/columbia_logo.png" alt="Columbia Machine Brasil">
+        <a class="brand" href="/boletos" aria-label="Columbia Sync">
+          <img class="brand-logo" src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync">
           <span class="brand-text">
-            <strong>Columbia Machine</strong>
+            <strong>Columbia Sync</strong>
             <span>Portal financeiro</span>
           </span>
         </a>
@@ -601,7 +624,7 @@
 
     <section class="results-section" id="resultsSection">
       <div class="results-header">
-        <h3><i class="fas fa-file-invoice-dollar" style="color:var(--blue-700);margin-right:6px;"></i> Cobranças em aberto</h3>
+        <h3><i class="fas fa-file-invoice-dollar" style="color:#8fc0ff;margin-right:6px;"></i> Cobranças em aberto</h3>
         <span class="results-count" id="resultsCount">0 boletos</span>
       </div>
       <div id="resultsList"></div>
@@ -609,7 +632,7 @@
   </main>
 
   <footer class="footer">
-    <p>Banco do Brasil - Cobrança | Columbia Machine Brasil</p>
+    <p>Banco do Brasil - Cobranca | Columbia Sync</p>
   </footer>
 
   <script>
