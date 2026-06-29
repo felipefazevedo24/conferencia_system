@@ -75,11 +75,17 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
     parcela = row.get("parcela")
     total_parcelas = row.get("n_parcelas")
     vencimento_raw = row.get("vencimento_raw") or row.get("dt_vencimento")
+    codigo = str(row.get("codigo") or "").strip()
+    tem_pdf_flag = bool(row.get("boleto_pdf_disponivel"))
+    boleto_gerado = bool(row.get("boleto_gerado") or row.get("nossonumero"))
+    # Em respostas da bridge nem sempre vem boleto_pdf_disponivel; se o titulo ja
+    # estiver com boleto emitido, expomos o link para tentativa de download oficial.
+    url_boleto = f"/api/boletos/grv/{codigo}/pdf" if codigo and (tem_pdf_flag or boleto_gerado) else ""
 
     return {
         "fonte": "grv_postgres",
         "tipo": "titulo_aberto",
-        "id_grv": str(row.get("codigo") or ""),
+        "id_grv": codigo,
         "cod_cliente": str(row.get("cod_cliente") or ""),
         "nome_pagador": str(row.get("nome_pagador") or "").strip(),
         "cpf_cnpj_pagador": _only_digits(row.get("cpf_cnpj_pagador")),
@@ -98,9 +104,9 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
         "n_parcelas": str(total_parcelas or "").strip(),
         "linha_digitavel": "",
         "codigo_barras": "",
-        "url_boleto": f"/api/boletos/grv/{row.get('codigo')}/pdf" if bool(row.get("boleto_pdf_disponivel")) else "",
+        "url_boleto": url_boleto,
         "banco": current_app.config.get("BOLETO_BANK_LABEL", "Banco do Brasil"),
-        "boleto_gerado": bool(row.get("boleto_gerado") or row.get("nossonumero")),
+        "boleto_gerado": boleto_gerado,
         "pode_gerar_boleto": True,
         "chave_acesso": str(row.get("chave_acesso") or "").strip(),
     }

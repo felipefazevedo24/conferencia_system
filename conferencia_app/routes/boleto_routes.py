@@ -234,7 +234,8 @@ def consultar_boletos():
             valor = 0.0
 
         boletos = BBBoletoService.consultar_por_nota_valor(numero_nota, valor, somente_abertos=True)
-        mensagem = BBBoletoService.config_warning()
+        tem_download = any(str(item.get("url_boleto") or "").strip() for item in boletos)
+        mensagem = "" if tem_download else BBBoletoService.config_warning()
         return jsonify(
             {
                 "sucesso": True,
@@ -276,7 +277,16 @@ def consultar_boletos():
         boletos_nf = BBBoletoService.consultar_por_nota_valor(numero_nota_extra, 0, somente_abertos=True)
         boletos_base = _deduplicar_boletos(boletos_base + _filtrar_por_documento_ou_sem_doc(boletos_nf, doc))
     boletos = _agrupar_titulos_abertos(boletos_base) if len(doc) == 14 else boletos_base
-    mensagem = resultado.get("mensagem", "") or BBBoletoService.config_warning()
+    tem_download = False
+    for item in boletos:
+        if str(item.get("url_boleto") or "").strip():
+            tem_download = True
+            break
+        titulos = item.get("titulos") if isinstance(item.get("titulos"), list) else []
+        if any(str(t.get("url_boleto") or "").strip() for t in titulos):
+            tem_download = True
+            break
+    mensagem = resultado.get("mensagem", "") or ("" if tem_download else BBBoletoService.config_warning())
     return jsonify(
         {
             "sucesso": True,
