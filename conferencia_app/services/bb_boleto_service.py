@@ -274,6 +274,13 @@ class BBBoletoService:
         return text or "Gerado"
 
     @classmethod
+    def _local_boleto_download_url(cls, nosso_numero: str) -> str:
+        numero = str(nosso_numero or "").strip()
+        if not numero:
+            return ""
+        return f"/api/boletos/local/{numero}/pdf"
+
+    @classmethod
     def _normalizar_boleto_api(cls, raw: dict) -> dict:
         pagador = raw.get("pagador") or {}
         if not isinstance(pagador, dict):
@@ -538,6 +545,7 @@ class BBBoletoService:
     @classmethod
     def _serializar_boleto_local(cls, b: BoletoContaReceber) -> dict:
         return {
+            "fonte": "local",
             "nosso_numero": b.nosso_numero,
             "numero_nota": b.numero_nota,
             "valor": float(b.valor or 0),
@@ -546,12 +554,52 @@ class BBBoletoService:
             "status": b.status,
             "linha_digitavel": b.linha_digitavel,
             "codigo_barras": b.codigo_barras,
-            "url_boleto": "",
+            "url_boleto": cls._local_boleto_download_url(b.nosso_numero),
             "nome_pagador": b.nome_pagador or "",
             "cpf_cnpj_pagador": _only_digits(b.cpf_cnpj_pagador or ""),
             "banco": cls._normalize_bank_name(b.banco),
             "data_geracao": b.data_geracao.strftime("%d/%m/%Y %H:%M") if b.data_geracao else "",
         }
+
+    @classmethod
+    def _propagar_boleto_local_por_nota(cls, boletos: list[dict]) -> list[dict]:
+        """Quando houver 1 boleto local por NF, replica dados de pagamento nos titulos GRV da mesma NF."""
+        if not boletos:
+            return boletos
+
+        por_nota: dict[str, dict] = {}
+        for item in boletos:
+            nota = _normalizar_numero_nf(item.get("numero_nota"))
+            if not nota:
+                continue
+            if not (item.get("nosso_numero") or item.get("linha_digitavel") or item.get("url_boleto")):
+                continue
+            atual = por_nota.get(nota)
+            if not atual or str(item.get("fonte") or "") == "local":
+                por_nota[nota] = item
+
+        if not por_nota:
+            return boletos
+
+        campos = ("nosso_numero", "linha_digitavel", "codigo_barras", "url_boleto", "banco")
+        resultado: list[dict] = []
+        for item in boletos:
+            nota = _normalizar_numero_nf(item.get("numero_nota"))
+            ref = por_nota.get(nota)
+            if not ref:
+                resultado.append(item)
+                continue
+
+            if item.get("nosso_numero") or item.get("linha_digitavel") or item.get("url_boleto"):
+                resultado.append(item)
+                continue
+
+            merged = dict(item)
+            for campo in campos:
+                if ref.get(campo):
+                    merged[campo] = ref[campo]
+            resultado.append(merged)
+        return resultado
 
     @classmethod
     def consultar_boletos_locais_por_notas(cls, numeros_notas: list[str], somente_abertos: bool = False) -> list[dict]:
@@ -590,7 +638,8 @@ class BBBoletoService:
             margem = valor * 0.01
             api_result = [b for b in api_result if margem == 0 or (valor - margem) <= float(b.get("valor") or 0) <= (valor + margem)]
 
-        return cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
+        mesclados = cls._deduplicar(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
+        return cls._propagar_boleto_local_por_nota(mesclados)
 
     @classmethod
     def consultar_por_orcamento(cls, orcamento: str) -> list[dict]:
@@ -626,7 +675,7 @@ class BBBoletoService:
         api_result = cls.consultar_boletos_api(cpf_cnpj=doc) if cls.is_configured() else []
         if somente_abertos:
             api_result = cls._filtrar_abertos(api_result)
-        boletos = cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result)
+        boletos = cls._propagar_boleto_local_por_nota(cls._mesclar_titulos_com_api(titulos_grv + enriched, api_result))
         if api_result:
             return {
                 "fonte": "grv_postgres+bb_api+local" if titulos_grv else ("bb_api+local" if enriched else "bb_api"),
