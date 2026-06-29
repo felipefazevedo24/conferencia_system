@@ -88,34 +88,41 @@
     .brand {
       display: inline-flex;
       align-items: center;
-      gap: 14px;
+      gap: 16px;
       min-width: 0;
       text-decoration: none;
+      padding: 12px 16px;
+      border-radius: 16px;
+      background: linear-gradient(130deg, rgba(255,255,255,.09), rgba(255,255,255,.02));
+      border: 1px solid rgba(143, 192, 255, .36);
+      box-shadow: 0 14px 26px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.06);
+      backdrop-filter: blur(8px);
     }
     .brand-logo {
-      width: 58px;
-      height: 58px;
-      border-radius: 12px;
+      width: 84px;
+      height: 84px;
+      border-radius: 14px;
       background: #fff;
-      padding: 6px;
+      padding: 8px;
       object-fit: contain;
-      box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 16px 24px rgba(0,0,0,.4);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 18px 28px rgba(0,0,0,.45);
     }
     .brand-text strong {
       display: block;
-      font-size: 20px;
+      font-size: clamp(24px, 2.4vw, 30px);
       line-height: 1;
       letter-spacing: .02em;
       color: #f4f8ff;
+      text-shadow: 0 0 22px rgba(143, 192, 255, .18);
     }
     .brand-text span {
       display: block;
-      margin-top: 6px;
-      color: #7fb6ff;
-      font-size: 11px;
+      margin-top: 9px;
+      color: #a9cdff;
+      font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: .16em;
+      letter-spacing: .18em;
     }
     .hero-copy { max-width: 760px; }
     .eyebrow {
@@ -537,6 +544,21 @@
       .hero { padding: 20px 16px 44px; }
       .topbar { align-items: flex-start; margin-bottom: 32px; }
       .admin-link { display: none; }
+      .brand {
+        width: 100%;
+        padding: 12px;
+      }
+      .brand-logo {
+        width: 72px;
+        height: 72px;
+      }
+      .brand-text strong {
+        font-size: 22px;
+      }
+      .brand-text span {
+        font-size: 11px;
+        letter-spacing: .14em;
+      }
       .main { padding: 0 14px 34px; }
       .search-card, .results-section { padding: 16px; }
       .card-head { align-items: flex-start; }
