@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from datetime import date, datetime
@@ -178,6 +179,39 @@ class GRVContasReceberService:
         return [_row_to_titulo(row) for row in rows if isinstance(row, dict)]
 
     @classmethod
+    def _obter_boleto_pdf_via_api(cls, cfg: dict[str, Any], codigo: str) -> bytes | None:
+        url = f"{cfg['api_url'].rstrip('/')}/api/erp/contas-receber-boleto-pdf"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "ColumbiaSync/Portal-Cliente",
+        }
+        if cfg.get("api_token"):
+            headers["Authorization"] = f"Bearer {cfg['api_token']}"
+
+        resp = requests.post(
+            url,
+            headers=headers,
+            json={"codigo": str(codigo or "").strip()},
+            timeout=cfg.get("api_timeout") or 30,
+        )
+        if resp.status_code in (400, 404):
+            return None
+        resp.raise_for_status()
+        data = resp.json() if resp.content else {}
+        if not isinstance(data, dict):
+            return None
+        b64 = str(data.get("pdf_base64") or "").strip()
+        if not b64:
+            return None
+        try:
+            payload = base64.b64decode(b64)
+        except Exception:
+            return None
+        return payload if payload.startswith(b"%PDF") else None
+
+    @classmethod
     def _consultar_abertos_postgres(
         cls,
         cfg: dict[str, Any],
@@ -257,20 +291,25 @@ class GRVContasReceberService:
         codigo_limpo = str(codigo or "").strip()
         if not codigo_limpo:
             return None
-        if not (cfg.get("host") and cfg.get("database") and cfg.get("user")):
-            return None
+        if cfg.get("host") and cfg.get("database") and cfg.get("user"):
+            sql = """
+                select boleto_pdf
+                from public.treceber
+                where codigo::text = %s
+                limit 1
+            """
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, [codigo_limpo])
+                    row = cur.fetchone()
+                    if row and row[0] is not None:
+                        payload = bytes(row[0])
+                        if payload.startswith(b"%PDF"):
+                            return payload
 
-        sql = """
-            select boleto_pdf
-            from public.treceber
-            where codigo::text = %s
-            limit 1
-        """
-        with _conectar(cfg) as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, [codigo_limpo])
-                row = cur.fetchone()
-                if not row or row[0] is None:
-                    return None
-                payload = bytes(row[0])
-                return payload if payload.startswith(b"%PDF") else None
+        if cfg.get("api_url"):
+            try:
+                return cls._obter_boleto_pdf_via_api(cfg, codigo_limpo)
+            except Exception:
+                logger.exception("Falha ao obter boleto PDF via bridge")
+        return None
