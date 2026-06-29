@@ -472,6 +472,100 @@ NFE_EMITIDA_SQL = """
 """
 
 
+CADASTRO_EMAIL_POR_CNPJ_SQL = """
+    with cliente as (
+        select
+            'cliente'::text as origem,
+            coalesce(to_jsonb(c)->>'codigo', '') as codigo,
+            coalesce(
+                nullif(to_jsonb(c)->>'razao_social', ''),
+                nullif(to_jsonb(c)->>'nome', ''),
+                nullif(to_jsonb(c)->>'fantasia', ''),
+                ''
+            ) as nome,
+            regexp_replace(
+                coalesce(
+                    to_jsonb(c)->>'rg_cgc',
+                    to_jsonb(c)->>'cgc',
+                    to_jsonb(c)->>'cnpj_cpf',
+                    ''
+                ),
+                '\\D',
+                '',
+                'g'
+            ) as documento,
+            coalesce(
+                nullif(to_jsonb(c)->>'e_mail', ''),
+                nullif(to_jsonb(c)->>'email', ''),
+                nullif(to_jsonb(c)->>'email_danfe', ''),
+                ''
+            ) as email
+        from public.tcliente c
+        where regexp_replace(
+            coalesce(
+                to_jsonb(c)->>'rg_cgc',
+                to_jsonb(c)->>'cgc',
+                to_jsonb(c)->>'cnpj_cpf',
+                ''
+            ),
+            '\\D',
+            '',
+            'g'
+        ) = %s
+    ),
+    fornecedor as (
+        select
+            'fornecedor'::text as origem,
+            coalesce(to_jsonb(f)->>'codigo', '') as codigo,
+            coalesce(
+                nullif(to_jsonb(f)->>'razao_social', ''),
+                nullif(to_jsonb(f)->>'nome', ''),
+                nullif(to_jsonb(f)->>'fantasia', ''),
+                ''
+            ) as nome,
+            regexp_replace(
+                coalesce(
+                    to_jsonb(f)->>'cgc',
+                    to_jsonb(f)->>'rg_cgc',
+                    to_jsonb(f)->>'cnpj_cpf',
+                    ''
+                ),
+                '\\D',
+                '',
+                'g'
+            ) as documento,
+            coalesce(
+                nullif(to_jsonb(f)->>'e_mail', ''),
+                nullif(to_jsonb(f)->>'email', ''),
+                nullif(to_jsonb(f)->>'email_danfe', ''),
+                ''
+            ) as email
+        from public.tfornece f
+        where regexp_replace(
+            coalesce(
+                to_jsonb(f)->>'cgc',
+                to_jsonb(f)->>'rg_cgc',
+                to_jsonb(f)->>'cnpj_cpf',
+                ''
+            ),
+            '\\D',
+            '',
+            'g'
+        ) = %s
+    ),
+    candidatos as (
+        select * from cliente
+        union all
+        select * from fornecedor
+    )
+    select origem, codigo, nome, documento, email
+    from candidatos
+    where coalesce(email, '') <> ''
+    order by case origem when 'cliente' then 1 else 2 end, codigo
+    limit 1
+"""
+
+
 CONTAS_RECEBER_ABERTO_SQL = """
     select
         r.codigo::text as codigo,
@@ -1394,6 +1488,39 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "nota": nota})
         except Exception as exc:
             app.logger.exception("Falha ao consultar NF-e emitida no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/cadastro-email-por-cnpj")
+    def consultar_cadastro_email_por_cnpj():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            cnpj = "".join(ch for ch in str(payload.get("cnpj") or payload.get("cpf_cnpj") or "") if ch.isdigit())
+            if not cnpj:
+                return jsonify({"sucesso": False, "erro": "cnpj_obrigatorio"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(CADASTRO_EMAIL_POR_CNPJ_SQL, (cnpj, cnpj))
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({"sucesso": True, "encontrado": False, "email": ""})
+
+                    cols = [desc[0] for desc in cur.description]
+                    item = dict(zip(cols, row))
+                    return jsonify({
+                        "sucesso": True,
+                        "encontrado": True,
+                        "cnpj": cnpj,
+                        **item,
+                    })
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar e-mail de cadastro no ERP")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/contas-receber-aberto")

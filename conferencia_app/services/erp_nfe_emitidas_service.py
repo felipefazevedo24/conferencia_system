@@ -141,3 +141,26 @@ def buscar_nfe_emitida_erp(numero_nf: str = "", chave: str = "") -> dict[str, An
         else:
             nota[campo.replace("_base64", "_bytes")] = None
     return nota
+
+
+def buscar_email_cadastro_erp(cnpj: str) -> dict[str, Any]:
+    """Consulta e-mail de cliente/fornecedor diretamente no GRV/Postgres via bridge."""
+    doc = _somente_digitos(cnpj)
+    if not doc:
+        return {}
+    try:
+        data = _post_bridge("/api/erp/cadastro-email-por-cnpj", {"cnpj": doc})
+        if not data.get("encontrado"):
+            return {}
+
+        return {
+            "email": str(data.get("email") or "").strip(),
+            "nome": str(data.get("nome") or "").strip(),
+            "documento": _somente_digitos(data.get("documento") or doc),
+            "origem": str(data.get("origem") or "").strip(),
+            "codigo": str(data.get("codigo") or "").strip(),
+            "fonte": "GRVPostgres",
+        }
+    except Exception as exc:
+        current_app.logger.warning("Falha ao consultar e-mail no cadastro GRV para %s: %s", doc, exc)
+        return {}

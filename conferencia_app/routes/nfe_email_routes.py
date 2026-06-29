@@ -10,8 +10,7 @@ from ..auth import roles_required
 from ..extensions import db
 from ..models import EmailNFEnviado
 from ..services.nfe_email_service import enviar_nfe_por_email, resolver_destinatario
-from ..services.erp_nfe_emitidas_service import listar_nfes_emitidas_erp, normalizar_data_minima
-from ..services.planilhas_cadastros import buscar_email_por_cnpj
+from ..services.erp_nfe_emitidas_service import buscar_email_cadastro_erp, listar_nfes_emitidas_erp, normalizar_data_minima
 
 nfe_email_bp = Blueprint("nfe_email", __name__)
 
@@ -281,7 +280,7 @@ def pagina_emails_nfe():
 def api_nfe_email_emitidas():
     """Lista NFs emitidas no ERP a partir de 13/05/2026.
 
-    Para cada NF retorna numero, chave, destinatario, e-mail sugerido (planilha)
+    Para cada NF retorna numero, chave, destinatario e e-mail sugerido (GRV/Postgres)
     e se ja foi enviado por e-mail. O XML NAO e baixado aqui (performance);
     isso acontece no clique de "Enviar".
     """
@@ -324,7 +323,11 @@ def api_nfe_email_emitidas():
     }
 
     resultado = []
-    from ..services.planilhas_cadastros import _somente_digitos
+    import re as _re
+    cache_email_cnpj: dict[str, dict] = {}
+
+    def _somente_digitos(valor):
+        return _re.sub(r"\D", "", str(valor or ""))
 
     for doc in documentos:
         chave = str(doc.get("chave") or "").strip()
@@ -341,10 +344,12 @@ def api_nfe_email_emitidas():
         sugestao_email = ""
         sugestao_fonte = ""
         if cnpj_dest:
-            hit = buscar_email_por_cnpj(cnpj_dest)
+            if cnpj_dest not in cache_email_cnpj:
+                cache_email_cnpj[cnpj_dest] = buscar_email_cadastro_erp(cnpj_dest)
+            hit = cache_email_cnpj.get(cnpj_dest) or {}
             if hit.get("email"):
                 sugestao_email = hit["email"]
-                sugestao_fonte = "Planilha"
+                sugestao_fonte = "GRVPostgres"
 
         envio = enviados.get(numero)
         aguardando = pendentes_manual.get(numero) if not envio else None

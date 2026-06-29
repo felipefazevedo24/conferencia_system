@@ -4,8 +4,8 @@ Envio automatico de NF-e emitida por e-mail ao destinatario.
 Fluxo:
 - Dado um numero de NF (ou chave de acesso), busca a NF-e emitida no ERP via API bridge.
 - Usa XML/PDF gravados no banco do ERP, sem aguardar a Consyste.
-- Resolve destinatario na ordem: 1) override manual -> 2) cadastro AgendamentoCliente ->
-  3) tag <dest><email> do XML. Em ultimo caso, fica pendente.
+- Resolve destinatario na ordem: 1) override manual -> 2) cadastro GRV/Postgres -> 3) cadastro AgendamentoCliente ->
+    4) tag <dest><email> do XML. Em ultimo caso, fica pendente.
 - Registra EmailNFEnviado e envia e-mail com XML + PDF anexados.
 - Modo teste: redireciona para NFE_EMAIL_TESTE_DESTINO, mantendo original em metadados.
 """
@@ -29,11 +29,10 @@ from flask import current_app
 
 from ..extensions import db
 from ..models import EmailNFEnviado, AgendamentoCliente, ItemNota
-from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+from .erp_nfe_emitidas_service import buscar_email_cadastro_erp, buscar_nfe_emitida_erp
 from .danfe_service import gerar_danfe
 from .pedidos_service import buscar_linhas_pedido
 from .cliente_portal_service import gerar_token_nf, portal_base_url
-from .planilhas_cadastros import buscar_email_por_cnpj
 from .smtp_service import enviar_mensagem_smtp
 
 
@@ -629,13 +628,13 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
             "avisos": avisos,
         }
 
-    # 1) Planilhas locais clientes.xlsx / fornecedores.xlsx
+    # 1) Cadastro no GRV/Postgres (cliente/fornecedor)
     if nota.dest_cnpj:
-        hit = buscar_email_por_cnpj(nota.dest_cnpj)
+        hit = buscar_email_cadastro_erp(nota.dest_cnpj)
         if hit and _valido_email(hit.get("email")):
             return {
                 "email": hit["email"],
-                "fonte_email": "Planilha",
+                "fonte_email": "GRVPostgres",
                 "dest_nome": nota.dest_nome or hit.get("nome", ""),
                 "dest_cnpj": nota.dest_cnpj,
                 "numero": nota.numero,
