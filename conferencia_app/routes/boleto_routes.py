@@ -4,7 +4,7 @@ import re
 from io import BytesIO
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, request, send_file
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file
 
 from ..services.cliente_portal_service import ler_token_nf
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
@@ -302,17 +302,76 @@ def consultar_boletos():
 
 @boleto_bp.route("/api/boletos/grv/<codigo>/pdf")
 def baixar_boleto_grv_pdf(codigo):
-    codigo_limpo = str(codigo or "").strip()
-    if not codigo_limpo:
-        return jsonify({"sucesso": False, "error": "Codigo do titulo invalido."}), 400
-
-    pdf_bytes = GRVContasReceberService.obter_boleto_pdf_por_codigo(codigo_limpo)
-    if not pdf_bytes:
-        return jsonify({"sucesso": False, "error": "PDF do boleto nao encontrado."}), 404
-
-    return send_file(
-        BytesIO(pdf_bytes),
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=f"boleto-grv-{codigo_limpo}.pdf",
+    return _resolver_download_boleto(
+        codigo=str(codigo or "").strip(),
+        numero_nota="",
+        documento="",
+        nosso_numero="",
+        cpf_cnpj="",
+        valor_raw="",
     )
+
+
+@boleto_bp.route("/api/boletos/grv/pdf")
+def baixar_boleto_grv_pdf_com_contexto():
+    return _resolver_download_boleto(
+        codigo=str(request.args.get("codigo") or "").strip(),
+        numero_nota=str(request.args.get("numero_nota") or "").strip(),
+        documento=str(request.args.get("documento") or "").strip(),
+        nosso_numero=str(request.args.get("nosso_numero") or "").strip(),
+        cpf_cnpj=str(request.args.get("cpf_cnpj") or "").strip(),
+        valor_raw=str(request.args.get("valor") or "").strip(),
+    )
+
+
+def _resolver_download_boleto(codigo: str, numero_nota: str, documento: str, nosso_numero: str, cpf_cnpj: str, valor_raw: str):
+    codigo_limpo = str(codigo or "").strip()
+    pdf_bytes = GRVContasReceberService.obter_boleto_pdf_por_codigo(codigo_limpo) if codigo_limpo else None
+    if pdf_bytes:
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"boleto-grv-{codigo_limpo or 'titulo'}.pdf",
+        )
+
+    # Fallback oficial BB: tenta localizar URL do boleto usando contexto do titulo.
+    try:
+        valor = float(valor_raw or 0)
+    except (TypeError, ValueError):
+        valor = 0.0
+
+    candidatos = []
+    if numero_nota:
+        candidatos.extend(BBBoletoService.consultar_por_nota_valor(numero_nota, valor, somente_abertos=True))
+    doc = _only_digits(cpf_cnpj)
+    if doc and len(doc) in (11, 14):
+        resultado_doc = BBBoletoService.consultar_boletos(doc, somente_abertos=True)
+        candidatos.extend(resultado_doc.get("boletos") or [])
+
+    nosso_limpo = _only_digits(nosso_numero)
+    doc_ref = str(documento or "").strip().lower()
+    nota_ref = _normalizar_numero_nf(numero_nota)
+
+    melhor_url = ""
+    for item in candidatos:
+        url = str(item.get("url_boleto") or "").strip()
+        if not url:
+            continue
+        item_nosso = _only_digits(item.get("nosso_numero"))
+        item_doc = str(item.get("documento") or "").strip().lower()
+        item_nota = _normalizar_numero_nf(item.get("numero_nota") or item.get("documento"))
+
+        if nosso_limpo and item_nosso and item_nosso == nosso_limpo:
+            melhor_url = url
+            break
+        if doc_ref and item_doc and item_doc == doc_ref:
+            melhor_url = url
+            break
+        if nota_ref and item_nota and item_nota == nota_ref:
+            melhor_url = url
+
+    if melhor_url:
+        return redirect(melhor_url, code=302)
+
+    return jsonify({"sucesso": False, "error": "PDF do boleto nao encontrado."}), 404

@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import date, datetime
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 from flask import current_app
@@ -79,9 +80,19 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
     codigo = str(row.get("codigo") or "").strip()
     tem_pdf_flag = bool(row.get("boleto_pdf_disponivel"))
     boleto_gerado = bool(row.get("boleto_gerado") or row.get("nossonumero"))
+    query = urlencode(
+        {
+            "codigo": codigo,
+            "numero_nota": numero_nota,
+            "documento": documento,
+            "nosso_numero": str(row.get("nossonumero") or "").strip(),
+            "cpf_cnpj": _only_digits(row.get("cpf_cnpj_pagador")),
+            "valor": str(_float(row.get("valor"))),
+        }
+    )
     # Em respostas da bridge nem sempre vem boleto_pdf_disponivel; se o titulo ja
     # estiver com boleto emitido, expomos o link para tentativa de download oficial.
-    url_boleto = f"/api/boletos/grv/{codigo}/pdf" if codigo and (tem_pdf_flag or boleto_gerado) else ""
+    url_boleto = f"/api/boletos/grv/pdf?{query}" if codigo and (tem_pdf_flag or boleto_gerado) else ""
 
     return {
         "fonte": "grv_postgres",
