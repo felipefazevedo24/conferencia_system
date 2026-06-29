@@ -16,6 +16,7 @@ import threading
 import os
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlencode
 from dataclasses import dataclass
 from datetime import datetime
 from email.mime.application import MIMEApplication
@@ -33,6 +34,7 @@ from .erp_nfe_emitidas_service import buscar_email_cadastro_erp, buscar_nfe_emit
 from .danfe_service import gerar_danfe
 from .pedidos_service import buscar_linhas_pedido
 from .cliente_portal_service import gerar_token_nf, portal_base_url
+from .grv_contas_receber_service import GRVContasReceberService
 from .smtp_service import enviar_mensagem_smtp
 
 
@@ -566,6 +568,32 @@ def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | No
     return None
 
 
+def _montar_link_boleto_nota(nota: NotaEmitida) -> str:
+    """Gera link da consulta de boleto filtrada por NF quando houver contas a receber."""
+    numero_nf = str(nota.numero or "").strip()
+    if not numero_nf:
+        return ""
+
+    try:
+        titulos = GRVContasReceberService.consultar_abertos(
+            numero_nota=numero_nf,
+            incluir_pagos=True,
+            limite=5,
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao consultar titulos para NF %s", numero_nf)
+        return ""
+
+    if not titulos:
+        return ""
+
+    base_url = portal_base_url()
+    if not base_url:
+        return ""
+
+    return f"{base_url}/boletos?{urlencode({'modo': 'nota', 'numero_nota': numero_nf, 'auto': '1'})}"
+
+
 # ---------- Resolucao do destinatario ----------
 
 
@@ -690,6 +718,7 @@ def _montar_corpo_html(
     destino_real: str,
     inclui_pedido_compra: bool = False,
     portal_url: str = "",
+    boleto_url: str = "",
 ) -> str:
     aviso_teste = ""
     if modo_teste:
@@ -724,6 +753,24 @@ def _montar_corpo_html(
                 </div>
               </td>
             </tr>"""
+
+        boleto_bloco = ""
+        if boleto_url:
+                boleto_bloco = f"""
+                        <tr>
+                            <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                                <table cellpadding="0" cellspacing="0">
+                                    <tr><td bgcolor="#1d4ed8" style="border-radius:6px;background-color:#1d4ed8">
+                                        <a href="{boleto_url}" style="display:inline-block;padding:10px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
+                                            Consultar boleto da NF {numero_nf}
+                                        </a>
+                                    </td></tr>
+                                </table>
+                                <div style="margin-top:10px;font-size:12px;color:#475569">
+                                    Este link abre a consulta do boleto já filtrada por esta nota fiscal.
+                                </div>
+                            </td>
+                        </tr>"""
 
     return f"""\
     <!DOCTYPE html>
@@ -818,6 +865,7 @@ def _montar_corpo_html(
 
             <!-- Anexos -->
             {portal_bloco}
+            {boleto_bloco}
 
             <tr>
               <td style="padding:22px 28px 0;font-family:Arial,Helvetica,sans-serif">
@@ -1026,6 +1074,7 @@ def enviar_nfe_por_email(
     if base_url:
         token_nf = gerar_token_nf(nota.numero, nota.chave, nota.dest_cnpj)
         portal_url = f"{base_url}/portal/cobranca/{token_nf}"
+    boleto_url = _montar_link_boleto_nota(nota)
 
     corpo_html = _montar_corpo_html(
         nota.numero,
@@ -1036,6 +1085,7 @@ def enviar_nfe_por_email(
         destino_real,
         inclui_pedido_compra=bool(anexos_pedido_compra),
         portal_url=portal_url,
+        boleto_url=boleto_url,
     )
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(f"NF-e {nota.numero} em anexo. Destinatário: {nota.dest_nome}", "plain", "utf-8"))
