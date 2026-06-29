@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from ..services.cliente_portal_service import ler_token_nf
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.bb_boleto_service import BBBoletoService
+from ..services.grv_contas_receber_service import GRVContasReceberService
 
 boleto_bp = Blueprint("boleto", __name__)
 
@@ -286,4 +287,22 @@ def consultar_boletos():
             "agrupado": len(doc) == 14,
             "mensagem": mensagem,
         }
+    )
+
+
+@boleto_bp.route("/api/boletos/grv/<codigo>/pdf")
+def baixar_boleto_grv_pdf(codigo):
+    codigo_limpo = str(codigo or "").strip()
+    if not codigo_limpo:
+        return jsonify({"sucesso": False, "error": "Codigo do titulo invalido."}), 400
+
+    pdf_bytes = GRVContasReceberService.obter_boleto_pdf_por_codigo(codigo_limpo)
+    if not pdf_bytes:
+        return jsonify({"sucesso": False, "error": "PDF do boleto nao encontrado."}), 404
+
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"boleto-grv-{codigo_limpo}.pdf",
     )

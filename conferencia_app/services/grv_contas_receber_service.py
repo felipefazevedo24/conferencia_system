@@ -98,6 +98,7 @@ def _row_to_titulo(row: dict[str, Any]) -> dict[str, Any]:
         "n_parcelas": str(total_parcelas or "").strip(),
         "linha_digitavel": "",
         "codigo_barras": "",
+        "url_boleto": f"/api/boletos/grv/{row.get('codigo')}/pdf" if bool(row.get("boleto_pdf_disponivel")) else "",
         "banco": current_app.config.get("BOLETO_BANK_LABEL", "Banco do Brasil"),
         "boleto_gerado": bool(row.get("boleto_gerado") or row.get("nossonumero")),
         "pode_gerar_boleto": True,
@@ -220,6 +221,7 @@ class GRVContasReceberService:
                 coalesce(r.nossonumero, '') as nossonumero,
                 coalesce(r.boleto_gerado, 0) as boleto_gerado,
                 coalesce(r.boleto_situacao, '') as boleto_situacao,
+                case when r.boleto_pdf is null then 0 else 1 end as boleto_pdf_disponivel,
                 coalesce(nf.chv_nfe, '') as chave_acesso
             from public.treceber r
             left join public.tcliente c
@@ -242,3 +244,27 @@ class GRVContasReceberService:
                 cur.execute(sql, params)
                 cols = [desc[0] for desc in cur.description]
                 return [_row_to_titulo(dict(zip(cols, row))) for row in cur.fetchall()]
+
+    @classmethod
+    def obter_boleto_pdf_por_codigo(cls, codigo: str) -> bytes | None:
+        cfg = _resolver_config()
+        codigo_limpo = str(codigo or "").strip()
+        if not codigo_limpo:
+            return None
+        if not (cfg.get("host") and cfg.get("database") and cfg.get("user")):
+            return None
+
+        sql = """
+            select boleto_pdf
+            from public.treceber
+            where codigo::text = %s
+            limit 1
+        """
+        with _conectar(cfg) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, [codigo_limpo])
+                row = cur.fetchone()
+                if not row or row[0] is None:
+                    return None
+                payload = bytes(row[0])
+                return payload if payload.startswith(b"%PDF") else None

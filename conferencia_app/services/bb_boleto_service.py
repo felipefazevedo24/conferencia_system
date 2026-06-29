@@ -81,6 +81,16 @@ def _normalizar_numero_nf(value: str) -> str:
     return raw.split("-", 1)[0].strip()
 
 
+def _safe_int(value) -> int | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 class BBBoletoService:
     """Consulta e enriquecimento de boletos com dados do BB."""
 
@@ -350,6 +360,113 @@ class BBBoletoService:
         }
 
     @classmethod
+    def _consultar_detalhe_boleto_api(cls, numero_boleto_bb: str) -> dict | None:
+        numero = str(numero_boleto_bb or "").strip()
+        headers = cls._headers()
+        params_base = cls._base_query_params()
+        base_url = str(current_app.config.get("BB_API_BASE", "")).strip().rstrip("/")
+        if not numero or headers is None or params_base is None or not base_url:
+            return None
+
+        try:
+            resp = cls._request(
+                "GET",
+                f"{base_url}/boletos/{numero}",
+                params=params_base,
+                headers=headers,
+                cert=cls._cert(),
+                timeout=cls._timeout(),
+            )
+            if resp.status_code in (400, 404):
+                return None
+            resp.raise_for_status()
+            payload = resp.json() if resp.content else {}
+            if not isinstance(payload, dict):
+                return None
+            return payload
+        except Exception as exc:
+            logger.warning("BB: falha ao consultar detalhe do boleto %s - %s", numero, _sanitize_error(exc))
+            return None
+
+    @classmethod
+    def _combinar_resumo_e_detalhe_api(cls, resumo: dict, detalhe: dict | None) -> dict:
+        if not detalhe:
+            return resumo
+        combinado = dict(resumo)
+
+        numero_documento = str(
+            detalhe.get("numeroTituloCedenteCobranca")
+            or detalhe.get("numeroTituloBeneficiario")
+            or resumo.get("documento")
+            or resumo.get("numero_nota")
+            or ""
+        ).strip()
+        numero_nota = _normalizar_numero_nf(numero_documento) or _normalizar_numero_nf(resumo.get("numero_nota"))
+
+        combinado.update(
+            {
+                "nosso_numero": str(
+                    detalhe.get("numeroBoletoBB")
+                    or detalhe.get("numeroTituloCliente")
+                    or resumo.get("nosso_numero")
+                    or ""
+                ).strip(),
+                "numero_nota": numero_nota,
+                "documento": numero_documento,
+                "valor": _to_float(
+                    detalhe.get("valorOriginalTituloCobranca")
+                    or detalhe.get("valorAtualTituloCobranca")
+                    or resumo.get("valor")
+                ),
+                "vencimento": _format_api_date(
+                    detalhe.get("dataVencimentoTituloCobranca")
+                    or resumo.get("vencimento")
+                ),
+                "data_pagamento": _format_api_date(
+                    detalhe.get("dataCreditoTitulo")
+                    or detalhe.get("dataPagamento")
+                    or resumo.get("data_pagamento")
+                ),
+                "status": cls._normalize_status(
+                    detalhe.get("codigoEstadoTituloCobranca")
+                    or detalhe.get("estadoTituloCobranca")
+                    or resumo.get("status")
+                ),
+                "linha_digitavel": str(
+                    detalhe.get("codigoLinhaDigitavel")
+                    or detalhe.get("linhaDigitavel")
+                    or resumo.get("linha_digitavel")
+                    or ""
+                ).strip(),
+                "codigo_barras": str(
+                    detalhe.get("codigoBarraNumerico")
+                    or detalhe.get("codigoBarrasTituloCobranca")
+                    or detalhe.get("codigoBarras")
+                    or resumo.get("codigo_barras")
+                    or ""
+                ).strip(),
+                "url_boleto": str(
+                    detalhe.get("urlImagemBoleto")
+                    or detalhe.get("urlBoleto")
+                    or resumo.get("url_boleto")
+                    or ""
+                ).strip(),
+                "nome_pagador": str(
+                    detalhe.get("nomeSacadoCobranca")
+                    or detalhe.get("nomePagador")
+                    or resumo.get("nome_pagador")
+                    or ""
+                ).strip(),
+                "cpf_cnpj_pagador": _only_digits(
+                    detalhe.get("numeroInscricaoSacadoCobranca")
+                    or detalhe.get("numeroInscricaoPagador")
+                    or resumo.get("cpf_cnpj_pagador")
+                ),
+            }
+        )
+        return combinado
+
+    @classmethod
     def _is_aberto(cls, boleto: dict) -> bool:
         status = str(boleto.get("status") or "").strip().lower()
         if any(word in status for word in ("pago", "baixado", "liquid")):
@@ -420,6 +537,9 @@ class BBBoletoService:
                 resp.raise_for_status()
                 for raw in cls._extrair_lista_boletos_api(resp.json()):
                     boleto = cls._normalizar_boleto_api(raw)
+                    numero_boleto_bb = str(raw.get("numeroBoletoBB") or boleto.get("nosso_numero") or "").strip()
+                    detalhe = cls._consultar_detalhe_boleto_api(numero_boleto_bb) if numero_boleto_bb else None
+                    boleto = cls._combinar_resumo_e_detalhe_api(boleto, detalhe)
                     if doc and _only_digits(boleto.get("cpf_cnpj_pagador")) != doc:
                         continue
                     if nota and _normalizar_numero_nf(boleto.get("numero_nota") or boleto.get("documento")) != nota:
