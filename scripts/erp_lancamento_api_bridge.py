@@ -590,6 +590,19 @@ CONTAS_RECEBER_ABERTO_SQL = """
 """
 
 
+CONTAS_RECEBER_BOLETO_PDF_SQL = """
+    select
+        r.codigo::text as codigo,
+        r.n_nf::text as numero_nota,
+        coalesce(r.nossonumero, '') as nossonumero,
+        coalesce(r.boleto_situacao, '') as boleto_situacao,
+        boleto_pdf
+    from public.treceber r
+    where r.codigo::text = %s
+    limit 1
+"""
+
+
 ENTRADA_CHAPA_SQL = """
     select
         c.codigo::text as codigo_lancamento,
@@ -1617,6 +1630,38 @@ def create_app() -> Flask:
             return jsonify({"sucesso": True, "titulos": titulos})
         except Exception as exc:
             app.logger.exception("Falha ao consultar contas a receber em aberto no ERP")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/contas-receber-boleto-pdf")
+    def consultar_contas_receber_boleto_pdf():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            codigo = str(payload.get("codigo") or "").strip()
+            if not codigo:
+                return jsonify({"sucesso": False, "erro": "codigo_obrigatorio"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(CONTAS_RECEBER_BOLETO_PDF_SQL, (codigo,))
+                    row = cur.fetchone()
+                    if not row:
+                        return jsonify({"sucesso": True, "encontrado": False, "pdf_base64": None})
+
+                    cols = [desc[0] for desc in cur.description]
+                    item = dict(zip(cols, row))
+                    pdf = item.pop("boleto_pdf", None)
+                    item["encontrado"] = True
+                    item["pdf_base64"] = _b64(pdf)
+                    item["pdf_len"] = len(bytes(pdf)) if pdf is not None else 0
+                    return jsonify({"sucesso": True, **item})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar boleto PDF no contas a receber")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/entrada-chapa")
