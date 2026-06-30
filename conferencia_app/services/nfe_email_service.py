@@ -736,38 +736,40 @@ def _montar_corpo_html(
     anexos_texto = "XML da NF-e, DANFE (PDF) e pedido de compra (PDF)"
     if not inclui_pedido_compra:
         anexos_texto = "XML da NF-e e DANFE (PDF)"
+
     portal_bloco = ""
+    boleto_bloco = ""
+
     if portal_url:
         portal_bloco = f"""
-            <tr>
-              <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
-                <table cellpadding="0" cellspacing="0">
-                  <tr><td bgcolor="#0f766e" style="border-radius:6px;background-color:#0f766e">
-                    <a href="{portal_url}" style="display:inline-block;padding:11px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
-                      Acessar NF, XML e boletos
-                    </a>
-                  </td></tr>
-                </table>
-                <div style="margin-top:8px;font-size:12px;color:#475569">
-                  Este link abre um portal seguro com os documentos desta nota fiscal e as cobranças vinculadas.
-                </div>
-              </td>
-            </tr>"""
+                        <tr>
+                            <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
+                                <table cellpadding="0" cellspacing="0">
+                                    <tr><td bgcolor="#0f766e" style="border-radius:6px;background-color:#0f766e">
+                                        <a href="{portal_url}" style="display:inline-block;padding:11px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
+                                            Consultar boleto desta NF
+                                        </a>
+                                    </td></tr>
+                                </table>
+                                <div style="margin-top:8px;font-size:12px;color:#475569">
+                                    Este link abre um portal seguro com os boletos e documentos desta nota fiscal.
+                                </div>
+                            </td>
+                        </tr>"""
 
-        boleto_bloco = ""
-        if boleto_url:
-                boleto_bloco = f"""
+    if boleto_url:
+        boleto_bloco = f"""
                         <tr>
                             <td style="padding:18px 28px 0;font-family:Arial,Helvetica,sans-serif">
                                 <table cellpadding="0" cellspacing="0">
                                     <tr><td bgcolor="#1d4ed8" style="border-radius:6px;background-color:#1d4ed8">
                                         <a href="{boleto_url}" style="display:inline-block;padding:10px 18px;font-size:13px;font-weight:700;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif">
-                                            Consultar boleto da NF {numero_nf}
+                                            Consulta rapida do boleto da NF {numero_nf}
                                         </a>
                                     </td></tr>
                                 </table>
                                 <div style="margin-top:10px;font-size:12px;color:#475569">
-                                    Este link abre a consulta do boleto já filtrada por esta nota fiscal.
+                                    Este link abre a consulta de boletos em aberto ja filtrada por esta nota fiscal.
                                 </div>
                             </td>
                         </tr>"""
