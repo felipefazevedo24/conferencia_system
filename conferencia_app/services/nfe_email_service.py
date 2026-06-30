@@ -34,7 +34,6 @@ from .erp_nfe_emitidas_service import buscar_email_cadastro_erp, buscar_nfe_emit
 from .danfe_service import gerar_danfe
 from .pedidos_service import buscar_linhas_pedido
 from .cliente_portal_service import gerar_token_nf, portal_base_url
-from .grv_contas_receber_service import GRVContasReceberService
 from .smtp_service import enviar_mensagem_smtp
 
 
@@ -569,22 +568,9 @@ def _resolver_nota(numero_nf: str, chave: str | None = None) -> NotaEmitida | No
 
 
 def _montar_link_boleto_nota(nota: NotaEmitida) -> str:
-    """Gera link da consulta de boleto filtrada por NF quando houver contas a receber."""
+    """Gera link da consulta de boleto filtrada por NF."""
     numero_nf = str(nota.numero or "").strip()
     if not numero_nf:
-        return ""
-
-    try:
-        titulos = GRVContasReceberService.consultar_abertos(
-            numero_nota=numero_nf,
-            incluir_pagos=True,
-            limite=5,
-        )
-    except Exception:
-        current_app.logger.exception("Falha ao consultar titulos para NF %s", numero_nf)
-        return ""
-
-    if not titulos:
         return ""
 
     base_url = portal_base_url()
