@@ -182,7 +182,11 @@ def portal_cobranca_dados(token):
     numero_nf = str(payload.get("numero_nf") or "").strip()
     chave = str(payload.get("chave") or "").strip()
     cnpj = str(payload.get("cnpj") or "").strip()
-    boletos = BBBoletoService.consultar_por_nota_valor(numero_nf, 0, somente_abertos=True)
+    # Traz todos os titulos da NF (inclusive os que ainda nao tem boleto emitido e os pagos),
+    # para o portal poder avisar o cliente quando o boleto ainda nao esta disponivel.
+    boletos = BBBoletoService.consultar_por_nota_valor(
+        numero_nf, 0, somente_abertos=False, incluir_pagos=True
+    )
 
     return jsonify({
         "sucesso": True,
