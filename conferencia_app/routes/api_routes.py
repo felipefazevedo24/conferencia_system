@@ -8447,6 +8447,7 @@ def listar_registros_conferencia_simples():
             "nome_cliente": reg.nome_cliente,
             "cliente_origem": reg.cliente_origem,
             "nf_origem": reg.nf_origem,
+            "sem_conferencia": bool(reg.sem_conferencia),
             "transportadora": reg.transportadora,
             "placa": reg.placa,
             "motorista": reg.motorista,
@@ -8865,6 +8866,7 @@ def criar_registro_conferencia_simples():
         transportadora = str(request.form.get("transportadora") or "").strip()
         placa = str(request.form.get("placa") or "").strip().upper()
         motorista = str(request.form.get("motorista") or "").strip()
+        sem_conferencia = str(request.form.get("sem_conferencia") or "").strip().lower() in ("1", "true", "on", "sim")
         fotos_files = request.files.getlist("fotos")
     else:
         payload = request.get_json(silent=True) or {}
@@ -8879,6 +8881,7 @@ def criar_registro_conferencia_simples():
         transportadora = str(payload.get("transportadora") or "").strip()
         placa = str(payload.get("placa") or "").strip().upper()
         motorista = str(payload.get("motorista") or "").strip()
+        sem_conferencia = bool(payload.get("sem_conferencia"))
         fotos_files = []
 
     # Validação básica
@@ -8902,6 +8905,7 @@ def criar_registro_conferencia_simples():
         transportadora=transportadora,
         placa=placa,
         motorista=motorista,
+        sem_conferencia=sem_conferencia,
         status="Pendente de expedição",
     )
     db.session.add(registro)
@@ -8985,7 +8989,7 @@ def criar_registro_conferencia_simples():
         db.session.rollback()
         return jsonify({"error": "Uma ou mais fotos expiraram antes de salvar. Selecione as fotos novamente."}), 400
 
-    if not fotos_salvas:
+    if not fotos_salvas and not sem_conferencia:
         db.session.rollback()
         return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
 
@@ -9001,6 +9005,7 @@ def criar_registro_conferencia_simples():
             "numero_nf": registro.numero_nf,
             "nome_cliente": registro.nome_cliente,
             "cliente_origem": registro.cliente_origem,
+            "sem_conferencia": bool(registro.sem_conferencia),
             "status": registro.status,
             "fotos": fotos_salvas,
         }

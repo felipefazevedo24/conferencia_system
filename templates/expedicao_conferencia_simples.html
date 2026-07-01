@@ -68,6 +68,8 @@
     .exp-list { display: grid; gap: 6px; }
     .exp-fotos-wrap { display: none; margin-top: 6px; }
     .exp-fotos-wrap.show { display: block; }
+    .eui-row.eui-row--sem-conf { border-color: var(--erp-danger) !important; background: linear-gradient(135deg, #fff5f5 0%, #ffe4e4 100%) !important; box-shadow: 0 10px 30px rgba(239,68,68,0.18) !important; }
+    .eui-row.eui-row--sem-conf .eui-row__head { border-left: 4px solid var(--erp-danger); }
     @media (max-width: 1180px) { .exp-grid { grid-template-columns: 1fr; } }
     @media (max-width: 760px) { .exp-form-grid, .exp-meta, .exp-summary, .exp-toolbar { grid-template-columns: 1fr; } .exp-inline { flex-direction: column; align-items: stretch; } .exp-actions { flex-direction: column-reverse; } .exp-row { grid-template-columns: 1fr; gap: 8px; } .exp-row-actions { justify-content: flex-end; flex-wrap: wrap; } }
 
@@ -185,7 +187,18 @@
                         </div>
 
                         <div class="exp-field full">
-                            <label for="fotos">Foto da conferência *</label>
+                            <label>Tipo de expedição</label>
+                            <div class="exp-inline" style="flex-wrap:wrap;">
+                                <button class="exp-btn-secondary" type="button" id="btn-sem-conferencia" aria-pressed="false" style="flex:0 0 auto;">
+                                    <i class="fas fa-triangle-exclamation"></i>&nbsp; Sem conferência de expedição
+                                </button>
+                                <span id="sem-conferencia-hint" class="exp-subtle" style="align-self:center;flex:1;min-width:180px;">Expedição avulsa: registra a saída sem conferência. A foto passa a ser opcional.</span>
+                            </div>
+                            <input type="hidden" name="sem_conferencia" id="sem_conferencia" value="0">
+                        </div>
+
+                        <div class="exp-field full" id="foto-field">
+                            <label for="fotos" id="foto-label">Foto da conferência *</label>
                             <div class="exp-upload">
                                 <div>
                                     <strong>Tire a foto na hora ou escolha da galeria</strong>
@@ -335,6 +348,32 @@ const btnSalvar = document.getElementById("btn-salvar-conferencia");
 const toastEl = document.getElementById("expedicao-toast");
 const isAdmin = {{ "true" if is_admin else "false" }};
 let toastTimer = null;
+
+const btnSemConferencia = document.getElementById("btn-sem-conferencia");
+const semConferenciaInput = document.getElementById("sem_conferencia");
+const fotoLabel = document.getElementById("foto-label");
+const fotoField = document.getElementById("foto-field");
+let semConferencia = false;
+
+function setSemConferencia(ativo) {
+    semConferencia = !!ativo;
+    semConferenciaInput.value = semConferencia ? "1" : "0";
+    btnSemConferencia.setAttribute("aria-pressed", semConferencia ? "true" : "false");
+    if (semConferencia) {
+        btnSemConferencia.style.background = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
+        btnSemConferencia.style.color = "#fff";
+        btnSemConferencia.style.borderColor = "#dc2626";
+        fotoLabel.textContent = "Foto da conferência (opcional)";
+        fotoField.style.opacity = "0.65";
+    } else {
+        btnSemConferencia.style.background = "";
+        btnSemConferencia.style.color = "";
+        btnSemConferencia.style.borderColor = "";
+        fotoLabel.textContent = "Foto da conferência *";
+        fotoField.style.opacity = "";
+    }
+}
+btnSemConferencia.addEventListener("click", () => setSemConferencia(!semConferencia));
 
 // Fotos rascunho: [{rascunho_id, url, nome}] — persistidas no sessionStorage
 const SESSION_FOTOS_KEY = "exp_fotos_rascunho";
@@ -577,6 +616,7 @@ function renderHistorico(data) {
         const aguardando = registro.status_slug === "aguardando_estorno";
         const expedido = registro.status_slug === "expedido";
         const finalizado = registro.status_slug === "finalizado";
+        const semConf = !!registro.sem_conferencia;
         const badgeClass = pending ? "eui-badge--warning"
             : (aguardando ? "eui-badge--danger"
             : (expedido ? "eui-badge--info" : "eui-badge--success"));
@@ -656,11 +696,11 @@ function renderHistorico(data) {
             </div>`;
 
         return `
-            <article class="eui-row" data-registro-id="${registro.id}">
+            <article class="eui-row${semConf ? ' eui-row--sem-conf' : ''}" data-registro-id="${registro.id}">
                 <div class="eui-row__head">
                     <span class="eui-badge ${badgeClass}"><span class="eui-badge__dot"></span>${registro.status}</span>
                     <div class="eui-row__id">
-                        <div class="eui-row__title"><b>${tituloRef}</b>${registro.numero_nf ? `<span class="sep">·</span> NF ${registro.numero_nf}` : ""}<span class="sep">·</span> ${clienteResumo}</div>
+                        <div class="eui-row__title"><b>${tituloRef}</b>${registro.numero_nf ? `<span class="sep">·</span> NF ${registro.numero_nf}` : ""}<span class="sep">·</span> ${clienteResumo}${semConf ? ` <span class="sep">·</span> <span style="color:#dc2626;font-weight:800;"><i class="fas fa-triangle-exclamation"></i> Sem conferência</span>` : ""}</div>
                         <div class="eui-row__meta">
                             <span><i class="far fa-calendar"></i> ${registro.data_conferencia}</span>
                             <span><i class="far fa-user"></i> ${registro.conferente}</span>
@@ -776,7 +816,7 @@ async function excluirCanhotoRegistro(registroId) {
 form.addEventListener("submit", async event => {
     event.preventDefault();
     await filaUploadFotos.catch(() => {});
-    if (!fotosRascunho.length) {
+    if (!fotosRascunho.length && !semConferencia) {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
     }
@@ -796,6 +836,7 @@ form.addEventListener("submit", async event => {
         form.reset();
         tipoReferenciaSelect.value = "Orcamento";
         toggleTipoReferencia();
+        setSemConferencia(false);
         resetNfState();
         limparFotosSession();
         updateFotoPreview();
@@ -810,6 +851,7 @@ form.addEventListener("submit", async event => {
 
 document.getElementById("btn-limpar-form").addEventListener("click", () => {
     resetNfState();
+    setSemConferencia(false);
     limparFotosSession();
     fotosCameraInput.value = "";
     fotosGaleriaInput.value = "";
