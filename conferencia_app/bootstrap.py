@@ -681,6 +681,9 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             ("placa", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN placa VARCHAR(20)"),
             ("motorista", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN motorista VARCHAR(160)"),
             ("sem_conferencia", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN sem_conferencia BOOLEAN NOT NULL DEFAULT 0"),
+            ("sem_conferencia_motivo", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN sem_conferencia_motivo VARCHAR(60)"),
+            ("retirado_por", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN retirado_por VARCHAR(160)"),
+            ("retirada_justificativa", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN retirada_justificativa VARCHAR(500)"),
             (
                 "status",
                 "ALTER TABLE expedicao_conferencia_simples ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'Pendente de expedicao'",

@@ -197,6 +197,26 @@
                             <input type="hidden" name="sem_conferencia" id="sem_conferencia" value="0">
                         </div>
 
+                        <div class="exp-field full hidden" id="sem-conf-detalhes">
+                            <label for="sem_conferencia_motivo">Motivo da expedição sem conferência *</label>
+                            <select id="sem_conferencia_motivo" name="sem_conferencia_motivo" style="min-height:50px;border-radius:16px;border:1px solid rgba(191,205,219,0.96);padding:0 16px;background:#fff;font-size:14px;">
+                                <option value="">Selecione o motivo…</option>
+                                <option value="Expedido sem validação da logística">Expedido sem validação da logística</option>
+                                <option value="Expedido sem nota fiscal">Expedido sem nota fiscal</option>
+                                <option value="Expedido em contraturno da logística">Expedido em contraturno da logística</option>
+                            </select>
+                        </div>
+
+                        <div class="exp-field full hidden" id="retirada-wrapper">
+                            <label for="retirado_por">Quem retirou? *</label>
+                            <input id="retirado_por" name="retirado_por" type="text" placeholder="Nome de quem retirou o material">
+                        </div>
+
+                        <div class="exp-field full hidden" id="retirada-justificativa-wrapper">
+                            <label for="retirada_justificativa">Por quê retirou sem validação da logística?</label>
+                            <textarea id="retirada_justificativa" name="retirada_justificativa" rows="2" placeholder="Opcional" style="border-radius:14px;border:1px solid var(--erp-border);padding:12px 16px;background:#fff;color:var(--erp-text);font-size:14px;font-weight:600;font-family:inherit;resize:vertical;"></textarea>
+                        </div>
+
                         <div class="exp-field full" id="foto-field">
                             <label for="fotos" id="foto-label">Foto da conferência *</label>
                             <div class="exp-upload">
@@ -353,7 +373,34 @@ const btnSemConferencia = document.getElementById("btn-sem-conferencia");
 const semConferenciaInput = document.getElementById("sem_conferencia");
 const fotoLabel = document.getElementById("foto-label");
 const fotoField = document.getElementById("foto-field");
+const semConfDetalhes = document.getElementById("sem-conf-detalhes");
+const motivoSelect = document.getElementById("sem_conferencia_motivo");
+const retiradaWrapper = document.getElementById("retirada-wrapper");
+const retiradaJustWrapper = document.getElementById("retirada-justificativa-wrapper");
+const retiradoPorInput = document.getElementById("retirado_por");
+const retiradaJustInput = document.getElementById("retirada_justificativa");
 let semConferencia = false;
+
+const MOTIVOS_EXIGEM_RETIRADA = [
+    "Expedido sem validação da logística",
+    "Expedido em contraturno da logística",
+];
+
+function toggleRetiradaFields() {
+    const exigeRetirada = MOTIVOS_EXIGEM_RETIRADA.includes(motivoSelect.value);
+    if (exigeRetirada) {
+        retiradaWrapper.classList.remove("hidden");
+        retiradaJustWrapper.classList.remove("hidden");
+        retiradoPorInput.required = true;
+    } else {
+        retiradaWrapper.classList.add("hidden");
+        retiradaJustWrapper.classList.add("hidden");
+        retiradoPorInput.required = false;
+        retiradoPorInput.value = "";
+        retiradaJustInput.value = "";
+    }
+}
+motivoSelect.addEventListener("change", toggleRetiradaFields);
 
 function setSemConferencia(ativo) {
     semConferencia = !!ativo;
@@ -365,12 +412,16 @@ function setSemConferencia(ativo) {
         btnSemConferencia.style.borderColor = "#dc2626";
         fotoLabel.textContent = "Foto da conferência (opcional)";
         fotoField.style.opacity = "0.65";
+        semConfDetalhes.classList.remove("hidden");
     } else {
         btnSemConferencia.style.background = "";
         btnSemConferencia.style.color = "";
         btnSemConferencia.style.borderColor = "";
         fotoLabel.textContent = "Foto da conferência *";
         fotoField.style.opacity = "";
+        semConfDetalhes.classList.add("hidden");
+        motivoSelect.value = "";
+        toggleRetiradaFields();
     }
 }
 btnSemConferencia.addEventListener("click", () => setSemConferencia(!semConferencia));
@@ -719,6 +770,9 @@ function renderHistorico(data) {
                         <div><span>Placa</span><strong>${registro.placa || "—"}</strong></div>
                         <div><span>Motorista</span><strong>${registro.motorista || "—"}</strong></div>
                         <div><span>Origem NF</span><strong>${registro.nf_origem || "Manual"}</strong></div>
+                        ${semConf ? `<div><span>Motivo sem conferência</span><strong style="color:#dc2626;">${registro.sem_conferencia_motivo || "—"}</strong></div>` : ""}
+                        ${semConf && registro.retirado_por ? `<div><span>Quem retirou</span><strong>${registro.retirado_por}</strong></div>` : ""}
+                        ${semConf && registro.retirada_justificativa ? `<div><span>Justificativa da retirada</span><strong>${registro.retirada_justificativa}</strong></div>` : ""}
                     </div>
                     <div class="eui-caption">${captionStatus}</div>
                     ${fotosHtml}
@@ -819,6 +873,16 @@ form.addEventListener("submit", async event => {
     if (!fotosRascunho.length && !semConferencia) {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
+    }
+    if (semConferencia) {
+        if (!motivoSelect.value) {
+            showToast("Selecione o motivo da expedição sem conferência.", "error");
+            return;
+        }
+        if (MOTIVOS_EXIGEM_RETIRADA.includes(motivoSelect.value) && !retiradoPorInput.value.trim()) {
+            showToast("Informe quem retirou o material.", "error");
+            return;
+        }
     }
     btnSalvar.disabled = true;
     btnSalvar.textContent = "Salvando...";

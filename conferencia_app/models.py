@@ -518,6 +518,9 @@ class ExpedicaoConferenciaSimples(db.Model):
     placa = db.Column(db.String(20))
     motorista = db.Column(db.String(160))
     sem_conferencia = db.Column(db.Boolean, nullable=False, default=False)  # Expedição avulsa sem conferência
+    sem_conferencia_motivo = db.Column(db.String(60))  # Motivo da expedição sem conferência
+    retirado_por = db.Column(db.String(160))  # Quem retirou (quando aplicável)
+    retirada_justificativa = db.Column(db.String(500))  # Justificativa opcional da retirada
     status = db.Column(db.String(30), nullable=False, default="Pendente de expedição", index=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)

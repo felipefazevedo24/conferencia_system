@@ -8448,6 +8448,9 @@ def listar_registros_conferencia_simples():
             "cliente_origem": reg.cliente_origem,
             "nf_origem": reg.nf_origem,
             "sem_conferencia": bool(reg.sem_conferencia),
+            "sem_conferencia_motivo": reg.sem_conferencia_motivo,
+            "retirado_por": reg.retirado_por,
+            "retirada_justificativa": reg.retirada_justificativa,
             "transportadora": reg.transportadora,
             "placa": reg.placa,
             "motorista": reg.motorista,
@@ -8867,6 +8870,9 @@ def criar_registro_conferencia_simples():
         placa = str(request.form.get("placa") or "").strip().upper()
         motorista = str(request.form.get("motorista") or "").strip()
         sem_conferencia = str(request.form.get("sem_conferencia") or "").strip().lower() in ("1", "true", "on", "sim")
+        sem_conferencia_motivo = str(request.form.get("sem_conferencia_motivo") or "").strip()
+        retirado_por = str(request.form.get("retirado_por") or "").strip()
+        retirada_justificativa = str(request.form.get("retirada_justificativa") or "").strip()
         fotos_files = request.files.getlist("fotos")
     else:
         payload = request.get_json(silent=True) or {}
@@ -8882,6 +8888,9 @@ def criar_registro_conferencia_simples():
         placa = str(payload.get("placa") or "").strip().upper()
         motorista = str(payload.get("motorista") or "").strip()
         sem_conferencia = bool(payload.get("sem_conferencia"))
+        sem_conferencia_motivo = str(payload.get("sem_conferencia_motivo") or "").strip()
+        retirado_por = str(payload.get("retirado_por") or "").strip()
+        retirada_justificativa = str(payload.get("retirada_justificativa") or "").strip()
         fotos_files = []
 
     # Validação básica
@@ -8891,6 +8900,26 @@ def criar_registro_conferencia_simples():
     elif tipo_referencia == "Orcamento":
         if not orcamento:
             return jsonify({"error": "orcamento é obrigatório para tipo Orcamento."}), 400
+
+    # Validação da expedição sem conferência
+    MOTIVOS_SEM_CONFERENCIA = {
+        "Expedido sem validação da logística",
+        "Expedido sem nota fiscal",
+        "Expedido em contraturno da logística",
+    }
+    MOTIVOS_EXIGEM_RETIRADO_POR = {
+        "Expedido sem validação da logística",
+        "Expedido em contraturno da logística",
+    }
+    if sem_conferencia:
+        if sem_conferencia_motivo not in MOTIVOS_SEM_CONFERENCIA:
+            return jsonify({"error": "Selecione o motivo da expedição sem conferência."}), 400
+        if sem_conferencia_motivo in MOTIVOS_EXIGEM_RETIRADO_POR and not retirado_por:
+            return jsonify({"error": "Informe quem retirou o material."}), 400
+    else:
+        sem_conferencia_motivo = ""
+        retirado_por = ""
+        retirada_justificativa = ""
 
     registro = ExpedicaoConferenciaSimples(
         orcamento=orcamento,
@@ -8906,6 +8935,9 @@ def criar_registro_conferencia_simples():
         placa=placa,
         motorista=motorista,
         sem_conferencia=sem_conferencia,
+        sem_conferencia_motivo=sem_conferencia_motivo or None,
+        retirado_por=retirado_por or None,
+        retirada_justificativa=retirada_justificativa or None,
         status="Pendente de expedição",
     )
     db.session.add(registro)
@@ -9006,6 +9038,9 @@ def criar_registro_conferencia_simples():
             "nome_cliente": registro.nome_cliente,
             "cliente_origem": registro.cliente_origem,
             "sem_conferencia": bool(registro.sem_conferencia),
+            "sem_conferencia_motivo": registro.sem_conferencia_motivo,
+            "retirado_por": registro.retirado_por,
+            "retirada_justificativa": registro.retirada_justificativa,
             "status": registro.status,
             "fotos": fotos_salvas,
         }
