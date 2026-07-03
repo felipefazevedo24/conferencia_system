@@ -516,12 +516,13 @@ def _quantidade_divergente_mas_tolerada(item: ItemNota, quantidade_convertida: f
     return 0.0001 < diferenca <= _get_tolerancia_quantidade(item)
 
 
-def _summarize_divergencia_nota(numero_nota: str):
-    tentativas = (
-        LogTentativaConferencia.query.filter_by(numero_nota=str(numero_nota))
-        .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
-        .all()
-    )
+def _summarize_divergencia_core(tentativas, descricao_por_id):
+    """Resume divergências a partir de tentativas já carregadas (sem consultar o banco).
+
+    ``tentativas`` são as LogTentativaConferencia de uma única nota e
+    ``descricao_por_id`` mapeia item_id -> descrição (usado apenas para os itens
+    com divergência na última tentativa).
+    """
     if not tentativas:
         return {
             "divergencia": "Não",
@@ -554,13 +555,6 @@ def _summarize_divergencia_nota(numero_nota: str):
     ]
 
     if divergencias_ultima:
-        itens_ultima = (
-            ItemNota.query.filter(
-                ItemNota.numero_nota == str(numero_nota),
-                ItemNota.id.in_({int(t.item_id) for t in divergencias_ultima}),
-            ).all()
-        )
-        descricao_por_id = {int(i.id): i.descricao for i in itens_ultima}
         detalhes = []
         for t in divergencias_ultima:
             desc = descricao_por_id.get(int(t.item_id), f"Item {t.item_id}")
@@ -579,6 +573,33 @@ def _summarize_divergencia_nota(numero_nota: str):
         "tentativas_invalidas": total_invalidas,
         "detalhe_divergencia": f"Divergências resolvidas após {total_invalidas} tentativa(s) inválida(s).",
     }
+
+
+def _summarize_divergencia_nota(numero_nota: str):
+    tentativas = (
+        LogTentativaConferencia.query.filter_by(numero_nota=str(numero_nota))
+        .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
+        .all()
+    )
+    if not tentativas:
+        return _summarize_divergencia_core([], {})
+
+    ultima_tentativa = max(int(t.tentativa_numero) for t in tentativas)
+    divergent_ids = {
+        int(t.item_id)
+        for t in tentativas
+        if int(t.tentativa_numero) == ultima_tentativa and str(t.status_item or "").upper() == "DIVERGÊNCIA"
+    }
+    descricao_por_id = {}
+    if divergent_ids:
+        itens_ultima = (
+            ItemNota.query.filter(
+                ItemNota.numero_nota == str(numero_nota),
+                ItemNota.id.in_(divergent_ids),
+            ).all()
+        )
+        descricao_por_id = {int(i.id): i.descricao for i in itens_ultima}
+    return _summarize_divergencia_core(tentativas, descricao_por_id)
 
 
 def _formatar_descricao_etiqueta(itens):
@@ -1703,12 +1724,67 @@ def _build_notas_liberadas_records(search_nota=None):
         .all()
     )
 
-    for row in notas:
-        numero_nota = str(row[0] or "").strip()
-        if not numero_nota:
-            continue
+    numeros_raw = [row[0] for row in notas if str(row[0] or "").strip()]
+    if not numeros_raw:
+        return registros
 
-        itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    def _chunks(seq, size=500):
+        for i in range(0, len(seq), size):
+            yield seq[i : i + size]
+
+    # Batch load de todos os dados necessários (evita N+1 por nota).
+    itens_por_nota: dict[str, list] = {}
+    for chunk in _chunks(numeros_raw):
+        for item in ItemNota.query.filter(ItemNota.numero_nota.in_(chunk)).all():
+            chave = str(item.numero_nota or "").strip()
+            if chave:
+                itens_por_nota.setdefault(chave, []).append(item)
+
+    estorno_por_nota: dict[str, dict] = {}
+    for chunk in _chunks(numeros_raw):
+        rows = (
+            db.session.query(
+                LogEstornoLancamento.numero_nota,
+                func.max(LogEstornoLancamento.data_estorno),
+                func.count(LogEstornoLancamento.id),
+            )
+            .filter(LogEstornoLancamento.numero_nota.in_(chunk))
+            .group_by(LogEstornoLancamento.numero_nota)
+            .all()
+        )
+        for numero, ultima_data, total in rows:
+            estorno_por_nota[str(numero or "").strip()] = {
+                "ultima_data": ultima_data,
+                "total": int(total or 0),
+            }
+
+    reversao_por_nota: dict[str, "datetime | None"] = {}
+    for chunk in _chunks(numeros_raw):
+        rows = (
+            db.session.query(
+                LogReversaoConferencia.numero_nota,
+                func.max(LogReversaoConferencia.data_reversao),
+            )
+            .filter(LogReversaoConferencia.numero_nota.in_(chunk))
+            .group_by(LogReversaoConferencia.numero_nota)
+            .all()
+        )
+        for numero, ultima_data in rows:
+            reversao_por_nota[str(numero or "").strip()] = ultima_data
+
+    tentativas_por_nota: dict[str, list] = {}
+    for chunk in _chunks(numeros_raw):
+        tentativas = (
+            LogTentativaConferencia.query.filter(LogTentativaConferencia.numero_nota.in_(chunk))
+            .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
+            .all()
+        )
+        for t in tentativas:
+            chave = str(t.numero_nota or "").strip()
+            if chave:
+                tentativas_por_nota.setdefault(chave, []).append(t)
+
+    for numero_nota, itens in itens_por_nota.items():
         if not itens:
             continue
 
@@ -1730,16 +1806,9 @@ def _build_notas_liberadas_records(search_nota=None):
         fim_conferencia = max((item.fim_conferencia for item in itens if item.fim_conferencia), default=None)
         data_lancamento = max((item.data_lancamento for item in itens if item.data_lancamento), default=None)
         data_importacao = max((item.data_importacao for item in itens if item.data_importacao), default=None)
-        ultimo_estorno_lancamento = (
-            LogEstornoLancamento.query.filter_by(numero_nota=numero_nota)
-            .order_by(LogEstornoLancamento.data_estorno.desc())
-            .first()
-        )
-        ultima_reversao_conferencia = (
-            LogReversaoConferencia.query.filter_by(numero_nota=numero_nota)
-            .order_by(LogReversaoConferencia.data_reversao.desc())
-            .first()
-        )
+        estorno_info = estorno_por_nota.get(numero_nota)
+        ultimo_estorno_data = estorno_info["ultima_data"] if estorno_info else None
+        ultima_reversao_data = reversao_por_nota.get(numero_nota)
         data_referencia = max(
             [
                 data
@@ -1747,8 +1816,8 @@ def _build_notas_liberadas_records(search_nota=None):
                     fim_conferencia,
                     data_lancamento,
                     data_importacao,
-                    ultimo_estorno_lancamento.data_estorno if ultimo_estorno_lancamento else None,
-                    ultima_reversao_conferencia.data_reversao if ultima_reversao_conferencia else None,
+                    ultimo_estorno_data,
+                    ultima_reversao_data,
                 ]
                 if data is not None
             ],
@@ -1760,8 +1829,10 @@ def _build_notas_liberadas_records(search_nota=None):
 
         total_itens = len(itens)
         total_quantidade = sum(float(item.qtd_real or 0) for item in itens)
-        liberacoes = max(1, LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).count())
-        resumo_divergencia = _summarize_divergencia_nota(numero_nota)
+        liberacoes = max(1, estorno_info["total"] if estorno_info else 0)
+        tentativas_nota = tentativas_por_nota.get(numero_nota, [])
+        descricao_por_id = {int(item.id): item.descricao for item in itens}
+        resumo_divergencia = _summarize_divergencia_core(tentativas_nota, descricao_por_id)
         motivo_liberacao = (
             resumo_divergencia["detalhe_divergencia"]
             if resumo_divergencia["divergencia"] == "Sim" and resumo_divergencia["detalhe_divergencia"]
