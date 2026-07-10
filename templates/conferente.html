@@ -595,9 +595,14 @@
         <div class="conf-panel">
             <div class="conf-header">
                 <h3 id="n-atual">EXECUÇÃO DE CONFERÊNCIA FÍSICA</h3>
-                <button class="btn-sap btn-danger" onclick="abrirModalDevolucao()">
-                    <i class="fas fa-undo-alt"></i> Recusar Mercadoria
-                </button>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn-sap btn-warning" onclick="abrirModalSemConferencia()">
+                        <i class="fas fa-forward"></i> Não passou pela conferência
+                    </button>
+                    <button class="btn-sap btn-danger" onclick="abrirModalDevolucao()">
+                        <i class="fas fa-undo-alt"></i> Recusar Mercadoria
+                    </button>
+                </div>
             </div>
 
             <div class="conf-progress">
@@ -721,6 +726,31 @@
         <div class="modal-foot">
             <button class="btn-sap btn-secondary" onclick="fecharModalDevolucao()">Cancelar</button>
             <button class="btn-sap btn-danger" onclick="solicitarDevolucaoTotal()">Solicitar Aprovação</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-sem-conferencia" class="modal-overlay" style="z-index: 3300;">
+    <div class="modal-sap" style="max-width: 600px;">
+        <div class="modal-head"><span>MATERIAL SEM CONFERÊNCIA LOGÍSTICA</span></div>
+        <div class="modal-body">
+            <div style="font-weight:800; font-size:16px; margin-bottom:8px; color: var(--sap-blue);">NF: <span id="sem-conf-nf-ref">---</span></div>
+            <div style="color:#475569; margin-bottom:14px; line-height:1.5;">Ao sinalizar que o material não passou pela conferência logística, não é necessário informar as quantidades. A NF seguirá normalmente para o Documento de Entrada.</div>
+            <label class="form-label">Motivo da não conferência</label>
+            <select id="sem-conf-motivo" class="filtro-nota" style="width:100%; height:40px; margin-bottom:15px;" onchange="atualizarCampoFuncionario()">
+                <option value="">Selecione...</option>
+                <option value="Material recebido em contraturno e/ou feriado">Material recebido em contraturno e/ou feriado</option>
+                <option value="Material recebido por outro funcionário">Material recebido por outro funcionário</option>
+            </select>
+            <div id="sem-conf-funcionario-wrap" style="display:none;">
+                <label class="form-label">Nome do funcionário que recebeu</label>
+                <input type="text" id="sem-conf-funcionario" class="filtro-nota" style="width:100%;" placeholder="Informe o nome do funcionário...">
+            </div>
+            <div id="sem-conf-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="fecharModalSemConferencia()">Cancelar</button>
+            <button class="btn-sap btn-warning" onclick="confirmarSemConferencia()">Confirmar recebimento</button>
         </div>
     </div>
 </div>
@@ -1373,6 +1403,64 @@
 
     function fecharModalDevolucao() {
         document.getElementById('modal-devolucao').style.display = 'none';
+    }
+
+    function abrirModalSemConferencia() {
+        if (!notaSel) {
+            alert('Abra uma NF antes de sinalizar a não conferência.');
+            return;
+        }
+        document.getElementById('sem-conf-nf-ref').innerText = notaSel;
+        document.getElementById('sem-conf-motivo').value = '';
+        document.getElementById('sem-conf-funcionario').value = '';
+        document.getElementById('sem-conf-funcionario-wrap').style.display = 'none';
+        document.getElementById('sem-conf-feedback').innerText = '';
+        document.getElementById('modal-sem-conferencia').style.display = 'flex';
+    }
+
+    function fecharModalSemConferencia() {
+        document.getElementById('modal-sem-conferencia').style.display = 'none';
+    }
+
+    function atualizarCampoFuncionario() {
+        const motivo = document.getElementById('sem-conf-motivo').value;
+        const wrap = document.getElementById('sem-conf-funcionario-wrap');
+        wrap.style.display = motivo === 'Material recebido por outro funcionário' ? 'block' : 'none';
+    }
+
+    async function confirmarSemConferencia() {
+        const motivo = document.getElementById('sem-conf-motivo').value;
+        const funcionario = (document.getElementById('sem-conf-funcionario').value || '').trim();
+        const feedback = document.getElementById('sem-conf-feedback');
+
+        if (!motivo) {
+            feedback.innerText = 'Selecione o motivo da não conferência.';
+            return;
+        }
+        if (motivo === 'Material recebido por outro funcionário' && !funcionario) {
+            feedback.innerText = 'Informe o nome do funcionário que recebeu o material.';
+            return;
+        }
+
+        feedback.innerText = 'Processando...';
+        try {
+            const response = await fetch('/api/conferencia/sem_conferencia_logistica', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ nota: notaSel, motivo, funcionario_recebedor: funcionario }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.sucesso) {
+                feedback.innerText = data.msg || 'Falha ao concluir sem conferência.';
+                return;
+            }
+            fecharModalSemConferencia();
+            pararHeartbeat();
+            alert(data.msg || 'Recebimento concluído sem conferência logística.');
+            location.reload();
+        } catch (e) {
+            feedback.innerText = 'Erro de rede.';
+        }
     }
 
     async function solicitarDevolucaoTotal() {

@@ -6419,6 +6419,79 @@ def validar():
     return jsonify(payload)
 
 
+MOTIVOS_SEM_CONFERENCIA_LOGISTICA = {
+    "Material recebido em contraturno e/ou feriado",
+    "Material recebido por outro funcionário",
+}
+
+
+@api_bp.route("/api/conferencia/sem_conferencia_logistica", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def concluir_sem_conferencia_logistica():
+    """Conclui o recebimento sem contagem física quando o material não passou pela
+    conferência logística (recebido em contraturno/feriado ou por outro funcionário)."""
+    user = session["username"]
+    dados = request.get_json() or {}
+    numero_nota = str(dados.get("nota") or "").strip()
+    motivo = str(dados.get("motivo") or "").strip()
+    funcionario_recebedor = str(dados.get("funcionario_recebedor") or "").strip()[:100]
+
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
+    if motivo not in MOTIVOS_SEM_CONFERENCIA_LOGISTICA:
+        return jsonify({"sucesso": False, "msg": "Selecione um motivo válido para a não conferência."}), 400
+    if motivo == "Material recebido por outro funcionário" and not funcionario_recebedor:
+        return jsonify({"sucesso": False, "msg": "Informe o nome do funcionário que recebeu o material."}), 400
+
+    itens_db = _filter_itens_para_conferencia(
+        ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente").all()
+    )
+    if not itens_db:
+        return jsonify({"sucesso": False, "msg": "NF sem itens pendentes para conferência."}), 404
+
+    agora = datetime.now()
+    for item in itens_db:
+        if not item.inicio_conferencia:
+            item.inicio_conferencia = agora
+        item.status = "Concluído"
+        item.usuario_conferencia = user
+        item.fim_conferencia = agora
+        item.sem_conferencia_logistica = True
+
+    detalhe = (
+        f"{motivo} - Recebido por: {funcionario_recebedor}"
+        if funcionario_recebedor
+        else motivo
+    )
+    db.session.add(
+        LogEventoFiscalNota(
+            numero_nota=numero_nota,
+            evento="RecebidoSemConferenciaLogistica",
+            etapa="Recebimento",
+            status="Concluído",
+            detalhe=detalhe[:1000],
+            usuario=user,
+        )
+    )
+
+    chave_api = itens_db[0].chave_acesso
+    _release_lock(numero_nota)
+    db.session.commit()
+
+    if chave_api:
+        try:
+            enviar_decisao_consyste(chave_api, "receber", f"Sem conferência logística: {detalhe}")
+        except Exception:
+            current_app.logger.exception("Falha ao enviar decisão Consyste (sem conferência logística)")
+
+    return jsonify(
+        {
+            "sucesso": True,
+            "msg": "Recebimento concluído sem conferência logística. NF seguirá para o Documento de Entrada.",
+        }
+    )
+
+
 @api_bp.route("/api/devolver_material", methods=["POST"])
 @roles_required("Admin")
 def devolver_material():
