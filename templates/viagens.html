@@ -498,48 +498,17 @@
                         <div id="sol-count-badge" style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:3px 10px;white-space:nowrap;display:none"></div>
                     </div>
                 </div>
-                <!-- Paradas manuais -->
-                <div class="doc-form-block" id="manual-paradas-block" style="border:1px dashed #bfdbfe;border-radius:10px;padding:12px 14px;background:#f8fbff;">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;" onclick="toggleManualParadas()">
-                        <label class="doc-form-label" style="cursor:pointer;margin:0;display:flex;align-items:center;gap:7px;">
-                            <i class="fa-solid fa-location-plus" style="color:#2563eb"></i> Adicionar paradas manuais
-                        </label>
-                        <i class="fa-solid fa-chevron-down" id="mp-toggle-icon" style="font-size:11px;color:#94a3b8;transition:transform .2s;"></i>
-                    </div>
-                    <div id="manual-paradas-section" style="display:none;margin-top:12px;">
-                        <div class="doc-form-row-3">
-                            <div class="doc-form-block">
-                                <label class="doc-form-label">Tipo</label>
-                                <select id="mp-tipo" class="doc-select">
-                                    <option value="ENTREGA">Entrega</option>
-                                    <option value="COLETA">Coleta</option>
-                                    <option value="PARADA">Parada</option>
-                                    <option value="ABASTECIMENTO">Abastecimento</option>
-                                </select>
-                            </div>
-                            <div class="doc-form-block" style="grid-column:span 2">
-                                <label class="doc-form-label">Nome do parceiro / destino</label>
-                                <input type="text" id="mp-nome" class="doc-input" placeholder="Ex: Cliente XPTO, Posto Shell">
-                            </div>
-                        </div>
-                        <div class="doc-form-row">
-                            <div class="doc-form-block" style="flex:2">
-                                <label class="doc-form-label">Endereço</label>
-                                <input type="text" id="mp-endereco" class="doc-input" placeholder="Ex: Rua das Flores, 100">
-                            </div>
-                            <div class="doc-form-block" style="flex:1.5">
-                                <label class="doc-form-label">Cidade</label>
-                                <input type="text" id="mp-cidade" class="doc-input" placeholder="Campinas">
-                            </div>
-                            <div class="doc-form-block" style="flex:.5">
-                                <label class="doc-form-label">UF</label>
-                                <input type="text" id="mp-uf" class="doc-input" placeholder="SP" maxlength="2" style="text-transform:uppercase">
-                            </div>
-                        </div>
-                        <button type="button" class="doc-btn doc-btn-outline doc-btn-sm" onclick="adicionarParadaManual()" style="margin-top:4px;">
-                            <i class="fa-solid fa-plus"></i> Adicionar parada
-                        </button>
-                        <div id="mp-lista" style="margin-top:8px;display:grid;gap:4px;"></div>
+                <!-- Viagem avulsa -->
+                <div class="doc-form-block" id="avulsa-block" style="border:1px dashed #fcd34d;border-radius:10px;padding:12px 14px;background:#fffbeb;">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin:0;">
+                        <input type="checkbox" id="nova-avulsa" onchange="atualizarModoViagemAvulsa()">
+                        <span class="doc-form-label" style="cursor:pointer;margin:0;display:flex;align-items:center;gap:7px;">
+                            <i class="fa-solid fa-user-clock" style="color:#d97706"></i> Viagem avulsa (sem solicitações/paradas)
+                        </span>
+                    </label>
+                    <div id="avulsa-funcionario-wrap" style="display:none;margin-top:12px;">
+                        <label class="doc-form-label">Funcionário que está saindo com o veículo *</label>
+                        <input type="text" id="nova-funcionario" class="doc-input" placeholder="Nome do funcionário responsável">
                     </div>
                 </div>
                 <div class="doc-form-block">
@@ -1016,47 +985,6 @@ function filtroRapido(status) {
     const el = document.getElementById(map[status] || 'qfc-all');
     if (el) el.classList.add('active');
     carregarLista();
-}
-
-// -------------------- paradas manuais
-function toggleManualParadas() {
-    const sec = document.getElementById('manual-paradas-section');
-    const icon = document.getElementById('mp-toggle-icon');
-    const open = sec.style.display === 'block';
-    sec.style.display = open ? 'none' : 'block';
-    if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
-}
-
-function adicionarParadaManual() {
-    const tipo = document.getElementById('mp-tipo').value;
-    const nome = document.getElementById('mp-nome').value.trim();
-    const endereco = document.getElementById('mp-endereco').value.trim();
-    const cidade = document.getElementById('mp-cidade').value.trim();
-    const uf = document.getElementById('mp-uf').value.trim().toUpperCase();
-    if (!nome && !cidade) { toast('Informe ao menos o nome do parceiro ou a cidade.', 'error'); return; }
-    paradasManuais.push({ tipo, parceiro_nome: nome || null, endereco: endereco || null, cidade: cidade || null, uf: uf || null });
-    document.getElementById('mp-nome').value = '';
-    document.getElementById('mp-endereco').value = '';
-    document.getElementById('mp-cidade').value = '';
-    document.getElementById('mp-uf').value = '';
-    renderParadasManuais();
-}
-
-function removerParadaManual(idx) {
-    paradasManuais.splice(idx, 1);
-    renderParadasManuais();
-}
-
-function renderParadasManuais() {
-    const el = document.getElementById('mp-lista');
-    if (!el) return;
-    if (!paradasManuais.length) { el.innerHTML = ''; return; }
-    el.innerHTML = paradasManuais.map((p, i) => `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px;">
-            <span class="doc-chip slate" style="min-width:60px;text-align:center">${p.tipo}</span>
-            <div style="flex:1;min-width:0;"><strong>${p.parceiro_nome || '—'}</strong>${p.cidade ? ` · ${p.cidade}${p.uf ? '/'+p.uf : ''}` : ''}${p.endereco ? ' · '+p.endereco : ''}</div>
-            <button type="button" style="color:#dc2626;background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;" onclick="removerParadaManual(${i})"><i class="fa-solid fa-trash-can"></i></button>
-        </div>`).join('');
 }
 
 // -------------------- kpis / dashboard
@@ -1662,11 +1590,12 @@ async function abrirModalNova() {
     document.forms['form-nova'].reset();
     solSelecionadas.clear();
     paradasManuais = [];
-    renderParadasManuais();
-    const secMP = document.getElementById('manual-paradas-section');
-    if (secMP) secMP.style.display = 'none';
-    const mpIcon = document.getElementById('mp-toggle-icon');
-    if (mpIcon) mpIcon.style.transform = '';
+    const avulsaChk = document.getElementById('nova-avulsa');
+    if (avulsaChk) avulsaChk.checked = false;
+    const func = document.getElementById('nova-funcionario');
+    if (func) func.value = '';
+    const funcWrap = document.getElementById('avulsa-funcionario-wrap');
+    if (funcWrap) funcWrap.style.display = 'none';
     document.querySelectorAll('#form-nova [data-user-modified]').forEach(el => delete el.dataset.userModified);
     const badge = document.getElementById('sol-count-badge');
     if (badge) badge.style.display = 'none';
@@ -1675,18 +1604,36 @@ async function abrirModalNova() {
     document.getElementById('modal-nova').classList.add('show');
 }
 
+function atualizarModoViagemAvulsa() {
+    const avulsa = document.getElementById('nova-avulsa')?.checked;
+    const funcWrap = document.getElementById('avulsa-funcionario-wrap');
+    if (funcWrap) funcWrap.style.display = avulsa ? 'block' : 'none';
+    const solBlock = document.getElementById('sol-pick-block');
+    if (solBlock) solBlock.style.display = avulsa ? 'none' : '';
+    if (avulsa) {
+        solSelecionadas.clear();
+        document.querySelectorAll('#sol-pick-list .sol-pick').forEach(el => {
+            el.classList.remove('selected');
+            const cb = el.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = false;
+        });
+        const badge = document.getElementById('sol-count-badge');
+        if (badge) badge.style.display = 'none';
+    }
+}
+
 function atualizarModoViagemAleatoria() {
     const form = document.getElementById('form-nova');
     if (!form) return;
     const tipo = (form.querySelector('[name=tipo]')?.value || '').toUpperCase();
     const aleatoria = tipo === 'ALEATORIA';
     const solBlock = document.getElementById('sol-pick-block');
-    const manualBlock = document.getElementById('manual-paradas-block');
+    const avulsaBlock = document.getElementById('avulsa-block');
     const obs = document.getElementById('nova-observacao');
     const obsLabel = document.getElementById('nova-observacao-label');
 
     if (solBlock) solBlock.style.display = aleatoria ? 'none' : '';
-    if (manualBlock) manualBlock.style.display = aleatoria ? 'none' : '';
+    if (avulsaBlock) avulsaBlock.style.display = aleatoria ? 'none' : '';
     if (obs) {
         obs.required = aleatoria;
         obs.placeholder = aleatoria ? 'Descreva obrigatoriamente o motivo/destino da viagem aleatória.' : '';
@@ -1696,7 +1643,10 @@ function atualizarModoViagemAleatoria() {
     if (aleatoria) {
         solSelecionadas.clear();
         paradasManuais = [];
-        renderParadasManuais();
+        const avulsaChk = document.getElementById('nova-avulsa');
+        if (avulsaChk) avulsaChk.checked = false;
+        const funcWrap = document.getElementById('avulsa-funcionario-wrap');
+        if (funcWrap) funcWrap.style.display = 'none';
         const badge = document.getElementById('sol-count-badge');
         if (badge) badge.style.display = 'none';
         document.querySelectorAll('#sol-pick-list .sol-pick').forEach(el => {
@@ -1704,8 +1654,6 @@ function atualizarModoViagemAleatoria() {
             const cb = el.querySelector('input[type=checkbox]');
             if (cb) cb.checked = false;
         });
-        const secMP = document.getElementById('manual-paradas-section');
-        if (secMP) secMP.style.display = 'none';
     }
 }
 
@@ -1882,14 +1830,21 @@ document.getElementById('form-nova').addEventListener('submit', async e => {
     const f = new FormData(e.target);
     const payload = Object.fromEntries(f.entries());
     const aleatoria = String(payload.tipo || '').toUpperCase() === 'ALEATORIA';
-    payload.solicitacao_ids = aleatoria ? [] : Array.from(solSelecionadas);
-    payload.paradas = aleatoria ? [] : paradasManuais;
+    const avulsa = !!document.getElementById('nova-avulsa')?.checked;
+    payload.avulsa = avulsa;
+    payload.funcionario_responsavel = avulsa ? (document.getElementById('nova-funcionario')?.value || '').trim() : '';
+    payload.solicitacao_ids = (aleatoria || avulsa) ? [] : Array.from(solSelecionadas);
+    payload.paradas = [];
+    if (avulsa && !payload.funcionario_responsavel) {
+        toast('Informe o nome do funcionário que está saindo com o veículo.', 'error');
+        return;
+    }
     if (aleatoria && !String(payload.observacao || '').trim()) {
         toast('Informe a descrição obrigatória da viagem aleatória.', 'error');
         return;
     }
-    if (!aleatoria && payload.solicitacao_ids.length === 0 && payload.paradas.length === 0) {
-        toast('Selecione pelo menos uma solicitação pendente ou adicione uma parada manual.', 'error');
+    if (!aleatoria && !avulsa && payload.solicitacao_ids.length === 0) {
+        toast('Selecione pelo menos uma solicitação pendente ou marque como viagem avulsa.', 'error');
         return;
     }
     try {

@@ -825,6 +825,11 @@ def initialize_database(app: Flask) -> None:
         _ensure_agendamento_veiculos()
 
         try:
+            _ensure_viagem_columns()
+        except Exception:
+            pass
+
+        try:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
@@ -1196,6 +1201,24 @@ def _ensure_agendamento_veiculos() -> None:
                 ativo=True,
             ))
     db.session.commit()
+
+
+def _ensure_viagem_columns() -> None:
+    if not _has_table("viagem"):
+        return
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("viagem")
+        missing_columns = [
+            ("avulsa", "ALTER TABLE viagem ADD COLUMN avulsa BOOLEAN NOT NULL DEFAULT 0"),
+            ("funcionario_responsavel", "ALTER TABLE viagem ADD COLUMN funcionario_responsavel VARCHAR(160)"),
+        ]
+        for column_name, ddl in missing_columns:
+            if column_name not in cols:
+                conn.execute(db.text(ddl))
+                conn.commit()
+    finally:
+        conn.close()
 
 
 def _ensure_depositos_wms() -> None:

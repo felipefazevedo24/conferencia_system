@@ -807,6 +807,9 @@ class Viagem(db.Model):
     liberada_em = db.Column(db.DateTime)
     liberada_por = db.Column(db.String(100))
     destino_unico = db.Column(db.Boolean, default=False, nullable=False)
+    # Viagem avulsa: veiculo sai sem solicitacoes/paradas, apenas com o funcionario responsavel
+    avulsa = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    funcionario_responsavel = db.Column(db.String(160))
 
 
 class ViagemParada(db.Model):

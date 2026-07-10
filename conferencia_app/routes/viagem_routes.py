@@ -228,10 +228,14 @@ def _checklist_liberacao(v: Viagem, paradas: list[ViagemParada] | None = None) -
     avisos: list[str] = []
     if not v.veiculo_id:
         bloqueios.append("Veiculo nao definido.")
-    if not v.motorista_id:
-        bloqueios.append("Motorista nao definido.")
-    if not paradas:
-        bloqueios.append("Adicione pelo menos uma parada.")
+    if v.avulsa:
+        if not str(v.funcionario_responsavel or "").strip():
+            bloqueios.append("Informe o funcionario responsavel pela viagem avulsa.")
+    else:
+        if not v.motorista_id:
+            bloqueios.append("Motorista nao definido.")
+        if not paradas:
+            bloqueios.append("Adicione pelo menos uma parada.")
     if not v.saida_prevista:
         bloqueios.append("Informe a saida prevista.")
     for idx, parada in enumerate(paradas, start=1):
@@ -364,6 +368,8 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
         "liberada_em": v.liberada_em.isoformat() if v.liberada_em else None,
         "liberada_por": v.liberada_por,
         "destino_unico": bool(v.destino_unico),
+        "avulsa": bool(v.avulsa),
+        "funcionario_responsavel": v.funcionario_responsavel,
         "alertas": alertas,
         "sla": sla,
         "prioridade_operacional": sla["prioridade"],
@@ -907,9 +913,16 @@ def criar():
     observacao = str(p.get("observacao") or "").strip()
     if tipo == "ALEATORIA" and not observacao:
         return jsonify({"sucesso": False, "msg": "Descricao obrigatoria para viagem aleatoria."}), 400
+    avulsa = bool(p.get("avulsa"))
+    funcionario_responsavel = str(p.get("funcionario_responsavel") or "").strip()
+    if avulsa and not funcionario_responsavel:
+        return jsonify({"sucesso": False, "msg": "Informe o nome do funcionario que esta saindo com o veiculo."}), 400
     sol_ids = p.get("solicitacao_ids") or []
     paradas_livres = p.get("paradas") or []
-    if tipo == "ALEATORIA":
+    if avulsa:
+        sol_ids = []
+        paradas_livres = []
+    elif tipo == "ALEATORIA":
         sol_ids = []
         paradas_livres = []
     elif not sol_ids and not paradas_livres:
@@ -932,11 +945,13 @@ def criar():
         codigo=_proximo_codigo(),
         veiculo_id=veiculo_id,
         motorista_id=motorista_id,
-        motorista_nome=(p.get("motorista_nome") or (motorista.nome if motorista else None)),
+        motorista_nome=(p.get("motorista_nome") or (motorista.nome if motorista else None) or (funcionario_responsavel if avulsa else None)),
         tipo=tipo,
         status="Planejada",
         titulo=str(p.get("titulo") or "").strip() or None,
         observacao=observacao or None,
+        avulsa=avulsa,
+        funcionario_responsavel=funcionario_responsavel or None,
         saida_prevista=saida_prevista,
         retorno_previsto=retorno_previsto,
         km_previsto=_parse_float(p.get("km_previsto")),
