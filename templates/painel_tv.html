@@ -102,20 +102,22 @@
   .slides-nav .sdot.on { background: var(--recebimento); width: 26px; border-radius: 6px; }
 
   /* ---------- Painel de compras (OCs) ---------- */
-  .panel.compras { flex: 1 1 auto; }
+  .compras-stack { flex: 1 1 auto; display: flex; flex-direction: column; gap: clamp(12px,1.6vh,22px); min-height: 0; }
+  .panel.compras { flex: 1 1 0; min-height: 0; }
   .compras-atr .icon { background: rgba(248,113,113,.16); color: #f87171; }
   .compras-atr .accent { color: #f87171; }
   .compras-sem .icon { background: rgba(52,211,153,.16); color: #34d399; }
   .compras-sem .accent { color: #34d399; }
   .oc-grid {
-    flex: 1 1 auto; min-height: 0; margin-top: clamp(6px,1vh,10px);
-    display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 4px;
+    flex: 1 1 auto; min-height: 0; margin-top: clamp(6px,1vh,12px);
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(210px,20vw,300px), 1fr));
+    grid-auto-rows: min-content; gap: 8px; overflow-y: auto; padding-right: 4px; align-content: start;
   }
   .oc-item {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     background: rgba(255,255,255,.035); border: 1px solid var(--border);
     border-left: 4px solid var(--border); border-radius: 12px;
-    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px); flex: 0 0 auto;
+    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px);
   }
   .oc-item.atraso { border-left-color: #f87171; }
   .oc-item.semana { border-left-color: #34d399; }
@@ -310,9 +312,9 @@
       </div>
     </section>
 
-    <!-- SLIDE 2: COMPRAS (OCs atrasadas | a chegar na semana) -->
+    <!-- SLIDE 2: COMPRAS (atrasadas em cima | a chegar na semana embaixo) -->
     <section class="slide slide-compras" data-slide="compras">
-      <div class="op-grid">
+      <div class="compras-stack">
         <!-- ATRASADAS -->
         <section class="panel compras compras-atr">
           <div class="panel-head">
@@ -474,19 +476,22 @@
     box._sig = sig;
     box.scrollTop = 0;
     box._phase = "";
+    box._doneScroll = false;
     box._pausedAt = Date.now() + 2000;
     if (!items.length) { box.innerHTML = '<div class="empty">' + (emptyMsg || "Nada pendente 🎉") + "</div>"; return; }
     box.innerHTML = items.map(buildRow).join("");
   }
 
-  // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV)
+  // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV).
+  // Marca _doneScroll quando a lista chega ao fim (ou nao precisa rolar).
   function autoScroll() {
     document.querySelectorAll(".feed .list, .oc-grid").forEach((el) => {
       const max = el.scrollHeight - el.clientHeight;
-      if (max <= 4) return;
+      if (max <= 4) { el._doneScroll = true; return; }
       const now = Date.now();
       if (el._pausedAt && now < el._pausedAt) return;
       if (el.scrollTop >= max - 1) {
+        el._doneScroll = true;
         if (el._phase !== "bottom") { el._phase = "bottom"; el._pausedAt = now + 3000; return; }
         el.scrollTop = 0; el._phase = "top"; el._pausedAt = now + 1500;
       } else {
@@ -567,14 +572,34 @@
     }, 300);
   }
 
-  // ----- Carrossel de slides (Operação <-> Compras) -----
+  // ----- Carrossel de slides + rotacao das visoes de expedicao -----
   const SLIDES = ["operacao", "compras"];
   let slideIdx = 0;
+  let slideShownAt = Date.now();
+  const SLIDE_MIN_MS = 15000;    // tempo minimo em cada slide
+  const SLIDE_MAX_MS = 150000;   // teto de seguranca
+
+  const EXP_VIEW_MS = 12000;     // tempo por visao da expedicao
+  let expLastRot = Date.now();
+  let expCycles = 0;             // voltas completas das visoes neste slide
+
+  function activeScrollers() {
+    return Array.from(document.querySelectorAll(".slide.is-active .feed .list, .slide.is-active .oc-grid"));
+  }
 
   function renderSlideDots() {
     $("slides-nav").innerHTML = SLIDES.map((s, i) =>
       '<span class="sdot' + (i === slideIdx ? " on" : "") + '"></span>'
     ).join("");
+  }
+
+  function resetSlideTiming() {
+    slideShownAt = Date.now();
+    expLastRot = Date.now();
+    expCycles = 0;
+    activeScrollers().forEach((el) => {
+      el.scrollTop = 0; el._phase = ""; el._doneScroll = false; el._pausedAt = Date.now() + 2500;
+    });
   }
 
   function showSlide(i) {
@@ -583,10 +608,48 @@
       el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
     });
     renderSlideDots();
+    if (SLIDES[slideIdx] === "operacao") { expIdx = 0; renderExpedicao(); }
     if (SLIDES[slideIdx] === "compras") pollCompras();
+    resetSlideTiming();
   }
 
   function nextSlide() { showSlide(slideIdx + 1); }
+
+  // Roda as visoes de expedicao (so no slide operacao) sem cortar o scroll no meio.
+  function rotateExp(now) {
+    if (SLIDES[slideIdx] !== "operacao" || !lastData) return;
+    const sc = $("exp-list");
+    const overflow = sc && (sc.scrollHeight - sc.clientHeight) > 4;
+    const doneScroll = !overflow || sc._doneScroll;
+    if (now - expLastRot < EXP_VIEW_MS || !doneScroll) return;
+    expLastRot = now;
+    const panel = document.querySelector(".panel.exp");
+    panel.classList.add("switching");
+    setTimeout(() => {
+      expIdx = (expIdx + 1) % EXP_VIEWS.length;
+      if (expIdx === 0) expCycles++;
+      renderExpedicao();
+      panel.classList.remove("switching");
+    }, 300);
+  }
+
+  // So avanca de slide respeitando o tempo minimo E depois de terminar de rolar tudo.
+  function slideReady(now) {
+    const elapsed = now - slideShownAt;
+    if (elapsed >= SLIDE_MAX_MS) return true;
+    if (elapsed < SLIDE_MIN_MS) return false;
+    if (SLIDES[slideIdx] === "operacao") {
+      return expCycles >= 1;   // mostrou todas as visoes ao menos uma vez
+    }
+    const lists = activeScrollers();
+    return lists.every((el) => el._doneScroll || (el.scrollHeight - el.clientHeight) <= 4);
+  }
+
+  function carouselTick() {
+    const now = Date.now();
+    rotateExp(now);
+    if (slideReady(now)) nextSlide();
+  }
 
   async function poll() {
     try {
@@ -648,9 +711,8 @@
   poll();
   pollCompras();
   setInterval(poll, POLL_MS);
-  setInterval(toggleExpMode, 14000);
   setInterval(autoScroll, 60);
-  setInterval(nextSlide, 20000);
+  setInterval(carouselTick, 500);
   setInterval(pollCompras, 90000);
 })();
 </script>
