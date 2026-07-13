@@ -7,7 +7,7 @@ Rotas publicas:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template
 from sqlalchemy import desc, func
@@ -25,6 +25,22 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
+def _previsao_status(previsao: datetime | None, agora: datetime) -> str | None:
+    """vencido | perto (<=1 dia) | None."""
+    if not previsao:
+        return None
+    if previsao < agora:
+        return "vencido"
+    if previsao <= agora + timedelta(days=1):
+        return "perto"
+    return None
+
+
+def _atrasado(desde: datetime | None, agora: datetime) -> bool:
+    """True se esta pendente ha mais de 1 dia."""
+    return bool(desde and desde < agora - timedelta(days=1))
+
+
 def _count_distinct_notas(status: str) -> int:
     return (
         db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
@@ -35,7 +51,8 @@ def _count_distinct_notas(status: str) -> int:
 
 
 def _coletar_indicadores() -> dict:
-    hoje = datetime.now().date()
+    agora = datetime.now()
+    hoje = agora.date()
 
     # ---- RECEBIMENTO ----
     recebimento_pendente = _count_distinct_notas("Pendente")
@@ -54,6 +71,29 @@ def _coletar_indicadores() -> dict:
         .scalar()
         or 0
     )
+
+    # Lista de notas pendentes de conferencia (quais sao)
+    pend_rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor).label("fornecedor"),
+            func.min(ItemNota.data_importacao).label("desde"),
+        )
+        .filter(ItemNota.status == "Pendente")
+        .group_by(ItemNota.numero_nota)
+        .order_by("desde")
+        .limit(60)
+        .all()
+    )
+    recebimento_lista = [
+        {
+            "codigo": nota,
+            "parceiro": fornecedor or "",
+            "desde": _iso(desde),
+            "atrasado": _atrasado(desde, agora),
+        }
+        for nota, fornecedor, desde in pend_rows
+    ]
 
     # ---- EXPEDICAO ----
     exp_fat_pendente = (
@@ -75,16 +115,53 @@ def _coletar_indicadores() -> dict:
         ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje).count()
     )
 
+    fat_pendentes = (
+        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_PENDENTE)
+        .order_by(ExpedicaoOrdemFat.created_at)
+        .limit(60)
+        .all()
+    )
+    fat_lista = [
+        {
+            "codigo": str(o.cod_ordem_fat),
+            "parceiro": o.cliente or "",
+            "previsao": _iso(o.dt_previsao_entrega),
+            "previsao_status": _previsao_status(o.dt_previsao_entrega, agora),
+            "desde": _iso(o.created_at),
+            "atrasado": _atrasado(o.created_at, agora),
+        }
+        for o in fat_pendentes
+    ]
+
+    st_pendentes = (
+        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE)
+        .order_by(ExpedicaoOrdemST.created_at)
+        .limit(60)
+        .all()
+    )
+    st_lista = [
+        {
+            "codigo": str(o.cod_ordem_compra),
+            "parceiro": o.fornecedor or "",
+            "previsao": _iso(o.dt_prevista_entrega),
+            "previsao_status": _previsao_status(o.dt_prevista_entrega, agora),
+            "desde": _iso(o.created_at),
+            "atrasado": _atrasado(o.created_at, agora),
+        }
+        for o in st_pendentes
+    ]
+
     eventos = _coletar_eventos()
 
     return {
-        "gerado_em": datetime.now().isoformat(),
+        "gerado_em": agora.isoformat(),
         "recebimento": {
             "pendente_conferencia": int(recebimento_pendente),
             "pendente_lancamento": int(recebimento_lancar),
             "lancadas_total": int(recebimento_lancado),
             "importadas_hoje": int(importadas_hoje),
             "lancadas_hoje": int(lancadas_hoje),
+            "lista": recebimento_lista,
         },
         "expedicao": {
             "pendente_total": int(exp_fat_pendente + exp_st_pendente),
@@ -92,11 +169,13 @@ def _coletar_indicadores() -> dict:
                 "pendente": int(exp_fat_pendente),
                 "conferido": int(exp_fat_conferido),
                 "expedidos_hoje": int(exp_fat_hoje),
+                "lista": fat_lista,
             },
             "st": {
                 "pendente": int(exp_st_pendente),
                 "conferido": int(exp_st_conferido),
                 "expedidos_hoje": int(exp_st_hoje),
+                "lista": st_lista,
             },
         },
         "eventos": eventos,

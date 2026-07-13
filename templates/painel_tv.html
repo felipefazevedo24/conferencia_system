@@ -175,20 +175,29 @@
   @keyframes slidein { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes slideout { to { transform: translateX(120%); opacity: 0; } }
 
-  /* ---------- Event ticker ---------- */
+  /* ---------- Feed / lista de pendentes ---------- */
   .feed { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-  .feed .feed-title { color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-  .feed .list { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
-  .ev {
-    display: flex; align-items: center; gap: 12px;
-    background: rgba(255,255,255,.03); border: 1px solid var(--border);
-    border-radius: 12px; padding: 8px 14px;
+  .feed .feed-title { color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display:flex; justify-content:space-between; }
+  .feed .list { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
+  .feed .list::-webkit-scrollbar { width: 8px; }
+  .feed .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 8px; }
+
+  .item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(255,255,255,.035); border: 1px solid var(--border);
+    border-left: 4px solid transparent; border-radius: 12px;
+    padding: clamp(7px,1.1vh,12px) clamp(10px,1.4vh,16px); flex: 0 0 auto;
   }
-  .ev .ico { font-size: clamp(16px,2vh,22px); }
-  .ev .txt { flex: 1 1 auto; min-width: 0; }
-  .ev .txt b { font-size: clamp(12px,1.5vh,17px); font-weight: 700; }
-  .ev .txt span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ev .when { color: var(--muted); font-size: clamp(10px,1.3vh,13px); white-space: nowrap; }
+  .item.atraso { background: rgba(250,204,21,.08); border-color: rgba(250,204,21,.35); border-left-color: #facc15; }
+  .item .main { min-width: 0; flex: 1 1 auto; }
+  .item .main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; }
+  .item .main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { display:flex; align-items:center; gap: 8px; white-space: nowrap; }
+  .item .ago { color: var(--muted); font-size: clamp(10px,1.3vh,13px); }
+  .badge { font-size: clamp(9px,1.2vh,12px); font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; background: rgba(255,255,255,.06); color: var(--muted); border: 1px solid var(--border); }
+  .badge.atraso { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
+  .badge.perto { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
+  .badge.vencido { background: rgba(248,113,113,.16); color: #f87171; border: 1px solid rgba(248,113,113,.45); }
   .empty { color: var(--muted); text-align: center; padding: 18px; font-size: clamp(12px,1.5vh,16px); }
 </style>
 </head>
@@ -227,8 +236,8 @@
         <div class="stat ok"><div class="n" id="rec-lanc-hoje">0</div><div class="t">Lançadas hoje (estoque)</div></div>
       </div>
       <div class="feed">
-        <div class="feed-title">Últimos eventos — recebimento</div>
-        <div class="list" id="rec-feed"><div class="empty">Sem eventos recentes</div></div>
+        <div class="feed-title"><span>Pendentes de conferência</span><span id="rec-count"></span></div>
+        <div class="list" id="rec-list"><div class="empty">Nada pendente</div></div>
       </div>
     </section>
 
@@ -252,8 +261,8 @@
         <div class="stat ok"><div class="n" id="exp-hoje">0</div><div class="t">Expedidos hoje</div></div>
       </div>
       <div class="feed">
-        <div class="feed-title">Últimos eventos — <span id="exp-feed-label">expedição</span></div>
-        <div class="list" id="exp-feed"><div class="empty">Sem eventos recentes</div></div>
+        <div class="feed-title"><span>Pendentes — <span id="exp-feed-label">faturamento</span></span><span id="exp-count"></span></div>
+        <div class="list" id="exp-list"><div class="empty">Nada pendente</div></div>
       </div>
     </section>
   </main>
@@ -323,20 +332,64 @@
     while (box.children.length > 5) box.lastChild.remove();
   }
 
-  function renderFeed(containerId, eventos) {
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+  function fmtDia(iso) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  }
+
+  function buildRecItem(it) {
+    const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
+    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
+      '<div class="main"><b>NF ' + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + "</span></div>" +
+      '<div class="meta"><span class="ago">' + relTime(it.desde) + "</span>" + atraso + "</div>" +
+      "</div>";
+  }
+
+  function buildExpItem(prefix) {
+    return function (it) {
+      const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
+      let prev = "";
+      if (it.previsao) {
+        const cls = it.previsao_status || "";
+        const txt = (it.previsao_status === "vencido" ? "Venceu " : "Entrega ") + fmtDia(it.previsao);
+        prev = '<span class="badge ' + cls + '">' + txt + "</span>";
+      }
+      return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
+        '<div class="main"><b>' + prefix + " " + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + "</span></div>" +
+        '<div class="meta">' + prev + atraso + '<span class="ago">' + relTime(it.desde) + "</span></div>" +
+        "</div>";
+    };
+  }
+
+  // Renderiza a lista somente se o conteudo mudou (preserva o auto-scroll)
+  function renderList(containerId, items, buildRow) {
     const box = $(containerId);
-    if (!eventos.length) { box.innerHTML = '<div class="empty">Sem eventos recentes</div>'; return; }
-    box.innerHTML = "";
-    eventos.slice(0, 6).forEach((ev) => {
-      const row = document.createElement("div");
-      row.className = "ev";
-      row.innerHTML =
-        '<div class="ico">' + (ICONS[ev.tipo] || "🔔") + '</div>' +
-        '<div class="txt"><b></b><span></span></div>' +
-        '<div class="when">' + relTime(ev.ts) + '</div>';
-      row.querySelector("b").textContent = ev.titulo;
-      row.querySelector("span").textContent = ev.detalhe || "";
-      box.appendChild(row);
+    const sig = JSON.stringify(items);
+    if (box._sig === sig) return;
+    box._sig = sig;
+    box.scrollTop = 0;
+    box._phase = "";
+    box._pausedAt = Date.now() + 2000;
+    if (!items.length) { box.innerHTML = '<div class="empty">Nada pendente 🎉</div>'; return; }
+    box.innerHTML = items.map(buildRow).join("");
+  }
+
+  // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV)
+  function autoScroll() {
+    document.querySelectorAll(".feed .list").forEach((el) => {
+      const max = el.scrollHeight - el.clientHeight;
+      if (max <= 4) return;
+      const now = Date.now();
+      if (el._pausedAt && now < el._pausedAt) return;
+      if (el.scrollTop >= max - 1) {
+        if (el._phase !== "bottom") { el._phase = "bottom"; el._pausedAt = now + 3000; return; }
+        el.scrollTop = 0; el._phase = "top"; el._pausedAt = now + 1500;
+      } else {
+        el.scrollTop += 1;
+      }
     });
   }
 
@@ -359,18 +412,17 @@
 
   function renderExpedicao() {
     if (!lastData) return;
-    const bloco = lastData.expedicao[expMode] || { pendente: 0, conferido: 0, expedidos_hoje: 0 };
+    const bloco = lastData.expedicao[expMode] || { pendente: 0, conferido: 0, expedidos_hoje: 0, lista: [] };
     setNum("exp-pend-conf", bloco.pendente);
     setNum("exp-conferido", bloco.conferido);
     setNum("exp-hoje", bloco.expedidos_hoje);
     $("exp-modo-label").textContent = EXP_LABEL[expMode];
     $("exp-feed-label").textContent = expMode === "fat" ? "faturamento" : "serviço de terceiros";
+    $("exp-count").textContent = (bloco.lista || []).length + " itens";
     $("exp-tag").textContent = "FAT " + lastData.expedicao.fat.pendente + " · ST " + lastData.expedicao.st.pendente;
     $("exp-mode-fat").classList.toggle("active", expMode === "fat");
     $("exp-mode-st").classList.toggle("active", expMode === "st");
-
-    const eventos = (lastData.eventos || []).filter((e) => e.tipo === "expedicao" && e.subtipo === expMode);
-    renderFeed("exp-feed", eventos);
+    renderList("exp-list", bloco.lista || [], buildExpItem(expMode === "fat" ? "Ordem" : "OC"));
   }
 
   function toggleExpMode() {
@@ -396,18 +448,17 @@
       setNum("rec-pend-lanc", d.recebimento.pendente_lancamento);
       setNum("rec-lanc-hoje", d.recebimento.lancadas_hoje);
       $("rec-tag").textContent = d.recebimento.importadas_hoje + " chegaram hoje";
+      $("rec-count").textContent = (d.recebimento.lista || []).length + " notas";
+      renderList("rec-list", d.recebimento.lista || [], buildRecItem);
 
       // Expedição (renderiza o modo atual: FAT ou ST)
       renderExpedicao();
 
-      const eventos = d.eventos || [];
-      renderFeed("rec-feed", eventos.filter((e) => e.tipo === "chegada" || e.tipo === "lancamento"));
-
       // Notificações (avisos rápidos) para eventos novos
+      const eventos = d.eventos || [];
       const novos = eventos.filter((e) => e.key && !seenKeys.has(e.key));
       novos.forEach((e) => seenKeys.add(e.key));
       if (!firstLoad) {
-        // mostra do mais antigo pro mais novo (novo fica no topo)
         novos.slice().reverse().forEach(toast);
       }
       firstLoad = false;
@@ -421,7 +472,8 @@
   setInterval(updateClock, 1000 * 15);
   poll();
   setInterval(poll, POLL_MS);
-  setInterval(toggleExpMode, 8000);
+  setInterval(toggleExpMode, 16000);
+  setInterval(autoScroll, 60);
 })();
 </script>
 </body>
