@@ -577,11 +577,32 @@ LIMIT %(limite)s;
 # - tlis_mat + tproduto: item de material e estoque para detectar "A COMPRAR"
 # -------------------------------------------------------------------
 # OCs em aberto com a PREVISAO DE ENTREGA da propria ORDEM DE COMPRA
-# (tord_com.dt_prevista_entrega). Uma OC por linha (tord_com pode ter linhas
-# duplicadas -> GROUP BY). "Aberta" = entregue=0 e cancelado=0. A janela de
-# recencia (janela_dias) evita OCs legadas nunca marcadas como entregues. O
-# painel separa em atrasadas (previsao < hoje) e a chegar na semana.
+# (tord_com.dt_prevista_entrega). Regra de "em aberto": tem SALDO a receber
+# (SUM(qtde - qtde_entregue) > 0) somando os itens de material (tord_aux),
+# servico (tord_serv) e material estrangeiro (tord_aux_me). OCs ja recebidas
+# (saldo 0) somem automaticamente. O painel separa atrasadas (previsao < hoje)
+# e a chegar na semana (hoje..hoje+7).
 SQL_OC_ENTREGAS = """
+WITH itens AS (
+    SELECT cod_empresa, cod_ord_compra   AS cod_ordem_compra,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0) AS saldo
+    FROM   public.tord_aux
+    UNION ALL
+    SELECT cod_empresa, cod_ordem_compra,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_serv
+    UNION ALL
+    SELECT cod_empresa, cod_ord_compra,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_aux_me
+),
+aberto AS (
+    SELECT cod_empresa, cod_ordem_compra
+    FROM   itens
+    WHERE  cod_empresa = %(cod_empresa)s
+    GROUP  BY cod_empresa, cod_ordem_compra
+    HAVING SUM(saldo) > 0.0001
+)
 SELECT
     o.codigo                                        AS cod_ordem_compra,
     COALESCE(NULLIF(TRIM(MAX(o.fornecedor)), ''),
@@ -590,11 +611,12 @@ SELECT
     MAX(o.status)                                   AS status_oc_nome,
     MAX(o.dt_prevista_entrega)                      AS previsao_entrega
 FROM   public.tord_com o
+JOIN   aberto a
+       ON a.cod_empresa      = o.cod_empresa
+      AND a.cod_ordem_compra = o.codigo
 WHERE  o.cod_empresa = %(cod_empresa)s
   AND  o.dt_prevista_entrega IS NOT NULL
-  AND  COALESCE(o.entregue, 0) = 0
   AND  COALESCE(o.cancelado, 0) = 0
-  AND  o.dt_prevista_entrega >= (CURRENT_DATE - %(janela_dias)s::int)
 GROUP  BY o.codigo
 ORDER  BY MAX(o.dt_prevista_entrega) ASC
 LIMIT  %(limite)s;

@@ -305,18 +305,16 @@ def historico_ordens_compra(
 
 def ordens_compra_entregas(
     cod_empresa: Optional[int] = None,
-    janela_dias: int = 90,
     limite: int = 2000,
 ) -> list[dict]:
-    """OCs em aberto (tord_com, entregue=0/cancelado=0) com previsao de entrega.
+    """OCs em aberto (com SALDO a receber) e sua previsao de entrega (da OC).
 
-    Uma OC por linha, com fornecedor e previsao. A janela de recencia evita OCs
-    legadas nunca marcadas como entregues. O painel separa atrasadas e a chegar.
+    Uma OC por linha, com fornecedor e previsao. OCs ja recebidas (saldo 0)
+    nao entram. O painel separa atrasadas e a chegar na semana.
     """
     empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
     params = {
         "cod_empresa": empresa,
-        "janela_dias": max(1, int(janela_dias or 90)),
         "limite": max(1, min(int(limite or 2000), 5000)),
     }
     return db.fetch_all(queries.SQL_OC_ENTREGAS, params)
