@@ -576,32 +576,36 @@ LIMIT %(limite)s;
 # - tcompras + tstat_oc: status operacional da OC
 # - tlis_mat + tproduto: item de material e estoque para detectar "A COMPRAR"
 # -------------------------------------------------------------------
-# OCs em aberto com a PREVISAO DE ENTREGA da propria ORDEM DE COMPRA
-# (tord_com.dt_prevista_entrega). Regra de "em aberto": tem SALDO a receber
-# (SUM(qtde - qtde_entregue) > 0) somando os itens de material (tord_aux),
-# servico (tord_serv) e material estrangeiro (tord_aux_me). OCs ja recebidas
-# (saldo 0) somem automaticamente. O painel separa atrasadas (previsao < hoje)
-# e a chegar na semana (hoje..hoje+7).
+# OCs em aberto com a PREVISAO DE ENTREGA da propria ORDEM DE COMPRA.
+# Regra de "em aberto": tem SALDO a receber (qtde - qtde_entregue > 0) somando
+# os itens de material (tord_aux), servico (tord_serv) e material estrangeiro
+# (tord_aux_me). So conta o item em aberto que TEM data de entrega prevista
+# (dt_prevista_entrega no item); itens em aberto sem data ficam de fora. A
+# previsao da OC e a menor data entre os itens em aberto datados. OCs ja
+# recebidas (saldo 0) ou sem nenhum item em aberto datado nao aparecem. O
+# painel separa atrasadas (previsao < hoje) e a chegar na semana (hoje..hoje+7).
 SQL_OC_ENTREGAS = """
 WITH itens AS (
-    SELECT cod_empresa, cod_ord_compra   AS cod_ordem_compra,
+    SELECT cod_empresa, cod_ord_compra   AS cod_ordem_compra, dt_prevista_entrega,
            COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0) AS saldo
     FROM   public.tord_aux
     UNION ALL
-    SELECT cod_empresa, cod_ordem_compra,
+    SELECT cod_empresa, cod_ordem_compra, dt_prevista_entrega,
            COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
     FROM   public.tord_serv
     UNION ALL
-    SELECT cod_empresa, cod_ord_compra,
+    SELECT cod_empresa, cod_ord_compra, dt_prevista_entrega,
            COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
     FROM   public.tord_aux_me
 ),
 aberto AS (
-    SELECT cod_empresa, cod_ordem_compra
+    SELECT cod_empresa, cod_ordem_compra,
+           MIN(dt_prevista_entrega) AS previsao
     FROM   itens
     WHERE  cod_empresa = %(cod_empresa)s
+      AND  saldo > 0.0001
+      AND  dt_prevista_entrega IS NOT NULL
     GROUP  BY cod_empresa, cod_ordem_compra
-    HAVING SUM(saldo) > 0.0001
 )
 SELECT
     o.codigo                                        AS cod_ordem_compra,
@@ -609,16 +613,14 @@ SELECT
              NULLIF(TRIM(MAX(o.fornecedor_razao)), ''),
              '(Sem fornecedor)')                    AS fornecedor,
     MAX(o.status)                                   AS status_oc_nome,
-    MAX(o.dt_prevista_entrega)                      AS previsao_entrega
-FROM   public.tord_com o
-JOIN   aberto a
-       ON a.cod_empresa      = o.cod_empresa
-      AND a.cod_ordem_compra = o.codigo
-WHERE  o.cod_empresa = %(cod_empresa)s
-  AND  o.dt_prevista_entrega IS NOT NULL
-  AND  COALESCE(o.cancelado, 0) = 0
-GROUP  BY o.codigo
-ORDER  BY MAX(o.dt_prevista_entrega) ASC
+    a.previsao                                      AS previsao_entrega
+FROM   aberto a
+JOIN   public.tord_com o
+       ON o.cod_empresa = a.cod_empresa
+      AND o.codigo      = a.cod_ordem_compra
+WHERE  COALESCE(o.cancelado, 0) = 0
+GROUP  BY o.codigo, a.previsao
+ORDER  BY a.previsao ASC
 LIMIT  %(limite)s;
 """
 
