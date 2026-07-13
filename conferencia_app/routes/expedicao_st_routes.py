@@ -379,6 +379,71 @@ def finalizar_sem_conferencia_st(cod_ordem_compra):
     })
 
 
+@expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/estornar-conferencia",
+    methods=["POST"],
+)
+@roles_required("Admin")
+def estornar_conferencia_st(cod_ordem_compra):
+    """Estorna a conferencia de uma ordem ST (acao exclusiva de Admin).
+
+    - Conferido/Ag. Fat  -> volta para Pendente de conferencia.
+    - Faturado (conferido)-> volta para "Faturado sem conferência" (mantem NF).
+    - Finalizada sem conferência -> volta para Pendente de conferencia.
+    Limpa a contagem e os dados de conferencia para permitir refazer.
+    """
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+
+    slug = svc.status_slug(ordem.status)
+    if slug not in ("conferido", "faturado", "finalizado_sem_conf"):
+        return jsonify({"error": "Nao ha conferencia para estornar nesta ordem."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+
+    ordem.status = svc.STATUS_FATURADO_SEM_CONF if slug == "faturado" else svc.STATUS_PENDENTE
+    ordem.conferente = None
+    ordem.conferido_at = None
+    ordem.divergente = False
+    ordem.conferido_pos_faturamento = False
+    ordem.peso_liquido = None
+    ordem.peso_bruto = None
+    ordem.qtde_volumes = None
+    ordem.especie_volumes = None
+    for it in ordem.itens:
+        it.qtde_conferida = None
+        it.divergente = False
+    ordem.updated_at = agora
+
+    diff_cab = [{"campo": "motivo", "label": "Motivo", "de": "", "para": motivo}] if motivo else []
+    log_svc.registrar_log(
+        origem="st",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="estorno_conferencia",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=False,
+        diff_cabecalho=diff_cab,
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
 @expedicao_st_bp.route("/api/expedicao/conf-cega-st/lookup", methods=["GET"])
 @roles_required(*ROLES)
 def lookup_ordem_conf_st():
