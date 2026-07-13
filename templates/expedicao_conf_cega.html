@@ -1,0 +1,765 @@
+{% extends "base.html" %}
+
+{% block title %}Conferência de Expedição{% endblock %}
+{% block shell_title %}Conferência de Expedição{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Harmonizado com o design system EUI (erp-ui.css) usado na Conferência de Recebimento */
+    .ce-wrap { display: grid; gap: 18px; }
+    .ce-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; background: transparent; border: none; }
+
+    /* Abas Faturamento / Serv. Terceiro */
+    .ce-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); margin-bottom: 4px; }
+    .ce-tab { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 8px 16px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
+    .ce-tab:hover { color: var(--eui-text); }
+    .ce-tab.is-active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .ce-tab .ce-tab-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--eui-surface-3); color: var(--eui-muted); font-size: 11px; font-weight: 700; }
+    .ce-tab.is-active .ce-tab-count { background: var(--eui-primary); color: #fff; }
+
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    /* Botao de edicao (nao existe no design system base) */
+    .eui-btn--warning { background: var(--eui-warning, #d97706); border-color: var(--eui-warning, #d97706); color: #fff; }
+    .eui-btn--warning:hover:not(:disabled) { filter: brightness(0.94); }
+
+    .ce-table-wrap { overflow-x: auto; }
+    .ce-diverg { color: var(--eui-danger); font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; }
+    .ce-posfat { color: var(--eui-warning, #b45309); font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; }
+    .ce-historico { display: flex; flex-direction: column; gap: 12px; }
+    .ce-hist-item { border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: var(--eui-radius); padding: 10px 14px; background: var(--eui-surface-2, #f8fafc); }
+    .ce-hist-item.is-edicao { border-left-color: var(--eui-warning, #b45309); }
+    .ce-hist-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+    .ce-hist-acao { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 2px 8px; border-radius: 999px; background: var(--eui-primary-soft, #e0e7ff); color: var(--eui-primary, #4338ca); }
+    .ce-hist-item.is-edicao .ce-hist-acao { background: #fef3c7; color: #b45309; }
+    .ce-hist-meta { color: var(--eui-text-muted, #64748b); }
+    .ce-hist-changes { font-size: 12px; margin: 2px 0 0; padding-left: 16px; }
+    .ce-hist-changes li { margin: 2px 0; }
+    .ce-hist-de { color: var(--eui-danger); text-decoration: line-through; }
+    .ce-hist-para { color: var(--eui-success, #15803d); font-weight: 700; }
+    .ce-hist-empty { color: var(--eui-text-muted, #64748b); font-size: 12px; }
+    .ce-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+
+    /* Painel de conferência */
+    .ce-conf-meta { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+    .ce-pill { padding: 12px 14px; border-radius: var(--eui-radius); border: 1px solid var(--eui-border); background: var(--eui-surface-2); }
+    .ce-pill span { display: block; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--eui-muted); }
+    .ce-pill strong { display: block; margin-top: 6px; font-size: 15px; color: var(--eui-text); font-weight: 700; }
+
+    .ce-conf-item { display: grid; grid-template-columns: 42px 1fr 150px; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--eui-border); }
+    .ce-conf-item .idx { width: 32px; height: 32px; border-radius: var(--eui-radius); background: var(--eui-surface-3); color: var(--eui-muted); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+    .ce-conf-item .info strong { display: block; font-size: 14px; color: var(--eui-text); font-weight: 600; }
+    .ce-conf-item .info small { color: var(--eui-muted); font-weight: 500; }
+    .ce-item-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ce-meta-chip { display: inline-flex; flex-direction: column; padding: 6px 12px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); min-width: 0; }
+    .ce-meta-chip span { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--eui-muted); }
+    .ce-meta-chip strong { font-size: 13px; color: var(--eui-text); font-weight: 700; }
+    .ce-conf-item input.qtd { min-height: 42px; width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
+    .ce-conf-item.divergente { background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
+    .ce-conf-item.ok-line { background: var(--eui-success-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
+    .ce-reveal { font-size: 11px; font-weight: 700; margin-top: 4px; }
+    .ce-reveal.bad { color: var(--eui-danger); }
+    .ce-reveal.good { color: var(--eui-success); }
+    .ce-final-qtd { text-align: center; font-size: 18px; font-weight: 700; color: var(--eui-text); }
+
+    .ce-header-form { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+
+    .ce-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .ce-toast.error { border-left-color: var(--eui-danger); }
+    .ce-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 1024px) {
+        .ce-conf-meta, .ce-header-form { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+        .ce-conf-item { grid-template-columns: 32px 1fr 90px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro painel(prefix, hidden, titulo_tabela, col1, col2, col3) %}
+<div id="{{ prefix }}-panel" class="ce-tabpanel{{ ' hidden' if hidden else '' }}">
+    <!-- DASHBOARD -->
+    <div id="{{ prefix }}-view-dashboard" class="ce-wrap">
+        <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
+                <div class="eui-input-group" style="flex:1; position:relative;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="{{ prefix }}-busca" class="eui-input" autocomplete="off"
+                        placeholder="Buscar por OS ou orçamento (todos os status)…" style="width:100%; padding-left:34px;">
+                </div>
+                <button class="eui-btn eui-btn--ghost hidden" id="{{ prefix }}-btn-limpar-busca" title="Limpar busca"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+                <button class="eui-btn eui-btn--primary" id="{{ prefix }}-btn-sync"><i class="fas fa-cloud-arrow-down"></i> Buscar da API</button>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="eui-stats" id="{{ prefix }}-metrics">
+            <div class="eui-stat is-clickable" data-filter="pendente">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Pendente de conferência</span>
+                    <span class="eui-stat__value" id="{{ prefix }}-m-pendente">0</span>
+                    <span class="eui-stat__hint">Aguardando contagem</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="conferido">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-clipboard-check"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Conferido/Ag. Fat</span>
+                    <span class="eui-stat__value" id="{{ prefix }}-m-conferido">0</span>
+                    <span class="eui-stat__hint">Aguardando faturamento</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="faturado_sem_conf">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Faturado sem conferência</span>
+                    <span class="eui-stat__value" id="{{ prefix }}-m-faturado-sem-conf">0</span>
+                    <span class="eui-stat__hint">Conferência obrigatória p/ expedir</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="faturado">
+                <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Faturado</span>
+                    <span class="eui-stat__value" id="{{ prefix }}-m-faturado">0</span>
+                    <span class="eui-stat__hint">NF emitida</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="expedido">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-truck-fast"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Expedido</span>
+                    <span class="eui-stat__value" id="{{ prefix }}-m-expedido">0</span>
+                    <span class="eui-stat__hint">Saída concluída</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela -->
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-list-check"></i> {{ titulo_tabela }}</h2>
+                    <p class="eui-card__sub" id="{{ prefix }}-subtitulo">Fila de ordens para conferência de expedição.</p>
+                </div>
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="{{ prefix }}-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="ce-table-wrap">
+                    <table class="erp-table ce-table">
+                        <thead>
+                            <tr>
+                                <th width="110">{{ col1 }}</th>
+                                <th>{{ col2 }}</th>
+                                <th width="140">{{ col3 }}</th>
+                                <th width="120">Previsão entrega</th>
+                                <th width="70" style="text-align:center;">Itens</th>
+                                <th width="120">NF</th>
+                                <th width="150">Status</th>
+                                <th width="150" style="text-align:right;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="{{ prefix }}-tbody">
+                            <tr><td colspan="8" class="ce-empty">Carregando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFERÊNCIA CEGA -->
+    <div id="{{ prefix }}-view-conferencia" class="ce-wrap hidden">
+        <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between;">
+            <h2 class="eui-card__title" id="{{ prefix }}-conf-titulo"><i class="fas fa-barcode"></i> Conferência</h2>
+            <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-voltar"><i class="fas fa-arrow-left"></i> Voltar</button>
+        </div>
+
+        <div class="eui-card">
+            <div class="eui-card__body">
+                <div class="ce-conf-meta">
+                    <div class="ce-pill"><span>{{ col1 }}</span><strong id="{{ prefix }}-conf-a">—</strong></div>
+                    <div class="ce-pill"><span>{{ col2 }}</span><strong id="{{ prefix }}-conf-b">—</strong></div>
+                    <div class="ce-pill"><span>{{ col3 }}</span><strong id="{{ prefix }}-conf-c">—</strong></div>
+                    <div class="ce-pill"><span>Itens</span><strong id="{{ prefix }}-conf-qtd-itens">—</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Itens da conferência</h2>
+            </div>
+            <div class="eui-card__body">
+                <div id="{{ prefix }}-conf-itens"></div>
+            </div>
+        </div>
+
+        <div class="eui-card" id="{{ prefix }}-card-header-form">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-box"></i> Dados dos volumes</h2>
+                <p class="eui-card__sub">Informações do embarque (englobam todos os itens da ordem).</p>
+            </div>
+            <div class="eui-card__body">
+                <div class="ce-header-form">
+                    <div class="eui-field">
+                        <label class="eui-field__label">Peso líquido *</label>
+                        <input id="{{ prefix }}-h-peso-liq" class="eui-input" type="text" placeholder="ex: 125 kg">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label">Peso bruto *</label>
+                        <input id="{{ prefix }}-h-peso-bruto" class="eui-input" type="text" placeholder="ex: 140 kg">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label">Qtde de volumes *</label>
+                        <input id="{{ prefix }}-h-qtde-vol" class="eui-input" type="number" min="0" placeholder="ex: 4">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label">Espécie dos volumes *</label>
+                        <input id="{{ prefix }}-h-especie" class="eui-input" type="text" placeholder="ex: Caixa">
+                    </div>
+                </div>
+            </div>
+            <div class="eui-card__foot">
+                <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-voltar-2">Sair sem salvar</button>
+                <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
+            </div>
+        </div>
+
+        <div class="eui-card" id="{{ prefix }}-card-historico">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-clock-rotate-left"></i> Histórico de conferências e edições</h2>
+                <p class="eui-card__sub">Registro de auditoria de cada conferência e alteração posterior.</p>
+            </div>
+            <div class="eui-card__body">
+                <div id="{{ prefix }}-conf-historico" class="ce-historico"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+<div class="container-erp eui-scope">
+    <div class="module-shell">
+        <div id="ce-toast" class="ce-toast"></div>
+
+        <header class="eui-page-header">
+            <div>
+                <div class="eui-page-header__eyebrow">Logística · Expedição</div>
+                <h1 class="eui-page-header__title"><i class="fas fa-boxes-packing"></i> Conferência de Expedição</h1>
+                <p class="eui-page-header__sub">Confronto físico do material a expedir. Conferência cega — a quantidade esperada não é exibida.</p>
+            </div>
+        </header>
+
+        <div class="ce-tabs" role="tablist">
+            <button class="ce-tab is-active" data-tab="fat">
+                <i class="fas fa-file-invoice-dollar"></i> Ordens de faturamento
+                <span class="ce-tab-count" id="fat-tab-count">0</span>
+            </button>
+            <button class="ce-tab" data-tab="st">
+                <i class="fas fa-people-carry-box"></i> Serv. terceiro (ST)
+                <span class="ce-tab-count" id="st-tab-count">0</span>
+            </button>
+        </div>
+
+        {{ painel('fat', false, 'Ordens de faturamento', 'Ordem', 'Cliente', 'Orçamento') }}
+        {{ painel('st', true, 'Ordens de compra · Serv. terceiro', 'Ordem compra', 'Fornecedor', 'Nº OS') }}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    const BADGE = {
+        pendente: "eui-badge--warning",
+        conferido: "eui-badge--info",
+        faturado_sem_conf: "eui-badge--danger",
+        faturado: "eui-badge--violet",
+        expedido: "eui-badge--success",
+    };
+
+    function badge(slug, label) {
+        return `<span class="eui-badge ${BADGE[slug] || 'eui-badge--neutral'}"><span class="eui-badge__dot"></span>${label}</span>`;
+    }
+
+    function toast(msg, type) {
+        const t = $("ce-toast");
+        t.textContent = msg;
+        t.className = "ce-toast" + (type ? " " + type : "");
+        t.style.display = "block";
+        clearTimeout(t._t);
+        t._t = setTimeout(() => { t.style.display = "none"; }, 4200);
+    }
+
+    async function api(url, opts) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
+        let data = {};
+        try { data = await resp.json(); } catch (e) {}
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    const fmtDataBR = (v) => {
+        if (!v) return "—";
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return escapeHtml(String(v).slice(0, 10));
+        return d.toLocaleDateString("pt-BR");
+    };
+
+    const fmtDataHora = (v) => {
+        if (!v) return "—";
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return escapeHtml(String(v).slice(0, 16).replace("T", " "));
+        return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    };
+
+    /**
+     * Controlador reutilizavel para uma aba (Faturamento ou Serv. Terceiro).
+     * cfg = { prefix, apiBase, codKey, colunas(o)->[c1,c2,c3], onCount(n) }
+     */
+    function criarControlador(cfg) {
+        const P = cfg.prefix;
+        const id = (name) => `${P}-${name}`;
+        const el = (name) => $(id(name));
+        let currentFilter = "";
+        let currentBusca = "";
+        let currentOrdem = null;
+        const codDe = (o) => o[cfg.codKey];
+
+        function renderTabela(ordens) {
+            const tb = el("tbody");
+            if (!ordens.length) {
+                const motivo = currentBusca ? " para esta busca" : (currentFilter ? " neste status" : "");
+                tb.innerHTML = `<tr><td colspan="8" class="ce-empty">Nenhuma ordem${motivo}. Clique em "Buscar da API".</td></tr>`;
+                return;
+            }
+            tb.innerHTML = ordens.map((o) => {
+                const cod = codDe(o);
+                const podeConferir = o.status_slug === "pendente" || o.status_slug === "faturado_sem_conf";
+                let acao;
+                if (podeConferir) {
+                    const lbl = o.status_slug === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
+                    acao = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-barcode"></i> ${lbl}</button>`;
+                } else if (o.status_slug === "faturado") {
+                    // Etapa final: registrar a expedicao a partir da ordem faturada.
+                    acao = `<button class="eui-btn eui-btn--success eui-btn--sm" data-expedir="${escapeHtml(cod)}"><i class="fas fa-truck"></i> Expedir</button>`;
+                    acao += o.editavel
+                        ? ` <button class="eui-btn eui-btn--warning eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-pen-to-square"></i> Editar</button>`
+                        : ` <button class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${escapeHtml(cod)}"><i class="fas fa-eye"></i> Detalhes</button>`;
+                } else if (o.editavel) {
+                    acao = `<button class="eui-btn eui-btn--warning eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-pen-to-square"></i> Editar</button>`;
+                } else {
+                    acao = `<button class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${escapeHtml(cod)}"><i class="fas fa-eye"></i> Detalhes</button>`;
+                }
+                const nf = o.numero_nf ? escapeHtml(o.numero_nf) : "—";
+                const div = o.divergente ? `<div class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</div>` : "";
+                const posFat = o.conferido_pos_faturamento
+                    ? `<div class="ce-posfat" title="Conferência realizada após o faturamento (NF já emitida)"><i class="fas fa-clock-rotate-left"></i> Conf. pós-faturamento</div>`
+                    : "";
+                const c = cfg.colunas(o);
+                const prev = fmtDataBR(typeof cfg.previsao === "function" ? cfg.previsao(o) : null);
+                return `<tr>
+                    <td><b>${escapeHtml(c[0])}</b></td>
+                    <td>${escapeHtml(c[1]) || "—"}</td>
+                    <td>${escapeHtml(c[2]) || "—"}</td>
+                    <td>${prev}</td>
+                    <td style="text-align:center;">${o.total_itens}</td>
+                    <td>${nf}</td>
+                    <td>${badge(o.status_slug, o.status)}${div}${posFat}</td>
+                    <td style="text-align:right;">${acao}</td>
+                </tr>`;
+            }).join("");
+        }
+
+        async function carregarDashboard() {
+            try {
+                const params = new URLSearchParams();
+                if (currentBusca) params.set("q", currentBusca);
+                else if (currentFilter) params.set("status", currentFilter);
+                const qs = params.toString();
+                const data = await api(cfg.apiBase + "/ordens" + (qs ? ("?" + qs) : ""));
+                const m = data.metricas || {};
+                el("m-pendente").textContent = m.pendente || 0;
+                el("m-conferido").textContent = m.conferido || 0;
+                el("m-faturado-sem-conf").textContent = m.faturado_sem_conf || 0;
+                el("m-faturado").textContent = m.faturado || 0;
+                el("m-expedido").textContent = m.expedido || 0;
+                if (typeof cfg.onCount === "function") {
+                    cfg.onCount((m.pendente || 0) + (m.conferido || 0) + (m.faturado_sem_conf || 0) + (m.faturado || 0) + (m.expedido || 0));
+                }
+                renderTabela(data.ordens || []);
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
+        function renderItens(o) {
+            const wrap = el("conf-itens");
+            const editavel = o.editavel;
+            const conferido = o.conferido;
+            wrap.innerHTML = (o.itens || []).map((it, i) => {
+                const nome = escapeHtml(it.item || "—");
+                const meta = `<div class="ce-item-meta">
+                    <span class="ce-meta-chip"><span>Item</span><strong>${nome}</strong></span>
+                    <span class="ce-meta-chip"><span>Cód. interno</span><strong>${escapeHtml(it.cod_interno || "—")}</strong></span>
+                    <span class="ce-meta-chip"><span>Nº OS</span><strong>${escapeHtml(it.n_os || "—")}</strong></span>
+                </div>`;
+                if (conferido && !editavel) {
+                    const cls = it.divergente ? "divergente" : "ok-line";
+                    // Conferencia CEGA: nunca exibimos a quantidade esperada.
+                    // Mostramos apenas o que foi contado e um alerta de divergencia.
+                    const rev = it.divergente
+                        ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
+                        : `<div class="ce-reveal good">OK · conferido ${it.qtde_conferida}</div>`;
+                    return `<div class="ce-conf-item ${cls}">
+                        <div class="idx">${i + 1}</div>
+                        <div class="info">${meta}${rev}</div>
+                        <div class="ce-final-qtd">${it.qtde_conferida}</div>
+                    </div>`;
+                }
+                const valAtual = (it.qtde_conferida !== undefined && it.qtde_conferida !== null) ? it.qtde_conferida : "";
+                const alerta = (conferido && it.divergente)
+                    ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
+                    : "";
+                const clsLinha = (conferido && it.divergente) ? " divergente" : "";
+                return `<div class="ce-conf-item${clsLinha}" data-item-id="${it.id}">
+                    <div class="idx">${i + 1}</div>
+                    <div class="info">${meta}${alerta}</div>
+                    <input class="eui-input qtd" type="number" min="0" inputmode="numeric" data-qtd="${it.id}" placeholder="0" value="${valAtual}">
+                </div>`;
+            }).join("");
+        }
+
+        function renderHistorico(historico) {
+            const card = el("card-historico");
+            const wrap = el("conf-historico");
+            const logs = Array.isArray(historico) ? historico : [];
+            if (!card || !wrap) return;
+            if (!logs.length) {
+                card.classList.add("hidden");
+                wrap.innerHTML = "";
+                return;
+            }
+            card.classList.remove("hidden");
+            wrap.innerHTML = logs.map((h) => {
+                const isEd = h.acao === "edicao";
+                const acaoLabel = isEd ? "Edição" : "Conferência";
+                const quando = h.created_at ? fmtDataHora(h.created_at) : "—";
+                const usuario = escapeHtml(h.usuario || "—");
+                const tags = [];
+                if (h.divergente) tags.push('<span class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</span>');
+                if (h.pos_faturamento) tags.push('<span class="ce-posfat"><i class="fas fa-clock-rotate-left"></i> Pós-faturamento</span>');
+                const changes = [];
+                (h.cabecalho || []).forEach((c) => {
+                    changes.push(`<li>${escapeHtml(c.label || c.campo)}: <span class="ce-hist-de">${escapeHtml(String(c.de ?? "—"))}</span> → <span class="ce-hist-para">${escapeHtml(String(c.para ?? "—"))}</span></li>`);
+                });
+                (h.itens || []).forEach((it) => {
+                    const nome = escapeHtml(it.item || it.cod_interno || ("Item " + it.id));
+                    changes.push(`<li>${nome}: <span class="ce-hist-de">${escapeHtml(String(it.de ?? "—"))}</span> → <span class="ce-hist-para">${escapeHtml(String(it.para ?? "—"))}</span></li>`);
+                });
+                const changesHtml = changes.length
+                    ? `<ul class="ce-hist-changes">${changes.join("")}</ul>`
+                    : (isEd ? '<div class="ce-hist-empty">Sem alterações de valores.</div>' : '<div class="ce-hist-empty">Conferência registrada.</div>');
+                return `<div class="ce-hist-item ${isEd ? "is-edicao" : ""}">
+                    <div class="ce-hist-head">
+                        <span class="ce-hist-acao">${acaoLabel}</span>
+                        <span class="ce-hist-meta"><i class="fas fa-user"></i> ${usuario}</span>
+                        <span class="ce-hist-meta"><i class="fas fa-clock"></i> ${quando}</span>
+                        ${tags.join(" ")}
+                    </div>
+                    ${changesHtml}
+                </div>`;
+            }).join("");
+        }
+
+        async function abrirConferencia(cod) {
+            try {
+                const o = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod));
+                currentOrdem = o;
+                const semConf = o.status_slug === "faturado_sem_conf";
+                const editando = o.editavel && o.status_slug !== "pendente";
+                const titulo = (o.status_slug === "pendente" || semConf)
+                    ? (semConf ? "Conferência obrigatória (faturado sem conferência)" : "Conferência")
+                    : (editando ? "Editar conferência" : "Detalhes");
+                const icone = semConf ? "fa-triangle-exclamation" : (editando ? "fa-pen-to-square" : "fa-barcode");
+                const c = cfg.colunas(o);
+                el("conf-titulo").innerHTML = `<i class="fas ${icone}"></i> ${titulo} · ${escapeHtml(c[0])}`;
+                el("conf-a").textContent = c[0] || "—";
+                el("conf-b").textContent = c[1] || "—";
+                el("conf-c").textContent = c[2] || "—";
+                el("conf-qtd-itens").textContent = o.total_itens;
+                renderItens(o);
+                renderHistorico(o.historico);
+
+                el("card-header-form").classList.toggle("hidden", !o.editavel);
+                el("h-peso-liq").value = o.peso_liquido || "";
+                el("h-peso-bruto").value = o.peso_bruto || "";
+                el("h-qtde-vol").value = o.qtde_volumes || "";
+                el("h-especie").value = o.especie_volumes || "";
+
+                el("btn-finalizar-conf").innerHTML = editando
+                    ? '<i class="fas fa-floppy-disk"></i> Salvar edição'
+                    : '<i class="fas fa-check-double"></i> Finalizar conferência';
+
+                el("view-dashboard").classList.add("hidden");
+                el("view-conferencia").classList.remove("hidden");
+                window.scrollTo(0, 0);
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
+        function marcarDivergencias(itens) {
+            const wrap = el("conf-itens");
+            if (!wrap) return;
+            (itens || []).forEach((it) => {
+                const row = wrap.querySelector(`[data-item-id="${it.id}"]`);
+                if (!row) return;
+                const prev = row.querySelector(".ce-reveal.bad.js-bloqueio");
+                if (prev) prev.remove();
+                row.classList.toggle("divergente", !!it.divergente);
+                if (it.divergente) {
+                    const info = row.querySelector(".info");
+                    if (info) {
+                        const alerta = document.createElement("div");
+                        alerta.className = "ce-reveal bad js-bloqueio";
+                        alerta.textContent = "Divergência — reveja a quantidade contada.";
+                        info.appendChild(alerta);
+                    }
+                }
+            });
+            const primeira = wrap.querySelector(".ce-conf-item.divergente");
+            if (primeira) primeira.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+
+        async function finalizarConferencia() {
+            if (!currentOrdem) return;
+            const itens = [];
+            let faltando = false;
+            el("conf-itens").querySelectorAll("input[data-qtd]").forEach((inp) => {
+                const val = inp.value.trim();
+                if (val === "") faltando = true;
+                itens.push({ id: parseInt(inp.dataset.qtd, 10), qtde_conferida: val === "" ? null : parseInt(val, 10) });
+            });
+            if (faltando) { toast("Informe a quantidade conferida de todos os itens.", "error"); return; }
+
+            const body = {
+                itens,
+                peso_liquido: el("h-peso-liq").value.trim(),
+                peso_bruto: el("h-peso-bruto").value.trim(),
+                qtde_volumes: el("h-qtde-vol").value.trim(),
+                especie_volumes: el("h-especie").value.trim(),
+            };
+            if (!body.peso_liquido || !body.peso_bruto || !body.qtde_volumes || !body.especie_volumes) {
+                toast("Preencha peso líquido, peso bruto, volumes e espécie.", "error"); return;
+            }
+
+            const btn = el("btn-finalizar-conf");
+            btn.disabled = true;
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/conferir", {
+                    method: "POST", body: JSON.stringify(body),
+                });
+                if (r.bloqueado) {
+                    marcarDivergencias(r.itens || []);
+                    toast(r.mensagem || "Conferência bloqueada por divergência. Reveja os itens destacados.", "error");
+                    return;
+                }
+                if (r.divergente) {
+                    toast("Conferência concluída com DIVERGÊNCIA. Verifique os itens destacados.", "error");
+                } else {
+                    toast("Conferência concluída sem divergências.", "success");
+                }
+                await abrirConferencia(codDe(currentOrdem));
+            } catch (e) {
+                toast(e.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function sincronizar() {
+            const btn = el("btn-sync");
+            btn.disabled = true;
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando…';
+            try {
+                const r = await api(cfg.apiBase + "/sync", { method: "POST" });
+                toast(`Sincronizado: ${r.total_ordens} ordens (${r.criadas} novas, ${r.faturadas} faturadas).`, "success");
+                await carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            }
+        }
+
+        // Atualizacao automatica da tela (GET leve). Nao roda enquanto o
+        // usuario esta dentro de uma conferencia, para nao recarregar no meio
+        // da contagem. A busca real no ERP e feita pelo scheduler do servidor.
+        async function atualizarSePossivel() {
+            if (currentOrdem) return;
+            try {
+                await carregarDashboard();
+            } catch (e) {
+                console.warn("Refresh automatico falhou:", e.message);
+            }
+        }
+
+        function voltarDashboard() {
+            currentOrdem = null;
+            el("view-conferencia").classList.add("hidden");
+            el("view-dashboard").classList.remove("hidden");
+            carregarDashboard();
+        }
+
+        function aplicarFiltro(f, elemento) {
+            // Filtrar por status limpa a busca por OS/orcamento (sao exclusivos).
+            if (currentBusca) {
+                currentBusca = "";
+                el("busca").value = "";
+                el("btn-limpar-busca").classList.add("hidden");
+            }
+            currentFilter = (currentFilter === f) ? "" : f;
+            el("metrics").querySelectorAll(".eui-stat.is-clickable").forEach((m) => m.classList.remove("is-active"));
+            if (currentFilter && elemento) elemento.classList.add("is-active");
+            el("btn-limpar-filtro").classList.toggle("hidden", !currentFilter);
+            el("subtitulo").textContent = currentFilter
+                ? ("Exibindo apenas ordens no status: " + currentFilter + ".")
+                : "Fila de ordens para conferência de expedição.";
+            carregarDashboard();
+        }
+
+        let buscaTimer = null;
+        function aplicarBusca(termo) {
+            currentBusca = (termo || "").trim();
+            el("btn-limpar-busca").classList.toggle("hidden", !currentBusca);
+            if (currentBusca) {
+                // Busca percorre todos os status: desativa o filtro de status.
+                currentFilter = "";
+                el("metrics").querySelectorAll(".eui-stat.is-clickable").forEach((m) => m.classList.remove("is-active"));
+                el("btn-limpar-filtro").classList.add("hidden");
+                el("subtitulo").textContent = 'Buscando "' + currentBusca + '" em todos os status.';
+            } else {
+                el("subtitulo").textContent = "Fila de ordens para conferência de expedição.";
+            }
+            carregarDashboard();
+        }
+
+        // Eventos
+        el("btn-sync").addEventListener("click", sincronizar);
+        el("btn-atualizar").addEventListener("click", carregarDashboard);
+        el("btn-voltar").addEventListener("click", voltarDashboard);
+        el("btn-voltar-2").addEventListener("click", voltarDashboard);
+        el("btn-finalizar-conf").addEventListener("click", finalizarConferencia);
+        el("btn-limpar-filtro").addEventListener("click", () => aplicarFiltro(currentFilter, null));
+
+        el("busca").addEventListener("input", (e) => {
+            const termo = e.target.value;
+            clearTimeout(buscaTimer);
+            buscaTimer = setTimeout(() => aplicarBusca(termo), 300);
+        });
+        el("busca").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { clearTimeout(buscaTimer); aplicarBusca(e.target.value); }
+        });
+        el("btn-limpar-busca").addEventListener("click", () => {
+            el("busca").value = "";
+            aplicarBusca("");
+        });
+
+        el("metrics").querySelectorAll(".eui-stat.is-clickable").forEach((elemento) => {
+            elemento.addEventListener("click", () => aplicarFiltro(elemento.dataset.filter, elemento));
+        });
+
+        el("tbody").addEventListener("click", (e) => {
+            const cBtn = e.target.closest("[data-conferir]");
+            const vBtn = e.target.closest("[data-ver]");
+            const xBtn = e.target.closest("[data-expedir]");
+            if (xBtn) {
+                const cod = xBtn.dataset.expedir;
+                window.location.href = `/expedicao/conferencia?ref=${encodeURIComponent(cfg.refTipo)}&cod=${encodeURIComponent(cod)}`;
+                return;
+            }
+            if (cBtn) abrirConferencia(cBtn.dataset.conferir);
+            else if (vBtn) abrirConferencia(vBtn.dataset.ver);
+        });
+
+        return { carregarDashboard, atualizarSePossivel };
+    }
+
+    // Instancia os dois controladores
+    const ctrlFat = criarControlador({
+        prefix: "fat",
+        apiBase: "/api/expedicao/conf-cega",
+        codKey: "cod_ordem_fat",
+        refTipo: "fat",
+        colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
+        previsao: (o) => o.dt_previsao_entrega,
+        onCount: (n) => { $("fat-tab-count").textContent = n; },
+    });
+    const ctrlSt = criarControlador({
+        prefix: "st",
+        apiBase: "/api/expedicao/conf-cega-st",
+        codKey: "cod_ordem_compra",
+        refTipo: "st",
+        colunas: (o) => [o.cod_ordem_compra, o.fornecedor, o.n_os],
+        previsao: (o) => o.dt_prevista_entrega,
+        onCount: (n) => { $("st-tab-count").textContent = n; },
+    });
+
+    // Abas
+    let stCarregado = false;
+    document.querySelectorAll(".ce-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+            const alvo = tab.dataset.tab;
+            document.querySelectorAll(".ce-tab").forEach((t) => t.classList.toggle("is-active", t === tab));
+            $("fat-panel").classList.toggle("hidden", alvo !== "fat");
+            $("st-panel").classList.toggle("hidden", alvo !== "st");
+            if (alvo === "st" && !stCarregado) {
+                stCarregado = true;
+                ctrlSt.carregarDashboard();
+            }
+        });
+    });
+
+    ctrlFat.carregarDashboard();
+    // Carrega a contagem da aba ST em segundo plano (para o badge), sem trocar de aba.
+    ctrlSt.carregarDashboard().then(() => { stCarregado = true; });
+
+    // Atualizacao automatica da tela a cada 4 minutos.
+    // A BUSCA REAL no ERP roda no SERVIDOR (scheduler continuo), garantindo que
+    // nenhuma ordem seja perdida no intervalo entre solicitacao e faturamento,
+    // mesmo sem navegador aberto. Aqui apenas refletimos os dados ja
+    // sincronizados. NAO pausamos em segundo plano — a tela permanece atual.
+    const AUTO_REFRESH_MS = 4 * 60 * 1000;
+    setInterval(() => {
+        // Nao recarrega enquanto o usuario esta contando itens numa conferencia.
+        ctrlFat.atualizarSePossivel();
+        if (stCarregado) ctrlSt.atualizarSePossivel();
+    }, AUTO_REFRESH_MS);
+
+    // Ao voltar o foco para a aba, atualiza imediatamente.
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+            ctrlFat.atualizarSePossivel();
+            if (stCarregado) ctrlSt.atualizarSePossivel();
+        }
+    });
+})();
+</script>
+{% endblock %}

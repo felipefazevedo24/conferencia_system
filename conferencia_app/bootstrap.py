@@ -799,6 +799,44 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
         conn.close()
 
 
+def _ensure_expedicao_ordem_fat_columns() -> None:
+    """Garante colunas novas na tabela de ordens de faturamento."""
+    if not _has_table("expedicao_ordem_fat"):
+        return
+    cols = _get_column_names("expedicao_ordem_fat")
+    conn = db.engine.connect()
+    try:
+        if "peso_bruto" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN peso_bruto VARCHAR(40)"))
+        if "dt_previsao_entrega" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN dt_previsao_entrega DATETIME"))
+        if "conferido_pos_faturamento" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_fat ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_expedicao_ordem_st_columns() -> None:
+    """Garante colunas novas na tabela de ordens de Servico de Terceiro (ST)."""
+    if not _has_table("expedicao_ordem_st"):
+        return
+    cols = _get_column_names("expedicao_ordem_st")
+    conn = db.engine.connect()
+    try:
+        if "dt_prevista_entrega" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN dt_prevista_entrega DATETIME"))
+        if "conferido_pos_faturamento" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_st ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         try:
@@ -842,6 +880,16 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_expedicao_conferencia_simples_schema()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_ordem_fat_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_ordem_st_columns()
         except Exception:
             pass
 

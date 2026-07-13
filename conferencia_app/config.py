@@ -116,6 +116,29 @@ class Config:
     ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
     ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
 
+    # Conferencia de Expedicao: API externa que retorna as ordens de faturamento.
+    EXPEDICAO_FAT_API_URL = os.environ.get(
+        "EXPEDICAO_FAT_API_URL",
+        "https://superelevated-han-throughly.ngrok-free.dev/expedicao",
+    )
+    EXPEDICAO_FAT_API_TIMEOUT = int(os.environ.get("EXPEDICAO_FAT_API_TIMEOUT", "30"))
+    # Conferencia de Expedicao (aba ST): API externa que retorna as ordens de
+    # compra com material de Servico de Terceiro (ST) a enviar. A aba ST passou
+    # a consumir SOMENTE este endpoint (nao usa mais o banco do CPS/bridge).
+    EXPEDICAO_ST_API_URL = os.environ.get(
+        "EXPEDICAO_ST_API_URL",
+        "https://superelevated-han-throughly.ngrok-free.dev/expedicao_terceiro",
+    )
+    EXPEDICAO_ST_API_TIMEOUT = int(os.environ.get("EXPEDICAO_ST_API_TIMEOUT", "30"))
+
+    # Sincronizacao automatica das ordens de Conferencia de Expedicao
+    # (Faturamento + Servico de Terceiro). Solucao satelite: precisa buscar
+    # continuamente no servidor para nao perder ordens que aparecem/somem no
+    # ERP entre a solicitacao e o faturamento, mesmo sem navegador aberto.
+    EXPEDICAO_SYNC_AUTO_ENABLED = os.environ.get("EXPEDICAO_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS", "240"))
+    EXPEDICAO_SYNC_ST_ENABLED = os.environ.get("EXPEDICAO_SYNC_ST_ENABLED", "1") not in ("0", "false", "False", "")
+
     # Integracao automatica de lancamento ERP (Postgres tcompras).
     # Cada ciclo procura, na tcompras, NFs com (n_nf, dt_nf) iguais aos itens
     # com status="Concluido" sem numero_lancamento e marca como "Lancado"

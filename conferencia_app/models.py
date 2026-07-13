@@ -565,6 +565,177 @@ class ExpedicaoConferenciaSimplesEstorno(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
+class ExpedicaoOrdemFat(db.Model):
+    """Cabecalho de uma ordem de faturamento (cod_ordem_fat) para a
+    Conferencia de Expedicao. Origem dos dados: API externa de faturamento."""
+
+    __tablename__ = "expedicao_ordem_fat"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cod_ordem_fat = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    cliente = db.Column(db.String(160))
+    orcamento = db.Column(db.String(80), index=True)
+    pedido = db.Column(db.String(80))
+    liberado_faturar = db.Column(db.String(10), default="nao")
+    origem_status = db.Column(db.String(40))  # status bruto vindo da API (em_aberto, faturado...)
+    dt_solicitacao_fat = db.Column(db.DateTime)
+    dt_previsao_entrega = db.Column(db.DateTime)
+
+    # Pendente de conferência | Conferido | Faturado | Expedido
+    status = db.Column(db.String(40), nullable=False, default="Pendente de conferência", index=True)
+
+    # Dados de volume/peso (cabecalho) preenchidos ao concluir a conferencia
+    peso_liquido = db.Column(db.String(40))
+    peso_bruto = db.Column(db.String(40))
+    qtde_volumes = db.Column(db.String(40))
+    especie_volumes = db.Column(db.String(80))
+    marca_volumes = db.Column(db.String(120))
+
+    # Conferencia
+    conferente = db.Column(db.String(100))
+    conferido_at = db.Column(db.DateTime)
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+    # Registro para consulta futura: a conferencia foi feita APOS o
+    # faturamento (NF ja emitida quando o material foi conferido).
+    conferido_pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Faturamento (NF preenchida na origem)
+    numero_nf = db.Column(db.String(80), index=True)
+    faturado_at = db.Column(db.DateTime)
+
+    # Expedicao (finalizacao no Registro de expedicao)
+    expedido_at = db.Column(db.DateTime)
+    expedido_by = db.Column(db.String(100))
+    expedicao_registro_id = db.Column(db.Integer, index=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    itens = db.relationship(
+        "ExpedicaoOrdemFatItem",
+        backref="ordem",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoOrdemFatItem.linha",
+    )
+
+
+class ExpedicaoOrdemFatItem(db.Model):
+    __tablename__ = "expedicao_ordem_fat_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_ordem_fat.id"),
+        nullable=False,
+        index=True,
+    )
+    linha = db.Column(db.Integer, nullable=False, default=0)
+    cod_interno = db.Column(db.String(80), index=True)
+    item = db.Column(db.String(200))
+    n_os = db.Column(db.String(80), index=True)
+    # Quantidade esperada (resultado da conferencia) - NUNCA exibida ao conferente
+    qtde_a_faturar = db.Column(db.Integer, nullable=False, default=0)
+    qtde_conferida = db.Column(db.Integer)
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class ExpedicaoOrdemST(db.Model):
+    """Cabecalho de uma Ordem de Compra com material de Servico de Terceiro (ST)
+    a faturar, para a Conferencia de Expedicao (aba ST). A cadeia de origem e:
+    Ordem de Compra -> Servico de Terceiro -> OS -> material enviado para ST."""
+
+    __tablename__ = "expedicao_ordem_st"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cod_ordem_compra = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    fornecedor = db.Column(db.String(160))
+    n_os = db.Column(db.String(120))  # pode agregar varias OS separadas por virgula
+    origem_status = db.Column(db.String(40))
+    dt_solicitacao = db.Column(db.DateTime)
+    dt_prevista_entrega = db.Column(db.DateTime)
+
+    # Pendente de conferência | Conferido/Ag. Fat | Faturado | Expedido
+    status = db.Column(db.String(40), nullable=False, default="Pendente de conferência", index=True)
+
+    # Dados de volume/peso (cabecalho) preenchidos ao concluir a conferencia
+    peso_liquido = db.Column(db.String(40))
+    peso_bruto = db.Column(db.String(40))
+    qtde_volumes = db.Column(db.String(40))
+    especie_volumes = db.Column(db.String(80))
+
+    # Conferencia
+    conferente = db.Column(db.String(100))
+    conferido_at = db.Column(db.DateTime)
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+    # Registro para consulta futura: conferencia feita APOS o faturamento.
+    conferido_pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Faturamento (NF de envio/retorno preenchida na origem)
+    numero_nf = db.Column(db.String(80), index=True)
+    faturado_at = db.Column(db.DateTime)
+
+    # Expedicao
+    expedido_at = db.Column(db.DateTime)
+    expedido_by = db.Column(db.String(100))
+    expedicao_registro_id = db.Column(db.Integer, index=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    itens = db.relationship(
+        "ExpedicaoOrdemSTItem",
+        backref="ordem",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoOrdemSTItem.linha",
+    )
+
+
+class ExpedicaoOrdemSTItem(db.Model):
+    __tablename__ = "expedicao_ordem_st_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_ordem_st.id"),
+        nullable=False,
+        index=True,
+    )
+    linha = db.Column(db.Integer, nullable=False, default=0)
+    cod_interno = db.Column(db.String(80), index=True)
+    item = db.Column(db.String(200))
+    n_os = db.Column(db.String(80), index=True)
+    # Quantidade enviada/esperada para o ST - NUNCA exibida ao conferente
+    qtde_a_faturar = db.Column(db.Integer, nullable=False, default=0)
+    qtde_conferida = db.Column(db.Integer)
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class ExpedicaoConferenciaLog(db.Model):
+    """Trilha de auditoria das conferencias de expedicao (FAT e ST).
+
+    Registra cada conferencia ou edicao posterior, guardando o que mudou
+    (cabecalho e itens) para consultas futuras. Usado tanto quando a
+    conferencia e feita no momento correto (fila pendente) quanto quando e
+    feita/corrigida apos o faturamento."""
+
+    __tablename__ = "expedicao_conferencia_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    origem = db.Column(db.String(10), nullable=False, index=True)  # "fat" | "st"
+    ordem_id = db.Column(db.Integer, nullable=False, index=True)
+    cod_ordem = db.Column(db.String(80), nullable=False, index=True)
+    # "conferencia" (primeira) | "edicao" (alteracao posterior)
+    acao = db.Column(db.String(20), nullable=False, default="conferencia")
+    usuario = db.Column(db.String(100))
+    status_anterior = db.Column(db.String(40))
+    status_novo = db.Column(db.String(40))
+    divergente = db.Column(db.Boolean, nullable=False, default=False)
+    pos_faturamento = db.Column(db.Boolean, nullable=False, default=False)
+    # JSON com o detalhamento das alteracoes (cabecalho + itens).
+    detalhes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class AgendamentoVeiculo(db.Model):
     __tablename__ = "agendamento_veiculo"
 

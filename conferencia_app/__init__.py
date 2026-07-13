@@ -25,6 +25,8 @@ from .routes.boleto_routes import boleto_bp
 from .routes.cadastro_workflow_routes import cadastro_workflow_bp
 from .routes.conserto_routes import conserto_bp
 from .routes.compras_routes import compras_bp
+from .routes.expedicao_fat_routes import expedicao_fat_bp
+from .routes.expedicao_st_routes import expedicao_st_bp
 from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
 from .routes.page_routes import page_bp
@@ -54,6 +56,8 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(boleto_bp)
     app.register_blueprint(cadastro_workflow_bp)
     app.register_blueprint(compras_bp)
+    app.register_blueprint(expedicao_fat_bp)
+    app.register_blueprint(expedicao_st_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(rastreamento_bp)
@@ -167,5 +171,15 @@ def create_app(test_config=None) -> Flask:
             iniciar_facilities_nr6(app)
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler Facilities NR-6")
+
+    # Scheduler de sincronizacao das ordens de Conferencia de Expedicao
+    # (Faturamento + ST). Solucao satelite: busca continua no servidor para
+    # nao perder ordens no intervalo entre solicitacao e faturamento.
+    if app.config.get("EXPEDICAO_SYNC_AUTO_ENABLED") and not app.config.get("TESTING"):
+        try:
+            from .services.expedicao_sync_scheduler import iniciar_scheduler as iniciar_expedicao_sync
+            iniciar_expedicao_sync(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Expedicao Sync")
 
     return app
