@@ -303,6 +303,22 @@ def historico_ordens_compra(
     }
 
 
+def ordens_compra_atrasadas(
+    cod_empresa: Optional[int] = None,
+    limite: int = 300,
+) -> list[dict]:
+    """OCs em aberto cuja previsao de entrega (os.dt_prevista) ja passou.
+
+    Uma OC por linha, com o nome do fornecedor e a previsao mais urgente.
+    """
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    params = {
+        "cod_empresa": empresa,
+        "limite": max(1, min(int(limite or 300), 2000)),
+    }
+    return db.fetch_all(queries.SQL_OC_ATRASADAS, params)
+
+
 def visibility_compras(
     cod_empresa: Optional[int] = None,
     classificacao: Optional[str] = None,

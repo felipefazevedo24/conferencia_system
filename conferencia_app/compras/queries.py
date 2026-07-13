@@ -576,6 +576,56 @@ LIMIT %(limite)s;
 # - tcompras + tstat_oc: status operacional da OC
 # - tlis_mat + tproduto: item de material e estoque para detectar "A COMPRAR"
 # -------------------------------------------------------------------
+# OCs em aberto ATRASADAS: a previsao de entrega (os.dt_prevista) ja passou e a
+# OC ainda nao foi recebida/encerrada. Uma OC por linha, com a menor previsao
+# (mais urgente) e o nome do fornecedor.
+SQL_OC_ATRASADAS = """
+WITH oc AS (
+    SELECT DISTINCT ON (c.cod_empresa, c.cod_ordem_compra)
+           c.cod_empresa,
+           c.cod_ordem_compra,
+           c.fornecedor,
+           c.comprador,
+           c.status                                AS cod_status_oc,
+           c.dt_lancamento,
+           c.dt_recebimento
+    FROM   public.tcompras c
+    WHERE  c.cod_empresa = %(cod_empresa)s
+      AND  COALESCE(c.cod_ordem_compra, 0) <> 0
+    ORDER  BY c.cod_empresa, c.cod_ordem_compra,
+              COALESCE(c.dt_lancamento, c.dt_recebimento) DESC NULLS LAST,
+              c.codigo DESC
+)
+SELECT
+    oc.cod_ordem_compra,
+    COALESCE(NULLIF(TRIM(oc.fornecedor), ''), '(Sem fornecedor)') AS fornecedor,
+    oc.comprador,
+    st.nome                                         AS status_oc_nome,
+    oc.dt_lancamento,
+    MIN(os.dt_prevista)                             AS previsao_entrega
+FROM   public.tcom_aux_os ao
+JOIN   oc
+       ON oc.cod_empresa      = ao.cod_empresa
+      AND oc.cod_ordem_compra = ao.cod_ord_compra
+LEFT   JOIN public.tos os
+       ON os.cod_empresa = ao.cod_empresa
+      AND os.codigo      = ao.cod_os
+LEFT   JOIN public.tstat_oc st
+       ON st.cod_empresa = oc.cod_empresa
+      AND st.codigo      = oc.cod_status_oc
+WHERE  ao.cod_empresa = %(cod_empresa)s
+  AND  COALESCE(ao.cancelado, 0) = 0
+  AND  COALESCE(ao.cod_ord_compra, 0) <> 0
+  AND  oc.dt_recebimento IS NULL
+  AND  COALESCE(st.nome, '') !~* '(ENCERR|CONCL|FECH|FINAL|RECEB)'
+GROUP  BY oc.cod_ordem_compra, oc.fornecedor, oc.comprador, st.nome, oc.dt_lancamento
+HAVING MIN(os.dt_prevista) IS NOT NULL
+   AND MIN(os.dt_prevista)::date < CURRENT_DATE
+ORDER  BY MIN(os.dt_prevista) ASC
+LIMIT  %(limite)s;
+"""
+
+
 SQL_VISIBILITY_HEADER = """
 WITH compras_ref AS (
     SELECT DISTINCT ON (c.cod_empresa, c.cod_ordem_compra)

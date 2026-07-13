@@ -21,6 +21,7 @@ painel_tv_bp = Blueprint("painel_tv", __name__)
 
 STATUS_EXP_PENDENTE = "Pendente de conferência"
 STATUS_EXP_CONFERIDO = "Conferido/Ag. Fat"
+STATUS_EXP_FATURADO = "Faturado"
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -163,23 +164,23 @@ def _coletar_indicadores() -> dict:
             "ts": _iso(ts),
         }
 
-    fat_fat_hoje = (
-        ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.faturado_at) == hoje)
+    fat_faturadas = (
+        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_FATURADO)
         .order_by(ExpedicaoOrdemFat.faturado_at.desc())
-        .limit(40)
+        .limit(60)
         .all()
     )
-    st_fat_hoje = (
-        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.faturado_at) == hoje)
+    st_faturadas = (
+        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_FATURADO)
         .order_by(ExpedicaoOrdemST.faturado_at.desc())
-        .limit(40)
+        .limit(60)
         .all()
     )
-    faturadas_hoje = (
-        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.faturado_at) for o in fat_fat_hoje]
-        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.faturado_at) for o in st_fat_hoje]
+    faturadas_a_expedir = (
+        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.faturado_at) for o in fat_faturadas]
+        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.faturado_at) for o in st_faturadas]
     )
-    faturadas_hoje.sort(key=lambda x: x["ts"] or "", reverse=True)
+    faturadas_a_expedir.sort(key=lambda x: x["ts"] or "", reverse=True)
 
     fat_exp_hoje = (
         ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje)
@@ -225,7 +226,7 @@ def _coletar_indicadores() -> dict:
                 "expedidos_hoje": int(exp_st_hoje),
                 "lista": st_lista,
             },
-            "faturadas_hoje": faturadas_hoje,
+            "faturadas_hoje": faturadas_a_expedir,
             "expedidas_hoje": expedidas_hoje,
         },
         "eventos": eventos,
@@ -404,35 +405,27 @@ def _coletar_ocs_atrasadas() -> dict:
     from ..compras.services import compras_service
 
     hoje = datetime.now().date()
-    limite_dias = _oc_atraso_dias()
-    resultado = compras_service.historico_ordens_compra(situacao="abertas", limite=500)
-    headers = resultado.get("headers", []) or []
+    rows = compras_service.ordens_compra_atrasadas(limite=400)
 
     lista = []
-    for h in headers:
-        if str(h.get("situacao_oc") or "").upper() != "ABERTA":
+    for h in rows:
+        prev = _to_date(h.get("previsao_entrega"))
+        if not prev or prev >= hoje:
             continue
-        ref = _to_date(h.get("data_referencia"))
-        if not ref:
-            continue
-        dias = (hoje - ref).days
-        if dias < limite_dias:
-            continue
+        dias = (hoje - prev).days
         lista.append({
             "oc": h.get("cod_ordem_compra"),
             "fornecedor": (h.get("fornecedor") or "").strip(),
             "comprador": (h.get("comprador") or "").strip(),
             "status": (h.get("status_oc_nome") or "").strip(),
-            "desde": ref.isoformat(),
+            "previsao": prev.isoformat(),
             "dias": dias,
-            "total": float(h.get("total") or 0),
         })
 
     lista.sort(key=lambda x: x["dias"], reverse=True)
     return {
         "total": len(lista),
-        "limite_dias": limite_dias,
-        "lista": lista[:80],
+        "lista": lista[:120],
         "gerado_em": datetime.now().isoformat(),
     }
 

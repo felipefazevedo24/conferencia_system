@@ -483,7 +483,7 @@
   const EXP_VIEWS = [
     { key: "fat", label: "Faturamento" },
     { key: "st", label: "Serv. Terceiros" },
-    { key: "faturadas", label: "Faturadas hoje" },
+    { key: "faturadas", label: "Faturadas a expedir" },
     { key: "expedidas", label: "Expedidas hoje" },
   ];
 
@@ -511,11 +511,11 @@
       renderList("exp-list", bloco.lista || [], buildExpItem(view === "fat" ? "Ordem" : "OC"));
     } else if (view === "faturadas") {
       const lista = exp.faturadas_hoje || [];
-      $("exp-hero-label").innerHTML = 'Notas <span class="accent">faturadas hoje</span>';
+      $("exp-hero-label").innerHTML = 'Notas <span class="accent">faturadas</span> · a expedir';
       setNum("exp-pend-conf", lista.length);
-      $("exp-feed-label").textContent = "faturadas hoje";
+      $("exp-feed-label").textContent = "faturadas · a expedir";
       $("exp-count").textContent = lista.length + " itens";
-      renderList("exp-list", lista, buildHojeItem, "Nada faturado hoje");
+      renderList("exp-list", lista, buildHojeItem, "Nada faturado a expedir");
     } else {
       const lista = exp.expedidas_hoje || [];
       $("exp-hero-label").innerHTML = 'Notas <span class="accent">expedidas hoje</span>';
@@ -600,7 +600,7 @@
       const d = await r.json();
       setNum("oc-total", d.total || 0);
       $("oc-tag").textContent = (d.total || 0) + " OCs";
-      $("oc-sub").textContent = d.limite_dias ? "(em aberto há mais de " + d.limite_dias + " dias)" : "";
+      $("oc-sub").textContent = "(previsão de entrega vencida)";
       renderList("oc-list", d.lista || [], buildOcItem, d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
     } catch (e) {
       renderList("oc-list", [], buildOcItem, "ERP indisponível");
