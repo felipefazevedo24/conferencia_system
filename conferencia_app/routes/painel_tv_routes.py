@@ -7,9 +7,11 @@ Rotas publicas:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import os
+import threading
+from datetime import date, datetime, timedelta
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, current_app, jsonify, render_template
 from sqlalchemy import desc, func
 
 from ..extensions import db
@@ -151,6 +153,52 @@ def _coletar_indicadores() -> dict:
         for o in st_pendentes
     ]
 
+    # Notas faturadas e expedidas HOJE (FAT + ST combinados)
+    def _exp_item(codigo, parceiro, tipo, numero_nf, ts):
+        return {
+            "codigo": str(codigo),
+            "parceiro": parceiro or "",
+            "tipo": tipo,
+            "numero_nf": numero_nf or "",
+            "ts": _iso(ts),
+        }
+
+    fat_fat_hoje = (
+        ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.faturado_at) == hoje)
+        .order_by(ExpedicaoOrdemFat.faturado_at.desc())
+        .limit(40)
+        .all()
+    )
+    st_fat_hoje = (
+        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.faturado_at) == hoje)
+        .order_by(ExpedicaoOrdemST.faturado_at.desc())
+        .limit(40)
+        .all()
+    )
+    faturadas_hoje = (
+        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.faturado_at) for o in fat_fat_hoje]
+        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.faturado_at) for o in st_fat_hoje]
+    )
+    faturadas_hoje.sort(key=lambda x: x["ts"] or "", reverse=True)
+
+    fat_exp_hoje = (
+        ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje)
+        .order_by(ExpedicaoOrdemFat.expedido_at.desc())
+        .limit(40)
+        .all()
+    )
+    st_exp_hoje = (
+        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje)
+        .order_by(ExpedicaoOrdemST.expedido_at.desc())
+        .limit(40)
+        .all()
+    )
+    expedidas_hoje = (
+        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.expedido_at) for o in fat_exp_hoje]
+        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.expedido_at) for o in st_exp_hoje]
+    )
+    expedidas_hoje.sort(key=lambda x: x["ts"] or "", reverse=True)
+
     eventos = _coletar_eventos()
 
     return {
@@ -177,6 +225,8 @@ def _coletar_indicadores() -> dict:
                 "expedidos_hoje": int(exp_st_hoje),
                 "lista": st_lista,
             },
+            "faturadas_hoje": faturadas_hoje,
+            "expedidas_hoje": expedidas_hoje,
         },
         "eventos": eventos,
     }
@@ -311,3 +361,103 @@ def painel_tv_indicadores():
         db.session.rollback()
         raise
     return jsonify(dados)
+
+
+# ---------------------------------------------------------------------------
+# OCs atrasadas (ERP Postgres via modulo de compras) com cache em memoria.
+# A consulta ao ERP e pesada; o painel publico faz polling, entao guardamos
+# o resultado por alguns segundos para nao sobrecarregar o banco.
+# ---------------------------------------------------------------------------
+_oc_cache = {"data": None, "ts": None}
+_oc_lock = threading.Lock()
+
+
+def _oc_cache_ttl() -> int:
+    try:
+        return int(os.environ.get("PAINEL_OC_CACHE_TTL", "90"))
+    except (TypeError, ValueError):
+        return 90
+
+
+def _oc_atraso_dias() -> int:
+    """Dias em aberto a partir dos quais uma OC e considerada atrasada."""
+    try:
+        return int(os.environ.get("PAINEL_OC_ATRASO_DIAS", "30"))
+    except (TypeError, ValueError):
+        return 30
+
+
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _coletar_ocs_atrasadas() -> dict:
+    from ..compras.services import compras_service
+
+    hoje = datetime.now().date()
+    limite_dias = _oc_atraso_dias()
+    resultado = compras_service.historico_ordens_compra(situacao="abertas", limite=500)
+    headers = resultado.get("headers", []) or []
+
+    lista = []
+    for h in headers:
+        if str(h.get("situacao_oc") or "").upper() != "ABERTA":
+            continue
+        ref = _to_date(h.get("data_referencia"))
+        if not ref:
+            continue
+        dias = (hoje - ref).days
+        if dias < limite_dias:
+            continue
+        lista.append({
+            "oc": h.get("cod_ordem_compra"),
+            "fornecedor": (h.get("fornecedor") or "").strip(),
+            "comprador": (h.get("comprador") or "").strip(),
+            "status": (h.get("status_oc_nome") or "").strip(),
+            "desde": ref.isoformat(),
+            "dias": dias,
+            "total": float(h.get("total") or 0),
+        })
+
+    lista.sort(key=lambda x: x["dias"], reverse=True)
+    return {
+        "total": len(lista),
+        "limite_dias": limite_dias,
+        "lista": lista[:80],
+        "gerado_em": datetime.now().isoformat(),
+    }
+
+
+@painel_tv_bp.route("/api/painel/compras")
+def painel_tv_compras():
+    agora = datetime.now()
+    ttl = _oc_cache_ttl()
+    with _oc_lock:
+        cache_ok = (
+            _oc_cache["data"] is not None
+            and _oc_cache["ts"] is not None
+            and (agora - _oc_cache["ts"]).total_seconds() < ttl
+        )
+        if cache_ok:
+            return jsonify(_oc_cache["data"])
+    try:
+        dados = _coletar_ocs_atrasadas()
+        with _oc_lock:
+            _oc_cache["data"] = dados
+            _oc_cache["ts"] = agora
+        return jsonify(dados)
+    except Exception:
+        current_app.logger.exception("Falha ao buscar OCs atrasadas para o painel")
+        # Se ha cache antigo, devolve ele; senao, retorna vazio com aviso.
+        if _oc_cache["data"] is not None:
+            return jsonify({**_oc_cache["data"], "stale": True})
+        return jsonify({"total": 0, "lista": [], "erro": "indisponivel", "limite_dias": _oc_atraso_dias()})

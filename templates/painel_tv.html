@@ -80,14 +80,51 @@
   .clock .time { font-size: clamp(22px, 3vh, 40px); font-weight: 800; font-variant-numeric: tabular-nums; }
   .clock .date { color: var(--muted); font-size: clamp(11px, 1.4vh, 16px); text-transform: capitalize; }
 
-  /* ---------- Main grid ---------- */
+  /* ---------- Carrossel de slides ---------- */
   main {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+  }
+  .slide { position: absolute; inset: 0; display: none; }
+  .slide.is-active { display: flex; flex-direction: column; animation: slideFade .5s ease; }
+  @keyframes slideFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .op-grid {
     flex: 1 1 auto;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: clamp(12px, 1.6vh, 22px);
     min-height: 0;
   }
+  /* indicador de slides no cabecalho */
+  .slides-nav { display: flex; gap: 8px; align-items: center; }
+  .slides-nav .sdot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.22); transition: all .3s; }
+  .slides-nav .sdot.on { background: var(--recebimento); width: 26px; border-radius: 6px; }
+
+  /* ---------- Painel de compras (OCs atrasadas) ---------- */
+  .panel.compras { flex: 1 1 auto; }
+  .compras .icon { background: rgba(250,204,21,.16); color: #facc15; }
+  .compras .accent { color: #facc15; }
+  .oc-grid {
+    flex: 1 1 auto; min-height: 0; margin-top: clamp(8px,1.2vh,14px);
+    display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+    grid-auto-rows: min-content; gap: 10px; overflow-y: auto; padding-right: 4px;
+    align-content: start;
+  }
+  .oc-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: rgba(255,255,255,.035); border: 1px solid var(--border);
+    border-left: 4px solid #facc15; border-radius: 12px;
+    padding: clamp(8px,1.1vh,12px) clamp(10px,1.4vh,15px);
+  }
+  .oc-item .oc-main { min-width: 0; }
+  .oc-item .oc-main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; }
+  .oc-item .oc-main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-item .oc-dias { text-align: right; white-space: nowrap; }
+  .oc-item .oc-dias b { font-size: clamp(15px,2vh,22px); font-weight: 900; color: #facc15; }
+  .oc-item .oc-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  @media (max-width: 1400px) { .oc-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
   .panel {
     background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
     border: 1px solid var(--border);
@@ -212,6 +249,7 @@
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:20px">
+      <div class="slides-nav" id="slides-nav"></div>
       <div id="live" class="live"><span class="dot"></span><span id="live-text">Ao vivo</span></div>
       <div class="clock">
         <div class="time" id="clock-time">--:--</div>
@@ -221,6 +259,9 @@
   </header>
 
   <main>
+    <!-- SLIDE 1: OPERAÇÃO (Recebimento + Expedição) -->
+    <section class="slide slide-op is-active" data-slide="operacao">
+      <div class="op-grid">
     <!-- RECEBIMENTO -->
     <section class="panel rec">
       <div class="panel-head">
@@ -247,14 +288,11 @@
       <div class="panel-head">
         <div class="icon">🚚</div>
         <h2>Expedição</h2>
-        <div class="mode-switch">
-          <span class="mode-pill" id="exp-mode-fat">Faturamento</span>
-          <span class="mode-pill" id="exp-mode-st">Serviço de Terceiros</span>
-        </div>
+        <div class="mode-switch" id="exp-modes"></div>
         <div class="tag" id="exp-tag">—</div>
       </div>
       <div class="hero">
-        <div class="label">Pendentes de <span class="accent">conferência</span> — <b id="exp-modo-label">Faturamento</b></div>
+        <div class="label" id="exp-hero-label">Pendentes de <span class="accent">conferência</span> — <b>Faturamento</b></div>
         <div class="num accent" id="exp-pend-conf">0</div>
       </div>
       <div class="grid2">
@@ -264,6 +302,24 @@
       <div class="feed">
         <div class="feed-title"><span>Pendentes — <span id="exp-feed-label">faturamento</span></span><span id="exp-count"></span></div>
         <div class="list" id="exp-list"><div class="empty">Nada pendente</div></div>
+      </div>
+    </section>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: COMPRAS (OCs atrasadas) -->
+    <section class="slide slide-compras" data-slide="compras">
+      <div class="panel compras">
+        <div class="panel-head">
+          <div class="icon">🛒</div>
+          <h2>Compras — Ordens de Compra em atraso</h2>
+          <div class="tag" id="oc-tag">—</div>
+        </div>
+        <div class="hero">
+          <div class="label">OCs em aberto <span class="accent">atrasadas</span> <span id="oc-sub" style="color:var(--muted);font-size:.7em"></span></div>
+          <div class="num accent" id="oc-total">0</div>
+        </div>
+        <div class="oc-grid" id="oc-list"><div class="empty">Carregando…</div></div>
       </div>
     </section>
   </main>
@@ -355,7 +411,7 @@
       let prev = "";
       if (it.previsao) {
         const cls = it.previsao_status || "";
-        const txt = (it.previsao_status === "vencido" ? "Venceu " : "Entrega ") + fmtDia(it.previsao);
+        const txt = (it.previsao_status === "vencido" ? "Em atraso " : "Entrega ") + fmtDia(it.previsao);
         prev = '<span class="badge ' + cls + '">' + txt + "</span>";
       }
       return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
@@ -365,8 +421,23 @@
     };
   }
 
+  function buildHojeItem(it) {
+    const nf = it.numero_nf ? " · NF " + esc(it.numero_nf) : "";
+    return '<div class="item">' +
+      '<div class="main"><b>' + (it.tipo === "ST" ? "OC " : "Ordem ") + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + nf + "</span></div>" +
+      '<div class="meta"><span class="badge">' + esc(it.tipo) + '</span><span class="ago">' + relTime(it.ts) + "</span></div>" +
+      "</div>";
+  }
+
+  function buildOcItem(it) {
+    return '<div class="oc-item">' +
+      '<div class="oc-main"><b>OC ' + esc(it.oc) + "</b><span>" + esc(it.fornecedor || "—") + "</span></div>" +
+      '<div class="oc-dias"><b>' + it.dias + "</b><span>dias</span></div>" +
+      "</div>";
+  }
+
   // Renderiza a lista somente se o conteudo mudou (preserva o auto-scroll)
-  function renderList(containerId, items, buildRow) {
+  function renderList(containerId, items, buildRow, emptyMsg) {
     const box = $(containerId);
     const sig = JSON.stringify(items);
     if (box._sig === sig) return;
@@ -374,13 +445,13 @@
     box.scrollTop = 0;
     box._phase = "";
     box._pausedAt = Date.now() + 2000;
-    if (!items.length) { box.innerHTML = '<div class="empty">Nada pendente 🎉</div>'; return; }
+    if (!items.length) { box.innerHTML = '<div class="empty">' + (emptyMsg || "Nada pendente 🎉") + "</div>"; return; }
     box.innerHTML = items.map(buildRow).join("");
   }
 
   // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV)
   function autoScroll() {
-    document.querySelectorAll(".feed .list").forEach((el) => {
+    document.querySelectorAll(".feed .list, .oc-grid").forEach((el) => {
       const max = el.scrollHeight - el.clientHeight;
       if (max <= 4) return;
       const now = Date.now();
@@ -406,24 +477,53 @@
     $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }
 
-  // ----- Expedição alterna entre FAT e ST -----
+  // ----- Expedição alterna entre 4 visões -----
   let lastData = null;
-  let expMode = "fat";
-  const EXP_LABEL = { fat: "Faturamento", st: "Serviço de Terceiros" };
+  let expIdx = 0;
+  const EXP_VIEWS = [
+    { key: "fat", label: "Faturamento" },
+    { key: "st", label: "Serv. Terceiros" },
+    { key: "faturadas", label: "Faturadas hoje" },
+    { key: "expedidas", label: "Expedidas hoje" },
+  ];
 
   function renderExpedicao() {
     if (!lastData) return;
-    const bloco = lastData.expedicao[expMode] || { pendente: 0, conferido: 0, expedidos_hoje: 0, lista: [] };
-    setNum("exp-pend-conf", bloco.pendente);
-    setNum("exp-conferido", bloco.conferido);
-    setNum("exp-hoje", bloco.expedidos_hoje);
-    $("exp-modo-label").textContent = EXP_LABEL[expMode];
-    $("exp-feed-label").textContent = expMode === "fat" ? "faturamento" : "serviço de terceiros";
-    $("exp-count").textContent = (bloco.lista || []).length + " itens";
-    $("exp-tag").textContent = "FAT " + lastData.expedicao.fat.pendente + " · ST " + lastData.expedicao.st.pendente;
-    $("exp-mode-fat").classList.toggle("active", expMode === "fat");
-    $("exp-mode-st").classList.toggle("active", expMode === "st");
-    renderList("exp-list", bloco.lista || [], buildExpItem(expMode === "fat" ? "Ordem" : "OC"));
+    const exp = lastData.expedicao;
+    const view = EXP_VIEWS[expIdx].key;
+
+    // Tiles sempre com o consolidado FAT + ST
+    setNum("exp-conferido", (exp.fat.conferido || 0) + (exp.st.conferido || 0));
+    setNum("exp-hoje", (exp.fat.expedidos_hoje || 0) + (exp.st.expedidos_hoje || 0));
+    $("exp-tag").textContent = "FAT " + exp.fat.pendente + " · ST " + exp.st.pendente;
+
+    // Pílulas das 4 visões
+    $("exp-modes").innerHTML = EXP_VIEWS.map((v, i) =>
+      '<span class="mode-pill' + (i === expIdx ? " active" : "") + '">' + v.label + "</span>"
+    ).join("");
+
+    if (view === "fat" || view === "st") {
+      const bloco = exp[view];
+      $("exp-hero-label").innerHTML = 'Pendentes de <span class="accent">conferência</span> — <b>' + EXP_VIEWS[expIdx].label + "</b>";
+      setNum("exp-pend-conf", bloco.pendente);
+      $("exp-feed-label").textContent = "pendentes · " + EXP_VIEWS[expIdx].label;
+      $("exp-count").textContent = (bloco.lista || []).length + " itens";
+      renderList("exp-list", bloco.lista || [], buildExpItem(view === "fat" ? "Ordem" : "OC"));
+    } else if (view === "faturadas") {
+      const lista = exp.faturadas_hoje || [];
+      $("exp-hero-label").innerHTML = 'Notas <span class="accent">faturadas hoje</span>';
+      setNum("exp-pend-conf", lista.length);
+      $("exp-feed-label").textContent = "faturadas hoje";
+      $("exp-count").textContent = lista.length + " itens";
+      renderList("exp-list", lista, buildHojeItem, "Nada faturado hoje");
+    } else {
+      const lista = exp.expedidas_hoje || [];
+      $("exp-hero-label").innerHTML = 'Notas <span class="accent">expedidas hoje</span>';
+      setNum("exp-pend-conf", lista.length);
+      $("exp-feed-label").textContent = "expedidas hoje";
+      $("exp-count").textContent = lista.length + " itens";
+      renderList("exp-list", lista, buildHojeItem, "Nada expedido hoje");
+    }
   }
 
   function toggleExpMode() {
@@ -431,11 +531,32 @@
     const panel = document.querySelector(".panel.exp");
     panel.classList.add("switching");
     setTimeout(() => {
-      expMode = expMode === "fat" ? "st" : "fat";
+      expIdx = (expIdx + 1) % EXP_VIEWS.length;
       renderExpedicao();
       panel.classList.remove("switching");
     }, 300);
   }
+
+  // ----- Carrossel de slides (Operação <-> Compras) -----
+  const SLIDES = ["operacao", "compras"];
+  let slideIdx = 0;
+
+  function renderSlideDots() {
+    $("slides-nav").innerHTML = SLIDES.map((s, i) =>
+      '<span class="sdot' + (i === slideIdx ? " on" : "") + '"></span>'
+    ).join("");
+  }
+
+  function showSlide(i) {
+    slideIdx = (i + SLIDES.length) % SLIDES.length;
+    document.querySelectorAll(".slide").forEach((el) => {
+      el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
+    });
+    renderSlideDots();
+    if (SLIDES[slideIdx] === "compras") pollCompras();
+  }
+
+  function nextSlide() { showSlide(slideIdx + 1); }
 
   async function poll() {
     try {
@@ -450,9 +571,9 @@
       setNum("rec-lanc-hoje", d.recebimento.lancadas_hoje);
       $("rec-tag").textContent = d.recebimento.importadas_hoje + " chegaram hoje";
       $("rec-count").textContent = (d.recebimento.lista || []).length + " notas";
-      renderList("rec-list", d.recebimento.lista || [], buildRecItem);
+      renderList("rec-list", d.recebimento.lista || [], buildRecItem, "Nada pendente 🎉");
 
-      // Expedição (renderiza o modo atual: FAT ou ST)
+      // Expedição (visão atual)
       renderExpedicao();
 
       // Notificações (avisos rápidos) para eventos novos
@@ -469,12 +590,33 @@
     }
   }
 
+  let comprasAt = 0;
+  async function pollCompras() {
+    // evita bater no ERP com muita frequencia (cache tambem no servidor)
+    if (Date.now() - comprasAt < 60000 && $("oc-list")._sig) return;
+    comprasAt = Date.now();
+    try {
+      const r = await fetch("/api/painel/compras", { cache: "no-store" });
+      const d = await r.json();
+      setNum("oc-total", d.total || 0);
+      $("oc-tag").textContent = (d.total || 0) + " OCs";
+      $("oc-sub").textContent = d.limite_dias ? "(em aberto há mais de " + d.limite_dias + " dias)" : "";
+      renderList("oc-list", d.lista || [], buildOcItem, d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
+    } catch (e) {
+      renderList("oc-list", [], buildOcItem, "ERP indisponível");
+    }
+  }
+
   updateClock();
   setInterval(updateClock, 1000 * 15);
+  renderSlideDots();
   poll();
+  pollCompras();
   setInterval(poll, POLL_MS);
-  setInterval(toggleExpMode, 16000);
+  setInterval(toggleExpMode, 14000);
   setInterval(autoScroll, 60);
+  setInterval(nextSlide, 20000);
+  setInterval(pollCompras, 90000);
 })();
 </script>
 </body>
