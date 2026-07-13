@@ -3,18 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f62c9">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
 <title>Painel Operacional — Recebimento & Expedição</title>
 <style>
   :root {
-    --bg: #0b1020;
-    --bg-soft: #111a33;
-    --card: #16213e;
-    --card-2: #1b2a4a;
-    --border: rgba(255,255,255,.08);
-    --text: #e8eefc;
-    --muted: #8ea3c7;
-    --recebimento: #38bdf8;
-    --recebimento-2: #0ea5e9;
+    --bg: #071a33;              /* azul Columbia profundo */
+    --bg-soft: #0c2547;
+    --card: #0f2c52;
+    --card-2: #143a68;
+    --border: rgba(255,255,255,.10);
+    --text: #eaf2ff;
+    --muted: #9db6d8;
+    --recebimento: #3da5f4;     /* azul Columbia claro */
+    --recebimento-2: #0f62c9;   /* azul Columbia primário */
     --expedicao: #fbbf24;
     --expedicao-2: #f59e0b;
     --ok: #34d399;
@@ -24,7 +26,7 @@
   html, body { height: 100%; }
   body {
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: radial-gradient(1200px 800px at 15% -10%, #14203f 0%, var(--bg) 55%);
+    background: radial-gradient(1200px 800px at 15% -10%, #0d3a6e 0%, var(--bg) 58%);
     color: var(--text);
     height: 100vh;
     overflow: hidden;
@@ -41,13 +43,21 @@
     justify-content: space-between;
     flex: 0 0 auto;
   }
-  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 18px; }
   .brand h1 {
     font-size: clamp(20px, 2.6vh, 34px);
     font-weight: 800;
     letter-spacing: .5px;
   }
   .brand .sub { color: var(--muted); font-size: clamp(11px, 1.4vh, 15px); font-weight: 500; }
+  .logo-badge {
+    background: #fff;
+    border-radius: 14px;
+    padding: clamp(8px, 1.1vh, 12px) clamp(12px, 1.6vh, 18px);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 26px rgba(0,0,0,.4);
+  }
+  .logo-badge img { height: clamp(30px, 4.6vh, 54px); display: block; }
   .live {
     display: inline-flex; align-items: center; gap: 8px;
     background: rgba(52,211,153,.12); color: var(--ok);
@@ -97,7 +107,7 @@
   }
   .panel-head h2 { font-size: clamp(17px, 2.3vh, 28px); font-weight: 800; letter-spacing:.3px; }
   .panel-head .tag { margin-left: auto; color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight:600; }
-  .rec .icon { background: rgba(56,189,248,.15); color: var(--recebimento); }
+  .rec .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
   .rec .accent { color: var(--recebimento); }
   .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
   .exp .accent { color: var(--expedicao); }
@@ -111,7 +121,7 @@
     background: var(--card-2);
     position: relative; overflow: hidden;
   }
-  .rec .hero { background: linear-gradient(120deg, rgba(56,189,248,.18), rgba(56,189,248,.04)); }
+  .rec .hero { background: linear-gradient(120deg, rgba(61,165,244,.20), rgba(15,98,201,.05)); }
   .exp .hero { background: linear-gradient(120deg, rgba(251,191,36,.18), rgba(251,191,36,.04)); }
   .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; max-width: 60%; }
   .hero .num { font-size: clamp(46px, 9vh, 120px); font-weight: 900; line-height: .9; font-variant-numeric: tabular-nums; }
@@ -172,7 +182,7 @@
 <body>
   <header>
     <div class="brand">
-      <div class="icon" style="width:clamp(40px,5.5vh,60px);height:clamp(40px,5.5vh,60px);border-radius:16px;background:rgba(255,255,255,.06);display:grid;place-items:center;font-size:clamp(22px,3vh,32px)">📊</div>
+      <div class="logo-badge"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
       <div>
         <h1>Painel Operacional</h1>
         <div class="sub">Recebimento &amp; Expedição — tempo real</div>
