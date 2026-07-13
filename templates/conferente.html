@@ -529,6 +529,22 @@
             .erp-table td::before { font-size: 9px; margin-bottom: 4px; }
             .qtd-input { font-size: 18px; padding: 12px; }
         }
+
+        /* Histórico / logs da nota (padrão da Conferência de Expedição) */
+        .rc-hist-card { margin-top: 18px; padding: 20px 24px; }
+        .rc-hist-head h3 { font-size: 15px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px; margin: 0; }
+        .rc-hist-sub { display: block; color: #64748b; font-size: 12px; margin-top: 4px; font-weight: 600; }
+        .rc-historico { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+        .rc-hist-item { border: 1px solid #e2e8f0; border-left: 3px solid #0f62c9; border-radius: 10px; padding: 10px 14px; background: #f8fafc; }
+        .rc-hist-item.is-danger { border-left-color: #dc2626; }
+        .rc-hist-item.is-success { border-left-color: #16a34a; }
+        .rc-hist-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .rc-hist-tipo { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: #e0ecff; color: #0f62c9; }
+        .rc-hist-tipo--danger { background: #fee2e2; color: #b91c1c; }
+        .rc-hist-tipo--success { background: #dcfce7; color: #15803d; }
+        .rc-hist-data { color: #64748b; font-size: 11px; font-weight: 700; margin-left: auto; font-family: monospace; }
+        .rc-hist-desc { font-size: 13px; color: #334155; margin-top: 6px; font-weight: 600; }
+        .rc-hist-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 22px; }
     </style>
 {% endblock %}
 
@@ -637,6 +653,14 @@
                     <i class="fas fa-check-double"></i> Validar Conferência
                 </button>
             </div>
+        </div>
+
+        <div class="conf-panel rc-hist-card">
+            <div class="rc-hist-head">
+                <h3><i class="fas fa-clock-rotate-left"></i> Histórico da nota</h3>
+                <span class="rc-hist-sub">Trilha de eventos desta NF: importação, conferência, divergências, lançamento e ocorrências.</span>
+            </div>
+            <div id="rc-hist-lista" class="rc-historico"></div>
         </div>
     </div>
     </div>
@@ -1081,6 +1105,48 @@
         atualizarDashboard();
     }
 
+    function _rcEscape(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+    function _rcCategoria(tipo) {
+        const t = (tipo || '').toLowerCase();
+        if (t.includes('diverg') || t.includes('estorno') || t.includes('exclus') || t.includes('recus') || t.includes('devolu'))
+            return { item: 'is-danger', tag: 'rc-hist-tipo--danger' };
+        if (t.includes('lança') || t.includes('lanca'))
+            return { item: 'is-success', tag: 'rc-hist-tipo--success' };
+        return { item: '', tag: '' };
+    }
+    function renderHistoricoNota(lista) {
+        const box = document.getElementById('rc-hist-lista');
+        if (!box) return;
+        if (!lista || !lista.length) {
+            box.innerHTML = '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>';
+            return;
+        }
+        // Mais recente primeiro.
+        box.innerHTML = lista.slice().reverse().map(e => {
+            const cat = _rcCategoria(e.tipo);
+            return `<div class="rc-hist-item ${cat.item}">
+                <div class="rc-hist-head-row">
+                    <span class="rc-hist-tipo ${cat.tag}">${_rcEscape(e.tipo)}</span>
+                    <span class="rc-hist-data">${_rcEscape(e.data)}</span>
+                </div>
+                <div class="rc-hist-desc">${_rcEscape(e.descricao)}</div>
+            </div>`;
+        }).join('');
+    }
+    async function carregarHistoricoNota(nota) {
+        const box = document.getElementById('rc-hist-lista');
+        if (box) box.innerHTML = '<div class="rc-hist-empty">Carregando…</div>';
+        try {
+            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico');
+            if (!r.ok) throw new Error();
+            renderHistoricoNota(await r.json());
+        } catch (e) {
+            if (box) box.innerHTML = '<div class="rc-hist-empty">Não foi possível carregar o histórico.</div>';
+        }
+    }
+
     async function abrir(n) {
         notaSel = n;
         const metaNota = notasPendentesCache.find(item => String(item.numero) === String(n));
@@ -1098,6 +1164,7 @@
         document.getElementById('msg-lock').style.display = 'none';
         document.getElementById('lista-view').classList.add('hidden');
         document.getElementById('conf-view').classList.remove('hidden');
+        carregarHistoricoNota(n);
         iniciarHeartbeat();
         const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || '---'}`);
         document.getElementById('n-atual').innerHTML = `CONFERÊNCIA NF: ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:700;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;

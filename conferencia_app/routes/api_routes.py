@@ -7698,6 +7698,19 @@ def api_estornos_historico():
 @api_bp.route("/api/timeline/<nota>")
 @roles_required("Admin")
 def timeline_nota(nota):
+    return jsonify(_timeline_eventos(nota))
+
+
+@api_bp.route("/api/conferencia/nota/<nota>/historico")
+@roles_required("Admin", "Conferente", "Fiscal", "Logística")
+def api_conferencia_historico_nota(nota):
+    """Historico cronologico de uma NF para o painel de logs da conferencia
+    cega de recebimento (mesmos eventos da timeline, acessivel aos perfis de
+    conferencia)."""
+    return jsonify(_timeline_eventos(nota))
+
+
+def _timeline_eventos(nota):
     itens = ItemNota.query.filter_by(numero_nota=nota).all()
     eventos = []
     if itens:
@@ -7797,16 +7810,14 @@ def timeline_nota(nota):
 
     eventos = [e for e in eventos if e.get("data")]
     eventos.sort(key=lambda e: e["data"])
-    return jsonify(
-        [
-            {
-                "data": e["data"].strftime("%d/%m/%Y %H:%M"),
-                "tipo": e["tipo"],
-                "descricao": e["descricao"],
-            }
-            for e in eventos
-        ]
-    )
+    return [
+        {
+            "data": e["data"].strftime("%d/%m/%Y %H:%M"),
+            "tipo": e["tipo"],
+            "descricao": e["descricao"],
+        }
+        for e in eventos
+    ]
 
 
 @api_bp.route("/api/sla_alertas")
