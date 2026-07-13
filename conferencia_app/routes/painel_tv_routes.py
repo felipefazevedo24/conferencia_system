@@ -413,7 +413,7 @@ def _coletar_ocs_atrasadas() -> dict:
     from ..compras.services import compras_service
 
     hoje = datetime.now().date()
-    limite_semana = hoje + timedelta(days=7)
+    limite_semana = hoje + timedelta(days=1)
     rows = compras_service.ordens_compra_entregas(limite=3000)
 
     atrasadas = []

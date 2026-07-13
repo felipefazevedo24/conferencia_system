@@ -335,11 +335,11 @@
         <section class="panel compras compras-sem">
           <div class="panel-head">
             <div class="icon">📅</div>
-            <h2>A chegar na semana</h2>
+            <h2>A chegar (próximo dia)</h2>
             <div class="tag" id="oc-sem-tag">—</div>
           </div>
           <div class="hero">
-            <div class="label">Previsão nos <span class="accent">próximos 7 dias</span></div>
+            <div class="label">Previsão para <span class="accent">hoje / amanhã</span></div>
             <div class="num accent" id="oc-sem-total">0</div>
           </div>
           <div class="feed">
@@ -460,7 +460,7 @@
     return function (it) {
       const diasTxt = mode === "atraso"
         ? it.dias + (it.dias === 1 ? " dia" : " dias")
-        : (it.dias === 0 ? "hoje" : "em " + it.dias + (it.dias === 1 ? " dia" : " dias"));
+        : (it.dias === 0 ? "hoje" : (it.dias === 1 ? "amanhã" : "em " + it.dias + " dias"));
       return '<div class="oc-item ' + mode + '">' +
         '<div class="oc-main"><b>OC ' + esc(it.oc) + "</b><span>" + esc(it.fornecedor || "—") + "</span></div>" +
         '<div class="oc-dias"><b>' + fmtDia(it.previsao) + "</b><span>" + diasTxt + "</span></div>" +
@@ -698,7 +698,7 @@
       $("oc-atr-tag").textContent = (atr.total || 0) + " OCs";
       $("oc-sem-tag").textContent = (sem.total || 0) + " OCs";
       renderList("oc-atr-list", atr.lista || [], buildOcItem("atraso"), d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
-      renderList("oc-sem-list", sem.lista || [], buildOcItem("semana"), d.erro ? "ERP indisponível" : "Nada a chegar nesta semana");
+      renderList("oc-sem-list", sem.lista || [], buildOcItem("semana"), d.erro ? "ERP indisponível" : "Nada a chegar no próximo dia");
     } catch (e) {
       renderList("oc-atr-list", [], buildOcItem("atraso"), "ERP indisponível");
       renderList("oc-sem-list", [], buildOcItem("semana"), "ERP indisponível");
