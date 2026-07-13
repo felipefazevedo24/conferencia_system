@@ -401,31 +401,45 @@ def _to_date(value):
         return None
 
 
+def _oc_janela_dias() -> int:
+    """Janela de recencia (dias) para 'atrasadas' — evita OCs legadas."""
+    try:
+        return int(os.environ.get("PAINEL_OC_JANELA_DIAS", "90"))
+    except (TypeError, ValueError):
+        return 90
+
+
 def _coletar_ocs_atrasadas() -> dict:
     from ..compras.services import compras_service
 
     hoje = datetime.now().date()
-    rows = compras_service.ordens_compra_atrasadas(limite=400)
+    limite_semana = hoje + timedelta(days=7)
+    rows = compras_service.ordens_compra_entregas(janela_dias=_oc_janela_dias(), limite=2500)
 
-    lista = []
+    atrasadas = []
+    semana = []
     for h in rows:
         prev = _to_date(h.get("previsao_entrega"))
-        if not prev or prev >= hoje:
+        if not prev:
             continue
-        dias = (hoje - prev).days
-        lista.append({
+        item = {
             "oc": h.get("cod_ordem_compra"),
             "fornecedor": (h.get("fornecedor") or "").strip(),
-            "comprador": (h.get("comprador") or "").strip(),
             "status": (h.get("status_oc_nome") or "").strip(),
             "previsao": prev.isoformat(),
-            "dias": dias,
-        })
+        }
+        if prev < hoje:
+            item["dias"] = (hoje - prev).days
+            atrasadas.append(item)
+        elif prev <= limite_semana:
+            item["dias"] = (prev - hoje).days
+            semana.append(item)
 
-    lista.sort(key=lambda x: x["dias"], reverse=True)
+    atrasadas.sort(key=lambda x: x["previsao"])          # mais antiga (mais atrasada) primeiro
+    semana.sort(key=lambda x: x["previsao"])             # mais proxima primeiro
     return {
-        "total": len(lista),
-        "lista": lista[:120],
+        "atrasadas": {"total": len(atrasadas), "lista": atrasadas[:150]},
+        "semana": {"total": len(semana), "lista": semana[:150]},
         "gerado_em": datetime.now().isoformat(),
     }
 
@@ -449,8 +463,12 @@ def painel_tv_compras():
             _oc_cache["ts"] = agora
         return jsonify(dados)
     except Exception:
-        current_app.logger.exception("Falha ao buscar OCs atrasadas para o painel")
+        current_app.logger.exception("Falha ao buscar OCs (entregas) para o painel")
         # Se ha cache antigo, devolve ele; senao, retorna vazio com aviso.
         if _oc_cache["data"] is not None:
             return jsonify({**_oc_cache["data"], "stale": True})
-        return jsonify({"total": 0, "lista": [], "erro": "indisponivel", "limite_dias": _oc_atraso_dias()})
+        return jsonify({
+            "atrasadas": {"total": 0, "lista": []},
+            "semana": {"total": 0, "lista": []},
+            "erro": "indisponivel",
+        })

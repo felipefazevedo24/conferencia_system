@@ -101,29 +101,32 @@
   .slides-nav .sdot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.22); transition: all .3s; }
   .slides-nav .sdot.on { background: var(--recebimento); width: 26px; border-radius: 6px; }
 
-  /* ---------- Painel de compras (OCs atrasadas) ---------- */
+  /* ---------- Painel de compras (OCs) ---------- */
   .panel.compras { flex: 1 1 auto; }
-  .compras .icon { background: rgba(250,204,21,.16); color: #facc15; }
-  .compras .accent { color: #facc15; }
+  .compras-atr .icon { background: rgba(248,113,113,.16); color: #f87171; }
+  .compras-atr .accent { color: #f87171; }
+  .compras-sem .icon { background: rgba(52,211,153,.16); color: #34d399; }
+  .compras-sem .accent { color: #34d399; }
   .oc-grid {
-    flex: 1 1 auto; min-height: 0; margin-top: clamp(8px,1.2vh,14px);
-    display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
-    grid-auto-rows: min-content; gap: 10px; overflow-y: auto; padding-right: 4px;
-    align-content: start;
+    flex: 1 1 auto; min-height: 0; margin-top: clamp(6px,1vh,10px);
+    display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 4px;
   }
   .oc-item {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-left: 4px solid #facc15; border-radius: 12px;
-    padding: clamp(8px,1.1vh,12px) clamp(10px,1.4vh,15px);
+    border-left: 4px solid var(--border); border-radius: 12px;
+    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px); flex: 0 0 auto;
   }
+  .oc-item.atraso { border-left-color: #f87171; }
+  .oc-item.semana { border-left-color: #34d399; }
   .oc-item .oc-main { min-width: 0; }
   .oc-item .oc-main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; }
   .oc-item .oc-main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .oc-item .oc-dias { text-align: right; white-space: nowrap; }
-  .oc-item .oc-dias b { font-size: clamp(15px,2vh,22px); font-weight: 900; color: #facc15; }
+  .oc-item .oc-dias b { font-size: clamp(14px,1.9vh,20px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .oc-item.atraso .oc-dias b { color: #f87171; }
+  .oc-item.semana .oc-dias b { color: #34d399; }
   .oc-item .oc-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
-  @media (max-width: 1400px) { .oc-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 
   .panel {
     background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
@@ -307,19 +310,41 @@
       </div>
     </section>
 
-    <!-- SLIDE 2: COMPRAS (OCs atrasadas) -->
+    <!-- SLIDE 2: COMPRAS (OCs atrasadas | a chegar na semana) -->
     <section class="slide slide-compras" data-slide="compras">
-      <div class="panel compras">
-        <div class="panel-head">
-          <div class="icon">🛒</div>
-          <h2>Compras — Ordens de Compra em atraso</h2>
-          <div class="tag" id="oc-tag">—</div>
-        </div>
-        <div class="hero">
-          <div class="label">OCs em aberto <span class="accent">atrasadas</span> <span id="oc-sub" style="color:var(--muted);font-size:.7em"></span></div>
-          <div class="num accent" id="oc-total">0</div>
-        </div>
-        <div class="oc-grid" id="oc-list"><div class="empty">Carregando…</div></div>
+      <div class="op-grid">
+        <!-- ATRASADAS -->
+        <section class="panel compras compras-atr">
+          <div class="panel-head">
+            <div class="icon">⚠️</div>
+            <h2>OCs atrasadas</h2>
+            <div class="tag" id="oc-atr-tag">—</div>
+          </div>
+          <div class="hero">
+            <div class="label">Previsão de entrega <span class="accent">vencida</span></div>
+            <div class="num accent" id="oc-atr-total">0</div>
+          </div>
+          <div class="feed">
+            <div class="feed-title"><span>Ordens de compra em atraso</span></div>
+            <div class="oc-grid" id="oc-atr-list"><div class="empty">Carregando…</div></div>
+          </div>
+        </section>
+        <!-- A CHEGAR NA SEMANA -->
+        <section class="panel compras compras-sem">
+          <div class="panel-head">
+            <div class="icon">📅</div>
+            <h2>A chegar na semana</h2>
+            <div class="tag" id="oc-sem-tag">—</div>
+          </div>
+          <div class="hero">
+            <div class="label">Previsão nos <span class="accent">próximos 7 dias</span></div>
+            <div class="num accent" id="oc-sem-total">0</div>
+          </div>
+          <div class="feed">
+            <div class="feed-title"><span>Ordens de compra a chegar</span></div>
+            <div class="oc-grid" id="oc-sem-list"><div class="empty">Carregando…</div></div>
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -429,11 +454,16 @@
       "</div>";
   }
 
-  function buildOcItem(it) {
-    return '<div class="oc-item">' +
-      '<div class="oc-main"><b>OC ' + esc(it.oc) + "</b><span>" + esc(it.fornecedor || "—") + "</span></div>" +
-      '<div class="oc-dias"><b>' + it.dias + "</b><span>dias</span></div>" +
-      "</div>";
+  function buildOcItem(mode) {
+    return function (it) {
+      const diasTxt = mode === "atraso"
+        ? it.dias + (it.dias === 1 ? " dia" : " dias")
+        : (it.dias === 0 ? "hoje" : "em " + it.dias + (it.dias === 1 ? " dia" : " dias"));
+      return '<div class="oc-item ' + mode + '">' +
+        '<div class="oc-main"><b>OC ' + esc(it.oc) + "</b><span>" + esc(it.fornecedor || "—") + "</span></div>" +
+        '<div class="oc-dias"><b>' + fmtDia(it.previsao) + "</b><span>" + diasTxt + "</span></div>" +
+        "</div>";
+    };
   }
 
   // Renderiza a lista somente se o conteudo mudou (preserva o auto-scroll)
@@ -593,17 +623,22 @@
   let comprasAt = 0;
   async function pollCompras() {
     // evita bater no ERP com muita frequencia (cache tambem no servidor)
-    if (Date.now() - comprasAt < 60000 && $("oc-list")._sig) return;
+    if (Date.now() - comprasAt < 60000 && $("oc-atr-list")._sig) return;
     comprasAt = Date.now();
     try {
       const r = await fetch("/api/painel/compras", { cache: "no-store" });
       const d = await r.json();
-      setNum("oc-total", d.total || 0);
-      $("oc-tag").textContent = (d.total || 0) + " OCs";
-      $("oc-sub").textContent = "(previsão de entrega vencida)";
-      renderList("oc-list", d.lista || [], buildOcItem, d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
+      const atr = d.atrasadas || { total: 0, lista: [] };
+      const sem = d.semana || { total: 0, lista: [] };
+      setNum("oc-atr-total", atr.total || 0);
+      setNum("oc-sem-total", sem.total || 0);
+      $("oc-atr-tag").textContent = (atr.total || 0) + " OCs";
+      $("oc-sem-tag").textContent = (sem.total || 0) + " OCs";
+      renderList("oc-atr-list", atr.lista || [], buildOcItem("atraso"), d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
+      renderList("oc-sem-list", sem.lista || [], buildOcItem("semana"), d.erro ? "ERP indisponível" : "Nada a chegar nesta semana");
     } catch (e) {
-      renderList("oc-list", [], buildOcItem, "ERP indisponível");
+      renderList("oc-atr-list", [], buildOcItem("atraso"), "ERP indisponível");
+      renderList("oc-sem-list", [], buildOcItem("semana"), "ERP indisponível");
     }
   }
 

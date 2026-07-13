@@ -303,20 +303,23 @@ def historico_ordens_compra(
     }
 
 
-def ordens_compra_atrasadas(
+def ordens_compra_entregas(
     cod_empresa: Optional[int] = None,
-    limite: int = 300,
+    janela_dias: int = 90,
+    limite: int = 2000,
 ) -> list[dict]:
-    """OCs em aberto cuja previsao de entrega (os.dt_prevista) ja passou.
+    """OCs em aberto (tord_com, entregue=0/cancelado=0) com previsao de entrega.
 
-    Uma OC por linha, com o nome do fornecedor e a previsao mais urgente.
+    Uma OC por linha, com fornecedor e previsao. A janela de recencia evita OCs
+    legadas nunca marcadas como entregues. O painel separa atrasadas e a chegar.
     """
     empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
     params = {
         "cod_empresa": empresa,
-        "limite": max(1, min(int(limite or 300), 2000)),
+        "janela_dias": max(1, int(janela_dias or 90)),
+        "limite": max(1, min(int(limite or 2000), 5000)),
     }
-    return db.fetch_all(queries.SQL_OC_ATRASADAS, params)
+    return db.fetch_all(queries.SQL_OC_ENTREGAS, params)
 
 
 def visibility_compras(
