@@ -62,13 +62,17 @@ def _coletar_indicadores() -> dict:
     exp_st_pendente = (
         ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE).count()
     )
-    exp_conferido = (
+    exp_fat_conferido = (
         ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_CONFERIDO).count()
-        + ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_CONFERIDO).count()
     )
-    exp_expedidos_hoje = (
+    exp_st_conferido = (
+        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_CONFERIDO).count()
+    )
+    exp_fat_hoje = (
         ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje).count()
-        + ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje).count()
+    )
+    exp_st_hoje = (
+        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje).count()
     )
 
     eventos = _coletar_eventos()
@@ -83,11 +87,17 @@ def _coletar_indicadores() -> dict:
             "lancadas_hoje": int(lancadas_hoje),
         },
         "expedicao": {
-            "fat_pendente": int(exp_fat_pendente),
-            "st_pendente": int(exp_st_pendente),
             "pendente_total": int(exp_fat_pendente + exp_st_pendente),
-            "conferido_ag_fat": int(exp_conferido),
-            "expedidos_hoje": int(exp_expedidos_hoje),
+            "fat": {
+                "pendente": int(exp_fat_pendente),
+                "conferido": int(exp_fat_conferido),
+                "expedidos_hoje": int(exp_fat_hoje),
+            },
+            "st": {
+                "pendente": int(exp_st_pendente),
+                "conferido": int(exp_st_conferido),
+                "expedidos_hoje": int(exp_st_hoje),
+            },
         },
         "eventos": eventos,
     }
@@ -157,6 +167,7 @@ def _coletar_eventos() -> list[dict]:
             {
                 "key": f"exp_fat:{o.cod_ordem_fat}:{_iso(o.created_at)}",
                 "tipo": "expedicao",
+                "subtipo": "fat",
                 "titulo": "Novo faturamento (Expedição)",
                 "detalhe": f"Ordem {o.cod_ordem_fat}" + (f" — {o.cliente}" if o.cliente else ""),
                 "ts": _iso(o.created_at),
@@ -172,6 +183,7 @@ def _coletar_eventos() -> list[dict]:
             {
                 "key": f"exp_st:{o.cod_ordem_compra}:{_iso(o.created_at)}",
                 "tipo": "expedicao",
+                "subtipo": "st",
                 "titulo": "Novo faturamento ST (Expedição)",
                 "detalhe": f"OC {o.cod_ordem_compra}" + (f" — {o.fornecedor}" if o.fornecedor else ""),
                 "ts": _iso(o.created_at),

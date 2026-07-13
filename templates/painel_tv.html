@@ -107,6 +107,19 @@
   }
   .panel-head h2 { font-size: clamp(17px, 2.3vh, 28px); font-weight: 800; letter-spacing:.3px; }
   .panel-head .tag { margin-left: auto; color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight:600; }
+  .mode-switch { display: flex; gap: 8px; margin-left: 14px; }
+  .mode-pill {
+    font-size: clamp(10px,1.3vh,14px); font-weight: 700;
+    padding: 5px 12px; border-radius: 999px;
+    color: var(--muted); background: rgba(255,255,255,.05);
+    border: 1px solid var(--border); transition: all .35s ease;
+  }
+  .mode-pill.active {
+    color: #08243f; background: var(--expedicao);
+    border-color: var(--expedicao); box-shadow: 0 0 0 3px rgba(251,191,36,.2);
+  }
+  .exp .hero, .exp .grid2, .exp .feed .list { transition: opacity .3s ease; }
+  .exp.switching .hero, .exp.switching .grid2, .exp.switching .feed .list { opacity: .25; }
   .rec .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
   .rec .accent { color: var(--recebimento); }
   .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
@@ -224,10 +237,14 @@
       <div class="panel-head">
         <div class="icon">🚚</div>
         <h2>Expedição</h2>
+        <div class="mode-switch">
+          <span class="mode-pill" id="exp-mode-fat">Faturamento</span>
+          <span class="mode-pill" id="exp-mode-st">Serviço de Terceiros</span>
+        </div>
         <div class="tag" id="exp-tag">—</div>
       </div>
       <div class="hero">
-        <div class="label">Faturamentos pendentes de <span class="accent">conferência</span></div>
+        <div class="label">Pendentes de <span class="accent">conferência</span> — <b id="exp-modo-label">Faturamento</b></div>
         <div class="num accent" id="exp-pend-conf">0</div>
       </div>
       <div class="grid2">
@@ -235,7 +252,7 @@
         <div class="stat ok"><div class="n" id="exp-hoje">0</div><div class="t">Expedidos hoje</div></div>
       </div>
       <div class="feed">
-        <div class="feed-title">Últimos eventos — expedição</div>
+        <div class="feed-title">Últimos eventos — <span id="exp-feed-label">expedição</span></div>
         <div class="list" id="exp-feed"><div class="empty">Sem eventos recentes</div></div>
       </div>
     </section>
@@ -335,11 +352,44 @@
     $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }
 
+  // ----- Expedição alterna entre FAT e ST -----
+  let lastData = null;
+  let expMode = "fat";
+  const EXP_LABEL = { fat: "Faturamento", st: "Serviço de Terceiros" };
+
+  function renderExpedicao() {
+    if (!lastData) return;
+    const bloco = lastData.expedicao[expMode] || { pendente: 0, conferido: 0, expedidos_hoje: 0 };
+    setNum("exp-pend-conf", bloco.pendente);
+    setNum("exp-conferido", bloco.conferido);
+    setNum("exp-hoje", bloco.expedidos_hoje);
+    $("exp-modo-label").textContent = EXP_LABEL[expMode];
+    $("exp-feed-label").textContent = expMode === "fat" ? "faturamento" : "serviço de terceiros";
+    $("exp-tag").textContent = "FAT " + lastData.expedicao.fat.pendente + " · ST " + lastData.expedicao.st.pendente;
+    $("exp-mode-fat").classList.toggle("active", expMode === "fat");
+    $("exp-mode-st").classList.toggle("active", expMode === "st");
+
+    const eventos = (lastData.eventos || []).filter((e) => e.tipo === "expedicao" && e.subtipo === expMode);
+    renderFeed("exp-feed", eventos);
+  }
+
+  function toggleExpMode() {
+    if (!lastData) return;
+    const panel = document.querySelector(".panel.exp");
+    panel.classList.add("switching");
+    setTimeout(() => {
+      expMode = expMode === "fat" ? "st" : "fat";
+      renderExpedicao();
+      panel.classList.remove("switching");
+    }, 300);
+  }
+
   async function poll() {
     try {
       const r = await fetch("/api/painel/indicadores", { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const d = await r.json();
+      lastData = d;
 
       // Recebimento
       setNum("rec-pend-conf", d.recebimento.pendente_conferencia);
@@ -347,15 +397,11 @@
       setNum("rec-lanc-hoje", d.recebimento.lancadas_hoje);
       $("rec-tag").textContent = d.recebimento.importadas_hoje + " chegaram hoje";
 
-      // Expedição
-      setNum("exp-pend-conf", d.expedicao.pendente_total);
-      setNum("exp-conferido", d.expedicao.conferido_ag_fat);
-      setNum("exp-hoje", d.expedicao.expedidos_hoje);
-      $("exp-tag").textContent = "FAT " + d.expedicao.fat_pendente + " · ST " + d.expedicao.st_pendente;
+      // Expedição (renderiza o modo atual: FAT ou ST)
+      renderExpedicao();
 
       const eventos = d.eventos || [];
       renderFeed("rec-feed", eventos.filter((e) => e.tipo === "chegada" || e.tipo === "lancamento"));
-      renderFeed("exp-feed", eventos.filter((e) => e.tipo === "expedicao"));
 
       // Notificações (avisos rápidos) para eventos novos
       const novos = eventos.filter((e) => e.key && !seenKeys.has(e.key));
@@ -375,6 +421,7 @@
   setInterval(updateClock, 1000 * 15);
   poll();
   setInterval(poll, POLL_MS);
+  setInterval(toggleExpMode, 8000);
 })();
 </script>
 </body>
