@@ -70,6 +70,23 @@
     .ce-toast.success { border-left-color: var(--eui-success); }
     .hidden { display: none !important; }
 
+    /* Modal (motivo de finalizacao sem conferencia) */
+    .ce-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); padding: 20px; }
+    .ce-modal.open { display: flex; animation: ceFade .18s ease; }
+    .ce-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(480px, 100%); overflow: hidden; animation: cePop .2s cubic-bezier(.2,.9,.3,1); }
+    .ce-modal__head { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--eui-border); }
+    .ce-modal__ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--eui-danger-soft, rgba(220,38,38,.12)); color: var(--eui-danger); font-size: 20px; flex: 0 0 auto; }
+    .ce-modal__title { font-size: 16px; font-weight: 800; color: var(--eui-text); margin: 0; }
+    .ce-modal__sub { font-size: 12.5px; color: var(--eui-text-soft); margin: 2px 0 0; }
+    .ce-modal__body { padding: 18px 22px; }
+    .ce-modal__body label { display: block; font-size: 12.5px; font-weight: 700; color: var(--eui-text); margin-bottom: 8px; }
+    .ce-modal__body textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; color: var(--eui-text); background: var(--eui-surface-2, #fff); }
+    .ce-modal__body textarea:focus { outline: none; border-color: var(--eui-primary); box-shadow: 0 0 0 3px rgba(15,98,201,.15); }
+    .ce-modal__err { color: var(--eui-danger); font-size: 12px; font-weight: 700; margin-top: 8px; min-height: 16px; }
+    .ce-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--eui-border); background: var(--eui-surface-3, rgba(0,0,0,.02)); }
+    @keyframes ceFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes cePop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+
     @media (max-width: 1024px) {
         .ce-conf-meta, .ce-header-form { grid-template-columns: repeat(2, 1fr); }
     }
@@ -252,6 +269,27 @@
     <div class="module-shell">
         <div id="ce-toast" class="ce-toast"></div>
 
+        <div id="ce-motivo-modal" class="ce-modal" role="dialog" aria-modal="true" aria-labelledby="ce-motivo-title">
+            <div class="ce-modal__box">
+                <div class="ce-modal__head">
+                    <div class="ce-modal__ico"><i class="fas fa-user-shield"></i></div>
+                    <div>
+                        <h3 class="ce-modal__title" id="ce-motivo-title">Finalizar sem conferir</h3>
+                        <p class="ce-modal__sub">Ação de Admin — a ordem será encerrada sem conferência física e <b>não</b> irá para o Registro de expedição.</p>
+                    </div>
+                </div>
+                <div class="ce-modal__body">
+                    <label for="ce-motivo-input">Informe o motivo</label>
+                    <textarea id="ce-motivo-input" placeholder="Ex.: material já expedido em contraturno / conferência dispensada pela gerência…"></textarea>
+                    <div class="ce-modal__err" id="ce-motivo-err"></div>
+                </div>
+                <div class="ce-modal__foot">
+                    <button class="eui-btn eui-btn--subtle" id="ce-motivo-cancelar">Cancelar</button>
+                    <button class="eui-btn eui-btn--danger" id="ce-motivo-confirmar"><i class="fas fa-check"></i> Finalizar sem conferir</button>
+                </div>
+            </div>
+        </div>
+
         <header class="eui-page-header">
             <div>
                 <div class="eui-page-header__eyebrow">Logística · Expedição</div>
@@ -303,6 +341,48 @@
         t.style.display = "block";
         clearTimeout(t._t);
         t._t = setTimeout(() => { t.style.display = "none"; }, 4200);
+    }
+
+    // Modal de motivo (substitui o prompt do navegador). Resolve com o texto
+    // do motivo ou com null se o usuario cancelar.
+    function pedirMotivo() {
+        return new Promise((resolve) => {
+            const modal = $("ce-motivo-modal");
+            const input = $("ce-motivo-input");
+            const err = $("ce-motivo-err");
+            const btnOk = $("ce-motivo-confirmar");
+            const btnCancel = $("ce-motivo-cancelar");
+
+            input.value = "";
+            err.textContent = "";
+            modal.classList.add("open");
+            setTimeout(() => input.focus(), 60);
+
+            function fechar(valor) {
+                modal.classList.remove("open");
+                btnOk.removeEventListener("click", onOk);
+                btnCancel.removeEventListener("click", onCancel);
+                modal.removeEventListener("click", onBackdrop);
+                document.removeEventListener("keydown", onKey);
+                resolve(valor);
+            }
+            function onOk() {
+                const v = input.value.trim();
+                if (!v) { err.textContent = "Informe o motivo para finalizar sem conferir."; input.focus(); return; }
+                fechar(v);
+            }
+            function onCancel() { fechar(null); }
+            function onBackdrop(e) { if (e.target === modal) fechar(null); }
+            function onKey(e) {
+                if (e.key === "Escape") fechar(null);
+                else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onOk();
+            }
+
+            btnOk.addEventListener("click", onOk);
+            btnCancel.addEventListener("click", onCancel);
+            modal.addEventListener("click", onBackdrop);
+            document.addEventListener("keydown", onKey);
+        });
     }
 
     async function api(url, opts) {
@@ -597,19 +677,14 @@
 
         async function finalizarSemConferencia() {
             if (!currentOrdem || !CE_IS_ADMIN) return;
-            const motivo = prompt(
-                "FINALIZAR SEM CONFERIR (ação de Admin).\n\n" +
-                "A ordem será encerrada sem conferência física e NÃO irá para o " +
-                "Registro de expedição.\n\nInforme o motivo:"
-            );
+            const motivo = await pedirMotivo();
             if (motivo === null) return; // cancelou
-            if (!motivo.trim()) { toast("Informe o motivo para finalizar sem conferir.", "error"); return; }
 
             const btn = el("btn-finalizar-sem-conf");
             btn.disabled = true;
             try {
                 await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/finalizar-sem-conferencia", {
-                    method: "POST", body: JSON.stringify({ motivo: motivo.trim() }),
+                    method: "POST", body: JSON.stringify({ motivo: motivo }),
                 });
                 toast("Ordem finalizada sem conferência.", "success");
                 voltarDashboard();
