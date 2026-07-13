@@ -7710,6 +7710,59 @@ def api_conferencia_historico_nota(nota):
     return jsonify(_timeline_eventos(nota))
 
 
+@api_bp.route("/api/conferencia/divergencia-produto", methods=["POST"])
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def conferencia_divergencia_produto():
+    """Divergencia de produto: o material recebido diverge do comprado. O
+    conferente registra o motivo e a NF segue para o Documento de Entrada
+    (status Concluído) para lancamento normal, sem exigir a contagem cega."""
+    payload = request.get_json(silent=True) or {}
+    numero_nota = str(payload.get("nota") or "").strip()
+    motivo = str(payload.get("motivo") or "").strip()
+    if not numero_nota:
+        return jsonify({"error": "Nota nao informada."}), 400
+    if not motivo:
+        return jsonify({"error": "Informe o motivo da divergencia."}), 400
+
+    user = session.get("username") or "desconhecido"
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota, status="Pendente").all()
+    if not itens:
+        return jsonify({"error": "Nenhum item pendente para esta nota."}), 404
+
+    agora = datetime.now()
+    for it in itens:
+        it.status = "Concluído"
+        it.usuario_conferencia = user
+        if not it.inicio_conferencia:
+            it.inicio_conferencia = agora
+        it.fim_conferencia = agora
+
+    db.session.add(LogDivergencia(
+        numero_nota=numero_nota,
+        item_descricao="Divergência de produto",
+        qtd_esperada=0,
+        qtd_contada=0,
+        usuario_erro=user,
+        data_erro=agora,
+        motivo_tipo="Divergência de produto",
+        destino_fisico="Documento de entrada",
+        tentativa_numero=1,
+    ))
+    try:
+        db.session.add(LogEventoFiscalNota(
+            numero_nota=numero_nota,
+            evento="DivergenciaProduto",
+            usuario=user,
+            detalhe=motivo,
+            data=agora,
+        ))
+    except Exception:
+        current_app.logger.exception("Falha ao registrar evento de divergencia de produto")
+
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
 def _timeline_eventos(nota):
     itens = ItemNota.query.filter_by(numero_nota=nota).all()
     eventos = []
@@ -9236,6 +9289,15 @@ def atualizar_status_conferencia_simples(registro_id):
         registro.expedido_by = usuario
         registro.updated_at = agora
         db.session.commit()
+        # Propaga o "expedido" para as ordens da Conferencia de Expedicao
+        # (FAT/ST) que casem pela NF, para refletir no Painel/TV como Expedido.
+        try:
+            from ..services import expedicao_fat_service as _fat_svc
+            from ..services import expedicao_st_service as _st_svc
+            _fat_svc.marcar_expedido_por_nf(registro.numero_nf, registro_id=registro.id, usuario=usuario)
+            _st_svc.marcar_expedido_por_nf(registro.numero_nf, registro_id=registro.id, usuario=usuario)
+        except Exception:
+            current_app.logger.exception("Falha ao propagar expedido para ordens conf-cega")
         return jsonify({
             "sucesso": True,
             "registro": {"id": registro.id, "status": registro.status,

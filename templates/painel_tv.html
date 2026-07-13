@@ -170,6 +170,7 @@
   .toast .ttl { font-weight: 800; font-size: clamp(13px,1.7vh,18px); }
   .toast .dtl { color: var(--muted); font-size: clamp(11px,1.4vh,15px); margin-top: 2px; }
   .toast.chegada { border-left-color: var(--recebimento); }
+  .toast.conferencia { border-left-color: var(--recebimento-2); }
   .toast.lancamento { border-left-color: var(--ok); }
   .toast.expedicao { border-left-color: var(--expedicao); }
   @keyframes slidein { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -272,7 +273,7 @@
 <script>
 (function () {
   const POLL_MS = 5000;
-  const ICONS = { chegada: "📦", lancamento: "✅", expedicao: "🚚" };
+  const ICONS = { chegada: "📦", conferencia: "🔎", lancamento: "✅", expedicao: "🚚" };
   const seenKeys = new Set();
   let firstLoad = true;
   let audioCtx = null;

@@ -210,6 +210,30 @@ def _coletar_eventos() -> list[dict]:
             }
         )
 
+    # NF conferida (conferencia cega de recebimento concluida) + quem conferiu
+    conferidas = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.usuario_conferencia).label("usuario"),
+            func.max(ItemNota.fim_conferencia).label("dt"),
+        )
+        .filter(ItemNota.fim_conferencia.isnot(None))
+        .group_by(ItemNota.numero_nota)
+        .order_by(desc("dt"))
+        .limit(8)
+        .all()
+    )
+    for nota, usuario, dt in conferidas:
+        eventos.append(
+            {
+                "key": f"conferida:{nota}:{_iso(dt)}",
+                "tipo": "conferencia",
+                "titulo": "NF conferida",
+                "detalhe": f"NF {nota}" + (f" — por {usuario}" if usuario else ""),
+                "ts": _iso(dt),
+            }
+        )
+
     # NF lancada / estoque alimentado
     lancadas = (
         db.session.query(

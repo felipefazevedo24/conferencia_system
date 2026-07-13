@@ -612,6 +612,9 @@
             <div class="conf-header">
                 <h3 id="n-atual">EXECUÇÃO DE CONFERÊNCIA FÍSICA</h3>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn-sap" style="background:#b45309; color:#fff;" onclick="abrirModalDivergenciaProduto()">
+                        <i class="fas fa-triangle-exclamation"></i> Divergência de produto
+                    </button>
                     <button class="btn-sap btn-warning" onclick="abrirModalSemConferencia()">
                         <i class="fas fa-forward"></i> Não passou pela conferência
                     </button>
@@ -803,23 +806,21 @@
     </div>
 </div>
 
-<div id="modal-checklist" class="modal-overlay" style="z-index: 3600;">
-    <div class="modal-sap" style="max-width: 620px;">
-        <div class="modal-head"><span>CHECKLIST DE DESCARGA</span></div>
+<div id="modal-checklist-removido" style="display:none"></div>
+
+<div id="modal-divergencia-produto" class="modal-overlay" style="z-index: 3650;">
+    <div class="modal-sap" style="max-width: 600px;">
+        <div class="modal-head"><span><i class="fas fa-triangle-exclamation"></i> DIVERGÊNCIA DE PRODUTO</span></div>
         <div class="modal-body">
-            <div style="margin-bottom: 15px; font-weight: 800; font-size: 16px;">NF: <span id="checklist-nf-ref" style="color: var(--sap-blue);">---</span></div>
-            <div style="display: grid; gap: 12px; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-lacre"> <b>Lacre e embalagem íntegros</b></label>
-                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-volumes"> <b>Quantidade de volumes confere</b></label>
-                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-avaria"> <b>Sem avaria visual relevante</b></label>
-                <label style="display:flex; align-items:center; gap:12px; cursor:pointer;"><input type="checkbox" id="chk-etiqueta"> <b>Etiquetas de identificação presentes</b></label>
-            </div>
-            <textarea id="checklist-obs" rows="3" class="filtro-nota" style="width:100%; margin-top:15px;" placeholder="Observações opcionais..."></textarea>
-            <div id="checklist-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+            <div style="margin-bottom: 12px; font-weight: 800; font-size: 16px;">NF: <span id="divprod-nf-ref" style="color: var(--sap-blue);">---</span></div>
+            <p style="color:#64748b; font-weight:600; font-size:13px; margin-bottom:14px;">O produto recebido está diferente do comprado. Descreva a divergência. A nota será enviada ao <b>Documento de Entrada</b> para lançamento normal.</p>
+            <label class="form-label" style="margin-bottom:6px; display:block;">Motivo da divergência *</label>
+            <textarea id="divprod-motivo" rows="4" class="filtro-nota" style="width:100%;" placeholder="Ex.: produto recebido diverge do pedido / especificação diferente…"></textarea>
+            <div id="divprod-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
         </div>
         <div class="modal-foot">
-            <button class="btn-sap" onclick="cancelarChecklist()">Abortar</button>
-            <button class="btn-sap btn-success" onclick="salvarChecklist()">Confirmar</button>
+            <button class="btn-sap" onclick="document.getElementById('modal-divergencia-produto').style.display='none'">Cancelar</button>
+            <button class="btn-sap btn-warning" id="btn-confirmar-divprod" onclick="confirmarDivergenciaProduto()"><i class="fas fa-paper-plane"></i> Enviar para lançamento</button>
         </div>
     </div>
 </div>
@@ -1155,11 +1156,6 @@
             const d = await res.json();
             mostrarMensagemOperacional(`NF ${n} bloqueada por ${d.usuario}. Expira em: ${d.expira_em}`);
             return;
-        }
-        const checklistOk = await garantirChecklistInicial(n);
-        if (!checklistOk) {
-            await fetch('/api/lock/release', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: n }) });
-            notaSel = ''; return;
         }
         document.getElementById('msg-lock').style.display = 'none';
         document.getElementById('lista-view').classList.add('hidden');
@@ -1580,30 +1576,48 @@
 // teste
 
     async function garantirChecklistInicial(nota) {
-        const res = await fetch(`/api/checklist/${encodeURIComponent(nota)}`);
-        const data = await res.json();
-        if (res.ok && data.existe) return true;
-        checklistPendente = nota;
-        document.getElementById('checklist-nf-ref').innerText = nota;
-        document.getElementById('modal-checklist').style.display = 'flex';
-        return new Promise(resolve => { checklistResolver = resolve; });
+        // Checklist de descarga removido: a conferência abre direto.
+        return true;
     }
 
-    async function salvarChecklist() {
-        const payload = {
-            nota: checklistPendente,
-            lacre_ok: document.getElementById('chk-lacre').checked,
-            volumes_ok: document.getElementById('chk-volumes').checked,
-            etiqueta_ok: document.getElementById('chk-etiqueta').checked,
-            avaria_visual: document.getElementById('chk-avaria').checked
-        };
-        if (!payload.lacre_ok || !payload.volumes_ok || !payload.etiqueta_ok) { alert('Check obrigatório!'); return; }
-        const res = await fetch('/api/checklist', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-        if (res.ok) { document.getElementById('modal-checklist').style.display = 'none'; checklistResolver(true); location.reload(); }
+    function abrirModalDivergenciaProduto() {
+        if (!notaSel) return;
+        document.getElementById('divprod-nf-ref').innerText = notaSel;
+        document.getElementById('divprod-motivo').value = '';
+        document.getElementById('divprod-feedback').innerText = '';
+        document.getElementById('modal-divergencia-produto').style.display = 'flex';
+        setTimeout(() => document.getElementById('divprod-motivo').focus(), 120);
+    }
+
+    async function confirmarDivergenciaProduto() {
+        const motivo = document.getElementById('divprod-motivo').value.trim();
+        const fb = document.getElementById('divprod-feedback');
+        if (!motivo) { fb.innerText = 'Informe o motivo da divergência.'; return; }
+        const btn = document.getElementById('btn-confirmar-divprod');
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/conferencia/divergencia-produto', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: notaSel, motivo })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { fb.innerText = data.error || 'Falha ao registrar a divergência.'; btn.disabled = false; return; }
+            document.getElementById('modal-divergencia-produto').style.display = 'none';
+            pararHeartbeat();
+            const notaAtual = notaSel;
+            await fetch('/api/lock/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nota: notaAtual }) });
+            notaSel = '';
+            document.getElementById('conf-view').classList.add('hidden');
+            document.getElementById('lista-view').classList.remove('hidden');
+            carregarNotas();
+        } catch (e) {
+            fb.innerText = 'Erro de conexão.'; btn.disabled = false;
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     function fecharTelaInstrucaoPendencia() { document.getElementById('modal-instrucao-pendencia').style.display = 'none'; location.reload(); }
-    function cancelarChecklist() { document.getElementById('modal-checklist').style.display = 'none'; checklistResolver(false); }
     function fecharModalReversao() { document.getElementById('modal-reversao').style.display = 'none'; }
     function iniciarHeartbeat() { heartbeatTimer = setInterval(() => { if(notaSel) fetch('/api/lock/heartbeat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nota:notaSel})}) }, 45000); }
     function pararHeartbeat() { clearInterval(heartbeatTimer); }
