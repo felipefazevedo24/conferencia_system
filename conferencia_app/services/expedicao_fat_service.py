@@ -22,6 +22,9 @@ STATUS_FATURADO = "Faturado"
 # A ordem fica travada para expedicao ate ser conferida.
 STATUS_FATURADO_SEM_CONF = "Faturado sem conferência"
 STATUS_EXPEDIDO = "Expedido"
+# Encerrada por um Admin SEM conferencia fisica. Ordem sai da fila de pendentes
+# e NAO segue para o Registro de expedicao.
+STATUS_FINALIZADO_SEM_CONF = "Finalizada sem conferência"
 
 STATUS_SLUGS = {
     STATUS_PENDENTE: "pendente",
@@ -30,6 +33,7 @@ STATUS_SLUGS = {
     STATUS_FATURADO: "faturado",
     STATUS_FATURADO_SEM_CONF: "faturado_sem_conf",
     STATUS_EXPEDIDO: "expedido",
+    STATUS_FINALIZADO_SEM_CONF: "finalizado_sem_conf",
 }
 
 

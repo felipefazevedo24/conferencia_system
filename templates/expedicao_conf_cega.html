@@ -230,6 +230,7 @@
             </div>
             <div class="eui-card__foot">
                 <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-voltar-2">Sair sem salvar</button>
+                <button class="eui-btn eui-btn--danger ce-admin-only" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
             </div>
         </div>
@@ -280,6 +281,7 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
+    const CE_IS_ADMIN = {{ 'true' if is_admin else 'false' }};
 
     const BADGE = {
         pendente: "eui-badge--warning",
@@ -287,6 +289,7 @@
         faturado_sem_conf: "eui-badge--danger",
         faturado: "eui-badge--violet",
         expedido: "eui-badge--success",
+        finalizado_sem_conf: "eui-badge--neutral",
     };
 
     function badge(slug, label) {
@@ -592,6 +595,32 @@
             }
         }
 
+        async function finalizarSemConferencia() {
+            if (!currentOrdem || !CE_IS_ADMIN) return;
+            const motivo = prompt(
+                "FINALIZAR SEM CONFERIR (ação de Admin).\n\n" +
+                "A ordem será encerrada sem conferência física e NÃO irá para o " +
+                "Registro de expedição.\n\nInforme o motivo:"
+            );
+            if (motivo === null) return; // cancelou
+            if (!motivo.trim()) { toast("Informe o motivo para finalizar sem conferir.", "error"); return; }
+
+            const btn = el("btn-finalizar-sem-conf");
+            btn.disabled = true;
+            try {
+                await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/finalizar-sem-conferencia", {
+                    method: "POST", body: JSON.stringify({ motivo: motivo.trim() }),
+                });
+                toast("Ordem finalizada sem conferência.", "success");
+                voltarDashboard();
+                carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         async function sincronizar() {
             const btn = el("btn-sync");
             btn.disabled = true;
@@ -667,6 +696,10 @@
         el("btn-voltar").addEventListener("click", voltarDashboard);
         el("btn-voltar-2").addEventListener("click", voltarDashboard);
         el("btn-finalizar-conf").addEventListener("click", finalizarConferencia);
+        if (CE_IS_ADMIN) {
+            const bSem = el("btn-finalizar-sem-conf");
+            if (bSem) { bSem.style.display = ""; bSem.addEventListener("click", finalizarSemConferencia); }
+        }
         el("btn-limpar-filtro").addEventListener("click", () => aplicarFiltro(currentFilter, null));
 
         el("busca").addEventListener("input", (e) => {

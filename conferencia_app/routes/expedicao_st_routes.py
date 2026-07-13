@@ -330,6 +330,55 @@ def conferir_ordem_conf_st(cod_ordem_compra):
     })
 
 
+@expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/finalizar-sem-conferencia",
+    methods=["POST"],
+)
+@roles_required("Admin")
+def finalizar_sem_conferencia_st(cod_ordem_compra):
+    """Encerra a ordem ST SEM conferencia fisica (acao exclusiva de Admin).
+
+    A ordem sai da fila de pendentes e NAO segue para o Registro de expedicao.
+    """
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    if ordem.status in (svc.STATUS_EXPEDIDO, svc.STATUS_FINALIZADO_SEM_CONF):
+        return jsonify({"error": f"Ordem '{ordem.status}' nao pode ser finalizada."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+    ordem.status = svc.STATUS_FINALIZADO_SEM_CONF
+    ordem.conferente = usuario
+    ordem.updated_at = agora
+
+    diff_cab = [{"campo": "motivo", "label": "Motivo", "de": "", "para": motivo}] if motivo else []
+    log_svc.registrar_log(
+        origem="st",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="finalizacao_sem_conferencia",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=diff_cab,
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
 @expedicao_st_bp.route("/api/expedicao/conf-cega-st/lookup", methods=["GET"])
 @roles_required(*ROLES)
 def lookup_ordem_conf_st():
