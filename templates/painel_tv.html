@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Operacional — Recebimento & Expedição</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-soft: #111a33;
+    --card: #16213e;
+    --card-2: #1b2a4a;
+    --border: rgba(255,255,255,.08);
+    --text: #e8eefc;
+    --muted: #8ea3c7;
+    --recebimento: #38bdf8;
+    --recebimento-2: #0ea5e9;
+    --expedicao: #fbbf24;
+    --expedicao-2: #f59e0b;
+    --ok: #34d399;
+    --warn: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: radial-gradient(1200px 800px at 15% -10%, #14203f 0%, var(--bg) 55%);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(12px, 1.6vh, 26px);
+    gap: clamp(10px, 1.4vh, 20px);
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+  }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand h1 {
+    font-size: clamp(20px, 2.6vh, 34px);
+    font-weight: 800;
+    letter-spacing: .5px;
+  }
+  .brand .sub { color: var(--muted); font-size: clamp(11px, 1.4vh, 15px); font-weight: 500; }
+  .live {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(52,211,153,.12); color: var(--ok);
+    padding: 6px 14px; border-radius: 999px; font-weight: 700;
+    font-size: clamp(11px, 1.3vh, 14px);
+    border: 1px solid rgba(52,211,153,.3);
+  }
+  .live .dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--ok);
+    box-shadow: 0 0 0 0 rgba(52,211,153,.7); animation: pulse 1.8s infinite;
+  }
+  .live.stale { background: rgba(248,113,113,.12); color: var(--warn); border-color: rgba(248,113,113,.35); }
+  .live.stale .dot { background: var(--warn); animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52,211,153,.6); }
+    70% { box-shadow: 0 0 0 14px rgba(52,211,153,0); }
+    100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+  }
+  .clock { text-align: right; }
+  .clock .time { font-size: clamp(22px, 3vh, 40px); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .clock .date { color: var(--muted); font-size: clamp(11px, 1.4vh, 16px); text-transform: capitalize; }
+
+  /* ---------- Main grid ---------- */
+  main {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(12px, 1.6vh, 22px);
+    min-height: 0;
+  }
+  .panel {
+    background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: clamp(14px, 2vh, 26px);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 1.4vh, 18px);
+    min-height: 0;
+    overflow: hidden;
+  }
+  .panel-head { display: flex; align-items: center; gap: 14px; }
+  .panel-head .icon {
+    width: clamp(38px, 5vh, 56px); height: clamp(38px, 5vh, 56px);
+    border-radius: 16px; display: grid; place-items: center;
+    font-size: clamp(20px, 2.8vh, 30px);
+  }
+  .panel-head h2 { font-size: clamp(17px, 2.3vh, 28px); font-weight: 800; letter-spacing:.3px; }
+  .panel-head .tag { margin-left: auto; color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight:600; }
+  .rec .icon { background: rgba(56,189,248,.15); color: var(--recebimento); }
+  .rec .accent { color: var(--recebimento); }
+  .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
+  .exp .accent { color: var(--expedicao); }
+
+  /* hero metric */
+  .hero {
+    border-radius: 18px;
+    padding: clamp(12px, 2vh, 24px);
+    display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+    position: relative; overflow: hidden;
+  }
+  .rec .hero { background: linear-gradient(120deg, rgba(56,189,248,.18), rgba(56,189,248,.04)); }
+  .exp .hero { background: linear-gradient(120deg, rgba(251,191,36,.18), rgba(251,191,36,.04)); }
+  .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; max-width: 60%; }
+  .hero .num { font-size: clamp(46px, 9vh, 120px); font-weight: 900; line-height: .9; font-variant-numeric: tabular-nums; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.3vh,16px); }
+  .stat {
+    background: var(--card-2); border: 1px solid var(--border);
+    border-radius: 16px; padding: clamp(10px,1.6vh,18px);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat .n { font-size: clamp(26px, 4.6vh, 58px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat .t { font-size: clamp(11px, 1.4vh, 16px); color: var(--muted); font-weight: 600; }
+  .stat.ok .n { color: var(--ok); }
+
+  .updated-flash { animation: flash 1s ease; }
+  @keyframes flash { 0% { background: rgba(255,255,255,.16);} 100% { background: var(--card-2);} }
+
+  /* ---------- Toasts ---------- */
+  #toasts {
+    position: fixed; top: clamp(14px, 2vh, 28px); right: clamp(14px, 2vh, 28px);
+    display: flex; flex-direction: column; gap: 12px; z-index: 50; width: min(30vw, 430px);
+  }
+  .toast {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 6px solid var(--recebimento);
+    border-radius: 14px; padding: 14px 18px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.45);
+    display: flex; gap: 14px; align-items: flex-start;
+    animation: slidein .4s cubic-bezier(.2,.9,.3,1);
+  }
+  .toast.out { animation: slideout .5s forwards; }
+  .toast .tico { font-size: 26px; line-height: 1; }
+  .toast .ttl { font-weight: 800; font-size: clamp(13px,1.7vh,18px); }
+  .toast .dtl { color: var(--muted); font-size: clamp(11px,1.4vh,15px); margin-top: 2px; }
+  .toast.chegada { border-left-color: var(--recebimento); }
+  .toast.lancamento { border-left-color: var(--ok); }
+  .toast.expedicao { border-left-color: var(--expedicao); }
+  @keyframes slidein { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes slideout { to { transform: translateX(120%); opacity: 0; } }
+
+  /* ---------- Event ticker ---------- */
+  .feed { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .feed .feed-title { color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .feed .list { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .ev {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px 14px;
+  }
+  .ev .ico { font-size: clamp(16px,2vh,22px); }
+  .ev .txt { flex: 1 1 auto; min-width: 0; }
+  .ev .txt b { font-size: clamp(12px,1.5vh,17px); font-weight: 700; }
+  .ev .txt span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev .when { color: var(--muted); font-size: clamp(10px,1.3vh,13px); white-space: nowrap; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; font-size: clamp(12px,1.5vh,16px); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="icon" style="width:clamp(40px,5.5vh,60px);height:clamp(40px,5.5vh,60px);border-radius:16px;background:rgba(255,255,255,.06);display:grid;place-items:center;font-size:clamp(22px,3vh,32px)">📊</div>
+      <div>
+        <h1>Painel Operacional</h1>
+        <div class="sub">Recebimento &amp; Expedição — tempo real</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div id="live" class="live"><span class="dot"></span><span id="live-text">Ao vivo</span></div>
+      <div class="clock">
+        <div class="time" id="clock-time">--:--</div>
+        <div class="date" id="clock-date">—</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- RECEBIMENTO -->
+    <section class="panel rec">
+      <div class="panel-head">
+        <div class="icon">📥</div>
+        <h2>Recebimento</h2>
+        <div class="tag" id="rec-tag">—</div>
+      </div>
+      <div class="hero">
+        <div class="label">Notas pendentes de <span class="accent">conferência</span></div>
+        <div class="num accent" id="rec-pend-conf">0</div>
+      </div>
+      <div class="grid2">
+        <div class="stat"><div class="n" id="rec-pend-lanc">0</div><div class="t">Pendentes de lançamento</div></div>
+        <div class="stat ok"><div class="n" id="rec-lanc-hoje">0</div><div class="t">Lançadas hoje (estoque)</div></div>
+      </div>
+      <div class="feed">
+        <div class="feed-title">Últimos eventos — recebimento</div>
+        <div class="list" id="rec-feed"><div class="empty">Sem eventos recentes</div></div>
+      </div>
+    </section>
+
+    <!-- EXPEDIÇÃO -->
+    <section class="panel exp">
+      <div class="panel-head">
+        <div class="icon">🚚</div>
+        <h2>Expedição</h2>
+        <div class="tag" id="exp-tag">—</div>
+      </div>
+      <div class="hero">
+        <div class="label">Faturamentos pendentes de <span class="accent">conferência</span></div>
+        <div class="num accent" id="exp-pend-conf">0</div>
+      </div>
+      <div class="grid2">
+        <div class="stat"><div class="n" id="exp-conferido">0</div><div class="t">Conferidos / Ag. faturar</div></div>
+        <div class="stat ok"><div class="n" id="exp-hoje">0</div><div class="t">Expedidos hoje</div></div>
+      </div>
+      <div class="feed">
+        <div class="feed-title">Últimos eventos — expedição</div>
+        <div class="list" id="exp-feed"><div class="empty">Sem eventos recentes</div></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toasts"></div>
+
+<script>
+(function () {
+  const POLL_MS = 5000;
+  const ICONS = { chegada: "📦", lancamento: "✅", expedicao: "🚚" };
+  const seenKeys = new Set();
+  let firstLoad = true;
+  let audioCtx = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function beep() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = "sine"; o.frequency.value = 880;
+      g.gain.value = 0.05;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start();
+      o.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+      o.stop(audioCtx.currentTime + 0.36);
+    } catch (e) { /* autoplay pode bloquear; ignora */ }
+  }
+
+  function setNum(id, val) {
+    const el = $(id);
+    if (!el) return;
+    const prev = el.textContent;
+    const next = String(val);
+    if (prev !== next) {
+      el.textContent = next;
+      const stat = el.closest(".stat");
+      if (stat) { stat.classList.remove("updated-flash"); void stat.offsetWidth; stat.classList.add("updated-flash"); }
+    }
+  }
+
+  function relTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return "agora";
+    if (s < 3600) return Math.floor(s / 60) + " min";
+    if (s < 86400) return Math.floor(s / 3600) + "h";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  }
+
+  function toast(ev) {
+    const box = $("toasts");
+    const el = document.createElement("div");
+    el.className = "toast " + ev.tipo;
+    el.innerHTML =
+      '<div class="tico">' + (ICONS[ev.tipo] || "🔔") + '</div>' +
+      '<div><div class="ttl"></div><div class="dtl"></div></div>';
+    el.querySelector(".ttl").textContent = ev.titulo;
+    el.querySelector(".dtl").textContent = ev.detalhe || "";
+    box.prepend(el);
+    beep();
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 550); }, 9000);
+    // limita a 5 toasts na tela
+    while (box.children.length > 5) box.lastChild.remove();
+  }
+
+  function renderFeed(containerId, eventos) {
+    const box = $(containerId);
+    if (!eventos.length) { box.innerHTML = '<div class="empty">Sem eventos recentes</div>'; return; }
+    box.innerHTML = "";
+    eventos.slice(0, 6).forEach((ev) => {
+      const row = document.createElement("div");
+      row.className = "ev";
+      row.innerHTML =
+        '<div class="ico">' + (ICONS[ev.tipo] || "🔔") + '</div>' +
+        '<div class="txt"><b></b><span></span></div>' +
+        '<div class="when">' + relTime(ev.ts) + '</div>';
+      row.querySelector("b").textContent = ev.titulo;
+      row.querySelector("span").textContent = ev.detalhe || "";
+      box.appendChild(row);
+    });
+  }
+
+  function setLive(online) {
+    const el = $("live");
+    $("live-text").textContent = online ? "Ao vivo" : "Sem conexão";
+    el.classList.toggle("stale", !online);
+  }
+
+  function updateClock() {
+    const now = new Date();
+    $("clock-time").textContent = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch("/api/painel/indicadores", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+
+      // Recebimento
+      setNum("rec-pend-conf", d.recebimento.pendente_conferencia);
+      setNum("rec-pend-lanc", d.recebimento.pendente_lancamento);
+      setNum("rec-lanc-hoje", d.recebimento.lancadas_hoje);
+      $("rec-tag").textContent = d.recebimento.importadas_hoje + " chegaram hoje";
+
+      // Expedição
+      setNum("exp-pend-conf", d.expedicao.pendente_total);
+      setNum("exp-conferido", d.expedicao.conferido_ag_fat);
+      setNum("exp-hoje", d.expedicao.expedidos_hoje);
+      $("exp-tag").textContent = "FAT " + d.expedicao.fat_pendente + " · ST " + d.expedicao.st_pendente;
+
+      const eventos = d.eventos || [];
+      renderFeed("rec-feed", eventos.filter((e) => e.tipo === "chegada" || e.tipo === "lancamento"));
+      renderFeed("exp-feed", eventos.filter((e) => e.tipo === "expedicao"));
+
+      // Notificações (avisos rápidos) para eventos novos
+      const novos = eventos.filter((e) => e.key && !seenKeys.has(e.key));
+      novos.forEach((e) => seenKeys.add(e.key));
+      if (!firstLoad) {
+        // mostra do mais antigo pro mais novo (novo fica no topo)
+        novos.slice().reverse().forEach(toast);
+      }
+      firstLoad = false;
+      setLive(true);
+    } catch (e) {
+      setLive(false);
+    }
+  }
+
+  updateClock();
+  setInterval(updateClock, 1000 * 15);
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>
