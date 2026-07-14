@@ -1227,20 +1227,31 @@
     }
 
     async function efetivarGravacaoFinal() {
-        const r = await fetch('/validar', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                nota: notaSel,
-                contagens: coletarContagens(),
-                conversoes_itens: coletarConversoes(),
-                forcar_pendencia: true,
-                motivos_itens: {},
-            }),
-        });
-        if (r.ok) {
-            pararHeartbeat();
-            location.reload();
+        const btn = document.getElementById('btn-efetivar-ok');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Concluindo...'; }
+        try {
+            const r = await fetch('/validar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    nota: notaSel,
+                    contagens: coletarContagens(),
+                    conversoes_itens: coletarConversoes(),
+                    forcar_pendencia: true,
+                    motivos_itens: {},
+                }),
+            });
+            if (r.ok) {
+                pararHeartbeat();
+                location.reload();
+                return;
+            }
+            const d = await r.json().catch(() => ({}));
+            alert(d.msg || 'Não foi possível concluir o recebimento. Tente novamente.');
+        } catch (e) {
+            alert('Erro de conexão ao concluir o recebimento.');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = 'Confirmar recebimento'; }
         }
     }
 

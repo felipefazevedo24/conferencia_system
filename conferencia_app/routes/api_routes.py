@@ -6170,8 +6170,9 @@ def validar():
 
     checklist = ChecklistRecebimento.query.filter_by(numero_nota=numero_nota).first()
     if not checklist and forcar_pendencia:
-        if not checklist_payload:
-            return jsonify({"sucesso": False, "msg": "Checklist inicial obrigatório para concluir recebimento."}), 400
+        # O checklist de descarga foi removido do fluxo de conferencia. Para
+        # nao travar a conclusao do recebimento, cria um registro automatico
+        # (sem exigir o preenchimento manual do checklist).
         checklist = ChecklistRecebimento(numero_nota=numero_nota, usuario=user)
         db.session.add(checklist)
 
