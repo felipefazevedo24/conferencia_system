@@ -652,6 +652,10 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
     if nota.dest_cnpj:
         hit = buscar_email_cadastro_erp(nota.dest_cnpj)
         if hit and _valido_email(hit.get("email")):
+            current_app.logger.info(
+                "NF-e %s: destinatario resolvido via GRV/Postgres (CNPJ %s -> %s).",
+                nota.numero, nota.dest_cnpj, hit["email"],
+            )
             return {
                 "email": hit["email"],
                 "fonte_email": "GRVPostgres",
@@ -661,10 +665,25 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
                 "chave": nota.chave,
                 "avisos": avisos,
             }
+        current_app.logger.warning(
+            "NF-e %s: GRV/Postgres nao retornou e-mail para CNPJ %s (resposta=%s). "
+            "Confirme que a bridge do ERP na VM esta atualizada (endpoint /api/erp/cadastro-email-por-cnpj) "
+            "e que o cadastro do cliente/fornecedor tem e-mail preenchido.",
+            nota.numero, nota.dest_cnpj, hit or {},
+        )
+    else:
+        current_app.logger.warning(
+            "NF-e %s: sem CNPJ do destinatario; nao da para buscar e-mail no Postgres.",
+            nota.numero,
+        )
 
     # 2) Cadastro interno (AgendamentoCliente)
     email_cad = _email_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome)
     if email_cad:
+        current_app.logger.info(
+            "NF-e %s: destinatario resolvido via cadastro interno/planilha (CNPJ %s -> %s).",
+            nota.numero, nota.dest_cnpj, email_cad,
+        )
         return {
             "email": email_cad,
             "fonte_email": "Cadastro",
@@ -676,6 +695,10 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
         }
 
     if _valido_email(nota.dest_email_xml):
+        current_app.logger.info(
+            "NF-e %s: destinatario resolvido via e-mail do XML (%s).",
+            nota.numero, nota.dest_email_xml,
+        )
         return {
             "email": nota.dest_email_xml,
             "fonte_email": "XML",
@@ -686,6 +709,11 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
             "avisos": avisos,
         }
 
+    current_app.logger.warning(
+        "NF-e %s: nenhum e-mail de destinatario encontrado (Postgres, cadastro interno e XML falharam) "
+        "para CNPJ %s / %s. O envio vai depender de e-mail manual ou cair em copia (CC).",
+        nota.numero, nota.dest_cnpj, nota.dest_nome,
+    )
     avisos.append("Nenhum e-mail valido encontrado no cadastro nem no XML.")
     return {
         "email": "",
@@ -935,39 +963,19 @@ def enviar_nfe_por_email(
     if not nota:
         return {"sucesso": False, "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.", "numero_nf": numero_nf}
 
-    # Roteamento por CFOP: se algum item da NF tiver CFOP na lista de CFOPs
-    # especiais configurada, o destinatario do XML/cadastro e ignorado e o
-    # e-mail vai exclusivamente para a lista NFE_EMAIL_DESTINATARIOS_ESPECIAIS.
-    cfops_cfg_raw = str(app.config.get("NFE_EMAIL_CFOPS_ESPECIAIS") or "")
-    cfops_especiais = {
-        c.strip() for c in re.split(r"[,;\s]+", cfops_cfg_raw) if c.strip().isdigit()
-    }
-    cfops_da_nota: set[str] = _parse_cfops_do_xml(nota.xml_bytes)
-    cfop_match: list[str] = []
-    if cfops_especiais:
-        cfop_match = sorted(cfops_da_nota & cfops_especiais)
-    anexos_pedido_compra = _anexos_pedido_compra_industrializacao(nota, cfops_da_nota)
+    # Modo teste (homologacao): quando ligado, todos os envios sao redirecionados
+    # para NFE_EMAIL_TESTE_DESTINO (felaze@colmac.com). Em producao (modo_teste=False)
+    # o e-mail vai para o cliente/fornecedor resolvido + os e-mails internos em CC.
+    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
 
-    rota_especial_emails: list[str] = []
-    if cfop_match:
-        destinos_raw = str(app.config.get("NFE_EMAIL_DESTINATARIOS_ESPECIAIS") or "")
-        for e in re.split(r"[,;\s]+", destinos_raw):
-            e = e.strip()
-            if _valido_email(e) and e not in rota_especial_emails:
-                rota_especial_emails.append(e)
-        if not rota_especial_emails:
-            app.logger.warning(
-                "NF-e %s casou CFOP especial %s mas NFE_EMAIL_DESTINATARIOS_ESPECIAIS esta vazio; envio segue fluxo normal.",
-                nota.numero, cfop_match,
-            )
+    cfops_da_nota: set[str] = _parse_cfops_do_xml(nota.xml_bytes)
+    anexos_pedido_compra = _anexos_pedido_compra_industrializacao(nota, cfops_da_nota)
 
     # Destinatario
     resolvido = _resolver_destinatario_da_nota(nota, override_email)
     destino_real = resolvido["email"]
     fonte = resolvido["fonte_email"]
 
-    # Modo teste: redireciona
-    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
     destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
 
     # CC: combina lista explicita + config global. Em modo teste, ignora CC
@@ -987,16 +995,10 @@ def enviar_nfe_por_email(
     if not destino_real and cc_final:
         destino_real = cc_final.pop(0)
         fonte = "CC"
-
-    # Override por CFOP: substitui completamente destinatario e CC pela lista
-    # configurada (primeiro vira TO, demais ficam em CC). O cliente NAO recebe.
-    if rota_especial_emails:
-        destino_real = rota_especial_emails[0]
-        cc_final = list(rota_especial_emails[1:])
-        fonte = "CFOP"
-        app.logger.info(
-            "NF-e %s roteada por CFOP %s -> %s (CC=%s)",
-            nota.numero, cfop_match, destino_real, cc_final,
+        app.logger.warning(
+            "NF-e %s: SEM e-mail do cliente/fornecedor resolvido; enviando apenas para copia (CC) %s. "
+            "O destinatario real NAO recebeu. Verifique o cadastro de e-mail no ERP/bridge.",
+            nota.numero, destino_real,
         )
 
     if not destino_real:

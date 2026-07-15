@@ -151,6 +151,9 @@ def buscar_email_cadastro_erp(cnpj: str) -> dict[str, Any]:
     try:
         data = _post_bridge("/api/erp/cadastro-email-por-cnpj", {"cnpj": doc})
         if not data.get("encontrado"):
+            current_app.logger.info(
+                "Cadastro GRV: CNPJ %s sem e-mail no ERP (encontrado=%s).", doc, data.get("encontrado")
+            )
             return {}
 
         return {
@@ -161,6 +164,16 @@ def buscar_email_cadastro_erp(cnpj: str) -> dict[str, Any]:
             "codigo": str(data.get("codigo") or "").strip(),
             "fonte": "GRVPostgres",
         }
+    except requests.HTTPError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status == 404:
+            current_app.logger.error(
+                "Cadastro GRV: endpoint /api/erp/cadastro-email-por-cnpj ausente (HTTP 404). "
+                "A bridge do ERP na VM esta DESATUALIZADA - reinicie-a com o scripts/erp_lancamento_api_bridge.py atual."
+            )
+        else:
+            current_app.logger.warning("Falha HTTP ao consultar e-mail no cadastro GRV para %s: %s", doc, exc)
+        return {}
     except Exception as exc:
         current_app.logger.warning("Falha ao consultar e-mail no cadastro GRV para %s: %s", doc, exc)
         return {}
