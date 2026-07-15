@@ -234,6 +234,24 @@
                             <div id="fotos-feedback" class="exp-subtle">Nenhuma foto selecionada ainda.</div>
                             <div id="fotos-preview" class="exp-preview-grid"></div>
                         </div>
+
+                        <div class="exp-field full" id="foto-cliente-field">
+                            <label id="foto-cliente-label">Foto para o cliente *</label>
+                            <div class="exp-upload">
+                                <div>
+                                    <strong>Foto que será enviada ao cliente</strong>
+                                    <p style="margin:8px 0 14px;">Tire uma foto separada para mandar ao cliente (ex.: material embalado/etiquetado). É guardada à parte das fotos da conferência.</p>
+                                    <div class="exp-upload-actions">
+                                        <button class="exp-btn" type="button" id="btn-foto-cliente">Tirar foto do cliente</button>
+                                        <button class="exp-btn-secondary" type="button" id="btn-foto-cliente-galeria">Escolher da galeria</button>
+                                    </div>
+                                    <input id="foto-cliente-camera" class="exp-file-input-hidden" type="file" accept="image/*" capture="environment">
+                                    <input id="foto-cliente-galeria" class="exp-file-input-hidden" type="file" accept="image/*">
+                                </div>
+                            </div>
+                            <div id="foto-cliente-feedback" class="exp-subtle">Nenhuma foto do cliente selecionada ainda.</div>
+                            <div id="foto-cliente-preview" class="exp-preview-grid"></div>
+                        </div>
                     </div>
 
                     <div class="exp-actions">
@@ -412,6 +430,8 @@ function setSemConferencia(ativo) {
         btnSemConferencia.style.borderColor = "#dc2626";
         fotoLabel.textContent = "Foto da conferência (opcional)";
         fotoField.style.opacity = "0.65";
+        if (fotoClienteLabel) fotoClienteLabel.textContent = "Foto para o cliente (opcional)";
+        if (fotoClienteField) fotoClienteField.style.opacity = "0.65";
         semConfDetalhes.classList.remove("hidden");
     } else {
         btnSemConferencia.style.background = "";
@@ -419,6 +439,8 @@ function setSemConferencia(ativo) {
         btnSemConferencia.style.borderColor = "";
         fotoLabel.textContent = "Foto da conferência *";
         fotoField.style.opacity = "";
+        if (fotoClienteLabel) fotoClienteLabel.textContent = "Foto para o cliente *";
+        if (fotoClienteField) fotoClienteField.style.opacity = "";
         semConfDetalhes.classList.add("hidden");
         motivoSelect.value = "";
         toggleRetiradaFields();
@@ -444,6 +466,103 @@ function restaurarFotosSession() {
 function limparFotosSession() {
     try { sessionStorage.removeItem(SESSION_FOTOS_KEY); } catch(e) {}
     fotosRascunho = [];
+}
+
+// ----- Foto para o cliente (uma foto, guardada a parte das fotos da conferencia) -----
+const fotoClienteCameraInput = document.getElementById("foto-cliente-camera");
+const fotoClienteGaleriaInput = document.getElementById("foto-cliente-galeria");
+const fotoClientePreview = document.getElementById("foto-cliente-preview");
+const fotoClienteFeedback = document.getElementById("foto-cliente-feedback");
+const fotoClienteLabel = document.getElementById("foto-cliente-label");
+const fotoClienteField = document.getElementById("foto-cliente-field");
+const btnFotoCliente = document.getElementById("btn-foto-cliente");
+const btnFotoClienteGaleria = document.getElementById("btn-foto-cliente-galeria");
+const SESSION_FOTO_CLIENTE_KEY = "exp_foto_cliente_rascunho";
+let fotoClienteRascunho = null;
+
+function salvarFotoClienteSession() {
+    try {
+        if (fotoClienteRascunho) sessionStorage.setItem(SESSION_FOTO_CLIENTE_KEY, JSON.stringify(fotoClienteRascunho));
+        else sessionStorage.removeItem(SESSION_FOTO_CLIENTE_KEY);
+    } catch (e) {}
+}
+function restaurarFotoClienteSession() {
+    try {
+        const raw = sessionStorage.getItem(SESSION_FOTO_CLIENTE_KEY);
+        fotoClienteRascunho = raw ? (JSON.parse(raw) || null) : null;
+    } catch (e) { fotoClienteRascunho = null; }
+}
+function limparFotoClienteSession() {
+    try { sessionStorage.removeItem(SESSION_FOTO_CLIENTE_KEY); } catch (e) {}
+    fotoClienteRascunho = null;
+}
+function updateFotoClientePreview() {
+    fotoClientePreview.innerHTML = "";
+    if (!fotoClienteRascunho) {
+        fotoClienteFeedback.textContent = "Nenhuma foto do cliente selecionada ainda.";
+        return;
+    }
+    fotoClienteFeedback.textContent = "Foto do cliente salva no servidor.";
+    const card = document.createElement("div");
+    card.className = "exp-preview-card";
+    card.style.position = "relative";
+    card.innerHTML = `<img src="${fotoClienteRascunho.url}" alt="${fotoClienteRascunho.nome}"><span>${fotoClienteRascunho.nome}</span>` +
+        `<button type="button" title="Remover foto" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;" data-remover-foto-cliente>×</button>`;
+    fotoClientePreview.appendChild(card);
+}
+fotoClientePreview.addEventListener("click", e => {
+    if (!e.target.closest("[data-remover-foto-cliente]")) return;
+    limparFotoClienteSession();
+    updateFotoClientePreview();
+});
+async function definirFotoCliente(file) {
+    if (!file) return;
+    fotoClienteFeedback.textContent = "Enviando foto do cliente...";
+    btnSalvar.disabled = true;
+    try {
+        const arquivoUpload = await prepararArquivoImagem(file);
+        const resultado = await uploadFotoRascunho(arquivoUpload);
+        fotoClienteRascunho = { rascunho_id: resultado.rascunho_id, url: resultado.url, nome: arquivoUpload.name || file.name };
+        salvarFotoClienteSession();
+        updateFotoClientePreview();
+        showToast("Foto do cliente salva.");
+    } catch (e) {
+        showToast(`Erro ao enviar foto do cliente: ${e.message}`, "error");
+    } finally {
+        btnSalvar.disabled = false;
+    }
+}
+btnFotoCliente.addEventListener("click", () => fotoClienteCameraInput.click());
+btnFotoClienteGaleria.addEventListener("click", () => fotoClienteGaleriaInput.click());
+fotoClienteCameraInput.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
+fotoClienteGaleriaInput.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
+
+async function compartilharFotoCliente(url, titulo) {
+    if (!url) return;
+    try {
+        const resp = await fetch(url, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Não foi possível carregar a foto.");
+        const blob = await resp.blob();
+        const nome = (titulo || "foto").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "foto";
+        const file = new File([blob], `${nome}.jpg`, { type: blob.type || "image/jpeg" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: titulo, text: `Foto - ${titulo}` });
+            return;
+        }
+        // Fallback: baixa a imagem
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objUrl;
+        a.download = `${nome}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objUrl);
+        showToast("Compartilhamento não suportado neste dispositivo; a foto foi baixada.", "warning");
+    } catch (e) {
+        if (e && e.name === "AbortError") return;
+        showToast(`Erro ao compartilhar: ${e.message}`, "error");
+    }
 }
 
 function showToast(message, type = "success") {
@@ -705,6 +824,18 @@ function renderHistorico(data) {
                 </div>`;
         }
 
+        // Foto destinada ao cliente (baixar / compartilhar)
+        let fotoClienteHtml = "";
+        if (registro.foto_cliente_url) {
+            fotoClienteHtml = `
+                <div class="eui-callout eui-callout--info" style="gap:12px;align-items:center;">
+                    <a href="${registro.foto_cliente_url}" target="_blank" rel="noopener noreferrer"><img src="${registro.foto_cliente_url}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;display:block;" alt="Foto do cliente"></a>
+                    <div style="flex:1;"><strong><i class="fas fa-camera-retro"></i> Foto para o cliente</strong><div style="margin-top:2px;font-size:11px;opacity:0.85;">${registro.foto_cliente_uploaded_at ? "Registrada em " + registro.foto_cliente_uploaded_at : ""}</div></div>
+                    <a class="eui-btn eui-btn--ghost eui-btn--sm" href="${registro.foto_cliente_url}" download><i class="fas fa-download"></i> Baixar</a>
+                    <button class="eui-btn eui-btn--primary eui-btn--sm" type="button" data-action="share-foto-cliente" data-url="${registro.foto_cliente_url}" data-titulo="${tituloRef}${registro.nome_cliente ? ' - ' + registro.nome_cliente : ''}"><i class="fas fa-share-nodes"></i> Compartilhar</button>
+                </div>`;
+        }
+
         const captionStatus = finalizado
             ? `<i class="fas fa-check-circle" style="color:var(--eui-success);"></i> Finalizado em ${registro.finalizado_at} por ${registro.finalizado_by || "sistema"}.`
             : (expedido
@@ -777,6 +908,7 @@ function renderHistorico(data) {
                     <div class="eui-caption">${captionStatus}</div>
                     ${fotosHtml}
                     ${canhotoHtml}
+                    ${fotoClienteHtml}
                 </div>
             </article>
         `;
@@ -874,6 +1006,10 @@ form.addEventListener("submit", async event => {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
     }
+    if (!fotoClienteRascunho && !semConferencia) {
+        showToast("Tire a foto para o cliente antes de salvar.", "error");
+        return;
+    }
     if (semConferencia) {
         if (!motivoSelect.value) {
             showToast("Selecione o motivo da expedição sem conferência.", "error");
@@ -893,6 +1029,7 @@ form.addEventListener("submit", async event => {
             formData.set("nf_origem", nfConsultaOrigem);
         }
         fotosRascunho.forEach(f => formData.append("fotos_rascunho", f.rascunho_id));
+        if (fotoClienteRascunho) formData.append("foto_cliente_rascunho", fotoClienteRascunho.rascunho_id);
         const response = await fetch("/api/expedicao/conferencia-simples", { method: "POST", body: formData });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Não foi possível salvar a conferência.");
@@ -904,6 +1041,8 @@ form.addEventListener("submit", async event => {
         resetNfState();
         limparFotosSession();
         updateFotoPreview();
+        limparFotoClienteSession();
+        updateFotoClientePreview();
         loadHistorico();
     } catch (error) {
         showToast(error.message, "error");
@@ -920,6 +1059,8 @@ document.getElementById("btn-limpar-form").addEventListener("click", () => {
     fotosCameraInput.value = "";
     fotosGaleriaInput.value = "";
     updateFotoPreview();
+    limparFotoClienteSession();
+    updateFotoClientePreview();
 });
 btnConsultarNf.addEventListener("click", consultarNf);
 nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
@@ -946,6 +1087,13 @@ historicoLista.addEventListener("click", event => {
             const icon = toggleDetail.querySelector("i");
             if (icon) icon.style.transform = willOpen ? "rotate(180deg)" : "";
         }
+        return;
+    }
+
+    // Compartilhar foto do cliente
+    const shareFotoCliente = event.target.closest("[data-action='share-foto-cliente']");
+    if (shareFotoCliente) {
+        compartilharFotoCliente(shareFotoCliente.dataset.url, shareFotoCliente.dataset.titulo || "Foto");
         return;
     }
 
@@ -1383,6 +1531,8 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
 document.addEventListener("DOMContentLoaded", () => {
     restaurarFotosSession();
     updateFotoPreview();
+    restaurarFotoClienteSession();
+    updateFotoClientePreview();
     loadHistorico();
 });
 

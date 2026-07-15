@@ -8781,6 +8781,8 @@ def listar_registros_conferencia_simples():
             "canhoto_url": f"/api/expedicao/conferencia-simples/{reg.id}/canhoto" if reg.canhoto_file_name else None,
             "canhoto_uploaded_at": reg.canhoto_uploaded_at.strftime("%d/%m/%Y %H:%M") if reg.canhoto_uploaded_at else None,
             "canhoto_uploaded_by": reg.canhoto_uploaded_by,
+            "foto_cliente_url": f"/api/expedicao/conferencia-simples/{reg.id}/foto-cliente" if reg.foto_cliente_file_name else None,
+            "foto_cliente_uploaded_at": reg.foto_cliente_uploaded_at.strftime("%d/%m/%Y %H:%M") if reg.foto_cliente_uploaded_at else None,
             "finalizado_at": reg.finalizado_at.strftime("%d/%m/%Y %H:%M") if reg.finalizado_at else None,
             "finalizado_by": reg.finalizado_by,
             "fotos": fotos,
@@ -9194,6 +9196,7 @@ def criar_registro_conferencia_simples():
         retirado_por = str(request.form.get("retirado_por") or "").strip()
         retirada_justificativa = str(request.form.get("retirada_justificativa") or "").strip()
         fotos_files = request.files.getlist("fotos")
+        foto_cliente_rascunho = str(request.form.get("foto_cliente_rascunho") or "").strip()
     else:
         payload = request.get_json(silent=True) or {}
         orcamento = str(payload.get("orcamento") or "").strip()
@@ -9212,6 +9215,7 @@ def criar_registro_conferencia_simples():
         retirado_por = str(payload.get("retirado_por") or "").strip()
         retirada_justificativa = str(payload.get("retirada_justificativa") or "").strip()
         fotos_files = []
+        foto_cliente_rascunho = ""
 
     # Validação básica
     if tipo_referencia == "OrdemCompra":
@@ -9341,6 +9345,32 @@ def criar_registro_conferencia_simples():
         db.session.rollback()
         return jsonify({"error": "Uma ou mais fotos expiraram antes de salvar. Selecione as fotos novamente."}), 400
 
+    # Foto destinada ao cliente (rascunho -> colunas dedicadas do registro)
+    if foto_cliente_rascunho:
+        drive_ref = decode_drive_rascunho(foto_cliente_rascunho)
+        if drive_ref:
+            file_id, nome_cliente_arq = drive_ref
+            registro.foto_cliente_file_name = nome_cliente_arq
+            registro.foto_cliente_file_path = f"https://drive.google.com/thumbnail?id={file_id}&sz=w1600"
+        else:
+            safe_id = os.path.basename(foto_cliente_rascunho)
+            origem = os.path.join(rascunho_dir, safe_id)
+            if not os.path.isfile(origem):
+                db.session.rollback()
+                return jsonify({"error": "A foto do cliente expirou antes de salvar. Tire a foto novamente."}), 400
+            ext = os.path.splitext(safe_id)[1] or ".jpg"
+            nome_cliente_arq = f"cliente_reg{registro.id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+            destino = os.path.join(fotos_dir, nome_cliente_arq)
+            shutil.move(origem, destino)
+            registro.foto_cliente_file_name = nome_cliente_arq
+            registro.foto_cliente_file_path = destino
+        registro.foto_cliente_uploaded_at = datetime.now()
+        registro.foto_cliente_uploaded_by = session.get("username", "desconhecido")
+
+    if not registro.foto_cliente_file_name and not sem_conferencia:
+        db.session.rollback()
+        return jsonify({"error": "Tire a foto para o cliente antes de salvar."}), 400
+
     if not fotos_salvas and not sem_conferencia:
         db.session.rollback()
         return jsonify({"error": "Inclua pelo menos uma foto da conferência."}), 400
@@ -9363,6 +9393,7 @@ def criar_registro_conferencia_simples():
             "retirada_justificativa": registro.retirada_justificativa,
             "status": registro.status,
             "fotos": fotos_salvas,
+            "foto_cliente_url": f"/api/expedicao/conferencia-simples/{registro.id}/foto-cliente" if registro.foto_cliente_file_name else None,
         }
     }), 201
 
@@ -9784,6 +9815,33 @@ def obter_canhoto_conferencia_simples(registro_id):
     except Exception as exc:
         current_app.logger.exception("Falha ao baixar canhoto de expedicao do Drive")
         return jsonify({"error": f"Falha ao baixar canhoto do Drive: {exc}"}), 502
+
+
+@api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto-cliente")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def obter_foto_cliente_conferencia_simples(registro_id):
+    """Retorna a foto destinada ao cliente de um registro."""
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"error": "Registro não encontrado."}), 404
+    if not registro.foto_cliente_file_name:
+        return jsonify({"error": "Foto do cliente não anexada."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(
+        fotos_dir, registro.foto_cliente_file_name, registro.foto_cliente_file_path
+    )
+    if not caminho:
+        return jsonify({"error": "Arquivo não encontrado."}), 404
+
+    try:
+        return _send_foto_expedicao(caminho, registro.foto_cliente_file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar foto do cliente de expedicao do Drive")
+        return jsonify({"error": f"Falha ao baixar foto do Drive: {exc}"}), 502
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>")

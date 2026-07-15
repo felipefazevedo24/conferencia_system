@@ -537,6 +537,11 @@ class ExpedicaoConferenciaSimples(db.Model):
     canhoto_file_path = db.Column(db.String(500))
     canhoto_uploaded_at = db.Column(db.DateTime)
     canhoto_uploaded_by = db.Column(db.String(100))
+    # Foto destinada ao cliente (capturada no registro, para envio posterior)
+    foto_cliente_file_name = db.Column(db.String(260))
+    foto_cliente_file_path = db.Column(db.String(500))
+    foto_cliente_uploaded_at = db.Column(db.DateTime)
+    foto_cliente_uploaded_by = db.Column(db.String(100))
     finalizado_at = db.Column(db.DateTime)
     finalizado_by = db.Column(db.String(100))
 

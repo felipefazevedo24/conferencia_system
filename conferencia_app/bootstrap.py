@@ -696,6 +696,10 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
             ("canhoto_file_path", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_file_path VARCHAR(500)"),
             ("canhoto_uploaded_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_uploaded_at DATETIME"),
             ("canhoto_uploaded_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN canhoto_uploaded_by VARCHAR(100)"),
+            ("foto_cliente_file_name", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN foto_cliente_file_name VARCHAR(260)"),
+            ("foto_cliente_file_path", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN foto_cliente_file_path VARCHAR(500)"),
+            ("foto_cliente_uploaded_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN foto_cliente_uploaded_at DATETIME"),
+            ("foto_cliente_uploaded_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN foto_cliente_uploaded_by VARCHAR(100)"),
             ("finalizado_at", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN finalizado_at DATETIME"),
             ("finalizado_by", "ALTER TABLE expedicao_conferencia_simples ADD COLUMN finalizado_by VARCHAR(100)"),
         ]
