@@ -340,6 +340,21 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
 
     db.session.commit()
 
+    # Aviso no Teams quando a conferencia e concluida (nao em edicoes posteriores).
+    if not era_conferido:
+        try:
+            from ..services.teams_service import notificar_expedicao_conferida
+
+            notificar_expedicao_conferida(
+                ordem.cliente or "Cliente não informado",
+                f"Orçamento {ordem.orcamento or '—'}",
+                conferente=ordem.conferente,
+                volumes=ordem.qtde_volumes,
+                peso_bruto=ordem.peso_bruto,
+            )
+        except Exception:
+            current_app.logger.exception("Falha ao notificar Teams (conf-cega FAT %s)", cod_ordem_fat)
+
     return jsonify({
         "sucesso": True,
         "divergente": ordem_divergente,
