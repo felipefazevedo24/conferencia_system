@@ -106,6 +106,23 @@ def create_app(test_config=None) -> Flask:
         }
 
     @app.context_processor
+    def inject_current_user_prefs():
+        from .models import Usuario
+
+        if "username" not in session:
+            return {"current_user_display": None, "current_user_tema": "claro"}
+        try:
+            user = Usuario.query.filter_by(username=session["username"]).first()
+        except Exception:
+            user = None
+        if not user:
+            return {"current_user_display": None, "current_user_tema": "claro"}
+        return {
+            "current_user_display": user.nome_exibicao or user.username,
+            "current_user_tema": user.tema or "claro",
+        }
+
+    @app.context_processor
     def inject_asset_version():
         # Cache-busting baseado no mtime mais recente da pasta static/css.
         # Garante que deploys de produção (PythonAnywhere) sirvam a versão

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-theme="{{ current_user_tema or 'claro' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -49,9 +49,9 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-recebimento" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-box-open"></i><span>Recebimento</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
-                    <div class="submenu-panel open" id="menu-recebimento">
+                    <div class="submenu-panel" id="menu-recebimento">
                         {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusao XML</a>{% endif %}
                         {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
                         {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
@@ -63,9 +63,9 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-compras" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-file-invoice-dollar"></i><span>Compras</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
-                    <div class="submenu-panel open" id="menu-compras">
+                    <div class="submenu-panel" id="menu-compras">
                         {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Pré-nota de entrada</a>{% endif %}
                         {% if can_access('PAGE_XML_AUDITOR') %}<a href="/compras/auditor-xml" class="list-group-item list-group-item-action"><i class="fas fa-shield-alt"></i> Auditor XML</a>{% endif %}
                         {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Documento de entrada</a>{% endif %}
@@ -84,9 +84,9 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
-                    <div class="submenu-panel open" id="menu-logistica">
+                    <div class="submenu-panel" id="menu-logistica">
 
                         {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') %}
                         <div class="submenu-subgroup" data-subgroup="recebimento">
@@ -159,7 +159,7 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-coins"></i><span>Controladoria</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-controladoria">
                         {% if can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_FATURAMENTO') %}
@@ -189,7 +189,7 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-facilities" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-building"></i><span>Facilities</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-facilities">
                         {% if can_access('PAGE_FACILITIES_GESTOR') %}<a href="/facilities/solicitar-epi" class="list-group-item list-group-item-action"><i class="fas fa-hard-hat"></i> Solicitar EPI</a>{% endif %}
@@ -204,7 +204,7 @@
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administração</span></span>
-                        <i class="fas fa-chevron-down nav-chevron"></i>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-administracao">
                         {% if can_access('PAGE_ADMIN_DASHBOARD') %}<a href="/admin" class="list-group-item list-group-item-action"><i class="fas fa-chart-line"></i> Dashboard</a>{% endif %}
@@ -217,17 +217,6 @@
                 </div>
                 {% endif %}
             </div>
-        </div>
-
-        <div class="sidebar-footer">
-            <div class="sidebar-user">
-                <span>Sessão atual</span>
-                <strong>{{ user }}</strong>
-            </div>
-            <a href="javascript:void(0)" onclick="confirmarLogout()" class="sidebar-footer-link">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Encerrar sessão</span>
-            </a>
         </div>
     </aside>
 
@@ -267,16 +256,16 @@
                 </div>
                 <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
                     <i class="fas fa-user-circle"></i>
-                    <span>{{ user|upper }}</span>
+                    <span>{{ (current_user_display or user)|upper }}</span>
                     <i class="fas fa-chevron-down"></i>
                 </button>
                 <div id="user-profile-panel" class="user-profile-panel" aria-hidden="true">
                     <div class="user-profile-panel-label">Nível de acesso</div>
                     <strong class="user-profile-panel-role">{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
-                    <button type="button" class="user-profile-config-btn">
+                    <a href="/perfil" class="user-profile-config-btn">
                         <i class="fas fa-gear"></i>
-                        <span>Configurações</span>
-                    </button>
+                        <span>Meu perfil e configurações</span>
+                    </a>
                 </div>
                 <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
@@ -331,6 +320,7 @@ function setShellCollapsed(collapsed) {
     shellBackdrop.classList.toggle("active", window.innerWidth < 992 && !collapsed);
     menuToggle.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
     menuToggle.setAttribute("title", collapsed ? "Expandir menu" : "Recolher menu");
+    if (typeof window.closeSidebarFlyouts === "function") window.closeSidebarFlyouts();
 }
 
 function confirmarLogout() {
@@ -503,24 +493,84 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    // Menu lateral em modo "flyout": cada modulo abre um painel flutuante
+    // com os submodulos ao lado da barra, em vez de expandir inline.
+    const sidebarWrapper = document.getElementById("sidebar-wrapper");
+    const sidebarScroll = document.querySelector(".sidebar-scroll");
+    const flyoutMap = new Map();
+
     menuButtons.forEach(button => {
-        const target = document.getElementById(button.dataset.shellTarget);
-        if (!target) return;
+        const panel = document.getElementById(button.dataset.shellTarget);
+        if (!panel) return;
 
-        button.addEventListener("click", function () {
-            const shouldOpen = !target.classList.contains("open");
+        panel.classList.add("sidebar-flyout");
+        panel.classList.remove("open");
 
-            menuButtons.forEach(otherButton => {
-                const otherTarget = document.getElementById(otherButton.dataset.shellTarget);
-                if (!otherTarget || otherButton === button) return;
-                otherButton.setAttribute("aria-expanded", "false");
-                otherTarget.classList.remove("open");
-            });
+        const label = button.querySelector(".nav-group-title span")?.textContent?.trim();
+        if (label && !panel.querySelector(".sidebar-flyout-title")) {
+            const title = document.createElement("div");
+            title.className = "sidebar-flyout-title";
+            title.textContent = label;
+            panel.insertBefore(title, panel.firstChild);
+        }
 
-            button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-            target.classList.toggle("open", shouldOpen);
+        document.body.appendChild(panel);
+        flyoutMap.set(button, panel);
+    });
+
+    function closeAllFlyouts() {
+        flyoutMap.forEach((panel, button) => {
+            panel.classList.remove("open");
+            button.setAttribute("aria-expanded", "false");
+            button.classList.remove("flyout-active");
+        });
+    }
+    window.closeSidebarFlyouts = closeAllFlyouts;
+
+    function positionFlyout(button, panel) {
+        const wrapRect = sidebarWrapper.getBoundingClientRect();
+        const btnRect = button.getBoundingClientRect();
+        panel.style.left = (wrapRect.right + 8) + "px";
+        panel.style.top = btnRect.top + "px";
+        const panelHeight = panel.offsetHeight;
+        let top = btnRect.top;
+        if (top + panelHeight > window.innerHeight - 12) {
+            top = Math.max(12, window.innerHeight - 12 - panelHeight);
+        }
+        panel.style.top = top + "px";
+    }
+
+    menuButtons.forEach(button => {
+        const panel = flyoutMap.get(button);
+        if (!panel) return;
+
+        button.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = panel.classList.contains("open");
+            closeAllFlyouts();
+            if (!isOpen) {
+                panel.classList.add("open");
+                button.setAttribute("aria-expanded", "true");
+                button.classList.add("flyout-active");
+                positionFlyout(button, panel);
+            }
+        });
+
+        panel.addEventListener("click", function (e) {
+            if (e.target.closest("a")) closeAllFlyouts();
         });
     });
+
+    document.addEventListener("click", function (e) {
+        if (e.target.closest(".sidebar-flyout") || e.target.closest(".menu-toggle")) return;
+        closeAllFlyouts();
+    });
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeAllFlyouts();
+    });
+    window.addEventListener("resize", closeAllFlyouts);
+    sidebarScroll?.addEventListener("scroll", closeAllFlyouts, { passive: true });
 
     // Subgrupos colapsáveis (Recebimento/Expedição/WMS/Transporte dentro de Logística)
     const SUBGROUP_KEY = "sidebar:subgroups:collapsed:v1";
@@ -558,11 +608,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const parentPanel = link.closest(".submenu-panel");
         if (parentPanel) {
-            parentPanel.classList.add("open");
             const parentButton = document.querySelector(`.menu-toggle[data-shell-target="${parentPanel.id}"]`);
             if (parentButton) {
                 parentButton.classList.add("active");
-                parentButton.setAttribute("aria-expanded", "true");
             }
         }
     });

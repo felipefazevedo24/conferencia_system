@@ -57,7 +57,7 @@ from datetime import timedelta
 import requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
 from sqlalchemy import func, or_
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from ..auth import (
@@ -1930,6 +1930,117 @@ def admin_limpar_senha(username):
     user.password = None
     db.session.commit()
     return jsonify({"sucesso": True, "msg": f"Senha de {username} removida. O usuário precisará se cadastrar novamente."})
+
+
+def _usuario_atual():
+    username = session.get("username")
+    if not username:
+        return None
+    return Usuario.query.filter_by(username=username).first()
+
+
+@api_bp.route("/api/perfil/dados", methods=["POST"])
+@login_required
+def perfil_atualizar_dados():
+    user = _usuario_atual()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    data = request.json or {}
+    nome = (data.get("nome_exibicao") or "").strip()
+    telefone = (data.get("telefone") or "").strip()
+    if len(nome) > 120:
+        return jsonify({"sucesso": False, "msg": "Nome de exibição muito longo."}), 400
+    if len(telefone) > 40:
+        return jsonify({"sucesso": False, "msg": "Telefone muito longo."}), 400
+    user.nome_exibicao = nome or None
+    user.telefone = telefone or None
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "Dados atualizados com sucesso."})
+
+
+@api_bp.route("/api/perfil/email", methods=["POST"])
+@login_required
+def perfil_atualizar_email():
+    user = _usuario_atual()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    data = request.json or {}
+    senha_atual = (data.get("senha_atual") or "").strip()
+    novo_email = (data.get("email") or "").strip().lower()
+
+    if not user.password or not check_password_hash(user.password, senha_atual):
+        return jsonify({"sucesso": False, "msg": "Senha atual incorreta."}), 403
+    if not novo_email or "@" not in novo_email or len(novo_email) > 160:
+        return jsonify({"sucesso": False, "msg": "Informe um e-mail válido."}), 400
+
+    existente = Usuario.query.filter(
+        func.lower(Usuario.email) == novo_email,
+        Usuario.id != user.id,
+    ).first()
+    if existente:
+        return jsonify({"sucesso": False, "msg": "E-mail já cadastrado para outro usuário."}), 409
+
+    user.email = novo_email
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "E-mail atualizado com sucesso."})
+
+
+@api_bp.route("/api/perfil/senha", methods=["POST"])
+@login_required
+def perfil_atualizar_senha():
+    user = _usuario_atual()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    data = request.json or {}
+    senha_atual = (data.get("senha_atual") or "").strip()
+    nova_senha = (data.get("nova_senha") or "").strip()
+    confirma = (data.get("confirma_senha") or "").strip()
+
+    if not user.password or not check_password_hash(user.password, senha_atual):
+        return jsonify({"sucesso": False, "msg": "Senha atual incorreta."}), 403
+    if len(nova_senha) < 4:
+        return jsonify({"sucesso": False, "msg": "A nova senha deve ter pelo menos 4 caracteres."}), 400
+    if nova_senha != confirma:
+        return jsonify({"sucesso": False, "msg": "A confirmação não confere com a nova senha."}), 400
+    if check_password_hash(user.password, nova_senha):
+        return jsonify({"sucesso": False, "msg": "A nova senha deve ser diferente da atual."}), 400
+
+    user.password = generate_password_hash(nova_senha)
+    user.senha_atualizada_em = datetime.now()
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "Senha alterada com sucesso."})
+
+
+@api_bp.route("/api/perfil/tema", methods=["POST"])
+@login_required
+def perfil_atualizar_tema():
+    user = _usuario_atual()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    tema = (request.json or {}).get("tema", "").strip().lower()
+    if tema not in ("claro", "escuro"):
+        return jsonify({"sucesso": False, "msg": "Tema inválido."}), 400
+    user.tema = tema
+    db.session.commit()
+    return jsonify({"sucesso": True, "tema": tema})
+
+
+@api_bp.route("/api/perfil/encerrar-outras-sessoes", methods=["POST"])
+@login_required
+def perfil_encerrar_outras_sessoes():
+    username = session.get("username")
+    current_session_id = session.get("session_id")
+    if not username:
+        return jsonify({"sucesso": False, "msg": "Sessão inválida."}), 400
+    outras = ActiveSession.query.filter(
+        ActiveSession.username == username,
+        ActiveSession.is_active == True,  # noqa: E712
+        ActiveSession.session_id != current_session_id,
+    ).all()
+    for sessao in outras:
+        sessao.is_active = False
+    db.session.commit()
+    return jsonify({"sucesso": True, "encerradas": len(outras), "msg": f"{len(outras)} sessão(ões) encerrada(s)."})
 
 
 @api_bp.route("/api/admin/upload-kpis", methods=["GET"])

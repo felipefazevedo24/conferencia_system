@@ -15,6 +15,7 @@ from ..models import (
     ExpedicaoConferenciaSimples,
     ItemNota,
     ItemWMS,
+    Usuario,
 )
 
 
@@ -803,6 +804,71 @@ def home():
         priority_actions=_build_priority_actions(modules, metrics),
         home_metrics=metrics,
     )
+
+
+@page_bp.route("/perfil")
+@login_required
+def perfil():
+    username = session.get("username", "")
+    usuario = Usuario.query.filter_by(username=username).first()
+    role = session.get("role", "Operação")
+    role_display = "Controladoria" if role == "Financeiro" else role
+
+    current_session_id = session.get("session_id")
+    sessoes_raw = (
+        ActiveSession.query
+        .filter_by(username=username, is_active=True)
+        .order_by(ActiveSession.last_activity.desc())
+        .all()
+    )
+    sessoes = [
+        {
+            "is_current": s.session_id == current_session_id,
+            "device": _friendly_device(getattr(s, "user_agent", None)),
+            "ip": getattr(s, "ip_address", None) or "—",
+            "created_at": s.created_at.strftime("%d/%m/%Y %H:%M") if s.created_at else "—",
+            "last_activity": s.last_activity.strftime("%d/%m/%Y %H:%M") if s.last_activity else "—",
+        }
+        for s in sessoes_raw
+    ]
+
+    return render_template(
+        "perfil.html",
+        usuario=usuario,
+        role_display=role_display,
+        sessoes=sessoes,
+        outras_sessoes=sum(1 for s in sessoes if not s["is_current"]),
+    )
+
+
+def _friendly_device(user_agent: str | None) -> str:
+    ua = (user_agent or "").lower()
+    if not ua:
+        return "Dispositivo desconhecido"
+    if "android" in ua:
+        so = "Android"
+    elif "iphone" in ua or "ipad" in ua or "ios" in ua:
+        so = "iOS"
+    elif "windows" in ua:
+        so = "Windows"
+    elif "mac os" in ua or "macintosh" in ua:
+        so = "macOS"
+    elif "linux" in ua:
+        so = "Linux"
+    else:
+        so = "Outro sistema"
+
+    if "edg" in ua:
+        nav = "Edge"
+    elif "chrome" in ua and "chromium" not in ua:
+        nav = "Chrome"
+    elif "firefox" in ua:
+        nav = "Firefox"
+    elif "safari" in ua:
+        nav = "Safari"
+    else:
+        nav = "Navegador"
+    return f"{nav} · {so}"
 
 
 @page_bp.route("/conferencia")

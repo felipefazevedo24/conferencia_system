@@ -59,6 +59,61 @@
     --content-max-width: 1560px;
 }
 
+/* ===== Tema escuro (self-service em /perfil) ===== */
+[data-theme="escuro"] {
+    --color-text: #e6edf5;
+    --color-text-muted: #9fb0c4;
+    --color-text-soft: #7f90a3;
+    --color-surface: #121a24;
+    --color-surface-alt: #172230;
+    --color-surface-muted: #1e2a39;
+    --color-border: #263447;
+    --color-border-strong: #33475f;
+    --surface-glass: rgba(18, 26, 36, 0.78);
+    --shadow-1: 0 8px 20px rgba(0, 0, 0, 0.35);
+    --shadow-2: 0 16px 32px rgba(0, 0, 0, 0.42);
+    --shadow-3: 0 28px 60px rgba(0, 0, 0, 0.55);
+    --erp-bg: #0d141d;
+    --border-color: #263447;
+    --card-shadow: 0 16px 32px rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="escuro"] body {
+    background:
+        radial-gradient(circle at top right, rgba(28, 134, 242, 0.10), transparent 30%),
+        linear-gradient(180deg, #0b1119 0%, #0d141d 100%);
+}
+
+[data-theme="escuro"] .content-body {
+    background:
+        radial-gradient(circle at 92% 0%, rgba(28, 134, 242, 0.10), transparent 32%),
+        linear-gradient(180deg, #0b1119 0%, #0d141d 100%);
+}
+
+[data-theme="escuro"] .app-footer {
+    background: rgba(13, 20, 29, 0.9);
+    border-top-color: var(--color-border);
+}
+
+/* Home usa tokens proprios (--home-*) definidos inline no template. */
+[data-theme="escuro"] .home-shell {
+    --home-ink: #e6edf5;
+    --home-ink-soft: #9fb0c4;
+    --home-border: #263447;
+    --home-card-bg: #141d28;
+    --home-shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="escuro"] .section-shell,
+[data-theme="escuro"] .module-card,
+[data-theme="escuro"] .home-hero-panel {
+    background: #141d28 !important;
+}
+
+[data-theme="escuro"] .module-card:hover {
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+}
+
 html,
 body {
     min-height: 100%;
@@ -412,6 +467,167 @@ a:hover {
 }
 #sidebar-wrapper .submenu-subgroup.collapsed .submenu-items {
     max-height: 0;
+}
+
+/* Flyout do menu lateral: painel flutuante com os submodulos de um modulo.
+   Os paineis sao reposicionados para o <body> via JS, por isso os seletores
+   abaixo nao dependem de #sidebar-wrapper. */
+.sidebar-flyout {
+    position: fixed;
+    z-index: 3000;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    width: 268px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    padding: 12px;
+    background: #0b1017;
+    border: 1px solid rgba(126, 196, 255, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(3, 12, 24, 0.6);
+    animation: sidebarFlyoutIn 0.14s ease;
+}
+
+.sidebar-flyout.open {
+    display: flex;
+}
+
+@keyframes sidebarFlyoutIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.sidebar-flyout::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar-flyout::-webkit-scrollbar-thumb {
+    background: rgba(125, 196, 255, 0.18);
+    border-radius: 999px;
+}
+
+.sidebar-flyout-title {
+    color: rgba(216, 232, 247, 0.6);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 2px 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 2px;
+}
+
+.sidebar-flyout .list-group-item {
+    border: none;
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #d8e4ef;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.sidebar-flyout .list-group-item i {
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.sidebar-flyout .list-group-item:hover {
+    background: rgba(15, 98, 201, 0.18);
+    color: #ffffff;
+}
+
+.sidebar-flyout .list-group-item.active {
+    background: linear-gradient(135deg, #0f62c9 0%, #0a4ea2 100%);
+    color: #ffffff;
+}
+
+.sidebar-flyout .submenu-subgroup {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    display: grid;
+    gap: 2px;
+}
+
+.sidebar-flyout .submenu-subgroup:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.sidebar-flyout .submenu-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 4px;
+    width: 100%;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.sidebar-flyout .submenu-subtitle:hover {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.sidebar-flyout .submenu-subtitle i.submenu-icon {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.sidebar-flyout .submenu-subtitle .submenu-chevron {
+    margin-left: auto;
+    font-size: 9px;
+    opacity: 0.55;
+    transition: transform 0.2s ease;
+}
+
+.sidebar-flyout .submenu-subgroup.collapsed .submenu-chevron {
+    transform: rotate(-90deg);
+}
+
+.sidebar-flyout .submenu-items {
+    display: grid;
+    gap: 2px;
+    overflow: hidden;
+    max-height: 1000px;
+    transition: max-height 0.25s ease;
+}
+
+.sidebar-flyout .submenu-subgroup.collapsed .submenu-items {
+    max-height: 0;
+}
+
+/* Modulo com flyout aberto */
+#sidebar-wrapper .list-group-item.flyout-active {
+    background: rgba(15, 98, 201, 0.22);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1px rgba(126, 196, 255, 0.3);
+}
+
+#sidebar-wrapper .list-group-item .nav-chevron {
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+#sidebar-wrapper .list-group-item.flyout-active .nav-chevron {
+    opacity: 1;
+    transform: translateX(2px);
 }
 
 .sidebar-footer {
@@ -1402,6 +1618,7 @@ code {
     justify-content: center;
     gap: 8px;
     min-height: 38px;
+    padding: 0 14px;
     border-radius: 10px;
     border: 1px solid rgba(15, 98, 201, 0.58);
     background: rgba(15, 98, 201, 0.22);
@@ -1409,6 +1626,7 @@ code {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
+    text-decoration: none;
 }
 
 .user-profile-config-btn:hover {

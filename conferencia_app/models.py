@@ -9,6 +9,8 @@ class ActiveSession(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     last_activity = db.Column(db.DateTime, default=datetime.now, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(400), nullable=True)
 
 
 class Usuario(db.Model):
@@ -17,6 +19,10 @@ class Usuario(db.Model):
     email = db.Column(db.String(160), unique=True, nullable=True, index=True)
     password = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), default="Logística")
+    nome_exibicao = db.Column(db.String(120), nullable=True)
+    telefone = db.Column(db.String(40), nullable=True)
+    tema = db.Column(db.String(10), nullable=True)  # 'claro' | 'escuro'
+    senha_atualizada_em = db.Column(db.DateTime, nullable=True)
 
 
 class AvisoAtualizacao(db.Model):

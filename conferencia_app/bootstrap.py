@@ -837,6 +837,36 @@ def _ensure_expedicao_ordem_st_columns() -> None:
         conn.close()
 
 
+def _ensure_perfil_columns() -> None:
+    """Adiciona colunas de self-service de perfil (usuario) e rastreio de sessao."""
+    conn = db.engine.connect()
+    try:
+        usuario_cols = _get_column_names("usuario")
+        if "nome_exibicao" not in usuario_cols:
+            conn.execute(db.text("ALTER TABLE usuario ADD COLUMN nome_exibicao VARCHAR(120)"))
+            conn.commit()
+        if "telefone" not in usuario_cols:
+            conn.execute(db.text("ALTER TABLE usuario ADD COLUMN telefone VARCHAR(40)"))
+            conn.commit()
+        if "tema" not in usuario_cols:
+            conn.execute(db.text("ALTER TABLE usuario ADD COLUMN tema VARCHAR(10)"))
+            conn.commit()
+        if "senha_atualizada_em" not in usuario_cols:
+            conn.execute(db.text("ALTER TABLE usuario ADD COLUMN senha_atualizada_em DATETIME"))
+            conn.commit()
+
+        if _has_table("active_session"):
+            sessao_cols = _get_column_names("active_session")
+            if "ip_address" not in sessao_cols:
+                conn.execute(db.text("ALTER TABLE active_session ADD COLUMN ip_address VARCHAR(64)"))
+                conn.commit()
+            if "user_agent" not in sessao_cols:
+                conn.execute(db.text("ALTER TABLE active_session ADD COLUMN user_agent VARCHAR(400)"))
+                conn.commit()
+    finally:
+        conn.close()
+
+
 def initialize_database(app: Flask) -> None:
     with app.app_context():
         try:
@@ -853,6 +883,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_usuario_email_column()
+        except Exception:
+            pass
+
+        try:
+            _ensure_perfil_columns()
         except Exception:
             pass
 

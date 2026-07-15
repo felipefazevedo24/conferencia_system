@@ -96,7 +96,9 @@ def login_page():
                 session_id=session_id,
                 created_at=datetime.now(),
                 last_activity=datetime.now(),
-                is_active=True
+                is_active=True,
+                ip_address=(request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()[:64],
+                user_agent=(request.headers.get("User-Agent", "") or "")[:400],
             ))
             db.session.commit()
             _login_attempts.pop(key, None)
@@ -166,6 +168,7 @@ def cadastrar_senha():
         return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente ou peça a um admin para resetar."}), 409
 
     user.password = generate_password_hash(nova_senha)
+    user.senha_atualizada_em = datetime.now()
     db.session.commit()
     return jsonify({"sucesso": True, "msg": "Senha cadastrada com sucesso! Faça login com seu usuário e a senha definida.", "username": user.username})
 
