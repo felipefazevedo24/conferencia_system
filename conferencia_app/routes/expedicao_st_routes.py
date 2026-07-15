@@ -321,20 +321,19 @@ def conferir_ordem_conf_st(cod_ordem_compra):
 
     db.session.commit()
 
-    # Aviso no Teams quando a conferencia e concluida (nao em edicoes posteriores).
-    if not era_conferido:
-        try:
-            from ..services.teams_service import notificar_expedicao_conferida
+    # Aviso no Teams a cada finalizacao bem-sucedida da conferencia.
+    try:
+        from ..services.teams_service import notificar_expedicao_conferida
 
-            notificar_expedicao_conferida(
-                ordem.fornecedor or "Fornecedor não informado",
-                f"Ordem de compra {ordem.cod_ordem_compra}",
-                conferente=ordem.conferente,
-                volumes=ordem.qtde_volumes,
-                peso_bruto=ordem.peso_bruto,
-            )
-        except Exception:
-            current_app.logger.exception("Falha ao notificar Teams (conf-cega ST %s)", cod_ordem_compra)
+        notificar_expedicao_conferida(
+            ordem.fornecedor or "Fornecedor não informado",
+            f"Ordem de compra {ordem.cod_ordem_compra}",
+            conferente=ordem.conferente,
+            volumes=ordem.qtde_volumes,
+            peso_bruto=ordem.peso_bruto,
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao notificar Teams (conf-cega ST %s)", cod_ordem_compra)
 
     return jsonify({
         "sucesso": True,
