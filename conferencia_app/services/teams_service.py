@@ -16,6 +16,9 @@ import threading
 import requests
 from flask import current_app
 
+# Texto da mencao de canal (o Teams resolve via msteams.entities abaixo).
+_MENTION_TEXT = "<at>Canal</at>"
+
 
 def _webhook_url() -> str:
     url = str(os.environ.get("TEAMS_WEBHOOK_EXPEDICAO_URL", "") or "").strip()
@@ -31,11 +34,23 @@ def _webhook_url() -> str:
     return ""
 
 
-def _card_payload(titulo: str, linha_principal: str, subinfo: str | None = None) -> dict:
-    body = [
-        {"type": "TextBlock", "size": "Small", "weight": "Bolder", "color": "Good", "text": titulo, "wrap": True},
-        {"type": "TextBlock", "size": "Large", "weight": "Bolder", "text": linha_principal, "wrap": True},
-    ]
+def _card_payload(titulo: str, linha_principal: str, subinfo: str | None = None, mencionar_canal: bool = False) -> dict:
+    body = []
+    content = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": body,
+    }
+    if mencionar_canal:
+        body.append({"type": "TextBlock", "size": "Small", "isSubtle": True, "wrap": True, "text": f"{_MENTION_TEXT}"})
+        content["msteams"] = {
+            "entities": [
+                {"type": "mention", "text": _MENTION_TEXT, "mentioned": {"id": "0", "name": "Canal"}}
+            ]
+        }
+    body.append({"type": "TextBlock", "size": "Small", "weight": "Bolder", "color": "Good", "text": titulo, "wrap": True})
+    body.append({"type": "TextBlock", "size": "Large", "weight": "Bolder", "text": linha_principal, "wrap": True})
     if subinfo:
         body.append({"type": "TextBlock", "size": "Small", "isSubtle": True, "wrap": True, "text": subinfo})
     return {
@@ -43,12 +58,7 @@ def _card_payload(titulo: str, linha_principal: str, subinfo: str | None = None)
         "attachments": [
             {
                 "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "type": "AdaptiveCard",
-                    "version": "1.4",
-                    "body": body,
-                },
+                "content": content,
             }
         ],
     }
@@ -63,14 +73,14 @@ def _enviar_async(app, url: str, payload: dict) -> None:
             app.logger.warning("Falha ao enviar aviso ao Teams: %s", exc)
 
 
-def enviar_card(titulo: str, linha_principal: str, subinfo: str | None = None) -> None:
+def enviar_card(titulo: str, linha_principal: str, subinfo: str | None = None, mencionar_canal: bool = False) -> None:
     """Dispara um Adaptive Card no canal do Teams (assincrono, tolerante a falha)."""
     app = current_app._get_current_object()
     url = _webhook_url()
     if not url:
         app.logger.info("TEAMS: webhook nao configurado; aviso ignorado (%s).", linha_principal)
         return
-    payload = _card_payload(titulo, linha_principal, subinfo)
+    payload = _card_payload(titulo, linha_principal, subinfo, mencionar_canal)
     threading.Thread(target=_enviar_async, args=(app, url, payload), daemon=True).start()
 
 
@@ -95,4 +105,4 @@ def notificar_expedicao_conferida(
     if peso_bruto:
         partes.append(f"Peso bruto: {peso_bruto}")
     subinfo = " · ".join(partes) or None
-    enviar_card("✅ Conferência de expedição finalizada", linha, subinfo)
+    enviar_card("✅ Conferência de expedição finalizada", linha, subinfo, mencionar_canal=True)
