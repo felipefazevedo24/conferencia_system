@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Menu Principal | Columbia Sync{% endblock %}
-{% block shell_title %}Menu principal{% endblock %}
+{% block title %}{{ panel_title or "Menu Principal" }} | Columbia Sync{% endblock %}
+{% block shell_title %}{{ shell_title or "Menu principal" }}{% endblock %}
 
 {% block extra_head %}
 <style>
