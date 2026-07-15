@@ -351,7 +351,12 @@ def _coletar_eventos() -> list[dict]:
 
 @painel_tv_bp.route("/painel")
 def painel_tv_page():
-    return render_template("painel_tv.html")
+    return render_template("painel_tv.html", show_compras=True)
+
+
+@painel_tv_bp.route("/painel/recebimento-expedicao")
+def painel_tv_rec_exp_page():
+    return render_template("painel_tv.html", show_compras=False)
 
 
 @painel_tv_bp.route("/api/painel/indicadores")

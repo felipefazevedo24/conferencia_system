@@ -806,61 +806,6 @@ def home():
     )
 
 
-PAINEL_REC_EXP_GRUPOS = [
-    {
-        "name": "Recebimento",
-        "icon": "fa-box-open",
-        "description": "Entrada de notas: portaria, conferência cega, liberação fiscal e etiquetas.",
-        "module_ids": ["portaria", "conferencia", "notas_liberadas", "etiquetas"],
-    },
-    {
-        "name": "Expedição",
-        "icon": "fa-truck-ramp-box",
-        "description": "Saída de mercadoria: registro, controle administrativo e romaneios.",
-        "module_ids": ["expedicao_conferencia", "expedicao_admin", "romaneios"],
-    },
-]
-
-
-def _group_modules_por_ids(modules: list[dict], grupos: list[dict]) -> list[dict]:
-    by_id = {module["id"]: module for module in modules}
-    resultado = []
-    for grupo in grupos:
-        mods = [by_id[mid] for mid in grupo["module_ids"] if mid in by_id]
-        if not mods:
-            continue
-        resultado.append(
-            {
-                "name": grupo["name"],
-                "description": grupo["description"],
-                "icon": grupo["icon"],
-                "tone": "blue",
-                "modules": mods,
-            }
-        )
-    return resultado
-
-
-@page_bp.route("/painel/recebimento-expedicao")
-@login_required
-def painel_recebimento_expedicao():
-    metrics = _build_home_metrics()
-    modules = _build_available_modules(metrics)
-    sections = _group_modules_por_ids(modules, PAINEL_REC_EXP_GRUPOS)
-    return render_template(
-        "menu_principal.html",
-        user=session.get("username", "Usuário"),
-        user_context=_build_user_context(metrics),
-        home_sections=sections,
-        home_modules=modules,
-        home_highlights=_build_home_highlights(metrics),
-        priority_actions=_build_priority_actions(modules, metrics),
-        home_metrics=metrics,
-        panel_title="Recebimento e Expedição",
-        shell_title="Recebimento e Expedição",
-    )
-
-
 @page_bp.route("/perfil")
 @login_required
 def perfil():

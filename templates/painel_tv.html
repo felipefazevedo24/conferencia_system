@@ -313,6 +313,7 @@
     </section>
 
     <!-- SLIDE 2: COMPRAS (atrasadas em cima | a chegar na semana embaixo) -->
+    {% if show_compras|default(true) %}
     <section class="slide slide-compras" data-slide="compras">
       <div class="compras-stack">
         <!-- ATRASADAS -->
@@ -349,6 +350,7 @@
         </section>
       </div>
     </section>
+    {% endif %}
   </main>
 
   <div id="toasts"></div>
@@ -573,7 +575,7 @@
   }
 
   // ----- Carrossel de slides + rotacao das visoes de expedicao -----
-  const SLIDES = ["operacao", "compras"];
+  const SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
   let slideIdx = 0;
   let slideShownAt = Date.now();
   const SLIDE_MIN_MS = 15000;    // tempo minimo em cada slide
