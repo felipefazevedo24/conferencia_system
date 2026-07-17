@@ -158,6 +158,11 @@
                         </div>
 
                         <div class="exp-field">
+                            <label for="numero_os">Nº OS</label>
+                            <input id="numero_os" name="numero_os" type="text" placeholder="Informe o número da OS">
+                        </div>
+
+                        <div class="exp-field">
                             <label for="numero_nf">Nº nota fiscal</label>
                             <div class="exp-inline">
                                 <input id="numero_nf" name="numero_nf" type="text" placeholder="Ex: 1234, 1235, 1236 (separadas por vírgula)">
@@ -368,6 +373,7 @@ const orcamentoWrapper = document.getElementById("orcamento-wrapper");
 const orcamentoInput = document.getElementById("orcamento");
 const ordemCompraWrapper = document.getElementById("ordem-compra-wrapper");
 const ordemCompraInput = document.getElementById("ordem_compra");
+const numeroOsInput = document.getElementById("numero_os");
 const nfInput = document.getElementById("numero_nf");
 const nfFeedback = document.getElementById("nf-feedback");
 const nomeClienteWrapper = document.getElementById("nome-cliente-wrapper");
@@ -1556,6 +1562,21 @@ async function prefillFromQuery() {
         }
         if (data.numero_nf) {
             nfInput.value = data.numero_nf;
+        }
+        // Numero da OS: ST traz agregado em data.n_os; FAT vem por item.
+        let osValor = "";
+        if (isSt) {
+            osValor = (data.n_os || "").toString().trim();
+        } else {
+            const oss = [];
+            (data.itens || []).forEach(it => {
+                const v = (it.n_os || "").toString().trim();
+                if (v && !oss.includes(v)) oss.push(v);
+            });
+            osValor = oss.join(", ");
+        }
+        if (osValor && numeroOsInput) {
+            numeroOsInput.value = osValor;
         }
     } catch (e) {
         showToast(e.message, "error");
