@@ -192,6 +192,7 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
     criadas = 0
     atualizadas = 0
     faturadas = 0
+    faturadas_sem_conf = 0
     agora = datetime.now()
 
     for cod, rows in grupos.items():
@@ -245,12 +246,25 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
                     ),
                 ))
 
-        # O endpoint /expedicao_terceiro retorna apenas a FILA de ST (itens
-        # pendentes de envio ao terceiro). O numero_nf (NF de envio) e apenas
-        # informativo e NAO deve tirar a ordem da fila. Guardamos so para
-        # exibicao e para a baixa por expedicao (marcar_expedido_por_nf).
+        # O endpoint /expedicao_terceiro retorna a FILA de ST. Guardamos a NF
+        # para exibicao e para a baixa por expedicao (marcar_expedido_por_nf).
         if numero_nf:
             ordem.numero_nf = numero_nf
+
+        # Deteccao de faturado (NF preenchida na origem), espelhando o fluxo FAT:
+        #  - Se ja estava Conferido/Ag. Fat -> Faturado (fluxo normal).
+        #  - Se ainda estava Pendente (NF emitida sem conferencia) ->
+        #    "Faturado sem conferência": exige a conferencia cega antes de
+        #    liberar a expedicao.
+        if ordem.status in (STATUS_PENDENTE, STATUS_CONFERIDO):
+            if _origem_indica_faturado(origem_status, numero_nf):
+                ordem.faturado_at = agora
+                if ordem.status == STATUS_CONFERIDO:
+                    ordem.status = STATUS_FATURADO
+                    faturadas += 1
+                else:
+                    ordem.status = STATUS_FATURADO_SEM_CONF
+                    faturadas_sem_conf += 1
 
         ordem.updated_at = agora
 
@@ -259,6 +273,7 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
         "criadas": criadas,
         "atualizadas": atualizadas,
         "faturadas": faturadas,
+        "faturadas_sem_conf": faturadas_sem_conf,
         "total_ordens": len(grupos),
     }
 
@@ -281,6 +296,10 @@ def marcar_expedido_por_nf(numero_nf, registro_id=None, usuario=None) -> int:
     afetadas = 0
     agora = datetime.now()
     for ordem in ordens:
+        # Trava de conferencia: ordens faturadas SEM conferencia nao podem ser
+        # expedidas ate que a conferencia cega seja realizada.
+        if ordem.status == STATUS_FATURADO_SEM_CONF:
+            continue
         if ordem.status != STATUS_EXPEDIDO:
             ordem.status = STATUS_EXPEDIDO
             ordem.expedido_at = agora
