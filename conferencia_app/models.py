@@ -1740,3 +1740,32 @@ class EmailEntradaChapa(db.Model):
     __table_args__ = (
         db.UniqueConstraint("numero_nota", "numero_ar", name="ux_email_entrada_chapa_nota_ar"),
     )
+
+
+class CadastroAtualizacaoPublica(db.Model):
+    """Atualizacao cadastral enviada pelo proprio cliente/fornecedor via pagina
+    publica (sem login). Fica em fila de revisao interna."""
+    __tablename__ = "cadastro_atualizacao_publica"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(20), nullable=False, index=True)  # cliente | fornecedor
+    documento = db.Column(db.String(20), nullable=False, index=True)  # CNPJ
+    razao_social = db.Column(db.String(220))
+    nome_fantasia = db.Column(db.String(220))
+    inscricao_estadual = db.Column(db.String(40))
+    regime_tributario = db.Column(db.String(40), nullable=False)
+    endereco = db.Column(db.String(300))
+    cep = db.Column(db.String(12))
+    municipio = db.Column(db.String(120))
+    uf = db.Column(db.String(2))
+    telefone = db.Column(db.String(40))
+    email = db.Column(db.String(160))
+    email_confirmado = db.Column(db.Boolean, nullable=False, default=False)
+    contato = db.Column(db.String(120))
+    observacoes = db.Column(db.String(500))
+    situacao_cadastral = db.Column(db.String(60))
+    fonte_cnpj = db.Column(db.String(40))
+    dados_json = db.Column(db.Text)
+    status = db.Column(db.String(40), nullable=False, default="Pendente de revisão", index=True)
+    origem_ip = db.Column(db.String(60))
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

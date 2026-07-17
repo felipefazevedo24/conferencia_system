@@ -20,6 +20,7 @@ from .error_handlers import register_error_handlers
 from .extensions import db, migrate
 from .routes.api_routes import api_bp
 from .routes.agendamento_routes import agendamento_bp
+from .routes.atualizacao_cadastral_routes import atualizacao_cadastral_bp
 from .routes.auth_routes import auth_bp
 from .routes.boleto_routes import boleto_bp
 from .routes.cadastro_workflow_routes import cadastro_workflow_bp
@@ -51,6 +52,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(page_bp)
     app.register_blueprint(painel_tv_bp)
+    app.register_blueprint(atualizacao_cadastral_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(agendamento_bp)
     app.register_blueprint(wms_bp)

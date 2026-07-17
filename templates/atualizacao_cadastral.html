@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f62c9">
+  <title>Atualização Cadastral | Columbia Sync</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    :root {
+      --primary: #0f62c9;      /* Columbia blue */
+      --primary-2: #0d4ea3;
+      --bg: #071a33;
+      --bg-2: #0d3a6e;
+      --surface: #ffffff;
+      --surface-soft: #f5f8fd;
+      --border: #e3e8ef;
+      --text: #0f172a;
+      --muted: #5b6b82;
+      --ok: #0c7a4f;
+      --ok-bg: #e7f6ee;
+      --err: #d64545;
+      --err-bg: #fdecec;
+      --radius: 14px;
+      --font: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-display: "Space Grotesk", var(--font);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(1100px 700px at 12% -10%, var(--bg-2) 0%, var(--bg) 60%),
+        var(--bg);
+      padding: clamp(16px, 4vw, 48px) 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .shell { width: min(920px, 100%); }
+
+    .brand {
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 22px;
+    }
+    .brand .logo-badge {
+      background: #fff; border-radius: 16px;
+      padding: 12px 20px; box-shadow: 0 12px 34px rgba(0,0,0,.35);
+    }
+    .brand .logo-badge img { height: clamp(34px, 6vw, 50px); display: block; }
+
+    .card {
+      background: var(--surface);
+      border-radius: 22px;
+      box-shadow: 0 24px 60px rgba(4, 20, 45, .45);
+      overflow: hidden;
+    }
+    .card-head {
+      background: linear-gradient(120deg, var(--primary) 0%, var(--primary-2) 100%);
+      color: #fff;
+      padding: clamp(20px, 3.4vw, 30px) clamp(20px, 4vw, 38px);
+    }
+    .card-head h1 {
+      font-family: var(--font-display);
+      font-size: clamp(20px, 3.2vw, 30px); font-weight: 800; letter-spacing: .3px;
+    }
+    .card-head p { margin-top: 8px; opacity: .92; font-size: clamp(13px, 1.8vw, 15px); max-width: 60ch; }
+    .card-body { padding: clamp(20px, 4vw, 38px); }
+
+    .section-title {
+      font-family: var(--font-display); font-weight: 700; font-size: 14px;
+      text-transform: uppercase; letter-spacing: .8px; color: var(--primary);
+      margin: 6px 0 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .step {
+      width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--primary); color: #fff; font-size: 13px; font-weight: 700;
+    }
+    .section + .section { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--border); }
+
+    /* segmented tipo */
+    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 460px; }
+    .seg-option {
+      border: 2px solid var(--border); border-radius: var(--radius);
+      padding: 16px; cursor: pointer; text-align: center; transition: all .18s ease;
+      background: var(--surface-soft); font-weight: 600; color: var(--muted);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .seg-option i { font-size: 22px; }
+    .seg-option:hover { border-color: #c3d3ea; }
+    .seg-option.active {
+      border-color: var(--primary); color: var(--primary);
+      background: #eef4fd; box-shadow: 0 0 0 3px rgba(15,98,201,.12);
+    }
+
+    /* fields */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .field label .req { color: var(--err); }
+    .field input, .field select, .field textarea {
+      font-family: var(--font); font-size: 15px; color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 12px 14px; background: #fff; transition: border-color .15s, box-shadow .15s;
+      width: 100%;
+    }
+    .field textarea { resize: vertical; min-height: 76px; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15,98,201,.14);
+    }
+    .field input:disabled { background: #f1f4f9; color: var(--muted); }
+
+    .cnpj-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .cnpj-row .field { flex: 1 1 260px; }
+
+    .btn {
+      font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer;
+      border: none; border-radius: var(--radius); padding: 13px 22px;
+      display: inline-flex; align-items: center; gap: 9px; transition: filter .15s, transform .05s;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.06); }
+    .btn-ghost { background: #eef4fd; color: var(--primary); }
+    .btn-ghost:hover { filter: brightness(.98); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn .fa-spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .checkbox {
+      display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px;
+      background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .checkbox input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); flex: 0 0 auto; cursor: pointer; }
+    .checkbox label { font-size: 14px; color: var(--text); cursor: pointer; line-height: 1.45; }
+
+    .actions { margin-top: 26px; display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+
+    .feedback { display: none; margin-top: 18px; padding: 14px 16px; border-radius: var(--radius); font-size: 14px; font-weight: 600; }
+    .feedback.show { display: flex; gap: 10px; align-items: center; }
+    .feedback.ok { background: var(--ok-bg); color: var(--ok); }
+    .feedback.err { background: var(--err-bg); color: var(--err); }
+
+    .hint { font-size: 12.5px; color: var(--muted); margin-top: -2px; }
+    .foot { text-align: center; color: rgba(255,255,255,.6); font-size: 12.5px; margin-top: 18px; }
+
+    /* success screen */
+    .success-screen { display: none; text-align: center; padding: 20px 6px; }
+    .success-screen.show { display: block; }
+    .success-screen .circle {
+      width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 18px;
+      background: var(--ok-bg); color: var(--ok); display: grid; place-items: center; font-size: 40px;
+    }
+    .success-screen h2 { font-family: var(--font-display); font-size: 24px; margin-bottom: 10px; }
+    .success-screen p { color: var(--muted); max-width: 46ch; margin: 0 auto; }
+
+    @media (max-width: 620px) {
+      .grid { grid-template-columns: 1fr; }
+      .segmented { grid-template-columns: 1fr; }
+      .actions { justify-content: stretch; }
+      .actions .btn { flex: 1; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">
+      <div class="logo-badge"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h1>Atualização Cadastral</h1>
+        <p>Mantenha os dados da sua empresa sempre atualizados conosco. Informe seu CNPJ, revise as informações e confirme seu contato.</p>
+      </div>
+
+      <div class="card-body">
+        <form id="form-cadastro" novalidate>
+          <!-- 1) Tipo -->
+          <div class="section">
+            <div class="section-title"><span class="step">1</span> Você é cliente ou fornecedor?</div>
+            <div class="segmented" id="tipo-seg">
+              <div class="seg-option" data-tipo="cliente" role="button" tabindex="0">
+                <i class="fas fa-user-tie"></i><span>Cliente</span>
+              </div>
+              <div class="seg-option" data-tipo="fornecedor" role="button" tabindex="0">
+                <i class="fas fa-truck-field"></i><span>Fornecedor</span>
+              </div>
+            </div>
+            <input type="hidden" id="tipo" name="tipo" value="">
+          </div>
+
+          <!-- 2) CNPJ -->
+          <div class="section">
+            <div class="section-title"><span class="step">2</span> Informe seu CNPJ</div>
+            <div class="cnpj-row">
+              <div class="field">
+                <label for="documento">CNPJ <span class="req">*</span></label>
+                <input id="documento" name="documento" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" autocomplete="off">
+                <span class="hint">Digite o CNPJ e clique em “Buscar dados” para preencher automaticamente.</span>
+              </div>
+              <button type="button" class="btn btn-ghost" id="btn-buscar">
+                <i class="fas fa-magnifying-glass"></i><span>Buscar dados</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3) Dados -->
+          <div class="section">
+            <div class="section-title"><span class="step">3</span> Revise e complete os dados</div>
+            <div class="grid">
+              <div class="field full">
+                <label for="razao_social">Razão Social</label>
+                <input id="razao_social" name="razao_social" type="text" placeholder="Razão social da empresa">
+              </div>
+              <div class="field">
+                <label for="nome_fantasia">Nome Fantasia</label>
+                <input id="nome_fantasia" name="nome_fantasia" type="text" placeholder="Nome fantasia">
+              </div>
+              <div class="field">
+                <label for="inscricao_estadual">Inscrição Estadual</label>
+                <input id="inscricao_estadual" name="inscricao_estadual" type="text" placeholder="IE (ou ISENTO)">
+              </div>
+              <div class="field">
+                <label for="regime_tributario">Regime Tributário <span class="req">*</span></label>
+                <select id="regime_tributario" name="regime_tributario" required>
+                  <option value="">Selecione…</option>
+                  <option value="Simples Nacional">Simples Nacional</option>
+                  <option value="Lucro Presumido">Lucro Presumido</option>
+                  <option value="Lucro Real">Lucro Real</option>
+                  <option value="MEI">MEI</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="telefone">Telefone</label>
+                <input id="telefone" name="telefone" type="text" placeholder="(00) 0000-0000">
+              </div>
+              <div class="field full">
+                <label for="endereco">Endereço completo</label>
+                <input id="endereco" name="endereco" type="text" placeholder="Logradouro, número, bairro">
+              </div>
+              <div class="field">
+                <label for="cep">CEP</label>
+                <input id="cep" name="cep" type="text" placeholder="00000-000">
+              </div>
+              <div class="field">
+                <label for="municipio">Município</label>
+                <input id="municipio" name="municipio" type="text" placeholder="Cidade">
+              </div>
+              <div class="field">
+                <label for="uf">UF</label>
+                <input id="uf" name="uf" type="text" maxlength="2" placeholder="UF" style="text-transform:uppercase">
+              </div>
+              <div class="field">
+                <label for="contato">Nome do contato</label>
+                <input id="contato" name="contato" type="text" placeholder="Pessoa de contato">
+              </div>
+              <div class="field full">
+                <label for="email">E-mail de contato <span class="req">*</span></label>
+                <input id="email" name="email" type="email" placeholder="contato@empresa.com.br">
+              </div>
+              <div class="field full">
+                <label for="observacoes">Observações (opcional)</label>
+                <textarea id="observacoes" name="observacoes" placeholder="Alguma informação adicional?"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4) Confirmação -->
+          <div class="section">
+            <div class="section-title"><span class="step">4</span> Confirmação</div>
+            <div class="checkbox">
+              <input type="checkbox" id="email_confirmado" name="email_confirmado">
+              <label for="email_confirmado">Confirmo que o e-mail informado acima é o <b>contato real e ativo</b> da empresa e autorizo o uso para comunicações.</label>
+            </div>
+          </div>
+
+          <div class="feedback" id="feedback"></div>
+
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="btn-enviar">
+              <i class="fas fa-paper-plane"></i><span>Enviar atualização</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- success -->
+        <div class="success-screen" id="success">
+          <div class="circle"><i class="fas fa-check"></i></div>
+          <h2>Atualização enviada!</h2>
+          <p>Recebemos os dados da sua empresa. Nossa equipe fará a revisão e o cadastro será atualizado. Obrigado!</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">Columbia Sync · Portal de atualização cadastral</div>
+  </div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const form = $("form-cadastro");
+  const feedback = $("feedback");
+  const tipoHidden = $("tipo");
+
+  // ----- Tipo (cliente/fornecedor) -----
+  document.querySelectorAll("#tipo-seg .seg-option").forEach((opt) => {
+    const select = () => {
+      document.querySelectorAll("#tipo-seg .seg-option").forEach((o) => o.classList.remove("active"));
+      opt.classList.add("active");
+      tipoHidden.value = opt.dataset.tipo;
+    };
+    opt.addEventListener("click", select);
+    opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
+  });
+
+  // ----- Mascaras simples -----
+  function maskCNPJ(v) {
+    v = (v || "").replace(/\D/g, "").slice(0, 14);
+    return v
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+  $("documento").addEventListener("input", (e) => { e.target.value = maskCNPJ(e.target.value); });
+  $("cep").addEventListener("input", (e) => {
+    let v = e.target.value.replace(/\D/g, "").slice(0, 8);
+    e.target.value = v.replace(/^(\d{5})(\d)/, "$1-$2");
+  });
+
+  function showFeedback(msg, type) {
+    feedback.textContent = "";
+    const icon = document.createElement("i");
+    icon.className = type === "ok" ? "fas fa-circle-check" : "fas fa-triangle-exclamation";
+    feedback.appendChild(icon);
+    feedback.appendChild(document.createTextNode(" " + msg));
+    feedback.className = "feedback show " + type;
+    if (type === "err") feedback.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function clearFeedback() { feedback.className = "feedback"; }
+
+  function setField(id, value) { if (value) $(id).value = value; }
+
+  // ----- Consultar CNPJ -----
+  const btnBuscar = $("btn-buscar");
+  btnBuscar.addEventListener("click", async () => {
+    const cnpj = $("documento").value.replace(/\D/g, "");
+    if (cnpj.length !== 14) { showFeedback("Informe um CNPJ válido com 14 dígitos.", "err"); return; }
+    clearFeedback();
+    const original = btnBuscar.innerHTML;
+    btnBuscar.disabled = true;
+    btnBuscar.innerHTML = '<i class="fas fa-spinner"></i><span>Buscando…</span>';
+    try {
+      const r = await fetch("/api/atualizacao-cadastral/consultar-cnpj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cnpj }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Não foi possível consultar o CNPJ.");
+      const d = data.dados || {};
+      setField("razao_social", d.razao_social);
+      setField("nome_fantasia", d.nome_fantasia);
+      setField("inscricao_estadual", d.inscricao_estadual);
+      setField("endereco", d.endereco);
+      setField("cep", d.cep);
+      setField("municipio", d.municipio);
+      setField("uf", (d.uf || "").toUpperCase());
+      setField("telefone", d.telefone);
+      setField("email", d.email);
+      if (d.regime_tributario) {
+        const sel = $("regime_tributario");
+        if ([...sel.options].some((o) => o.value === d.regime_tributario)) sel.value = d.regime_tributario;
+      }
+      $("documento").dataset.situacao = d.situacao_cadastral || "";
+      $("documento").dataset.fonte = d.fonte_cnpj || "";
+      showFeedback("Dados encontrados! Revise, complete o que faltar e confirme o Regime Tributário.", "ok");
+    } catch (err) {
+      showFeedback(err.message, "err");
+    } finally {
+      btnBuscar.disabled = false;
+      btnBuscar.innerHTML = original;
+    }
+  });
+
+  // ----- Enviar -----
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearFeedback();
+
+    if (!tipoHidden.value) { showFeedback("Selecione se você é Cliente ou Fornecedor.", "err"); return; }
+    if ($("documento").value.replace(/\D/g, "").length !== 14) { showFeedback("Informe um CNPJ válido com 14 dígitos.", "err"); return; }
+    if (!$("regime_tributario").value) { showFeedback("Selecione o Regime Tributário.", "err"); return; }
+    if (!$("email").value.trim()) { showFeedback("Informe o e-mail de contato da empresa.", "err"); return; }
+    if (!$("email_confirmado").checked) { showFeedback("Confirme que o e-mail informado é o contato real da empresa.", "err"); return; }
+
+    const payload = {
+      tipo: tipoHidden.value,
+      documento: $("documento").value,
+      razao_social: $("razao_social").value,
+      nome_fantasia: $("nome_fantasia").value,
+      inscricao_estadual: $("inscricao_estadual").value,
+      regime_tributario: $("regime_tributario").value,
+      endereco: $("endereco").value,
+      cep: $("cep").value,
+      municipio: $("municipio").value,
+      uf: $("uf").value,
+      telefone: $("telefone").value,
+      contato: $("contato").value,
+      email: $("email").value,
+      observacoes: $("observacoes").value,
+      email_confirmado: $("email_confirmado").checked,
+      situacao_cadastral: $("documento").dataset.situacao || "",
+      fonte_cnpj: $("documento").dataset.fonte || "",
+    };
+
+    const btn = $("btn-enviar");
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner"></i><span>Enviando…</span>';
+    try {
+      const r = await fetch("/api/atualizacao-cadastral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Não foi possível enviar a atualização.");
+      form.style.display = "none";
+      $("success").classList.add("show");
+      $("success").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (err) {
+      showFeedback(err.message, "err");
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+})();
+</script>
+</body>
+</html>
