@@ -9367,7 +9367,7 @@ def criar_registro_conferencia_simples():
         registro.foto_cliente_uploaded_at = datetime.now()
         registro.foto_cliente_uploaded_by = session.get("username", "desconhecido")
 
-    if not registro.foto_cliente_file_name and not sem_conferencia:
+    if not registro.foto_cliente_file_name and not sem_conferencia and tipo_referencia != "OrdemCompra":
         db.session.rollback()
         return jsonify({"error": "Tire a foto para o cliente antes de salvar."}), 400
 

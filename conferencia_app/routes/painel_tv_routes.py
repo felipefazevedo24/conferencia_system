@@ -22,6 +22,8 @@ painel_tv_bp = Blueprint("painel_tv", __name__)
 STATUS_EXP_PENDENTE = "Pendente de conferência"
 STATUS_EXP_CONFERIDO = "Conferido/Ag. Fat"
 STATUS_EXP_FATURADO = "Faturado"
+STATUS_EXP_FATURADO_SEM_CONF = "Faturado sem conferência"
+STATUS_EXP_EXPEDIDO = "Expedido"
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -42,6 +44,21 @@ def _previsao_status(previsao: datetime | None, agora: datetime) -> str | None:
 def _atrasado(desde: datetime | None, agora: datetime) -> bool:
     """True se esta pendente ha mais de 1 dia."""
     return bool(desde and desde < agora - timedelta(days=1))
+
+
+def _cons_item(codigo, parceiro, tipo, numero_nf, previsao, desde, ts, agora) -> dict:
+    """Item consolidado (FAT ou ST) para o painel de expedicao."""
+    return {
+        "codigo": str(codigo),
+        "parceiro": parceiro or "",
+        "tipo": tipo,  # "FAT" (faturamento) ou "OC" (servico de terceiro)
+        "numero_nf": numero_nf or "",
+        "previsao": _iso(previsao),
+        "previsao_status": _previsao_status(previsao, agora),
+        "desde": _iso(desde),
+        "atrasado": _atrasado(desde, agora),
+        "ts": _iso(ts),
+    }
 
 
 def _count_distinct_notas(status: str) -> int:
@@ -98,107 +115,62 @@ def _coletar_indicadores() -> dict:
         for nota, fornecedor, desde in pend_rows
     ]
 
-    # ---- EXPEDICAO ----
-    exp_fat_pendente = (
-        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_PENDENTE).count()
-    )
-    exp_st_pendente = (
-        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE).count()
-    )
-    exp_fat_conferido = (
-        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_CONFERIDO).count()
-    )
-    exp_st_conferido = (
-        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_CONFERIDO).count()
-    )
-    exp_fat_hoje = (
-        ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje).count()
-    )
-    exp_st_hoje = (
-        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje).count()
-    )
+    # ---- EXPEDICAO (consolidado FAT + ST por status) ----
+    def _cons_fat(o, ts):
+        return _cons_item(
+            o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf,
+            o.dt_previsao_entrega, o.created_at, ts, agora,
+        )
 
-    fat_pendentes = (
-        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_PENDENTE)
-        .order_by(ExpedicaoOrdemFat.created_at)
-        .limit(60)
-        .all()
-    )
-    fat_lista = [
-        {
-            "codigo": str(o.cod_ordem_fat),
-            "parceiro": o.cliente or "",
-            "previsao": _iso(o.dt_previsao_entrega),
-            "previsao_status": _previsao_status(o.dt_previsao_entrega, agora),
-            "desde": _iso(o.created_at),
-            "atrasado": _atrasado(o.created_at, agora),
-        }
-        for o in fat_pendentes
-    ]
+    def _cons_st(o, ts):
+        return _cons_item(
+            o.cod_ordem_compra, o.fornecedor, "OC", o.numero_nf,
+            o.dt_prevista_entrega, o.created_at, ts, agora,
+        )
 
-    st_pendentes = (
-        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE)
-        .order_by(ExpedicaoOrdemST.created_at)
-        .limit(60)
-        .all()
-    )
-    st_lista = [
-        {
-            "codigo": str(o.cod_ordem_compra),
-            "parceiro": o.fornecedor or "",
-            "previsao": _iso(o.dt_prevista_entrega),
-            "previsao_status": _previsao_status(o.dt_prevista_entrega, agora),
-            "desde": _iso(o.created_at),
-            "atrasado": _atrasado(o.created_at, agora),
-        }
-        for o in st_pendentes
-    ]
+    def _cons_categoria(status, ts_attr, reverse, limite=120):
+        fat_rows = (
+            ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status).limit(limite).all()
+        )
+        st_rows = (
+            ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).limit(limite).all()
+        )
+        itens = [_cons_fat(o, getattr(o, ts_attr, None)) for o in fat_rows]
+        itens += [_cons_st(o, getattr(o, ts_attr, None)) for o in st_rows]
+        itens.sort(key=lambda x: x["ts"] or "", reverse=reverse)
+        return itens
 
-    # Notas faturadas e expedidas HOJE (FAT + ST combinados)
-    def _exp_item(codigo, parceiro, tipo, numero_nf, ts):
-        return {
-            "codigo": str(codigo),
-            "parceiro": parceiro or "",
-            "tipo": tipo,
-            "numero_nf": numero_nf or "",
-            "ts": _iso(ts),
-        }
+    def _cons_total(status):
+        return (
+            ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status).count()
+            + ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).count()
+        )
 
-    fat_faturadas = (
-        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_FATURADO)
-        .order_by(ExpedicaoOrdemFat.faturado_at.desc())
-        .limit(60)
-        .all()
-    )
-    st_faturadas = (
-        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_FATURADO)
-        .order_by(ExpedicaoOrdemST.faturado_at.desc())
-        .limit(60)
-        .all()
-    )
-    faturadas_a_expedir = (
-        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.faturado_at) for o in fat_faturadas]
-        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.faturado_at) for o in st_faturadas]
-    )
-    faturadas_a_expedir.sort(key=lambda x: x["ts"] or "", reverse=True)
+    exp_fat_pendente = ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_PENDENTE).count()
+    exp_st_pendente = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE).count()
 
+    # Pendentes e conferidos: mais antigos primeiro (destaca o que esta parado).
+    cat_pendente = _cons_categoria(STATUS_EXP_PENDENTE, "created_at", False)
+    cat_conferido = _cons_categoria(STATUS_EXP_CONFERIDO, "created_at", False)
+    # Faturados: mais recentes primeiro.
+    cat_fat_sem_conf = _cons_categoria(STATUS_EXP_FATURADO_SEM_CONF, "faturado_at", True)
+    cat_faturado = _cons_categoria(STATUS_EXP_FATURADO, "faturado_at", True)
+
+    # Expedidos: consolidado apenas do dia (evita listas gigantes na TV).
     fat_exp_hoje = (
         ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje)
-        .order_by(ExpedicaoOrdemFat.expedido_at.desc())
-        .limit(40)
-        .all()
+        .order_by(ExpedicaoOrdemFat.expedido_at.desc()).limit(120).all()
     )
     st_exp_hoje = (
         ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje)
-        .order_by(ExpedicaoOrdemST.expedido_at.desc())
-        .limit(40)
-        .all()
+        .order_by(ExpedicaoOrdemST.expedido_at.desc()).limit(120).all()
     )
-    expedidas_hoje = (
-        [_exp_item(o.cod_ordem_fat, o.cliente, "FAT", o.numero_nf, o.expedido_at) for o in fat_exp_hoje]
-        + [_exp_item(o.cod_ordem_compra, o.fornecedor, "ST", o.numero_nf, o.expedido_at) for o in st_exp_hoje]
+    cat_expedido = (
+        [_cons_fat(o, o.expedido_at) for o in fat_exp_hoje]
+        + [_cons_st(o, o.expedido_at) for o in st_exp_hoje]
     )
-    expedidas_hoje.sort(key=lambda x: x["ts"] or "", reverse=True)
+    cat_expedido.sort(key=lambda x: x["ts"] or "", reverse=True)
+
 
     eventos = _coletar_eventos()
 
@@ -214,20 +186,17 @@ def _coletar_indicadores() -> dict:
         },
         "expedicao": {
             "pendente_total": int(exp_fat_pendente + exp_st_pendente),
-            "fat": {
-                "pendente": int(exp_fat_pendente),
-                "conferido": int(exp_fat_conferido),
-                "expedidos_hoje": int(exp_fat_hoje),
-                "lista": fat_lista,
+            "resumo": {
+                "fat_pendente": int(exp_fat_pendente),
+                "st_pendente": int(exp_st_pendente),
             },
-            "st": {
-                "pendente": int(exp_st_pendente),
-                "conferido": int(exp_st_conferido),
-                "expedidos_hoje": int(exp_st_hoje),
-                "lista": st_lista,
+            "categorias": {
+                "pendente": {"total": int(_cons_total(STATUS_EXP_PENDENTE)), "lista": cat_pendente},
+                "conferido": {"total": int(_cons_total(STATUS_EXP_CONFERIDO)), "lista": cat_conferido},
+                "faturado_sem_conf": {"total": int(_cons_total(STATUS_EXP_FATURADO_SEM_CONF)), "lista": cat_fat_sem_conf},
+                "faturado": {"total": int(_cons_total(STATUS_EXP_FATURADO)), "lista": cat_faturado},
+                "expedido": {"total": len(cat_expedido), "lista": cat_expedido},
             },
-            "faturadas_hoje": faturadas_a_expedir,
-            "expedidas_hoje": expedidas_hoje,
         },
         "eventos": eventos,
     }

@@ -190,6 +190,16 @@
   .stat .n { font-size: clamp(26px, 4.6vh, 58px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   .stat .t { font-size: clamp(11px, 1.4vh, 16px); color: var(--muted); font-weight: 600; }
   .stat.ok .n { color: var(--ok); }
+  /* Tiles consolidados da expedicao (4 categorias) */
+  .exp-stats { grid-template-columns: 1fr 1fr; }
+  .exp-stats .stat { border-left: 4px solid var(--border); }
+  .stat.s-conf { border-left-color: var(--expedicao); }
+  .stat.s-conf .n { color: var(--expedicao); }
+  .stat.s-fsc { border-left-color: #f87171; }
+  .stat.s-fsc .n { color: #f87171; }
+  .stat.s-fat { border-left-color: #b9adff; }
+  .stat.s-fat .n { color: #b9adff; }
+  .exp-pills { flex-wrap: wrap; margin: 2px 0 6px; }
 
   .updated-flash { animation: flash 1s ease; }
   @keyframes flash { 0% { background: rgba(255,255,255,.16);} 100% { background: var(--card-2);} }
@@ -241,6 +251,8 @@
   .badge.atraso { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
   .badge.perto { background: rgba(250,204,21,.16); color: #facc15; border: 1px solid rgba(250,204,21,.45); }
   .badge.vencido { background: rgba(248,113,113,.16); color: #f87171; border: 1px solid rgba(248,113,113,.45); }
+  .badge.tipo-fat { background: rgba(251,191,36,.16); color: var(--expedicao); border: 1px solid rgba(251,191,36,.42); }
+  .badge.tipo-oc { background: rgba(139,124,246,.18); color: #b9adff; border: 1px solid rgba(139,124,246,.42); }
   .empty { color: var(--muted); text-align: center; padding: 18px; font-size: clamp(12px,1.5vh,16px); }
 </style>
 </head>
@@ -293,19 +305,21 @@
       <div class="panel-head">
         <div class="icon">🚚</div>
         <h2>Expedição</h2>
-        <div class="mode-switch" id="exp-modes"></div>
         <div class="tag" id="exp-tag">—</div>
       </div>
       <div class="hero">
-        <div class="label" id="exp-hero-label">Pendentes de <span class="accent">conferência</span> — <b>Faturamento</b></div>
+        <div class="label">Pendentes de <span class="accent">conferência</span></div>
         <div class="num accent" id="exp-pend-conf">0</div>
       </div>
-      <div class="grid2">
-        <div class="stat"><div class="n" id="exp-conferido">0</div><div class="t">Conferidos / Ag. faturar</div></div>
+      <div class="grid2 exp-stats">
+        <div class="stat s-conf"><div class="n" id="exp-conferido">0</div><div class="t">Conferidos · aguard. faturamento</div></div>
+        <div class="stat s-fsc"><div class="n" id="exp-fat-sem-conf">0</div><div class="t">Faturados sem conferência</div></div>
+        <div class="stat s-fat"><div class="n" id="exp-faturado">0</div><div class="t">Faturados · a expedir</div></div>
         <div class="stat ok"><div class="n" id="exp-hoje">0</div><div class="t">Expedidos hoje</div></div>
       </div>
       <div class="feed">
-        <div class="feed-title"><span>Pendentes — <span id="exp-feed-label">faturamento</span></span><span id="exp-count"></span></div>
+        <div class="feed-title"><span id="exp-feed-title">Pendentes de conferência</span><span id="exp-count"></span></div>
+        <div class="mode-switch exp-pills" id="exp-modes"></div>
         <div class="list" id="exp-list"><div class="empty">Nada pendente</div></div>
       </div>
     </section>
@@ -458,6 +472,26 @@
       "</div>";
   }
 
+  // Item consolidado (FAT + ST) do painel de expedicao — serve para todas as
+  // categorias (pendente, conferido, faturado sem conf, faturado, expedido).
+  function buildConsItem(it) {
+    const tipoCls = it.tipo === "OC" ? "tipo-oc" : "tipo-fat";
+    const tipoBadge = '<span class="badge ' + tipoCls + '">' + esc(it.tipo) + "</span>";
+    const nf = it.numero_nf ? " · NF " + esc(it.numero_nf) : "";
+    let prev = "";
+    if (it.previsao) {
+      const cls = it.previsao_status || "";
+      const txt = (it.previsao_status === "vencido" ? "Em atraso " : "Entrega ") + fmtDia(it.previsao);
+      prev = '<span class="badge ' + cls + '">' + txt + "</span>";
+    }
+    const atraso = (it.atrasado && !it.previsao) ? '<span class="badge atraso">Em atraso</span>' : "";
+    const prefix = it.tipo === "OC" ? "OC" : "Ordem";
+    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
+      '<div class="main"><b>' + prefix + " " + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + nf + "</span></div>" +
+      '<div class="meta">' + tipoBadge + prev + atraso + '<span class="ago">' + relTime(it.ts || it.desde) + "</span></div>" +
+      "</div>";
+  }
+
   function buildOcItem(mode) {
     return function (it) {
       const diasTxt = mode === "atraso"
@@ -514,53 +548,42 @@
     $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }
 
-  // ----- Expedição alterna entre 4 visões -----
+  // ----- Expedição: 5 categorias consolidadas (FAT + ST) -----
   let lastData = null;
   let expIdx = 0;
   const EXP_VIEWS = [
-    { key: "fat", label: "Faturamento" },
-    { key: "st", label: "Serv. Terceiros" },
-    { key: "faturadas", label: "Faturadas a expedir" },
-    { key: "expedidas", label: "Expedidas hoje" },
+    { key: "pendente",          label: "Pendentes de conferência",         empty: "Nada pendente 🎉" },
+    { key: "conferido",         label: "Conferidos · aguard. faturamento", empty: "Nada aguardando faturamento" },
+    { key: "faturado_sem_conf", label: "Faturados sem conferência",        empty: "Nenhum faturado sem conferência" },
+    { key: "faturado",          label: "Faturados · a expedir",            empty: "Nada faturado a expedir" },
+    { key: "expedido",          label: "Expedidos hoje",                   empty: "Nada expedido hoje" },
   ];
 
   function renderExpedicao() {
     if (!lastData) return;
-    const exp = lastData.expedicao;
-    const view = EXP_VIEWS[expIdx].key;
+    const exp = lastData.expedicao || {};
+    const cats = exp.categorias || {};
+    const g = (k) => cats[k] || { total: 0, lista: [] };
 
-    // Tiles sempre com o consolidado FAT + ST
-    setNum("exp-conferido", (exp.fat.conferido || 0) + (exp.st.conferido || 0));
-    setNum("exp-hoje", (exp.fat.expedidos_hoje || 0) + (exp.st.expedidos_hoje || 0));
-    $("exp-tag").textContent = "FAT " + exp.fat.pendente + " · ST " + exp.st.pendente;
+    // KPIs consolidados sempre visiveis (FAT + ST somados)
+    setNum("exp-pend-conf", g("pendente").total);
+    setNum("exp-conferido", g("conferido").total);
+    setNum("exp-fat-sem-conf", g("faturado_sem_conf").total);
+    setNum("exp-faturado", g("faturado").total);
+    setNum("exp-hoje", g("expedido").total);
+    if (exp.resumo) {
+      $("exp-tag").textContent = "FAT " + exp.resumo.fat_pendente + " · ST " + exp.resumo.st_pendente;
+    }
 
-    // Pílulas das 4 visões
+    // Lista rotativa por categoria
+    const view = EXP_VIEWS[expIdx];
+    const cat = g(view.key);
     $("exp-modes").innerHTML = EXP_VIEWS.map((v, i) =>
       '<span class="mode-pill' + (i === expIdx ? " active" : "") + '">' + v.label + "</span>"
     ).join("");
-
-    if (view === "fat" || view === "st") {
-      const bloco = exp[view];
-      $("exp-hero-label").innerHTML = 'Pendentes de <span class="accent">conferência</span> — <b>' + EXP_VIEWS[expIdx].label + "</b>";
-      setNum("exp-pend-conf", bloco.pendente);
-      $("exp-feed-label").textContent = "pendentes · " + EXP_VIEWS[expIdx].label;
-      $("exp-count").textContent = (bloco.lista || []).length + " itens";
-      renderList("exp-list", bloco.lista || [], buildExpItem(view === "fat" ? "Ordem" : "OC"));
-    } else if (view === "faturadas") {
-      const lista = exp.faturadas_hoje || [];
-      $("exp-hero-label").innerHTML = 'Notas <span class="accent">faturadas</span> · a expedir';
-      setNum("exp-pend-conf", lista.length);
-      $("exp-feed-label").textContent = "faturadas · a expedir";
-      $("exp-count").textContent = lista.length + " itens";
-      renderList("exp-list", lista, buildHojeItem, "Nada faturado a expedir");
-    } else {
-      const lista = exp.expedidas_hoje || [];
-      $("exp-hero-label").innerHTML = 'Notas <span class="accent">expedidas hoje</span>';
-      setNum("exp-pend-conf", lista.length);
-      $("exp-feed-label").textContent = "expedidas hoje";
-      $("exp-count").textContent = lista.length + " itens";
-      renderList("exp-list", lista, buildHojeItem, "Nada expedido hoje");
-    }
+    $("exp-feed-title").textContent = view.label;
+    $("exp-count").textContent = (cat.lista || []).length + " itens";
+    renderList("exp-list", cat.lista || [], buildConsItem, view.empty);
   }
 
   function toggleExpMode() {
