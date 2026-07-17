@@ -296,13 +296,8 @@
         <div class="tag" id="rec-tag">—</div>
       </div>
       <div class="hero">
-        <div class="label">Notas pendentes de <span class="accent">conferência</span></div>
+        <div class="label" id="rec-hero-label">Notas pendentes de <span class="accent">conferência</span></div>
         <div class="num accent" id="rec-pend-conf">0</div>
-      </div>
-      <div class="grid2 rec-stats">
-        <div class="stat r-conf"><div class="n" id="rec-conferidas">0</div><div class="t">Conferidas hoje</div></div>
-        <div class="stat r-lanc"><div class="n" id="rec-pend-lanc">0</div><div class="t">Pendentes de lançamento</div></div>
-        <div class="stat ok"><div class="n" id="rec-lanc-hoje">0</div><div class="t">Lançadas hoje (estoque)</div></div>
       </div>
       <div class="feed">
         <div class="feed-title"><span id="rec-feed-title">Pendentes de conferência</span><span id="rec-count"></span></div>
@@ -319,14 +314,8 @@
         <div class="tag" id="exp-tag">—</div>
       </div>
       <div class="hero">
-        <div class="label">Pendentes de <span class="accent">conferência</span></div>
+        <div class="label" id="exp-hero-label">Pendentes de <span class="accent">conferência</span></div>
         <div class="num accent" id="exp-pend-conf">0</div>
-      </div>
-      <div class="grid2 exp-stats">
-        <div class="stat s-conf"><div class="n" id="exp-conferido">0</div><div class="t">Conferidos · aguard. faturamento</div></div>
-        <div class="stat s-fsc"><div class="n" id="exp-fat-sem-conf">0</div><div class="t">Faturados sem conferência</div></div>
-        <div class="stat s-fat"><div class="n" id="exp-faturado">0</div><div class="t">Faturados · a expedir</div></div>
-        <div class="stat ok"><div class="n" id="exp-hoje">0</div><div class="t">Expedidos hoje</div></div>
       </div>
       <div class="feed">
         <div class="feed-title"><span id="exp-feed-title">Pendentes de conferência</span><span id="exp-count"></span></div>
@@ -574,11 +563,11 @@
   let lastData = null;
   let expIdx = 0;
   const EXP_VIEWS = [
-    { key: "pendente",          label: "Pendentes de conferência",         empty: "Nada pendente 🎉" },
-    { key: "conferido",         label: "Conferidos · aguard. faturamento", empty: "Nada aguardando faturamento" },
-    { key: "faturado_sem_conf", label: "Faturados sem conferência",        empty: "Nenhum faturado sem conferência" },
-    { key: "faturado",          label: "Faturados · a expedir",            empty: "Nada faturado a expedir" },
-    { key: "expedido",          label: "Expedidos hoje",                   empty: "Nada expedido hoje" },
+    { key: "pendente",          label: "Pendentes de conferência",         hero: 'Pendentes de <span class="accent">conferência</span>',              empty: "Nada pendente 🎉" },
+    { key: "conferido",         label: "Conferidos · aguard. faturamento", hero: 'Conferidos · <span class="accent">aguardando faturamento</span>',   empty: "Nada aguardando faturamento" },
+    { key: "faturado_sem_conf", label: "Faturados sem conferência",        hero: 'Faturados <span class="accent">sem conferência</span>',            empty: "Nenhum faturado sem conferência" },
+    { key: "faturado",          label: "Faturados · a expedir",            hero: 'Faturados · <span class="accent">a expedir</span>',                empty: "Nada faturado a expedir" },
+    { key: "expedido",          label: "Expedidos hoje",                   hero: '<span class="accent">Expedidos</span> hoje',                       empty: "Nada expedido hoje" },
   ];
 
   function renderExpedicao() {
@@ -586,20 +575,15 @@
     const exp = lastData.expedicao || {};
     const cats = exp.categorias || {};
     const g = (k) => cats[k] || { total: 0, lista: [] };
-
-    // KPIs consolidados sempre visiveis (FAT + ST somados)
-    setNum("exp-pend-conf", g("pendente").total);
-    setNum("exp-conferido", g("conferido").total);
-    setNum("exp-fat-sem-conf", g("faturado_sem_conf").total);
-    setNum("exp-faturado", g("faturado").total);
-    setNum("exp-hoje", g("expedido").total);
     if (exp.resumo) {
       $("exp-tag").textContent = "FAT " + exp.resumo.fat_pendente + " · ST " + exp.resumo.st_pendente;
     }
 
-    // Lista rotativa por categoria
+    // Card unico (heroi) que rotaciona mostrando o numero da categoria atual.
     const view = EXP_VIEWS[expIdx];
     const cat = g(view.key);
+    $("exp-hero-label").innerHTML = view.hero;
+    setNum("exp-pend-conf", cat.total);
     $("exp-modes").innerHTML = EXP_VIEWS.map((v, i) =>
       '<span class="mode-pill' + (i === expIdx ? " active" : "") + '">' + v.label + "</span>"
     ).join("");
@@ -611,10 +595,10 @@
   // ----- Recebimento: 4 categorias consolidadas -----
   let recIdx = 0;
   const REC_VIEWS = [
-    { key: "pendente_conf", label: "Pendentes de conferência", empty: "Nada pendente 🎉" },
-    { key: "conferidas",    label: "Conferidas hoje",          empty: "Nenhuma conferida hoje" },
-    { key: "pendente_lanc", label: "Pendentes de lançamento",  empty: "Nada aguardando lançamento" },
-    { key: "lancadas",      label: "Lançadas hoje",            empty: "Nada lançado hoje" },
+    { key: "pendente_conf", label: "Pendentes de conferência", hero: 'Notas pendentes de <span class="accent">conferência</span>', empty: "Nada pendente 🎉" },
+    { key: "conferidas",    label: "Conferidas hoje",          hero: 'Notas <span class="accent">conferidas</span> hoje',          empty: "Nenhuma conferida hoje" },
+    { key: "pendente_lanc", label: "Pendentes de lançamento",  hero: 'Notas pendentes de <span class="accent">lançamento</span>',  empty: "Nada aguardando lançamento" },
+    { key: "lancadas",      label: "Lançadas hoje",            hero: 'Notas <span class="accent">lançadas</span> hoje',            empty: "Nada lançado hoje" },
   ];
 
   function renderRecebimento() {
@@ -622,17 +606,13 @@
     const rec = lastData.recebimento || {};
     const cats = rec.categorias || {};
     const g = (k) => cats[k] || { total: 0, lista: [] };
-
-    // KPIs sempre visiveis
-    setNum("rec-pend-conf", g("pendente_conf").total);
-    setNum("rec-conferidas", g("conferidas").total);
-    setNum("rec-pend-lanc", g("pendente_lanc").total);
-    setNum("rec-lanc-hoje", g("lancadas").total);
     $("rec-tag").textContent = (rec.importadas_hoje || 0) + " chegaram hoje";
 
-    // Lista rotativa por categoria
+    // Card unico (heroi) que rotaciona mostrando o numero da categoria atual.
     const view = REC_VIEWS[recIdx];
     const cat = g(view.key);
+    $("rec-hero-label").innerHTML = view.hero;
+    setNum("rec-pend-conf", cat.total);
     $("rec-modes").innerHTML = REC_VIEWS.map((v, i) =>
       '<span class="mode-pill' + (i === recIdx ? " active" : "") + '">' + v.label + "</span>"
     ).join("");
