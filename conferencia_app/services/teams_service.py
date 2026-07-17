@@ -98,7 +98,9 @@ def notificar_expedicao_conferida(
     *,
     conferente: str | None = None,
     volumes: str | None = None,
+    peso_liquido: str | None = None,
     peso_bruto: str | None = None,
+    especie_volumes: str | None = None,
     env_var: str = "TEAMS_WEBHOOK_EXPEDICAO_URL",
     config_key: str = "webhook_expedicao",
 ) -> None:
@@ -112,6 +114,10 @@ def notificar_expedicao_conferida(
         partes.append(f"Conferente: {conferente}")
     if volumes:
         partes.append(f"Volumes: {volumes}")
+    if especie_volumes:
+        partes.append(f"Espécie: {especie_volumes}")
+    if peso_liquido:
+        partes.append(f"Peso líquido: {peso_liquido}")
     if peso_bruto:
         partes.append(f"Peso bruto: {peso_bruto}")
     subinfo = " · ".join(partes) or None

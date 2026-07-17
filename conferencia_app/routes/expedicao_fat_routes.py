@@ -349,7 +349,9 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
             f"Orçamento {ordem.orcamento or '—'}",
             conferente=ordem.conferente,
             volumes=ordem.qtde_volumes,
+            peso_liquido=ordem.peso_liquido,
             peso_bruto=ordem.peso_bruto,
+            especie_volumes=ordem.especie_volumes,
         )
     except Exception:
         current_app.logger.exception("Falha ao notificar Teams (conf-cega FAT %s)", cod_ordem_fat)

@@ -330,7 +330,9 @@ def conferir_ordem_conf_st(cod_ordem_compra):
             f"Ordem de compra {ordem.cod_ordem_compra}",
             conferente=ordem.conferente,
             volumes=ordem.qtde_volumes,
+            peso_liquido=ordem.peso_liquido,
             peso_bruto=ordem.peso_bruto,
+            especie_volumes=ordem.especie_volumes,
             env_var="TEAMS_WEBHOOK_EXPEDICAO_ST_URL",
             config_key="webhook_expedicao_st",
         )

@@ -588,6 +588,10 @@ function toggleTipoReferencia() {
         ordemCompraInput.required = false;
         ordemCompraInput.value = "";
     }
+    // Ordem de compra (serviço de terceiro) não envia foto para o cliente.
+    if (fotoClienteField) {
+        fotoClienteField.classList.toggle("hidden", tipo === "OrdemCompra");
+    }
 }
 tipoReferenciaSelect.addEventListener("change", toggleTipoReferencia);
 
@@ -1006,7 +1010,7 @@ form.addEventListener("submit", async event => {
         showToast("Inclua pelo menos uma foto da conferência.", "error");
         return;
     }
-    if (!fotoClienteRascunho && !semConferencia) {
+    if (!fotoClienteRascunho && !semConferencia && tipoReferenciaSelect.value !== "OrdemCompra") {
         showToast("Tire a foto para o cliente antes de salvar.", "error");
         return;
     }
@@ -1528,11 +1532,42 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
     document.getElementById("completar-form-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// Pre-preenche o registro a partir do botao "Expedir" da conferencia de expedicao
+// (URL: ?ref=fat|st&cod=...). Traz numero da NF, orcamento (FAT) ou ordem de compra (ST).
+async function prefillFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const ref = (params.get("ref") || "").trim().toLowerCase();
+    const cod = (params.get("cod") || "").trim();
+    if (!ref || !cod) return;
+    const isSt = ref === "st";
+    tipoReferenciaSelect.value = isSt ? "OrdemCompra" : "Orcamento";
+    toggleTipoReferencia();
+    const endpoint = isSt
+        ? `/api/expedicao/conf-cega-st/ordens/${encodeURIComponent(cod)}`
+        : `/api/expedicao/conf-cega/ordens/${encodeURIComponent(cod)}`;
+    try {
+        const resp = await fetch(endpoint, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Não foi possível carregar os dados da conferência.");
+        const data = await resp.json();
+        if (isSt) {
+            ordemCompraInput.value = data.cod_ordem_compra || cod;
+        } else {
+            orcamentoInput.value = data.orcamento || "";
+        }
+        if (data.numero_nf) {
+            nfInput.value = data.numero_nf;
+        }
+    } catch (e) {
+        showToast(e.message, "error");
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     restaurarFotosSession();
     updateFotoPreview();
     restaurarFotoClienteSession();
     updateFotoClientePreview();
+    prefillFromQuery();
     loadHistorico();
 });
 
