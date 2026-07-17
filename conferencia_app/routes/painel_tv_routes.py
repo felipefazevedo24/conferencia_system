@@ -61,6 +61,20 @@ def _cons_item(codigo, parceiro, tipo, numero_nf, previsao, desde, ts, agora) ->
     }
 
 
+def _receb_item(nota, parceiro, quem, quem_label, ts, desde, agora, extra="") -> dict:
+    """Item consolidado do painel de recebimento (por nota fiscal)."""
+    return {
+        "codigo": str(nota),
+        "parceiro": parceiro or "",
+        "quem": quem or "",
+        "quem_label": quem_label or "",  # "Importou" | "Conferiu"
+        "extra": extra or "",             # ex.: numero do lancamento
+        "ts": _iso(ts),
+        "desde": _iso(desde),
+        "atrasado": _atrasado(desde, agora),
+    }
+
+
 def _count_distinct_notas(status: str) -> int:
     return (
         db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
@@ -113,6 +127,87 @@ def _coletar_indicadores() -> dict:
             "atrasado": _atrasado(desde, agora),
         }
         for nota, fornecedor, desde in pend_rows
+    ]
+
+    # Categorias consolidadas do recebimento (por nota fiscal).
+    #  1) Pendentes de conferencia  -> quem importou
+    #  2) Conferidas (hoje)         -> quem conferiu
+    #  3) Pendentes de lancamento   -> quem conferiu
+    #  4) Lancadas (hoje)           -> numero do lancamento
+    receb_pend_conf_rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor).label("fornecedor"),
+            func.max(ItemNota.usuario_importacao).label("quem"),
+            func.min(ItemNota.data_importacao).label("desde"),
+        )
+        .filter(ItemNota.status == "Pendente")
+        .group_by(ItemNota.numero_nota)
+        .order_by("desde")
+        .limit(80)
+        .all()
+    )
+    receb_pend_conf = [
+        _receb_item(r.numero_nota, r.fornecedor, r.quem, "Importou", r.desde, r.desde, agora)
+        for r in receb_pend_conf_rows
+    ]
+
+    receb_conferidas_rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor).label("fornecedor"),
+            func.max(ItemNota.usuario_conferencia).label("quem"),
+            func.max(ItemNota.fim_conferencia).label("ts"),
+        )
+        .filter(ItemNota.fim_conferencia.isnot(None), func.date(ItemNota.fim_conferencia) == hoje)
+        .group_by(ItemNota.numero_nota)
+        .order_by(desc("ts"))
+        .limit(80)
+        .all()
+    )
+    receb_conferidas = [
+        _receb_item(r.numero_nota, r.fornecedor, r.quem, "Conferiu", r.ts, r.ts, agora)
+        for r in receb_conferidas_rows
+    ]
+
+    receb_pend_lanc_rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor).label("fornecedor"),
+            func.max(ItemNota.usuario_conferencia).label("quem"),
+            func.max(ItemNota.fim_conferencia).label("ts"),
+            func.min(ItemNota.fim_conferencia).label("desde"),
+        )
+        .filter(ItemNota.status == "Concluído")
+        .group_by(ItemNota.numero_nota)
+        .order_by("desde")
+        .limit(80)
+        .all()
+    )
+    receb_pend_lanc = [
+        _receb_item(r.numero_nota, r.fornecedor, r.quem, "Conferiu", r.ts, r.desde or r.ts, agora)
+        for r in receb_pend_lanc_rows
+    ]
+
+    receb_lancadas_rows = (
+        db.session.query(
+            ItemNota.numero_nota,
+            func.max(ItemNota.fornecedor).label("fornecedor"),
+            func.max(ItemNota.numero_lancamento).label("num_lanc"),
+            func.max(ItemNota.data_lancamento).label("ts"),
+        )
+        .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) == hoje)
+        .group_by(ItemNota.numero_nota)
+        .order_by(desc("ts"))
+        .limit(80)
+        .all()
+    )
+    receb_lancadas = [
+        _receb_item(
+            r.numero_nota, r.fornecedor, None, "", r.ts, r.ts, agora,
+            extra=("Lçto " + str(r.num_lanc)) if r.num_lanc else "",
+        )
+        for r in receb_lancadas_rows
     ]
 
     # ---- EXPEDICAO (consolidado FAT + ST por status) ----
@@ -183,6 +278,12 @@ def _coletar_indicadores() -> dict:
             "importadas_hoje": int(importadas_hoje),
             "lancadas_hoje": int(lancadas_hoje),
             "lista": recebimento_lista,
+            "categorias": {
+                "pendente_conf": {"total": int(recebimento_pendente), "lista": receb_pend_conf},
+                "conferidas": {"total": len(receb_conferidas), "lista": receb_conferidas},
+                "pendente_lanc": {"total": int(recebimento_lancar), "lista": receb_pend_lanc},
+                "lancadas": {"total": int(lancadas_hoje), "lista": receb_lancadas},
+            },
         },
         "expedicao": {
             "pendente_total": int(exp_fat_pendente + exp_st_pendente),

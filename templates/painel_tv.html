@@ -160,8 +160,10 @@
     color: #08243f; background: var(--expedicao);
     border-color: var(--expedicao); box-shadow: 0 0 0 3px rgba(251,191,36,.2);
   }
-  .exp .hero, .exp .grid2, .exp .feed .list { transition: opacity .3s ease; }
-  .exp.switching .hero, .exp.switching .grid2, .exp.switching .feed .list { opacity: .25; }
+  .exp .hero, .exp .grid2, .exp .feed .list,
+  .rec .hero, .rec .grid2, .rec .feed .list { transition: opacity .3s ease; }
+  .exp.switching .hero, .exp.switching .grid2, .exp.switching .feed .list,
+  .rec.switching .hero, .rec.switching .grid2, .rec.switching .feed .list { opacity: .25; }
   .rec .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
   .rec .accent { color: var(--recebimento); }
   .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
@@ -199,6 +201,13 @@
   .stat.s-fsc .n { color: #f87171; }
   .stat.s-fat { border-left-color: #b9adff; }
   .stat.s-fat .n { color: #b9adff; }
+  /* Tiles consolidados do recebimento (3 categorias) */
+  .rec-stats { grid-template-columns: repeat(3, 1fr); }
+  .rec-stats .stat { border-left: 4px solid var(--border); }
+  .stat.r-conf { border-left-color: var(--recebimento); }
+  .stat.r-conf .n { color: var(--recebimento); }
+  .stat.r-lanc { border-left-color: var(--expedicao); }
+  .stat.r-lanc .n { color: var(--expedicao); }
   .exp-pills { flex-wrap: wrap; margin: 2px 0 6px; }
 
   .updated-flash { animation: flash 1s ease; }
@@ -290,12 +299,14 @@
         <div class="label">Notas pendentes de <span class="accent">conferência</span></div>
         <div class="num accent" id="rec-pend-conf">0</div>
       </div>
-      <div class="grid2">
-        <div class="stat"><div class="n" id="rec-pend-lanc">0</div><div class="t">Pendentes de lançamento</div></div>
+      <div class="grid2 rec-stats">
+        <div class="stat r-conf"><div class="n" id="rec-conferidas">0</div><div class="t">Conferidas hoje</div></div>
+        <div class="stat r-lanc"><div class="n" id="rec-pend-lanc">0</div><div class="t">Pendentes de lançamento</div></div>
         <div class="stat ok"><div class="n" id="rec-lanc-hoje">0</div><div class="t">Lançadas hoje (estoque)</div></div>
       </div>
       <div class="feed">
-        <div class="feed-title"><span>Pendentes de conferência</span><span id="rec-count"></span></div>
+        <div class="feed-title"><span id="rec-feed-title">Pendentes de conferência</span><span id="rec-count"></span></div>
+        <div class="mode-switch exp-pills" id="rec-modes"></div>
         <div class="list" id="rec-list"><div class="empty">Nada pendente</div></div>
       </div>
     </section>
@@ -492,6 +503,17 @@
       "</div>";
   }
 
+  // Item consolidado do recebimento (por nota) — mostra quem importou/conferiu.
+  function buildRecCons(it) {
+    const who = it.quem ? " · " + esc(it.quem_label) + " " + esc(it.quem) : "";
+    const extra = it.extra ? " · " + esc(it.extra) : "";
+    const atraso = it.atrasado ? '<span class="badge atraso">Em atraso</span>' : "";
+    return '<div class="item' + (it.atrasado ? " atraso" : "") + '">' +
+      '<div class="main"><b>NF ' + esc(it.codigo) + "</b><span>" + esc(it.parceiro || "—") + who + extra + "</span></div>" +
+      '<div class="meta">' + atraso + '<span class="ago">' + relTime(it.ts || it.desde) + "</span></div>" +
+      "</div>";
+  }
+
   function buildOcItem(mode) {
     return function (it) {
       const diasTxt = mode === "atraso"
@@ -586,6 +608,39 @@
     renderList("exp-list", cat.lista || [], buildConsItem, view.empty);
   }
 
+  // ----- Recebimento: 4 categorias consolidadas -----
+  let recIdx = 0;
+  const REC_VIEWS = [
+    { key: "pendente_conf", label: "Pendentes de conferência", empty: "Nada pendente 🎉" },
+    { key: "conferidas",    label: "Conferidas hoje",          empty: "Nenhuma conferida hoje" },
+    { key: "pendente_lanc", label: "Pendentes de lançamento",  empty: "Nada aguardando lançamento" },
+    { key: "lancadas",      label: "Lançadas hoje",            empty: "Nada lançado hoje" },
+  ];
+
+  function renderRecebimento() {
+    if (!lastData) return;
+    const rec = lastData.recebimento || {};
+    const cats = rec.categorias || {};
+    const g = (k) => cats[k] || { total: 0, lista: [] };
+
+    // KPIs sempre visiveis
+    setNum("rec-pend-conf", g("pendente_conf").total);
+    setNum("rec-conferidas", g("conferidas").total);
+    setNum("rec-pend-lanc", g("pendente_lanc").total);
+    setNum("rec-lanc-hoje", g("lancadas").total);
+    $("rec-tag").textContent = (rec.importadas_hoje || 0) + " chegaram hoje";
+
+    // Lista rotativa por categoria
+    const view = REC_VIEWS[recIdx];
+    const cat = g(view.key);
+    $("rec-modes").innerHTML = REC_VIEWS.map((v, i) =>
+      '<span class="mode-pill' + (i === recIdx ? " active" : "") + '">' + v.label + "</span>"
+    ).join("");
+    $("rec-feed-title").textContent = view.label;
+    $("rec-count").textContent = (cat.lista || []).length + " notas";
+    renderList("rec-list", cat.lista || [], buildRecCons, view.empty);
+  }
+
   function toggleExpMode() {
     if (!lastData) return;
     const panel = document.querySelector(".panel.exp");
@@ -606,6 +661,7 @@
 
   const EXP_VIEW_MS = 12000;     // tempo por visao da expedicao
   let expLastRot = Date.now();
+  let recLastRot = Date.now();
   let expCycles = 0;             // voltas completas das visoes neste slide
 
   function activeScrollers() {
@@ -633,7 +689,7 @@
       el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
     });
     renderSlideDots();
-    if (SLIDES[slideIdx] === "operacao") { expIdx = 0; renderExpedicao(); }
+    if (SLIDES[slideIdx] === "operacao") { expIdx = 0; recIdx = 0; renderExpedicao(); renderRecebimento(); }
     if (SLIDES[slideIdx] === "compras") pollCompras();
     resetSlideTiming();
   }
@@ -658,6 +714,23 @@
     }, 300);
   }
 
+  // Roda as visoes do recebimento (so no slide operacao), independente da expedicao.
+  function rotateRec(now) {
+    if (SLIDES[slideIdx] !== "operacao" || !lastData) return;
+    const sc = $("rec-list");
+    const overflow = sc && (sc.scrollHeight - sc.clientHeight) > 4;
+    const doneScroll = !overflow || sc._doneScroll;
+    if (now - recLastRot < EXP_VIEW_MS || !doneScroll) return;
+    recLastRot = now;
+    const panel = document.querySelector(".panel.rec");
+    panel.classList.add("switching");
+    setTimeout(() => {
+      recIdx = (recIdx + 1) % REC_VIEWS.length;
+      renderRecebimento();
+      panel.classList.remove("switching");
+    }, 300);
+  }
+
   // So avanca de slide respeitando o tempo minimo E depois de terminar de rolar tudo.
   function slideReady(now) {
     const elapsed = now - slideShownAt;
@@ -673,6 +746,7 @@
   function carouselTick() {
     const now = Date.now();
     rotateExp(now);
+    rotateRec(now);
     if (slideReady(now)) nextSlide();
   }
 
@@ -683,13 +757,8 @@
       const d = await r.json();
       lastData = d;
 
-      // Recebimento
-      setNum("rec-pend-conf", d.recebimento.pendente_conferencia);
-      setNum("rec-pend-lanc", d.recebimento.pendente_lancamento);
-      setNum("rec-lanc-hoje", d.recebimento.lancadas_hoje);
-      $("rec-tag").textContent = d.recebimento.importadas_hoje + " chegaram hoje";
-      $("rec-count").textContent = (d.recebimento.lista || []).length + " notas";
-      renderList("rec-list", d.recebimento.lista || [], buildRecItem, "Nada pendente 🎉");
+      // Recebimento (categorias consolidadas)
+      renderRecebimento();
 
       // Expedição (visão atual)
       renderExpedicao();
