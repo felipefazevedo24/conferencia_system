@@ -20,15 +20,15 @@ from flask import current_app
 _MENTION_TEXT = "<at>Canal</at>"
 
 
-def _webhook_url() -> str:
-    url = str(os.environ.get("TEAMS_WEBHOOK_EXPEDICAO_URL", "") or "").strip()
+def _webhook_url(env_var: str = "TEAMS_WEBHOOK_EXPEDICAO_URL", config_key: str = "webhook_expedicao") -> str:
+    url = str(os.environ.get(env_var, "") or "").strip()
     if url:
         return url
     try:
         path = os.path.join(current_app.instance_path, "teams_config.json")
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as fh:
-                return str((json.load(fh) or {}).get("webhook_expedicao") or "").strip()
+                return str((json.load(fh) or {}).get(config_key) or "").strip()
     except Exception:
         return ""
     return ""
@@ -73,10 +73,18 @@ def _enviar_async(app, url: str, payload: dict) -> None:
             app.logger.warning("Falha ao enviar aviso ao Teams: %s", exc)
 
 
-def enviar_card(titulo: str, linha_principal: str, subinfo: str | None = None, mencionar_canal: bool = False) -> None:
+def enviar_card(
+    titulo: str,
+    linha_principal: str,
+    subinfo: str | None = None,
+    mencionar_canal: bool = False,
+    *,
+    env_var: str = "TEAMS_WEBHOOK_EXPEDICAO_URL",
+    config_key: str = "webhook_expedicao",
+) -> None:
     """Dispara um Adaptive Card no canal do Teams (assincrono, tolerante a falha)."""
     app = current_app._get_current_object()
-    url = _webhook_url()
+    url = _webhook_url(env_var, config_key)
     if not url:
         app.logger.info("TEAMS: webhook nao configurado; aviso ignorado (%s).", linha_principal)
         return
@@ -91,6 +99,8 @@ def notificar_expedicao_conferida(
     conferente: str | None = None,
     volumes: str | None = None,
     peso_bruto: str | None = None,
+    env_var: str = "TEAMS_WEBHOOK_EXPEDICAO_URL",
+    config_key: str = "webhook_expedicao",
 ) -> None:
     """Aviso de conferencia de expedicao finalizada.
 
@@ -105,4 +115,11 @@ def notificar_expedicao_conferida(
     if peso_bruto:
         partes.append(f"Peso bruto: {peso_bruto}")
     subinfo = " · ".join(partes) or None
-    enviar_card("✅ Conferência de expedição finalizada", linha, subinfo, mencionar_canal=True)
+    enviar_card(
+        "✅ Conferência de expedição finalizada",
+        linha,
+        subinfo,
+        mencionar_canal=True,
+        env_var=env_var,
+        config_key=config_key,
+    )

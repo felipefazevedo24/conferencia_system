@@ -331,6 +331,8 @@ def conferir_ordem_conf_st(cod_ordem_compra):
             conferente=ordem.conferente,
             volumes=ordem.qtde_volumes,
             peso_bruto=ordem.peso_bruto,
+            env_var="TEAMS_WEBHOOK_EXPEDICAO_ST_URL",
+            config_key="webhook_expedicao_st",
         )
     except Exception:
         current_app.logger.exception("Falha ao notificar Teams (conf-cega ST %s)", cod_ordem_compra)
