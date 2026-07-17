@@ -4,253 +4,87 @@
 
 {% block extra_head %}
 <style>
-    :root {
-        --primary: #2563eb;
-        --primary-hover: #1d4ed8;
-        --bg-body: #f8fafc;
-        --text-main: #1e293b;
-        --text-muted: #64748b;
-        --border-color: #e2e8f0;
-        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-    }
-
-    .main-content { 
-        max-width: 1280px; 
-        margin: 0 auto; 
-        padding: 24px; 
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    }
-
-    /* Cabeçalho e Filtros */
-    .filtros-container {
-        background: white;
-        padding: 16px;
-        border-radius: 12px;
-        border: 1px solid var(--border-color);
-        box-shadow: var(--card-shadow);
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        flex-wrap: wrap;
-        margin-bottom: 24px;
-    }
-
-    .filtro { 
-        border: 1px solid var(--border-color); 
-        border-radius: 8px; 
-        padding: 8px 12px; 
-        font-size: 13px; 
-        background: #ffffff; 
-        color: var(--text-main);
-        outline: none;
-        transition: border 0.2s;
-        min-width: 140px;
-    }
-    
-    .filtro:focus { border-color: var(--primary); }
-
-    /* Botões Estilizados */
-    .btn-sap {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 9px 16px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        transition: all 0.2s;
-    }
-
-    .btn-sap:hover { background: var(--primary-hover); transform: translateY(-1px); }
-    .btn-sap i { font-size: 14px; }
-    
-    .btn-export { background: #059669; }
-    .btn-export:hover { background: #047857; }
-
-    /* Grid de Estatísticas */
-    .stats-grid { 
-        display: grid; 
-        grid-template-columns: repeat(4, 1fr); 
-        gap: 16px; 
-        margin-bottom: 24px; 
-    }
-
-    .stat-card { 
-        background: white; 
-        border: 1px solid var(--border-color); 
-        border-radius: 12px; 
-        padding: 20px; 
-        box-shadow: var(--card-shadow);
-    }
-
-    .stat-label { 
-        font-size: 11px; 
-        color: var(--text-muted); 
-        text-transform: uppercase; 
-        font-weight: 700; 
-        letter-spacing: 0.5px;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .stat-value { 
-        font-size: 26px; 
-        font-weight: 800; 
-        color: var(--text-main); 
-    }
-
-    /* Listas Mini */
-    .mini-list { margin-top: 12px; font-size: 12px; max-height: 100px; overflow-y: auto; }
-    .mini-item { 
-        display: flex; 
-        justify-content: space-between; 
-        padding: 6px 0; 
-        border-bottom: 1px solid #f1f5f9;
-    }
+    .main-content { max-width: 1280px; }
+    .filtros { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .filtro { border: 1px solid #b8c6d3; border-radius: 10px; padding: 8px 10px; font-size: 11px; min-width: 120px; background: #fbfdff; color: #294054; }
+    .table-wrap { background: white; border: 1px solid var(--border-color); overflow-x: auto; border-radius: 16px 16px 0 0; box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08); }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .stat-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%); border: 1px solid #d9e3ec; border-radius: 16px; padding: 14px; box-shadow: 0 10px 24px rgba(26, 49, 74, 0.08); }
+    .stat-label { font-size: 10px; color: #666; text-transform: uppercase; font-weight: 700; }
+    .stat-value { font-size: 22px; font-weight: 800; color: #2d3c4a; }
+    .mini-list { margin-top: 6px; font-size: 11px; max-height: 85px; overflow-y: auto; }
+    .mini-item { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 3px 0; gap: 8px; }
     .mini-item:last-child { border-bottom: none; }
-    .mini-item span:first-child { color: var(--text-main); font-weight: 500; }
-    .mini-item span:last-child { color: var(--primary); font-weight: 700; }
+    .pager { display: flex; justify-content: space-between; align-items: center; background: white; border: 1px solid var(--border-color); border-top: none; border-radius: 0 0 16px 16px; padding: 10px 12px; font-size: 11px; box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08); }
+    .pager-actions { display: flex; gap: 6px; }
 
-    /* Tabela Estilo Moderno */
-    .table-container {
-        background: white;
-        border: 1px solid var(--border-color);
-        border-radius: 12px 12px 0 0;
-        box-shadow: var(--card-shadow);
-        overflow: hidden;
+    @media (max-width: 980px) {
+        .stats-grid { grid-template-columns: 1fr 1fr; }
     }
 
-    table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { 
-        background: #f8fafc; 
-        padding: 14px 20px; 
-        font-size: 12px; 
-        font-weight: 600; 
-        color: var(--text-muted); 
-        text-transform: uppercase;
-        border-bottom: 1px solid var(--border-color);
-    }
-    
-    td { padding: 14px 20px; font-size: 14px; color: var(--text-main); border-bottom: 1px solid #f1f5f9; }
-    tr:hover { background-color: #fbfdff; }
-
-    /* Paginação */
-    .pager { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        background: white; 
-        border: 1px solid var(--border-color); 
-        border-top: none; 
-        border-radius: 0 0 12px 12px; 
-        padding: 14px 20px; 
-        font-size: 13px;
-        box-shadow: var(--card-shadow);
-    }
-    
-    .pager-info b { color: var(--primary); }
-    .pager-actions { display: flex; gap: 8px; }
-    .btn-pager { background: #f1f5f9; color: var(--text-main); }
-    .btn-pager:hover { background: #e2e8f0; }
-
-    @media (max-width: 1024px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 640px) { 
-        .stats-grid { grid-template-columns: 1fr; } 
-        .filtros-container { flex-direction: column; align-items: stretch; }
+    @media (max-width: 720px) {
+        .stats-grid { grid-template-columns: 1fr; }
     }
 </style>
+                                <option value="">Método</option>
+                                <option>GET</option>
+                                <option>POST</option>
+                                <option>PUT</option>
+                                <option>DELETE</option>
+                            </select>
+                            <input id="f-data-ini" type="date" class="filtro" onchange="carregar()" />
+                            <input id="f-data-fim" type="date" class="filtro" onchange="carregar()" />
+                            <button class="btn-sap" onclick="carregar()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+                            <button class="btn-sap" onclick="exportarCsv()"><i class="fas fa-file-csv"></i> Exportar CSV</button>
+                        </div>
+                    </div>
+
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Acessos 24h</div>
+                            <div id="s-24h" class="stat-value">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Acessos 7 dias</div>
+                            <div id="s-7d" class="stat-value">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Top Usuários (7d)</div>
+                            <div id="s-usuarios" class="mini-list"><div class="mini-item"><span>---</span><span>0</span></div></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Top Rotas (7d)</div>
+                            <div id="s-rotas" class="mini-list"><div class="mini-item"><span>---</span><span>0</span></div></div>
+                        </div>
+                        <div class="stat-card" style="grid-column: span 4;">
+                            <div class="stat-label">Sessões Ativas</div>
+                            <div id="s-sessoes" class="mini-list">Carregando...</div>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th width="190">Data/Hora</th>
+                                    <th width="180">Usuário</th>
+                                    <th width="90">Método</th>
+                                    <th>Rota</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tb-acessos">
+                                <tr><td colspan="4" style="text-align:center">Carregando logs...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pager">
+                        <div id="pager-info">Página 1 de 1</div>
+                        <div class="pager-actions">
+                            <button class="btn-sap" onclick="irPaginaAtual(-1)"><i class="fas fa-chevron-left"></i> Anterior</button>
+                            <button class="btn-sap" onclick="irPaginaAtual(1)">Próxima <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </div>
 {% endblock %}
-
-{% block content %}
-<div class="main-content">
-    
-    <div class="filtros-container">
-        <select id="f-metodo" class="filtro" onchange="carregar()">
-            <option value="">Todos os Métodos</option>
-            <option>GET</option>
-            <option>POST</option>
-            <option>PUT</option>
-            <option>DELETE</option>
-        </select>
-        <input id="f-data-ini" type="date" class="filtro" onchange="carregar()" />
-        <input id="f-data-fim" type="date" class="filtro" onchange="carregar()" />
-        
-        <div style="flex-grow: 1;"></div>
-        
-        <button class="btn-sap" onclick="carregar()">
-            <i class="fas fa-sync-alt"></i> Atualizar
-        </button>
-        <button class="btn-sap btn-export" onclick="exportarCsv()">
-            <i class="fas fa-file-csv"></i> Exportar CSV
-        </button>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label"><i class="fas fa-history"></i> Acessos 24h</div>
-            <div id="s-24h" class="stat-value">0</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label"><i class="fas fa-calendar-week"></i> Acessos 7 dias</div>
-            <div id="s-7d" class="stat-value">0</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label"><i class="fas fa-user-shield"></i> Top Usuários (7d)</div>
-            <div id="s-usuarios" class="mini-list">
-                <div class="mini-item"><span>---</span><span>0</span></div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label"><i class="fas fa-link"></i> Top Rotas (7d)</div>
-            <div id="s-rotas" class="mini-list">
-                <div class="mini-item"><span>---</span><span>0</span></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="stat-card" style="margin-bottom: 24px; border-left: 4px solid var(--primary);">
-        <div class="stat-label" style="color: var(--primary);">
-            <i class="fas fa-broadcast-tower"></i> Sessões Ativas Agora
-        </div>
-        <div id="s-sessoes" class="mini-list">Carregando sessões...</div>
-    </div>
-
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th width="200">Data/Hora</th>
-                    <th width="200">Usuário</th>
-                    <th width="120">Método</th>
-                    <th>Rota</th>
-                </tr>
-            </thead>
-            <tbody id="tb-acessos">
-                <tr>
-                    <td colspan="4" style="text-align:center; padding: 40px; color: var(--text-muted);">
-                        <i class="fas fa-circle-notch fa-spin"></i> Carregando logs de auditoria...
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="pager">
-        <div id="pager-info" class="pager-info">Página <b>1</b> de <b>1</b></div>
-        <div class="pager-actions">
-            <button class="btn-sap btn-pager" onclick="irPaginaAtual(-1)">
-                <i class="fas fa-chevron-left"></i> Anterior
-            </button>
-            <button class="btn-sap btn-pager" onclick="irPaginaAtual(1)">
-                Próxima <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
-    </div>
-</div>
-{% endblock %}
+    if (!Array.isArray(items) || items.length === 0) {

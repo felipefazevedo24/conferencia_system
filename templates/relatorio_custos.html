@@ -12,19 +12,13 @@
     .cost-actions{display:flex;gap:10px;flex-wrap:wrap}
     .cost-btn{border:0;border-radius:8px;min-height:40px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;font-weight:800;color:#fff;background:#2563eb;box-shadow:0 12px 24px rgba(37,99,235,.18)}
     .cost-btn.secondary{color:#0f172a;background:#fff;border:1px solid #dbe4ef;box-shadow:none}
-    .cost-filters{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;display:grid;grid-template-columns:150px 150px 230px minmax(160px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
+    .cost-filters{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;display:grid;grid-template-columns:170px 230px minmax(160px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
     .cost-field label{display:block;color:#64748b;font-size:.78rem;font-weight:800;margin-bottom:5px}
     .cost-field input,.cost-field select{width:100%;height:38px;border:1px solid #d9e2ef;border-radius:8px;padding:0 10px;background:#fbfdff;color:#0f172a}
     .cost-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
     .cost-kpi{background:#fff;border:1px solid #e4eaf3;border-radius:8px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.05)}
     .cost-kpi span{color:#64748b;font-size:.78rem;font-weight:800;text-transform:uppercase}
     .cost-kpi strong{display:block;margin-top:6px;font:800 1.45rem "Space Grotesk",sans-serif;color:#0f172a}
-    .cost-insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
-    .cost-insight{background:#0f172a;color:#fff;border-radius:8px;padding:14px;min-height:98px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 14px 28px rgba(15,23,42,.16)}
-    .cost-insight:nth-child(2){background:#1d4ed8}.cost-insight:nth-child(3){background:#0f766e}.cost-insight:nth-child(4){background:#9333ea}
-    .cost-insight span{font-size:.74rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em;opacity:.78}
-    .cost-insight strong{display:block;margin-top:7px;font:800 1.18rem "Space Grotesk",sans-serif}
-    .cost-insight small{display:block;margin-top:4px;color:rgba(255,255,255,.78)}
     .cost-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:14px;margin-bottom:14px}
     .cost-panel{background:#fff;border:1px solid #e4eaf3;border-radius:8px;box-shadow:0 10px 26px rgba(15,23,42,.06);overflow:hidden}
     .cost-panel-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid #eef2f7}
@@ -45,7 +39,6 @@
     .cost-table th,.cost-table td{padding:11px 12px;border-bottom:1px solid #eef2f7;vertical-align:top}
     .cost-table td.num,.cost-table th.num{text-align:right;white-space:nowrap}
     .cost-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;border:1px solid #dbe4ef;background:#f8fafc;color:#334155;padding:4px 9px;font-weight:800;font-size:.76rem}
-    .cost-muted{color:#64748b}
     .cost-empty{padding:34px;color:#64748b;text-align:center}
     @media(max-width:980px){.cost-filters,.cost-grid{grid-template-columns:1fr}.cost-wrap{padding:16px}.cost-chart{height:260px}}
 </style>
@@ -66,12 +59,8 @@
 
     <section class="cost-filters">
         <div class="cost-field">
-            <label>De</label>
-            <input id="f-competencia-inicio" type="month" min="2026-01">
-        </div>
-        <div class="cost-field">
-            <label>Até</label>
-            <input id="f-competencia-fim" type="month" min="2026-01">
+            <label>Competência</label>
+            <input id="f-competencia" type="month" min="2026-01">
         </div>
         <div class="cost-field">
             <label>Categoria</label>
@@ -93,32 +82,13 @@
         <div class="cost-kpi"><span>Categorias com custo</span><strong id="k-categorias">0</strong></div>
     </section>
 
-    <section class="cost-insights">
-        <article class="cost-insight">
-            <div><span>Fonte dos dados</span><strong id="i-fonte">---</strong></div>
-            <small id="i-periodo">---</small>
-        </article>
-        <article class="cost-insight">
-            <div><span>Fam&iacute;lia dominante</span><strong id="i-top-categoria">---</strong></div>
-            <small id="i-top-categoria-det">---</small>
-        </article>
-        <article class="cost-insight">
-            <div><span>Fornecedor dominante</span><strong id="i-top-fornecedor">---</strong></div>
-            <small id="i-top-fornecedor-det">---</small>
-        </article>
-        <article class="cost-insight">
-            <div><span>Concentra&ccedil;&atilde;o top 3</span><strong id="i-top3">0%</strong></div>
-            <small>Custo concentrado nas 3 maiores fam&iacute;lias</small>
-        </article>
-    </section>
-
     <section class="cost-grid">
         <div class="cost-panel">
             <div class="cost-panel-head"><h2>Custo médio por família</h2><span class="cost-pill" id="periodo-label">---</span></div>
             <div class="cost-chart"><canvas id="chart-categorias"></canvas></div>
         </div>
         <div class="cost-panel">
-            <div class="cost-panel-head"><h2>Custo total por competência</h2><span class="cost-pill">R$</span></div>
+            <div class="cost-panel-head"><h2>Custo total por família</h2><span class="cost-pill">R$</span></div>
             <div class="cost-chart"><canvas id="chart-mensal"></canvas></div>
         </div>
     </section>
@@ -141,11 +111,11 @@
     <section class="cost-grid" style="margin-top:14px">
         <div class="cost-panel">
             <div class="cost-panel-head"><h2>Top itens por custo</h2></div>
-            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Código / descrição</th><th class="num">Qtd.</th><th class="num">Unit. médio</th><th class="num">Valor</th></tr></thead><tbody id="top-itens"></tbody></table></div>
+            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Código / descrição</th><th class="num">Qtd.</th><th class="num">Valor</th></tr></thead><tbody id="top-itens"></tbody></table></div>
         </div>
         <div class="cost-panel">
             <div class="cost-panel-head"><h2>Top fornecedores</h2></div>
-            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Fornecedor</th><th class="num">Participação</th><th class="num">Valor</th></tr></thead><tbody id="top-fornecedores"></tbody></table></div>
+            <div class="cost-table-wrap"><table class="cost-table"><thead><tr><th>Fornecedor</th><th class="num">Valor</th></tr></thead><tbody id="top-fornecedores"></tbody></table></div>
         </div>
     </section>
 
@@ -169,18 +139,8 @@ const palette = ["#2563eb","#0891b2","#16a34a","#f59e0b","#dc2626","#7c3aed","#0
 
 function money(value){return Number(value || 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});}
 function number(value){return Number(value || 0).toLocaleString("pt-BR",{maximumFractionDigits:4});}
-function percent(value){return `${Number(value || 0).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}%`;}
-function esc(value){return String(value ?? "").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function competenciaAtual(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;}
-function periodo(){
-    let ini=document.getElementById("f-competencia-inicio").value || "2026-01";
-    let fimComp=document.getElementById("f-competencia-fim").value || ini;
-    if(fimComp < ini){const tmp=ini;ini=fimComp;fimComp=tmp;}
-    const [anoIni,mesIni]=ini.split("-").map(Number);
-    const [anoFim,mesFim]=fimComp.split("-").map(Number);
-    const fim=new Date(anoFim,mesFim,0);
-    return {competencia_inicio:ini,competencia_fim:fimComp,inicio:`${anoIni}-${String(mesIni).padStart(2,"0")}-01`,fim:`${anoFim}-${String(mesFim).padStart(2,"0")}-${String(fim.getDate()).padStart(2,"0")}`};
-}
+function periodo(){const c=document.getElementById("f-competencia").value || "2026-01";const [ano,mes]=c.split("-").map(Number);const fim=new Date(ano,mes,0);return {competencia:c,inicio:`${ano}-${String(mes).padStart(2,"0")}-01`,fim:`${ano}-${String(mes).padStart(2,"0")}-${String(fim.getDate()).padStart(2,"0")}`};}
 function params(){return new URLSearchParams({...periodo(),categoria:document.getElementById("f-categoria").value || "",limite:document.getElementById("f-limite").value || "80"});}
 
 async function carregar(){
@@ -200,7 +160,7 @@ async function carregar(){
 function renderSelectCategorias(){
     const select=document.getElementById("f-categoria");
     const atual=select.value;
-    select.innerHTML='<option value="">Todas as categorias</option>' + state.categorias.map(c=>`<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("");
+    select.innerHTML='<option value="">Todas as categorias</option>' + state.categorias.map(c=>`<option value="${c.id}">${c.label}</option>`).join("");
     select.value=atual;
 }
 
@@ -213,13 +173,6 @@ function renderResumo(data){
     document.getElementById("k-medio-lanc").textContent=money(r.custo_medio_lancamento);
     document.getElementById("k-categorias").textContent=r.categorias_com_custo || 0;
     document.getElementById("periodo-label").textContent=`${data.inicio || ""} a ${data.fim || ""}`;
-    document.getElementById("i-fonte").textContent=data.fonte === "grv_postgres" ? "GRV / Postgres" : "Base local";
-    document.getElementById("i-periodo").textContent=`${r.fornecedores || 0} fornecedor(es) em ${data.inicio || ""} a ${data.fim || ""}`;
-    document.getElementById("i-top-categoria").textContent=r.top_categoria || "Sem custo";
-    document.getElementById("i-top-categoria-det").textContent=`${money(r.top_categoria_valor)} - ${percent(r.top_categoria_participacao)} do total`;
-    document.getElementById("i-top-fornecedor").textContent=r.top_fornecedor || "Sem fornecedor";
-    document.getElementById("i-top-fornecedor-det").textContent=`${money(r.top_fornecedor_valor)} - ${percent(r.top_fornecedor_participacao)} do total`;
-    document.getElementById("i-top3").textContent=percent(r.participacao_top_3);
 }
 
 function renderCharts(data){
@@ -229,16 +182,15 @@ function renderCharts(data){
     state.categoriaChart = new Chart(catCtx,{type:"bar",data:{labels:cats.map(c=>c.label),datasets:[{label:"Custo médio",data:cats.map(c=>c.custo_medio),backgroundColor:"#2563eb",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
     const mensalCtx=document.getElementById("chart-mensal");
     if(state.mensalChart) state.mensalChart.destroy();
-    const mensal=(data.mensal || []).filter(m=>Number(m.valor)>0);
-    state.mensalChart = new Chart(mensalCtx,{type:"bar",data:{labels:mensal.map(m=>m.competencia),datasets:[{label:"Custo total",data:mensal.map(m=>m.valor),backgroundColor:"#0891b2",borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}},scales:{y:{ticks:{callback:(v)=>money(v)}}}}});
+    state.mensalChart = new Chart(mensalCtx,{type:"doughnut",data:{labels:cats.map(c=>c.label),datasets:[{data:cats.map(c=>c.valor),backgroundColor:palette,borderWidth:2,borderColor:"#fff"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${money(ctx.raw)}`}}}}});
     renderFamiliasMedias(cats);
 }
 
 function renderFamiliasMedias(familias){
     document.getElementById("familias-medias").innerHTML = familias.length ? familias.map(f=>`
         <tr>
-            <td><strong>${esc(f.label)}</strong></td>
-            <td>${esc(f.setor)}</td>
+            <td><strong>${f.label}</strong></td>
+            <td>${f.setor}</td>
             <td class="num">${number(f.quantidade)}</td>
             <td class="num">${f.itens || 0}</td>
             <td class="num"><strong>${money(f.custo_medio)}</strong></td>
@@ -252,7 +204,7 @@ function renderCategorias(categorias){
     const total = categorias.reduce((acc,c)=>acc+Number(c.valor || 0),0);
     document.getElementById("cost-cats").innerHTML = categorias.map((c,idx)=>`
         <article class="cost-cat">
-            <div class="cost-cat-top"><div><h3>${esc(c.label)}</h3><small>${esc(c.setor)} · ${c.itens} item(ns) · ${c.notas} NF(s) · ${percent(c.participacao)}</small></div><i class="fas ${esc(c.icon)}"></i></div>
+            <div class="cost-cat-top"><div><h3>${c.label}</h3><small>${c.setor} · ${c.itens} item(ns) · ${c.notas} NF(s)</small></div><i class="fas ${c.icon}"></i></div>
             <strong>${money(c.valor)}</strong>
             <small>Médio: ${money(c.custo_medio)} · Unitário: ${money(c.custo_medio_unitario)}</small>
             <div class="cost-bar"><span style="width:${total ? Math.max(2,(Number(c.valor||0)/total)*100) : 0}%;background:${palette[idx % palette.length]}"></span></div>
@@ -261,8 +213,8 @@ function renderCategorias(categorias){
 }
 
 function renderTops(data){
-    document.getElementById("top-itens").innerHTML = (data.top_itens || []).map(i=>`<tr><td><strong>${esc(i.codigo)}</strong><br><small>${esc(i.descricao)}</small></td><td class="num">${number(i.quantidade)}</td><td class="num">${money(i.valor_unitario_medio)}</td><td class="num"><strong>${money(i.valor)}</strong></td></tr>`).join("");
-    document.getElementById("top-fornecedores").innerHTML = (data.top_fornecedores || []).map(f=>`<tr><td>${esc(f.fornecedor)}</td><td class="num">${percent(f.participacao)}</td><td class="num"><strong>${money(f.valor)}</strong></td></tr>`).join("");
+    document.getElementById("top-itens").innerHTML = (data.top_itens || []).map(i=>`<tr><td><strong>${i.codigo}</strong><br><small>${i.descricao}</small></td><td class="num">${number(i.quantidade)}</td><td class="num"><strong>${money(i.valor)}</strong></td></tr>`).join("");
+    document.getElementById("top-fornecedores").innerHTML = (data.top_fornecedores || []).map(f=>`<tr><td>${f.fornecedor}</td><td class="num"><strong>${money(f.valor)}</strong></td></tr>`).join("");
 }
 
 function renderLinhas(linhas){
@@ -270,12 +222,12 @@ function renderLinhas(linhas){
     document.getElementById("cost-empty").style.display = linhas.length ? "none" : "block";
     document.getElementById("linhas-body").innerHTML = linhas.map(l=>`
         <tr>
-            <td><span class="cost-pill">${esc(l.categoria)}</span><br><small>${esc(l.setor)}</small></td>
-            <td><strong>${esc(l.numero_nota)}</strong><br><small>${esc(l.data_lancamento)}</small></td>
-            <td>${esc(l.fornecedor)}</td>
-            <td><strong>${esc(l.codigo || "---")}</strong><br><small>${esc(l.descricao)}</small><br><small>${esc([l.familia,l.grupo,l.localizacao_estoque].filter(Boolean).join(" / "))}</small></td>
-            <td>${esc(l.conta || "---")}<br><small>${esc(l.nome_conta || "")}</small></td>
-            <td class="num">${number(l.quantidade)} ${esc(l.unidade || "")}</td>
+            <td><span class="cost-pill">${l.categoria}</span><br><small>${l.setor}</small></td>
+            <td><strong>${l.numero_nota}</strong><br><small>${l.data_lancamento}</small></td>
+            <td>${l.fornecedor}</td>
+            <td><strong>${l.codigo || "---"}</strong><br><small>${l.descricao}</small><br><small>${[l.familia,l.grupo,l.localizacao_estoque].filter(Boolean).join(" / ")}</small></td>
+            <td>${l.conta || "---"}<br><small>${l.nome_conta || ""}</small></td>
+            <td class="num">${number(l.quantidade)} ${l.unidade || ""}</td>
             <td class="num">${money(l.valor_unitario)}</td>
             <td class="num"><strong>${money(l.valor)}</strong></td>
         </tr>
@@ -286,8 +238,7 @@ function exportar(){window.location.href = `/api/financeiro/relatorio-custos/exp
 document.getElementById("btn-filtrar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
 document.getElementById("btn-atualizar").addEventListener("click",()=>carregar().catch(err=>alert(err.message)));
 document.getElementById("btn-exportar").addEventListener("click",exportar);
-document.getElementById("f-competencia-inicio").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
-document.getElementById("f-competencia-fim").value = document.getElementById("f-competencia-inicio").value;
+document.getElementById("f-competencia").value = competenciaAtual() < "2026-01" ? "2026-01" : competenciaAtual();
 carregar().catch(err=>{document.getElementById("cost-empty").style.display="block";document.getElementById("cost-empty").textContent=err.message;});
 </script>
 {% endblock %}
