@@ -78,11 +78,28 @@ def buscar_ordens_api(timeout: int | None = None) -> list:
     return data
 
 
+def _limpar_num_nf(valor) -> str:
+    """Normaliza o numero da NF. Alguns endpoints entregam a NF como float
+    (ex.: 1234.0); aqui removemos o ".0" convertendo para inteiro quando o
+    valor for um numero inteiro. Valores nao-numericos (ex.: multiplas NFs
+    separadas por virgula) sao mantidos como estao."""
+    val = str(valor or "").strip()
+    if not val:
+        return ""
+    try:
+        numero = float(val)
+    except (TypeError, ValueError):
+        return val
+    if numero.is_integer():
+        return str(int(numero))
+    return val
+
+
 def _detectar_numero_nf(row: dict) -> str:
     for key in ("numero_nf", "num_nf", "nf", "nota_fiscal", "n_nf", "numero_nota"):
         val = str(row.get(key) or "").strip()
         if val and val.lower() not in ("0", "none", "null"):
-            return val
+            return _limpar_num_nf(val)
     return ""
 
 
