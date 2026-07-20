@@ -65,16 +65,28 @@
 
     .ce-header-form { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
 
-    /* Tipo de operacao (nacional/internacional) + medidas por item */
+    /* Tipo de operacao (nacional/internacional) + volumes do embarque */
     .ce-op-toggle { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
     .ce-op-btn { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 8px 20px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
     .ce-op-btn:hover:not(:disabled) { color: var(--eui-text); }
     .ce-op-btn.is-active { background: var(--eui-primary); color: #fff; box-shadow: var(--eui-shadow-sm); }
     .ce-op-btn:disabled { cursor: not-allowed; opacity: .55; }
-    .ce-item-medidas { display: none; grid-column: 1 / -1; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--eui-border); }
-    .ce-conf-item.is-intl .ce-item-medidas { display: block; }
-    .ce-medidas-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
-    .ce-medidas-grid .eui-field__label { font-size: 11px; }
+    .ce-vol-table { width: 100%; border-collapse: collapse; }
+    .ce-vol-table th { text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-muted); padding: 6px 8px; border-bottom: 1px solid var(--eui-border); }
+    .ce-vol-table td { padding: 6px 8px; vertical-align: middle; }
+    .ce-vol-table td .eui-input { min-height: 38px; }
+    .ce-vol-idx { width: 34px; text-align: center; color: var(--eui-muted); font-weight: 700; }
+    .ce-vol-del { width: 44px; text-align: center; }
+    .ce-vol-del button { border: none; background: transparent; color: var(--eui-danger); cursor: pointer; font-size: 15px; padding: 6px; border-radius: 8px; }
+    .ce-vol-del button:hover { background: var(--eui-danger-soft, rgba(220,38,38,.12)); }
+    .ce-vol-empty { padding: 16px; text-align: center; color: var(--eui-muted); font-size: 12px; }
+    .ce-vol-ro { display: flex; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 820px) {
+        .ce-vol-table, .ce-vol-table thead, .ce-vol-table tbody, .ce-vol-table tr, .ce-vol-table td { display: block; }
+        .ce-vol-table thead { display: none; }
+        .ce-vol-table tr { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); padding: 8px; margin-bottom: 10px; }
+        .ce-vol-table td { padding: 4px 6px; }
+    }
 
     .ce-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .ce-toast.error { border-left-color: var(--eui-danger); }
@@ -245,6 +257,37 @@
                 <div id="{{ prefix }}-conf-itens"></div>
             </div>
         </div>
+
+        {% if prefix == 'fat' %}
+        <div class="eui-card hidden" id="{{ prefix }}-card-volumes">
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-boxes-stacked"></i> Volumes do embarque (exportação)</h2>
+                    <p class="eui-card__sub">Adicione manualmente cada volume com espécie, quantidade, medidas (cm) e peso (kg).</p>
+                </div>
+                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="{{ prefix }}-btn-add-volume"><i class="fas fa-plus"></i> Adicionar volume</button>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="ce-table-wrap">
+                    <table class="ce-vol-table">
+                        <thead>
+                            <tr>
+                                <th class="ce-vol-idx">#</th>
+                                <th>Espécie / descrição</th>
+                                <th style="width:90px;">Qtde</th>
+                                <th style="width:110px;">Altura (cm)</th>
+                                <th style="width:130px;">Comprimento (cm)</th>
+                                <th style="width:110px;">Largura (cm)</th>
+                                <th style="width:110px;">Peso (kg)</th>
+                                <th class="ce-vol-del"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="{{ prefix }}-volumes-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="eui-card" id="{{ prefix }}-card-header-form">
             <div class="eui-card__head">
@@ -465,11 +508,114 @@
                 toggle.querySelectorAll(".ce-op-btn").forEach((b) =>
                     b.classList.toggle("is-active", b.dataset.op === operacaoTipo));
             }
-            const wrap = el("conf-itens");
-            if (wrap) {
-                wrap.querySelectorAll(".ce-conf-item").forEach((row) =>
-                    row.classList.toggle("is-intl", operacaoTipo === "internacional"));
+            const card = el("card-volumes");
+            const intl = operacaoTipo === "internacional";
+            if (card) {
+                card.classList.toggle("hidden", !intl);
+                // Ao entrar em internacional editavel sem nenhum volume, ja abre
+                // uma linha em branco para o conferente preencher.
+                const editavel = currentOrdem && currentOrdem.editavel;
+                const body = el("volumes-body");
+                if (intl && editavel && body && !body.querySelector("[data-vol-row]")) {
+                    addVolumeRow(null, true);
+                }
             }
+        }
+
+        function volumeRowHtml(v, editavel) {
+            v = v || {};
+            const val = (x) => (x === null || x === undefined ? "" : x);
+            if (!editavel) {
+                return `<tr data-vol-row>
+                    <td class="ce-vol-idx"></td>
+                    <td>${escapeHtml(val(v.especie) || "—")}</td>
+                    <td>${escapeHtml(val(v.quantidade) || "—")}</td>
+                    <td>${escapeHtml(val(v.altura_cm) || "—")}</td>
+                    <td>${escapeHtml(val(v.comprimento_cm) || "—")}</td>
+                    <td>${escapeHtml(val(v.largura_cm) || "—")}</td>
+                    <td>${escapeHtml(val(v.peso_kg) || "—")}</td>
+                    <td class="ce-vol-del"></td>
+                </tr>`;
+            }
+            return `<tr data-vol-row>
+                <td class="ce-vol-idx"></td>
+                <td><input class="eui-input" type="text" data-vf="especie" maxlength="120" placeholder="ex: Caixa" value="${escapeHtml(val(v.especie))}"></td>
+                <td><input class="eui-input" type="number" min="1" step="1" inputmode="numeric" data-vf="quantidade" placeholder="0" value="${escapeHtml(val(v.quantidade))}"></td>
+                <td><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-vf="altura_cm" placeholder="0" value="${escapeHtml(val(v.altura_cm))}"></td>
+                <td><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-vf="comprimento_cm" placeholder="0" value="${escapeHtml(val(v.comprimento_cm))}"></td>
+                <td><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-vf="largura_cm" placeholder="0" value="${escapeHtml(val(v.largura_cm))}"></td>
+                <td><input class="eui-input" type="number" min="0" step="0.01" inputmode="decimal" data-vf="peso_kg" placeholder="0" value="${escapeHtml(val(v.peso_kg))}"></td>
+                <td class="ce-vol-del"><button type="button" data-vol-del title="Remover volume"><i class="fas fa-trash"></i></button></td>
+            </tr>`;
+        }
+
+        function renumerarVolumes() {
+            const body = el("volumes-body");
+            if (!body) return;
+            body.querySelectorAll("[data-vol-row]").forEach((tr, i) => {
+                const idx = tr.querySelector(".ce-vol-idx");
+                if (idx) idx.textContent = i + 1;
+            });
+        }
+
+        function addVolumeRow(data, editavel) {
+            const body = el("volumes-body");
+            if (!body) return;
+            const empty = body.querySelector(".ce-vol-empty-row");
+            if (empty) empty.remove();
+            body.insertAdjacentHTML("beforeend", volumeRowHtml(data, editavel));
+            renumerarVolumes();
+            const rows = body.querySelectorAll("[data-vol-row]");
+            const last = rows[rows.length - 1];
+            const first = last && last.querySelector("input[data-vf]");
+            if (first && editavel) first.focus();
+        }
+
+        function renderVolumes(o) {
+            const body = el("volumes-body");
+            if (!body) return;
+            const editavel = o.editavel;
+            const lista = Array.isArray(o.volumes) ? o.volumes : [];
+            if (!lista.length && !editavel) {
+                body.innerHTML = `<tr class="ce-vol-empty-row"><td colspan="8" class="ce-vol-empty">Nenhum volume informado.</td></tr>`;
+                return;
+            }
+            body.innerHTML = lista.map((v) => volumeRowHtml(v, editavel)).join("");
+            renumerarVolumes();
+        }
+
+        function coletarVolumes() {
+            const body = el("volumes-body");
+            const volumes = [];
+            let invalido = false;
+            if (!body) return { volumes, invalido };
+            body.querySelectorAll("[data-vol-row]").forEach((tr) => {
+                const get = (f) => (tr.querySelector(`input[data-vf="${f}"]`)?.value || "").trim();
+                const especie = get("especie");
+                const quantidade = get("quantidade");
+                const altura = get("altura_cm");
+                const comprimento = get("comprimento_cm");
+                const largura = get("largura_cm");
+                const peso = get("peso_kg");
+                // Ignora linha totalmente vazia.
+                if (!especie && !quantidade && !altura && !comprimento && !largura && !peso) return;
+                if (!especie || !quantidade || Number(quantidade) <= 0
+                    || !altura || Number(altura) <= 0
+                    || !comprimento || Number(comprimento) <= 0
+                    || !largura || Number(largura) <= 0
+                    || !peso || Number(peso) <= 0) {
+                    invalido = true;
+                }
+                volumes.push({
+                    especie,
+                    quantidade: quantidade === "" ? null : parseInt(quantidade, 10),
+                    altura_cm: altura === "" ? null : Number(altura),
+                    comprimento_cm: comprimento === "" ? null : Number(comprimento),
+                    largura_cm: largura === "" ? null : Number(largura),
+                    peso_kg: peso === "" ? null : Number(peso),
+                });
+            });
+            return { volumes, invalido };
         }
 
         function renderTabela(ordens) {
@@ -557,17 +703,9 @@
                     const rev = it.divergente
                         ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
                         : `<div class="ce-reveal good">OK · conferido ${it.qtde_conferida}</div>`;
-                    const medidasRO = (cfg.internacional && (it.qtde_volumes != null || it.altura_cm != null))
-                        ? `<div class="ce-item-meta" style="margin-top:8px;">
-                            <span class="ce-meta-chip"><span>Volumes</span><strong>${it.qtde_volumes ?? "—"}</strong></span>
-                            <span class="ce-meta-chip"><span>Altura</span><strong>${it.altura_cm != null ? it.altura_cm + " cm" : "—"}</strong></span>
-                            <span class="ce-meta-chip"><span>Comprimento</span><strong>${it.comprimento_cm != null ? it.comprimento_cm + " cm" : "—"}</strong></span>
-                            <span class="ce-meta-chip"><span>Largura</span><strong>${it.largura_cm != null ? it.largura_cm + " cm" : "—"}</strong></span>
-                        </div>`
-                        : "";
                     return `<div class="ce-conf-item ${cls}">
                         <div class="idx">${i + 1}</div>
-                        <div class="info">${meta}${rev}${medidasRO}</div>
+                        <div class="info">${meta}${rev}</div>
                         <div class="ce-final-qtd">${it.qtde_conferida}</div>
                     </div>`;
                 }
@@ -576,24 +714,12 @@
                     ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
                     : "";
                 const clsLinha = (conferido && it.divergente) ? " divergente" : "";
-                const medidas = cfg.internacional
-                    ? `<div class="ce-item-medidas">
-                        <div class="ce-medidas-grid">
-                            <div class="eui-field"><label class="eui-field__label">Volumes *</label><input class="eui-input" type="number" min="0" step="1" inputmode="numeric" data-vol="${it.id}" placeholder="0" value="${it.qtde_volumes ?? ""}"></div>
-                            <div class="eui-field"><label class="eui-field__label">Altura (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-alt="${it.id}" placeholder="0" value="${it.altura_cm ?? ""}"></div>
-                            <div class="eui-field"><label class="eui-field__label">Comprimento (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-comp="${it.id}" placeholder="0" value="${it.comprimento_cm ?? ""}"></div>
-                            <div class="eui-field"><label class="eui-field__label">Largura (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-larg="${it.id}" placeholder="0" value="${it.largura_cm ?? ""}"></div>
-                        </div>
-                    </div>`
-                    : "";
                 return `<div class="ce-conf-item${clsLinha}" data-item-id="${it.id}">
                     <div class="idx">${i + 1}</div>
                     <div class="info">${meta}${alerta}</div>
                     <input class="eui-input qtd" type="number" min="0" inputmode="numeric" data-qtd="${it.id}" placeholder="0" value="${valAtual}">
-                    ${medidas}
                 </div>`;
             }).join("");
-            aplicarOperacao();
         }
 
         function renderHistorico(historico) {
@@ -670,6 +796,9 @@
                     if (toggle) {
                         toggle.querySelectorAll(".ce-op-btn").forEach((b) => { b.disabled = !o.editavel; });
                     }
+                    const bAdd = el("btn-add-volume");
+                    if (bAdd) bAdd.style.display = o.editavel ? "" : "none";
+                    renderVolumes(o);
                     aplicarOperacao();
                 }
 
@@ -722,39 +851,34 @@
             const itens = [];
             let faltando = false;
             const intl = cfg.internacional && operacaoTipo === "internacional";
-            let medidasFaltando = false;
             el("conf-itens").querySelectorAll(".ce-conf-item[data-item-id]").forEach((row) => {
                 const inp = row.querySelector("input[data-qtd]");
                 if (!inp) return;
                 const id = parseInt(inp.dataset.qtd, 10);
                 const val = inp.value.trim();
                 if (val === "") faltando = true;
-                const entry = { id, qtde_conferida: val === "" ? null : parseInt(val, 10) };
-                if (intl) {
-                    const vol = (row.querySelector("input[data-vol]")?.value || "").trim();
-                    const alt = (row.querySelector("input[data-alt]")?.value || "").trim();
-                    const comp = (row.querySelector("input[data-comp]")?.value || "").trim();
-                    const larg = (row.querySelector("input[data-larg]")?.value || "").trim();
-                    if (!vol || !alt || !comp || !larg
-                        || Number(vol) <= 0 || Number(alt) <= 0 || Number(comp) <= 0 || Number(larg) <= 0) {
-                        medidasFaltando = true;
-                    }
-                    entry.qtde_volumes = vol === "" ? null : parseInt(vol, 10);
-                    entry.altura_cm = alt === "" ? null : Number(alt);
-                    entry.comprimento_cm = comp === "" ? null : Number(comp);
-                    entry.largura_cm = larg === "" ? null : Number(larg);
-                }
-                itens.push(entry);
+                itens.push({ id, qtde_conferida: val === "" ? null : parseInt(val, 10) });
             });
             if (faltando) { toast("Informe a quantidade conferida de todos os itens.", "error"); return; }
-            if (intl && medidasFaltando) {
-                toast("Operação internacional: informe volumes e medidas (altura, comprimento e largura em cm) de todos os itens.", "error");
-                return;
+
+            let volumes = [];
+            if (intl) {
+                const coletado = coletarVolumes();
+                if (!coletado.volumes.length) {
+                    toast("Operação internacional: adicione ao menos um volume do embarque.", "error");
+                    return;
+                }
+                if (coletado.invalido) {
+                    toast("Preencha espécie, quantidade, altura, comprimento, largura (cm) e peso (kg) de todos os volumes.", "error");
+                    return;
+                }
+                volumes = coletado.volumes;
             }
 
             const body = {
                 itens,
                 operacao_tipo: cfg.internacional ? operacaoTipo : "nacional",
+                volumes,
                 peso_liquido: el("h-peso-liq").value.trim(),
                 peso_bruto: el("h-peso-bruto").value.trim(),
                 qtde_volumes: el("h-qtde-vol").value.trim(),
@@ -919,6 +1043,17 @@
                     if (!b || b.disabled) return;
                     operacaoTipo = b.dataset.op === "internacional" ? "internacional" : "nacional";
                     aplicarOperacao();
+                });
+            }
+            const bAdd = el("btn-add-volume");
+            if (bAdd) bAdd.addEventListener("click", () => addVolumeRow(null, true));
+            const volBody = el("volumes-body");
+            if (volBody) {
+                volBody.addEventListener("click", (e) => {
+                    const del = e.target.closest("[data-vol-del]");
+                    if (!del) return;
+                    const tr = del.closest("[data-vol-row]");
+                    if (tr) { tr.remove(); renumerarVolumes(); }
                 });
             }
         }

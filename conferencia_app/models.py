@@ -633,6 +633,39 @@ class ExpedicaoOrdemFat(db.Model):
         order_by="ExpedicaoOrdemFatItem.linha",
     )
 
+    # Volumes do embarque (operacao internacional) — lista adicionada
+    # manualmente pelo conferente, com medidas e peso de cada volume.
+    volumes = db.relationship(
+        "ExpedicaoOrdemFatVolume",
+        backref="ordem",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoOrdemFatVolume.linha",
+    )
+
+
+class ExpedicaoOrdemFatVolume(db.Model):
+    """Volume do embarque de uma ordem de faturamento (operacao internacional).
+
+    Cada linha e um volume fisico adicionado manualmente pelo conferente, com
+    especie/descricao, quantidade e medidas (cm) + peso (kg)."""
+
+    __tablename__ = "expedicao_ordem_fat_volume"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_ordem_fat.id"),
+        nullable=False,
+        index=True,
+    )
+    linha = db.Column(db.Integer, nullable=False, default=0)
+    especie = db.Column(db.String(120))
+    quantidade = db.Column(db.Integer)
+    altura_cm = db.Column(db.Float)
+    comprimento_cm = db.Column(db.Float)
+    largura_cm = db.Column(db.Float)
+    peso_kg = db.Column(db.Float)
+
 
 class ExpedicaoOrdemFatItem(db.Model):
     __tablename__ = "expedicao_ordem_fat_item"
@@ -652,12 +685,6 @@ class ExpedicaoOrdemFatItem(db.Model):
     qtde_a_faturar = db.Column(db.Integer, nullable=False, default=0)
     qtde_conferida = db.Column(db.Integer)
     divergente = db.Column(db.Boolean, nullable=False, default=False)
-
-    # Dados de volumes/medidas por item (usados na operacao internacional).
-    qtde_volumes = db.Column(db.Integer)
-    altura_cm = db.Column(db.Float)
-    comprimento_cm = db.Column(db.Float)
-    largura_cm = db.Column(db.Float)
 
 
 class ExpedicaoOrdemST(db.Model):
