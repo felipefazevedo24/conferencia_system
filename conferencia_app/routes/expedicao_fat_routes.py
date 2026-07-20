@@ -69,6 +69,7 @@ def _ordem_resumo(ordem: ExpedicaoOrdemFat, total_itens: int | None = None) -> d
         "conferente": ordem.conferente,
         "conferido_pos_faturamento": bool(ordem.conferido_pos_faturamento),
         "total_itens": total_itens,
+        "operacao_tipo": ordem.operacao_tipo or "nacional",
         "peso_liquido": ordem.peso_liquido,
         "peso_bruto": ordem.peso_bruto,
         "qtde_volumes": ordem.qtde_volumes,
@@ -185,6 +186,12 @@ def obter_ordem_conf_cega(cod_ordem_fat):
         if conferido:
             dados["qtde_conferida"] = it.qtde_conferida
             dados["divergente"] = bool(it.divergente)
+        # Dados de volumes/medidas por item (operacao internacional). Podem ser
+        # exibidos mesmo antes de conferir, para permitir reedicao.
+        dados["qtde_volumes"] = it.qtde_volumes
+        dados["altura_cm"] = it.altura_cm
+        dados["comprimento_cm"] = it.comprimento_cm
+        dados["largura_cm"] = it.largura_cm
         itens.append(dados)
 
     resumo = _ordem_resumo(ordem, len(itens))
@@ -212,30 +219,68 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
     peso_bruto = str(payload.get("peso_bruto") or "").strip()
     qtde_volumes = str(payload.get("qtde_volumes") or "").strip()
     especie_volumes = str(payload.get("especie_volumes") or "").strip()
+    operacao_tipo = str(payload.get("operacao_tipo") or "nacional").strip().lower()
+
+    if operacao_tipo not in ("nacional", "internacional"):
+        return jsonify({"error": "Selecione se a operacao e nacional ou internacional."}), 400
 
     if not (peso_liquido and peso_bruto and qtde_volumes and especie_volumes):
         return jsonify({
             "error": "Preencha peso liquido, peso bruto, qtde de volumes e especie dos volumes."
         }), 400
 
+    def _parse_float_pos(valor):
+        try:
+            num = float(str(valor).strip().replace(",", "."))
+        except (TypeError, ValueError):
+            return None
+        return num if num > 0 else None
+
     # Mapa item_id -> quantidade conferida
     contagens = {}
+    # Mapa item_id -> medidas/volumes (apenas operacao internacional)
+    medidas = {}
     for entry in itens_payload:
         try:
             item_id = int(entry.get("id"))
         except (TypeError, ValueError):
             continue
         contagens[item_id] = svc._parse_int(entry.get("qtde_conferida"), None)
+        medidas[item_id] = {
+            "qtde_volumes": svc._parse_int(entry.get("qtde_volumes"), None),
+            "altura_cm": _parse_float_pos(entry.get("altura_cm")),
+            "comprimento_cm": _parse_float_pos(entry.get("comprimento_cm")),
+            "largura_cm": _parse_float_pos(entry.get("largura_cm")),
+        }
 
     itens = list(ordem.itens)
     faltando = [it.id for it in itens if contagens.get(it.id) is None]
     if faltando:
         return jsonify({"error": "Informe a quantidade conferida de todos os itens."}), 400
 
+    # Operacao internacional: medidas (altura, comprimento, largura em cm) e a
+    # quantidade de volumes sao obrigatorias por item.
+    if operacao_tipo == "internacional":
+        incompletos = []
+        for it in itens:
+            m = medidas.get(it.id) or {}
+            if not (m.get("qtde_volumes") and m.get("altura_cm")
+                    and m.get("comprimento_cm") and m.get("largura_cm")):
+                incompletos.append(it.id)
+        if incompletos:
+            return jsonify({
+                "error": (
+                    "Operacao internacional: informe quantidade de volumes e as "
+                    "medidas (altura, comprimento e largura em cm) de todos os itens."
+                ),
+                "itens_incompletos": incompletos,
+            }), 400
+
     # Snapshot ANTES das alteracoes (para a trilha de auditoria).
     era_conferido = ordem.conferido_at is not None
     status_anterior = ordem.status
     header_antes = {
+        "operacao_tipo": ordem.operacao_tipo,
         "peso_liquido": ordem.peso_liquido,
         "peso_bruto": ordem.peso_bruto,
         "qtde_volumes": ordem.qtde_volumes,
@@ -262,6 +307,19 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
         it.divergente = (qtd != it.qtde_a_faturar)
         if it.divergente:
             ordem_divergente = True
+        # Volumes/medidas por item (somente relevante na operacao internacional;
+        # na nacional os campos sao limpos).
+        if operacao_tipo == "internacional":
+            m = medidas.get(it.id) or {}
+            it.qtde_volumes = m.get("qtde_volumes")
+            it.altura_cm = m.get("altura_cm")
+            it.comprimento_cm = m.get("comprimento_cm")
+            it.largura_cm = m.get("largura_cm")
+        else:
+            it.qtde_volumes = None
+            it.altura_cm = None
+            it.comprimento_cm = None
+            it.largura_cm = None
         resultado_itens.append({
             "id": it.id,
             "cod_interno": it.cod_interno,
@@ -290,6 +348,7 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
 
     agora = datetime.now()
     ordem.divergente = ordem_divergente
+    ordem.operacao_tipo = operacao_tipo
     ordem.peso_liquido = peso_liquido
     ordem.peso_bruto = peso_bruto
     ordem.qtde_volumes = qtde_volumes
@@ -319,6 +378,7 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
     # Trilha de auditoria: registra a conferencia ou a edicao posterior com o
     # detalhamento do que mudou (cabecalho + itens).
     diff_cabecalho = log_svc.montar_diff_cabecalho(header_antes, {
+        "operacao_tipo": operacao_tipo,
         "peso_liquido": peso_liquido,
         "peso_bruto": peso_bruto,
         "qtde_volumes": qtde_volumes,

@@ -595,6 +595,10 @@ class ExpedicaoOrdemFat(db.Model):
     # Pendente de conferência | Conferido | Faturado | Expedido
     status = db.Column(db.String(40), nullable=False, default="Pendente de conferência", index=True)
 
+    # Tipo de operacao definido pelo conferente: nacional | internacional.
+    # Quando internacional, o conferente informa medidas/volumes por item.
+    operacao_tipo = db.Column(db.String(20), nullable=False, default="nacional")
+
     # Dados de volume/peso (cabecalho) preenchidos ao concluir a conferencia
     peso_liquido = db.Column(db.String(40))
     peso_bruto = db.Column(db.String(40))
@@ -648,6 +652,12 @@ class ExpedicaoOrdemFatItem(db.Model):
     qtde_a_faturar = db.Column(db.Integer, nullable=False, default=0)
     qtde_conferida = db.Column(db.Integer)
     divergente = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Dados de volumes/medidas por item (usados na operacao internacional).
+    qtde_volumes = db.Column(db.Integer)
+    altura_cm = db.Column(db.Float)
+    comprimento_cm = db.Column(db.Float)
+    largura_cm = db.Column(db.Float)
 
 
 class ExpedicaoOrdemST(db.Model):

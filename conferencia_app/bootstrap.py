@@ -818,6 +818,28 @@ def _ensure_expedicao_ordem_fat_columns() -> None:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_fat ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
             ))
+        if "operacao_tipo" not in cols:
+            conn.execute(db.text(
+                "ALTER TABLE expedicao_ordem_fat ADD COLUMN operacao_tipo VARCHAR(20) NOT NULL DEFAULT 'nacional'"
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Colunas de volumes/medidas por item (operacao internacional).
+    if not _has_table("expedicao_ordem_fat_item"):
+        return
+    item_cols = _get_column_names("expedicao_ordem_fat_item")
+    conn = db.engine.connect()
+    try:
+        if "qtde_volumes" not in item_cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat_item ADD COLUMN qtde_volumes INTEGER"))
+        if "altura_cm" not in item_cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat_item ADD COLUMN altura_cm FLOAT"))
+        if "comprimento_cm" not in item_cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat_item ADD COLUMN comprimento_cm FLOAT"))
+        if "largura_cm" not in item_cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat_item ADD COLUMN largura_cm FLOAT"))
         conn.commit()
     finally:
         conn.close()

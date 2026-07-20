@@ -65,6 +65,17 @@
 
     .ce-header-form { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
 
+    /* Tipo de operacao (nacional/internacional) + medidas por item */
+    .ce-op-toggle { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
+    .ce-op-btn { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 8px 20px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
+    .ce-op-btn:hover:not(:disabled) { color: var(--eui-text); }
+    .ce-op-btn.is-active { background: var(--eui-primary); color: #fff; box-shadow: var(--eui-shadow-sm); }
+    .ce-op-btn:disabled { cursor: not-allowed; opacity: .55; }
+    .ce-item-medidas { display: none; grid-column: 1 / -1; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--eui-border); }
+    .ce-conf-item.is-intl .ce-item-medidas { display: block; }
+    .ce-medidas-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+    .ce-medidas-grid .eui-field__label { font-size: 11px; }
+
     .ce-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .ce-toast.error { border-left-color: var(--eui-danger); }
     .ce-toast.success { border-left-color: var(--eui-success); }
@@ -210,6 +221,21 @@
                 </div>
             </div>
         </div>
+
+        {% if prefix == 'fat' %}
+        <div class="eui-card" id="{{ prefix }}-card-operacao">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-earth-americas"></i> Tipo de operação</h2>
+                <p class="eui-card__sub">Nacional ou internacional. Na internacional, informe volumes e medidas (cm) de cada item.</p>
+            </div>
+            <div class="eui-card__body">
+                <div class="ce-op-toggle" id="{{ prefix }}-op-toggle" role="group" aria-label="Tipo de operação">
+                    <button type="button" class="ce-op-btn is-active" data-op="nacional"><i class="fas fa-flag"></i> Nacional</button>
+                    <button type="button" class="ce-op-btn" data-op="internacional"><i class="fas fa-globe"></i> Internacional</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="eui-card">
             <div class="eui-card__head">
@@ -429,7 +455,22 @@
         let currentFilter = "";
         let currentBusca = "";
         let currentOrdem = null;
+        let operacaoTipo = "nacional";
         const codDe = (o) => o[cfg.codKey];
+
+        function aplicarOperacao() {
+            if (!cfg.internacional) return;
+            const toggle = el("op-toggle");
+            if (toggle) {
+                toggle.querySelectorAll(".ce-op-btn").forEach((b) =>
+                    b.classList.toggle("is-active", b.dataset.op === operacaoTipo));
+            }
+            const wrap = el("conf-itens");
+            if (wrap) {
+                wrap.querySelectorAll(".ce-conf-item").forEach((row) =>
+                    row.classList.toggle("is-intl", operacaoTipo === "internacional"));
+            }
+        }
 
         function renderTabela(ordens) {
             const tb = el("tbody");
@@ -516,9 +557,17 @@
                     const rev = it.divergente
                         ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
                         : `<div class="ce-reveal good">OK · conferido ${it.qtde_conferida}</div>`;
+                    const medidasRO = (cfg.internacional && (it.qtde_volumes != null || it.altura_cm != null))
+                        ? `<div class="ce-item-meta" style="margin-top:8px;">
+                            <span class="ce-meta-chip"><span>Volumes</span><strong>${it.qtde_volumes ?? "—"}</strong></span>
+                            <span class="ce-meta-chip"><span>Altura</span><strong>${it.altura_cm != null ? it.altura_cm + " cm" : "—"}</strong></span>
+                            <span class="ce-meta-chip"><span>Comprimento</span><strong>${it.comprimento_cm != null ? it.comprimento_cm + " cm" : "—"}</strong></span>
+                            <span class="ce-meta-chip"><span>Largura</span><strong>${it.largura_cm != null ? it.largura_cm + " cm" : "—"}</strong></span>
+                        </div>`
+                        : "";
                     return `<div class="ce-conf-item ${cls}">
                         <div class="idx">${i + 1}</div>
-                        <div class="info">${meta}${rev}</div>
+                        <div class="info">${meta}${rev}${medidasRO}</div>
                         <div class="ce-final-qtd">${it.qtde_conferida}</div>
                     </div>`;
                 }
@@ -527,12 +576,24 @@
                     ? `<div class="ce-reveal bad">Divergência detectada · Conferido ${it.qtde_conferida}</div>`
                     : "";
                 const clsLinha = (conferido && it.divergente) ? " divergente" : "";
+                const medidas = cfg.internacional
+                    ? `<div class="ce-item-medidas">
+                        <div class="ce-medidas-grid">
+                            <div class="eui-field"><label class="eui-field__label">Volumes *</label><input class="eui-input" type="number" min="0" step="1" inputmode="numeric" data-vol="${it.id}" placeholder="0" value="${it.qtde_volumes ?? ""}"></div>
+                            <div class="eui-field"><label class="eui-field__label">Altura (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-alt="${it.id}" placeholder="0" value="${it.altura_cm ?? ""}"></div>
+                            <div class="eui-field"><label class="eui-field__label">Comprimento (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-comp="${it.id}" placeholder="0" value="${it.comprimento_cm ?? ""}"></div>
+                            <div class="eui-field"><label class="eui-field__label">Largura (cm) *</label><input class="eui-input" type="number" min="0" step="0.1" inputmode="decimal" data-larg="${it.id}" placeholder="0" value="${it.largura_cm ?? ""}"></div>
+                        </div>
+                    </div>`
+                    : "";
                 return `<div class="ce-conf-item${clsLinha}" data-item-id="${it.id}">
                     <div class="idx">${i + 1}</div>
                     <div class="info">${meta}${alerta}</div>
                     <input class="eui-input qtd" type="number" min="0" inputmode="numeric" data-qtd="${it.id}" placeholder="0" value="${valAtual}">
+                    ${medidas}
                 </div>`;
             }).join("");
+            aplicarOperacao();
         }
 
         function renderHistorico(historico) {
@@ -602,6 +663,16 @@
                 el("h-qtde-vol").value = o.qtde_volumes || "";
                 el("h-especie").value = o.especie_volumes || "";
 
+                // Tipo de operacao (nacional/internacional) — somente aba FAT.
+                if (cfg.internacional) {
+                    operacaoTipo = (o.operacao_tipo === "internacional") ? "internacional" : "nacional";
+                    const toggle = el("op-toggle");
+                    if (toggle) {
+                        toggle.querySelectorAll(".ce-op-btn").forEach((b) => { b.disabled = !o.editavel; });
+                    }
+                    aplicarOperacao();
+                }
+
                 el("btn-finalizar-conf").innerHTML = editando
                     ? '<i class="fas fa-floppy-disk"></i> Salvar edição'
                     : '<i class="fas fa-check-double"></i> Finalizar conferência';
@@ -650,15 +721,40 @@
             if (!currentOrdem) return;
             const itens = [];
             let faltando = false;
-            el("conf-itens").querySelectorAll("input[data-qtd]").forEach((inp) => {
+            const intl = cfg.internacional && operacaoTipo === "internacional";
+            let medidasFaltando = false;
+            el("conf-itens").querySelectorAll(".ce-conf-item[data-item-id]").forEach((row) => {
+                const inp = row.querySelector("input[data-qtd]");
+                if (!inp) return;
+                const id = parseInt(inp.dataset.qtd, 10);
                 const val = inp.value.trim();
                 if (val === "") faltando = true;
-                itens.push({ id: parseInt(inp.dataset.qtd, 10), qtde_conferida: val === "" ? null : parseInt(val, 10) });
+                const entry = { id, qtde_conferida: val === "" ? null : parseInt(val, 10) };
+                if (intl) {
+                    const vol = (row.querySelector("input[data-vol]")?.value || "").trim();
+                    const alt = (row.querySelector("input[data-alt]")?.value || "").trim();
+                    const comp = (row.querySelector("input[data-comp]")?.value || "").trim();
+                    const larg = (row.querySelector("input[data-larg]")?.value || "").trim();
+                    if (!vol || !alt || !comp || !larg
+                        || Number(vol) <= 0 || Number(alt) <= 0 || Number(comp) <= 0 || Number(larg) <= 0) {
+                        medidasFaltando = true;
+                    }
+                    entry.qtde_volumes = vol === "" ? null : parseInt(vol, 10);
+                    entry.altura_cm = alt === "" ? null : Number(alt);
+                    entry.comprimento_cm = comp === "" ? null : Number(comp);
+                    entry.largura_cm = larg === "" ? null : Number(larg);
+                }
+                itens.push(entry);
             });
             if (faltando) { toast("Informe a quantidade conferida de todos os itens.", "error"); return; }
+            if (intl && medidasFaltando) {
+                toast("Operação internacional: informe volumes e medidas (altura, comprimento e largura em cm) de todos os itens.", "error");
+                return;
+            }
 
             const body = {
                 itens,
+                operacao_tipo: cfg.internacional ? operacaoTipo : "nacional",
                 peso_liquido: el("h-peso-liq").value.trim(),
                 peso_bruto: el("h-peso-bruto").value.trim(),
                 qtde_volumes: el("h-qtde-vol").value.trim(),
@@ -815,6 +911,17 @@
         el("btn-voltar").addEventListener("click", voltarDashboard);
         el("btn-voltar-2").addEventListener("click", voltarDashboard);
         el("btn-finalizar-conf").addEventListener("click", finalizarConferencia);
+        if (cfg.internacional) {
+            const toggle = el("op-toggle");
+            if (toggle) {
+                toggle.addEventListener("click", (e) => {
+                    const b = e.target.closest(".ce-op-btn");
+                    if (!b || b.disabled) return;
+                    operacaoTipo = b.dataset.op === "internacional" ? "internacional" : "nacional";
+                    aplicarOperacao();
+                });
+            }
+        }
         if (CE_IS_ADMIN) {
             const bSem = el("btn-finalizar-sem-conf");
             if (bSem) bSem.addEventListener("click", finalizarSemConferencia);
@@ -862,6 +969,7 @@
         apiBase: "/api/expedicao/conf-cega",
         codKey: "cod_ordem_fat",
         refTipo: "fat",
+        internacional: true,
         colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
         previsao: (o) => o.dt_previsao_entrega,
         onCount: (n) => { $("fat-tab-count").textContent = n; },

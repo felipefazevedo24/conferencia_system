@@ -14,6 +14,7 @@ from ..models import ExpedicaoConferenciaLog
 
 # Campos de cabecalho auditados (rotulo amigavel -> atributo).
 _CAMPOS_CABECALHO = [
+    ("operacao_tipo", "Tipo de operação"),
     ("peso_liquido", "Peso líquido"),
     ("peso_bruto", "Peso bruto"),
     ("qtde_volumes", "Qtde volumes"),
