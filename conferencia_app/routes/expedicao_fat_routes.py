@@ -23,6 +23,11 @@ expedicao_fat_bp = Blueprint("expedicao_fat", __name__)
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
 ROLES = ("Conferente", "Admin", "Fiscal", "Logística")
 
+# "Faturado sem conferência": exibe apenas a partir desta solicitação de
+# faturamento (cod_ordem_fat). O backlog antigo (NFs emitidas na origem antes
+# do uso da conferência cega) fica oculto para não poluir a fila.
+FAT_SEM_CONF_COD_MINIMO = 1594
+
 
 def _iso(value):
     return value.isoformat() if value else None
@@ -147,6 +152,10 @@ def listar_ordens_conf_cega():
     metricas = {"pendente": 0, "conferido": 0, "faturado_sem_conf": 0, "faturado": 0, "expedido": 0}
     for ordem in ordens:
         sl = svc.status_slug(ordem.status)
+        # Faturado sem conferência: oculta o backlog antigo, exibindo apenas as
+        # solicitações a partir de FAT_SEM_CONF_COD_MINIMO (não conta nem lista).
+        if sl == "faturado_sem_conf" and (ordem.cod_ordem_fat or 0) < FAT_SEM_CONF_COD_MINIMO:
+            continue
         metricas[sl] = metricas.get(sl, 0) + 1
         # Busca por OS/orcamento percorre TODOS os status; ignora o filtro de
         # status enquanto houver termo de busca.
