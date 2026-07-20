@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, render_template, session
+from flask import Blueprint, redirect, render_template, session
 from sqlalchemy import func
 
 from ..auth import get_effective_permissions, login_required, permission_required
@@ -1030,8 +1030,6 @@ def solicitar_transporte_page():
 @page_bp.route("/logistica/agendamento-veiculos")
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def agendamento_veiculos_page():
-    from flask import redirect
-
     return redirect("/logistica/viagens?tab=viagens", code=302)
 
 
@@ -1065,7 +1063,6 @@ def expedicao_admin_page():
 def painel_motorista_page():
     # Rota legada. O painel antigo (login + sessão) foi substituído por link público
     # permanente HMAC compartilhado via WhatsApp/QR pelo gestor.
-    from flask import redirect
     return redirect("/logistica/operacao#frota", code=302)
 
 
