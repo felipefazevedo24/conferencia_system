@@ -335,7 +335,7 @@
 </div>
 {% endmacro %}
 
-<div class="container-erp eui-scope">
+<div class="container-erp eui-scope" id="ce-root" data-is-admin="{{ 'true' if is_admin else 'false' }}">
     <div class="module-shell">
         <div id="ce-toast" class="ce-toast"></div>
 
@@ -389,7 +389,7 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
-    const CE_IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+    const CE_IS_ADMIN = ($("ce-root")?.dataset.isAdmin === "true");
 
     const BADGE = {
         pendente: "eui-badge--warning",
