@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Atualizações Cadastrais - Columbia Sync{% endblock %}
+{% block shell_title %}Atualizações cadastrais{% endblock %}
+{% block shell_subtitle %}Respostas enviadas por clientes e fornecedores.{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ac-wrap { max-width: 1320px; margin: 0 auto; padding: 24px; }
+    .ac-header { margin-bottom: 18px; }
+    .ac-header h1 { font-size: 26px; margin: 0; color: #0f172a; font-weight: 800; }
+    .ac-header p { margin: 6px 0 0; color: #64748b; }
+    .ac-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .ac-filtro { border: 1px solid #b8c6d3; border-radius: 10px; padding: 8px 10px; font-size: 12px; min-width: 140px; background: #fbfdff; color: #294054; }
+    .ac-stats { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .ac-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%); border: 1px solid #d9e3ec; border-radius: 16px; padding: 14px; box-shadow: 0 10px 24px rgba(26, 49, 74, 0.08); }
+    .ac-card .lbl { font-size: 10px; color: #666; text-transform: uppercase; font-weight: 700; }
+    .ac-card .val { font-size: 24px; font-weight: 800; color: #2d3c4a; }
+    .ac-table-wrap { background: white; border: 1px solid var(--border-color); overflow-x: auto; border-radius: 16px; box-shadow: 0 10px 26px rgba(26, 49, 74, 0.08); }
+    table.ac-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.ac-table th, table.ac-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid #eef2f6; white-space: nowrap; }
+    table.ac-table th { background: #f4f8fc; color: #33506a; font-weight: 700; position: sticky; top: 0; }
+    table.ac-table td.wrap { white-space: normal; min-width: 180px; }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .pill.cliente { background: #e0f2fe; color: #0369a1; }
+    .pill.fornecedor { background: #fef3c7; color: #92400e; }
+    .status-sel { border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 6px; font-size: 11px; background: #fff; color: #294054; }
+    .ac-empty { text-align: center; padding: 30px; color: #64748b; }
+    @media (max-width: 900px) { .ac-stats { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ac-wrap">
+    <div class="ac-header">
+        <h1>Atualizações cadastrais recebidas</h1>
+        <p>Respostas enviadas pela página pública de atualização de cadastro. Filtre, revise o status e exporte em Excel.</p>
+    </div>
+
+    <div class="ac-toolbar">
+        <select id="f-tipo" class="ac-filtro" onchange="carregar()">
+            <option value="">Todos os tipos</option>
+            <option value="cliente">Cliente</option>
+            <option value="fornecedor">Fornecedor</option>
+        </select>
+        <select id="f-status" class="ac-filtro" onchange="carregar()">
+            <option value="">Todos os status</option>
+            <option>Pendente de revisão</option>
+            <option>Em análise</option>
+            <option>Concluído</option>
+            <option>Descartado</option>
+        </select>
+        <input id="f-busca" type="text" class="ac-filtro" style="min-width:220px" placeholder="Buscar por CNPJ, razão social ou e-mail" onkeydown="if(event.key==='Enter')carregar()">
+        <button class="btn-sap" onclick="carregar()"><i class="fas fa-sync-alt"></i> Atualizar</button>
+        <button class="btn-sap" onclick="exportarExcel()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+    </div>
+
+    <div class="ac-stats">
+        <div class="ac-card">
+            <div class="lbl">Total (filtro atual)</div>
+            <div id="s-total" class="val">0</div>
+        </div>
+        <div class="ac-card">
+            <div class="lbl">Pendentes de revisão</div>
+            <div id="s-pendentes" class="val">0</div>
+        </div>
+        <div class="ac-card">
+            <div class="lbl">Última atualização</div>
+            <div id="s-atualizado" class="val" style="font-size:14px;padding-top:8px">—</div>
+        </div>
+    </div>
+
+    <div class="ac-table-wrap">
+        <table class="ac-table">
+            <thead>
+                <tr>
+                    <th>Recebido</th>
+                    <th>Tipo</th>
+                    <th>CNPJ</th>
+                    <th>Razão social</th>
+                    <th>Regime</th>
+                    <th>Município/UF</th>
+                    <th>Telefone</th>
+                    <th>E-mail</th>
+                    <th>Contato</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="tb-lista">
+                <tr><td colspan="10" class="ac-empty">Carregando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function qs(id) { return document.getElementById(id); }
+
+    function filtrosQuery() {
+        const params = new URLSearchParams();
+        const tipo = qs('f-tipo').value;
+        const status = qs('f-status').value;
+        const busca = qs('f-busca').value.trim();
+        if (tipo) params.set('tipo', tipo);
+        if (status) params.set('status', status);
+        if (busca) params.set('busca', busca);
+        return params.toString();
+    }
+
+    function escapeHtml(v) {
+        if (v === null || v === undefined) return '';
+        return String(v).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    async function alterarStatus(id, novo) {
+        try {
+            const resp = await fetch(`/api/admin/atualizacoes-cadastrais/${id}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ status: novo })
+            });
+            if (!resp.ok) throw new Error('Falha ao salvar status.');
+            carregar();
+        } catch (err) {
+            alert(err.message || 'Erro ao atualizar status.');
+        }
+    }
+
+    function statusSelect(item) {
+        const opcoes = ['Pendente de revisão', 'Em análise', 'Concluído', 'Descartado'];
+        const options = opcoes.map(function (op) {
+            const sel = op === item.status ? ' selected' : '';
+            return `<option${sel}>${op}</option>`;
+        }).join('');
+        return `<select class="status-sel" onchange="alterarStatus(${item.id}, this.value)">${options}</select>`;
+    }
+
+    async function carregar() {
+        const tbody = qs('tb-lista');
+        tbody.innerHTML = '<tr><td colspan="10" class="ac-empty">Carregando...</td></tr>';
+        try {
+            const resp = await fetch('/api/admin/atualizacoes-cadastrais?' + filtrosQuery(), { credentials: 'same-origin' });
+            if (!resp.ok) throw new Error('Falha ao carregar dados.');
+            const data = await resp.json();
+            qs('s-total').textContent = data.total || 0;
+            qs('s-pendentes').textContent = data.pendentes || 0;
+
+            const itens = data.itens || [];
+            if (!itens.length) {
+                tbody.innerHTML = '<tr><td colspan="10" class="ac-empty">Nenhuma atualização cadastral encontrada.</td></tr>';
+                qs('s-atualizado').textContent = '—';
+                return;
+            }
+            qs('s-atualizado').textContent = itens[0].created_at || '—';
+
+            tbody.innerHTML = itens.map(function (item) {
+                const municipio = [item.municipio, item.uf].filter(Boolean).join(' / ');
+                return `<tr>
+                    <td>${escapeHtml(item.created_at)}</td>
+                    <td><span class="pill ${item.tipo === 'fornecedor' ? 'fornecedor' : 'cliente'}">${escapeHtml(item.tipo)}</span></td>
+                    <td>${escapeHtml(item.documento)}</td>
+                    <td class="wrap">${escapeHtml(item.razao_social || item.nome_fantasia || '—')}</td>
+                    <td>${escapeHtml(item.regime_tributario)}</td>
+                    <td>${escapeHtml(municipio || '—')}</td>
+                    <td>${escapeHtml(item.telefone || '—')}</td>
+                    <td>${escapeHtml(item.email || '—')}</td>
+                    <td>${escapeHtml(item.contato || '—')}</td>
+                    <td>${statusSelect(item)}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="10" class="ac-empty">${escapeHtml(err.message || 'Erro ao carregar.')}</td></tr>`;
+        }
+    }
+
+    function exportarExcel() {
+        window.location.href = '/api/admin/atualizacoes-cadastrais/export.xlsx?' + filtrosQuery();
+    }
+
+    document.addEventListener('DOMContentLoaded', carregar);
+</script>
+{% endblock %}

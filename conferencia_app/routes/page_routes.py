@@ -517,6 +517,20 @@ HOME_MODULES = [
         "keywords": ["acessos", "auditoria", "admin", "log"],
         "metric_key": "sessoes_ativas",
     },
+    {
+        "id": "atualizacoes_cadastrais",
+        "title": "Atualizações Cadastrais",
+        "subtitle": "Administração",
+        "description": "Veja as atualizações de cadastro enviadas por clientes e fornecedores e exporte em Excel.",
+        "href": "/admin/atualizacoes-cadastrais",
+        "icon": "fa-address-card",
+        "permission": "PAGE_ADMIN_ATUALIZACOES_CADASTRAIS",
+        "section": "Administração",
+        "tone": "navy",
+        "priority": 63,
+        "keywords": ["cadastro", "atualizacao", "cliente", "fornecedor", "cnpj", "excel"],
+        "metric_key": "sessoes_ativas",
+    },
 ]
 
 
@@ -1124,3 +1138,9 @@ def atualizacoes_admin_page():
 @permission_required("PAGE_ADMIN_ACESSOS")
 def acessos_admin_page():
     return render_template("admin_acessos.html", user=session["username"])
+
+
+@page_bp.route("/admin/atualizacoes-cadastrais")
+@permission_required("PAGE_ADMIN_ATUALIZACOES_CADASTRAIS")
+def atualizacoes_cadastrais_admin_page():
+    return render_template("admin_atualizacoes_cadastrais.html", user=session["username"])

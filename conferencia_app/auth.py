@@ -41,6 +41,7 @@ PERMISSION_CATALOG = {
     "PAGE_EXPEDICAO_ROMANEIO": "Expedicao > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
     "PAGE_ADMIN_ATUALIZACOES": "Administração > Avisos de atualizações",
+    "PAGE_ADMIN_ATUALIZACOES_CADASTRAIS": "Administração > Atualizações cadastrais recebidas",
     "PAGE_ADMIN_USUARIOS": "Administração > Gestão de acessos",
     "PAGE_ADMIN_HISTORICO": "Administração > Logs e auditoria",
     "PAGE_ADMIN_ACESSOS": "Administração > Auditoria de acessos",

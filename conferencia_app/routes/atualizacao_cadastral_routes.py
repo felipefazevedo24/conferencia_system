@@ -9,10 +9,12 @@ cadastro. Fluxo:
 """
 from __future__ import annotations
 
+import io
 import json
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, Response, jsonify, render_template, request
 
+from ..auth import permission_required
 from ..extensions import db
 from ..models import CadastroAtualizacaoPublica
 from ..services import cadastro_workflow_service as cad_svc
@@ -93,3 +95,151 @@ def enviar_atualizacao_cadastral():
     db.session.add(registro)
     db.session.commit()
     return jsonify({"sucesso": True, "id": registro.id})
+
+
+# ---------------------------------------------------------------------------
+# Area interna (com login) para revisar/exportar as atualizacoes recebidas
+# ---------------------------------------------------------------------------
+
+STATUS_VALIDOS = {"Pendente de revisão", "Em análise", "Concluído", "Descartado"}
+
+
+def _filtrar_registros():
+    tipo = str(request.args.get("tipo") or "").strip().lower()
+    status = str(request.args.get("status") or "").strip()
+    busca = str(request.args.get("busca") or "").strip()
+
+    query = CadastroAtualizacaoPublica.query
+    if tipo in TIPOS_VALIDOS:
+        query = query.filter(CadastroAtualizacaoPublica.tipo == tipo)
+    if status:
+        query = query.filter(CadastroAtualizacaoPublica.status == status)
+    if busca:
+        termo = f"%{busca}%"
+        query = query.filter(
+            db.or_(
+                CadastroAtualizacaoPublica.documento.ilike(termo),
+                CadastroAtualizacaoPublica.razao_social.ilike(termo),
+                CadastroAtualizacaoPublica.nome_fantasia.ilike(termo),
+                CadastroAtualizacaoPublica.email.ilike(termo),
+            )
+        )
+    return query.order_by(CadastroAtualizacaoPublica.created_at.desc())
+
+
+def _serializar(registro):
+    return {
+        "id": registro.id,
+        "tipo": registro.tipo,
+        "documento": registro.documento,
+        "razao_social": registro.razao_social,
+        "nome_fantasia": registro.nome_fantasia,
+        "inscricao_estadual": registro.inscricao_estadual,
+        "regime_tributario": registro.regime_tributario,
+        "endereco": registro.endereco,
+        "cep": registro.cep,
+        "municipio": registro.municipio,
+        "uf": registro.uf,
+        "telefone": registro.telefone,
+        "email": registro.email,
+        "email_confirmado": registro.email_confirmado,
+        "contato": registro.contato,
+        "observacoes": registro.observacoes,
+        "situacao_cadastral": registro.situacao_cadastral,
+        "status": registro.status,
+        "created_at": registro.created_at.strftime("%d/%m/%Y %H:%M") if registro.created_at else "",
+    }
+
+
+@atualizacao_cadastral_bp.route("/api/admin/atualizacoes-cadastrais")
+@permission_required("PAGE_ADMIN_ATUALIZACOES_CADASTRAIS")
+def listar_atualizacoes_cadastrais():
+    registros = _filtrar_registros().limit(2000).all()
+    total = len(registros)
+    pendentes = sum(1 for r in registros if r.status == "Pendente de revisão")
+    return jsonify(
+        {
+            "total": total,
+            "pendentes": pendentes,
+            "itens": [_serializar(r) for r in registros],
+        }
+    )
+
+
+@atualizacao_cadastral_bp.route("/api/admin/atualizacoes-cadastrais/<int:registro_id>/status", methods=["POST"])
+@permission_required("PAGE_ADMIN_ATUALIZACOES_CADASTRAIS")
+def atualizar_status_atualizacao(registro_id):
+    payload = request.get_json(silent=True) or {}
+    novo_status = str(payload.get("status") or "").strip()
+    if novo_status not in STATUS_VALIDOS:
+        return jsonify({"error": "Status inválido."}), 400
+    registro = CadastroAtualizacaoPublica.query.get_or_404(registro_id)
+    registro.status = novo_status
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@atualizacao_cadastral_bp.route("/api/admin/atualizacoes-cadastrais/export.xlsx")
+@permission_required("PAGE_ADMIN_ATUALIZACOES_CADASTRAIS")
+def exportar_atualizacoes_cadastrais_xlsx():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    registros = _filtrar_registros().limit(20000).all()
+
+    colunas = [
+        ("Recebido em", "created_at"),
+        ("Tipo", "tipo"),
+        ("CNPJ", "documento"),
+        ("Razão social", "razao_social"),
+        ("Nome fantasia", "nome_fantasia"),
+        ("Inscrição estadual", "inscricao_estadual"),
+        ("Regime tributário", "regime_tributario"),
+        ("Endereço", "endereco"),
+        ("CEP", "cep"),
+        ("Município", "municipio"),
+        ("UF", "uf"),
+        ("Telefone", "telefone"),
+        ("E-mail", "email"),
+        ("E-mail confirmado", "email_confirmado"),
+        ("Contato", "contato"),
+        ("Situação cadastral", "situacao_cadastral"),
+        ("Observações", "observacoes"),
+        ("Status", "status"),
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Atualizações cadastrais"
+
+    header_fill = PatternFill(start_color="0F62C9", end_color="0F62C9", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col_idx, (titulo, _) in enumerate(colunas, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=titulo)
+        cell.fill = header_fill
+        cell.font = header_font
+
+    for row_idx, registro in enumerate(registros, start=2):
+        dados = _serializar(registro)
+        for col_idx, (_, chave) in enumerate(colunas, start=1):
+            valor = dados.get(chave)
+            if chave == "tipo" and valor:
+                valor = valor.capitalize()
+            elif chave == "email_confirmado":
+                valor = "Sim" if valor else "Não"
+            ws.cell(row=row_idx, column=col_idx, value=valor)
+
+    for col_idx, (titulo, _) in enumerate(colunas, start=1):
+        largura = max(12, min(45, len(titulo) + 6))
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = largura
+
+    ws.freeze_panes = "A2"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=atualizacoes_cadastrais.xlsx"},
+    )
