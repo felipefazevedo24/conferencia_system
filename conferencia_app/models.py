@@ -1806,3 +1806,45 @@ class CadastroAtualizacaoPublica(db.Model):
     status = db.Column(db.String(40), nullable=False, default="Pendente de revisão", index=True)
     origem_ip = db.Column(db.String(60))
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class QualidadeCertificado(db.Model):
+    """Análise de qualidade disparada após a conferência de recebimento quando o
+    remetente da NF é um fornecedor de tratamento térmico (Brasimet, Metal
+    Paulista ou Friese). O analista de qualidade anexa a foto do certificado e
+    preenche os dados do laudo técnico (linhas Grid e Sapatas)."""
+    __tablename__ = "qualidade_certificado"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    chave_acesso = db.Column(db.String(44), index=True)
+    fornecedor = db.Column(db.String(100))
+
+    # Campos preenchidos pelo analista de qualidade
+    numero_orcamento = db.Column(db.String(120))  # Orçamento vinculado ao modelo
+    numero_certificado = db.Column(db.String(120))  # Nº Laudo do Material (célula N25)
+    os = db.Column(db.String(120))  # OS / Lote e CP (mesmo valor; células D35/D36)
+
+    # Linha GRID (registro dos resultados do corpo de prova)
+    grid_dureza = db.Column(db.String(120))   # F35
+    grid_chd = db.Column(db.String(120))      # I35
+    grid_resultado = db.Column(db.String(20))  # L35 - Conforme | Não Conforme
+
+    # Linha SAPATAS
+    sapatas_dureza = db.Column(db.String(120))   # F36
+    sapatas_chd = db.Column(db.String(120))      # I36
+    sapatas_resultado = db.Column(db.String(20))  # L36 - Conforme | Não Conforme
+
+    foto_path = db.Column(db.String(255))
+
+    status = db.Column(db.String(30), nullable=False, default="Pendente de análise", index=True)
+    # Status: "Pendente de análise" | "Laudo emitido" | "Laudo aprovado"
+    analista = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    analisado_em = db.Column(db.DateTime)   # data de emissão do laudo (execução)
+    aprovado_em = db.Column(db.DateTime)    # data de aprovação pelo supervisor/gerente
+    aprovado_por = db.Column(db.String(100))
+
+    __table_args__ = (
+        db.UniqueConstraint("numero_nota", name="ux_qualidade_certificado_nota"),
+    )

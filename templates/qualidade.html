@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+
+{% block title %}Qualidade | Análise de Certificados{% endblock %}
+
+{% block extra_head %}
+<style>
+    .q-wrap { max-width: 1280px; margin: 0 auto; padding: 20px; }
+    .q-header { margin-bottom: 20px; }
+    .q-header h1 { font-size: 22px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 10px; }
+    .q-header p { color: #64748b; font-size: 13px; margin-top: 4px; }
+    .q-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .q-toolbar select, .q-toolbar button { padding: 9px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; font-family: inherit; background: #fff; cursor: pointer; }
+    .q-toolbar button { background: #1d4ed8; color: #fff; border-color: #1d4ed8; font-weight: 700; }
+    .q-grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+    .q-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+    .q-card-head { padding: 14px 18px; border-bottom: 1px solid #edf2f7; font-weight: 700; color: #0f172a; font-size: 14px; }
+    .q-list { max-height: 58vh; overflow-y: auto; }
+    .q-item { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .12s; }
+    .q-item:hover { background: #f8fafc; }
+    .q-item.active { background: #eff6ff; border-left: 3px solid #1d4ed8; }
+    .q-item .nf { font-weight: 800; color: #1d4ed8; font-size: 14px; }
+    .q-item .forn { font-size: 12px; color: #475569; margin-top: 2px; }
+    .q-item .meta { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+    .q-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .q-badge.pend { background: #fef3c7; color: #92400e; }
+    .q-badge.done { background: #dcfce7; color: #166534; }
+    .q-badge.conf { background: #dcfce7; color: #166534; }
+    .q-badge.nconf { background: #fee2e2; color: #991b1b; }
+    .q-form { padding: 18px; }
+    .q-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    @media (max-width: 640px) { .q-form .row { grid-template-columns: 1fr; } }
+    .q-field label { display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 5px; }
+    .q-field input, .q-field select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-family: inherit; }
+    .q-field input:focus, .q-field select:focus { outline: none; border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29,78,216,.12); }
+    .q-foto-box { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 18px; text-align: center; color: #64748b; cursor: pointer; transition: border-color .12s; }
+    .q-foto-box:hover { border-color: #1d4ed8; }
+    .q-foto-box img { max-width: 100%; max-height: 260px; border-radius: 8px; margin-top: 10px; }
+    .q-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+    .q-btn { padding: 11px 24px; border-radius: 8px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit; }
+    .q-btn.save { background: #16a34a; color: #fff; }
+    .q-btn.save:disabled { opacity: .5; cursor: not-allowed; }
+    .q-empty { padding: 60px 20px; text-align: center; color: #94a3b8; }
+    .q-empty i { font-size: 42px; margin-bottom: 12px; opacity: .4; }
+    .q-readonly { background: #f8fafc !important; color: #475569; }
+
+    /* Abas de status (painel) */
+    .q-tabs { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .q-tab { flex: 1; min-width: 180px; text-align: left; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all .12s; display: flex; align-items: center; gap: 12px; }
+    .q-tab:hover { border-color: #94a3b8; }
+    .q-tab.active { border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29,78,216,.15); }
+    .q-tab .ico { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .q-tab.pendente .ico { background: #fef3c7; color: #b45309; }
+    .q-tab.emitido .ico { background: #dbeafe; color: #1d4ed8; }
+    .q-tab.aprovado .ico { background: #dcfce7; color: #166534; }
+    .q-tab .lbl { font-size: 12px; color: #64748b; font-weight: 600; }
+    .q-tab .cnt { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1; }
+    .q-badge.emitido { background: #dbeafe; color: #1d4ed8; }
+    .q-badge.aprovado { background: #dcfce7; color: #166534; }
+    .q-btn.danger { background: #fee2e2; color: #991b1b; }
+    .q-btn.approve { background: #16a34a; color: #fff; }
+    .q-btn.ghost { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+    /* Tabela da fila (conforme padrão da expedição) */
+    .q-table-wrap { overflow-x: auto; }
+    .q-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    .q-table thead th {
+        background: #eef2f7;
+        color: #334e68;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        font-weight: 800;
+        text-align: left;
+        padding: 12px 14px;
+        border-bottom: 1px solid #dbe5ef;
+    }
+    .q-table tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #edf2f7;
+        font-size: 14px;
+        color: #0f172a;
+        vertical-align: middle;
+    }
+    .q-table tbody tr:hover { background: #f8fafc; }
+    .q-table tbody tr.active { background: #eff6ff; }
+    .q-link-btn {
+        border: none;
+        background: #1d4ed8;
+        color: #fff;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+    .q-foto-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #ecfeff;
+        color: #0e7490;
+        border: 1px solid #a5f3fc;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .q-alert {
+        margin: 8px 0 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #fde68a;
+        background: #fffbeb;
+        color: #92400e;
+        font-size: 12px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="q-wrap">
+    <div class="q-header">
+        <h1><i class="fas fa-clipboard-check"></i> Qualidade — Laudos de Tratamento Térmico</h1>
+        <p>Notas de recebimento de <strong>Brasimet</strong>, <strong>Metal Paulista</strong> e <strong>Friese</strong>. Emita, aprove e acompanhe os laudos por status.</p>
+    </div>
+
+    <div class="q-tabs">
+        <div class="q-tab pendente active" id="tab-pendente" onclick="trocarAba('Pendente de análise')">
+            <div class="ico"><i class="fas fa-hourglass-half"></i></div>
+            <div><div class="cnt" id="cnt-pendente">0</div><div class="lbl">Pendente de análise</div></div>
+        </div>
+        <div class="q-tab emitido" id="tab-emitido" onclick="trocarAba('Laudo emitido')">
+            <div class="ico"><i class="fas fa-file-signature"></i></div>
+            <div><div class="cnt" id="cnt-emitido">0</div><div class="lbl">Laudo emitido</div></div>
+        </div>
+        <div class="q-tab aprovado" id="tab-aprovado" onclick="trocarAba('Laudo aprovado')">
+            <div class="ico"><i class="fas fa-circle-check"></i></div>
+            <div><div class="cnt" id="cnt-aprovado">0</div><div class="lbl">Laudo aprovado</div></div>
+        </div>
+    </div>
+
+    <div class="q-grid">
+        <div class="q-card">
+            <div class="q-card-head"><span id="lista-titulo">Pendente de análise</span> (<span id="contador">0</span>)
+                <button onclick="carregarLista()" style="float:right;background:none;border:none;color:#1d4ed8;cursor:pointer;font-size:13px;"><i class="fas fa-sync-alt"></i></button>
+            </div>
+            <div class="q-list" id="lista"></div>
+        </div>
+
+        <div class="q-card">
+            <div class="q-card-head" id="form-titulo">Selecione uma NF na fila</div>
+            <div id="form-container">
+                <div class="q-empty">
+                    <div><i class="fas fa-hand-pointer"></i></div>
+                    <div>Selecione uma nota fiscal na lista para visualizar ou registrar o laudo.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const PODE_APROVAR = {{ 'true' if pode_aprovar else 'false' }};
+    let registros = [];
+    let selecionado = null;
+    let fotoNovaSelecionada = false;
+    let estadoBlocos = [];
+    let abaAtiva = 'Pendente de análise';
+
+    function trocarAba(status) {
+        abaAtiva = status;
+        document.querySelectorAll('.q-tab').forEach(t => t.classList.remove('active'));
+        const map = { 'Pendente de análise': 'tab-pendente', 'Laudo emitido': 'tab-emitido', 'Laudo aprovado': 'tab-aprovado' };
+        const tab = document.getElementById(map[status]);
+        if (tab) tab.classList.add('active');
+        document.getElementById('lista-titulo').textContent = status;
+        selecionado = null;
+        document.getElementById('form-titulo').textContent = 'Selecione uma NF na fila';
+        document.getElementById('form-container').innerHTML = `<div class="q-empty"><div><i class="fas fa-hand-pointer"></i></div><div>Selecione uma nota fiscal na lista.</div></div>`;
+        carregarLista();
+    }
+
+    function atualizarContadores(m) {
+        document.getElementById('cnt-pendente').textContent = m.pendente || 0;
+        document.getElementById('cnt-emitido').textContent = m.emitido || 0;
+        document.getElementById('cnt-aprovado').textContent = m.aprovado || 0;
+    }
+
+    async function carregarLista() {
+        const res = await fetch(`/api/qualidade/certificados?status=${encodeURIComponent(abaAtiva)}`);
+        const data = await res.json();
+        registros = data.rows || [];
+        if (data.metricas) atualizarContadores(data.metricas);
+        document.getElementById('contador').textContent = registros.length;
+        renderLista();
+    }
+
+    function badgeStatus(r) {
+        if (r.status === 'Laudo aprovado') return `<span class="q-badge aprovado">Aprovado</span>`;
+        if (r.status === 'Laudo emitido') return `<span class="q-badge emitido">Emitido</span>`;
+        return `<span class="q-badge pend">Pendente</span>`;
+    }
+
+    function renderLista() {
+        const el = document.getElementById('lista');
+        if (!registros.length) {
+            el.innerHTML = `<div class="q-empty"><div><i class="fas fa-inbox"></i></div><div>Nenhuma NF nesta visão.</div></div>`;
+            return;
+        }
+        el.innerHTML = `
+            <div class="q-table-wrap">
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>NF</th>
+                            <th>Fornecedor</th>
+                            <th>Status</th>
+                            <th>Emitido em</th>
+                            <th>Aprovado em</th>
+                            <th>Foto</th>
+                            <th>Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${registros.map(r => `
+                            <tr class="${selecionado && selecionado.id === r.id ? 'active' : ''}">
+                                <td><strong>#${esc(r.numero_nota)}</strong></td>
+                                <td>${esc(r.fornecedor) || '—'}</td>
+                                <td>${badgeStatus(r)}</td>
+                                <td>${esc(r.analisado_em) || '—'}</td>
+                                <td>${esc(r.aprovado_em) || '—'}</td>
+                                <td>${r.tem_foto ? '<span class="q-foto-chip"><i class="fas fa-image"></i> Com foto</span>' : '<span style="color:#94a3b8;">—</span>'}</td>
+                                <td><button class="q-link-btn" onclick="selecionar(${r.id})">Abrir</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function esc(v) { return (v == null ? '' : String(v)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    async function selecionar(id) {
+        const res = await fetch(`/api/qualidade/certificados/${id}`);
+        if (!res.ok) return;
+        selecionado = await res.json();
+        fotoNovaSelecionada = false;
+        renderLista();
+        renderForm();
+    }
+
+    function renderForm() {
+        const r = selecionado;
+        const editavel = !!r.pode_editar;   // Pendente de análise ou Laudo emitido
+        const temLaudo = !!r.tem_laudo;      // Emitido ou Aprovado
+        const badgeGeral = () => {
+            if (!temLaudo) return badgeStatus(r);
+            const naoConf = r.grid_resultado === 'Não Conforme' || r.sapatas_resultado === 'Não Conforme';
+            return `${badgeStatus(r)} <span class="q-badge ${naoConf ? 'nconf' : 'conf'}">${naoConf ? 'Não Conforme' : 'Conforme'}</span>`;
+        };
+        document.getElementById('form-titulo').innerHTML =
+            `NF ${esc(r.numero_nota)} — ${esc(r.fornecedor)} ` + badgeGeral();
+
+        const ro = editavel ? '' : 'readonly';
+        const roCls = editavel ? '' : 'q-readonly';
+        const disabled = editavel ? '' : 'disabled';
+
+        const fotoInner = r.tem_foto
+            ? `<img src="/api/qualidade/certificados/${r.id}/foto?t=${Date.now()}" alt="Certificado">`
+            : `<div><i class="fas fa-camera" style="font-size:28px;"></i><div style="margin-top:8px;">Toque para anexar a foto do certificado (opcional)</div></div>`;
+
+        const optResultado = (val) => `
+            <option value="">Selecione...</option>
+            <option value="Conforme" ${val === 'Conforme' ? 'selected' : ''}>Conforme</option>
+            <option value="Não Conforme" ${val === 'Não Conforme' ? 'selected' : ''}>Não Conforme</option>`;
+
+        // Botões de ação por status
+        const btnPDF = temLaudo
+            ? `<a class="q-btn ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="/api/qualidade/certificados/${r.id}/laudo.pdf?t=${Date.now()}" target="_blank"><i class="fas fa-file-pdf"></i> Baixar laudo (PDF)</a>` : '';
+        const btnSalvar = editavel
+            ? `<button class="q-btn save" id="btn-salvar" onclick="salvar()"><i class="fas fa-check"></i> ${r.status === 'Laudo emitido' ? 'Salvar alterações' : 'Emitir laudo'}</button>` : '';
+        const btnExcluir = r.pode_excluir
+            ? `<button class="q-btn danger" onclick="excluirLaudo()"><i class="fas fa-trash"></i> Excluir laudo</button>` : '';
+        const btnAprovar = r.pode_aprovar
+            ? `<button class="q-btn approve" onclick="aprovarLaudo()"><i class="fas fa-thumbs-up"></i> Aprovar laudo</button>` : '';
+        const alertaCompliance = (r.status === 'Laudo emitido' && r.bloqueio_aprovacao_motivo)
+            ? `<div class="q-alert"><i class="fas fa-shield-alt"></i> ${esc(r.bloqueio_aprovacao_motivo)}</div>` : '';
+
+        document.getElementById('form-container').innerHTML = `
+        <div class="q-form">
+            <div class="q-field" style="margin-bottom:14px;">
+                <label>Foto do certificado <span style="color:#94a3b8;font-weight:400;">(opcional)</span></label>
+                <div class="q-foto-box" id="foto-box" ${editavel ? 'onclick="document.getElementById(\'foto-input\').click()"' : ''}>
+                    ${fotoInner}
+                </div>
+                <input type="file" id="foto-input" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="previewFoto(event)">
+            </div>
+            <div class="row">
+                <div class="q-field"><label>Orçamento nº *</label><input id="f-orc" class="${roCls}" ${ro} value="${esc(r.numero_orcamento)}"></div>
+                <div class="q-field"><label>Nº do certificado *</label><input id="f-cert" class="${roCls}" ${ro} value="${esc(r.numero_certificado)}"></div>
+            </div>
+            <div class="row">
+                <div class="q-field"><label>OS / Lote-CP *</label><input id="f-os" class="${roCls}" ${ro} value="${esc(r.os)}"><div style="font-size:11px;color:#94a3b8;margin-top:3px;">OS e Lote/CP são o mesmo valor.</div></div>
+                <div></div>
+            </div>
+
+            <div style="margin:6px 0 4px;font-weight:800;color:#0f172a;font-size:13px;"><i class="fas fa-border-all"></i> Registro dos resultados do corpo de prova</div>
+
+            <div id="componentes-wrap"></div>
+
+            ${temLaudo ? `<div style="font-size:12px;color:#64748b;margin-bottom:6px;">Laudo emitido por <strong>${esc(r.analista)}</strong> em ${esc(r.analisado_em)}.${r.aprovado_em ? ` Aprovado por <strong>${esc(r.aprovado_por)}</strong> em ${esc(r.aprovado_em)}.` : ''}</div>` : ''}
+
+            ${alertaCompliance}
+
+            <div class="q-actions">
+                ${btnExcluir}${btnPDF}${btnAprovar}${btnSalvar}
+            </div>
+        </div>`;
+
+        // Monta os blocos de componentes (Grid/Sapatas)
+        estadoBlocos = [];
+        if (r.grid_resultado || r.grid_dureza || r.grid_chd) {
+            estadoBlocos.push({ tipo: 'Grid', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
+        }
+        if (r.sapatas_resultado || r.sapatas_dureza || r.sapatas_chd) {
+            estadoBlocos.push({ tipo: 'Sapatas', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
+        }
+        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', dureza: '', chd: '', resultado: '' });
+        renderBlocos(!editavel);
+    }
+
+    function optResultadoHtml(val) {
+        return `<option value="">Selecione...</option>
+            <option value="Conforme" ${val === 'Conforme' ? 'selected' : ''}>Conforme</option>
+            <option value="Não Conforme" ${val === 'Não Conforme' ? 'selected' : ''}>Não Conforme</option>`;
+    }
+
+    function blocoComponenteHtml(idx, b, concluido) {
+        const ro = concluido ? 'readonly' : '';
+        const roCls = concluido ? 'q-readonly' : '';
+        const dis = concluido ? 'disabled' : '';
+        const seletorTipo = concluido
+            ? `<span style="font-weight:700;color:#1d4ed8;">${esc(b.tipo)}</span>`
+            : `<select id="c${idx}-tipo" onchange="onTipoChange(${idx})" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-weight:700;color:#1d4ed8;">
+                    <option value="Grid" ${b.tipo === 'Grid' ? 'selected' : ''}>Grid</option>
+                    <option value="Sapatas" ${b.tipo === 'Sapatas' ? 'selected' : ''}>Sapatas</option>
+               </select>`;
+        const remover = (!concluido && idx === 1)
+            ? `<button type="button" onclick="removerComponente()" style="border:none;background:#fee2e2;color:#991b1b;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer;font-size:12px;"><i class="fas fa-times"></i> remover</button>`
+            : '';
+        return `
+        <div class="comp-bloco" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12px;font-weight:700;color:#334155;">Componente</span>${seletorTipo}</div>
+                ${remover}
+            </div>
+            <div class="row">
+                <div class="q-field"><label>Dureza medida *</label><input id="c${idx}-dureza" class="${roCls}" ${ro} value="${esc(b.dureza)}" placeholder="ex: 63 HRC"></div>
+                <div class="q-field"><label>CHD medida *</label><input id="c${idx}-chd" class="${roCls}" ${ro} value="${esc(b.chd)}" placeholder="ex: 1,6 mm"></div>
+            </div>
+            <div class="q-field"><label>Resultado *</label><select id="c${idx}-resultado" class="${roCls}" ${dis}>${optResultadoHtml(b.resultado)}</select></div>
+        </div>`;
+    }
+
+    function renderBlocos(concluido) {
+        const wrap = document.getElementById('componentes-wrap');
+        if (!wrap) return;
+        let html = estadoBlocos.map((b, i) => blocoComponenteHtml(i, b, concluido)).join('');
+        if (!concluido && estadoBlocos.length < 2) {
+            html += `<button type="button" onclick="adicionarComponente()" style="border:1px dashed #1d4ed8;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;font-size:13px;margin-bottom:12px;"><i class="fas fa-plus"></i> Adicionar componente</button>`;
+        }
+        wrap.innerHTML = html;
+    }
+
+    function lerBlocosDOM() {
+        estadoBlocos = estadoBlocos.map((b, i) => {
+            const tipoEl = document.getElementById(`c${i}-tipo`);
+            const durEl = document.getElementById(`c${i}-dureza`);
+            const chdEl = document.getElementById(`c${i}-chd`);
+            const resEl = document.getElementById(`c${i}-resultado`);
+            return {
+                tipo: tipoEl ? tipoEl.value : b.tipo,
+                dureza: durEl ? durEl.value : b.dureza,
+                chd: chdEl ? chdEl.value : b.chd,
+                resultado: resEl ? resEl.value : b.resultado,
+            };
+        });
+    }
+
+    function onTipoChange(idx) {
+        lerBlocosDOM();
+        // Evita os dois blocos com o mesmo tipo: ajusta o outro para o oposto.
+        if (estadoBlocos.length === 2) {
+            const outro = idx === 0 ? 1 : 0;
+            if (estadoBlocos[outro].tipo === estadoBlocos[idx].tipo) {
+                estadoBlocos[outro].tipo = estadoBlocos[idx].tipo === 'Grid' ? 'Sapatas' : 'Grid';
+            }
+        }
+        renderBlocos(false);
+    }
+
+    function adicionarComponente() {
+        lerBlocosDOM();
+        const existente = estadoBlocos[0] ? estadoBlocos[0].tipo : 'Grid';
+        const novoTipo = existente === 'Grid' ? 'Sapatas' : 'Grid';
+        estadoBlocos.push({ tipo: novoTipo, dureza: '', chd: '', resultado: '' });
+        renderBlocos(false);
+    }
+
+    function removerComponente() {
+        lerBlocosDOM();
+        estadoBlocos.splice(1, 1);
+        renderBlocos(false);
+    }
+
+    function previewFoto(ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+        fotoNovaSelecionada = true;
+        const box = document.getElementById('foto-box');
+        if (file.type === 'application/pdf') {
+            box.innerHTML = `<div><i class="fas fa-file-pdf" style="font-size:28px;color:#dc2626;"></i><div style="margin-top:8px;">${esc(file.name)}</div></div>`;
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => { box.innerHTML = `<img src="${e.target.result}" alt="Certificado">`; };
+        reader.readAsDataURL(file);
+    }
+
+    async function salvar() {
+        const r = selecionado;
+        lerBlocosDOM();
+
+        // Bloqueia tipos duplicados
+        if (estadoBlocos.length === 2 && estadoBlocos[0].tipo === estadoBlocos[1].tipo) {
+            alert('Os dois componentes não podem ser do mesmo tipo. Selecione Grid e Sapatas.');
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('numero_orcamento', document.getElementById('f-orc').value.trim());
+        fd.append('numero_certificado', document.getElementById('f-cert').value.trim());
+        fd.append('os', document.getElementById('f-os').value.trim());
+        // Zera os dois; preenche conforme os blocos selecionados
+        const map = { Grid: 'grid', Sapatas: 'sapatas' };
+        ['grid', 'sapatas'].forEach(k => {
+            fd.append(`${k}_dureza`, '');
+            fd.append(`${k}_chd`, '');
+            fd.append(`${k}_resultado`, '');
+        });
+        estadoBlocos.forEach(b => {
+            const k = map[b.tipo];
+            fd.set(`${k}_dureza`, (b.dureza || '').trim());
+            fd.set(`${k}_chd`, (b.chd || '').trim());
+            fd.set(`${k}_resultado`, b.resultado || '');
+        });
+
+        const fotoInput = document.getElementById('foto-input');
+        if (fotoInput.files[0]) fd.append('foto', fotoInput.files[0]);
+
+        const btn = document.getElementById('btn-salvar');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+
+        const res = await fetch(`/api/qualidade/certificados/${r.id}/analisar`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Falha ao salvar.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Emitir laudo';
+            return;
+        }
+        selecionado = data.registro;
+        await carregarLista();
+        renderForm();
+        alert('Laudo emitido com sucesso. Você já pode baixar o PDF.');
+    }
+
+    async function excluirLaudo() {
+        const r = selecionado;
+        if (!confirm(`Excluir o laudo da NF ${r.numero_nota}? A NF voltará para "Pendente de análise".`)) return;
+        const res = await fetch(`/api/qualidade/certificados/${r.id}/excluir-laudo`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Falha ao excluir.'); return; }
+        selecionado = null;
+        document.getElementById('form-titulo').textContent = 'Selecione uma NF na fila';
+        document.getElementById('form-container').innerHTML = `<div class="q-empty"><div><i class="fas fa-check-circle"></i></div><div>Laudo excluído. NF devolvida para Pendente de análise.</div></div>`;
+        await carregarLista();
+    }
+
+    async function aprovarLaudo() {
+        const r = selecionado;
+        if (!confirm(`Aprovar o laudo da NF ${r.numero_nota}?`)) return;
+        const res = await fetch(`/api/qualidade/certificados/${r.id}/aprovar`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Falha ao aprovar.'); return; }
+        selecionado = data.registro;
+        await carregarLista();
+        renderForm();
+        alert('Laudo aprovado com sucesso.');
+    }
+
+    carregarLista();
+</script>
+{% endblock %}

@@ -250,6 +250,7 @@ from ..services.expedicao_photo_storage import (
 )
 from ..services.xml_service import process_xml_and_store
 from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf
+from ..services.qualidade_service import disparar_qualidade_se_necessario
 
 
 register_schema = RegisterSchema()
@@ -6480,6 +6481,14 @@ def validar():
         nota_db = ItemNota.query.filter_by(numero_nota=numero_nota).first()
         chave_api = nota_db.chave_acesso if nota_db else None
         _release_lock(numero_nota)
+
+        # Gatilho de Qualidade: NF de fornecedor monitorado (Brasimet, Metal
+        # Paulista ou Friese) gera pendência de análise de certificado.
+        try:
+            disparar_qualidade_se_necessario(numero_nota)
+        except Exception:
+            current_app.logger.exception("Falha ao disparar análise de qualidade para NF %s", numero_nota)
+
         db.session.commit()
 
         if chave_api:
@@ -6588,6 +6597,14 @@ def concluir_sem_conferencia_logistica():
 
     chave_api = itens_db[0].chave_acesso
     _release_lock(numero_nota)
+
+    # Gatilho de Qualidade: mesmo sem conferência logística, se o remetente for
+    # um fornecedor monitorado, gera a pendência de análise de certificado.
+    try:
+        disparar_qualidade_se_necessario(numero_nota)
+    except Exception:
+        current_app.logger.exception("Falha ao disparar análise de qualidade para NF %s", numero_nota)
+
     db.session.commit()
 
     if chave_api:

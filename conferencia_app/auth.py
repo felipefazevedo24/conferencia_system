@@ -57,6 +57,8 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_VIAGEM": "Logistica > Gestao de Viagens",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestao (Admin)",
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
+    "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",
+    "PAGE_QUALIDADE_APROVAR": "Qualidade > Aprovar laudo (supervisor/gerente)",
 }
 
 
@@ -117,6 +119,9 @@ BASE_ROLE_PERMISSIONS = {
     "Solicitante": {
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
+    },
+    "Qualidade": {
+        "PAGE_QUALIDADE",
     },
 }
 

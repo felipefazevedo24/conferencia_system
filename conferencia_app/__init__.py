@@ -32,6 +32,7 @@ from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
 from .routes.page_routes import page_bp
 from .routes.painel_tv_routes import painel_tv_bp
+from .routes.qualidade_routes import qualidade_bp
 from .routes.rastreamento_routes import rastreamento_bp
 from .routes.frota_routes import frota_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
@@ -64,6 +65,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_st_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
+    app.register_blueprint(qualidade_bp)
     app.register_blueprint(rastreamento_bp)
     app.register_blueprint(frota_bp)
     app.register_blueprint(viagem_bp)
