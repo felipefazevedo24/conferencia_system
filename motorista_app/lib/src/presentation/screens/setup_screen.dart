@@ -8,7 +8,7 @@ import '../providers/providers.dart';
 
 /// Tela de pareamento (1ª vez que o motorista abre o app): cola o mesmo link
 /// do painel que o despachante já manda hoje por WhatsApp
-/// (gerado em /motorista/<mid>/painel-link no backend, sem mudanças ali).
+/// (gerado em `/motorista/<mid>/painel-link` no backend, sem mudanças ali).
 class SetupScreen extends ConsumerStatefulWidget {
   const SetupScreen({super.key});
 

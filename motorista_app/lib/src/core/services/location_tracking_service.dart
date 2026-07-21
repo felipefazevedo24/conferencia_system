@@ -29,7 +29,6 @@ class LocationTrackingService {
         channelDescription: 'Notificação enquanto uma viagem está em andamento.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
-        isSticky: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(

@@ -41,3 +41,11 @@ app.*.map.json
 
 # Local machine config (gerado pelo `flutter pub get` / Android Studio)
 android/local.properties
+
+# Gerados automaticamente pelo `flutter build`/`flutter run` (Gradle wrapper
+# bootstrap e o registrador de plugins) — não precisam ser versionados.
+android/.gradle/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+android/app/src/main/java/
