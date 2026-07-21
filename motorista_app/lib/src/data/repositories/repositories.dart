@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../domain/entities/models.dart';
 import '../local/app_database.dart';
 import '../remote/api_client.dart';
@@ -143,6 +145,7 @@ class MotoristaRepository {
     String? observacao,
     double? latitude,
     double? longitude,
+    File? foto,
   }) async {
     final data = await _api.concluirParada(
       vid: vid,
@@ -152,6 +155,7 @@ class MotoristaRepository {
       observacao: observacao,
       latitude: latitude,
       longitude: longitude,
+      foto: foto,
     );
     _checkOk(data);
   }

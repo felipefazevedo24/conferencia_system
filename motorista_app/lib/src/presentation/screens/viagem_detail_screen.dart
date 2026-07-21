@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/services/location_tracking_service.dart';
@@ -547,47 +549,111 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
     }
   }
 
+  static const _resultadosNaoRealizada = {'Recusado', 'AusenciaRecebedor', 'NaoRealizada'};
+
   Future<void> _abrirConcluir() async {
-    final resultado = ValueNotifier<String>(widget.parada.tipo == 'COLETA' ? 'Coletado' : 'Entregue');
+    String resultado = widget.parada.tipo == 'COLETA' ? 'Coletado' : 'Entregue';
     final obsController = TextEditingController();
+    File? foto;
+    String? erroFoto;
+
     final confirmou = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Concluir parada'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Resultado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            ValueListenableBuilder<String>(
-              valueListenable: resultado,
-              builder: (ctx, valor, _) => DropdownButton<String>(
-                value: valor,
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'Entregue', child: Text('Entregue')),
-                  DropdownMenuItem(value: 'Coletado', child: Text('Coletado')),
-                  DropdownMenuItem(value: 'NaoRealizada', child: Text('Não realizada')),
-                  DropdownMenuItem(value: 'Recusado', child: Text('Recusado pelo destinatário')),
-                  DropdownMenuItem(value: 'AusenciaRecebedor', child: Text('Ausência do recebedor')),
-                  DropdownMenuItem(value: 'Outros', child: Text('Outros')),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final exigeFoto = widget.parada.tipo == 'ENTREGA' && !_resultadosNaoRealizada.contains(resultado);
+
+          Future<void> escolherFoto(ImageSource origem) async {
+            final picker = ImagePicker();
+            final arquivo = await picker.pickImage(source: origem, imageQuality: 80, maxWidth: 1600);
+            if (arquivo != null) {
+              setDialogState(() {
+                foto = File(arquivo.path);
+                erroFoto = null;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Concluir parada'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Resultado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  DropdownButton<String>(
+                    value: resultado,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(value: 'Entregue', child: Text('Entregue')),
+                      DropdownMenuItem(value: 'Coletado', child: Text('Coletado')),
+                      DropdownMenuItem(value: 'NaoRealizada', child: Text('Não realizada')),
+                      DropdownMenuItem(value: 'Recusado', child: Text('Recusado pelo destinatário')),
+                      DropdownMenuItem(value: 'AusenciaRecebedor', child: Text('Ausência do recebedor')),
+                      DropdownMenuItem(value: 'Outros', child: Text('Outros')),
+                    ],
+                    onChanged: (v) => setDialogState(() => resultado = v ?? resultado),
+                  ),
+                  if (exigeFoto) ...[
+                    const SizedBox(height: 12),
+                    const Text('Foto do canhoto *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    if (foto != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        child: Image.file(foto!, height: 140, width: double.infinity, fit: BoxFit.cover),
+                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => escolherFoto(ImageSource.camera),
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: Text(foto == null ? 'Tirar foto' : 'Tirar outra'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => escolherFoto(ImageSource.gallery),
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Galeria'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (erroFoto != null) ...[
+                      const SizedBox(height: 6),
+                      Text(erroFoto!, style: const TextStyle(color: AppColors.danger500, fontSize: 12)),
+                    ],
+                  ],
+                  const SizedBox(height: 12),
+                  const Text('Observação (opcional)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  TextField(
+                    controller: obsController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
                 ],
-                onChanged: (v) => resultado.value = v ?? resultado.value,
               ),
             ),
-            const SizedBox(height: 12),
-            const Text('Observação (opcional)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            TextField(
-              controller: obsController,
-              maxLines: 3,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
-        ],
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+              FilledButton(
+                onPressed: () {
+                  if (exigeFoto && foto == null) {
+                    setDialogState(() => erroFoto = 'Anexe a foto do canhoto para concluir a entrega.');
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Confirmar'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (confirmou != true) return;
@@ -599,10 +665,11 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
         vid: widget.vid,
         token: widget.token,
         pid: widget.parada.id,
-        resultado: resultado.value,
+        resultado: resultado,
         observacao: obsController.text.trim(),
         latitude: pos['latitude'],
         longitude: pos['longitude'],
+        foto: foto,
       );
       ref.invalidate(paradasProvider((vid: widget.vid, token: widget.token)));
     } on ApiException catch (e) {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -47,6 +48,27 @@ class ApiClient {
     } catch (_) {
       throw ApiException('Sem conexão com o servidor.');
     }
+    return _decode(res);
+  }
+
+  Future<Map<String, dynamic>> _postMultipart(
+    String path,
+    Map<String, String?> fields, {
+    required File arquivo,
+    required String campoArquivo,
+  }) async {
+    http.StreamedResponse streamed;
+    try {
+      final req = http.MultipartRequest('POST', _uri(path));
+      fields.forEach((k, v) {
+        if (v != null) req.fields[k] = v;
+      });
+      req.files.add(await http.MultipartFile.fromPath(campoArquivo, arquivo.path));
+      streamed = await _client.send(req).timeout(const Duration(seconds: 40));
+    } catch (_) {
+      throw ApiException('Sem conexão com o servidor.');
+    }
+    final res = await http.Response.fromStream(streamed);
     return _decode(res);
   }
 
@@ -156,8 +178,23 @@ class ApiClient {
     String? observacao,
     double? latitude,
     double? longitude,
+    File? foto,
   }) {
-    return _post('/motorista/viagem/$vid/$token/parada/$pid/concluir', {
+    final path = '/motorista/viagem/$vid/$token/parada/$pid/concluir';
+    if (foto != null) {
+      return _postMultipart(
+        path,
+        {
+          'resultado': resultado,
+          'observacao': observacao,
+          'latitude': latitude?.toString(),
+          'longitude': longitude?.toString(),
+        },
+        arquivo: foto,
+        campoArquivo: 'foto',
+      );
+    }
+    return _post(path, {
       'resultado': resultado,
       'observacao': observacao,
       'latitude': latitude,

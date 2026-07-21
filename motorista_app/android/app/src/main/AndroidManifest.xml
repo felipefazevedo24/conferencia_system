@@ -16,6 +16,10 @@
     <!-- Notificação persistente ("Rastreamento ativo") no Android 13+. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- Foto do canhoto ao concluir uma entrega. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <application
         android:label="Motorista Sync"
         android:name="${applicationName}"

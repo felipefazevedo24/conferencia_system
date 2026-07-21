@@ -1260,6 +1260,10 @@ function renderParadas(v) {
                     ${p.resultado ? `<span class="doc-chip info">${p.resultado}</span>` : ''}
                 </div>
                 ${p.observacao ? `<div style="font-size:11.5px;color:var(--doc-muted);margin-top:4px"><i>"${p.observacao}"</i></div>` : ''}
+                ${(p.foto_paths || []).length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${p.foto_paths.map((_, i) => `
+                    <a href="/api/viagem/paradas/${p.id}/foto/${i}" target="_blank" title="Foto do canhoto">
+                        <img src="/api/viagem/paradas/${p.id}/foto/${i}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--doc-border, #d7e2ec)">
+                    </a>`).join('')}</div>` : ''}
             </div>
             <div class="parada-acoes">${acoes.join('')}</div>
         </div>`;

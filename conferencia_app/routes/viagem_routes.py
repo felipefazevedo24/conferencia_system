@@ -9,7 +9,7 @@ import math
 import re
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, current_app, jsonify, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
@@ -1292,6 +1292,25 @@ def parada_concluir(pid: int):
     return jsonify({"sucesso": True, "parada": _parada_dict(parada)})
 
 
+@viagem_bp.route("/paradas/<int:pid>/foto/<int:idx>", methods=["GET"])
+@permission_required(PERM)
+def parada_foto(pid: int, idx: int):
+    """Serve a foto do canhoto (ou outra evidência) anexada na conclusão da parada."""
+    parada = db.session.get(ViagemParada, pid)
+    if not parada or not parada.foto_paths:
+        return ("Foto não encontrada.", 404)
+    try:
+        fotos = json.loads(parada.foto_paths)
+    except ValueError:
+        fotos = []
+    if idx < 0 or idx >= len(fotos):
+        return ("Foto não encontrada.", 404)
+    caminho = os.path.join(current_app.instance_path, fotos[idx])
+    if not os.path.isfile(caminho):
+        return ("Arquivo não encontrado.", 404)
+    return send_file(caminho)
+
+
 @viagem_bp.route("/paradas/<int:pid>/nao-realizada", methods=["POST"])
 @permission_required(PERM)
 def parada_nao_realizada(pid: int):
@@ -2293,16 +2312,32 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
     p = ViagemParada.query.filter_by(id=pid, viagem_id=vid).first()
     if not p:
         return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
-    data = request.get_json(silent=True) or {}
+    if request.content_type and "multipart" in request.content_type:
+        data = request.form
+        foto = _save_upload("foto")
+    else:
+        data = request.get_json(silent=True) or {}
+        foto = None
+    p.resultado = (data.get("resultado") or ("Entregue" if p.tipo == "ENTREGA" else "Coletado")).strip()
+    obs = (data.get("observacao") or "").strip()
+    nao_realizada = p.resultado in {"Recusado", "AusenciaRecebedor", "NaoRealizada"}
+    # Foto do canhoto é obrigatória ao concluir uma ENTREGA com sucesso
+    # (não se aplica quando o resultado é recusa/ausência/não realizada).
+    if p.tipo == "ENTREGA" and not nao_realizada and not foto and not p.foto_paths:
+        return jsonify({"sucesso": False, "msg": "Anexe a foto do canhoto para concluir a entrega."}), 400
     p.saida_real = datetime.now()
     if not p.chegada_real:
         p.chegada_real = p.saida_real
-    p.resultado = (data.get("resultado") or ("Entregue" if p.tipo == "ENTREGA" else "Coletado")).strip()
-    obs = (data.get("observacao") or "").strip()
     if obs:
         p.observacao = obs
-    nao_realizada = p.resultado in {"Recusado", "AusenciaRecebedor", "NaoRealizada"}
     p.status = "Nao_realizada" if nao_realizada else "Concluida"
+    if foto:
+        try:
+            atual = json.loads(p.foto_paths) if p.foto_paths else []
+        except ValueError:
+            atual = []
+        atual.append(foto)
+        p.foto_paths = json.dumps(atual, ensure_ascii=False)
     if nao_realizada and p.solicitacao_id:
         _solicitacao_volta_pendente(db.session.get(AgendamentoSolicitacao, p.solicitacao_id))
     elif p.solicitacao_id:
@@ -2315,6 +2350,7 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
         latitude=_parse_float(data.get("latitude")),
         longitude=_parse_float(data.get("longitude")),
         parada_id=p.id,
+        foto_path=foto,
         severidade="warning" if nao_realizada else "success",
     )
     db.session.commit()
