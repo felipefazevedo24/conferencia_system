@@ -238,6 +238,15 @@
                 </select>
               </div>
               <div class="field">
+                <label for="contribuinte_icms">É Contribuinte do ICMS? <span class="req">*</span></label>
+                <select id="contribuinte_icms" name="contribuinte_icms" required>
+                  <option value="">Selecione…</option>
+                  <option value="Sim, sou Contribuinte do ICMS">Sim, sou Contribuinte do ICMS</option>
+                  <option value="Contribuinte isento de IE">Contribuinte isento de IE</option>
+                  <option value="Não contribuinte">Não contribuinte</option>
+                </select>
+              </div>
+              <div class="field">
                 <label for="telefone">Telefone</label>
                 <input id="telefone" name="telefone" type="text" placeholder="(00) 0000-0000">
               </div>
@@ -264,6 +273,18 @@
               <div class="field full">
                 <label for="email">E-mail de contato <span class="req">*</span></label>
                 <input id="email" name="email" type="email" placeholder="contato@empresa.com.br">
+              </div>
+              <div class="field full">
+                <label for="possui_beneficios_fiscais">Possui benefícios fiscais? <span class="req">*</span></label>
+                <select id="possui_beneficios_fiscais" name="possui_beneficios_fiscais" required>
+                  <option value="">Selecione…</option>
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </div>
+              <div class="field full" id="wrap-beneficios-descricao" style="display:none">
+                <label for="beneficios_fiscais_descricao">Quais benefícios fiscais? <span class="req">*</span></label>
+                <textarea id="beneficios_fiscais_descricao" name="beneficios_fiscais_descricao" placeholder="Descreva o(s) benefício(s) fiscal(is) (ex.: incentivo estadual X, regime especial Y…)"></textarea>
               </div>
               <div class="field full">
                 <label for="observacoes">Observações (opcional)</label>
@@ -335,6 +356,14 @@
     e.target.value = v.replace(/^(\d{5})(\d)/, "$1-$2");
   });
 
+  // ----- Benefícios fiscais (mostra o campo de detalhamento só quando "Sim") -----
+  const wrapBeneficios = $("wrap-beneficios-descricao");
+  $("possui_beneficios_fiscais").addEventListener("change", (e) => {
+    const isSim = e.target.value === "sim";
+    wrapBeneficios.style.display = isSim ? "" : "none";
+    if (!isSim) $("beneficios_fiscais_descricao").value = "";
+  });
+
   function showFeedback(msg, type) {
     feedback.textContent = "";
     const icon = document.createElement("i");
@@ -398,9 +427,13 @@
     if (!tipoHidden.value) { showFeedback("Selecione se você é Cliente ou Fornecedor.", "err"); return; }
     if ($("documento").value.replace(/\D/g, "").length !== 14) { showFeedback("Informe um CNPJ válido com 14 dígitos.", "err"); return; }
     if (!$("regime_tributario").value) { showFeedback("Selecione o Regime Tributário.", "err"); return; }
+    if (!$("contribuinte_icms").value) { showFeedback("Selecione se a empresa é Contribuinte do ICMS.", "err"); return; }
+    if (!$("possui_beneficios_fiscais").value) { showFeedback("Informe se a empresa possui benefícios fiscais.", "err"); return; }
+    if ($("possui_beneficios_fiscais").value === "sim" && !$("beneficios_fiscais_descricao").value.trim()) { showFeedback("Especifique qual(is) benefício(s) fiscal(is) a empresa possui.", "err"); return; }
     if (!$("email").value.trim()) { showFeedback("Informe o e-mail de contato da empresa.", "err"); return; }
     if (!$("email_confirmado").checked) { showFeedback("Confirme que o e-mail informado é o contato real da empresa.", "err"); return; }
 
+    const possuiBeneficios = $("possui_beneficios_fiscais").value === "sim";
     const payload = {
       tipo: tipoHidden.value,
       documento: $("documento").value,
@@ -408,6 +441,9 @@
       nome_fantasia: $("nome_fantasia").value,
       inscricao_estadual: $("inscricao_estadual").value,
       regime_tributario: $("regime_tributario").value,
+      contribuinte_icms: $("contribuinte_icms").value,
+      possui_beneficios_fiscais: possuiBeneficios,
+      beneficios_fiscais_descricao: possuiBeneficios ? $("beneficios_fiscais_descricao").value : "",
       endereco: $("endereco").value,
       cep: $("cep").value,
       municipio: $("municipio").value,

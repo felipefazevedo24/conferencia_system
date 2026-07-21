@@ -23,6 +23,11 @@ atualizacao_cadastral_bp = Blueprint("atualizacao_cadastral", __name__)
 
 REGIMES_VALIDOS = {"Lucro Real", "Lucro Presumido", "Simples Nacional", "MEI"}
 TIPOS_VALIDOS = {"cliente", "fornecedor"}
+CONTRIBUINTE_ICMS_VALIDOS = {
+    "Sim, sou Contribuinte do ICMS",
+    "Contribuinte isento de IE",
+    "Não contribuinte",
+}
 
 
 @atualizacao_cadastral_bp.route("/atualizacao-cadastral")
@@ -50,6 +55,9 @@ def enviar_atualizacao_cadastral():
     tipo = str(payload.get("tipo") or "").strip().lower()
     documento = cad_svc.normalizar_documento(str(payload.get("documento") or ""))
     regime = str(payload.get("regime_tributario") or "").strip()
+    contribuinte_icms = str(payload.get("contribuinte_icms") or "").strip()
+    possui_beneficios_fiscais = bool(payload.get("possui_beneficios_fiscais"))
+    beneficios_fiscais_descricao = str(payload.get("beneficios_fiscais_descricao") or "").strip()
     email = str(payload.get("email") or "").strip()
     email_confirmado = bool(payload.get("email_confirmado"))
 
@@ -59,6 +67,10 @@ def enviar_atualizacao_cadastral():
         return jsonify({"error": "Informe um CNPJ válido com 14 dígitos."}), 400
     if regime not in REGIMES_VALIDOS:
         return jsonify({"error": "Selecione o Regime Tributário."}), 400
+    if contribuinte_icms not in CONTRIBUINTE_ICMS_VALIDOS:
+        return jsonify({"error": "Selecione se a empresa é Contribuinte do ICMS."}), 400
+    if possui_beneficios_fiscais and not beneficios_fiscais_descricao:
+        return jsonify({"error": "Especifique qual(is) benefício(s) fiscal(is) a empresa possui."}), 400
     if not email:
         return jsonify({"error": "Informe o e-mail de contato da empresa."}), 400
     if not email_confirmado:
@@ -77,6 +89,9 @@ def enviar_atualizacao_cadastral():
         nome_fantasia=_campo("nome_fantasia", 220),
         inscricao_estadual=_campo("inscricao_estadual", 40),
         regime_tributario=regime,
+        contribuinte_icms=contribuinte_icms,
+        possui_beneficios_fiscais=possui_beneficios_fiscais,
+        beneficios_fiscais_descricao=(beneficios_fiscais_descricao[:500] if possui_beneficios_fiscais else None),
         endereco=_campo("endereco", 300),
         cep=_campo("cep", 12),
         municipio=_campo("municipio", 120),
@@ -136,6 +151,9 @@ def _serializar(registro):
         "nome_fantasia": registro.nome_fantasia,
         "inscricao_estadual": registro.inscricao_estadual,
         "regime_tributario": registro.regime_tributario,
+        "contribuinte_icms": registro.contribuinte_icms,
+        "possui_beneficios_fiscais": registro.possui_beneficios_fiscais,
+        "beneficios_fiscais_descricao": registro.beneficios_fiscais_descricao,
         "endereco": registro.endereco,
         "cep": registro.cep,
         "municipio": registro.municipio,
@@ -195,6 +213,9 @@ def exportar_atualizacoes_cadastrais_xlsx():
         ("Nome fantasia", "nome_fantasia"),
         ("Inscrição estadual", "inscricao_estadual"),
         ("Regime tributário", "regime_tributario"),
+        ("Contribuinte do ICMS", "contribuinte_icms"),
+        ("Possui benefícios fiscais", "possui_beneficios_fiscais"),
+        ("Quais benefícios fiscais", "beneficios_fiscais_descricao"),
         ("Endereço", "endereco"),
         ("CEP", "cep"),
         ("Município", "municipio"),
@@ -225,7 +246,7 @@ def exportar_atualizacoes_cadastrais_xlsx():
             valor = dados.get(chave)
             if chave == "tipo" and valor:
                 valor = valor.capitalize()
-            elif chave == "email_confirmado":
+            elif chave in ("email_confirmado", "possui_beneficios_fiscais"):
                 valor = "Sim" if valor else "Não"
             ws.cell(row=row_idx, column=col_idx, value=valor)
 
