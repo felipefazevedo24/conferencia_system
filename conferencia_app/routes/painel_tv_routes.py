@@ -25,6 +25,11 @@ STATUS_EXP_FATURADO = "Faturado"
 STATUS_EXP_FATURADO_SEM_CONF = "Faturado sem conferência"
 STATUS_EXP_EXPEDIDO = "Expedido"
 
+# Mesmo corte de backlog aplicado na tela de Conferência de Expedição cega
+# (FAT): oculta solicitações de "Faturado sem conferência" anteriores à
+# ordem de faturamento 1594 (ver expedicao_fat_routes.FAT_SEM_CONF_COD_MINIMO).
+FAT_SEM_CONF_COD_MINIMO = 1594
+
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
@@ -223,10 +228,14 @@ def _coletar_indicadores() -> dict:
             o.dt_prevista_entrega, o.created_at, ts, agora,
         )
 
+    def _query_fat(status):
+        q = ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status)
+        if status == STATUS_EXP_FATURADO_SEM_CONF:
+            q = q.filter(ExpedicaoOrdemFat.cod_ordem_fat >= FAT_SEM_CONF_COD_MINIMO)
+        return q
+
     def _cons_categoria(status, ts_attr, reverse, limite=120):
-        fat_rows = (
-            ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status).limit(limite).all()
-        )
+        fat_rows = _query_fat(status).limit(limite).all()
         st_rows = (
             ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).limit(limite).all()
         )
@@ -237,7 +246,7 @@ def _coletar_indicadores() -> dict:
 
     def _cons_total(status):
         return (
-            ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status).count()
+            _query_fat(status).count()
             + ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).count()
         )
 
