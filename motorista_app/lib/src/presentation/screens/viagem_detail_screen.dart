@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,11 @@ import '../../core/services/location_tracking_service.dart';
 import '../../data/remote/api_client.dart';
 import '../../domain/entities/models.dart';
 import '../providers/providers.dart';
+
+/// Mesmo polling que a versão web já fazia (a cada 30s) para as paradas
+/// refletirem alterações feitas por outra pessoa (despachante reordenando,
+/// etc.) sem precisar sair e voltar da tela.
+const _intervaloAtualizacaoParadas = Duration(seconds: 30);
 
 class ViagemDetailScreen extends ConsumerStatefulWidget {
   final Viagem viagem;
@@ -25,6 +32,7 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
   int _pontosPendentes = 0;
   String? _ultimaPosicaoTexto;
   bool _acaoEmAndamento = false;
+  Timer? _timerParadas;
 
   ({int vid, String token})? get _tokenViagem => widget.viagem.viagemToken;
 
@@ -37,10 +45,16 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
     _token = t?.token;
     FlutterForegroundTask.addTaskDataCallback(_onTaskData);
     _sincronizarEstadoRastreamento();
+    _timerParadas = Timer.periodic(_intervaloAtualizacaoParadas, (_) {
+      if (mounted && _vid != null && _token != null) {
+        ref.invalidate(paradasProvider((vid: _vid!, token: _token!)));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _timerParadas?.cancel();
     FlutterForegroundTask.removeTaskDataCallback(_onTaskData);
     super.dispose();
   }

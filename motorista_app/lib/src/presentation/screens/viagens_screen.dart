@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,11 +7,46 @@ import '../../domain/entities/models.dart';
 import '../providers/providers.dart';
 import 'viagem_detail_screen.dart';
 
-class ViagensScreen extends ConsumerWidget {
+/// Atualiza a lista sozinha (a cada 20s e sempre que o app volta do segundo
+/// plano), igual ao polling que a versão web já fazia — sem isso, uma
+/// viagem nova só apareceria depois de fechar e reabrir o app.
+const _intervaloAtualizacao = Duration(seconds: 20);
+
+class ViagensScreen extends ConsumerStatefulWidget {
   const ViagensScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ViagensScreen> createState() => _ViagensScreenState();
+}
+
+class _ViagensScreenState extends ConsumerState<ViagensScreen> with WidgetsBindingObserver {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(_intervaloAtualizacao, (_) => _atualizar());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _atualizar();
+  }
+
+  void _atualizar() {
+    if (mounted) ref.invalidate(viagensProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final viagensAsync = ref.watch(viagensProvider);
     return Scaffold(
       appBar: AppBar(
