@@ -63,12 +63,14 @@ class _ViagensScreenState extends ConsumerState<ViagensScreen> with WidgetsBindi
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(viagensProvider),
-        child: viagensAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _ErroCarregar(mensagem: e.toString(), onTentarNovamente: () => ref.invalidate(viagensProvider)),
-          data: (viagens) => _ListaViagens(ativas: viagens.ativas, historico: viagens.historico),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(viagensProvider),
+          child: viagensAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => _ErroCarregar(mensagem: e.toString(), onTentarNovamente: () => ref.invalidate(viagensProvider)),
+            data: (viagens) => _ListaViagens(ativas: viagens.ativas, historico: viagens.historico),
+          ),
         ),
       ),
     );

@@ -221,51 +221,53 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
       appBar: AppBar(title: Text(widget.viagem.codigo)),
       body: vid == null || token == null
           ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Link da viagem inválido.')))
-          : Column(
-              children: [
-                _ResumoViagemCard(viagem: widget.viagem, status: _status),
-                if (!finalizada)
-                  _CardRastreamento(
-                    status: _status,
-                    rastreando: _rastreando,
-                    pontosEnviados: _pontosEnviados,
-                    pontosPendentes: _pontosPendentes,
-                    ultimaPosicaoTexto: _ultimaPosicaoTexto,
-                  ),
-                if (_status == 'Planejada')
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                    child: FilledButton.icon(
-                      onPressed: _acaoEmAndamento ? null : _iniciarViagem,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Iniciar viagem'),
+          : SafeArea(
+              child: Column(
+                children: [
+                  _ResumoViagemCard(viagem: widget.viagem, status: _status),
+                  if (!finalizada)
+                    _CardRastreamento(
+                      status: _status,
+                      rastreando: _rastreando,
+                      pontosEnviados: _pontosEnviados,
+                      pontosPendentes: _pontosPendentes,
+                      ultimaPosicaoTexto: _ultimaPosicaoTexto,
                     ),
-                  ),
-                if (_status == 'EmAndamento' && !_rastreando)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await LocationTrackingService.solicitarPermissoes();
-                        await LocationTrackingService.iniciar(vid: vid, token: token, codigoViagem: widget.viagem.codigo);
-                        setState(() => _rastreando = true);
-                      },
-                      icon: const Icon(Icons.satellite_alt),
-                      label: const Text('Retomar rastreamento'),
+                  if (_status == 'Planejada')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: FilledButton.icon(
+                        onPressed: _acaoEmAndamento ? null : _iniciarViagem,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Iniciar viagem'),
+                      ),
                     ),
-                  ),
-                Expanded(child: _ParadasList(vid: vid, token: token, somenteLeitura: finalizada)),
-                if (_status == 'EmAndamento')
-                  Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.accent500),
-                      onPressed: _acaoEmAndamento ? null : _concluirViagem,
-                      icon: const Icon(Icons.flag),
-                      label: const Text('Concluir viagem'),
+                  if (_status == 'EmAndamento' && !_rastreando)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await LocationTrackingService.solicitarPermissoes();
+                          await LocationTrackingService.iniciar(vid: vid, token: token, codigoViagem: widget.viagem.codigo);
+                          setState(() => _rastreando = true);
+                        },
+                        icon: const Icon(Icons.satellite_alt),
+                        label: const Text('Retomar rastreamento'),
+                      ),
                     ),
-                  ),
-              ],
+                  Expanded(child: _ParadasList(vid: vid, token: token, somenteLeitura: finalizada)),
+                  if (_status == 'EmAndamento')
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: AppColors.accent500),
+                        onPressed: _acaoEmAndamento ? null : _concluirViagem,
+                        icon: const Icon(Icons.flag),
+                        label: const Text('Concluir viagem'),
+                      ),
+                    ),
+                ],
+              ),
             ),
     );
   }
