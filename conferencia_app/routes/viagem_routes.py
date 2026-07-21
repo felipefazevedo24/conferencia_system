@@ -2021,6 +2021,14 @@ def reordenar_paradas_gestor(vid: int):
 motorista_bp = Blueprint("motorista_viagem", __name__)
 
 
+# ---- Download do app nativo (Android) do motorista ----
+@motorista_bp.route("/motorista/app", methods=["GET"])
+def motorista_app_download():
+    """Página pública com o link para baixar o APK do app do motorista e o
+    passo a passo de instalação. Sem login — o motorista abre pelo celular."""
+    return render_template("motorista_app_download.html")
+
+
 # ---- Painel permanente do motorista (link PWA compartilhável) ----
 @motorista_bp.route("/motorista/painel/<int:mid>/<token>", methods=["GET"])
 def motorista_painel_publico(mid: int, token: str):

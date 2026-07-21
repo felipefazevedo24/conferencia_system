@@ -26,6 +26,9 @@ dist/
 database.db
 instance/
 
+# APK do app do motorista (binário, sobe direto no servidor, não versiona)
+static/downloads/*.apk
+
 # IDE
 .vscode/
 .idea/

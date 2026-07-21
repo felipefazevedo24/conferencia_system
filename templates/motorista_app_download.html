@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instalar app do motorista — Columbia Sync</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #edf3f9; color: #0f2439; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 28px 20px 60px; }
+    .logo { text-align: center; margin-bottom: 18px; }
+    .logo i { font-size: 40px; color: #0f62c9; }
+    h1 { font-size: 20px; text-align: center; margin-bottom: 6px; }
+    .sub { text-align: center; color: #64758b; font-size: 13.5px; margin-bottom: 24px; }
+    .btn-download {
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        background: #0f8f5f; color: #fff; text-decoration: none; font-weight: 800;
+        padding: 16px; border-radius: 14px; font-size: 16px;
+        box-shadow: 0 10px 22px rgba(15,143,95,.24);
+    }
+    .passos { margin-top: 28px; background: #fff; border: 1px solid #d8e3ef; border-radius: 14px; padding: 18px; }
+    .passos h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: #40556d; margin-bottom: 12px; }
+    .passo { display: flex; gap: 12px; margin-bottom: 14px; }
+    .passo:last-child { margin-bottom: 0; }
+    .passo .num {
+        min-width: 26px; height: 26px; border-radius: 50%; background: #e6f0fb; color: #0f62c9;
+        display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0;
+    }
+    .passo p { font-size: 13.5px; line-height: 1.5; color: #2d3d4f; }
+    .aviso { margin-top: 16px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; border-radius: 10px; padding: 12px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="logo"><i class="fa-solid fa-truck-fast">🚚</i></div>
+    <h1>App do Motorista — Columbia Sync</h1>
+    <p class="sub">Baixe e instale para ter o rastreamento funcionando de verdade, mesmo com o celular no bolso.</p>
+
+    <a class="btn-download" href="{{ url_for('static', filename='downloads/motorista-app.apk') }}" download>
+        ⬇ Baixar aplicativo (.apk)
+    </a>
+
+    <div class="passos">
+        <h2>Como instalar</h2>
+        <div class="passo"><div class="num">1</div><p>Toque no botão acima para baixar o arquivo.</p></div>
+        <div class="passo"><div class="num">2</div><p>Abra o arquivo baixado. Se o Android avisar "instalar apps de fontes desconhecidas", toque em <b>Permitir</b>/<b>Configurações</b> e libere para este app.</p></div>
+        <div class="passo"><div class="num">3</div><p>Abra o app instalado e cole o mesmo link do painel de viagens que você já recebe pelo WhatsApp.</p></div>
+        <div class="passo"><div class="num">4</div><p>Aceite as permissões de localização (escolha <b>"Permitir o tempo todo"</b>) e de notificações — são elas que mantêm o rastreamento ativo mesmo com a tela apagada.</p></div>
+    </div>
+
+    <div class="aviso">Se ainda não tiver o app instalado, continue usando o link de viagem normalmente pelo navegador — nada muda até você migrar.</div>
+</div>
+</body>
+</html>
