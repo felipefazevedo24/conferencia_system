@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../core/theme.dart';
 import '../../domain/entities/models.dart';
 import '../providers/providers.dart';
 import 'viagem_detail_screen.dart';
+
+final _fmtData = DateFormat('dd/MM HH:mm');
 
 /// Atualiza a lista sozinha (a cada 20s e sempre que o app volta do segundo
 /// plano), igual ao polling que a versão web já fazia — sem isso, uma
@@ -126,15 +130,15 @@ class _ListaViagens extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         children: const [
           SizedBox(height: 120),
-          Icon(Icons.route, size: 48, color: Colors.black26),
+          Icon(Icons.route, size: 48, color: AppColors.textSoft),
           SizedBox(height: 12),
-          Center(child: Text('Nenhuma viagem por enquanto.')),
+          Center(child: Text('Nenhuma viagem por enquanto.', style: TextStyle(color: AppColors.textMuted))),
         ],
       );
     }
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       children: [
         if (ativas.isNotEmpty) ...[
           const _SecaoTitulo('Ativas'),
@@ -156,10 +160,10 @@ class _SecaoTitulo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
       child: Text(
         texto.toUpperCase(),
-        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1, color: Colors.black54),
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1, color: AppColors.textSoft),
       ),
     );
   }
@@ -169,34 +173,84 @@ class _ViagemCard extends StatelessWidget {
   final Viagem viagem;
   const _ViagemCard({required this.viagem});
 
-  Color _corStatus(String status) {
-    switch (status) {
-      case 'EmAndamento':
-        return const Color(0xFF0F8F5F);
-      case 'Concluida':
-        return Colors.black45;
-      case 'Cancelada':
-        return const Color(0xFFC0392B);
-      default:
-        return const Color(0xFFB7791F);
-    }
+  @override
+  Widget build(BuildContext context) {
+    final cor = AppTheme.corStatusViagem(viagem.status);
+    final rota = [viagem.origemLabel, viagem.destinoLabel].where((e) => e != null && e.isNotEmpty).join(' → ');
+    final quando = viagem.saidaReal ?? viagem.saidaPrevista;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ViagemDetailScreen(viagem: viagem))),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(viagem.codigo,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.text)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(color: cor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
+                    child: Text(viagem.status,
+                        style: TextStyle(color: cor, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+              if (viagem.titulo != null && viagem.titulo!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(viagem.titulo!, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w600)),
+              ],
+              if (rota.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(children: [
+                  const Icon(Icons.alt_route, size: 15, color: AppColors.textSoft),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(rota, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5))),
+                ]),
+              ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                children: [
+                  if (viagem.veiculoLabel != null)
+                    _InfoChip(icon: Icons.local_shipping_outlined, texto: viagem.veiculoLabel!),
+                  if (quando != null)
+                    _InfoChip(icon: Icons.schedule, texto: _fmtData.format(quando)),
+                  if (viagem.qtdParadas != null && viagem.qtdParadas! > 0)
+                    _InfoChip(icon: Icons.flag_outlined, texto: '${viagem.qtdParadasOk ?? 0}/${viagem.qtdParadas} paradas'),
+                  if (viagem.kmPercorrido != null)
+                    _InfoChip(icon: Icons.speed, texto: '${viagem.kmPercorrido!.toStringAsFixed(0)} km'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String texto;
+  const _InfoChip({required this.icon, required this.texto});
 
   @override
   Widget build(BuildContext context) {
-    final podeAbrir = !viagem.finalizada;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        onTap: podeAbrir ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ViagemDetailScreen(viagem: viagem))) : null,
-        title: Text(viagem.codigo, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(viagem.titulo ?? viagem.veiculoLabel ?? ''),
-        trailing: Chip(
-          label: Text(viagem.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
-          backgroundColor: _corStatus(viagem.status),
-          padding: EdgeInsets.zero,
-        ),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.textSoft),
+        const SizedBox(width: 4),
+        Text(texto, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+      ],
     );
   }
 }

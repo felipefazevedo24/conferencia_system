@@ -18,40 +18,77 @@ class Viagem {
   final int id;
   final String codigo;
   final String status; // Planejada | EmAndamento | Concluida | Cancelada
+  final String? tipo;
   final String? titulo;
+  final String? observacao;
   final String? veiculoLabel;
   final String? motoristaNome;
+  final String? origemLabel;
+  final String? destinoLabel;
+  final DateTime? saidaPrevista;
+  final DateTime? retornoPrevisto;
+  final DateTime? saidaReal;
+  final DateTime? retornoReal;
+  final int? kmPrevisto;
   final int? kmInicial;
   final int? kmFinal;
   final double? kmPercorrido;
+  final int? tempoTotalMin;
+  final int? qtdParadas;
+  final int? qtdParadasOk;
   final String? motoristaLink; // URL completa com vid + token específico da viagem
 
   const Viagem({
     required this.id,
     required this.codigo,
     required this.status,
+    this.tipo,
     this.titulo,
+    this.observacao,
     this.veiculoLabel,
     this.motoristaNome,
+    this.origemLabel,
+    this.destinoLabel,
+    this.saidaPrevista,
+    this.retornoPrevisto,
+    this.saidaReal,
+    this.retornoReal,
+    this.kmPrevisto,
     this.kmInicial,
     this.kmFinal,
     this.kmPercorrido,
+    this.tempoTotalMin,
+    this.qtdParadas,
+    this.qtdParadasOk,
     this.motoristaLink,
   });
 
   bool get finalizada => status == 'Concluida' || status == 'Cancelada';
 
   factory Viagem.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic v) => v == null ? null : DateTime.tryParse(v as String);
     return Viagem(
       id: json['id'] as int,
       codigo: json['codigo'] as String? ?? '',
       status: json['status'] as String? ?? '',
+      tipo: json['tipo'] as String?,
       titulo: json['titulo'] as String?,
+      observacao: json['observacao'] as String?,
       veiculoLabel: json['veiculo_label'] as String?,
       motoristaNome: json['motorista_nome'] as String?,
+      origemLabel: json['origem_label'] as String?,
+      destinoLabel: json['destino_label'] as String?,
+      saidaPrevista: parseDate(json['saida_prevista']),
+      retornoPrevisto: parseDate(json['retorno_previsto']),
+      saidaReal: parseDate(json['saida_real']),
+      retornoReal: parseDate(json['retorno_real']),
+      kmPrevisto: (json['km_previsto'] as num?)?.toInt(),
       kmInicial: (json['km_inicial'] as num?)?.toInt(),
       kmFinal: (json['km_final'] as num?)?.toInt(),
       kmPercorrido: (json['km_percorrido'] as num?)?.toDouble(),
+      tempoTotalMin: (json['tempo_total_min'] as num?)?.toInt(),
+      qtdParadas: (json['qtd_paradas'] as num?)?.toInt(),
+      qtdParadasOk: (json['qtd_paradas_ok'] as num?)?.toInt(),
       motoristaLink: json['motorista_link'] as String?,
     );
   }

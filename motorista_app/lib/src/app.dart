@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/theme.dart';
 import 'presentation/providers/providers.dart';
 import 'presentation/screens/setup_screen.dart';
 import 'presentation/screens/viagens_screen.dart';
@@ -13,11 +14,7 @@ class MotoristaApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Motorista Sync',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF0F62C9),
-        scaffoldBackgroundColor: const Color(0xFFF3F7FB),
-      ),
+      theme: AppTheme.light(),
       home: ref.watch(configProvider).when(
             data: (config) => config == null ? const SetupScreen() : const ViagensScreen(),
             loading: () => const _Splash(),

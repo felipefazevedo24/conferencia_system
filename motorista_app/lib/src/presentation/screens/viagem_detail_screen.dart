@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/services/location_tracking_service.dart';
+import '../../core/theme.dart';
 import '../../data/remote/api_client.dart';
 import '../../domain/entities/models.dart';
 import '../providers/providers.dart';
+
+final _fmtDataHora = DateFormat('dd/MM/yyyy HH:mm');
 
 /// Mesmo polling que a versão web já fazia (a cada 30s) para as paradas
 /// refletirem alterações feitas por outra pessoa (despachante reordenando,
@@ -179,7 +183,7 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(legenda, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+            Text(legenda, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
             const SizedBox(height: 8),
             TextField(
               controller: controller,
@@ -205,29 +209,32 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
 
   void _mostrarErro(String mensagem) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem), backgroundColor: AppColors.danger500));
   }
 
   @override
   Widget build(BuildContext context) {
     final vid = _vid;
     final token = _token;
+    final finalizada = _status == 'Concluida' || _status == 'Cancelada';
     return Scaffold(
       appBar: AppBar(title: Text(widget.viagem.codigo)),
       body: vid == null || token == null
           ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Link da viagem inválido.')))
           : Column(
               children: [
-                _CardRastreamento(
-                  status: _status,
-                  rastreando: _rastreando,
-                  pontosEnviados: _pontosEnviados,
-                  pontosPendentes: _pontosPendentes,
-                  ultimaPosicaoTexto: _ultimaPosicaoTexto,
-                ),
+                _ResumoViagemCard(viagem: widget.viagem, status: _status),
+                if (!finalizada)
+                  _CardRastreamento(
+                    status: _status,
+                    rastreando: _rastreando,
+                    pontosEnviados: _pontosEnviados,
+                    pontosPendentes: _pontosPendentes,
+                    ultimaPosicaoTexto: _ultimaPosicaoTexto,
+                  ),
                 if (_status == 'Planejada')
                   Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
                     child: FilledButton.icon(
                       onPressed: _acaoEmAndamento ? null : _iniciarViagem,
                       icon: const Icon(Icons.play_arrow),
@@ -236,7 +243,7 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
                   ),
                 if (_status == 'EmAndamento' && !_rastreando)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         await LocationTrackingService.solicitarPermissoes();
@@ -247,26 +254,109 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
                       label: const Text('Retomar rastreamento'),
                     ),
                   ),
-                if (_status == 'EmAndamento' || _status == 'Planejada')
-                  Expanded(child: _ParadasList(vid: vid, token: token)),
+                Expanded(child: _ParadasList(vid: vid, token: token, somenteLeitura: finalizada)),
                 if (_status == 'EmAndamento')
                   Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     child: FilledButton.icon(
-                      style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F8F5F)),
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.accent500),
                       onPressed: _acaoEmAndamento ? null : _concluirViagem,
                       icon: const Icon(Icons.flag),
                       label: const Text('Concluir viagem'),
                     ),
                   ),
-                if (_status == 'Concluida' || _status == 'Cancelada')
-                  Expanded(
-                    child: Center(
-                      child: Text(_status == 'Concluida' ? 'Viagem concluída.' : 'Viagem cancelada.'),
-                    ),
-                  ),
               ],
             ),
+    );
+  }
+}
+
+class _ResumoViagemCard extends StatelessWidget {
+  final Viagem viagem;
+  final String status;
+  const _ResumoViagemCard({required this.viagem, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final cor = AppTheme.corStatusViagem(status);
+    final rota = [viagem.origemLabel, viagem.destinoLabel].where((e) => e != null && e.isNotEmpty).join(' → ');
+    return Card(
+      margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (viagem.titulo != null && viagem.titulo!.isNotEmpty)
+                  Expanded(
+                    child: Text(viagem.titulo!,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.text)),
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: cor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
+                  child: Text(status, style: TextStyle(color: cor, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+            if (rota.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                const Icon(Icons.alt_route, size: 16, color: AppColors.textSoft),
+                const SizedBox(width: 6),
+                Expanded(child: Text(rota, style: const TextStyle(color: AppColors.textMuted, fontSize: 13))),
+              ]),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 18,
+              runSpacing: 8,
+              children: [
+                if (viagem.veiculoLabel != null) _ResumoItem(icone: Icons.local_shipping_outlined, texto: viagem.veiculoLabel!),
+                if (viagem.motoristaNome != null) _ResumoItem(icone: Icons.badge_outlined, texto: viagem.motoristaNome!),
+                if (viagem.saidaReal != null)
+                  _ResumoItem(icone: Icons.north_east, texto: 'Saída ${_fmtDataHora.format(viagem.saidaReal!)}')
+                else if (viagem.saidaPrevista != null)
+                  _ResumoItem(icone: Icons.north_east, texto: 'Prev. saída ${_fmtDataHora.format(viagem.saidaPrevista!)}'),
+                if (viagem.retornoReal != null)
+                  _ResumoItem(icone: Icons.south_west, texto: 'Retorno ${_fmtDataHora.format(viagem.retornoReal!)}'),
+                if (viagem.kmInicial != null) _ResumoItem(icone: Icons.speed, texto: 'KM inicial ${viagem.kmInicial}'),
+                if (viagem.kmFinal != null) _ResumoItem(icone: Icons.speed, texto: 'KM final ${viagem.kmFinal}'),
+                if (viagem.kmPercorrido != null)
+                  _ResumoItem(icone: Icons.route, texto: '${viagem.kmPercorrido!.toStringAsFixed(0)} km percorridos'),
+                if (viagem.tempoTotalMin != null)
+                  _ResumoItem(icone: Icons.timer_outlined, texto: '${(viagem.tempoTotalMin! / 60).floor()}h${(viagem.tempoTotalMin! % 60).toString().padLeft(2, '0')}'),
+                if (viagem.qtdParadas != null && viagem.qtdParadas! > 0)
+                  _ResumoItem(icone: Icons.flag_outlined, texto: '${viagem.qtdParadasOk ?? 0}/${viagem.qtdParadas} paradas'),
+              ],
+            ),
+            if (viagem.observacao != null && viagem.observacao!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(viagem.observacao!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, fontStyle: FontStyle.italic)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumoItem extends StatelessWidget {
+  final IconData icone;
+  final String texto;
+  const _ResumoItem({required this.icone, required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icone, size: 14, color: AppColors.textSoft),
+        const SizedBox(width: 4),
+        Text(texto, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+      ],
     );
   }
 }
@@ -296,7 +386,7 @@ class _CardRastreamento extends StatelessWidget {
           children: [
             Icon(
               rastreando ? Icons.satellite_alt : Icons.satellite_alt_outlined,
-              color: rastreando ? const Color(0xFF0F8F5F) : Colors.black38,
+              color: rastreando ? AppColors.accent500 : AppColors.textSoft,
               size: 32,
             ),
             const SizedBox(width: 12),
@@ -311,7 +401,7 @@ class _CardRastreamento extends StatelessWidget {
                   Text(
                     '$pontosEnviados ponto${pontosEnviados == 1 ? '' : 's'} enviado${pontosEnviados == 1 ? '' : 's'}'
                     '${pontosPendentes > 0 ? ' · $pontosPendentes pendente${pontosPendentes == 1 ? '' : 's'} offline' : ''}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                   if (ultimaPosicaoTexto != null)
                     Text(ultimaPosicaoTexto!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
@@ -328,7 +418,8 @@ class _CardRastreamento extends StatelessWidget {
 class _ParadasList extends ConsumerWidget {
   final int vid;
   final String token;
-  const _ParadasList({required this.vid, required this.token});
+  final bool somenteLeitura;
+  const _ParadasList({required this.vid, required this.token, this.somenteLeitura = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -339,51 +430,59 @@ class _ParadasList extends ConsumerWidget {
       error: (e, _) => Center(child: Text('Erro ao carregar paradas: $e')),
       data: (paradas) {
         if (paradas.isEmpty) {
-          return const Center(child: Text('Nenhuma parada planejada.'));
+          return const Center(child: Text('Nenhuma parada planejada.', style: TextStyle(color: AppColors.textMuted)));
         }
         final pendentes = paradas.where((p) => !p.concluida).toList();
         final concluidas = paradas.where((p) => p.concluida).toList();
         return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
           children: [
             if (pendentes.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('PENDENTES — arraste para ajustar a ordem',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
-              ),
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: pendentes.length,
-                itemBuilder: (ctx, i) => _ParadaTile(
-                  key: ValueKey(pendentes[i].id),
-                  parada: pendentes[i],
-                  vid: vid,
-                  token: token,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  somenteLeitura ? 'PENDENTES' : 'PENDENTES — arraste para ajustar a ordem',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSoft),
                 ),
-                onReorder: (oldIndex, newIndex) async {
-                  final novaLista = List<Parada>.from(pendentes);
-                  if (newIndex > oldIndex) newIndex -= 1;
-                  final item = novaLista.removeAt(oldIndex);
-                  novaLista.insert(newIndex, item);
-                  final repo = ref.read(motoristaRepositoryProvider);
-                  try {
-                    await repo.reordenarParadas(vid: vid, token: token, ordem: novaLista.map((p) => p.id).toList());
-                  } on ApiException {
-                    // Ignora silenciosamente: o refresh abaixo já vai trazer a
-                    // ordem real do servidor de volta.
-                  }
-                  ref.invalidate(paradasProvider(args));
-                },
               ),
+              somenteLeitura
+                  ? Column(
+                      children: pendentes
+                          .map((p) => _ParadaTile(key: ValueKey(p.id), parada: p, vid: vid, token: token, somenteLeitura: true))
+                          .toList(),
+                    )
+                  : ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: pendentes.length,
+                      itemBuilder: (ctx, i) => _ParadaTile(
+                        key: ValueKey(pendentes[i].id),
+                        parada: pendentes[i],
+                        vid: vid,
+                        token: token,
+                      ),
+                      onReorder: (oldIndex, newIndex) async {
+                        final novaLista = List<Parada>.from(pendentes);
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final item = novaLista.removeAt(oldIndex);
+                        novaLista.insert(newIndex, item);
+                        final repo = ref.read(motoristaRepositoryProvider);
+                        try {
+                          await repo.reordenarParadas(vid: vid, token: token, ordem: novaLista.map((p) => p.id).toList());
+                        } on ApiException {
+                          // Ignora silenciosamente: o refresh abaixo já vai trazer a
+                          // ordem real do servidor de volta.
+                        }
+                        ref.invalidate(paradasProvider(args));
+                      },
+                    ),
             ],
             if (concluidas.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('CONCLUÍDAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                child: Text('CONCLUÍDAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSoft)),
               ),
-              ...concluidas.map((p) => _ParadaTile(key: ValueKey(p.id), parada: p, vid: vid, token: token)),
+              ...concluidas.map((p) => _ParadaTile(key: ValueKey(p.id), parada: p, vid: vid, token: token, somenteLeitura: somenteLeitura)),
             ],
             const SizedBox(height: 24),
           ],
@@ -397,7 +496,8 @@ class _ParadaTile extends ConsumerStatefulWidget {
   final Parada parada;
   final int vid;
   final String token;
-  const _ParadaTile({super.key, required this.parada, required this.vid, required this.token});
+  final bool somenteLeitura;
+  const _ParadaTile({super.key, required this.parada, required this.vid, required this.token, this.somenteLeitura = false});
 
   @override
   ConsumerState<_ParadaTile> createState() => _ParadaTileState();
@@ -521,8 +621,8 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: p.concluida ? const Color(0xFFDFF7EB) : const Color(0xFFE6F0FB),
-          foregroundColor: p.concluida ? const Color(0xFF06633E) : const Color(0xFF0F62C9),
+          backgroundColor: p.concluida ? AppColors.accent500.withValues(alpha: 0.14) : AppColors.primary600.withValues(alpha: 0.10),
+          foregroundColor: p.concluida ? AppColors.accent500 : AppColors.primary600,
           child: Text('${p.sequencia}'),
         ),
         title: Text('${p.parceiroNome ?? 'Parada ${p.sequencia}'} · ${_labelTipo[p.tipo] ?? p.tipo}'),
@@ -530,10 +630,12 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
         trailing: _carregando
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
             : p.concluida
-                ? const Icon(Icons.check_circle, color: Color(0xFF0F8F5F))
-                : p.noLocal
-                    ? TextButton(onPressed: _abrirConcluir, child: const Text('Concluir'))
-                    : TextButton(onPressed: _marcarChegada, child: const Text('Cheguei')),
+                ? const Icon(Icons.check_circle, color: AppColors.accent500)
+                : widget.somenteLeitura
+                    ? null
+                    : p.noLocal
+                        ? TextButton(onPressed: _abrirConcluir, child: const Text('Concluir'))
+                        : TextButton(onPressed: _marcarChegada, child: const Text('Cheguei')),
       ),
     );
   }
