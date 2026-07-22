@@ -129,3 +129,40 @@ def notificar_expedicao_conferida(
         env_var=env_var,
         config_key=config_key,
     )
+
+
+_SOLICITACAO_NF_TITULOS = {
+    "criada": "🧾 Nova solicitação de NF",
+    "separada": "📦 Solicitação de NF separada",
+    "faturada": "✅ Solicitação de NF faturada",
+    "retorno": "🔁 Retorno de material registrado",
+    "estorno": "↩️ Solicitação de NF estornada",
+    "excluida": "🗑️ Solicitação de NF excluída",
+}
+
+
+def notificar_solicitacao_nf(
+    evento: str,
+    protocolo: str,
+    solicitante: str,
+    cliente: str,
+    tipo_operacao: str,
+    *,
+    subinfo: str | None = None,
+    env_var: str = "TEAMS_WEBHOOK_SOLICITACAO_NF_URL",
+    config_key: str = "webhook_solicitacao_nf",
+) -> None:
+    """Aviso de criacao/separacao/faturamento de solicitacao de NF."""
+    titulo = _SOLICITACAO_NF_TITULOS.get(evento, "🧾 Solicitação de NF")
+    linha = f"{protocolo} · {cliente} ({tipo_operacao})"
+    partes = [f"Solicitante: {solicitante}"]
+    if subinfo:
+        partes.append(subinfo)
+    enviar_card(
+        titulo,
+        linha,
+        " · ".join(partes),
+        mencionar_canal=(evento == "criada"),
+        env_var=env_var,
+        config_key=config_key,
+    )

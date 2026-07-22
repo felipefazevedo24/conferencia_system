@@ -784,6 +784,96 @@ class ExpedicaoConferenciaLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+class SolicitacaoNF(db.Model):
+    """Solicitacao de saida de material sem venda direta (garantia,
+    bonificacao, teste ou atendimento tecnico), aberta por qualquer
+    funcionario via formulario publico (sem login), separada pela
+    logistica/fiscal/admin e faturada pelo fiscal."""
+
+    __tablename__ = "solicitacao_nf"
+
+    id = db.Column(db.Integer, primary_key=True)
+    protocolo = db.Column(db.String(20), unique=True, index=True)
+
+    solicitante_codigo = db.Column(db.String(40))
+    solicitante_nome = db.Column(db.String(160), nullable=False)
+    solicitante_setor = db.Column(db.String(120))
+
+    # Garantia | Bonificação | Teste | Atendimento técnico
+    tipo_operacao = db.Column(db.String(40), nullable=False)
+    # Indica se havera retorno do material ao estoque + orcamento de venda
+    # posterior (acompanhado manualmente fora deste modulo por enquanto).
+    venda_posterior = db.Column(db.Boolean, nullable=False, default=False)
+
+    cliente_codigo = db.Column(db.String(40))
+    cliente_nome = db.Column(db.String(160), nullable=False)
+    cliente_documento = db.Column(db.String(30))
+
+    # Solicitado | Expedido sem nota fiscal | Notas fiscais emitidas |
+    # Estoque em poder de terceiros | Estoque em poder da Assistência
+    # técnica | Estoque retornado
+    status = db.Column(db.String(60), nullable=False, default="Solicitado", index=True)
+
+    separado_por = db.Column(db.String(100))
+    separado_at = db.Column(db.DateTime)
+    observacoes_separacao = db.Column(db.String(500))
+
+    faturado_por = db.Column(db.String(100))
+    faturado_at = db.Column(db.DateTime)
+    numero_nf = db.Column(db.String(80))
+    observacoes_faturamento = db.Column(db.String(500))
+
+    # Retorno do material (Teste / Atendimento técnico) apos uso "emprestado"
+    numero_nf_retorno = db.Column(db.String(80))
+    retorno_por = db.Column(db.String(100))
+    retorno_at = db.Column(db.DateTime)
+    observacoes_retorno = db.Column(db.String(500))
+
+    ip_solicitante = db.Column(db.String(64))
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    itens = db.relationship(
+        "SolicitacaoNFItem",
+        backref="solicitacao",
+        cascade="all, delete-orphan",
+        order_by="SolicitacaoNFItem.linha",
+    )
+
+
+class SolicitacaoNFItem(db.Model):
+    __tablename__ = "solicitacao_nf_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(
+        db.Integer,
+        db.ForeignKey("solicitacao_nf.id"),
+        nullable=False,
+        index=True,
+    )
+    linha = db.Column(db.Integer, nullable=False, default=0)
+    material_codigo = db.Column(db.String(80), index=True)
+    material_nome = db.Column(db.String(200))
+    quantidade = db.Column(db.Float, nullable=False, default=0)
+    separado = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class SolicitacaoNFLog(db.Model):
+    """Trilha de auditoria da solicitacao de NF (criacao, separacao,
+    faturamento, cancelamento)."""
+
+    __tablename__ = "solicitacao_nf_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitacao_id = db.Column(db.Integer, nullable=False, index=True)
+    acao = db.Column(db.String(30), nullable=False)  # criada|separada|faturada|cancelada
+    usuario = db.Column(db.String(100))
+    status_anterior = db.Column(db.String(20))
+    status_novo = db.Column(db.String(20))
+    detalhes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class AgendamentoVeiculo(db.Model):
     __tablename__ = "agendamento_veiculo"
 

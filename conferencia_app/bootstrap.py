@@ -845,6 +845,26 @@ def _ensure_expedicao_ordem_st_columns() -> None:
         conn.close()
 
 
+def _ensure_solicitacao_nf_columns() -> None:
+    """Garante as colunas de retorno (Faturamento avulso) na solicitacao_nf."""
+    if not _has_table("solicitacao_nf"):
+        return
+    cols = _get_column_names("solicitacao_nf")
+    conn = db.engine.connect()
+    try:
+        if "numero_nf_retorno" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN numero_nf_retorno VARCHAR(80)"))
+        if "retorno_por" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN retorno_por VARCHAR(100)"))
+        if "retorno_at" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN retorno_at DATETIME"))
+        if "observacoes_retorno" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN observacoes_retorno VARCHAR(500)"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _ensure_perfil_columns() -> None:
     """Adiciona colunas de self-service de perfil (usuario) e rastreio de sessao."""
     conn = db.engine.connect()
@@ -933,6 +953,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_expedicao_ordem_st_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_solicitacao_nf_columns()
         except Exception:
             pass
 

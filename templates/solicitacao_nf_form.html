@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f62c9">
+  <title>Solicitação de Nota Fiscal | Columbia Sync</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    :root {
+      --primary: #0f62c9;
+      --primary-2: #0d4ea3;
+      --bg: #071a33;
+      --bg-2: #0d3a6e;
+      --surface: #ffffff;
+      --surface-soft: #f5f8fd;
+      --border: #e3e8ef;
+      --text: #0f172a;
+      --muted: #5b6b82;
+      --ok: #0c7a4f;
+      --ok-bg: #e7f6ee;
+      --err: #d64545;
+      --err-bg: #fdecec;
+      --radius: 14px;
+      --font: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-display: "Space Grotesk", var(--font);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(1100px 700px at 12% -10%, var(--bg-2) 0%, var(--bg) 60%),
+        var(--bg);
+      padding: clamp(16px, 4vw, 48px) 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .shell { width: min(920px, 100%); }
+
+    .brand { display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+    .brand .logo-badge { background: #fff; border-radius: 16px; padding: 12px 20px; box-shadow: 0 12px 34px rgba(0,0,0,.35); }
+    .brand .logo-badge img { height: clamp(34px, 6vw, 50px); display: block; }
+
+    .card { background: var(--surface); border-radius: 22px; box-shadow: 0 24px 60px rgba(4, 20, 45, .45); overflow: hidden; }
+    .card-head { background: linear-gradient(120deg, var(--primary) 0%, var(--primary-2) 100%); color: #fff; padding: clamp(20px, 3.4vw, 30px) clamp(20px, 4vw, 38px); }
+    .card-head h1 { font-family: var(--font-display); font-size: clamp(20px, 3.2vw, 30px); font-weight: 800; letter-spacing: .3px; display: flex; align-items: center; gap: 12px; }
+    .card-head p { margin-top: 8px; opacity: .92; font-size: clamp(13px, 1.8vw, 15px); max-width: 60ch; }
+    .card-body { padding: clamp(20px, 4vw, 38px); }
+
+    .section-title { font-family: var(--font-display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .8px; color: var(--primary); margin: 6px 0 14px; display: flex; align-items: center; gap: 10px; }
+    .section-title .step { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+    .section + .section { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--border); }
+
+    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .segmented.tipo-op { grid-template-columns: 1fr 1fr; }
+    .seg-option { border: 2px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer; text-align: center; transition: all .18s ease; background: var(--surface-soft); font-weight: 600; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13.5px; }
+    .seg-option i { font-size: 20px; }
+    .seg-option:hover { border-color: #c3d3ea; }
+    .seg-option.active { border-color: var(--primary); color: var(--primary); background: #eef4fd; box-shadow: 0 0 0 3px rgba(15,98,201,.12); }
+
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; position: relative; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .field input, .field select, .field textarea {
+      font-family: var(--font); font-size: 15px; color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 12px 14px; background: #fff; transition: border-color .15s, box-shadow .15s;
+      width: 100%;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15,98,201,.14); }
+
+    .sugestoes { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 14px 35px rgba(15,23,42,.14); max-height: 260px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; }
+    .sugestoes.show { display: block; }
+    .sugestoes .item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .sugestoes .item:last-child { border-bottom: none; }
+    .sugestoes .item:hover { background: var(--surface-soft); }
+    .sugestoes .item small { color: var(--muted); display: block; margin-top: 2px; font-size: 12px; }
+    .sugestoes .empty { padding: 14px; color: var(--muted); font-size: 13px; text-align: center; }
+
+    .chip { display: flex; align-items: center; gap: 12px; background: var(--ok-bg); border: 1px solid #bfe6d4; border-radius: var(--radius); padding: 12px 14px; margin-top: 8px; }
+    .chip .info { flex: 1; min-width: 0; }
+    .chip .info strong { display: block; color: var(--ok); font-size: 14px; }
+    .chip .info small { color: var(--muted); font-size: 12px; }
+    .chip .btn-x { background: transparent; border: none; color: var(--err); cursor: pointer; padding: 6px; border-radius: 6px; flex-shrink: 0; }
+    .chip .btn-x:hover { background: var(--err-bg); }
+
+    .add-item-row { display: grid; grid-template-columns: 1fr 110px auto; gap: 10px; align-items: start; }
+    .item-row { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .item-row .info strong { display: block; color: var(--text); font-size: 14px; }
+    .item-row .info span { color: var(--muted); font-size: 12px; }
+    .item-row .btn-x { background: transparent; border: none; color: var(--err); cursor: pointer; padding: 6px; flex-shrink: 0; }
+    .empty-list { text-align: center; color: var(--muted); font-size: 13px; padding: 14px; }
+
+    .btn { font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; border: none; border-radius: var(--radius); padding: 13px 22px; display: inline-flex; align-items: center; gap: 9px; transition: filter .15s, transform .05s; }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+    .btn-ghost { background: #eef4fd; color: var(--primary); }
+    .btn-ghost:hover:not(:disabled) { filter: brightness(.98); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .actions { margin-top: 26px; display: flex; justify-content: flex-end; }
+    .actions .btn { width: 100%; justify-content: center; padding: 15px; }
+
+    .feedback { display: none; margin-top: 18px; padding: 14px 16px; border-radius: var(--radius); font-size: 14px; font-weight: 600; }
+    .feedback.show { display: flex; gap: 10px; align-items: center; }
+    .feedback.ok { background: var(--ok-bg); color: var(--ok); }
+    .feedback.err { background: var(--err-bg); color: var(--err); }
+
+    .hint { font-size: 12.5px; color: var(--muted); margin-top: -2px; }
+    .foot { text-align: center; color: rgba(255,255,255,.6); font-size: 12.5px; margin-top: 18px; }
+
+    .success-screen { display: none; text-align: center; padding: 20px 6px; }
+    .success-screen.show { display: block; }
+    .success-screen .circle { width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 18px; background: var(--ok-bg); color: var(--ok); display: grid; place-items: center; font-size: 40px; }
+    .success-screen h2 { font-family: var(--font-display); font-size: 24px; margin-bottom: 10px; }
+    .success-screen p { color: var(--muted); max-width: 46ch; margin: 0 auto; }
+    .success-screen .protocolo { font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--primary); margin: 14px 0; }
+
+    .honeypot { position: absolute; left: -9999px; top: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden; }
+
+    .minha-sol-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; background: var(--surface-soft); }
+    .minha-sol-item .info strong { display: block; font-size: 13.5px; color: var(--text); }
+    .minha-sol-item .info small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .status-pill { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap; text-transform: uppercase; letter-spacing: .3px; }
+
+    @media (max-width: 620px) {
+      .grid { grid-template-columns: 1fr; }
+      .segmented { grid-template-columns: 1fr; }
+      .add-item-row { grid-template-columns: 1fr; }
+      .actions { justify-content: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">
+      <div class="logo-badge"><img src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h1><i class="fas fa-file-invoice"></i> Solicitação de Nota Fiscal</h1>
+        <p>Garantia, bonificação, teste ou atendimento técnico — preencha os dados abaixo para solicitar a emissão.</p>
+      </div>
+
+      <div class="card-body">
+        <form id="form-solicitacao" novalidate>
+          <!-- 1) Solicitante -->
+          <div class="section">
+            <div class="section-title"><span class="step">1</span> Identificação do solicitante</div>
+            <div class="field">
+              <label for="buscaFuncionario">Seu nome <span style="color:var(--err)">*</span></label>
+              <input type="text" id="buscaFuncionario" placeholder="Digite seu nome..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesFuncionario"></div>
+            </div>
+            <div id="funcionarioChip" class="chip" style="display:none">
+              <div class="info"><strong id="funcNome">-</strong><small id="funcSetor">-</small></div>
+              <button type="button" class="btn-x" onclick="limparFuncionario()" title="Trocar"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="minhasSolicitacoesWrap" style="display:none">
+              <p class="hint" style="margin-top:14px;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.4px;color:var(--muted)">Suas solicitações recentes</p>
+              <div id="minhasSolicitacoesLista"></div>
+            </div>
+          </div>
+
+          <!-- 2) Tipo de operacao -->
+          <div class="section">
+            <div class="section-title"><span class="step">2</span> Tipo de operação</div>
+            <div class="segmented tipo-op" id="tipoSeg">
+              {% for tipo in tipos_operacao %}
+              <div class="seg-option" data-tipo="{{ tipo }}" role="button" tabindex="0">
+                <i class="fas fa-tag"></i><span>{{ tipo }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <input type="hidden" id="tipoOperacao" value="">
+          </div>
+
+          <!-- 3) Venda posterior -->
+          <div class="section">
+            <div class="section-title"><span class="step">3</span> Haverá venda posterior do material?</div>
+            <div class="segmented" id="vendaSeg">
+              <div class="seg-option" data-venda="sim" role="button" tabindex="0">
+                <i class="fas fa-rotate-left"></i><span>Sim — retorno + orçamento futuro</span>
+              </div>
+              <div class="seg-option active" data-venda="nao" role="button" tabindex="0">
+                <i class="fas fa-check"></i><span>Não — garantia/bonificação</span>
+              </div>
+            </div>
+            <input type="hidden" id="vendaPosterior" value="nao">
+          </div>
+
+          <!-- 4) Cliente -->
+          <div class="section">
+            <div class="section-title"><span class="step">4</span> Cliente</div>
+            <div class="field">
+              <label for="buscaCliente">Nome do cliente <span style="color:var(--err)">*</span></label>
+              <input type="text" id="buscaCliente" placeholder="Digite o nome do cliente..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesCliente"></div>
+            </div>
+            <div id="clienteChip" class="chip" style="display:none">
+              <div class="info"><strong id="cliNome">-</strong><small id="cliDocumento">-</small></div>
+              <button type="button" class="btn-x" onclick="limparCliente()" title="Trocar"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <!-- 5) Materiais -->
+          <div class="section">
+            <div class="section-title"><span class="step">5</span> Materiais</div>
+            <div class="field">
+              <label for="buscaMaterial">Código ou nome do material</label>
+              <div class="add-item-row">
+                <div style="position:relative">
+                  <input type="text" id="buscaMaterial" placeholder="Digite o código ou nome..." autocomplete="off">
+                  <div class="sugestoes" id="sugestoesMaterial"></div>
+                </div>
+                <input type="number" id="txtQuantidade" placeholder="Qtde" min="0.01" step="0.01">
+                <button type="button" class="btn btn-ghost" onclick="adicionarItem()"><i class="fas fa-plus"></i></button>
+              </div>
+              <p class="hint" id="helpMaterial">Selecione um material da lista antes de adicionar.</p>
+            </div>
+            <div id="listaItens">
+              <div class="empty-list">Nenhum item adicionado ainda.</div>
+            </div>
+          </div>
+
+          <input type="text" id="website" class="honeypot" tabindex="-1" autocomplete="off">
+
+          <div class="feedback" id="feedback"></div>
+
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="btn-enviar" onclick="enviarSolicitacao()">
+              <i class="fas fa-paper-plane"></i><span>Enviar solicitação</span>
+            </button>
+          </div>
+        </form>
+
+        <div class="success-screen" id="success">
+          <div class="circle"><i class="fas fa-check"></i></div>
+          <h2>Solicitação enviada!</h2>
+          <p>Guarde o protocolo abaixo para acompanhamento junto à logística/fiscal.</p>
+          <div class="protocolo" id="protocoloGerado">-</div>
+          <button type="button" class="btn btn-ghost" onclick="location.reload()">Nova solicitação</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">Columbia Sync · Solicitação de Nota Fiscal</div>
+  </div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  let funcionarios = [];
+  let funcionarioSelecionado = null;
+  let clienteSelecionado = null;
+  let materialSelecionado = null;
+  let itens = [];
+
+  async function lerResposta(r) {
+    const texto = await r.text();
+    if (!texto) return {};
+    try { return JSON.parse(texto); } catch (e) { return { erro: `HTTP ${r.status}` }; }
+  }
+
+  function showFeedback(msg, type) {
+    const feedback = $("feedback");
+    feedback.textContent = "";
+    const icon = document.createElement("i");
+    icon.className = type === "ok" ? "fas fa-circle-check" : "fas fa-triangle-exclamation";
+    feedback.appendChild(icon);
+    feedback.appendChild(document.createTextNode(" " + msg));
+    feedback.className = "feedback show " + type;
+    if (type === "err") feedback.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function clearFeedback() { $("feedback").className = "feedback"; }
+
+  function normalizar(texto) {
+    return (texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  }
+
+  // ----- Tipo de operacao (segmented) -----
+  document.querySelectorAll("#tipoSeg .seg-option").forEach((opt) => {
+    const select = () => {
+      document.querySelectorAll("#tipoSeg .seg-option").forEach((o) => o.classList.remove("active"));
+      opt.classList.add("active");
+      $("tipoOperacao").value = opt.dataset.tipo;
+    };
+    opt.addEventListener("click", select);
+    opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
+  });
+
+  // ----- Venda posterior (segmented) -----
+  document.querySelectorAll("#vendaSeg .seg-option").forEach((opt) => {
+    const select = () => {
+      document.querySelectorAll("#vendaSeg .seg-option").forEach((o) => o.classList.remove("active"));
+      opt.classList.add("active");
+      $("vendaPosterior").value = opt.dataset.venda;
+    };
+    opt.addEventListener("click", select);
+    opt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); } });
+  });
+
+  // ----- Funcionario (lista carregada uma vez, filtro local) -----
+  async function carregarFuncionarios() {
+    try {
+      const r = await fetch("/api/solicitacao-nf/funcionarios");
+      const d = await lerResposta(r);
+      funcionarios = d.funcionarios || [];
+    } catch (e) {
+      showFeedback("Falha ao carregar lista de funcionários.", "err");
+    }
+  }
+
+  const STATUS_COLORS = {
+    "Solicitado": { bg: "#fef3c7", fg: "#92400e" },
+    "Expedido sem nota fiscal": { bg: "#dbeafe", fg: "#1e40af" },
+    "Notas fiscais emitidas": { bg: "#ede9fe", fg: "#5b21b6" },
+    "Estoque em poder de terceiros": { bg: "#e0e7ff", fg: "#3730a3" },
+    "Estoque em poder da Assistência técnica": { bg: "#fee2e2", fg: "#991b1b" },
+    "Estoque retornado": { bg: "#dcfce7", fg: "#166534" },
+  };
+
+  async function carregarMinhasSolicitacoes(codigo) {
+    const wrap = $("minhasSolicitacoesWrap");
+    const lista = $("minhasSolicitacoesLista");
+    if (!codigo) { wrap.style.display = "none"; return; }
+    try {
+      const r = await fetch(`/api/solicitacao-nf/minhas?codigo=${encodeURIComponent(codigo)}`);
+      const d = await lerResposta(r);
+      const solicitacoes = d.solicitacoes || [];
+      if (!solicitacoes.length) { wrap.style.display = "none"; return; }
+      lista.innerHTML = solicitacoes.map((s) => {
+        const cor = STATUS_COLORS[s.status] || { bg: "#e2e8f0", fg: "#334155" };
+        return `
+          <div class="minha-sol-item">
+            <div class="info">
+              <strong>${s.protocolo} — ${s.cliente_nome}</strong>
+              <small>${s.tipo_operacao} · ${new Date(s.created_at).toLocaleDateString("pt-BR")}</small>
+            </div>
+            <span class="status-pill" style="background:${cor.bg};color:${cor.fg}">${s.status}</span>
+          </div>`;
+      }).join("");
+      wrap.style.display = "block";
+    } catch (e) {
+      wrap.style.display = "none";
+    }
+  }
+
+  window.selecionarFuncionario = function (func) {
+    funcionarioSelecionado = func;
+    $("funcNome").textContent = func.nome;
+    $("funcSetor").textContent = func.setor || "Setor não informado";
+    $("funcionarioChip").style.display = "flex";
+    $("buscaFuncionario").value = "";
+    $("buscaFuncionario").style.display = "none";
+    $("sugestoesFuncionario").classList.remove("show");
+    carregarMinhasSolicitacoes(func.codigo);
+  };
+  window.limparFuncionario = function () {
+    funcionarioSelecionado = null;
+    $("funcionarioChip").style.display = "none";
+    $("buscaFuncionario").style.display = "block";
+    $("minhasSolicitacoesWrap").style.display = "none";
+  };
+
+  window.selecionarCliente = function (cli) {
+    clienteSelecionado = cli;
+    $("cliNome").textContent = cli.nome;
+    $("cliDocumento").textContent = cli.documento || "Documento não informado";
+    $("clienteChip").style.display = "flex";
+    $("buscaCliente").value = "";
+    $("buscaCliente").style.display = "none";
+    $("sugestoesCliente").classList.remove("show");
+  };
+  window.limparCliente = function () {
+    clienteSelecionado = null;
+    $("clienteChip").style.display = "none";
+    $("buscaCliente").style.display = "block";
+  };
+
+  window.selecionarMaterial = function (mat) {
+    materialSelecionado = mat;
+    $("buscaMaterial").value = `${mat.codigo_interno} - ${mat.nome}`;
+    $("sugestoesMaterial").classList.remove("show");
+    $("helpMaterial").textContent = `Saldo em estoque: ${mat.estoque_disponivel_uso ?? "-"}`;
+  };
+
+  window.adicionarItem = function () {
+    const qtde = parseFloat($("txtQuantidade").value || "0");
+    if (!materialSelecionado) { showFeedback("Selecione um material da lista antes de adicionar.", "err"); return; }
+    if (!qtde || qtde <= 0) { showFeedback("Informe uma quantidade válida.", "err"); return; }
+    clearFeedback();
+    itens.push({ material_codigo: materialSelecionado.codigo_interno, material_nome: materialSelecionado.nome, quantidade: qtde });
+    renderItens();
+    materialSelecionado = null;
+    $("buscaMaterial").value = "";
+    $("txtQuantidade").value = "";
+    $("helpMaterial").textContent = "Selecione um material da lista antes de adicionar.";
+  };
+
+  window.removerItem = function (idx) {
+    itens.splice(idx, 1);
+    renderItens();
+  };
+
+  function renderItens() {
+    const container = $("listaItens");
+    if (!itens.length) {
+      container.innerHTML = '<div class="empty-list">Nenhum item adicionado ainda.</div>';
+      return;
+    }
+    container.innerHTML = itens.map((it, idx) => `
+      <div class="item-row">
+        <div class="info"><strong>${it.material_codigo} - ${it.material_nome}</strong><span>Quantidade: ${it.quantidade}</span></div>
+        <button type="button" class="btn-x" onclick="removerItem(${idx})"><i class="fas fa-trash"></i></button>
+      </div>
+    `).join("");
+  }
+
+  function renderSugestoes(lista, resultados, render, onSelecionar) {
+    if (!resultados.length) {
+      lista.innerHTML = '<div class="empty">Nenhum resultado encontrado.</div>';
+      lista.classList.add("show");
+      return;
+    }
+    lista.innerHTML = "";
+    resultados.forEach((r) => {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = render(r);
+      div.addEventListener("click", () => onSelecionar(r));
+      lista.appendChild(div);
+    });
+    lista.classList.add("show");
+  }
+
+  function bindBuscaFuncionario() {
+    const input = $("buscaFuncionario");
+    const lista = $("sugestoesFuncionario");
+    input.addEventListener("input", () => {
+      const termo = normalizar(input.value);
+      if (!termo) { lista.classList.remove("show"); return; }
+      const encontrados = funcionarios.filter((f) => normalizar(f.nome).includes(termo)).slice(0, 10);
+      renderSugestoes(lista, encontrados, (f) => `<strong>${f.nome}</strong><small>${f.setor || ""}</small>`, window.selecionarFuncionario);
+    });
+  }
+
+  function bindBuscaServidor(inputId, listaId, url, campo, onSelecionar, render) {
+    const input = $(inputId);
+    const lista = $(listaId);
+    let debounce = null;
+    input.addEventListener("input", () => {
+      clearTimeout(debounce);
+      const termo = input.value.trim();
+      if (termo.length < 2) { lista.classList.remove("show"); return; }
+      debounce = setTimeout(async () => {
+        try {
+          const r = await fetch(`${url}?q=${encodeURIComponent(termo)}`);
+          const d = await lerResposta(r);
+          renderSugestoes(lista, d[campo] || [], render, onSelecionar);
+        } catch (e) {
+          lista.innerHTML = '<div class="empty">Falha na busca.</div>';
+          lista.classList.add("show");
+        }
+      }, 300);
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll(".sugestoes").forEach((el) => {
+      if (!el.parentElement.contains(e.target)) el.classList.remove("show");
+    });
+  });
+
+  window.enviarSolicitacao = async function () {
+    clearFeedback();
+    if (!funcionarioSelecionado) { showFeedback("Selecione seu nome na lista de funcionários.", "err"); return; }
+    if (!$("tipoOperacao").value) { showFeedback("Selecione o tipo de operação.", "err"); return; }
+    if (!clienteSelecionado) { showFeedback("Selecione o cliente na lista.", "err"); return; }
+    if (!itens.length) { showFeedback("Adicione ao menos um material.", "err"); return; }
+
+    const btn = $("btn-enviar");
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Enviando…</span>';
+    try {
+      const payload = {
+        solicitante_nome: funcionarioSelecionado.nome,
+        tipo_operacao: $("tipoOperacao").value,
+        venda_posterior: $("vendaPosterior").value === "sim",
+        cliente_codigo: clienteSelecionado.codigo,
+        cliente_nome: clienteSelecionado.nome,
+        itens: itens,
+        website: $("website").value,
+      };
+      const r = await fetch("/api/solicitacao-nf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await lerResposta(r);
+      if (!r.ok || !d.sucesso) {
+        showFeedback(d.erro || "Falha ao enviar solicitação.", "err");
+        btn.disabled = false;
+        btn.innerHTML = original;
+        return;
+      }
+      document.getElementById("form-solicitacao").style.display = "none";
+      $("protocoloGerado").textContent = d.protocolo;
+      $("success").classList.add("show");
+    } catch (e) {
+      showFeedback("Falha ao enviar solicitação. Tente novamente.", "err");
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  };
+
+  carregarFuncionarios();
+  bindBuscaFuncionario();
+  bindBuscaServidor("buscaCliente", "sugestoesCliente", "/api/solicitacao-nf/clientes", "clientes", window.selecionarCliente,
+    (c) => `<strong>${c.nome}</strong><small>${c.documento || ""}</small>`);
+  bindBuscaServidor("buscaMaterial", "sugestoesMaterial", "/api/solicitacao-nf/materiais", "materiais", window.selecionarMaterial,
+    (m) => `<strong>${m.codigo_interno} - ${m.nome}</strong><small>Saldo: ${m.estoque_disponivel_uso ?? "-"}</small>`);
+})();
+</script>
+</body>
+</html>

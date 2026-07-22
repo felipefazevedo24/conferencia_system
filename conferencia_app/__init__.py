@@ -26,6 +26,7 @@ from .routes.boleto_routes import boleto_bp
 from .routes.cadastro_workflow_routes import cadastro_workflow_bp
 from .routes.conserto_routes import conserto_bp
 from .routes.compras_routes import compras_bp
+from .routes.expedicao_avulso_routes import expedicao_avulso_bp
 from .routes.expedicao_fat_routes import expedicao_fat_bp
 from .routes.expedicao_st_routes import expedicao_st_bp
 from .routes.facilities_routes import facilities_bp
@@ -35,6 +36,7 @@ from .routes.painel_tv_routes import painel_tv_bp
 from .routes.qualidade_routes import qualidade_bp
 from .routes.rastreamento_routes import rastreamento_bp
 from .routes.frota_routes import frota_bp
+from .routes.solicitacao_nf_routes import solicitacao_nf_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
 from .routes.wms_routes import wms_bp
 
@@ -63,6 +65,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(compras_bp)
     app.register_blueprint(expedicao_fat_bp)
     app.register_blueprint(expedicao_st_bp)
+    app.register_blueprint(expedicao_avulso_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(qualidade_bp)
@@ -70,6 +73,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(frota_bp)
     app.register_blueprint(viagem_bp)
     app.register_blueprint(motorista_bp)
+    app.register_blueprint(solicitacao_nf_bp)
 
     register_error_handlers(app)
 
