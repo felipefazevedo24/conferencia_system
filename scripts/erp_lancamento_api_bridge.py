@@ -1020,6 +1020,16 @@ def _compras_query_catalog() -> dict[str, str]:
     }
 
 
+def _solicitacao_nf_query_catalog() -> dict[str, str]:
+    from conferencia_app.services import solicitacao_nf_service
+
+    return {
+        name: value
+        for name, value in vars(solicitacao_nf_service).items()
+        if name.startswith("SQL_") and isinstance(value, str)
+    }
+
+
 def _registrar_facilities_na_bridge(app: Flask) -> None:
     app.config.from_object(Config)
     os.makedirs(app.instance_path, exist_ok=True)
@@ -1311,6 +1321,35 @@ def create_app() -> Flask:
                     return jsonify({"sucesso": True, "rows": _json_safe(rows)})
         except Exception as exc:
             app.logger.exception("Falha ao executar query de Compras na bridge")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
+    @app.post("/api/erp/solicitacao-nf/query")
+    def solicitacao_nf_query():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+
+        try:
+            payload = request.get_json(silent=True) or {}
+            query_name = str(payload.get("query") or "").strip()
+            params = payload.get("params") or {}
+            catalog = _solicitacao_nf_query_catalog()
+            sql = catalog.get(query_name)
+            if not sql:
+                return jsonify({"sucesso": False, "erro": "query_nao_permitida"}), 400
+            if not isinstance(params, dict):
+                return jsonify({"sucesso": False, "erro": "params_deve_ser_objeto"}), 400
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    cols = [desc[0] for desc in (cur.description or [])]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                    return jsonify({"sucesso": True, "rows": _json_safe(rows)})
+        except Exception as exc:
+            app.logger.exception("Falha ao executar query da Solicitacao de NF na bridge")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     @app.post("/api/erp/lancamentos-periodo")

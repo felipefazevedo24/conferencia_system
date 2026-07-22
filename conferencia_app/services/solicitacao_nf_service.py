@@ -17,6 +17,7 @@ import json
 from datetime import datetime
 from typing import Any
 
+import requests
 from flask import current_app
 
 from ..extensions import db
@@ -68,7 +69,23 @@ def _empresa() -> int:
 
 
 def _executar(sql: str, params: dict) -> list[dict[str, Any]]:
+    """Executa uma das queries SQL_* deste modulo.
+
+    Producao (PythonAnywhere) nao alcanca o Postgres do ERP diretamente —
+    quando ha uma bridge configurada (ERP_LANCAMENTO_API_URL), a query e
+    enviada por HTTP para /api/erp/solicitacao-nf/query (rodando na VM com
+    acesso ao Postgres). Sem bridge configurada, cai para conexao direta
+    (uso local/rede da empresa). Mesmo padrao ja usado por
+    FacilitiesGRVService/compras/db.py.
+    """
     cfg = _resolver_config()
+    if cfg.get("api_url"):
+        try:
+            return _executar_bridge(cfg, sql, params)
+        except Exception:
+            current_app.logger.warning(
+                "solicitacao_nf: bridge indisponivel, tentando Postgres direto", exc_info=True
+            )
     if not cfg["host"] or not cfg["database"] or not cfg["user"]:
         return []
     conn = _conectar(cfg)
@@ -79,6 +96,31 @@ def _executar(sql: str, params: dict) -> list[dict[str, Any]]:
             return [dict(zip(cols, row)) for row in cur.fetchall()]
     finally:
         conn.close()
+
+
+def _executar_bridge(cfg: dict[str, Any], sql: str, params: dict) -> list[dict[str, Any]]:
+    query_name = _QUERY_NAMES.get(sql)
+    if not query_name:
+        raise ValueError("Query da Solicitacao de NF nao registrada para uso via bridge")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/SolicitacaoNF",
+    }
+    if cfg.get("api_token"):
+        headers["Authorization"] = f"Bearer {cfg['api_token']}"
+    response = requests.post(
+        f"{cfg['api_url']}/api/erp/solicitacao-nf/query",
+        headers=headers,
+        json={"query": query_name, "params": params},
+        timeout=cfg.get("api_timeout") or 30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("sucesso"):
+        raise RuntimeError(str(payload.get("erro") or "Falha na bridge da Solicitacao de NF"))
+    return payload.get("rows") or []
 
 
 _CLIENTE_SELECT = """
@@ -101,22 +143,51 @@ _CLIENTE_SELECT = """
     from public.tcliente c
 """
 
+# Queries nomeadas (prefixo SQL_) — o nome da constante e enviado para a
+# bridge no lugar do texto SQL (allowlist), que a resolve de volta via
+# _QUERY_NAMES. Nao renomeie sem atualizar a bridge (scripts/erp_lancamento_api_bridge.py).
+SQL_CLIENTE_BUSCAR = (
+    _CLIENTE_SELECT
+    + """
+    where to_jsonb(c)->>'razao_social' ilike %(termo)s
+       or to_jsonb(c)->>'nome' ilike %(termo)s
+       or to_jsonb(c)->>'fantasia' ilike %(termo)s
+    order by nome
+    limit %(limit)s
+"""
+)
+
+SQL_CLIENTE_POR_CODIGO = _CLIENTE_SELECT + " where to_jsonb(c)->>'codigo' = %(codigo)s limit 1"
+
+SQL_MATERIAL_BUSCAR = """
+    select codigo_interno, nome, estoque_disponivel_uso
+    from public.tproduto
+    where cod_empresa = %(empresa)s
+      and (codigo_interno ilike %(termo)s or nome ilike %(termo)s)
+    order by nome
+    limit %(limit)s
+"""
+
+SQL_MATERIAL_POR_CODIGO = """
+    select codigo_interno, nome, estoque_disponivel_uso
+    from public.tproduto
+    where cod_empresa = %(empresa)s
+      and lower(trim(codigo_interno)) = lower(trim(%(codigo)s))
+    limit 1
+"""
+
+_QUERY_NAMES = {
+    value: name
+    for name, value in list(globals().items())
+    if name.startswith("SQL_") and isinstance(value, str)
+}
+
 
 def buscar_clientes(termo: str, limit: int = 15) -> list[dict[str, Any]]:
     termo = (termo or "").strip()
     if len(termo) < 2:
         return []
-    sql = (
-        _CLIENTE_SELECT
-        + """
-        where to_jsonb(c)->>'razao_social' ilike %(termo)s
-           or to_jsonb(c)->>'nome' ilike %(termo)s
-           or to_jsonb(c)->>'fantasia' ilike %(termo)s
-        order by nome
-        limit %(limit)s
-    """
-    )
-    rows = _executar(sql, {"termo": f"%{termo}%", "limit": limit})
+    rows = _executar(SQL_CLIENTE_BUSCAR, {"termo": f"%{termo}%", "limit": limit})
     return [row for row in rows if row.get("codigo") and row.get("nome")]
 
 
@@ -124,8 +195,7 @@ def _buscar_cliente_por_codigo(codigo: str) -> dict[str, Any] | None:
     codigo = str(codigo or "").strip()
     if not codigo:
         return None
-    sql = _CLIENTE_SELECT + " where to_jsonb(c)->>'codigo' = %(codigo)s limit 1"
-    rows = _executar(sql, {"codigo": codigo})
+    rows = _executar(SQL_CLIENTE_POR_CODIGO, {"codigo": codigo})
     return rows[0] if rows else None
 
 
@@ -133,15 +203,7 @@ def buscar_materiais(termo: str, limit: int = 15) -> list[dict[str, Any]]:
     termo = (termo or "").strip()
     if len(termo) < 2:
         return []
-    sql = """
-        select codigo_interno, nome, estoque_disponivel_uso
-        from public.tproduto
-        where cod_empresa = %(empresa)s
-          and (codigo_interno ilike %(termo)s or nome ilike %(termo)s)
-        order by nome
-        limit %(limit)s
-    """
-    rows = _executar(sql, {"empresa": _empresa(), "termo": f"%{termo}%", "limit": limit})
+    rows = _executar(SQL_MATERIAL_BUSCAR, {"empresa": _empresa(), "termo": f"%{termo}%", "limit": limit})
     return [row for row in rows if row.get("codigo_interno") and row.get("nome")]
 
 
@@ -149,14 +211,7 @@ def _buscar_material_por_codigo(codigo: str) -> dict[str, Any] | None:
     codigo = str(codigo or "").strip()
     if not codigo:
         return None
-    sql = """
-        select codigo_interno, nome, estoque_disponivel_uso
-        from public.tproduto
-        where cod_empresa = %(empresa)s
-          and lower(trim(codigo_interno)) = lower(trim(%(codigo)s))
-        limit 1
-    """
-    rows = _executar(sql, {"empresa": _empresa(), "codigo": codigo})
+    rows = _executar(SQL_MATERIAL_POR_CODIGO, {"empresa": _empresa(), "codigo": codigo})
     return rows[0] if rows else None
 
 
