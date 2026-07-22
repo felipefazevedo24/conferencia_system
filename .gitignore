@@ -39,3 +39,9 @@ static/downloads/*.apk
 Thumbs.db
 # Google Cloud credentials
 columbia-sync-59d7163c97b6.json
+
+# Scripts de debug/uso pontual (não versionar) e binarios de terceiros
+temp_*.py
+ngrok.exe
+ngrok.zip
+*.zip

@@ -13,7 +13,12 @@ from flask import (
 
 from ..auth import permission_required, roles_required
 from ..extensions import db
-from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemFatItem, ExpedicaoOrdemFatVolume
+from ..models import (
+    ExpedicaoOrdemFat,
+    ExpedicaoOrdemFatItem,
+    ExpedicaoOrdemFatVolume,
+    ExpedicaoConferenciaSimples,
+)
 from ..services import expedicao_fat_service as svc
 from ..services import expedicao_log_service as log_svc
 
@@ -149,7 +154,28 @@ def listar_ordens_conf_cega():
         return any(busca in os_val for os_val in os_por_ordem.get(ordem.id, ()))
 
     resumos = []
-    metricas = {"pendente": 0, "conferido": 0, "faturado_sem_conf": 0, "faturado": 0, "expedido": 0}
+    metricas = {"pendente": 0, "conferido": 0, "faturado_sem_conf": 0, "faturado": 0, "romaneio": 0, "expedido": 0}
+
+    # Mapeia numero_nf -> romaneio mais recente que a contém. O agrupamento em
+    # romaneio é feito por NF (não por orçamento), pois um mesmo romaneio pode
+    # reunir NFes de orçamentos/ordens diferentes. Usado apenas para exibir a
+    # composição (badge) nas etapas "Em Romaneio" e "Expedido".
+    from ..models import ExpedicaoRomaneio, ExpedicaoRomaneioNF
+
+    nf_para_romaneio = {}
+    linhas_nf = (
+        db.session.query(ExpedicaoRomaneioNF, ExpedicaoRomaneio)
+        .join(ExpedicaoRomaneio, ExpedicaoRomaneioNF.romaneio_id == ExpedicaoRomaneio.id)
+        .all()
+    )
+    for nf_row, rom in linhas_nf:
+        chave = str(nf_row.numero_nf or "").strip()
+        if not chave:
+            continue
+        existente = nf_para_romaneio.get(chave)
+        if not existente or rom.id > existente.id:
+            nf_para_romaneio[chave] = rom
+
     for ordem in ordens:
         sl = svc.status_slug(ordem.status)
         # Faturado sem conferência: oculta o backlog antigo, exibindo apenas as
@@ -157,6 +183,17 @@ def listar_ordens_conf_cega():
         if sl == "faturado_sem_conf" and (ordem.cod_ordem_fat or 0) < FAT_SEM_CONF_COD_MINIMO:
             continue
         metricas[sl] = metricas.get(sl, 0) + 1
+
+        romaneio_info = None
+        if sl in ("romaneio", "expedido"):
+            rom = nf_para_romaneio.get(str(ordem.numero_nf or "").strip())
+            if rom:
+                romaneio_info = {
+                    "id": rom.id,
+                    "numero_romaneio": rom.numero_romaneio,
+                    "status": rom.status,
+                }
+
         # Busca por OS/orcamento percorre TODOS os status; ignora o filtro de
         # status enquanto houver termo de busca.
         if busca:
@@ -164,7 +201,11 @@ def listar_ordens_conf_cega():
                 continue
         elif slug and sl != slug:
             continue
-        resumos.append(_ordem_resumo(ordem, contagens.get(ordem.id, 0)))
+        resumo = _ordem_resumo(ordem, contagens.get(ordem.id, 0))
+        if sl in ("romaneio", "expedido"):
+            resumo["romaneio"] = romaneio_info
+        resumos.append(resumo)
+
 
     return jsonify({"ordens": resumos, "metricas": metricas})
 
@@ -522,6 +563,19 @@ def estornar_conferencia_fat(cod_ordem_fat):
 
     slug = svc.status_slug(ordem.status)
     if slug not in ("conferido", "faturado", "finalizado_sem_conf"):
+        # Regra de workflow: so se pode estornar a ULTIMA etapa concluida, na
+        # ordem inversa. Se ha uma etapa posterior ativa (Romaneio/Expedido),
+        # orienta o usuario a estornar primeiro a etapa mais recente.
+        if slug == "romaneio":
+            return jsonify({
+                "error": "Nao e possivel estornar a Nota Fiscal, pois existe uma etapa posterior ativa (Romaneio). "
+                         "Realize primeiro o estorno do Romaneio (remova a NF do romaneio ou delete o romaneio)."
+            }), 400
+        if slug == "expedido":
+            return jsonify({
+                "error": "Nao e possivel estornar a Nota Fiscal, pois existe uma etapa posterior ativa (Expedicao). "
+                         "Realize primeiro o estorno da Expedicao e depois do Romaneio."
+            }), 400
         return jsonify({"error": "Nao ha conferencia para estornar nesta ordem."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -596,3 +650,131 @@ def lookup_ordem_conf_cega():
         "n_os": os_lista,
         "numero_os": ", ".join(os_lista),
     })
+
+
+@expedicao_fat_bp.route("/api/expedicao/dados-envio", methods=["GET"])
+def dados_envio_expedicao():
+    """Endpoint público de consulta para sistemas externos - SEM autenticação necessária.
+
+    GATILHOS:
+    1. Após CONFERÊNCIA: Retorna dados EXCETO data_expedicao (null)
+    2. Após EXPEDIÇÃO: Retorna dados COM data_expedicao preenchida
+    3. Após 10 DIAS DE EXPEDIÇÃO: Remove da API automaticamente
+
+    Parâmetros opcionais (query string):
+        status  — filtra pelo status: conferido | faturado | expedido (padrão: todos)
+        desde   — data mínima de atualização no formato YYYY-MM-DD
+        limite  — máximo de registros (padrão 200, máximo 1000)
+        offset  — paginação - número de registros a pular (padrão 0)
+
+    Exemplo:
+        GET /api/expedicao/dados-envio?status=expedido&desde=2026-07-01&limite=50
+    """
+    from datetime import datetime as _datetime, date as _date, timedelta
+
+    try:
+        status_filtro = (request.args.get("status") or "").strip().lower()
+        desde_str = (request.args.get("desde") or "").strip()
+        limite = min(int(request.args.get("limite", 200)), 1000)
+        offset = max(int(request.args.get("offset", 0)), 0)
+
+        query = ExpedicaoOrdemFat.query
+
+        # Filtra apenas ordens que já têm dados de conferência (descarta Pendentes)
+        status_validos = {
+            "conferido": svc.STATUS_CONFERIDO,
+            "faturado": svc.STATUS_FATURADO,
+            "expedido": svc.STATUS_EXPEDIDO,
+        }
+        if status_filtro and status_filtro in status_validos:
+            query = query.filter(ExpedicaoOrdemFat.status == status_validos[status_filtro])
+        else:
+            query = query.filter(
+                ExpedicaoOrdemFat.status.in_(list(status_validos.values()))
+            )
+
+        if desde_str:
+            try:
+                desde = _date.fromisoformat(desde_str)
+                query = query.filter(ExpedicaoOrdemFat.updated_at >= desde)
+            except ValueError:
+                return jsonify({
+                    "success": False,
+                    "error": "Parâmetro 'desde' inválido. Use YYYY-MM-DD.",
+                    "timestamp": _datetime.utcnow().isoformat() + "Z"
+                }), 400
+
+        ordens_brutos = (
+            query
+            .order_by(ExpedicaoOrdemFat.updated_at.desc())
+            .all()
+        )
+
+        # FILTRO DE EXPIRAÇÃO: Remove ordens que foram expedidas há mais de 10 dias
+        agora = _datetime.utcnow()
+        ordens_filtradas = []
+        
+        for ordem in ordens_brutos:
+            if ordem.status == svc.STATUS_EXPEDIDO and ordem.expedido_at:
+                dias_desde_expedicao = (agora - ordem.expedido_at).days
+                if dias_desde_expedicao > 10:
+                    # Passou 10 dias, não incluir na API
+                    continue
+            
+            ordens_filtradas.append(ordem)
+
+        # Conta total de registros disponíveis (após filtro de expiração)
+        total_available = len(ordens_filtradas)
+
+        # Aplica paginação
+        ordens = ordens_filtradas[offset:offset + limite]
+
+        resultado = []
+        for ordem in ordens:
+            os_lista = sorted({
+                (it.n_os or "").strip()
+                for it in ordem.itens
+                if (it.n_os or "").strip()
+            })
+            # Extrai últimos 4 dígitos de OS e Orçamento
+            os_ultimos = ", ".join([os[-4:] if len(os) >= 4 else os for os in os_lista])
+            orcamento_ultimos = ordem.orcamento[-4:] if ordem.orcamento and len(str(ordem.orcamento)) >= 4 else ordem.orcamento
+            
+            item = {
+                "n_os": os_ultimos,
+                "orcamento": orcamento_ultimos,
+                "n_ordem_faturamento": f"#{ordem.cod_ordem_fat}",
+                "peso_liquido": ordem.peso_liquido,
+                "peso_bruto": ordem.peso_bruto,
+                "qtde_volumes": ordem.qtde_volumes,
+                "especie_volumes": ordem.especie_volumes,
+            }
+            
+            # GATILHO 1: Se conferido/faturado (NÃO expedido) → data_expedicao = None
+            # GATILHO 2: Se expedido → data_expedicao com a data
+            if ordem.status == svc.STATUS_EXPEDIDO:
+                item["data_expedicao"] = _iso(ordem.expedido_at)
+            else:
+                item["data_expedicao"] = None
+            
+            resultado.append(item)
+
+        resposta = {
+            "success": True,
+            "data": resultado,
+            "count": len(resultado),
+            "total_available": total_available,
+            "offset": offset,
+            "limit": limite,
+            "timestamp": _datetime.utcnow().isoformat() + "Z"
+        }
+
+        return jsonify(resposta), 200
+
+    except Exception as e:
+        from datetime import datetime as _datetime
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "timestamp": _datetime.utcnow().isoformat() + "Z"
+        }), 500

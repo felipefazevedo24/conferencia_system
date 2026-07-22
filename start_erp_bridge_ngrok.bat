@@ -5,7 +5,7 @@ cd /d "%~dp0"
 REM ============================================================
 REM  Sobe a API bridge do ERP Lancamento + tunel ngrok (fixo)
 REM  - Bridge (Flask)  : http://localhost:%ERP_BRIDGE_PORT%
-REM  - ngrok           : https://copy-shadiness-justice.ngrok-free.dev
+REM  - ngrok           : https://clumsy-outbreak-irk.ngrok-free.dev
 REM ============================================================
 
 REM ---- Configuracao da bridge ------------------------------
@@ -22,7 +22,7 @@ set ERP_LANCAMENTO_PG_PASSWORD=PZdyLt8i7A5@@
 set ERP_LANCAMENTO_PG_TABLE=tcompras
 
 REM ---- Dominio fixo do ngrok -------------------------------
-set NGROK_DOMAIN=copy-shadiness-justice.ngrok-free.dev
+set NGROK_DOMAIN=clumsy-outbreak-irk.ngrok-free.dev
 
 REM ---- Ambiente virtual ------------------------------------
 if not exist ".venv\Scripts\python.exe" (

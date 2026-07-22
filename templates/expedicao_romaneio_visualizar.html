@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizar Romaneio #{{ romaneio.numero_romaneio }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .rom-viz-container { max-width: 950px; margin: 20px auto; }
+    .rom-viz-toolbar { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .rom-viz-document {
+        border: 2px solid #333;
+        background: white;
+        padding: 40px;
+        font-family: Arial, sans-serif;
+        line-height: 1.4;
+        page-break-after: always;
+    }
+    
+    /* CABEÇALHO */
+    .rom-doc-header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #333; }
+    .rom-doc-title { font-size: 22px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px; }
+    
+    /* SEÇÕES */
+    .rom-doc-section { margin: 20px 0; }
+    .rom-doc-section-title { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #333; letter-spacing: 0.5px; margin: 0 0 8px; }
+    
+    /* INFORMAÇÕES REMETENTE */
+    .rom-remetente-label { font-size: 10px; font-weight: 700; color: #555; margin-bottom: 2px; }
+    .rom-remetente-value { font-size: 12px; color: #222; margin-bottom: 8px; }
+    
+    /* GRID DE CABEÇALHO */
+    .rom-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin: 20px 0; }
+    .rom-header-field { }
+    .rom-header-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px; letter-spacing: 0.5px; }
+    .rom-header-value { font-size: 14px; font-weight: 700; color: #222; min-height: 20px; border-bottom: 1px solid #333; }
+    
+    /* TABELA NFes */
+    .rom-nf-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .rom-nf-table th { 
+        background: #f3f4f6;
+        padding: 8px;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        color: #333;
+        border: 1px solid #d1d5db;
+        letter-spacing: 0.5px;
+    }
+    .rom-nf-table td { 
+        padding: 10px 8px;
+        border: 1px solid #d1d5db;
+        font-size: 12px;
+        color: #222;
+    }
+    .rom-nf-table tbody tr:nth-child(even) { background: #f9fafb; }
+    .rom-nf-table tbody tr:hover { background: #eff6ff; }
+    
+    /* TOTALIZADORES */
+    .rom-totalizadores { 
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 15px;
+        margin: 25px 0;
+        padding: 15px;
+        background: #e0e7ff;
+        border-radius: 4px;
+    }
+    .rom-total-box { text-align: center; }
+    .rom-total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px; }
+    .rom-total-value { font-size: 18px; font-weight: 900; color: #1e1b4b; margin-top: 5px; }
+    
+    /* TRANSPORTADOR */
+    .rom-transportador-grid { 
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 15px;
+        margin: 20px 0;
+    }
+    .rom-transport-field { }
+    .rom-transport-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px; letter-spacing: 0.5px; }
+    .rom-transport-value { font-size: 12px; color: #222; min-height: 16px; border-bottom: 1px solid #333; }
+    
+    /* ASSINATURA */
+    .rom-assinatura-section { margin-top: 40px; }
+    .rom-assinatura-grid { 
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-top: 60px;
+    }
+    .rom-assinatura-box { text-align: center; border-top: 2px solid #333; padding-top: 10px; }
+    .rom-assinatura-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: 0.5px; }
+    
+    /* STATUS BADGE */
+    .rom-status-badge { 
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .rom-status-rascunho { background: #fef3c7; color: #b45309; }
+    .rom-status-pronto { background: #dbeafe; color: #1e40af; }
+    .rom-status-expedido { background: #dcfce7; color: #15803d; }
+    
+    @media print {
+        .rom-viz-toolbar { display: none; }
+        body { background: #fff; }
+        .rom-viz-container { margin: 0; max-width: none; }
+        .rom-viz-document { border: none; padding: 0; page-break-before: always; }
+        .rom-viz-document:first-of-type { page-break-before: auto; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rom-viz-container">
+    <!-- TOOLBAR IMPRESSÃO -->
+    <div class="rom-viz-toolbar">
+        <div>
+            <strong>{{ romaneio.numero_romaneio }}</strong> | {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}
+            {% if romaneio.status == 'Rascunho' %}
+                <span class="rom-status-badge rom-status-rascunho"><i class="fas fa-circle"></i> {{ romaneio.status }}</span>
+            {% elif romaneio.status == 'Pronto' %}
+                <span class="rom-status-badge rom-status-pronto"><i class="fas fa-circle"></i> {{ romaneio.status }}</span>
+            {% elif romaneio.status == 'Expedido' %}
+                <span class="rom-status-badge rom-status-expedido"><i class="fas fa-circle"></i> {{ romaneio.status }}</span>
+            {% endif %}
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="eui-btn eui-btn--primary" onclick="window.print()"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="eui-btn eui-btn--ghost" onclick="window.history.back()"><i class="fas fa-arrow-left"></i> Voltar</button>
+        </div>
+    </div>
+
+    <!-- DOCUMENTO -->
+    <div class="rom-viz-document">
+        <!-- CABEÇALHO -->
+        <div class="rom-doc-header">
+            <div class="rom-doc-title"><i class="fas fa-receipt"></i> Romaneio de Expedição</div>
+        </div>
+
+        <!-- SEÇÃO REMETENTE -->
+        <div class="rom-doc-section">
+            <div class="rom-doc-section-title">Remetente</div>
+            <div class="rom-remetente-value"><strong>{{ remetente.razao_social }}</strong></div>
+            <div class="rom-remetente-value" style="font-size: 11px;">{{ remetente.endereco }}</div>
+        </div>
+
+        <!-- INFORMAÇÕES PRINCIPAIS -->
+        <div class="rom-header-grid">
+            <div class="rom-header-field">
+                <div class="rom-header-label">Orçamento</div>
+                <div class="rom-header-value">{{ romaneio.orcamento or '—' }}</div>
+            </div>
+            <div class="rom-header-field">
+                <div class="rom-header-label">Data de Expedição</div>
+                <div class="rom-header-value">{{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}</div>
+            </div>
+        </div>
+
+        <!-- TABELA NFes -->
+        <div class="rom-doc-section">
+            <table class="rom-nf-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">NF</th>
+                        <th>Cliente</th>
+                        <th style="width: 80px;">Peso (kg)</th>
+                        <th style="width: 100px;">Qtde Volumes</th>
+                        <th>Espécie</th>
+                        <th>OSs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if romaneio.nfs and romaneio.nfs|length > 0 %}
+                        {% for nf in romaneio.nfs %}
+                        <tr>
+                            <td><strong>{{ nf.numero_nf }}</strong></td>
+                            <td>{{ nf.cliente or '—' }}</td>
+                            <td style="text-align: right;">{{ "%.2f"|format(nf.peso_bruto or 0) }}</td>
+                            <td style="text-align: center;">{{ nf.qtde_volumes or 0 }}</td>
+                            <td>{{ nf.especie_volumes or '—' }}</td>
+                            <td style="font-size: 10px;">{{ nf.numeros_os or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: #9ca3af;">Nenhuma NF adicionada</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TOTALIZADORES -->
+        <div class="rom-totalizadores">
+            <div class="rom-total-box">
+                <div class="rom-total-label">Peso Total</div>
+                <div class="rom-total-value">{{ "%.2f"|format(romaneio.peso_bruto_total or 0) }} <span style="font-size: 12px;">kg</span></div>
+            </div>
+            <div class="rom-total-box">
+                <div class="rom-total-label">Total de Volumes</div>
+                <div class="rom-total-value">{{ romaneio.qtde_volumes_total or 0 }}</div>
+            </div>
+            <div class="rom-total-box">
+                <div class="rom-total-label">Tipo de Frete</div>
+                <div class="rom-total-value" style="font-size: 14px;">{{ romaneio.tipo_frete or 'FOB' }}</div>
+            </div>
+        </div>
+
+        <!-- OBSERVAÇÕES (CAMPOS LIVRES) -->
+        {% if romaneio.observacao_1 or romaneio.observacao_2 or romaneio.observacao_3 %}
+        <div class="rom-doc-section">
+            <div class="rom-doc-section-title">Observações</div>
+            {% if romaneio.observacao_1 %}
+            <div style="font-size: 12px; margin-bottom: 8px; padding: 8px; background: #f9fafb; border-left: 3px solid #4338ca;">
+                <strong>1:</strong> {{ romaneio.observacao_1 }}
+            </div>
+            {% endif %}
+            {% if romaneio.observacao_2 %}
+            <div style="font-size: 12px; margin-bottom: 8px; padding: 8px; background: #f9fafb; border-left: 3px solid #4338ca;">
+                <strong>2:</strong> {{ romaneio.observacao_2 }}
+            </div>
+            {% endif %}
+            {% if romaneio.observacao_3 %}
+            <div style="font-size: 12px; margin-bottom: 8px; padding: 8px; background: #f9fafb; border-left: 3px solid #4338ca;">
+                <strong>3:</strong> {{ romaneio.observacao_3 }}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- DADOS TRANSPORTADOR -->
+        <div class="rom-doc-section" style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #ddd;">
+            <div class="rom-doc-section-title">Dados Transportador</div>
+            <div class="rom-transportador-grid">
+                <div class="rom-transport-field">
+                    <div class="rom-transport-label">Transportadora</div>
+                    <div class="rom-transport-value">{{ romaneio.transportadora_nome or '—' }}</div>
+                </div>
+                <div class="rom-transport-field">
+                    <div class="rom-transport-label">Nome Motorista / Conferente</div>
+                    <div class="rom-transport-value">{{ romaneio.motorista_nome or '—' }}</div>
+                </div>
+                <div class="rom-transport-field">
+                    <div class="rom-transport-label">Número Documento (CPF/CNPJ)</div>
+                    <div class="rom-transport-value">{{ romaneio.motorista_documento or '—' }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ASSINATURA -->
+        <div class="rom-assinatura-section">
+            <div class="rom-assinatura-grid">
+                <div class="rom-assinatura-box">
+                    <div class="rom-assinatura-label">Conferente / Responsável</div>
+                </div>
+                <div class="rom-assinatura-box">
+                    <div class="rom-assinatura-label">Motorista / Transportador</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RODAPÉ COM INFORMAÇÕES GERENCIAIS -->
+        <div style="margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 9px; color: #999;">
+            <div>Romaneio: <strong>{{ romaneio.numero_romaneio }}</strong> | Criado por: {{ romaneio.criado_por }} em {{ romaneio.criado_em.strftime('%d/%m/%Y %H:%M') if romaneio.criado_em else '—' }}</div>
+            {% if romaneio.expedido_em %}
+            <div>Expedido por: {{ romaneio.expedido_por }} em {{ romaneio.expedido_em.strftime('%d/%m/%Y %H:%M') }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1941,3 +1941,92 @@ class QualidadeCertificado(db.Model):
     __table_args__ = (
         db.UniqueConstraint("numero_nota", name="ux_qualidade_certificado_nota"),
     )
+
+
+class ExpedicaoRomaneio(db.Model):
+    """Romaneio de Expedição - documento que agrupa múltiplas NFes que serão expedidas juntas.
+    Permite definir tipo de frete (FOB/CIF) e gerenciar informações consolidadas."""
+
+    __tablename__ = "expedicao_romaneio"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_romaneio = db.Column(db.String(40), nullable=False, unique=True, index=True)
+    data_romaneio = db.Column(db.Date, nullable=False, default=datetime.now, index=True)
+    orcamento = db.Column(db.String(80), index=True)
+    cliente = db.Column(db.String(160))
+    
+    # Tipo de frete: FOB (Frete por conta do cliente) ou CIF (Frete por conta do fornecedor)
+    tipo_frete = db.Column(db.String(10), nullable=False, default="FOB", index=True)
+    
+    # Dados consolidados das NFes
+    peso_bruto_total = db.Column(db.Float, nullable=False, default=0)
+    qtde_volumes_total = db.Column(db.Integer, nullable=False, default=0)
+    
+    # Campos livres para observações (conforme modelo do romaneio)
+    observacao_1 = db.Column(db.String(500))
+    observacao_2 = db.Column(db.String(500))
+    observacao_3 = db.Column(db.String(500))
+    
+    # Assinatura do transportador (foto/imagem)
+    assinatura_transportador_file_name = db.Column(db.String(260))
+    assinatura_transportador_file_path = db.Column(db.String(500))
+    assinatura_uploadado_em = db.Column(db.DateTime)
+    assinatura_uploadado_por = db.Column(db.String(100))
+    
+    # Status: Rascunho (em construção), Pronto (finalizado), Expedido (já expedido)
+    status = db.Column(db.String(30), nullable=False, default="Rascunho", index=True)
+    
+    # Auditoria
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    expedido_por = db.Column(db.String(100))
+    expedido_em = db.Column(db.DateTime)
+    
+    # Relacionamento com as NFes do romaneio
+    nfs = db.relationship(
+        "ExpedicaoRomaneioNF",
+        backref="romaneio",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoRomaneioNF.numero_nf",
+    )
+
+
+class ExpedicaoRomaneioNF(db.Model):
+    """Linhas do Romaneio - NFes que fazem parte de um romaneio de expedição."""
+
+    __tablename__ = "expedicao_romaneio_nf"
+
+    id = db.Column(db.Integer, primary_key=True)
+    romaneio_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_romaneio.id"),
+        nullable=False,
+        index=True,
+    )
+    
+    # Informações da NF
+    numero_nf = db.Column(db.String(160), nullable=False, index=True)
+    orcamento = db.Column(db.String(80), index=True)
+    cliente = db.Column(db.String(160))
+    
+    # Dados da expedição
+    peso_bruto = db.Column(db.Float, nullable=False, default=0)
+    qtde_volumes = db.Column(db.Integer, nullable=False, default=0)
+    especie_volumes = db.Column(db.String(80))
+    
+    # Relação de OSs desta NF (comma-separated ou JSON)
+    numeros_os = db.Column(db.String(500))
+    
+    # Auditoria
+    adicionado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    adicionado_por = db.Column(db.String(100), nullable=False)
+    
+    __table_args__ = (
+        db.UniqueConstraint(
+            "romaneio_id",
+            "numero_nf",
+            name="ux_romaneio_nf_unique",
+        ),
+    )

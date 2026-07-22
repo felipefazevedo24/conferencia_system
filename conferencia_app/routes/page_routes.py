@@ -1113,10 +1113,6 @@ def viagens_page():
     )
 
 
-@page_bp.route("/expedicao/romaneio")
-@permission_required("PAGE_EXPEDICAO_ROMANEIO")
-def expedicao_romaneio_page():
-    return render_template("expedicao_romaneio.html", user=session["username"])
 
 
 @page_bp.route("/admin/usuarios")
