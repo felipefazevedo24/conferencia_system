@@ -1972,7 +1972,13 @@ class ExpedicaoRomaneio(db.Model):
     assinatura_transportador_file_path = db.Column(db.String(500))
     assinatura_uploadado_em = db.Column(db.DateTime)
     assinatura_uploadado_por = db.Column(db.String(100))
-    
+
+    # Assinatura do conferente/responsavel (foto/imagem)
+    assinatura_conferente_file_name = db.Column(db.String(260))
+    assinatura_conferente_file_path = db.Column(db.String(500))
+    assinatura_conferente_uploadado_em = db.Column(db.DateTime)
+    assinatura_conferente_uploadado_por = db.Column(db.String(100))
+
     # Status: Rascunho (em construção), Pronto (finalizado), Expedido (já expedido)
     status = db.Column(db.String(30), nullable=False, default="Rascunho", index=True)
     
@@ -2030,3 +2036,27 @@ class ExpedicaoRomaneioNF(db.Model):
             name="ux_romaneio_nf_unique",
         ),
     )
+
+
+class ExpedicaoRomaneioExclusao(db.Model):
+    """Solicitacao de exclusao de um romaneio em Rascunho feita por quem nao
+    e Admin — precisa de aprovacao. Mesmo padrao de
+    ExpedicaoConferenciaSimplesEstorno."""
+
+    __tablename__ = "expedicao_romaneio_exclusao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    romaneio_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_romaneio.id"),
+        nullable=False,
+        index=True,
+    )
+    solicitante = db.Column(db.String(100), nullable=False)
+    motivo = db.Column(db.String(500), nullable=False)
+    # Pendente | Aprovado | Rejeitado
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    admin_usuario = db.Column(db.String(100))
+    admin_observacao = db.Column(db.String(500))
+    resolvido_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

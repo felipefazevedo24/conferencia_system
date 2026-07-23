@@ -422,7 +422,7 @@
                     </div>
                 </div>
                 <div class="ce-modal__body">
-                    <label for="ce-motivo-input">Informe o motivo</label>
+                    <label for="ce-motivo-input" id="ce-motivo-label">Informe o motivo</label>
                     <textarea id="ce-motivo-input" placeholder="Ex.: material já expedido em contraturno / conferência dispensada pela gerência…"></textarea>
                     <div class="ce-modal__err" id="ce-motivo-err"></div>
                 </div>
@@ -596,6 +596,7 @@
             $("ce-motivo-title").textContent = opts.title || "Finalizar sem conferir";
             $("ce-motivo-sub").innerHTML = opts.sub ||
                 "Ação de Admin — a ordem será encerrada sem conferência física e <b>não</b> irá para o Registro de expedição.";
+            $("ce-motivo-label").textContent = opts.label || "Informe o motivo";
             btnOk.innerHTML = '<i class="fas fa-check"></i> ' + (opts.okLabel || "Finalizar sem conferir");
             input.placeholder = opts.placeholder || "Ex.: material já expedido em contraturno / conferência dispensada pela gerência…";
 
@@ -614,7 +615,7 @@
             }
             function onOk() {
                 const v = input.value.trim();
-                if (!v) { err.textContent = "Informe o motivo para finalizar sem conferir."; input.focus(); return; }
+                if (!v) { err.textContent = opts.errLabel || "Informe o motivo para finalizar sem conferir."; input.focus(); return; }
                 fechar(v);
             }
             function onCancel() { fechar(null); }
@@ -805,6 +806,9 @@
                     acao = `<button class="eui-btn eui-btn--warning eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-pen-to-square"></i> Editar</button>`;
                 } else {
                     acao = `<button class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${escapeHtml(cod)}"><i class="fas fa-eye"></i> Detalhes</button>`;
+                }
+                if (CE_IS_ADMIN && cfg.podeCorrigirNf && o.status_slug === "faturado") {
+                    acao += ` <button class="eui-btn eui-btn--warning eui-btn--icon eui-btn--sm" data-corrigir-nf="${escapeHtml(cod)}" title="Corrigir NF"><i class="fas fa-file-pen"></i></button>`;
                 }
                 const nf = o.numero_nf ? escapeHtml(o.numero_nf) : "—";
                 const div = o.divergente ? `<div class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</div>` : "";
@@ -1092,6 +1096,29 @@
             }
         }
 
+        async function corrigirNf(cod) {
+            if (!CE_IS_ADMIN || !cod) return;
+            const numeroNovo = await pedirMotivo({
+                title: "Corrigir NF",
+                sub: "Ação de Admin — corrige o número da NF desta ordem (ex.: nota cancelada/reemitida) <b>sem</b> apagar a conferência e os pesos já registrados. O número informado será validado no ERP.",
+                okLabel: "Corrigir NF",
+                label: "Número da nova NF",
+                placeholder: "Ex.: 55502",
+                errLabel: "Informe o número da nova NF.",
+            });
+            if (numeroNovo === null) return; // cancelou
+
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod) + "/corrigir-nf", {
+                    method: "POST", body: JSON.stringify({ numero_nf_novo: numeroNovo }),
+                });
+                toast("NF corrigida para " + r.numero_nf + ".", "success");
+                carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
         async function finalizarSemConferencia() {
             if (!currentOrdem || !CE_IS_ADMIN) return;
             const motivo = await pedirMotivo();
@@ -1298,7 +1325,13 @@
             const xBtn = e.target.closest("[data-expedir]");
             const editarRomBtn = e.target.closest("[data-editar-romaneio]");
             const verRomBtn = e.target.closest("[data-ver-romaneio]");
-            
+            const corrigirNfBtn = e.target.closest("[data-corrigir-nf]");
+
+            if (corrigirNfBtn) {
+                corrigirNf(corrigirNfBtn.dataset.corrigirNf);
+                return;
+            }
+
             // Editar romaneio existente (abre dentro da mesma tela, sem navegar)
             if (editarRomBtn) {
                 const romId = editarRomBtn.dataset.editarRomaneio;
@@ -1600,6 +1633,7 @@
         codKey: "cod_ordem_fat",
         refTipo: "fat",
         internacional: true,
+        podeCorrigirNf: true,
         colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
         previsao: (o) => o.dt_previsao_entrega,
         onCount: (n) => { $("fat-tab-count").textContent = n; },

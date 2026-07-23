@@ -1589,6 +1589,10 @@ document.addEventListener("DOMContentLoaded", () => {
     restaurarFotoClienteSession();
     updateFotoClientePreview();
     prefillFromQuery();
+    // Link direto com busca pre-preenchida (ex.: "Registro de expedição" a
+    // partir de um romaneio) — ?q=<numero_nf>.
+    const buscaUrl = new URLSearchParams(window.location.search).get("q");
+    if (buscaUrl) buscaHistorico.value = buscaUrl;
     loadHistorico();
 });
 

@@ -865,6 +865,44 @@ def _ensure_solicitacao_nf_columns() -> None:
         conn.close()
 
 
+def _ensure_expedicao_romaneio_columns() -> None:
+    """Garante as colunas de assinatura do conferente na expedicao_romaneio."""
+    if not _has_table("expedicao_romaneio"):
+        return
+    cols = _get_column_names("expedicao_romaneio")
+    conn = db.engine.connect()
+    try:
+        if "assinatura_conferente_file_name" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_file_name VARCHAR(260)"))
+        if "assinatura_conferente_file_path" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_file_path VARCHAR(500)"))
+        if "assinatura_conferente_uploadado_em" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_uploadado_em DATETIME"))
+        if "assinatura_conferente_uploadado_por" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_uploadado_por VARCHAR(100)"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_cadastro_atualizacao_publica_columns() -> None:
+    """Garante as colunas de ICMS/beneficios fiscais na cadastro_atualizacao_publica."""
+    if not _has_table("cadastro_atualizacao_publica"):
+        return
+    cols = _get_column_names("cadastro_atualizacao_publica")
+    conn = db.engine.connect()
+    try:
+        if "contribuinte_icms" not in cols:
+            conn.execute(db.text("ALTER TABLE cadastro_atualizacao_publica ADD COLUMN contribuinte_icms VARCHAR(60)"))
+        if "possui_beneficios_fiscais" not in cols:
+            conn.execute(db.text("ALTER TABLE cadastro_atualizacao_publica ADD COLUMN possui_beneficios_fiscais BOOLEAN NOT NULL DEFAULT 0"))
+        if "beneficios_fiscais_descricao" not in cols:
+            conn.execute(db.text("ALTER TABLE cadastro_atualizacao_publica ADD COLUMN beneficios_fiscais_descricao VARCHAR(500)"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _ensure_perfil_columns() -> None:
     """Adiciona colunas de self-service de perfil (usuario) e rastreio de sessao."""
     conn = db.engine.connect()
@@ -958,6 +996,16 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_solicitacao_nf_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_romaneio_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_cadastro_atualizacao_publica_columns()
         except Exception:
             pass
 

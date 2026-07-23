@@ -334,13 +334,21 @@
         let itens = `<button onclick="fecharMenuAcoesRomaneio(); abrirRomaneio(${r.id})"><i class="fas fa-pen"></i> Editar</button>`;
         if (r.status === "Rascunho") {
             itens += `<button onclick="fecharMenuAcoesRomaneio(); finalizarRomaneio(${r.id})"><i class="fas fa-check"></i> Finalizar</button>`;
+            if (IS_ADMIN) {
+                itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); excluirRomaneioDireto(${r.id})"><i class="fas fa-trash"></i> Excluir</button>`;
+            } else if (!r.exclusao_pendente) {
+                itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); solicitarExclusaoRomaneio(${r.id})"><i class="fas fa-trash"></i> Solicitar exclusão</button>`;
+            }
         } else if (r.status === "Pronto") {
             itens += `<button onclick="fecharMenuAcoesRomaneio(); expedirRomaneio(${r.id})"><i class="fas fa-truck"></i> Expedir</button>`;
             if (IS_ADMIN) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarFinalizacao(${r.id})" title="Voltar para Rascunho"><i class="fas fa-rotate-left"></i> Estornar finalização</button>`;
             }
-        } else if (r.status === "Expedido" && IS_ADMIN) {
-            itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarExpedicao(${r.id})" title="Voltar para Pronto"><i class="fas fa-rotate-left"></i> Estornar expedição</button>`;
+        } else if (r.status === "Expedido") {
+            itens += `<button onclick="fecharMenuAcoesRomaneio(); irParaRegistroExpedicao(${r.id})"><i class="fas fa-clipboard-list"></i> Registro de expedição</button>`;
+            if (IS_ADMIN) {
+                itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarExpedicao(${r.id})" title="Voltar para Pronto"><i class="fas fa-rotate-left"></i> Estornar expedição</button>`;
+            }
         }
         itens += `<hr><button onclick="fecharMenuAcoesRomaneio(); visualizarRomaneio(${r.id})"><i class="fas fa-eye"></i> Visualizar</button>`;
         return itens;
@@ -397,8 +405,21 @@
                 </tr>`).join("")
             : `<tr><td colspan="6" style="text-align:center; color:#9ca3af;">Nenhuma NF adicionada</td></tr>`;
 
+        const avisoExclusao = r.exclusao_pendente ? `
+            <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="font-size:13px;color:#92400e;">
+                    <strong><i class="fas fa-triangle-exclamation"></i> Exclusão solicitada por ${escapeHtml(r.exclusao_pendente.solicitante)}:</strong> ${escapeHtml(r.exclusao_pendente.motivo)}
+                </div>
+                ${IS_ADMIN ? `
+                <div style="display:flex;gap:8px;">
+                    <button type="button" class="eui-btn eui-btn--success eui-btn--sm" onclick="decidirExclusaoRomaneio(${r.exclusao_pendente.id}, 'aprovar')"><i class="fas fa-check"></i> Aprovar</button>
+                    <button type="button" class="eui-btn eui-btn--danger eui-btn--sm" onclick="decidirExclusaoRomaneio(${r.exclusao_pendente.id}, 'rejeitar')"><i class="fas fa-xmark"></i> Rejeitar</button>
+                </div>` : `<span style="font-size:12px;color:#92400e;">Aguardando decisão de um Admin.</span>`}
+            </div>` : "";
+
         return `
             <div class="rom-detail-panel">
+                ${avisoExclusao}
                 <div class="rom-detail-grid">
                     <div class="rom-detail-field">
                         <label>Tipo de Frete</label>
@@ -593,6 +614,55 @@
 
     function visualizarRomaneio(id) {
         window.open(`/expedicao/romaneio/${id}/visualizar`, "_blank");
+    }
+
+    async function excluirRomaneioDireto(id) {
+        if (!confirm("Excluir este romaneio? Essa ação não pode ser desfeita e a(s) NF(s) voltam para 'Faturado'.")) return;
+        try {
+            await api(`/api/expedicao/romaneio-fat/${id}/deletar`, { method: "DELETE" });
+            toast("Romaneio excluído!");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    async function solicitarExclusaoRomaneio(id) {
+        const motivo = prompt("Motivo da solicitação de exclusão:");
+        if (motivo === null) return;
+        if (!motivo.trim()) { toast("Informe o motivo.", "error"); return; }
+        try {
+            await api(`/api/expedicao/romaneio-fat/${id}/solicitar-exclusao`, {
+                method: "POST",
+                body: JSON.stringify({ motivo: motivo.trim() }),
+            });
+            toast("Solicitação de exclusão enviada. Aguardando aprovação de um Admin.");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    async function decidirExclusaoRomaneio(exclusaoId, acao) {
+        const label = acao === "aprovar" ? "aprovar" : "rejeitar";
+        if (!confirm(`Confirma ${label} esta solicitação de exclusão?`)) return;
+        try {
+            await api(`/api/expedicao/romaneio-fat/exclusao/${exclusaoId}/${acao}`, {
+                method: "POST",
+                body: JSON.stringify({}),
+            });
+            toast(acao === "aprovar" ? "Exclusão aprovada! Romaneio removido." : "Solicitação rejeitada.");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    function irParaRegistroExpedicao(romaneioId) {
+        const r = romaneiosCacheLista.find((x) => x.id === romaneioId);
+        const primeiraNf = r && r.nfs && r.nfs.length ? r.nfs[0].numero_nf : null;
+        if (!primeiraNf) { toast("Este romaneio não tem NF associada.", "error"); return; }
+        window.open(`/expedicao/conferencia?q=${encodeURIComponent(primeiraNf)}`, "_blank");
     }
 
     // EVENTOS

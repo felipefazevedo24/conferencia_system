@@ -14,28 +14,36 @@
         line-height: 1.4;
         page-break-after: always;
     }
-    
+
     /* CABEÇALHO */
-    .rom-doc-header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #333; }
-    .rom-doc-title { font-size: 22px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px; }
-    
+    .rom-doc-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #333; }
+    .rom-doc-logo { height: 52px; width: auto; flex-shrink: 0; }
+    .rom-doc-header-text { flex: 1; }
+    .rom-doc-title { font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 4px; }
+    .rom-doc-meta { font-size: 12px; color: #444; }
+
     /* SEÇÕES */
     .rom-doc-section { margin: 20px 0; }
     .rom-doc-section-title { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #333; letter-spacing: 0.5px; margin: 0 0 8px; }
-    
-    /* INFORMAÇÕES REMETENTE */
-    .rom-remetente-label { font-size: 10px; font-weight: 700; color: #555; margin-bottom: 2px; }
-    .rom-remetente-value { font-size: 12px; color: #222; margin-bottom: 8px; }
-    
+
+    /* REMETENTE / DESTINATÁRIO lado a lado */
+    .rom-parties-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+    .rom-party-card { border: 1px solid #d1d5db; border-radius: 6px; padding: 14px 16px; }
+    .rom-party-title { font-size: 10px; font-weight: 900; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .rom-party-name { font-size: 14px; font-weight: 800; color: #111; margin-bottom: 2px; }
+    .rom-party-fantasia { font-size: 11px; color: #666; margin-bottom: 6px; font-style: italic; }
+    .rom-party-line { font-size: 11px; color: #333; margin-bottom: 3px; }
+    .rom-party-line strong { color: #555; font-weight: 700; }
+
     /* GRID DE CABEÇALHO */
     .rom-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin: 20px 0; }
     .rom-header-field { }
     .rom-header-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px; letter-spacing: 0.5px; }
     .rom-header-value { font-size: 14px; font-weight: 700; color: #222; min-height: 20px; border-bottom: 1px solid #333; }
-    
+
     /* TABELA NFes */
     .rom-nf-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .rom-nf-table th { 
+    .rom-nf-table th {
         background: #f3f4f6;
         padding: 8px;
         text-align: left;
@@ -46,7 +54,7 @@
         border: 1px solid #d1d5db;
         letter-spacing: 0.5px;
     }
-    .rom-nf-table td { 
+    .rom-nf-table td {
         padding: 10px 8px;
         border: 1px solid #d1d5db;
         font-size: 12px;
@@ -54,9 +62,9 @@
     }
     .rom-nf-table tbody tr:nth-child(even) { background: #f9fafb; }
     .rom-nf-table tbody tr:hover { background: #eff6ff; }
-    
+
     /* TOTALIZADORES */
-    .rom-totalizadores { 
+    .rom-totalizadores {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 15px;
@@ -68,9 +76,9 @@
     .rom-total-box { text-align: center; }
     .rom-total-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px; }
     .rom-total-value { font-size: 18px; font-weight: 900; color: #1e1b4b; margin-top: 5px; }
-    
+
     /* TRANSPORTADOR */
-    .rom-transportador-grid { 
+    .rom-transportador-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 15px;
@@ -79,20 +87,26 @@
     .rom-transport-field { }
     .rom-transport-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; margin-bottom: 4px; letter-spacing: 0.5px; }
     .rom-transport-value { font-size: 12px; color: #222; min-height: 16px; border-bottom: 1px solid #333; }
-    
+
     /* ASSINATURA */
     .rom-assinatura-section { margin-top: 40px; }
-    .rom-assinatura-grid { 
+    .rom-assinatura-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 30px;
-        margin-top: 60px;
+        margin-top: 30px;
     }
-    .rom-assinatura-box { text-align: center; border-top: 2px solid #333; padding-top: 10px; }
-    .rom-assinatura-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: 0.5px; }
-    
+    .rom-assinatura-box { text-align: center; }
+    .rom-assinatura-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: 0.5px; margin-top: 8px; }
+    .rom-assinatura-img { max-height: 90px; max-width: 100%; border-bottom: 2px solid #333; padding-bottom: 6px; }
+    .rom-assinatura-placeholder { height: 90px; border-bottom: 2px solid #333; }
+    .rom-assinatura-canvas-wrap { border: 1px dashed #9ca3af; border-radius: 6px; background: #fbfbfd; }
+    .rom-assinatura-canvas { width: 100%; height: 140px; display: block; touch-action: none; cursor: crosshair; }
+    .rom-assinatura-actions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+    .rom-assinatura-meta { font-size: 9px; color: #888; margin-top: 4px; }
+
     /* STATUS BADGE */
-    .rom-status-badge { 
+    .rom-status-badge {
         display: inline-block;
         padding: 6px 12px;
         border-radius: 3px;
@@ -104,9 +118,9 @@
     .rom-status-rascunho { background: #fef3c7; color: #b45309; }
     .rom-status-pronto { background: #dbeafe; color: #1e40af; }
     .rom-status-expedido { background: #dcfce7; color: #15803d; }
-    
+
     @media print {
-        .rom-viz-toolbar { display: none; }
+        .rom-viz-toolbar, .rom-assinatura-canvas-wrap, .rom-assinatura-actions, .rom-assinatura-meta { display: none !important; }
         body { background: #fff; }
         .rom-viz-container { margin: 0; max-width: none; }
         .rom-viz-document { border: none; padding: 0; page-break-before: always; }
@@ -136,28 +150,34 @@
     </div>
 
     <!-- DOCUMENTO -->
-    <div class="rom-viz-document">
+    <div class="rom-viz-document" id="rom-root" data-romaneio-id="{{ romaneio.id }}">
         <!-- CABEÇALHO -->
         <div class="rom-doc-header">
-            <div class="rom-doc-title"><i class="fas fa-receipt"></i> Romaneio de Expedição</div>
-        </div>
-
-        <!-- SEÇÃO REMETENTE -->
-        <div class="rom-doc-section">
-            <div class="rom-doc-section-title">Remetente</div>
-            <div class="rom-remetente-value"><strong>{{ remetente.razao_social }}</strong></div>
-            <div class="rom-remetente-value" style="font-size: 11px;">{{ remetente.endereco }}</div>
-        </div>
-
-        <!-- INFORMAÇÕES PRINCIPAIS -->
-        <div class="rom-header-grid">
-            <div class="rom-header-field">
-                <div class="rom-header-label">Orçamento</div>
-                <div class="rom-header-value">{{ romaneio.orcamento or '—' }}</div>
+            <img class="rom-doc-logo" src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync">
+            <div class="rom-doc-header-text">
+                <div class="rom-doc-title">Romaneio de Expedição</div>
+                <div class="rom-doc-meta">Nº {{ romaneio.numero_romaneio }} &middot; {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}</div>
             </div>
-            <div class="rom-header-field">
-                <div class="rom-header-label">Data de Expedição</div>
-                <div class="rom-header-value">{{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}</div>
+        </div>
+
+        <!-- REMETENTE / DESTINATÁRIO -->
+        <div class="rom-parties-grid">
+            <div class="rom-party-card">
+                <div class="rom-party-title">Remetente</div>
+                <div class="rom-party-name">{{ remetente.razao_social }}</div>
+                {% if remetente.nome_fantasia %}<div class="rom-party-fantasia">{{ remetente.nome_fantasia }}</div>{% endif %}
+                <div class="rom-party-line"><strong>CNPJ:</strong> {{ remetente.documento or '—' }}{% if remetente.inscricao_estadual %} &middot; <strong>IE:</strong> {{ remetente.inscricao_estadual }}{% endif %}</div>
+                <div class="rom-party-line">{{ remetente.endereco }}</div>
+                {% if remetente.municipio %}<div class="rom-party-line">{{ remetente.municipio }}{% if remetente.uf %} - {{ remetente.uf }}{% endif %}{% if remetente.cep %} &middot; CEP {{ remetente.cep }}{% endif %}</div>{% endif %}
+                {% if remetente.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ remetente.telefone }}</div>{% endif %}
+                <div class="rom-party-line"><strong>Logística:</strong> {{ remetente.email_logistica }}</div>
+                <div class="rom-party-line"><strong>Fiscal:</strong> {{ remetente.email_fiscal }}</div>
+            </div>
+            <div class="rom-party-card">
+                <div class="rom-party-title">Destinatário</div>
+                <div class="rom-party-name">{{ romaneio.cliente or '—' }}</div>
+                <div class="rom-party-line"><strong>Orçamento:</strong> {{ romaneio.orcamento or '—' }}</div>
+                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete or 'FOB' }}</div>
             </div>
         </div>
 
@@ -255,10 +275,30 @@
         <!-- ASSINATURA -->
         <div class="rom-assinatura-section">
             <div class="rom-assinatura-grid">
-                <div class="rom-assinatura-box">
+                <div class="rom-assinatura-box" id="rom-assinatura-box-conferente" data-tipo="conferente">
+                    {% if romaneio.assinatura_conferente_file_name %}
+                        <img class="rom-assinatura-img" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/assinatura/conferente?v={{ romaneio.assinatura_conferente_uploadado_em }}" alt="Assinatura conferente">
+                        <div class="rom-assinatura-meta">Assinado por {{ romaneio.assinatura_conferente_uploadado_por }} em {{ romaneio.assinatura_conferente_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.assinatura_conferente_uploadado_em else '' }}</div>
+                    {% else %}
+                        <div class="rom-assinatura-canvas-wrap"><canvas class="rom-assinatura-canvas"></canvas></div>
+                        <div class="rom-assinatura-actions">
+                            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="limparAssinatura('conferente')">Limpar</button>
+                            <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="salvarAssinatura('conferente')">Salvar assinatura</button>
+                        </div>
+                    {% endif %}
                     <div class="rom-assinatura-label">Conferente / Responsável</div>
                 </div>
-                <div class="rom-assinatura-box">
+                <div class="rom-assinatura-box" id="rom-assinatura-box-transportador" data-tipo="transportador">
+                    {% if romaneio.assinatura_transportador_file_name %}
+                        <img class="rom-assinatura-img" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/assinatura/transportador?v={{ romaneio.assinatura_uploadado_em }}" alt="Assinatura motorista">
+                        <div class="rom-assinatura-meta">Assinado por {{ romaneio.assinatura_uploadado_por }} em {{ romaneio.assinatura_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.assinatura_uploadado_em else '' }}</div>
+                    {% else %}
+                        <div class="rom-assinatura-canvas-wrap"><canvas class="rom-assinatura-canvas"></canvas></div>
+                        <div class="rom-assinatura-actions">
+                            <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="limparAssinatura('transportador')">Limpar</button>
+                            <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="salvarAssinatura('transportador')">Salvar assinatura</button>
+                        </div>
+                    {% endif %}
                     <div class="rom-assinatura-label">Motorista / Transportador</div>
                 </div>
             </div>
@@ -273,4 +313,87 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const romaneioId = document.getElementById("rom-root").dataset.romaneioId;
+    const canvasCtx = {};
+
+    function setupCanvas(canvas) {
+        const parent = canvas.parentElement;
+        const ratio = window.devicePixelRatio || 1;
+        const rect = parent.getBoundingClientRect();
+        canvas.width = rect.width * ratio;
+        canvas.height = 140 * ratio;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(ratio, ratio);
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "#111";
+
+        let desenhando = false;
+        let ultimo = null;
+
+        function posicao(evento) {
+            const r = canvas.getBoundingClientRect();
+            const ponto = evento.touches ? evento.touches[0] : evento;
+            return { x: ponto.clientX - r.left, y: ponto.clientY - r.top };
+        }
+        function iniciar(evento) {
+            desenhando = true;
+            ultimo = posicao(evento);
+            evento.preventDefault();
+        }
+        function mover(evento) {
+            if (!desenhando) return;
+            const atual = posicao(evento);
+            ctx.beginPath();
+            ctx.moveTo(ultimo.x, ultimo.y);
+            ctx.lineTo(atual.x, atual.y);
+            ctx.stroke();
+            ultimo = atual;
+            evento.preventDefault();
+        }
+        function parar() { desenhando = false; }
+
+        canvas.addEventListener("mousedown", iniciar);
+        canvas.addEventListener("mousemove", mover);
+        window.addEventListener("mouseup", parar);
+        canvas.addEventListener("touchstart", iniciar, { passive: false });
+        canvas.addEventListener("touchmove", mover, { passive: false });
+        canvas.addEventListener("touchend", parar);
+
+        return ctx;
+    }
+
+    document.querySelectorAll(".rom-assinatura-canvas").forEach((canvas) => {
+        const box = canvas.closest(".rom-assinatura-box");
+        canvasCtx[box.dataset.tipo] = { canvas, ctx: setupCanvas(canvas) };
+    });
+
+    window.limparAssinatura = function (tipo) {
+        const info = canvasCtx[tipo];
+        if (!info) return;
+        info.ctx.clearRect(0, 0, info.canvas.width, info.canvas.height);
+    };
+
+    window.salvarAssinatura = async function (tipo) {
+        const info = canvasCtx[tipo];
+        if (!info) return;
+        const dataUrl = info.canvas.toDataURL("image/png");
+        try {
+            const resp = await fetch(`/api/expedicao/romaneio-fat/${romaneioId}/assinatura/${tipo}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ imagem_base64: dataUrl }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || "Falha ao salvar assinatura.");
+            window.location.reload();
+        } catch (e) {
+            alert(e.message);
+        }
+    };
+})();
+</script>
 {% endblock %}

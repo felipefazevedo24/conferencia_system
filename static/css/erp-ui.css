@@ -140,6 +140,9 @@
 .eui-btn--danger    { background: var(--eui-surface); border-color: var(--eui-danger); color: var(--eui-danger); }
 .eui-btn--danger:hover:not(:disabled)    { background: var(--eui-danger); color: #fff; }
 
+.eui-btn--warning   { background: var(--eui-surface); border-color: var(--eui-warning); color: var(--eui-warning); }
+.eui-btn--warning:hover:not(:disabled)   { background: var(--eui-warning); color: #fff; }
+
 .eui-btn--sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
 .eui-btn--icon { width: 32px; min-height: 32px; padding: 0; }
 
