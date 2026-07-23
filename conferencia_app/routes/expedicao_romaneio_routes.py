@@ -10,10 +10,14 @@ from ..models import (
     ExpedicaoRomaneioNF,
     ExpedicaoRomaneioExclusao,
     ExpedicaoOrdemFat,
+    ExpedicaoOrdemFatItem,
+    ExpedicaoConferenciaSimples,
 )
 from ..auth import permission_required, roles_required
 from ..services import expedicao_fat_service as fat_svc
 from ..services import cadastro_workflow_service as cad_svc
+from ..services import danfe_service
+from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.expedicao_photo_storage import using_drive, upload_bytes_to_drive
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 
@@ -34,6 +38,84 @@ def _parse_float(valor, default=0.0) -> float:
 
 def _parse_int(valor, default=0) -> int:
     return int(_parse_float(valor, default))
+
+
+def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
+    """Ao expedir o romaneio, garante um Registro de Expedicao ja Finalizado
+    para a NF. Se ja existir um rascunho (fotos do material/cliente tiradas na
+    etapa Faturado), promove-o; senao cria um novo. O proprio romaneio faz as
+    vezes de canhoto, portanto NAO se exige foto de canhoto neste fluxo.
+    Retorna o registro (ou None se a NF for vazia)."""
+    numero_nf = str(getattr(nf, "numero_nf", "") or "").strip()
+    if not numero_nf:
+        return None
+    agora = datetime.now()
+
+    ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
+    registro = None
+    if ordem is not None and ordem.expedicao_registro_id:
+        registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+    if registro is None:
+        # Rascunho vinculado pela NF (fotos tiradas no Faturado sem link direto).
+        registro = (
+            ExpedicaoConferenciaSimples.query
+            .filter_by(numero_nf=numero_nf, origem="Romaneio")
+            .filter(ExpedicaoConferenciaSimples.status.in_(
+                ["Pendente de expedição", "Pendente de expedicao"]))
+            .order_by(ExpedicaoConferenciaSimples.id.desc())
+            .first()
+        )
+
+    numero_os = str(getattr(nf, "numeros_os", "") or "").strip() or None
+    orcamento = str(getattr(nf, "orcamento", "") or romaneio.orcamento or "").strip()
+    cliente = str(getattr(nf, "cliente", "") or romaneio.cliente or "").strip()
+    transportadora = str(getattr(romaneio, "transportadora", "") or "").strip() or None
+    placa = str(getattr(romaneio, "placa", "") or "").strip() or None
+    motorista = str(getattr(romaneio, "motorista", "") or "").strip() or None
+
+    if registro is None:
+        registro = ExpedicaoConferenciaSimples(
+            orcamento=orcamento,
+            tipo_referencia="Orcamento",
+            numero_os=numero_os,
+            conferente=usuario,
+            numero_nf=numero_nf,
+            nome_cliente=cliente,
+            cliente_origem="Consyste",
+            nf_origem="Consyste",
+            origem="Romaneio",
+            transportadora=transportadora,
+            placa=placa,
+            motorista=motorista,
+            status="Finalizado",
+        )
+        db.session.add(registro)
+    else:
+        registro.origem = "Romaneio"
+        if not registro.numero_os and numero_os:
+            registro.numero_os = numero_os
+        if not registro.nome_cliente and cliente:
+            registro.nome_cliente = cliente
+        if transportadora:
+            registro.transportadora = transportadora
+        if placa:
+            registro.placa = placa
+        if motorista:
+            registro.motorista = motorista
+        registro.status = "Finalizado"
+
+    # Romaneio = canhoto: registro nasce finalizado, sem foto de canhoto.
+    if not registro.expedido_at:
+        registro.expedido_at = agora
+        registro.expedido_by = usuario
+    registro.finalizado_at = agora
+    registro.finalizado_by = usuario
+    registro.updated_at = agora
+    db.session.flush()
+
+    if ordem is not None:
+        ordem.expedicao_registro_id = registro.id
+    return registro
 
 
 @expedicao_romaneio_bp.route("/expedicao/romaneio")
@@ -125,12 +207,25 @@ def criar_romaneio():
     """Cria um novo romaneio em branco."""
     payload = request.get_json(silent=True) or {}
     
-    # Gera número único para o romaneio (p.ex: ROM-2026-001)
+    # Gera número único para o romaneio (p.ex: ROM-2026-0001). Usa o MAIOR
+    # sufixo numérico já existente no ano (não a contagem de linhas) — contar
+    # linhas gera número duplicado sempre que um romaneio anterior é excluído
+    # (o total cai, mas o número "vago" já pode pertencer a um romaneio que
+    # ainda existe), disparando IntegrityError na coluna única.
     hoje = datetime.now()
-    ultimo = ExpedicaoRomaneio.query.filter(
-        ExpedicaoRomaneio.criado_em >= datetime(hoje.year, 1, 1)
-    ).count()
-    numero_romaneio = f"ROM-{hoje.year}-{ultimo + 1:04d}"
+    prefixo = f"ROM-{hoje.year}-"
+    existentes = (
+        ExpedicaoRomaneio.query
+        .filter(ExpedicaoRomaneio.numero_romaneio.like(f"{prefixo}%"))
+        .with_entities(ExpedicaoRomaneio.numero_romaneio)
+        .all()
+    )
+    maior_sequencia = 0
+    for (numero,) in existentes:
+        sufixo = str(numero or "")[len(prefixo):]
+        if sufixo.isdigit():
+            maior_sequencia = max(maior_sequencia, int(sufixo))
+    numero_romaneio = f"{prefixo}{maior_sequencia + 1:04d}"
     
     romaneio = ExpedicaoRomaneio(
         numero_romaneio=numero_romaneio,
@@ -163,6 +258,10 @@ def obter_romaneio(romaneio_id):
         "orcamento": romaneio.orcamento,
         "cliente": romaneio.cliente,
         "tipo_frete": romaneio.tipo_frete,
+        "transportadora_nome": romaneio.transportadora,
+        "placa": romaneio.placa,
+        "motorista_nome": romaneio.motorista,
+        "motorista_documento": romaneio.motorista_documento,
         "peso_bruto_total": romaneio.peso_bruto_total,
         "qtde_volumes_total": romaneio.qtde_volumes_total,
         "observacao_1": romaneio.observacao_1,
@@ -221,6 +320,14 @@ def atualizar_romaneio(romaneio_id):
         if frete not in ("FOB", "CIF"):
             return jsonify({"error": "Tipo de frete deve ser FOB ou CIF."}), 400
         romaneio.tipo_frete = frete
+    if "transportadora" in payload:
+        romaneio.transportadora = str(payload["transportadora"]).strip()
+    if "placa" in payload:
+        romaneio.placa = str(payload["placa"]).strip()
+    if "motorista" in payload:
+        romaneio.motorista = str(payload["motorista"]).strip()
+    if "motorista_documento" in payload:
+        romaneio.motorista_documento = str(payload["motorista_documento"]).strip()
     if "observacao_1" in payload:
         romaneio.observacao_1 = str(payload["observacao_1"]).strip()
     if "observacao_2" in payload:
@@ -272,13 +379,25 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         peso_bruto = _parse_float(ordem_fat.peso_bruto, _parse_float(payload.get("peso_bruto")))
         qtde_volumes = _parse_int(ordem_fat.qtde_volumes, _parse_int(payload.get("qtde_volumes")))
         especie_volumes = ordem_fat.especie_volumes or payload.get("especie_volumes") or ""
+        # Numeros de OS vem dos itens da propria ordem de faturamento (mesma
+        # fonte usada pelo pre-fill do Registro de Expedicao a partir da
+        # Conferencia de Expedicao) — nao digitados manualmente aqui.
+        oss_itens = (
+            ExpedicaoOrdemFatItem.query
+            .filter_by(ordem_id=ordem_fat.id)
+            .with_entities(ExpedicaoOrdemFatItem.n_os)
+            .distinct()
+            .all()
+        )
+        oss_unicas = [str(v[0]).strip() for v in oss_itens if v[0] and str(v[0]).strip()]
+        numeros_os = ", ".join(oss_unicas) if oss_unicas else (payload.get("numeros_os") or "")
     else:
         orcamento = payload.get("orcamento") or romaneio.orcamento
         cliente = payload.get("cliente") or romaneio.cliente
         peso_bruto = _parse_float(payload.get("peso_bruto"))
         qtde_volumes = _parse_int(payload.get("qtde_volumes"))
         especie_volumes = payload.get("especie_volumes") or ""
-    numeros_os = payload.get("numeros_os") or ""
+        numeros_os = payload.get("numeros_os") or ""
     
     nf = ExpedicaoRomaneioNF(
         romaneio_id=romaneio_id,
@@ -398,10 +517,18 @@ def expedir_romaneio(romaneio_id):
     db.session.commit()
     
     # Fluxo progressivo: cada ordem cuja NF esta neste romaneio avanca de
-    # "Em Romaneio" para "Expedido".
+    # "Em Romaneio" para "Expedido". O Registro de Expedicao nasce ja
+    # Finalizado (o romaneio faz as vezes de canhoto), reaproveitando as fotos
+    # tiradas na etapa Faturado quando existirem.
     for nf in romaneio.nfs or []:
-        fat_svc.marcar_expedido_por_nf(nf.numero_nf, usuario=session["username"])
-    
+        registro = _finalizar_registro_expedicao_para_nf(nf, romaneio, session["username"])
+        fat_svc.marcar_expedido_por_nf(
+            nf.numero_nf,
+            registro_id=(registro.id if registro else None),
+            usuario=session["username"],
+        )
+    db.session.commit()
+
     return jsonify({"message": "Romaneio expedido com sucesso."})
 
 
@@ -448,7 +575,24 @@ def estornar_expedicao_romaneio(romaneio_id):
     
     for nf in romaneio.nfs or []:
         fat_svc.reverter_expedicao_por_nf(nf.numero_nf)
-    
+        # Reverte o Registro de Expedicao auto-finalizado de volta para
+        # rascunho (mantem as fotos ja tiradas), permitindo re-expedir depois.
+        numero_nf = str(nf.numero_nf or "").strip()
+        if numero_nf:
+            registros = (
+                ExpedicaoConferenciaSimples.query
+                .filter_by(numero_nf=numero_nf, origem="Romaneio", status="Finalizado")
+                .all()
+            )
+            for reg in registros:
+                reg.status = "Pendente de expedição"
+                reg.expedido_at = None
+                reg.expedido_by = None
+                reg.finalizado_at = None
+                reg.finalizado_by = None
+                reg.updated_at = datetime.now()
+    db.session.commit()
+
     return jsonify({"message": "Expedição estornada. Romaneio voltou para Pronto."})
 
 
@@ -555,10 +699,11 @@ def decidir_exclusao_romaneio(exclusao_id, acao):
 
 
 def _remetente_padrao() -> dict:
+    cnpj_bruto = current_app.config.get("EMPRESA_CNPJ", "")
     return {
         "razao_social": current_app.config.get("EMPRESA_NOME", "COLUMBIA MACHINE BRASIL"),
         "nome_fantasia": "",
-        "documento": current_app.config.get("EMPRESA_CNPJ", ""),
+        "documento": cad_svc.formatar_cnpj(cnpj_bruto) if cnpj_bruto else "",
         "endereco": current_app.config.get("EMPRESA_ENDERECO", "RUA CARLOS ROBERTO PRATAVIEIRA, 600 - JD. NOVA EUROPA - HORTOLÂNDIA BRAZIL - SP"),
         "municipio": "",
         "uf": "",
@@ -599,6 +744,59 @@ def _remetente_completo() -> dict:
     return dados
 
 
+def _destinatario_padrao(romaneio) -> dict:
+    return {
+        "razao_social": romaneio.cliente or "—",
+        "documento": "",
+        "inscricao_estadual": "",
+        "endereco": "",
+        "municipio": "",
+        "uf": "",
+        "cep": "",
+        "telefone": "",
+    }
+
+
+def _destinatario_completo(romaneio) -> dict:
+    """Dados do destinatário (cliente) para o documento do romaneio — busca
+    CNPJ/endereço direto na NF-e emitida (mesmo XML autorizado usado para
+    gerar o DANFE). Cai no fallback (só o nome do cliente) se a NF não for
+    encontrada no ERP ou não houver XML disponível."""
+    dados = _destinatario_padrao(romaneio)
+    primeira_nf = romaneio.nfs[0] if romaneio.nfs else None
+    if not primeira_nf or not primeira_nf.numero_nf:
+        return dados
+    try:
+        nota = buscar_nfe_emitida_erp(numero_nf=primeira_nf.numero_nf)
+        xml_bytes = (nota or {}).get("xml_bytes")
+        if not xml_bytes:
+            return dados
+        nfe = danfe_service.parse_nfe_xml(xml_bytes)
+        endereco = ", ".join(
+            parte.strip() for parte in [
+                nfe.get("dest_logr"),
+                nfe.get("dest_nro"),
+                nfe.get("dest_cpl"),
+                nfe.get("dest_bairro"),
+            ] if str(parte or "").strip()
+        )
+        dados.update({
+            "razao_social": nfe.get("dest_nome") or dados["razao_social"],
+            "documento": nfe.get("dest_cnpj") or dados["documento"],
+            "inscricao_estadual": nfe.get("dest_ie") or "",
+            "endereco": endereco,
+            "municipio": nfe.get("dest_mun") or "",
+            "uf": nfe.get("dest_uf") or "",
+            "cep": nfe.get("dest_cep") or "",
+            "telefone": nfe.get("dest_fone") or "",
+        })
+    except Exception:
+        current_app.logger.warning(
+            "Falha ao obter dados do destinatário via NF-e emitida para o romaneio %s", romaneio.id, exc_info=True
+        )
+    return dados
+
+
 @expedicao_romaneio_bp.route("/expedicao/romaneio/<int:romaneio_id>/visualizar")
 @permission_required(PERMISSION)
 def visualizar_romaneio(romaneio_id):
@@ -611,6 +809,7 @@ def visualizar_romaneio(romaneio_id):
         "expedicao_romaneio_visualizar.html",
         romaneio=romaneio,
         remetente=_remetente_completo(),
+        destinatario=_destinatario_completo(romaneio),
     )
 
 

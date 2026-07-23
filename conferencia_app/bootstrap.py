@@ -673,6 +673,10 @@ def _ensure_expedicao_conferencia_simples_schema() -> None:
                 "ALTER TABLE expedicao_conferencia_simples ADD COLUMN nf_origem VARCHAR(20) NOT NULL DEFAULT 'Manual'",
             ),
             (
+                "origem",
+                "ALTER TABLE expedicao_conferencia_simples ADD COLUMN origem VARCHAR(20) NOT NULL DEFAULT 'Manual'",
+            ),
+            (
                 "consyste_document_id",
                 "ALTER TABLE expedicao_conferencia_simples ADD COLUMN consyste_document_id VARCHAR(120)",
             ),
@@ -880,6 +884,14 @@ def _ensure_expedicao_romaneio_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_uploadado_em DATETIME"))
         if "assinatura_conferente_uploadado_por" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN assinatura_conferente_uploadado_por VARCHAR(100)"))
+        if "transportadora" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN transportadora VARCHAR(160)"))
+        if "placa" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN placa VARCHAR(20)"))
+        if "motorista" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista VARCHAR(160)"))
+        if "motorista_documento" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista_documento VARCHAR(40)"))
         conn.commit()
     finally:
         conn.close()

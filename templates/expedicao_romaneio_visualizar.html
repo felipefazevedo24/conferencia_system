@@ -120,6 +120,12 @@
     .rom-status-expedido { background: #dcfce7; color: #15803d; }
 
     @media print {
+        /* Esconde o chrome do app (sidebar, topo, rodapé) — sem isso o
+           navegador imprime a página inteira, não só o documento. */
+        #sidebar-wrapper, .top-nav, .app-footer, #shell-backdrop { display: none !important; }
+        #wrapper, #page-content-wrapper { margin: 0 !important; padding: 0 !important; }
+        .content-body { padding: 0 !important; }
+
         .rom-viz-toolbar, .rom-assinatura-canvas-wrap, .rom-assinatura-actions, .rom-assinatura-meta { display: none !important; }
         body { background: #fff; }
         .rom-viz-container { margin: 0; max-width: none; }
@@ -175,7 +181,11 @@
             </div>
             <div class="rom-party-card">
                 <div class="rom-party-title">Destinatário</div>
-                <div class="rom-party-name">{{ romaneio.cliente or '—' }}</div>
+                <div class="rom-party-name">{{ destinatario.razao_social }}</div>
+                <div class="rom-party-line"><strong>CNPJ:</strong> {{ destinatario.documento or '—' }}{% if destinatario.inscricao_estadual %} &middot; <strong>IE:</strong> {{ destinatario.inscricao_estadual }}{% endif %}</div>
+                {% if destinatario.endereco %}<div class="rom-party-line">{{ destinatario.endereco }}</div>{% endif %}
+                {% if destinatario.municipio %}<div class="rom-party-line">{{ destinatario.municipio }}{% if destinatario.uf %} - {{ destinatario.uf }}{% endif %}{% if destinatario.cep %} &middot; CEP {{ destinatario.cep }}{% endif %}</div>{% endif %}
+                {% if destinatario.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ destinatario.telefone }}</div>{% endif %}
                 <div class="rom-party-line"><strong>Orçamento:</strong> {{ romaneio.orcamento or '—' }}</div>
                 <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete or 'FOB' }}</div>
             </div>

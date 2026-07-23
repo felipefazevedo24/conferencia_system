@@ -518,6 +518,9 @@ class ExpedicaoConferenciaSimples(db.Model):
     nome_cliente = db.Column(db.String(160))
     cliente_origem = db.Column(db.String(20), nullable=False, default="Manual")
     nf_origem = db.Column(db.String(20), nullable=False, default="Manual")  # Manual | Consyste (quem preencheu a NF)
+    # Origem do registro: Manual (criado na tela) | Romaneio (nasceu da
+    # conferencia de expedicao/romaneio, ja finalizado, canhoto = romaneio).
+    origem = db.Column(db.String(20), nullable=False, default="Manual", index=True)
     consyste_document_id = db.Column(db.String(120), index=True)
     consyste_chave = db.Column(db.String(50), index=True)
     transportadora = db.Column(db.String(160))
@@ -1957,7 +1960,14 @@ class ExpedicaoRomaneio(db.Model):
     
     # Tipo de frete: FOB (Frete por conta do cliente) ou CIF (Frete por conta do fornecedor)
     tipo_frete = db.Column(db.String(10), nullable=False, default="FOB", index=True)
-    
+
+    # Dados do transportador (preenchidos no formulario do romaneio) — copiados
+    # para o Registro de Expedicao quando o romaneio e expedido.
+    transportadora = db.Column(db.String(160))
+    placa = db.Column(db.String(20))
+    motorista = db.Column(db.String(160))
+    motorista_documento = db.Column(db.String(40))
+
     # Dados consolidados das NFes
     peso_bruto_total = db.Column(db.Float, nullable=False, default=0)
     qtde_volumes_total = db.Column(db.Integer, nullable=False, default=0)

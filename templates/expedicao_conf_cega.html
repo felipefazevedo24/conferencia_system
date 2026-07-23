@@ -88,7 +88,7 @@
         .ce-vol-table td { padding: 4px 6px; }
     }
 
-    .ce-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .ce-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .ce-toast.error { border-left-color: var(--eui-danger); }
     .ce-toast.success { border-left-color: var(--eui-success); }
     .hidden { display: none !important; }
@@ -131,6 +131,33 @@
     /* View "Romaneios" — embute a tela de romaneios (mesmo layout/UI) sem
        sair da Conferência de Expedição. */
     .ce-romaneio-iframe { width: 100%; min-height: 78vh; border: none; display: block; background: var(--eui-surface-2, #f1f6fb); border-radius: var(--eui-radius); }
+
+    /* Menu de ações (kebab / três pontinhos) na coluna de ações da tabela. */
+    .ce-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .ce-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .ce-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 210px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .ce-actions-menu.open { display: flex; }
+    .ce-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
+    .ce-actions-menu button:hover { background: #f3f4f6; }
+    .ce-actions-menu button.is-danger { color: #dc2626; }
+    .ce-actions-menu hr { border: none; border-top: 1px solid #eef0f3; margin: 4px 0; }
+
+    /* Modal de fotos de pré-expedição (material + cliente, ordem Faturada). */
+    .ce-fotos-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px); z-index: 10050; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .ce-fotos-overlay.hidden { display: none; }
+    .ce-fotos-dialog { background: #fff; border-radius: 14px; width: min(640px, 100%); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.3); overflow: hidden; }
+    .ce-fotos-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f3; }
+    .ce-fotos-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: #1f2937; }
+    .ce-fotos-close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #6b7280; }
+    .ce-fotos-body { padding: 18px 20px; overflow-y: auto; display: grid; gap: 22px; }
+    .ce-fotos-label { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748b; margin-bottom: 10px; }
+    .ce-fotos-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+    .ce-fotos-thumb { position: relative; width: 92px; height: 92px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #f8fafc; }
+    .ce-fotos-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .ce-fotos-thumb .ce-fotos-remove { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(220,38,38,.9); color: #fff; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .ce-fotos-thumb .ce-fotos-badge { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(15,23,42,.65); color: #fff; font-size: 9px; text-align: center; padding: 2px; }
+    .ce-fotos-empty { font-size: 12px; color: #94a3b8; }
+    .ce-fotos-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid #eef0f3; }
 </style>
 {% endblock %}
 
@@ -551,6 +578,34 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: fotos de pré-expedição (material + cliente) para ordens Faturadas. -->
+<div id="ce-fotos-modal" class="ce-fotos-overlay hidden" aria-hidden="true">
+    <div class="ce-fotos-dialog" role="dialog" aria-modal="true" aria-labelledby="ce-fotos-titulo">
+        <div class="ce-fotos-head">
+            <h3 id="ce-fotos-titulo"><i class="fas fa-camera"></i> Fotos do material e do cliente</h3>
+            <button type="button" class="ce-fotos-close" onclick="fecharModalFotosPreexpedicao()" title="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="ce-fotos-body">
+            <section>
+                <label class="ce-fotos-label">Fotos do material</label>
+                <div id="ce-fotos-material-grid" class="ce-fotos-grid"></div>
+                <input type="file" id="ce-fotos-material-input" accept="image/*" capture="environment" multiple hidden onchange="ceAddFotosMaterial(this)">
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-material-input').click()"><i class="fas fa-camera"></i> Adicionar fotos do material</button>
+            </section>
+            <section>
+                <label class="ce-fotos-label">Foto do cliente (recebedor)</label>
+                <div id="ce-fotos-cliente-grid" class="ce-fotos-grid"></div>
+                <input type="file" id="ce-fotos-cliente-input" accept="image/*" capture="environment" hidden onchange="ceSetFotoCliente(this)">
+                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-cliente-input').click()"><i class="fas fa-camera"></i> Adicionar foto do cliente</button>
+            </section>
+        </div>
+        <div class="ce-fotos-foot">
+            <button type="button" class="eui-btn eui-btn--ghost" onclick="fecharModalFotosPreexpedicao()">Cancelar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="ce-fotos-salvar" onclick="salvarFotosPreexpedicao()"><i class="fas fa-floppy-disk"></i> Salvar fotos</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -657,6 +712,143 @@
         return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
     };
 
+    // ── Modal de fotos de pré-expedição (material + cliente) ──────────────────
+    // Usado pelo menu de ações das ordens Faturadas. As fotos ficam num Registro
+    // de Expedição em rascunho e são reaproveitadas quando o romaneio é expedido.
+    let ceFotos = { apiBase: null, cod: null, novasMaterial: [], novaCliente: null, existentes: { fotos_material: [], foto_cliente_url: null } };
+
+    function _revogarPreviews() {
+        ceFotos.novasMaterial.forEach((f) => { if (f._url) URL.revokeObjectURL(f._url); });
+        if (ceFotos.novaCliente && ceFotos.novaCliente._url) URL.revokeObjectURL(ceFotos.novaCliente._url);
+    }
+
+    async function abrirModalFotosPreexpedicao(apiBase, cod, ordem) {
+        _revogarPreviews();
+        ceFotos = { apiBase, cod, novasMaterial: [], novaCliente: null, existentes: { fotos_material: [], foto_cliente_url: null } };
+        const titulo = $("ce-fotos-titulo");
+        const nome = ordem ? (ordem.cliente || ordem.numero_nf || codDeAny(ordem, cod)) : cod;
+        titulo.innerHTML = `<i class="fas fa-camera"></i> Fotos — ${escapeHtml(nome || "")}`;
+        $("ce-fotos-material-input").value = "";
+        $("ce-fotos-cliente-input").value = "";
+        renderFotosGrids();
+        $("ce-fotos-modal").classList.remove("hidden");
+        $("ce-fotos-modal").setAttribute("aria-hidden", "false");
+        try {
+            const resp = await fetch(`${apiBase}/ordens/${encodeURIComponent(cod)}/fotos-preexpedicao`);
+            const data = await resp.json();
+            if (resp.ok) {
+                ceFotos.existentes = { fotos_material: data.fotos_material || [], foto_cliente_url: data.foto_cliente_url || null };
+                renderFotosGrids();
+            }
+        } catch (e) { /* silencioso: sem fotos existentes */ }
+    }
+
+    function codDeAny(ordem, fallback) {
+        return ordem && (ordem.cod_ordem_fat || ordem.numero_nf) || fallback;
+    }
+
+    function fecharModalFotosPreexpedicao() {
+        _revogarPreviews();
+        $("ce-fotos-modal").classList.add("hidden");
+        $("ce-fotos-modal").setAttribute("aria-hidden", "true");
+    }
+
+    function renderFotosGrids() {
+        const gm = $("ce-fotos-material-grid");
+        const gc = $("ce-fotos-cliente-grid");
+        let hm = "";
+        (ceFotos.existentes.fotos_material || []).forEach((f) => {
+            hm += `<div class="ce-fotos-thumb"><img src="${escapeHtml(f.url)}" alt="material"><span class="ce-fotos-badge">Salva</span></div>`;
+        });
+        ceFotos.novasMaterial.forEach((f, i) => {
+            hm += `<div class="ce-fotos-thumb"><img src="${f._url}" alt="nova"><button type="button" class="ce-fotos-remove" onclick="removerFotoMaterialNova(${i})" title="Remover"><i class="fas fa-xmark"></i></button></div>`;
+        });
+        gm.innerHTML = hm || `<span class="ce-fotos-empty">Nenhuma foto do material ainda.</span>`;
+
+        let hc = "";
+        if (ceFotos.novaCliente) {
+            hc = `<div class="ce-fotos-thumb"><img src="${ceFotos.novaCliente._url}" alt="cliente"><button type="button" class="ce-fotos-remove" onclick="removerFotoClienteNova()" title="Remover"><i class="fas fa-xmark"></i></button></div>`;
+        } else if (ceFotos.existentes.foto_cliente_url) {
+            hc = `<div class="ce-fotos-thumb"><img src="${escapeHtml(ceFotos.existentes.foto_cliente_url)}" alt="cliente"><span class="ce-fotos-badge">Salva</span></div>`;
+        }
+        gc.innerHTML = hc || `<span class="ce-fotos-empty">Nenhuma foto do cliente ainda.</span>`;
+    }
+
+    function removerFotoMaterialNova(i) {
+        const f = ceFotos.novasMaterial[i];
+        if (f && f._url) URL.revokeObjectURL(f._url);
+        ceFotos.novasMaterial.splice(i, 1);
+        renderFotosGrids();
+    }
+
+    function removerFotoClienteNova() {
+        if (ceFotos.novaCliente && ceFotos.novaCliente._url) URL.revokeObjectURL(ceFotos.novaCliente._url);
+        ceFotos.novaCliente = null;
+        renderFotosGrids();
+    }
+
+    async function salvarFotosPreexpedicao() {
+        if (!ceFotos.apiBase || !ceFotos.cod) return;
+        if (!ceFotos.novasMaterial.length && !ceFotos.novaCliente) {
+            toast("Adicione ao menos uma foto do material ou do cliente.", "error");
+            return;
+        }
+        const fd = new FormData();
+        ceFotos.novasMaterial.forEach((f) => fd.append("fotos_material", f, f.name));
+        if (ceFotos.novaCliente) fd.append("foto_cliente", ceFotos.novaCliente, ceFotos.novaCliente.name);
+        const btn = $("ce-fotos-salvar");
+        btn.disabled = true;
+        try {
+            const resp = await fetch(`${ceFotos.apiBase}/ordens/${encodeURIComponent(ceFotos.cod)}/fotos-preexpedicao`, { method: "POST", body: fd });
+            const data = await resp.json();
+            if (!resp.ok || !data.sucesso) throw new Error(data.error || ("Erro " + resp.status));
+            toast("Fotos salvas com sucesso.", "success");
+            fecharModalFotosPreexpedicao();
+        } catch (e) {
+            toast(e.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function ceAddFotosMaterial(input) {
+        Array.from(input.files || []).forEach((f) => { f._url = URL.createObjectURL(f); ceFotos.novasMaterial.push(f); });
+        input.value = "";
+        renderFotosGrids();
+    }
+
+    function ceSetFotoCliente(input) {
+        const f = (input.files || [])[0];
+        if (f) {
+            f._url = URL.createObjectURL(f);
+            if (ceFotos.novaCliente && ceFotos.novaCliente._url) URL.revokeObjectURL(ceFotos.novaCliente._url);
+            ceFotos.novaCliente = f;
+        }
+        input.value = "";
+        renderFotosGrids();
+    }
+
+    (function initFotosModal() {
+        const bind = () => {
+            const modal = $("ce-fotos-modal");
+            if (modal) modal.addEventListener("click", (e) => { if (e.target === modal) fecharModalFotosPreexpedicao(); });
+        };
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
+        else bind();
+    })();
+
+    // O <script> deste template roda dentro de uma IIFE, então as funções acima
+    // NÃO são globais. Os handlers inline (onclick/onchange no HTML do modal)
+    // rodam no escopo global — por isso precisamos expô-las em window.
+    window.abrirModalFotosPreexpedicao = abrirModalFotosPreexpedicao;
+    window.fecharModalFotosPreexpedicao = fecharModalFotosPreexpedicao;
+    window.salvarFotosPreexpedicao = salvarFotosPreexpedicao;
+    window.ceAddFotosMaterial = ceAddFotosMaterial;
+    window.ceSetFotoCliente = ceSetFotoCliente;
+    window.removerFotoMaterialNova = removerFotoMaterialNova;
+    window.removerFotoClienteNova = removerFotoClienteNova;
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
      * Controlador reutilizavel para uma aba (Faturamento ou Serv. Terceiro).
      * cfg = { prefix, apiBase, codKey, colunas(o)->[c1,c2,c3], onCount(n) }
@@ -669,7 +861,100 @@
         let currentBusca = "";
         let currentOrdem = null;
         let operacaoTipo = "nacional";
+        let ordensCache = [];
         const codDe = (o) => o[cfg.codKey];
+        const ordemPorCod = (cod) => ordensCache.find((o) => String(codDe(o)) === String(cod));
+
+        // ── Menu de ações (kebab) ────────────────────────────────────────────
+        function acoesMenuEl() {
+            let m = $(id("acoes-menu"));
+            if (!m) {
+                m = document.createElement("div");
+                m.id = id("acoes-menu");
+                m.className = "ce-actions-menu";
+                document.body.appendChild(m);
+                m.addEventListener("click", (e) => {
+                    const btn = e.target.closest("button[data-act]");
+                    if (!btn) return;
+                    const act = btn.dataset.act;
+                    const cod = btn.dataset.cod;
+                    fecharMenuAcoes();
+                    if (act === "conferir" || act === "ver") abrirConferencia(cod);
+                    else if (act === "corrigir-nf") corrigirNf(cod);
+                    else if (act === "fotos") abrirModalFotosPreexpedicao(cfg.apiBase, cod, ordemPorCod(cod));
+                    else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
+                });
+            }
+            return m;
+        }
+
+        function montarAcoes(o) {
+            const cod = codDe(o);
+            const s = o.status_slug;
+            const it = (act, icon, label, danger) =>
+                `<button data-act="${act}" data-cod="${escapeHtml(cod)}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+            let itens = "";
+            if (s === "pendente" || s === "faturado_sem_conf") {
+                const lbl = s === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
+                itens += it("conferir", "fa-barcode", lbl);
+            } else if (s === "faturado") {
+                itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
+                itens += it("ver", "fa-eye", "Detalhes da conferência");
+                if (CE_IS_ADMIN && cfg.podeCorrigirNf) {
+                    itens += "<hr>" + it("corrigir-nf", "fa-file-pen", "Corrigir NF");
+                }
+            } else if (s === "romaneio" || s === "expedido") {
+                if (s === "romaneio") {
+                    itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
+                }
+                itens += it("ver", "fa-eye", "Detalhes da conferência");
+                itens += it("ver-registro", "fa-clipboard-list", "Ver registro de expedição");
+            } else if (o.editavel) {
+                itens += it("conferir", "fa-pen-to-square", "Editar conferência");
+                itens += it("ver", "fa-eye", "Detalhes");
+            } else {
+                itens += it("ver", "fa-eye", "Detalhes");
+            }
+            return itens;
+        }
+
+        function toggleMenuAcoes(btnEl, cod) {
+            const menu = acoesMenuEl();
+            const jaAberto = menu.classList.contains("open") && menu.dataset.cod === String(cod);
+            fecharMenuAcoes();
+            if (jaAberto) return;
+            const o = ordemPorCod(cod);
+            if (!o) return;
+            menu.innerHTML = montarAcoes(o);
+            menu.dataset.cod = String(cod);
+            const rect = btnEl.getBoundingClientRect();
+            menu.style.top = (rect.bottom + 4) + "px";
+            menu.style.left = "auto";
+            menu.style.right = (window.innerWidth - rect.right) + "px";
+            menu.classList.add("open");
+        }
+
+        function fecharMenuAcoes() {
+            const menu = $(id("acoes-menu"));
+            if (menu) menu.classList.remove("open");
+        }
+
+        function verRegistroExpedicao(o) {
+            if (!o) return;
+            const nf = o.numero_nf;
+            if (!nf) { toast("Ordem sem NF vinculada ao registro de expedição.", "error"); return; }
+            window.open("/expedicao/conferencia?q=" + encodeURIComponent(nf), "_blank");
+        }
+
+        document.addEventListener("click", (e) => {
+            const menu = $(id("acoes-menu"));
+            if (!menu || !menu.classList.contains("open")) return;
+            if (menu.contains(e.target)) return;
+            if (e.target.closest(".ce-actions-btn")) return;
+            fecharMenuAcoes();
+        });
+        // ─────────────────────────────────────────────────────────────────────
+
 
         function aplicarOperacao() {
             if (!cfg.internacional) return;
@@ -789,6 +1074,7 @@
         }
 
         function renderTabela(ordens) {
+            ordensCache = ordens || [];
             const tb = el("tbody");
             if (!ordens.length) {
                 const motivo = currentBusca ? " para esta busca" : (currentFilter ? " neste status" : "");
@@ -797,19 +1083,7 @@
             }
             tb.innerHTML = ordens.map((o) => {
                 const cod = codDe(o);
-                const podeConferir = o.status_slug === "pendente" || o.status_slug === "faturado_sem_conf";
-                let acao;
-                if (podeConferir) {
-                    const lbl = o.status_slug === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
-                    acao = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-barcode"></i> ${lbl}</button>`;
-                } else if (o.editavel) {
-                    acao = `<button class="eui-btn eui-btn--warning eui-btn--sm" data-conferir="${escapeHtml(cod)}"><i class="fas fa-pen-to-square"></i> Editar</button>`;
-                } else {
-                    acao = `<button class="eui-btn eui-btn--ghost eui-btn--sm" data-ver="${escapeHtml(cod)}"><i class="fas fa-eye"></i> Detalhes</button>`;
-                }
-                if (CE_IS_ADMIN && cfg.podeCorrigirNf && o.status_slug === "faturado") {
-                    acao += ` <button class="eui-btn eui-btn--warning eui-btn--icon eui-btn--sm" data-corrigir-nf="${escapeHtml(cod)}" title="Corrigir NF"><i class="fas fa-file-pen"></i></button>`;
-                }
+                const acao = `<button class="ce-actions-btn" data-kebab="${escapeHtml(cod)}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button>`;
                 const nf = o.numero_nf ? escapeHtml(o.numero_nf) : "—";
                 const div = o.divergente ? `<div class="ce-diverg"><i class="fas fa-triangle-exclamation"></i> Divergente</div>` : "";
                 const posFat = o.conferido_pos_faturamento
@@ -1320,6 +1594,12 @@
         }
 
         el("tbody").addEventListener("click", (e) => {
+            const kebabBtn = e.target.closest("[data-kebab]");
+            if (kebabBtn) {
+                e.stopPropagation();
+                toggleMenuAcoes(kebabBtn, kebabBtn.dataset.kebab);
+                return;
+            }
             const cBtn = e.target.closest("[data-conferir]");
             const vBtn = e.target.closest("[data-ver]");
             const xBtn = e.target.closest("[data-expedir]");

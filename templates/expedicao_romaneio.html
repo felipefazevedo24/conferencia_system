@@ -194,7 +194,9 @@
             <div class="rom-nfs-section">
                 <h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 700;">NOTAS FISCAIS</h4>
                 <div class="rom-nf-input-group">
-                    <input type="text" id="rom-nf-numero" class="rom-input" placeholder="Número da NF (ex: 001234)">
+                    <select id="rom-nf-select" class="rom-input">
+                        <option value="">Selecione uma NF faturada…</option>
+                    </select>
                     <button type="button" class="eui-btn eui-btn--primary" id="rom-btn-add-nf" style="white-space: nowrap;"><i class="fas fa-plus"></i> Adicionar</button>
                 </div>
                 <div class="rom-nfs-list" id="rom-nfs-container"></div>
@@ -207,6 +209,10 @@
                     <div class="rom-form-group">
                         <label class="rom-label">Transportadora</label>
                         <input type="text" id="rom-transportadora" class="rom-input" placeholder="Nome da transportadora">
+                    </div>
+                    <div class="rom-form-group">
+                        <label class="rom-label">Placa do Veículo</label>
+                        <input type="text" id="rom-placa" class="rom-input" placeholder="AAA-0000">
                     </div>
                     <div class="rom-form-group">
                         <label class="rom-label">Nome Motorista / Conferente</label>
@@ -274,6 +280,44 @@
         return data;
     }
 
+    // NFs Faturadas ainda sem romaneio — unica fonte usada para popular os
+    // seletores de NF (nunca digitacao livre, so selecao).
+    async function carregarNfsFaturadasDisponiveis() {
+        try {
+            const data = await api("/api/expedicao/conf-cega/ordens?status=faturado");
+            return (data.ordens || []).filter((o) => o.numero_nf);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function preencherSelectNfs(selectEl, nfsDisponiveis, nfsJaAdicionadas) {
+        if (!selectEl) return;
+        const jaAdicionadas = new Set((nfsJaAdicionadas || []).map((n) => n.numero_nf));
+        const valorAtual = selectEl.value;
+        const opcoes = nfsDisponiveis.filter((o) => !jaAdicionadas.has(o.numero_nf));
+        selectEl.innerHTML = '<option value="">' + (opcoes.length ? "Selecione uma NF faturada…" : "Nenhuma NF faturada disponível") + "</option>" +
+            opcoes.map((o) => `<option value="${escapeHtml(o.numero_nf)}">NF ${escapeHtml(o.numero_nf)} — ${escapeHtml(o.cliente || "—")} (Orç. ${escapeHtml(o.orcamento || "—")})</option>`).join("");
+        if (valorAtual && opcoes.some((o) => o.numero_nf === valorAtual)) {
+            selectEl.value = valorAtual;
+        }
+    }
+
+    async function atualizarSelectModal() {
+        const nfs = await carregarNfsFaturadasDisponiveis();
+        preencherSelectNfs($("rom-nf-select"), nfs, nfsAtual);
+    }
+
+    async function atualizarSelectsInline() {
+        if (!expandidos.size) return;
+        const nfs = await carregarNfsFaturadasDisponiveis();
+        expandidos.forEach((id) => {
+            const r = romaneiosCacheLista.find((x) => x.id === id);
+            const sel = $(`rom-nf-select-inline-${id}`);
+            if (sel && r) preencherSelectNfs(sel, nfs, r.nfs || []);
+        });
+    }
+
     async function carregarRomaneios() {
         try {
             const status = ($("rom-filtro-status").value || "").trim();
@@ -301,6 +345,7 @@
         }
 
         tb.innerHTML = romaneios.map(r => renderLinhaRomaneio(r)).join("");
+        atualizarSelectsInline();
     }
 
     function renderLinhaRomaneio(r) {
@@ -457,7 +502,9 @@
 
                 ${editavel ? `
                 <div class="rom-add-nf-inline">
-                    <input type="text" class="rom-input" id="rom-nf-add-inline-${r.id}" placeholder="Número da NF (ex: 001234)">
+                    <select class="rom-input" id="rom-nf-select-inline-${r.id}">
+                        <option value="">Selecione uma NF faturada…</option>
+                    </select>
                     <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="adicionarNfInline(${r.id})"><i class="fas fa-plus"></i> Adicionar</button>
                 </div>` : ""}
             </div>`;
@@ -486,9 +533,9 @@
     }
 
     async function adicionarNfInline(id) {
-        const input = $(`rom-nf-add-inline-${id}`);
-        const numeroNf = (input.value || "").trim();
-        if (!numeroNf) { toast("Informe o número da NF", "error"); return; }
+        const select = $(`rom-nf-select-inline-${id}`);
+        const numeroNf = select.value;
+        if (!numeroNf) { toast("Selecione uma NF faturada", "error"); return; }
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/nf`, {
                 method: "POST",
@@ -526,11 +573,13 @@
             $("rom-orcamento").value = r.orcamento || "";
             $("rom-cliente").value = r.cliente || "";
             $("rom-transportadora").value = r.transportadora_nome || "";
+            $("rom-placa").value = r.placa || "";
             $("rom-motorista").value = r.motorista_nome || "";
             $("rom-documento").value = r.motorista_documento || "";
 
             renderNFsList();
             $("rom-modal").classList.add("open");
+            atualizarSelectModal();
         } catch (e) {
             toast(e.message, "error");
         }
@@ -583,7 +632,10 @@
         if (!confirm("Marcar como expedido?")) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/expedir`, { method: "POST" });
-            toast("Romaneio expedido!");
+            // O Registro de Expedição já nasce Finalizado no servidor (o romaneio
+            // faz as vezes de canhoto e as fotos do Faturado são reaproveitadas),
+            // então não é preciso reabrir a tela nem pedir "expedir" de novo.
+            toast("Romaneio expedido! Registro de expedição finalizado.");
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -678,28 +730,38 @@
             $("rom-orcamento").value = "";
             $("rom-cliente").value = "";
             $("rom-transportadora").value = "";
+            $("rom-placa").value = "";
             $("rom-motorista").value = "";
             $("rom-documento").value = "";
             
             renderNFsList();
             $("rom-modal").classList.add("open");
+            atualizarSelectModal();
         } catch (e) {
             toast(e.message, "error");
         }
     });
 
-    $("rom-btn-add-nf").addEventListener("click", () => {
-        const nf = ($("rom-nf-numero").value || "").trim();
-        if (!nf) { toast("Informe número da NF", "error"); return; }
-        
-        if (nfsAtual.some(n => n.numero_nf === nf)) {
-            toast("NF já adicionada", "error");
-            return;
+    $("rom-btn-add-nf").addEventListener("click", async () => {
+        const select = $("rom-nf-select");
+        const nf = select.value;
+        if (!nf) { toast("Selecione uma NF faturada", "error"); return; }
+        if (!romaneioAtual || !romaneioAtual.id) { toast("Romaneio ainda não foi criado.", "error"); return; }
+
+        try {
+            await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf`, {
+                method: "POST",
+                body: JSON.stringify({ numero_nf: nf }),
+            });
+            const atualizado = await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`);
+            romaneioAtual = atualizado;
+            nfsAtual = atualizado.nfs || [];
+            renderNFsList();
+            await atualizarSelectModal();
+            toast("NF adicionada!");
+        } catch (e) {
+            toast(e.message, "error");
         }
-        
-        nfsAtual.push({ numero_nf: nf, cliente: "", peso_bruto: 0, qtde_volumes: 0 });
-        $("rom-nf-numero").value = "";
-        renderNFsList();
     });
 
     $("rom-modal-close").addEventListener("click", () => $("rom-modal").classList.remove("open"));
@@ -716,6 +778,10 @@
                     body: JSON.stringify({
                         orcamento: $("rom-orcamento").value,
                         cliente: $("rom-cliente").value,
+                        transportadora: $("rom-transportadora").value,
+                        placa: $("rom-placa").value,
+                        motorista: $("rom-motorista").value,
+                        motorista_documento: $("rom-documento").value,
                     })
                 });
             }

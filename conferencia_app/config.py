@@ -279,8 +279,8 @@ class Config:
     DANFE_PREFER_FISCAL_ENGINE = os.environ.get("DANFE_PREFER_FISCAL_ENGINE", "1") == "1"
 
     # Identidade da empresa — exibida em documentos impressos como a Ficha EPI NR-6
+    # (EMPRESA_CNPJ ja tem um default definido acima, na linha ~87 — nao redeclarar aqui.)
     EMPRESA_NOME = os.environ.get("EMPRESA_NOME", "Columbia")
-    EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "")
     # Caminho para o logotipo da empresa (relativo a /static/ ou URL completa).
     # Exemplo: "img/logo.png"  ou  "https://example.com/logo.png"
     EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "https://www.columbiamachine.com.br/img/columbia_logo.png")

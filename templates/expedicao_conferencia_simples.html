@@ -1297,6 +1297,10 @@ function cacheRegistros(data) {
 function abrirRomaneio(id) {
     const reg = romaneioRegistros.find(r => String(r.id) === String(id));
     if (!reg) { showToast("Conferência não encontrada.", "error"); return; }
+    if (reg.romaneio_id) {
+        window.open(`/expedicao/romaneio/${reg.romaneio_id}/visualizar`, "_blank");
+        return;
+    }
     const overlay = document.getElementById("romaneio-overlay");
     const fotosHtml = (reg.fotos || []).length
         ? `<div class="romaneio-fotos"><h3>Fotos da conferência</h3><div class="romaneio-fotos-grid">${reg.fotos.map(f => `<img src="${f.url}" alt="${f.nome}">`).join("")}</div></div>`
@@ -1538,13 +1542,21 @@ function abrirCompletarConferencia(id, orcamento, nf, cliente, transportadora, p
     document.getElementById("completar-form-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Pre-preenche o registro a partir do botao "Expedir" da conferencia de expedicao
-// (URL: ?ref=fat|st&cod=...). Traz numero da NF, orcamento (FAT) ou ordem de compra (ST).
+// Pre-preenche o registro a partir do botao "Expedir" da conferencia de
+// expedicao (URL: ?ref=fat|st|romaneio&cod=...). Traz numero da NF, orcamento
+// (FAT/romaneio) ou ordem de compra (ST) — sempre a partir da propria
+// conferencia/romaneio, nunca digitado do zero.
 async function prefillFromQuery() {
     const params = new URLSearchParams(window.location.search);
     const ref = (params.get("ref") || "").trim().toLowerCase();
     const cod = (params.get("cod") || "").trim();
     if (!ref || !cod) return;
+
+    if (ref === "romaneio") {
+        await prefillFromRomaneio(cod);
+        return;
+    }
+
     const isSt = ref === "st";
     tipoReferenciaSelect.value = isSt ? "OrdemCompra" : "Orcamento";
     toggleTipoReferencia();
@@ -1577,6 +1589,39 @@ async function prefillFromQuery() {
         }
         if (osValor && numeroOsInput) {
             numeroOsInput.value = osValor;
+        }
+    } catch (e) {
+        showToast(e.message, "error");
+    }
+}
+
+// Pre-preenche a partir de um romaneio de expedicao (pode reunir varias NFs):
+// junta os numeros de NF e de OS de todas as notas do romaneio, e usa o
+// orcamento do proprio romaneio.
+async function prefillFromRomaneio(romaneioId) {
+    tipoReferenciaSelect.value = "Orcamento";
+    toggleTipoReferencia();
+    try {
+        const resp = await fetch(`/api/expedicao/romaneio-fat/${encodeURIComponent(romaneioId)}`, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Não foi possível carregar os dados do romaneio.");
+        const data = await resp.json();
+        const nfs = data.nfs || [];
+
+        orcamentoInput.value = data.orcamento || (nfs[0] && nfs[0].orcamento) || "";
+
+        const numerosNf = [...new Set(nfs.map((nf) => (nf.numero_nf || "").trim()).filter(Boolean))];
+        if (numerosNf.length) {
+            nfInput.value = numerosNf.join(", ");
+        }
+
+        const oss = [];
+        nfs.forEach((nf) => {
+            (nf.numeros_os || "").split(",").map((v) => v.trim()).filter(Boolean).forEach((v) => {
+                if (!oss.includes(v)) oss.push(v);
+            });
+        });
+        if (oss.length && numeroOsInput) {
+            numeroOsInput.value = oss.join(", ");
         }
     } catch (e) {
         showToast(e.message, "error");

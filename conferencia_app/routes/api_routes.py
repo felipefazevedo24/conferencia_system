@@ -83,6 +83,7 @@ from ..models import (
     ExpedicaoEstorno,
     ExpedicaoFaturamento,
     ExpedicaoFaturamentoItem,
+    ExpedicaoRomaneioNF,
     ItemNota,
     ChecklistRecebimento,
     LocalizacaoArmazem,
@@ -8941,6 +8942,11 @@ def listar_registros_conferencia_simples():
                 "disponivel": bool(caminho_resolvido),
             })
         estornos = ExpedicaoConferenciaSimplesEstorno.query.filter_by(conferencia_id=reg.id).all()
+        romaneio_id = None
+        if reg.origem == "Romaneio" and reg.numero_nf:
+            romaneio_nf = ExpedicaoRomaneioNF.query.filter_by(numero_nf=reg.numero_nf).first()
+            if romaneio_nf:
+                romaneio_id = romaneio_nf.romaneio_id
         result.append({
             "id": reg.id,
             "orcamento": reg.orcamento,
@@ -8953,6 +8959,8 @@ def listar_registros_conferencia_simples():
             "nome_cliente": reg.nome_cliente,
             "cliente_origem": reg.cliente_origem,
             "nf_origem": reg.nf_origem,
+            "origem": reg.origem,
+            "romaneio_id": romaneio_id,
             "sem_conferencia": bool(reg.sem_conferencia),
             "sem_conferencia_motivo": reg.sem_conferencia_motivo,
             "retirado_por": reg.retirado_por,
