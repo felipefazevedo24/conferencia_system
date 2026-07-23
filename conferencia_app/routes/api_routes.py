@@ -66,6 +66,7 @@ from ..auth import (
     get_permission_catalog,
     login_required,
     permission_required,
+    permission_required_any,
     roles_required,
 )
 from ..extensions import db
@@ -601,6 +602,69 @@ def _summarize_divergencia_nota(numero_nota: str):
         )
         descricao_por_id = {int(i.id): i.descricao for i in itens_ultima}
     return _summarize_divergencia_core(tentativas, descricao_por_id)
+
+
+def _bulk_ultimo_por_nota(model, numeros, campo_data):
+    """Versão em lote de "pega o último registro desta nota": uma única
+    query com IN(...) em vez de uma query por nota (evita N+1)."""
+    if not numeros:
+        return {}
+    rows = (
+        model.query.filter(model.numero_nota.in_(numeros))
+        .order_by(model.numero_nota, campo_data.desc())
+        .all()
+    )
+    out = {}
+    for r in rows:
+        out.setdefault(r.numero_nota, r)  # primeira ocorrência por nota = mais recente (ORDER BY numero_nota, data DESC)
+    return out
+
+
+def _summarize_divergencias_lote(numeros):
+    """Versão em lote de ``_summarize_divergencia_nota``: uma query só para
+    todas as notas da página, em vez de uma por nota."""
+    if not numeros:
+        return {}
+    tentativas = (
+        LogTentativaConferencia.query.filter(LogTentativaConferencia.numero_nota.in_(numeros))
+        .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
+        .all()
+    )
+    por_nota = {}
+    for t in tentativas:
+        por_nota.setdefault(t.numero_nota, []).append(t)
+
+    ids_divergentes = set()
+    for lista in por_nota.values():
+        ultima_tentativa = max(int(t.tentativa_numero) for t in lista)
+        ids_divergentes.update(
+            int(t.item_id)
+            for t in lista
+            if int(t.tentativa_numero) == ultima_tentativa and str(t.status_item or "").upper() == "DIVERGÊNCIA"
+        )
+    descricao_por_id = {}
+    if ids_divergentes:
+        descricao_por_id = {
+            int(i.id): i.descricao for i in ItemNota.query.filter(ItemNota.id.in_(ids_divergentes)).all()
+        }
+
+    return {numero: _summarize_divergencia_core(por_nota.get(numero, []), descricao_por_id) for numero in numeros}
+
+
+def _etapa_atual_por_itens(itens):
+    """Status "mais avançado" entre os itens de uma nota (mesma prioridade
+    já usada em ``/api/detalhes_nf``: Lançado > Concluído > Devolvido >
+    AguardandoLiberacao > Pendente)."""
+    statuses = {str(i.status or "").strip() for i in itens}
+    if "Lançado" in statuses:
+        return "Lançado"
+    if "Concluído" in statuses:
+        return "Concluído"
+    if "Devolvido" in statuses:
+        return "Devolvido"
+    if "AguardandoLiberacao" in statuses:
+        return "AguardandoLiberacao"
+    return "Pendente"
 
 
 def _formatar_descricao_etiqueta(itens):
@@ -1677,16 +1741,16 @@ def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota],
         pendencias.append(
             {
                 "tipo": "divergencia",
-                "titulo": "Divergencia",
+                "titulo": "Divergência",
                 "severidade": "warning",
-                "descricao": resumo_divergencia["detalhe_divergencia"] or "Divergencia ativa na conferencia.",
+                "descricao": resumo_divergencia["detalhe_divergencia"] or "Divergência ativa na conferência.",
             }
         )
     elif resumo_divergencia.get("tentativas_invalidas", 0) > 0:
         pendencias.append(
             {
                 "tipo": "divergencia",
-                "titulo": "Divergencia resolvida",
+                "titulo": "Divergência resolvida",
                 "severidade": "info",
                 "descricao": resumo_divergencia["detalhe_divergencia"],
             }
@@ -1696,9 +1760,9 @@ def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota],
         pendencias.append(
             {
                 "tipo": "remessa",
-                "titulo": "Codigo material",
+                "titulo": "Código material",
                 "severidade": "warning",
-                "descricao": "Remessa de industrializacao exige codigo do material por item.",
+                "descricao": "Remessa de industrialização exige código do material por item.",
             }
         )
 
@@ -2044,15 +2108,120 @@ def perfil_encerrar_outras_sessoes():
     return jsonify({"sucesso": True, "encerradas": len(outras), "msg": f"{len(outras)} sessão(ões) encerrada(s)."})
 
 
-@api_bp.route("/api/admin/upload-kpis", methods=["GET"])
-def get_upload_kpis():
-    """KPIs placeholder: modelo NotaPendente ainda nao implantado."""
+_ETAPA_STATUS_MAP = {
+    "auditoria": ["AguardandoLiberacao"],
+    "lancamento": ["Pendente", "Concluído"],
+    "finalizado": ["Lançado"],
+}
+
+
+@api_bp.route("/api/documento_entrada/kpis", methods=["GET"])
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
+def documento_entrada_kpis_v2():
+    """KPIs reais da página unificada de Documento de Entrada (4 estágios)."""
+    hoje = datetime.now().date()
+
+    contagem_status = dict(
+        db.session.query(ItemNota.status, func.count(func.distinct(ItemNota.numero_nota)))
+        .filter(ItemNota.status.in_(["AguardandoLiberacao", "Pendente", "Concluído", "Lançado"]))
+        .group_by(ItemNota.status)
+        .all()
+    )
+    importados_hoje = (
+        db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
+        .filter(func.date(ItemNota.data_importacao) == hoje)
+        .scalar()
+    ) or 0
+
     return jsonify({
-        "importados_hoje": 0,
-        "prontos_lancar": 0,
-        "em_auditoria": 0,
-        "devolucoes_abertas": 0,
+        "importados_hoje": int(importados_hoje),
+        "em_auditoria": int(contagem_status.get("AguardandoLiberacao", 0)),
+        "em_lancamento": int(contagem_status.get("Pendente", 0)) + int(contagem_status.get("Concluído", 0)),
+        "lancamento_finalizado": int(contagem_status.get("Lançado", 0)),
     })
+
+
+@api_bp.route("/api/documento_entrada/lista", methods=["GET"])
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
+def documento_entrada_lista():
+    """Lista paginada de notas por estágio, para a página unificada de
+    Documento de Entrada. Substitui a combinação de /api/xml_auditor/notas +
+    /api/concluidas + /api/notas_lancadas usada antes por página separada,
+    já paginando e evitando N+1 nos lookups de log por nota."""
+    etapa = str(request.args.get("etapa") or "").strip()
+    busca = str(request.args.get("q") or "").strip()
+    page = _parse_positive_int(request.args.get("page"), default=1, min_value=1, max_value=100000)
+    page_size = _parse_positive_int(request.args.get("page_size"), default=25, min_value=1, max_value=100)
+
+    if etapa != "importados_hoje" and etapa not in _ETAPA_STATUS_MAP:
+        return jsonify({"error": "Parâmetro 'etapa' inválido."}), 400
+
+    filtros = []
+    if etapa == "importados_hoje":
+        hoje = datetime.now().date()
+        filtros.append(func.date(ItemNota.data_importacao) == hoje)
+    else:
+        filtros.append(ItemNota.status.in_(_ETAPA_STATUS_MAP[etapa]))
+    if busca:
+        termo = f"%{busca}%"
+        filtros.append(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
+
+    base_query = (
+        db.session.query(ItemNota.numero_nota, func.max(ItemNota.data_importacao))
+        .filter(*filtros)
+        .group_by(ItemNota.numero_nota)
+    )
+    total = base_query.count()
+    pagina = (
+        base_query.order_by(func.max(ItemNota.data_importacao).desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    numeros_pagina = [r[0] for r in pagina]
+
+    itens_por_nota = {}
+    if numeros_pagina:
+        for item in ItemNota.query.filter(ItemNota.numero_nota.in_(numeros_pagina)).all():
+            itens_por_nota.setdefault(item.numero_nota, []).append(item)
+
+    divergencias = _summarize_divergencias_lote(numeros_pagina)
+    estornos = _bulk_ultimo_por_nota(LogEstornoLancamento, numeros_pagina, LogEstornoLancamento.data_estorno)
+    manifestacoes = _bulk_ultimo_por_nota(LogManifestacaoDestinatario, numeros_pagina, LogManifestacaoDestinatario.data)
+
+    notas = []
+    for numero in numeros_pagina:
+        itens_nota = itens_por_nota.get(numero, [])
+        if not itens_nota:
+            continue
+        status_real = _etapa_atual_por_itens(itens_nota)
+        pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
+        fornecedor = next((i.fornecedor for i in itens_nota if i.fornecedor), "---")
+        data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
+        data_lancamento = max((i.data_lancamento for i in itens_nota if i.data_lancamento), default=None)
+        divergencia = divergencias.get(numero, {})
+        manifest = manifestacoes.get(numero)
+        estorno = estornos.get(numero)
+
+        linha = {
+            "numero": numero,
+            "fornecedor": fornecedor,
+            "status": status_real,
+            "pedido_compra": pedido_compra,
+            "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M") if data_importacao else "---",
+            "data_lancamento": data_lancamento.strftime("%d/%m/%Y %H:%M") if data_lancamento else None,
+            "material_cliente": bool(itens_nota[0].material_cliente),
+            "remessa": bool(itens_nota[0].remessa),
+            "tem_divergencia_ativa": divergencia.get("divergencia") == "Sim",
+            "manifestacao_status": manifest.status if manifest else None,
+            "tem_estorno": estorno is not None,
+        }
+        if status_real == "AguardandoLiberacao":
+            linha["auditor_status"] = itens_nota[0].auditor_status or "NaoAuditado"
+            linha["auditor_decisao"] = itens_nota[0].auditor_decisao or "PendenteDecisao"
+        notas.append(linha)
+
+    return jsonify({"total": total, "page": page, "page_size": page_size, "notas": notas})
 
 
 @api_bp.route("/api/permissoes/catalogo", methods=["GET"])
@@ -7617,15 +7786,15 @@ def detalhes_nf(numero):
         {"nome": "Conferida", "estado": "done" if fim_conferencia else "pending"},
         {
             "nome": "Liberada",
-            "estado": "done" if "ConcluÃ­do" in statuses or "LanÃ§ado" in statuses else "pending",
+            "estado": "done" if "Concluído" in statuses or "Lançado" in statuses else "pending",
         },
-        {"nome": "Lancada", "estado": "done" if data_lancamento else "pending"},
+        {"nome": "Lançada", "estado": "done" if data_lancamento else "pending"},
         {"nome": "Manifestada", "estado": "done" if manifestacao else "pending"},
     ]
     motivos_estorno_padrao = [
-        "Erro no codigo de lancamento do ERP",
-        "Divergencia fiscal identificada apos lancamento",
-        "Solicitacao de reprocessamento da conferencia",
+        "Erro no código de lançamento do ERP",
+        "Divergência fiscal identificada após lançamento",
+        "Solicitação de reprocessamento da conferência",
         "Ajuste operacional autorizado",
     ]
 

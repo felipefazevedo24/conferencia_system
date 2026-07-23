@@ -66,9 +66,7 @@
                         <i class="fas fa-chevron-right nav-chevron"></i>
                     </button>
                     <div class="submenu-panel" id="menu-compras">
-                        {% if can_access('PAGE_UPLOAD') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Pré-nota de entrada</a>{% endif %}
-                        {% if can_access('PAGE_XML_AUDITOR') %}<a href="/compras/auditor-xml" class="list-group-item list-group-item-action"><i class="fas fa-shield-alt"></i> Auditor XML</a>{% endif %}
-                        {% if can_access('PAGE_LANCAMENTO') %}<a href="/lancamento" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice-dollar"></i> Documento de entrada</a>{% endif %}
+                        {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Documento de entrada</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras" class="list-group-item list-group-item-action"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
                         {% if can_access('PAGE_CADASTRO_WORKFLOW') %}<a href="/cadastros/" class="list-group-item list-group-item-action"><i class="fas fa-diagram-project"></i> Workflow de cadastros</a>{% endif %}
                     </div>

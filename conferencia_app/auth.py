@@ -260,3 +260,29 @@ def permission_required(permission_key: str, *roles):
         return decorated_view
 
     return wrapper
+
+
+def permission_required_any(*permission_keys: str):
+    """Como ``permission_required``, mas libera acesso se o usuário tiver
+    QUALQUER UMA das permissões informadas (OR), não todas. Usado por
+    páginas que unificam fluxos antes atendidos por permissões distintas
+    (ex.: Documento de Entrada, que reúne Pré-Nota + Auditor XML +
+    Lançamento) sem precisar criar uma permissão nova nem re-conceder nada
+    no catálogo de acessos."""
+
+    def wrapper(fn):
+        @wraps(fn)
+        @login_required
+        def decorated_view(*args, **kwargs):
+            is_api = request.path.startswith("/api") or request.path == "/validar"
+            if not any(has_permission(key) for key in permission_keys):
+                if is_api:
+                    return jsonify({"error": "Acesso negado", "msg": f"Permissão necessária: {permission_keys}"}), 403
+                return render_template("acesso_negado.html", user=session.get("username")), 403
+
+            _registrar_acesso_admin(path=request.path, method=request.method)
+            return fn(*args, **kwargs)
+
+        return decorated_view
+
+    return wrapper

@@ -1,0 +1,2162 @@
+{% extends "base.html" %}
+
+{% block title %}Documento de Entrada{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recebimento_sap.css') }}?v={{ asset_version }}">
+<style>
+    /* ==========================================================================
+       Estilos herdados do Auditor XML (aliases usados pelo HTML gerado via
+       innerHTML: vinc-*, pedido-result, inconsistencias, badge, modal-*, etc.)
+       Mantidos tal como no arquivo original para preservar 100% do
+       comportamento visual do fluxo de auditoria fiscal.
+       ========================================================================== */
+    :root {
+        --sap-blue: var(--rec-blue-600);
+        --sap-hover: var(--rec-blue-700);
+        --erp-bg: var(--rec-bg);
+        --border-color: var(--rec-border);
+        --text-main: var(--rec-ink-900);
+        --text-muted: var(--rec-ink-500);
+        --card-shadow: var(--rec-shadow-1);
+        --success-erp: var(--rec-green-600);
+        --danger-erp: var(--rec-red-600);
+        --warning-erp: var(--rec-amber-600);
+        --radius: var(--rec-radius-md);
+        --doc-bg: var(--rec-bg);
+        --doc-card: var(--rec-surface);
+        --doc-ink: var(--rec-ink-700);
+        --doc-muted: var(--rec-ink-500);
+        --doc-border: var(--rec-border);
+        --doc-primary: var(--rec-blue-600);
+        --doc-primary-soft: var(--rec-blue-050);
+        --doc-success: var(--rec-green-600);
+        --doc-success-soft: var(--rec-green-100);
+        --doc-warning: var(--rec-amber-500);
+        --doc-warning-soft: var(--rec-amber-100);
+        --doc-danger: var(--rec-red-600);
+        --doc-danger-soft: var(--rec-red-100);
+        --doc-shadow: var(--rec-shadow-1);
+    }
+
+    body { background: var(--eui-bg, #f5f7fb) !important; }
+
+    /* Badges (fila de auditoria / linha da lista unificada) */
+    .badge { display: inline-flex; padding: 5px 12px; border-radius: 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+    .b-pendente { background: rgba(245, 158, 11, 0.1); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .b-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .b-inc { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .b-dec-ok { background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .b-dec-no { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Detalhe do Auditor XML */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .box { border: 1px solid var(--border-color); border-radius: 14px; padding: 14px 16px; background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); transition: all 0.2s; }
+    .box:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .box label { display: block; font-size: 10px; color: var(--text-muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .box span { font-size: 14px; font-weight: 700; color: var(--text-main); }
+
+    .inconsistencias { border-left: 4px solid var(--danger-erp); background: rgba(239, 68, 68, 0.05); border-radius: 12px; padding: 18px; margin: 18px 0; }
+    .inconsistencias b { color: #991b1b; font-size: 14px; }
+    .inconsistencias ul { margin: 10px 0 0 20px; color: #b91c1c; }
+
+    .pedido-result { display: none; border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 13px; font-weight: 600; border-left: 4px solid; }
+    .pedido-result.ok  { background: #f0fdf4; color: #166534; border-left-color: var(--success-erp); }
+    .pedido-result.err { background: #fef2f2; color: #991b1b; border-left-color: var(--danger-erp); }
+    .pedido-result.warn{ background: #fffbeb; color: #92400e; border-left-color: var(--warning-erp); }
+
+    .po-compare-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+    .po-compare-table th { background: #f1f5f9; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; }
+    .po-compare-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+    .po-compare-table tr:last-child td { border-bottom: none; }
+    .po-compare-table .line-ok  { color: #166534; font-weight: 700; }
+    .po-compare-table .line-err { color: #991b1b; font-weight: 700; }
+    .po-compare-table .line-na  { color: #94a3b8; }
+
+    .vinculacao-card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; background: #fff; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .vinculacao-card:hover { border-color: #2563eb; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); }
+    .vinculacao-card.divergencia { border-left: 4px solid var(--danger-erp); background: #fff5f5; }
+    .vinculacao-card.ok { border-left: 4px solid var(--success-erp); background: #f0fdf4; }
+    .vinculacao-linha-xml { padding: 12px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 12px; }
+    .vinculacao-linha-xml-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
+    .vinculacao-linha-xml-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #0f172a; }
+    .vinculacao-linha-xml-dados div { display: flex; justify-content: space-between; }
+    .vinculacao-linha-xml-dados strong { font-weight: 700; color: #2563eb; }
+    .vinculacao-select-wrap { margin: 12px 0; }
+    .vinculacao-select-label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px; text-transform: uppercase; }
+    .vinculacao-select { width: 100%; padding: 11px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; cursor: pointer; transition: all 0.2s; }
+    .vinculacao-select:hover { border-color: #2563eb; }
+    .vinculacao-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
+    .vinculacao-select:disabled { background: #f8fafc; color: #64748b; cursor: not-allowed; border-color: #cbd5e1; }
+    .vinc-status { margin-top: 8px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
+    .vinc-status.ok { color: #166534; }
+    .vinc-status.err { color: #991b1b; }
+    .vinc-edit-btn { margin-top: 10px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .vinc-edit-btn:hover { border-color: #2563eb; color: #1d4ed8; }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+    .actions .btn:last-child { grid-column: span 2; }
+    .btn { border: 1px solid var(--border-color); background: #fff; color: #475569; border-radius: 12px; padding: 11px 18px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-decoration: none; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: inline-flex; align-items: center; gap: 8px; }
+    .btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+    .msg { display: none; margin-bottom: 20px; border-radius: 10px; padding: 14px 20px; font-weight: 600; }
+    .msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .msg.err { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(248, 250, 252, 0.78); backdrop-filter: blur(3px); z-index: 3000; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal-card { background: #fff; border-radius: 16px; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18); padding: 32px 36px; max-width: 420px; width: 90%; text-align: center; animation: modalIn 0.18s ease-out; }
+    @keyframes modalIn { from { transform: scale(0.93); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-card .modal-icon { font-size: 36px; color: var(--warning-erp); margin-bottom: 16px; }
+    .modal-card h4 { margin: 0 0 8px; font-size: 17px; font-weight: 800; color: var(--text-main); }
+    .modal-card p  { margin: 0 0 24px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; }
+    .vinculacao-overlay-card { background: #fff; border-radius: 14px; box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2); width: min(980px, 95vw); max-height: 86vh; overflow: hidden; animation: modalIn 0.2s ease-out; border: 2px solid #2563eb; }
+    .pendencia-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2); width: min(560px, 94vw); padding: 24px; border: 2px solid #f59e0b; animation: modalIn 0.2s ease-out; }
+    .pendencia-card h4 { margin: 0; font-size: 18px; color: #7c2d12; font-weight: 900; display: flex; align-items: center; gap: 10px; }
+    .pendencia-card p { margin: 10px 0 16px; color: #475569; font-size: 14px; line-height: 1.45; }
+    .pendencia-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .rec-card { background: #fff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important; padding: 0 !important; }
+    .rec-card__head { padding: 16px 20px !important; border-bottom: 1px solid #eef2f7 !important; background: #fff !important; }
+    .rec-card__title { font-size: 14px !important; font-weight: 700 !important; color: #0f172a !important; text-transform: none !important; letter-spacing: 0 !important; }
+    .rec-card__sub { font-size: 12px !important; color: #64748b !important; margin-top: 2px !important; }
+    .rec-card__body { padding: 16px 20px !important; }
+    .rec-btn { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; padding: 8px 14px !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #0f172a !important; transition: background 0.15s, border-color 0.15s !important; }
+    .rec-btn:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; }
+    .rec-btn--primary { background: #0f62c9 !important; border-color: #0f62c9 !important; color: #fff !important; }
+    .rec-btn--primary:hover { background: #0b4fa4 !important; border-color: #0b4fa4 !important; }
+    .rec-btn--success { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
+    .rec-btn--success:hover { background: #128a3d !important; border-color: #128a3d !important; }
+    .rec-btn--danger { background: #fff !important; border-color: #ef4444 !important; color: #dc2626 !important; }
+    .rec-btn--danger:hover { background: #fef2f2 !important; }
+    .rec-btn--warning { background: #f59e0b !important; border-color: #f59e0b !important; color: #fff !important; }
+    .rec-input, .rec-textarea, .rec-select { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 9px 12px !important; font-size: 13px !important; font-weight: 500 !important; }
+    .rec-input:focus, .rec-textarea:focus, .rec-select:focus { border-color: #0f62c9 !important; box-shadow: 0 0 0 3px rgba(15,98,201,0.15) !important; }
+
+    /* ==========================================================================
+       Estilos herdados do Documento de Entrada (lancamento.html) — cards de
+       detalhe, maquina de estados, pendencias, modais de lancamento/estorno.
+       ========================================================================== */
+    .doc-btn { border: 1px solid transparent; border-radius: 14px; padding: 11px 16px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .doc-btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .doc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .doc-btn-primary { background: linear-gradient(135deg, #1671d8, #0f62c9); color: #ffffff; border-color: #0f62c9; }
+    .doc-btn-secondary { background: #ffffff; color: var(--doc-ink); border-color: var(--doc-border); }
+    .doc-btn-success { background: var(--doc-success-soft); color: var(--doc-success); border-color: #bde5cc; }
+    .doc-btn-warning { background: var(--doc-warning-soft); color: var(--doc-warning); border-color: #f4d5a0; }
+    .doc-btn-danger { background: var(--doc-danger-soft); color: var(--doc-danger); border-color: #f0c2c8; }
+
+    .doc-feedback { display: none; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 16px 18px; border-radius: 18px; border: 1px solid transparent; box-shadow: var(--doc-shadow); background: #ffffff; }
+    .doc-feedback.show { display: flex; }
+    .doc-feedback.success { background: var(--doc-success-soft); border-color: #bde5cc; color: var(--doc-success); }
+    .doc-feedback.error { background: var(--doc-danger-soft); border-color: #f0c2c8; color: var(--doc-danger); }
+    .doc-feedback.info { background: var(--doc-primary-soft); border-color: #cfe0fb; color: var(--doc-primary); }
+    .doc-feedback-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+    .doc-feedback-message { margin-top: 6px; font-size: 13px; font-weight: 700; line-height: 1.5; }
+    .doc-feedback-close { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 20px; line-height: 1; padding: 0; }
+
+    .doc-detail-empty { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--doc-muted); padding: 44px 24px; font-size: 13px; font-weight: 700; }
+    .doc-card { border: 1px solid var(--doc-border); border-radius: 18px; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); padding: 18px; }
+    .doc-card h3 { margin: 0 0 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; color: var(--doc-muted); }
+    .doc-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .doc-summary-item { padding: 14px; border-radius: 16px; background: #f6f9fc; border: 1px solid #e4ebf2; }
+    .doc-summary-item label { display: block; margin-bottom: 6px; font-size: 10px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .doc-summary-item strong { display: block; font-size: 14px; line-height: 1.4; font-weight: 800; color: var(--doc-ink); word-break: break-word; }
+    .doc-workflow { display: flex; gap: 12px; flex-wrap: wrap; }
+    .doc-step { flex: 1 1 130px; min-width: 120px; padding: 12px 14px; border-radius: 16px; border: 1px solid #dde7f0; background: #f8fbfe; }
+    .doc-step.done { background: var(--doc-success-soft); border-color: #bde5cc; }
+    .doc-step.pending { background: #f7f9fc; border-color: #e2eaf2; }
+    .doc-step-label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 800; color: var(--doc-muted); }
+    .doc-step-status { display: block; margin-top: 6px; font-size: 14px; font-weight: 800; color: var(--doc-ink); }
+    .doc-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .doc-pendency-list, .doc-timeline-list { display: grid; gap: 10px; }
+    .doc-pendency-item, .doc-timeline-item { padding: 12px 14px; border-radius: 16px; border: 1px solid #e2eaf2; background: #f9fbfd; }
+    .doc-pendency-item.severidade-alta { background: var(--doc-danger-soft); border-color: #f0c2c8; }
+    .doc-pendency-item.severidade-media { background: var(--doc-warning-soft); border-color: #f4d5a0; }
+    .doc-pendency-item.severidade-warning { background: var(--doc-warning-soft); border-color: #f4d5a0; }
+    .doc-pendency-item.severidade-info { background: var(--doc-primary-soft); border-color: #cfe0fb; }
+    .doc-pendency-title, .doc-timeline-type { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-ink); margin-bottom: 6px; }
+    .doc-pendency-text, .doc-timeline-text { font-size: 12px; line-height: 1.5; font-weight: 700; color: var(--doc-muted); }
+    .doc-timeline-meta { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-muted); font-weight: 800; }
+    .doc-modal-overlay { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 24px; }
+    .doc-modal { width: min(720px, 100%); border-radius: 20px; background: #ffffff; border: 1px solid var(--doc-border); box-shadow: 0 30px 70px rgba(15, 23, 42, 0.2); overflow: hidden; }
+    .doc-modal.small { width: min(580px, 100%); }
+    .doc-modal-head, .doc-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 22px; }
+    .doc-modal-head { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; }
+    .doc-modal-head h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; }
+    .doc-modal-close { border: none; background: transparent; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; padding: 0; }
+    .doc-modal-body { padding: 22px; display: grid; gap: 16px; }
+    .doc-modal-foot { background: #f8fafc; border-top: 1px solid var(--doc-border); justify-content: flex-end; }
+    .doc-form-block { display: grid; gap: 8px; }
+    .doc-form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; color: var(--doc-muted); }
+    .doc-inline-check { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 16px; background: var(--doc-primary-soft); border: 1px solid #cfe0fb; color: var(--doc-primary); font-size: 12px; font-weight: 700; }
+    .doc-item-code-list { display: grid; gap: 10px; max-height: 260px; overflow-y: auto; }
+    .doc-item-code-card { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: center; padding: 12px; border-radius: 16px; border: 1px solid #f0d4a2; background: #fff8eb; }
+    .doc-item-code-title { font-size: 12px; font-weight: 800; color: #7e5711; }
+    .doc-item-code-sub { margin-top: 4px; font-size: 11px; font-weight: 700; color: #9a6c12; }
+    .doc-form-help { padding: 12px; border-radius: 16px; background: #f7fafc; border: 1px solid #e4ebf2; color: var(--doc-muted); font-size: 12px; font-weight: 700; line-height: 1.5; }
+    .doc-estorno-feedback { font-size: 11px; font-weight: 800; color: var(--doc-danger); }
+    .doc-input, .doc-select, .doc-textarea { width: 100%; border: 1px solid var(--doc-border); border-radius: 12px; background: #fff; padding: 11px 14px; font-size: 13px; font-weight: 600; color: var(--doc-ink); }
+    .doc-input:focus, .doc-select:focus, .doc-textarea:focus { outline: none; border-color: var(--doc-primary); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+    .doc-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .hidden { display: none !important; }
+
+    /* ==========================================================================
+       Novo: KPIs clicaveis, lista unificada e alternancia de estagios
+       ========================================================================== */
+    .de-import-toggle { margin-bottom: 16px; }
+    .de-import-body { margin-top: 12px; }
+    .de-list-row { cursor: pointer; }
+    .de-list-row:hover td { background: var(--eui-surface-3, #f4f6fb); }
+    .de-list-row.is-active td { background: var(--eui-primary-soft, #e7f0ff); }
+    .de-panel { display: none; }
+    .de-panel.is-visible { display: block; }
+    .de-header-strip { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 14px; background: #fff; border: 1px solid #e2e8f0; margin-bottom: 16px; }
+    .de-header-strip__id { font-size: 18px; font-weight: 800; color: #0f172a; }
+    .de-header-strip__sub { font-size: 12px; color: #64748b; font-weight: 600; }
+
+    /* Hub + telas focadas por estagio */
+    .de-view[hidden] { display: none !important; }
+    .de-hub-hint { font-size: 12px; color: #94a3b8; margin: 0 2px 14px; display: flex; align-items: center; gap: 6px; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    .de-stage-topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .de-stage-topbar h2 { margin: 0; font-size: 18px; }
+    .de-stage-topbar .de-stage-sub { margin: 2px 0 0; font-size: 12px; color: #64748b; }
+
+    /* Importar XML — form em grade */
+    .ce-header-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+    @media (max-width: 1100px) { .ce-header-form { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .ce-header-form { grid-template-columns: 1fr; } }
+    /* Importar XML — dois blocos */
+    .de-import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 760px) { .de-import-grid { grid-template-columns: 1fr; } }
+    .de-import-col { display: flex; flex-direction: column; gap: 12px; }
+    .de-import-col__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #475569; display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #eef2f7; }
+    .modelo-toggle { display: flex; gap: 8px; }
+    .modelo-btn { flex: 1; cursor: pointer; }
+    .file-drop-area { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 14px; text-align: center; position: relative; cursor: pointer; min-height: 78px; }
+    .file-drop-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .file-msg { font-size: 12px; color: #64748b; font-weight: 600; }
+    .de-import-processar { width: 100%; margin-top: 14px; }
+
+    /* Fila de notas — tabela legivel */
+    .ce-vol-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .ce-vol-table thead th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748b; padding: 11px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .ce-vol-table tbody td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+    .ce-vol-table tbody tr:last-child td { border-bottom: none; }
+    .ce-vol-table tbody td:first-child { font-weight: 700; color: #0f172a; white-space: nowrap; }
+    .ce-vol-table tbody td:last-child { width: 40px; text-align: right; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-erp eui-scope" id="de-root" data-is-admin="{{ 'true' if is_admin else 'false' }}" data-can-auditor="{{ 'true' if can_access('PAGE_XML_AUDITOR') else 'false' }}" data-can-lancamento="{{ 'true' if can_access('PAGE_LANCAMENTO') else 'false' }}">
+    <div class="module-shell">
+        <div id="de-toast" class="msg" style="position: sticky; top: 8px; z-index: 50;"></div>
+
+        <header class="eui-page-header">
+            <div>
+                <div class="eui-page-header__eyebrow">Compras · Fiscal</div>
+                <h1 class="eui-page-header__title"><i class="fas fa-file-invoice"></i> Documento de Entrada</h1>
+                <p class="eui-page-header__sub">Importação, auditoria fiscal e lançamento ERP num único fluxo.</p>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="eui-btn eui-btn--ghost" type="button" id="de-btn-sync-erp"><i class="fas fa-cloud-arrow-down"></i> Sincronizar ERP</button>
+                <button class="eui-btn eui-btn--primary" type="button" id="de-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
+        </header>
+
+        <!-- ===== HUB: KPIs + Importar XML ===== -->
+        <div class="de-view" id="de-hub-view">
+        <p class="de-hub-hint"><i class="fas fa-hand-pointer"></i> Clique em um indicador para abrir a fila correspondente.</p>
+
+        <!-- KPIs clicaveis -->
+        <div class="eui-stats" id="de-metrics">
+            <div class="eui-stat is-clickable" data-filter="importados_hoje">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-file-import"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Importados hoje</span>
+                    <span class="eui-stat__value" id="de-m-importados-hoje">0</span>
+                    <span class="eui-stat__hint">Chegaram hoje, qualquer etapa</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="auditoria">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-magnifying-glass"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Em auditoria</span>
+                    <span class="eui-stat__value" id="de-m-auditoria">0</span>
+                    <span class="eui-stat__hint">Aguardando decisão fiscal</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="lancamento">
+                <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-clipboard-check"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Em lançamento</span>
+                    <span class="eui-stat__value" id="de-m-lancamento">0</span>
+                    <span class="eui-stat__hint">Conferência + lançamento ERP</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="finalizado">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-double"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Lançamento finalizado</span>
+                    <span class="eui-stat__value" id="de-m-finalizado">0</span>
+                    <span class="eui-stat__hint">Já lançado no ERP</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Importar XML -->
+        <div class="eui-card de-import-toggle">
+            <div class="eui-card__head" style="cursor:pointer;" id="de-import-toggle-head">
+                <h2 class="eui-card__title"><i class="fas fa-cloud-upload-alt"></i> Importar XML</h2>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-import-toggle-btn"><i class="fas fa-chevron-up"></i></button>
+            </div>
+            <div class="eui-card__body de-import-body" id="de-import-body">
+                <div class="de-import-grid">
+                    <div class="de-import-col">
+                        <span class="de-import-col__title"><i class="fas fa-cloud-arrow-down"></i> Buscar no Consyste</span>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Modelo de documento</label>
+                            <div class="modelo-toggle" role="group" aria-label="Modelo de documento Consyste">
+                                <button type="button" class="modelo-btn active" data-modelo="nfe" onclick="selecionarModeloConsyste('nfe', this)">NF-e</button>
+                                <button type="button" class="modelo-btn" data-modelo="nfse" onclick="selecionarModeloConsyste('nfse', this)">NFS-e</button>
+                            </div>
+                            <input type="hidden" id="consyste-modelo" value="nfe" />
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Entrada por chave (44 dígitos)</label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="consyste-chave" class="eui-input" maxlength="44" placeholder="0000 0000 0000...">
+                                <button id="btn-consyste-chave" class="eui-btn eui-btn--primary" type="button" onclick="buscarPorChave()"><i class="fas fa-bolt"></i> Puxar</button>
+                            </div>
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Consulta por número</label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="consyste-numero" class="eui-input" placeholder="Ex: 351">
+                                <button id="btn-consyste-numero" class="eui-btn eui-btn--primary" type="button" onclick="buscarPorNumero()"><i class="fas fa-search"></i> Buscar</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="de-import-col">
+                        <span class="de-import-col__title"><i class="fas fa-folder-open"></i> Enviar arquivos locais</span>
+                        <div class="eui-field" style="flex:1;">
+                            <label class="eui-field__label">Repositório local de XML</label>
+                            <div class="file-drop-area" id="drop-area" style="flex:1;">
+                                <i class="fas fa-file-code" style="font-size: 24px; color: var(--sap-blue); opacity: 0.6;"></i>
+                                <span class="file-msg" id="file-name">Selecione arquivos XML</span>
+                                <input type="file" id="xmls" accept=".xml" multiple onchange="updateFileName()">
+                            </div>
+                        </div>
+                        <button id="btn-envio" class="eui-btn eui-btn--success de-import-processar" type="button" onclick="fazerUpload()"><i class="fas fa-play"></i> Processar lote</button>
+                    </div>
+                </div>
+                <div id="consyste-status" style="margin-top:10px;"></div>
+                <div id="status" style="margin-top:10px;"></div>
+            </div>
+        </div>
+        </div><!-- /de-hub-view -->
+
+        <!-- ===== TELA FOCADA POR ESTAGIO ===== -->
+        <div class="de-view" id="de-stage-view" hidden>
+
+        <div class="de-stage-topbar">
+            <button class="eui-btn eui-btn--ghost" type="button" id="de-btn-voltar"><i class="fas fa-arrow-left"></i> Voltar</button>
+            <div>
+                <h2 class="eui-card__title" id="de-lista-titulo"><i class="fas fa-list"></i> Notas</h2>
+                <p class="de-stage-sub" id="de-stage-sub"></p>
+            </div>
+        </div>
+
+        <!-- Lista unificada -->
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title" style="font-size:13px; color:#64748b;"><i class="fas fa-filter"></i> Fila</h2>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="de-busca" class="eui-input" placeholder="Buscar por NF ou fornecedor..." style="width:260px;">
+                </div>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="ce-table-wrap">
+                    <table class="ce-vol-table">
+                        <thead>
+                            <tr>
+                                <th>NF</th>
+                                <th>Fornecedor</th>
+                                <th>Pedido</th>
+                                <th>Importado em</th>
+                                <th>Situação</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="de-tbody">
+                            <tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Carregando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 4px;">
+                    <span id="de-paginacao-info" style="font-size:12px; color:#64748b;"></span>
+                    <div style="display:flex; gap:6px;">
+                        <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-btn-pag-anterior"><i class="fas fa-chevron-left"></i></button>
+                        <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-btn-pag-proxima"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de detalhe: vazio -->
+        <div class="eui-card de-panel is-visible" id="de-panel-vazio">
+            <div class="eui-card__body" style="text-align:center; padding:40px 20px; color:#64748b;">
+                <i class="fas fa-hand-pointer" style="font-size:28px; opacity:.5;"></i>
+                <p style="margin-top:10px; font-weight:700;">Selecione uma nota na lista para abrir o painel.</p>
+            </div>
+        </div>
+
+        <!-- Painel de detalhe: Auditoria (portado de auditor_xml.html) -->
+        <div class="de-panel" id="de-panel-auditoria">
+            <div class="de-header-strip">
+                <div>
+                    <div class="de-header-strip__id">NF <span id="dNota">---</span></div>
+                    <div class="de-header-strip__sub"><span id="dFornecedor">---</span> · Status fluxo: <span id="dStatusFluxo">---</span></div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <span class="box" style="padding:8px 12px;"><label>Status auditoria</label><span id="dStatusAuditoria">---</span></span>
+                    <span class="box" style="padding:8px 12px;"><label>Decisão fiscal</label><span id="dDecisaoFiscal">---</span></span>
+                    <span class="box" style="padding:8px 12px;"><label>CNPJ destinatário</label><span id="dCnpjDestinatario">---</span></span>
+                </div>
+            </div>
+
+            <div class="rec-stack-3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:14px;">
+                <div class="box">
+                    <label>Pedido(s) de Compra (Vínculo ERP)</label>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        <input id="pedidoCompra" class="rec-input" style="flex:1;" placeholder="Ex: OC-2026-0000; OC-2026-0001" />
+                        <button type="button" class="rec-btn" onclick="consultarPedidoExcel()"><i class="fas fa-search"></i> Consultar</button>
+                    </div>
+                    <div id="pedidoResult" class="pedido-result"></div>
+                    <div id="pedidoCompareWrap" style="display:none;"></div>
+                    <div style="margin-top:12px; display:grid; gap:8px;">
+                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="materialCliente" onchange="alternarMaterialCliente()"> Material de cliente</label>
+                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="remessa" onchange="alternarMaterialCliente()"> Remessa</label>
+                        <label style="display:flex; gap:8px; align-items:center; font-size:12px;"><input type="checkbox" id="semConferenciaLogistica"> Sem conferência logística</label>
+                    </div>
+                    <p class="rec-muted" style="margin:8px 0 0; font-size:11px;">Quando marcado, após a liberação a NF pula a conferência física e vai direto para lançamento (como concluída).</p>
+                </div>
+                <div class="box">
+                    <label>Justificativa da decisão fiscal (obrigatória para recusar)</label>
+                    <textarea id="justificativaFiscal" class="rec-textarea" rows="4" style="width:100%; margin-top:6px;" placeholder="Informe o motivo da aprovação/recusa..."></textarea>
+                </div>
+                <div class="box">
+                    <label>Observações do Auditor Fiscal</label>
+                    <textarea id="obsFiscal" class="rec-textarea" rows="4" style="width:100%; margin-top:6px;" placeholder="Descreva observações relevantes..."></textarea>
+                </div>
+            </div>
+
+            <div id="inconsistenciasBox" class="inconsistencias" style="display:none;"></div>
+
+            <div id="decisaoInconsistenciaBox" class="box" style="display:none; border:1px solid var(--rec-red-100); background:#fff7f7;">
+                <label>Decisão da Inconsistência Fiscal</label>
+                <p class="rec-muted" style="margin:6px 0 12px; color:var(--rec-red-700);">Foram detectadas inconsistências no XML. Defina a decisão fiscal para seguir o fluxo.</p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button class="rec-btn rec-btn--success" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+                    <button class="rec-btn rec-btn--danger" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="rec-btn rec-btn--warning" onclick="auditarSelecionada()"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                <button class="rec-btn" onclick="salvarPedido()"><i class="fas fa-save"></i> Salvar Vínculo</button>
+                <button class="rec-btn" style="background:var(--rec-amber-100); color:var(--rec-amber-700); border-color:#f3cfa0;" onclick="retirarNotaDoAuditor()"><i class="fas fa-trash"></i> Excluir do Auditor (definitivo)</button>
+                <button class="rec-btn rec-btn--success" onclick="liberarSelecionada()"><i class="fas fa-paper-plane"></i> Liberar para Conferência</button>
+            </div>
+
+            <h3 class="rec-card__title" style="margin:22px 0 10px;"><i class="fas fa-th-list"></i> Itens do Documento</h3>
+            <div class="rec-table-wrap rec-table-wrap--bordered" style="max-height:300px;">
+                <table class="rec-table rec-table--compact">
+                    <thead>
+                        <tr><th>Código</th><th>Descrição</th><th>CFOP</th><th>NCM</th><th>CST ICMS</th><th>CST PIS</th><th>CST COFINS</th><th class="num">Qtd</th></tr>
+                    </thead>
+                    <tbody id="tbodyItens"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Painel de detalhe: Lançamento / Finalizado (portado de lancamento.html) -->
+        <div class="de-panel" id="de-panel-lancamento">
+            <div class="doc-detail-bar" style="display:flex; justify-content:space-between; gap:16px; align-items:center; padding:16px 18px; border-radius:14px 14px 0 0; background:#fff; border:1px solid #e2e8f0; border-bottom:none;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <span class="doc-detail-number" id="detail-number" style="font-size:20px; font-weight:800; color:#1e293b;">---</span>
+                    <span class="doc-detail-sub" id="detail-sub" style="font-size:12px; font-weight:700; color:#64748b;">---</span>
+                </div>
+                <div class="doc-detail-actions">
+                    <button id="btn-action-lancar" class="doc-btn doc-btn-primary" type="button" onclick="abrirModalLancamento()" disabled><i class="fas fa-book"></i> Lançar</button>
+                    <button id="btn-action-manifestar" class="doc-btn doc-btn-success" type="button" onclick="reenviarManifestacaoSelecionada()" disabled><i class="fas fa-paper-plane"></i> Manifestar</button>
+                    <button id="btn-action-estornar" class="doc-btn doc-btn-warning" type="button" onclick="abrirModalEstorno()" disabled><i class="fas fa-rotate-left"></i> Estornar</button>
+                    <button id="btn-action-xml" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('xml')" disabled><i class="fas fa-file-code"></i> XML</button>
+                    <button id="btn-action-pdf" class="doc-btn doc-btn-secondary" type="button" onclick="baixarDocumentoSelecionado('pdf')" disabled><i class="fas fa-file-pdf"></i> PDF</button>
+                </div>
+            </div>
+            <div id="detail-body" class="doc-detail-body" style="padding:16px; background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 14px 14px; display:grid; gap:16px;"></div>
+        </div>
+        </div><!-- /de-stage-view -->
+    </div>
+</div>
+
+<!-- MODAIS — Auditoria -->
+<div id="modalOverlay" class="modal-overlay">
+    <div class="modal-card">
+        <i class="fas fa-exclamation-triangle modal-icon"></i>
+        <h4>Confirmar ação</h4>
+        <p id="confirmText"></p>
+        <div class="modal-actions">
+            <button class="rec-btn rec-btn--success" type="button" onclick="responderConfirmacao(true)"><i class="fas fa-check"></i> Confirmar</button>
+            <button class="rec-btn" type="button" onclick="responderConfirmacao(false)"><i class="fas fa-times"></i> Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<div id="diagOverlay" class="modal-overlay">
+    <div class="modal-card" style="max-width:760px; text-align:left;">
+        <i class="fas fa-triangle-exclamation modal-icon" style="color:var(--rec-red-600);"></i>
+        <h4 style="text-align:center;">Inconsistências no XML detectadas</h4>
+        <p style="text-align:center;">Revise os pontos abaixo e registre a decisão fiscal.</p>
+        <div id="diagList" style="max-height:260px; overflow:auto; border:1px solid var(--rec-red-100); border-radius:var(--rec-radius); background:#fff7f7; padding:12px;"></div>
+        <div style="margin-top:12px;">
+            <label for="diagJustificativa" class="rec-label">Justificativa para recusa (mín. 5 caracteres)</label>
+            <textarea id="diagJustificativa" class="rec-textarea" rows="3" style="width:100%;" placeholder="Descreva o motivo da recusa..."></textarea>
+        </div>
+        <div id="diagMsg" style="display:none; margin-top:10px; padding:10px 12px; border-radius:var(--rec-radius); font-size:12px; font-weight:600;"></div>
+        <div class="modal-actions" style="margin-top:16px;">
+            <button class="rec-btn rec-btn--success" type="button" onclick="registrarDecisaoFiscal(true)"><i class="fas fa-thumbs-up"></i> Aprovar XML</button>
+            <button class="rec-btn rec-btn--danger" type="button" onclick="registrarDecisaoFiscal(false)"><i class="fas fa-thumbs-down"></i> Recusar XML</button>
+            <button class="rec-btn" type="button" onclick="fecharDiagnostico()"><i class="fas fa-xmark"></i> Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div id="vinculacaoOverlay" class="modal-overlay" onclick="if(event.target===this)fecharModalVinculacao()">
+    <div class="vinculacao-overlay-card">
+        <div style="padding:18px 22px; background:var(--rec-blue-700); color:#fff;">
+            <h3 style="margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;"><i class="fas fa-link"></i> Vincular Linhas do Pedido</h3>
+            <p style="margin:4px 0 0; font-size:12px; opacity:.9;">Selecione qual linha do pedido de compra corresponde a cada linha do XML.</p>
+        </div>
+        <div style="padding:20px; max-height:62vh; overflow-y:auto;">
+            <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
+        </div>
+        <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
+            <button id="btnConfirmarDivergencia" class="rec-btn rec-btn--warning" type="button" onclick="confirmarVinculacaoComDivergencia()" style="display:none;"><i class="fas fa-triangle-exclamation"></i> Confirmar mesmo com divergência</button>
+            <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
+            <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
+        </div>
+    </div>
+</div>
+
+<div id="pendenciaOverlay" class="modal-overlay" onclick="if(event.target===this)fecharPendenciaObrigatoria()">
+    <div class="pendencia-card">
+        <h4><i class="fas fa-triangle-exclamation"></i> Ação obrigatória antes de liberar</h4>
+        <p id="pendenciaTexto"></p>
+        <div id="pendenciaActions" class="pendencia-actions"></div>
+    </div>
+</div>
+
+<!-- MODAIS — Lançamento -->
+<div id="modal-lancamento" class="doc-modal-overlay">
+    <div class="doc-modal">
+        <div class="doc-modal-head">
+            <h3>Efetivar lançamento fiscal</h3>
+            <button class="doc-modal-close" type="button" onclick="fecharModalLancamento()">&times;</button>
+        </div>
+        <div class="doc-modal-body">
+            <div class="doc-form-help" id="lancamento-resumo">Nenhuma NF selecionada.</div>
+            <div class="doc-form-block">
+                <label class="doc-form-label" for="input-codigo-erp">Código do ERP</label>
+                <input id="input-codigo-erp" class="doc-input" placeholder="Ex: LANC-2026-001">
+            </div>
+            <div id="tipo-documento-box" class="doc-form-help hidden"></div>
+            <div id="alerta-pendencia-box" class="doc-form-help hidden"></div>
+            <div id="codigo-material-wrap" class="doc-form-block hidden">
+                <label class="doc-form-label" for="input-codigo-material">Código do material</label>
+                <input id="input-codigo-material" class="doc-input" placeholder="Obrigatório para material de cliente">
+            </div>
+            <div id="codigo-itens-wrap" class="doc-form-block hidden">
+                <label class="doc-form-label">Código do material por item XML</label>
+                <div id="codigo-itens-lista" class="doc-item-code-list"></div>
+            </div>
+            <label class="doc-inline-check">
+                <input id="input-manifestar-destinatario" type="checkbox" checked>
+                <span>Enviar confirmação da operação para SEFAZ após gravar o lançamento.</span>
+            </label>
+        </div>
+        <div class="doc-modal-foot">
+            <button class="doc-btn doc-btn-secondary" type="button" onclick="fecharModalLancamento()">Cancelar</button>
+            <button class="doc-btn doc-btn-primary" type="button" onclick="enviarDadosLancamento()"><i class="fas fa-save"></i> Gravar lançamento</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-estorno" class="doc-modal-overlay">
+    <div class="doc-modal small">
+        <div class="doc-modal-head" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);">
+            <h3>Estorno de documento de entrada</h3>
+            <button class="doc-modal-close" type="button" onclick="fecharModalEstorno()">&times;</button>
+        </div>
+        <div class="doc-modal-body">
+            <div class="doc-form-help" id="estorno-resumo">Nenhuma NF selecionada.</div>
+            <div class="doc-form-block">
+                <label class="doc-form-label">Tipo de estorno</label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <button id="btn-tipo-estorno-lancamento" type="button" onclick="selecionarTipoEstorno('lancamento')" style="padding:16px 14px; border-radius:14px; border:2px solid #3b82f6; background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%); cursor:pointer; text-align:left;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-book"></i></span>
+                            <strong style="font-size:13px; color:#1e40af;">Estornar Lançamento</strong>
+                        </div>
+                        <p style="margin:0; font-size:11px; color:#64748b;">Reverte o lançamento fiscal no ERP.</p>
+                    </button>
+                    <button id="btn-tipo-estorno-conferencia" type="button" onclick="selecionarTipoEstorno('conferencia')" style="padding:16px 14px; border-radius:14px; border:2px solid #e2e8f0; background:#fff; cursor:pointer; text-align:left;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-clipboard-check"></i></span>
+                            <strong style="font-size:13px; color:#065f46;">Estornar Conferência</strong>
+                        </div>
+                        <p style="margin:0; font-size:11px; color:#64748b;">Reverte a conferência do recebimento.</p>
+                    </button>
+                </div>
+            </div>
+            <div id="estorno-lancamento-fields">
+                <div class="doc-form-block" style="margin-bottom:12px;">
+                    <label class="doc-form-label" for="estorno-motivo-padrao">Motivo padrão</label>
+                    <select id="estorno-motivo-padrao" class="doc-select"></select>
+                </div>
+                <div class="doc-form-block" style="margin-bottom:12px;">
+                    <label class="doc-form-label" for="estorno-complemento">Complemento</label>
+                    <input id="estorno-complemento" class="doc-input" placeholder="Detalhe do erro, número de chamado ou ajuste">
+                </div>
+            </div>
+            <div id="estorno-conferencia-fields" style="display:none;">
+                <div class="doc-form-help" style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%); border:1px solid #34d399; color:#065f46; margin-bottom:12px;">
+                    <i class="fas fa-info-circle"></i> A conferência será removida e o conferente precisará refazer o checklist de recebimento.
+                </div>
+            </div>
+            <div class="doc-form-block">
+                <label class="doc-form-label" for="estorno-motivo">Observação do estorno</label>
+                <textarea id="estorno-motivo" class="doc-textarea" rows="4" placeholder="Descreva o contexto operacional e fiscal do estorno."></textarea>
+            </div>
+            <div id="estorno-feedback" class="doc-estorno-feedback"></div>
+        </div>
+        <div class="doc-modal-foot">
+            <button class="doc-btn doc-btn-secondary" type="button" onclick="fecharModalEstorno()">Cancelar</button>
+            <button id="btn-confirmar-estorno" class="doc-btn doc-btn-danger" type="button" onclick="confirmarEstorno()"><i class="fas fa-rotate-left"></i> Confirmar estorno</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const DE_ROOT = document.getElementById('de-root');
+    const DE_IS_ADMIN = DE_ROOT.dataset.isAdmin === 'true';
+    const DE_CAN_AUDITOR = DE_ROOT.dataset.canAuditor === 'true';
+    const DE_CAN_LANCAMENTO = DE_ROOT.dataset.canLancamento === 'true';
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function deToast(msg, tipo = 'ok') {
+        const el = document.getElementById('de-toast');
+        el.className = 'msg';
+        el.classList.add(tipo === 'ok' ? 'ok' : 'err');
+        el.textContent = msg;
+        el.style.display = 'block';
+        clearTimeout(deToast._t);
+        deToast._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
+    }
+
+    /* ======================================================================
+       KPIs + lista unificada
+       ====================================================================== */
+    let deEtapaAtual = 'importados_hoje';
+    let deBuscaAtual = '';
+    let dePaginaAtual = 1;
+    let dePageSize = 25;
+    let deTotalRegistros = 0;
+    let deNotaAberta = null; // numero da nota atualmente aberta no painel
+
+    const DE_TITULOS_ETAPA = {
+        importados_hoje: 'Notas — Importados hoje',
+        auditoria: 'Notas — Em auditoria',
+        lancamento: 'Notas — Em lançamento',
+        finalizado: 'Notas — Lançamento finalizado',
+    };
+
+    async function carregarKpis() {
+        try {
+            const resp = await fetch('/api/documento_entrada/kpis');
+            const dados = await resp.json();
+            document.getElementById('de-m-importados-hoje').textContent = dados.importados_hoje ?? 0;
+            document.getElementById('de-m-auditoria').textContent = dados.em_auditoria ?? 0;
+            document.getElementById('de-m-lancamento').textContent = dados.em_lancamento ?? 0;
+            document.getElementById('de-m-finalizado').textContent = dados.lancamento_finalizado ?? 0;
+        } catch (e) {
+            console.error('[kpis]', e);
+        }
+    }
+
+    function badgeStatusLinha(status) {
+        const mapa = {
+            AguardandoLiberacao: ['Em auditoria', 'warning'],
+            Pendente: ['Aguardando conferência', 'neutral'],
+            'Concluído': ['Pronta p/ lançar', 'primary'],
+            'Lançado': ['Lançada', 'success'],
+            Devolvido: ['Devolvida', 'danger'],
+        };
+        const [label, tom] = mapa[status] || [status || '---', 'neutral'];
+        return `<span class="eui-badge eui-badge--${tom}">${escapeHtml(label)}</span>`;
+    }
+
+    function renderListaUnificada(payload) {
+        const tbody = document.getElementById('de-tbody');
+        const notas = payload.notas || [];
+        deTotalRegistros = payload.total || 0;
+        document.getElementById('de-lista-titulo').innerHTML = `<i class="fas fa-list"></i> ${escapeHtml(DE_TITULOS_ETAPA[deEtapaAtual] || 'Notas')}`;
+
+        if (!notas.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Nenhuma nota encontrada.</td></tr>';
+        } else {
+            tbody.innerHTML = notas.map((n) => {
+                const alerta = n.tem_divergencia_ativa ? ' <i class="fas fa-triangle-exclamation" style="color:#dc2626;" title="Divergência ativa"></i>' : '';
+                const auditorInfo = n.status === 'AguardandoLiberacao'
+                    ? `<span class="badge ${badgeClass(n.auditor_status)}" style="margin-left:6px;">${escapeHtml(n.auditor_status || 'NaoAuditado')}</span>`
+                    : '';
+                return `
+                <tr class="de-list-row ${deNotaAberta === n.numero ? 'is-active' : ''}" data-numero="${escapeHtml(n.numero)}" data-status="${escapeHtml(n.status)}">
+                    <td><strong>${escapeHtml(n.numero)}</strong>${alerta}</td>
+                    <td>${escapeHtml(n.fornecedor || '---')}</td>
+                    <td>${escapeHtml(n.pedido_compra || '---')}</td>
+                    <td>${escapeHtml(n.data_importacao || '---')}</td>
+                    <td>${badgeStatusLinha(n.status)}${auditorInfo}</td>
+                    <td style="text-align:right;"><i class="fas fa-chevron-right" style="color:#94a3b8;"></i></td>
+                </tr>`;
+            }).join('');
+        }
+
+        const inicio = notas.length ? (dePaginaAtual - 1) * dePageSize + 1 : 0;
+        const fim = (dePaginaAtual - 1) * dePageSize + notas.length;
+        document.getElementById('de-paginacao-info').textContent = `${inicio}-${fim} de ${deTotalRegistros}`;
+        document.getElementById('de-btn-pag-anterior').disabled = dePaginaAtual <= 1;
+        document.getElementById('de-btn-pag-proxima').disabled = fim >= deTotalRegistros;
+    }
+
+    async function carregarLista() {
+        const params = new URLSearchParams({
+            etapa: deEtapaAtual,
+            page: dePaginaAtual,
+            page_size: dePageSize,
+        });
+        if (deBuscaAtual) params.set('q', deBuscaAtual);
+        try {
+            const resp = await fetch(`/api/documento_entrada/lista?${params.toString()}`);
+            if (!resp.ok) throw new Error('Falha ao carregar lista.');
+            const dados = await resp.json();
+            renderListaUnificada(dados);
+        } catch (e) {
+            deToast(e.message, 'err');
+        }
+    }
+
+    async function recarregarTudo() {
+        await Promise.all([carregarKpis(), carregarLista()]);
+    }
+
+    const DE_ETAPAS_VALIDAS = ['importados_hoje', 'auditoria', 'lancamento', 'finalizado'];
+    const DE_SUBTITULOS_ETAPA = {
+        importados_hoje: 'Notas que chegaram hoje, em qualquer etapa.',
+        auditoria: 'Notas aguardando decisão fiscal.',
+        lancamento: 'Conferência e lançamento no ERP.',
+        finalizado: 'Notas já lançadas no ERP.',
+    };
+
+    function mostrarHub() {
+        deNotaAberta = null;
+        mostrarPainel('de-panel-vazio');
+        document.getElementById('de-stage-view').hidden = true;
+        document.getElementById('de-hub-view').hidden = false;
+        carregarKpis();
+    }
+
+    function mostrarVistaEstagio(etapa) {
+        if (!DE_ETAPAS_VALIDAS.includes(etapa)) etapa = 'importados_hoje';
+        deEtapaAtual = etapa;
+        dePaginaAtual = 1;
+        deBuscaAtual = '';
+        deNotaAberta = null;
+        const busca = document.getElementById('de-busca');
+        if (busca) busca.value = '';
+        document.getElementById('de-hub-view').hidden = true;
+        document.getElementById('de-stage-view').hidden = false;
+        document.getElementById('de-lista-titulo').innerHTML = `<i class="fas fa-list"></i> ${escapeHtml(DE_TITULOS_ETAPA[etapa] || 'Notas')}`;
+        document.getElementById('de-stage-sub').textContent = DE_SUBTITULOS_ETAPA[etapa] || '';
+        mostrarPainel('de-panel-vazio');
+        carregarLista();
+    }
+
+    function irParaEtapa(etapa) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('stage', etapa);
+        url.searchParams.delete('nota');
+        history.pushState({ stage: etapa }, '', url);
+        mostrarVistaEstagio(etapa);
+    }
+
+    function voltarParaHub() {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('stage');
+        url.searchParams.delete('nota');
+        history.pushState({ stage: null }, '', url);
+        mostrarHub();
+    }
+
+    document.getElementById('de-metrics').addEventListener('click', (e) => {
+        const card = e.target.closest('[data-filter]');
+        if (!card) return;
+        irParaEtapa(card.dataset.filter);
+    });
+
+    document.getElementById('de-btn-voltar').addEventListener('click', voltarParaHub);
+
+    window.addEventListener('popstate', () => {
+        const stage = (new URLSearchParams(window.location.search).get('stage') || '').trim();
+        if (stage) mostrarVistaEstagio(stage);
+        else mostrarHub();
+    });
+
+    let deBuscaTimer = null;
+    document.getElementById('de-busca').addEventListener('input', (e) => {
+        clearTimeout(deBuscaTimer);
+        deBuscaTimer = setTimeout(() => {
+            deBuscaAtual = e.target.value.trim();
+            dePaginaAtual = 1;
+            carregarLista();
+        }, 300);
+    });
+
+    document.getElementById('de-btn-pag-anterior').addEventListener('click', () => {
+        if (dePaginaAtual > 1) { dePaginaAtual -= 1; carregarLista(); }
+    });
+    document.getElementById('de-btn-pag-proxima').addEventListener('click', () => {
+        dePaginaAtual += 1; carregarLista();
+    });
+    document.getElementById('de-btn-atualizar').addEventListener('click', recarregarTudo);
+
+    document.getElementById('de-import-toggle-head').addEventListener('click', () => {
+        const body = document.getElementById('de-import-body');
+        const btn = document.getElementById('de-import-toggle-btn');
+        body.classList.toggle('hidden');
+        btn.innerHTML = body.classList.contains('hidden') ? '<i class="fas fa-chevron-down"></i>' : '<i class="fas fa-chevron-up"></i>';
+    });
+
+    function mostrarPainel(id) {
+        document.querySelectorAll('.de-panel').forEach((p) => p.classList.remove('is-visible'));
+        document.getElementById(id).classList.add('is-visible');
+    }
+
+    document.getElementById('de-tbody').addEventListener('click', async (e) => {
+        const row = e.target.closest('.de-list-row');
+        if (!row) return;
+        const numero = row.dataset.numero;
+        const status = row.dataset.status;
+        deNotaAberta = numero;
+        document.querySelectorAll('.de-list-row').forEach((r) => r.classList.toggle('is-active', r.dataset.numero === numero));
+
+        if (status === 'AguardandoLiberacao') {
+            if (!DE_CAN_AUDITOR) { deToast('Você não tem permissão para auditoria fiscal.', 'err'); return; }
+            mostrarPainel('de-panel-auditoria');
+            await selecionarNota(numero);
+        } else {
+            if (!DE_CAN_LANCAMENTO) { deToast('Você não tem permissão para o fluxo de lançamento.', 'err'); return; }
+            mostrarPainel('de-panel-lancamento');
+            notaSelecionada = numero;
+            try {
+                await carregarDetalhes(numero);
+            } catch (erro) {
+                exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Não foi possível carregar o painel detalhado.'));
+            }
+        }
+    });
+
+    /* ======================================================================
+       IMPORTAÇÃO DE XML (portado de admin.html)
+       ====================================================================== */
+    function selecionarModeloConsyste(modelo, buttonEl) {
+        document.getElementById('consyste-modelo').value = (modelo || 'nfe').toLowerCase();
+        document.querySelectorAll('.modelo-btn').forEach((btn) => btn.classList.remove('active'));
+        if (buttonEl) buttonEl.classList.add('active');
+    }
+
+    function getConsysteModeloSelecionado() {
+        return (document.getElementById('consyste-modelo').value || 'nfe').toLowerCase();
+    }
+
+    function showStatus(msg, type = 'info') {
+        const box = document.getElementById('consyste-status');
+        box.style.display = 'block';
+        box.innerText = msg;
+        box.style.color = type === 'error' ? '#991b1b' : (type === 'success' ? '#166534' : '#475569');
+    }
+
+    async function parseResponseSafe(res) {
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) return await res.json();
+        const raw = await res.text();
+        return { error: raw ? raw.slice(0, 200) : `HTTP ${res.status}` };
+    }
+
+    async function importarPorChave(chave) {
+        try {
+            const res = await fetch('/api/consyste/download', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chave }),
+            });
+            const data = await parseResponseSafe(res);
+            if (!res.ok) { showStatus(data.error || data.msg || 'Falha ao baixar XML por chave.', 'error'); return; }
+            showStatus(data.msg || 'NF importada com sucesso.', 'success');
+            await recarregarTudo();
+        } catch (e) {
+            showStatus(`Falha ao importar por chave: ${e.message || e}`, 'error');
+        }
+    }
+
+    async function importarDocumento(doc) {
+        const modelo = (doc && doc.modelo) || 'nfe';
+        const chave = (doc && doc.chave) || '';
+        const documentoId = (doc && doc.documento_id) || (doc && doc.id) || '';
+        if (modelo === 'nfse' && !documentoId) { showStatus('NFS-e sem ID de documento.', 'error'); return; }
+        if (modelo === 'nfe' && !chave) { showStatus('NF-e sem chave de acesso.', 'error'); return; }
+
+        try {
+            const res = await fetch('/api/consyste/download', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelo, chave, documento_id: documentoId }),
+            });
+            const data = await parseResponseSafe(res);
+            if (!res.ok) { showStatus(data.error || data.msg || 'Falha ao importar documento.', 'error'); return; }
+            showStatus(data.msg || 'Documento importado com sucesso.', 'success');
+            await recarregarTudo();
+        } catch (e) {
+            showStatus(`Falha ao importar documento: ${e.message || e}`, 'error');
+        }
+    }
+
+    function renderSelecaoDocumentos(lista) {
+        const box = document.getElementById('consyste-status');
+        box.style.display = 'block';
+        box.style.color = '#475569';
+        box.innerHTML = `
+            <div style="margin-bottom:8px; font-weight:700;">Múltiplos documentos encontrados (${lista.length}). Selecione qual importar:</div>
+            <div style="display:grid; gap:6px;">
+                ${lista.map((doc, idx) => `
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm de-selecao-doc" data-idx="${idx}" style="justify-content:space-between; text-align:left;">
+                        <span><strong>NF ${escapeHtml(doc.numero || '---')}</strong> · ${escapeHtml(doc.emitente_nome || 'Emitente não informado')}</span>
+                        <span style="color:#94a3b8; font-size:11px;">${escapeHtml(doc.emissao || '')}</span>
+                    </button>
+                `).join('')}
+            </div>`;
+        box.querySelectorAll('.de-selecao-doc').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.idx, 10);
+                if (Number.isInteger(idx) && lista[idx]) {
+                    showStatus('Importando documento selecionado...');
+                    importarDocumento(lista[idx]);
+                }
+            });
+        });
+    }
+
+    async function comBotaoCarregando(botaoId, fn) {
+        const btn = document.getElementById(botaoId);
+        const htmlOriginal = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
+        try {
+            await fn();
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = htmlOriginal; }
+        }
+    }
+
+    async function buscarPorChave() {
+        const chave = document.getElementById('consyste-chave').value.trim();
+        if (!chave) return alert('Informe a chave de acesso.');
+        const modelo = getConsysteModeloSelecionado();
+        await comBotaoCarregando('btn-consyste-chave', async () => {
+            if (modelo === 'nfe') { showStatus('Baixando NF-e por chave...'); await importarPorChave(chave); return; }
+            showStatus('Consultando web service por chave...');
+            try {
+                const res = await fetch(`/api/consyste/listar?modelo=${encodeURIComponent(modelo)}&chave=${encodeURIComponent(chave)}`);
+                const data = await parseResponseSafe(res);
+                if (!res.ok) { showStatus(data.error || 'Erro na API.', 'error'); return; }
+                const lista = data.documentos || [];
+                if (!lista.length) { showStatus('Documento não encontrado no portal.', 'error'); return; }
+                showStatus('Registro localizado. Importando...');
+                await importarDocumento(lista[0] || { modelo: 'nfe', chave });
+            } catch (e) {
+                showStatus(`Falha ao consultar por chave: ${e.message || e}`, 'error');
+            }
+        });
+    }
+
+    async function buscarPorNumero() {
+        const numInput = document.getElementById('consyste-numero').value.trim();
+        if (!numInput) return alert('Informe o número da nota.');
+        await comBotaoCarregando('btn-consyste-numero', async () => {
+            showStatus('Consultando web service por número: ' + numInput);
+            try {
+                const modelo = getConsysteModeloSelecionado();
+                const res = await fetch(`/api/consyste/listar?modelo=${encodeURIComponent(modelo)}&numero=${encodeURIComponent(numInput)}`);
+                const data = await parseResponseSafe(res);
+                if (!res.ok) { showStatus(data.error || 'Erro na API.', 'error'); return; }
+                const lista = data.documentos || [];
+                if (!lista.length) showStatus('Nenhum resultado para esta consulta.', 'error');
+                else if (lista.length === 1) { showStatus('Registro único localizado. Importando...'); await importarDocumento(lista[0]); }
+                else renderSelecaoDocumentos(lista);
+            } catch (e) {
+                showStatus(`Falha ao consultar por número: ${e.message || e}`, 'error');
+            }
+        });
+    }
+
+    function updateFileName() {
+        const input = document.getElementById('xmls');
+        document.getElementById('file-name').innerText = input.files.length + ' arquivo(s) selecionado(s)';
+    }
+
+    async function fazerUpload() {
+        const input = document.getElementById('xmls');
+        if (input.files.length === 0) return alert('Selecione arquivos.');
+        const statusBox = document.getElementById('status');
+        statusBox.style.display = 'block';
+        statusBox.innerText = 'Processando lote local...';
+        const formData = new FormData();
+        for (const f of input.files) formData.append('xml', f);
+        try {
+            const res = await fetch('/importar_xml', { method: 'POST', body: formData });
+            const d = await res.json();
+            statusBox.innerText = d.msg || 'Concluído.';
+            await recarregarTudo();
+        } catch (e) {
+            statusBox.innerText = 'Erro no processamento local.';
+        }
+    }
+
+    /* ======================================================================
+       PAINEL DE AUDITORIA (portado quase literalmente de auditor_xml.html —
+       mesmas chamadas de API, mesma logica de vinculo de pedido/divergencia).
+       Variavel renomeada notaSelecionada -> auditorNotaSelecionada para nao
+       colidir com o subsistema de lancamento, que usa o mesmo nome.
+       ====================================================================== */
+    let auditorNotaSelecionada = null;
+    let confirmResolver = null;
+
+    function toast(msg, tipo = 'ok') { deToast(msg, tipo === 'ok' ? 'ok' : 'err'); }
+
+    function confirmarAcao(msg) {
+        if (confirmResolver) { confirmResolver(false); confirmResolver = null; }
+        const overlay = document.getElementById('modalOverlay');
+        document.getElementById('confirmText').textContent = msg;
+        overlay.classList.add('active');
+        return new Promise((resolve) => { confirmResolver = resolve; });
+    }
+
+    function responderConfirmacao(confirmado) {
+        document.getElementById('modalOverlay').classList.remove('active');
+        if (confirmResolver) { confirmResolver(confirmado); confirmResolver = null; }
+    }
+
+    function fecharPendenciaObrigatoria() { document.getElementById('pendenciaOverlay').classList.remove('active'); }
+
+    function abrirPendenciaObrigatoria(tipo) {
+        const texto = document.getElementById('pendenciaTexto');
+        const actions = document.getElementById('pendenciaActions');
+        if (tipo === 'auditoria') {
+            texto.textContent = 'Você ainda não executou a auditoria XML desta NF. Execute a auditoria agora para liberar a conferência.';
+            actions.innerHTML = `
+                <button class="btn warning" type="button" onclick="fecharPendenciaObrigatoria(); auditarSelecionada();"><i class="fas fa-robot"></i> Executar Auditoria</button>
+                <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
+        } else {
+            texto.textContent = 'Informe o pedido de compra ou escolha o tipo do documento para liberar sem OC.';
+            actions.innerHTML = `
+                <button class="btn" type="button" onclick="irParaCampoPedido();"><i class="fas fa-keyboard"></i> Informar Pedido</button>
+                <button class="btn" type="button" onclick="marcarTipoDocumento('material');"><i class="fas fa-user-tag"></i> Material de Cliente</button>
+                <button class="btn" type="button" onclick="marcarTipoDocumento('remessa');"><i class="fas fa-truck"></i> Remessa</button>
+                <button class="btn" type="button" onclick="fecharPendenciaObrigatoria();"><i class="fas fa-times"></i> Fechar</button>`;
+        }
+        document.getElementById('pendenciaOverlay').classList.add('active');
+    }
+
+    function detectarTipoPendencia(msgRaw) {
+        const msg = String(msgRaw || '').toLowerCase();
+        if (msg.includes('auditoria ainda não executada') || msg.includes('execute a auditoria') || msg.includes('analise a nf') || msg.includes('naoauditado')) return 'auditoria';
+        if (msg.includes('pedido de compras') || msg.includes('informe o pedido') || msg.includes('material de cliente/remessa') || msg.includes('sem oc') || msg.includes('número do pedido obrigatório')) return 'pedido';
+        return null;
+    }
+
+    function irParaCampoPedido() {
+        fecharPendenciaObrigatoria();
+        const campo = document.getElementById('pedidoCompra');
+        const box = campo?.closest('.box');
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (campo) { campo.disabled = false; campo.focus(); }
+    }
+
+    async function marcarTipoDocumento(tipo) {
+        const material = document.getElementById('materialCliente');
+        const remessa = document.getElementById('remessa');
+        const semConf = document.getElementById('semConferenciaLogistica');
+        if (!material || !remessa) return;
+        if (tipo === 'material') { material.checked = true; remessa.checked = false; }
+        else if (tipo === 'remessa') { remessa.checked = true; material.checked = false; }
+        alternarMaterialCliente();
+        if (semConf) semConf.checked = false;
+        fecharPendenciaObrigatoria();
+        await salvarPedido();
+    }
+
+    function abrirDiagnostico(inconsistencias) {
+        const overlay = document.getElementById('diagOverlay');
+        const list = document.getElementById('diagList');
+        const msg = document.getElementById('diagMsg');
+        const just = document.getElementById('diagJustificativa');
+        if (!inconsistencias || !inconsistencias.length) {
+            list.innerHTML = '<div style="color:#64748b;">Sem inconsistências.</div>';
+        } else {
+            list.innerHTML = `<ul style="margin:0; padding-left:18px; color:#991b1b;">${inconsistencias.map((i) => `<li style="margin:6px 0;">${i}</li>`).join('')}</ul>`;
+        }
+        just.value = '';
+        msg.style.display = 'none';
+        msg.textContent = '';
+        overlay.classList.add('active');
+    }
+
+    function fecharDiagnostico() { document.getElementById('diagOverlay').classList.remove('active'); }
+
+    async function fetchJson(url, options = {}) {
+        const resp = await fetch(url, options);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.msg || data.erro || 'Falha na operação');
+        return data;
+    }
+
+    function badgeClass(st) {
+        if (st === 'SemInconsistencia') return 'b-ok';
+        if (st === 'ComInconsistencia') return 'b-inc';
+        return 'b-pendente';
+    }
+
+    function badgeDecisaoClass(st) {
+        if (st === 'XML Aprovado') return 'b-dec-ok';
+        if (st === 'XML Recusado') return 'b-dec-no';
+        return 'b-pendente';
+    }
+
+    function alternarMaterialCliente() {
+        const materialMarcado = document.getElementById('materialCliente').checked;
+        const remessaMarcada = document.getElementById('remessa').checked;
+        const marcado = materialMarcado || remessaMarcada;
+        const inputPedido = document.getElementById('pedidoCompra');
+        inputPedido.disabled = marcado;
+        if (marcado) {
+            inputPedido.value = '';
+            inputPedido.placeholder = remessaMarcada ? 'Não aplicável (NF de remessa)' : 'Não aplicável (material de cliente)';
+        } else {
+            inputPedido.placeholder = 'Ex: OC-2026-0000; OC-2026-0001';
+        }
+    }
+
+    async function selecionarNota(numero) {
+        auditorNotaSelecionada = numero;
+        try {
+            const d = await fetchJson(`/api/xml_auditor/nota/${encodeURIComponent(numero)}`);
+            document.getElementById('dNota').textContent = d.numero || '---';
+            document.getElementById('dStatusFluxo').textContent = d.status_fluxo || '---';
+            document.getElementById('dFornecedor').textContent = d.fornecedor || '---';
+            document.getElementById('dStatusAuditoria').textContent = d.auditor_status || 'NaoAuditado';
+            document.getElementById('dCnpjDestinatario').textContent = d.cnpj_destinatario || '---';
+            document.getElementById('dDecisaoFiscal').textContent = d.auditor_decisao || 'PendenteDecisao';
+            document.getElementById('pedidoCompra').value = d.pedido_compra || '';
+            document.getElementById('materialCliente').checked = !!d.material_cliente;
+            document.getElementById('remessa').checked = !!d.remessa;
+            document.getElementById('semConferenciaLogistica').checked = !!d.sem_conferencia_logistica;
+            alternarMaterialCliente();
+            document.getElementById('justificativaFiscal').value = d.auditor_justificativa || '';
+            document.getElementById('obsFiscal').value = d.auditor_observacao || '';
+
+            const incBox = document.getElementById('inconsistenciasBox');
+            const decisaoBox = document.getElementById('decisaoInconsistenciaBox');
+            const inconsistencias = d.inconsistencias || [];
+            if (!inconsistencias.length) {
+                incBox.style.display = '';
+                incBox.style.borderLeftColor = 'var(--success-erp)';
+                incBox.style.background = '#f0fdf4';
+                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#166534; font-weight:700;"><i class="fas fa-check-circle"></i> Nenhuma inconsistência detectada.</div>';
+                decisaoBox.style.display = 'none';
+            } else {
+                incBox.style.display = '';
+                incBox.style.borderLeftColor = 'var(--danger-erp)';
+                incBox.style.background = '#fff1f2';
+                incBox.innerHTML = '<b>Resultado da Auditoria:</b><div style="margin-top:6px; color:#991b1b; font-weight:700;"><i class="fas fa-triangle-exclamation"></i> Inconsistências detectadas. O card de diagnóstico aparece ao executar a auditoria.</div>';
+                decisaoBox.style.display = 'none';
+            }
+
+            document.getElementById('tbodyItens').innerHTML = (d.itens || []).map((i) => `
+                <tr>
+                    <td><code style="background:#f1f5f9; padding:2px 4px; border-radius:4px;">${i.codigo || '---'}</code></td>
+                    <td>${i.descricao || '---'}</td>
+                    <td>${i.cfop || '---'}</td>
+                    <td>${i.ncm || '---'}</td>
+                    <td>${i.cst_icms || '---'}</td>
+                    <td>${i.cst_pis || '---'}</td>
+                    <td>${i.cst_cofins || '---'}</td>
+                    <td style="text-align:right; font-weight:700;">${Number(i.quantidade || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                </tr>`).join('');
+        } catch (e) {
+            toast(e.message, 'err');
+        }
+    }
+
+    async function registrarDecisaoFiscal(autorizado) {
+        if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+        const msg = document.getElementById('diagMsg');
+        const justificativaPagina = (document.getElementById('justificativaFiscal').value || '').trim();
+        const justificativaModal = (document.getElementById('diagJustificativa')?.value || '').trim();
+        const justificativa = justificativaModal || justificativaPagina;
+        if (!autorizado && justificativa.length < 5) {
+            msg.style.display = 'block';
+            msg.style.background = '#fef2f2'; msg.style.color = '#991b1b'; msg.style.border = '1px solid #fecaca';
+            msg.textContent = 'Para recusar, informe uma justificativa com no mínimo 5 caracteres.';
+            return;
+        }
+        try {
+            const r = await fetchJson('/api/xml_auditor/decisao', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, autorizado, justificativa }),
+            });
+            fecharDiagnostico();
+            toast(r.msg || 'Decisão fiscal registrada.', 'ok');
+            await recarregarTudo();
+            await selecionarNota(auditorNotaSelecionada);
+        } catch (e) {
+            toast(e.message, 'err');
+        }
+    }
+
+    async function consultarPedidoExcel() {
+        const pedido = (document.getElementById('pedidoCompra').value || '').trim();
+        const observacao = (document.getElementById('obsFiscal').value || '').trim();
+        const res = document.getElementById('pedidoResult');
+        const wrap = document.getElementById('pedidoCompareWrap');
+        if (!pedido) { abrirPendenciaObrigatoria('pedido'); return; }
+        res.className = 'pedido-result warn';
+        res.textContent = 'Consultando planilha...';
+        res.style.display = 'block';
+        wrap.style.display = 'none';
+        try {
+            if (auditorNotaSelecionada) {
+                await fetchJson('/api/xml_auditor/vincular_pedido', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nota: auditorNotaSelecionada, pedido_compra: pedido,
+                        material_cliente: false, remessa: false,
+                        sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
+                        observacao,
+                    }),
+                });
+            }
+            const r = await fetchJson('/api/xml_auditor/consultar_pedido', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido, conversoes_itens: coletarConversoesAuditor() }),
+            });
+            if (!r.encontrado) {
+                res.className = 'pedido-result warn';
+                res.textContent = `Pedido "${pedido}" não encontrado na planilha.`;
+                wrap.style.display = 'none';
+            } else if (r.total_ok) {
+                res.className = 'pedido-result ok';
+                res.textContent = `✔ Todas as ${r.pares.length} linha(s) conferem perfeitamente. Nenhuma vinculação manual necessária!`;
+                wrap.style.display = 'none';
+            } else if (possuiMarcadorConfirmacaoDivergencia()) {
+                const ndivQtd = r.pares.filter((p) => !p.qtd_ok).length;
+                const ndivVlr = r.pares.filter((p) => !p.valor_ok).length;
+                res.className = 'pedido-result ok';
+                res.textContent = `✔ Vínculo aceito com divergência confirmada (quantidade: ${ndivQtd} | valor: ${ndivVlr}). Fluxo liberado para avançar.`;
+                wrap.style.display = 'none';
+            } else {
+                res.className = 'pedido-result err';
+                const ndivQtd = r.pares.filter((p) => !p.qtd_ok).length;
+                const ndivVlr = r.pares.filter((p) => !p.valor_ok).length;
+                res.textContent = `✘ Divergências detectadas: quantidade (${ndivQtd}) | valor (${ndivVlr}). Vincule as linhas manualmente.`;
+                renderPoLinkingInterface(r.pares, r.linhas_po || [], auditorNotaSelecionada);
+                wrap.style.display = 'none';
+            }
+        } catch (e) {
+            const tipo = detectarTipoPendencia(e.message);
+            if (tipo) { abrirPendenciaObrigatoria(tipo); return; }
+            res.className = 'pedido-result err';
+            res.textContent = e.message;
+            wrap.style.display = 'none';
+        }
+    }
+
+    let xmlDados = {};
+    let poDados = {};
+    let confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+    const CONVERSAO_OPCOES_AUDITOR = [
+        { unidade: 'UN', fator: 1 }, { unidade: 'DUZIA', fator: 12 }, { unidade: 'DEZENA', fator: 10 },
+        { unidade: 'CENTO', fator: 100 }, { unidade: 'MILHEIRO', fator: 1000 },
+    ];
+
+    function parseConversaoValor(value) {
+        const raw = String(value || '').trim();
+        const [unidadeRaw, fatorRaw] = raw.split('|');
+        const unidade = String(unidadeRaw || 'UN').trim().toUpperCase() || 'UN';
+        const fator = Number(String(fatorRaw || '1').replace(',', '.'));
+        return { unidade, fator: Number.isFinite(fator) && fator > 0 ? fator : 1 };
+    }
+
+    function coletarConversoesAuditor() {
+        const mapa = {};
+        document.querySelectorAll('.conversao-select[data-item-id]').forEach((el) => {
+            const itemId = String(el.dataset.itemId || '').trim();
+            if (!itemId) return;
+            mapa[itemId] = parseConversaoValor(el.value);
+        });
+        return mapa;
+    }
+
+    function labelOpcaoConversao(unidade, fator) {
+        const fatorFmt = Number(fator || 1).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+        return `${String(unidade || 'UN').toUpperCase()} (x${fatorFmt})`;
+    }
+
+    function buildConversaoOptionsHtml(fatorAtual, unidadeAtual) {
+        const fatorRef = Number(fatorAtual || 1);
+        const unidadeRef = String(unidadeAtual || 'UN').trim().toUpperCase() || 'UN';
+        const opcoes = CONVERSAO_OPCOES_AUDITOR.map((op) => ({ ...op }));
+        const existe = opcoes.some((op) => Number(op.fator) === fatorRef && String(op.unidade).toUpperCase() === unidadeRef);
+        if (!existe) opcoes.push({ unidade: unidadeRef, fator: fatorRef });
+        return opcoes.map((op) => {
+            const selected = Number(op.fator) === fatorRef && String(op.unidade).toUpperCase() === unidadeRef ? 'selected' : '';
+            const value = `${String(op.unidade).toUpperCase()}|${Number(op.fator)}`;
+            return `<option value="${value}" ${selected}>${labelOpcaoConversao(op.unidade, op.fator)}</option>`;
+        }).join('');
+    }
+
+    function obterDivergenciasValorSelecionadas() {
+        const pares = window.paresVinculacao || [];
+        const linhasPo = window.linhasPoVinculacao || [];
+        const selects = document.querySelectorAll('.vinculacao-select');
+        const divergencias = [];
+        for (const select of selects) {
+            if (select.disabled) continue;
+            const linhaPoSelecionada = select.value;
+            if (linhaPoSelecionada === '' || linhaPoSelecionada === null) continue;
+            const idxPar = parseInt(select.dataset.xmlIdx, 10);
+            const idxPo = parseInt(linhaPoSelecionada, 10);
+            if (!Number.isInteger(idxPar) || !Number.isInteger(idxPo)) continue;
+            const par = pares[idxPar];
+            const po = linhasPo[idxPo];
+            if (!par || !po) continue;
+            const nfValorUnit = Number(par.nf_valor_unit || 0);
+            const nfValorTotal = Number(par.nf_valor_total || 0);
+            const poValorUnit = Number(po.valor_unit || 0);
+            const poQtd = Number(po.qtd || 0);
+            const unitOk = Math.abs(nfValorUnit - poValorUnit) <= 0.01;
+            const totalOk = Math.abs((poQtd * poValorUnit) - nfValorTotal) <= 0.02;
+            if (!unitOk && !totalOk) divergencias.push({ linhaXml: Number(par.linha || (idxPar + 1)), linhaPo: idxPo + 1 });
+        }
+        return divergencias;
+    }
+
+    function atualizarEstadoConfirmacaoDivergencia() {
+        const btn = document.getElementById('btnConfirmarDivergencia');
+        if (!btn) return;
+        const divergencias = obterDivergenciasValorSelecionadas();
+        const chaveAtual = divergencias.map((d) => `${d.linhaXml}-${d.linhaPo}`).join('|');
+        if (chaveAtual !== confirmacaoDivergenciaValor.chave) {
+            confirmacaoDivergenciaValor.aceita = false;
+            confirmacaoDivergenciaValor.chave = chaveAtual;
+        }
+        if (!divergencias.length) { btn.style.display = 'none'; return; }
+        btn.style.display = 'inline-flex';
+        if (confirmacaoDivergenciaValor.aceita) {
+            btn.style.background = '#ecfdf5'; btn.style.color = '#166534'; btn.style.borderColor = '#86efac';
+            btn.innerHTML = `<i class="fas fa-check-circle"></i> Divergência de valor confirmada (${divergencias.length})`;
+        } else {
+            btn.style.background = '#fffbeb'; btn.style.color = '#92400e'; btn.style.borderColor = '#fcd34d';
+            btn.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Confirmar vinculação mesmo com divergência de valor (${divergencias.length})`;
+        }
+    }
+
+    function confirmarVinculacaoComDivergencia() {
+        const divergencias = obterDivergenciasValorSelecionadas();
+        if (!divergencias.length) {
+            confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+            atualizarEstadoConfirmacaoDivergencia();
+            return;
+        }
+        confirmacaoDivergenciaValor.aceita = true;
+        confirmacaoDivergenciaValor.chave = divergencias.map((d) => `${d.linhaXml}-${d.linhaPo}`).join('|');
+        atualizarEstadoConfirmacaoDivergencia();
+        toast('Confirmação registrada. Agora você pode salvar a vinculação com divergência de valor.', 'ok');
+    }
+
+    function montarResumoDivergenciasValor(divergencias) {
+        if (!Array.isArray(divergencias) || !divergencias.length) return '';
+        return divergencias.map((d) => `XML ${d.linhaXml}->PO ${d.linhaPo}`).join(', ');
+    }
+
+    function possuiMarcadorConfirmacaoDivergencia() {
+        const obs = String(document.getElementById('obsFiscal')?.value || '').trim();
+        return obs.includes('[CONFIRMADO_DIVERGENCIA_VALOR]');
+    }
+
+    async function registrarObservacaoDivergenciaValor(divergencias) {
+        if (!auditorNotaSelecionada || !Array.isArray(divergencias) || !divergencias.length) return;
+        const obsEl = document.getElementById('obsFiscal');
+        const pedido = (document.getElementById('pedidoCompra').value || '').trim();
+        const material_cliente = !!document.getElementById('materialCliente')?.checked;
+        const remessa = !!document.getElementById('remessa')?.checked;
+        const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
+        const observacaoAtual = String(obsEl?.value || '').trim();
+        const marcador = '[CONFIRMADO_DIVERGENCIA_VALOR]';
+        if (observacaoAtual.includes(marcador)) return;
+        const detalhe = montarResumoDivergenciasValor(divergencias);
+        const sufixo = detalhe ? ` Linhas: ${detalhe}.` : '';
+        const novaObservacao = `${observacaoAtual ? `${observacaoAtual}\n` : ''}${marcador} Vinculacao de pedido confirmada mesmo com divergencia de valor.${sufixo}`.slice(0, 500);
+        if (obsEl) obsEl.value = novaObservacao;
+        await fetchJson('/api/xml_auditor/vincular_pedido', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra: pedido, material_cliente, remessa, sem_conferencia_logistica, observacao: novaObservacao }),
+        });
+    }
+
+    function renderPoLinkingInterface(pares, linhasPo, numeronota) {
+        window.paresVinculacao = pares;
+        window.linhasPoVinculacao = linhasPo;
+        confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+        const linhasPerfeitasReservadas = new Set(
+            pares.filter((px) => Number.isInteger(px.po_index) && px.po_index >= 0 && px.qtd_ok && px.valor_ok).map((px) => Number(px.po_index))
+        );
+        const container = document.getElementById('vinculacoesContainer');
+        container.innerHTML = pares.map((p, idx) => {
+            const matchPerfeito = !!(p.qtd_ok && p.valor_ok);
+            const poIndexValido = Number.isInteger(p.po_index) && p.po_index >= 0;
+            const linhaManualValida = Number.isInteger(p.linha_po_vinculada) && p.linha_po_vinculada >= 0;
+            const poSelecionada = matchPerfeito ? null : (poIndexValido ? p.po_index : (linhaManualValida ? p.linha_po_vinculada : null));
+            const listaPoOptions = linhasPo.map((po, idxPoOriginal) => ({ po, idxPoOriginal }))
+                .filter(({ idxPoOriginal }) => !linhasPerfeitasReservadas.has(idxPoOriginal) || poSelecionada === idxPoOriginal)
+                .map(({ po, idxPoOriginal }) => {
+                    const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
+                    const codigoMaterial = (po.codigo_material || '').trim();
+                    const pedidoPo = (po.pedido_compra || '').trim();
+                    const pedidoTxt = pedidoPo ? `Pedido: ${pedidoPo} | ` : '';
+                    const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
+                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                }).join('');
+            const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
+            const statusHtml = matchPerfeito
+                ? '<div class="vinc-status ok"><i class="fas fa-check-circle"></i> Verde: quantidade e valor batem</div>'
+                : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>';
+            const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
+                ? `<div style="margin-top:8px; font-size:11px; color:#166534; font-weight:700;">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
+            const selectDisabled = matchPerfeito ? 'disabled' : '';
+            const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
+            const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
+            return `
+                <div class="vinculacao-card ${cardClasse}">
+                    <div class="vinculacao-linha-xml">
+                        <div class="vinculacao-linha-xml-titulo">Linha ${p.linha} do XML ${badgeVinculo}</div>
+                        <div class="vinculacao-linha-xml-dados">
+                            <div><span style="color:#64748b;">Código:</span> <strong>${p.nf_codigo}</strong></div>
+                            <div><span style="color:#64748b;">Descrição:</span> <strong>${p.nf_descricao}</strong></div>
+                            <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
+                            <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
+                        </div>
+                        <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <label style="font-size:11px; color:#334155; font-weight:700;">Conversão da quantidade:</label>
+                            <select class="conversao-select" data-item-id="${p.item_id}" style="min-width:170px; border:1px solid #cbd5e1; border-radius:6px; padding:4px 6px; font-size:12px; font-weight:700;">
+                                ${buildConversaoOptionsHtml(p.conversao_fator, p.conversao_unidade)}
+                            </select>
+                            <button type="button" class="vinc-edit-btn" onclick="consultarPedidoExcel()"><i class="fas fa-arrows-rotate"></i> Aplicar conversão</button>
+                        </div>
+                    </div>
+                    <div class="vinculacao-select-wrap">
+                        <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
+                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarEstadoConfirmacaoDivergencia()" ${selectDisabled}>
+                            <option value="">-- Sem vínculo manual (usar posição) --</option>
+                            ${listaPoOptions}
+                        </select>
+                        ${statusHtml}
+                        ${detalheVinculoAuto}
+                        ${editBtn}
+                    </div>
+                </div>`;
+        }).join('');
+        atualizarEstadoConfirmacaoDivergencia();
+        document.getElementById('vinculacaoOverlay').classList.add('active');
+    }
+
+    function habilitarEdicaoVinculo(idx) {
+        const select = document.getElementById(`select_${idx}`);
+        if (!select) return;
+        select.disabled = false;
+        const par = (window.paresVinculacao || [])[idx] || {};
+        if (select.value === '' && Number.isInteger(par.po_index) && par.po_index >= 0) select.value = String(par.po_index);
+        select.focus();
+    }
+
+    function fecharModalVinculacao() {
+        document.getElementById('vinculacaoOverlay').classList.remove('active');
+        confirmacaoDivergenciaValor = { aceita: false, chave: '' };
+    }
+
+    async function salvarVinculacoes() {
+        const selects = document.querySelectorAll('.vinculacao-select');
+        const pedidoAtual = (document.getElementById('pedidoCompra').value || '').trim();
+        let vinculacoesAtualizadas = 0;
+        const alteracoes = [];
+        for (const select of selects) {
+            if (select.disabled) continue;
+            const itemIdRaw = String(select.dataset.itemId || '').trim();
+            if (!itemIdRaw) continue;
+            const atualRaw = String(select.dataset.currentPo || '').trim();
+            const desejadaRaw = String(select.value || '').trim();
+            const linhaPoAtual = atualRaw === '' ? null : parseInt(atualRaw, 10);
+            const linhaPoDesejada = desejadaRaw === '' ? null : parseInt(desejadaRaw, 10);
+            if (linhaPoAtual === linhaPoDesejada) continue;
+            alteracoes.push({ itemId: parseInt(itemIdRaw, 10), linhaPoAtual, linhaPoDesejada });
+        }
+        const desejadas = alteracoes.filter((a) => Number.isInteger(a.linhaPoDesejada) && a.linhaPoDesejada >= 0).map((a) => a.linhaPoDesejada);
+        if (new Set(desejadas).size !== desejadas.length) { toast('A mesma linha do pedido foi selecionada para mais de um item da NF.', 'err'); return; }
+        try {
+            for (const a of alteracoes) {
+                if (!Number.isInteger(a.linhaPoAtual) || a.linhaPoAtual < 0) continue;
+                await fetchJson('/api/xml_auditor/vincular_linha_po', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: a.itemId, linha_po: null, pedido: pedidoAtual }),
+                });
+            }
+            for (const a of alteracoes) {
+                if (!Number.isInteger(a.linhaPoDesejada) || a.linhaPoDesejada < 0) continue;
+                await fetchJson('/api/xml_auditor/vincular_linha_po', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: a.itemId, linha_po: a.linhaPoDesejada, pedido: pedidoAtual }),
+                });
+            }
+            vinculacoesAtualizadas = alteracoes.length;
+        } catch (e) {
+            toast(`Erro ao vincular linha: ${e.message}`, 'err');
+            return;
+        }
+        const resultado = document.getElementById('pedidoResult');
+        if (resultado) {
+            resultado.className = 'pedido-result warn';
+            resultado.style.display = 'block';
+            resultado.textContent = `Vínculos atualizados: ${vinculacoesAtualizadas}. Reprocessando divergências...`;
+        }
+        let reprocessado = null;
+        try {
+            reprocessado = await fetchJson('/api/xml_auditor/consultar_pedido', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido: pedidoAtual, conversoes_itens: coletarConversoesAuditor() }),
+            });
+        } catch (e) {
+            toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
+            return;
+        }
+        const paresDivergentes = (reprocessado?.pares || []).filter((p) => !p.ok);
+        const divergenciasPersistem = Boolean(reprocessado && reprocessado.encontrado && !reprocessado.total_ok && paresDivergentes.length);
+        if (divergenciasPersistem) {
+            if (resultado) {
+                const qtdDiv = paresDivergentes.filter((p) => !p.qtd_ok).length;
+                const valDiv = paresDivergentes.filter((p) => !p.valor_ok).length;
+                resultado.className = 'pedido-result err';
+                resultado.textContent = `Divergências após salvar: quantidade (${qtdDiv}) | valor (${valDiv}).`;
+            }
+            const vinculacaoOverlay = document.getElementById('vinculacaoOverlay');
+            const reabrirVinculacaoAoCancelar = vinculacaoOverlay?.classList.contains('active');
+            if (vinculacaoOverlay) vinculacaoOverlay.classList.remove('active');
+            const confirmar = await confirmarAcao(`Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`);
+            if (!confirmar) {
+                toast('Vínculos salvos. Ajuste as linhas divergentes para prosseguir.', 'err');
+                if (reabrirVinculacaoAoCancelar) renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], auditorNotaSelecionada);
+                return;
+            }
+            const divergenciasParaLog = paresDivergentes.filter((p) => Number.isInteger(p.po_index) && p.po_index >= 0)
+                .map((p) => ({ linhaXml: Number(p.linha || 0), linhaPo: Number(p.po_index) + 1 }));
+            if (divergenciasParaLog.length) {
+                try { await registrarObservacaoDivergenciaValor(divergenciasParaLog); }
+                catch (e) { toast(`Vínculos salvos, mas não foi possível registrar observação: ${e.message}`, 'err'); }
+            }
+        }
+        toast(`Vínculos atualizados: ${vinculacoesAtualizadas}.`, 'ok');
+        fecharModalVinculacao();
+        await consultarPedidoExcel();
+    }
+
+    async function auditarSelecionada() {
+        if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+        try {
+            const r = await fetchJson('/api/xml_auditor/analisar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada }),
+            });
+            toast(r.msg || 'Auditoria concluída.', 'ok');
+            await recarregarTudo();
+            await selecionarNota(auditorNotaSelecionada);
+            if (Array.isArray(r.inconsistencias) && r.inconsistencias.length) abrirDiagnostico(r.inconsistencias);
+        } catch (e) {
+            toast(e.message, 'err');
+        }
+    }
+
+    async function salvarPedido() {
+        if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+        const material_cliente = document.getElementById('materialCliente').checked;
+        const remessa = document.getElementById('remessa').checked;
+        const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
+        const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+        if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
+        const observacao = (document.getElementById('obsFiscal').value || '').trim();
+        try {
+            const r = await fetchJson('/api/xml_auditor/vincular_pedido', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
+            });
+            toast(r.msg || 'Pedido vinculado com sucesso.', 'ok');
+            await recarregarTudo();
+            await selecionarNota(auditorNotaSelecionada);
+        } catch (e) {
+            const tipo = detectarTipoPendencia(e.message);
+            if (tipo) { abrirPendenciaObrigatoria(tipo); return; }
+            toast(e.message, 'err');
+        }
+    }
+
+    async function retirarNotaDoAuditor() {
+        if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+        const motivo = prompt(`Informe o motivo para excluir a NF ${auditorNotaSelecionada} do Auditor XML (mín. 5 caracteres). Esta ação apaga definitivamente os dados importados desta NF:`, '');
+        if (motivo === null) return;
+        if (!motivo || motivo.trim().length < 5) { toast('Informe um motivo com no mínimo 5 caracteres.', 'err'); return; }
+        const confirmou = await confirmarAcao(`Excluir definitivamente a NF ${auditorNotaSelecionada} do Auditor XML? Os dados importados serão apagados e será necessário reimportar o XML.`);
+        if (!confirmou) return;
+        try {
+            const r = await fetchJson('/api/xml_auditor/retirar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, motivo: motivo.trim() }),
+            });
+            toast(r.msg || 'NF excluída do Auditor XML.', 'ok');
+            auditorNotaSelecionada = null;
+            deNotaAberta = null;
+            mostrarPainel('de-panel-vazio');
+            await recarregarTudo();
+        } catch (e) {
+            toast(e.message, 'err');
+        }
+    }
+
+    async function liberarSelecionada() {
+        if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
+        const auditoriaStatus = (document.getElementById('dStatusAuditoria').textContent || '').trim();
+        if (auditoriaStatus === 'NaoAuditado') { abrirPendenciaObrigatoria('auditoria'); return; }
+        const material_cliente = document.getElementById('materialCliente').checked;
+        const remessa = document.getElementById('remessa').checked;
+        const sem_conferencia_logistica = !!document.getElementById('semConferenciaLogistica')?.checked;
+        const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
+        if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
+        const textoConfirmacao = sem_conferencia_logistica
+            ? `Deseja liberar a NF ${auditorNotaSelecionada} sem conferência logística? Ela irá direto para lançamento.`
+            : `Deseja liberar a NF ${auditorNotaSelecionada} para a conferência física?`;
+        const confirmado = await confirmarAcao(textoConfirmacao);
+        if (!confirmado) return;
+        try {
+            const observacao = (document.getElementById('obsFiscal').value || '').trim();
+            const r = await fetchJson('/api/xml_auditor/liberar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
+            });
+            toast(r.msg || 'NF liberada para conferência.', 'ok');
+            auditorNotaSelecionada = null;
+            deNotaAberta = null;
+            mostrarPainel('de-panel-vazio');
+            await recarregarTudo();
+        } catch (e) {
+            const tipo = detectarTipoPendencia(e.message);
+            if (tipo) { abrirPendenciaObrigatoria(tipo); return; }
+            toast(e.message, 'err');
+        }
+    }
+
+    /* ======================================================================
+       PAINEL DE LANÇAMENTO / FINALIZADO (portado de lancamento.html) —
+       maquina de estados corrigida (nome real da etapa em vez de "Etapa"
+       fixo), "Resumo executivo" removido (campos migrados pra Governanca),
+       severidade das pendencias com CSS corrigido.
+       ====================================================================== */
+    let notaSelecionada = null;
+    let detalhesSelecionados = null;
+    const detalhesCache = new Map();
+
+    function gerarIdempotencyKey(prefixo) {
+        return `${prefixo || 'doc'}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function exibirFeedback(tipo, titulo, mensagem) {
+        deToast(`${titulo ? titulo + ': ' : ''}${mensagem || ''}`.replace(/<[^>]+>/g, ''), tipo === 'error' ? 'err' : 'ok');
+    }
+
+    async function carregarDetalhes(numero, force = false) {
+        const chave = String(numero || '');
+        if (!force && detalhesCache.has(chave)) {
+            detalhesSelecionados = detalhesCache.get(chave);
+            renderizarDetalhe(detalhesSelecionados);
+            return detalhesSelecionados;
+        }
+        const resposta = await fetch(`/api/detalhes_nf/${encodeURIComponent(chave)}`);
+        if (!resposta.ok) {
+            detalhesSelecionados = null;
+            renderizarDetalhe(null);
+            throw new Error('Não foi possível carregar os detalhes da NF.');
+        }
+        const dados = await resposta.json();
+        detalhesCache.set(chave, dados);
+        detalhesSelecionados = dados;
+        renderizarDetalhe(dados);
+        return dados;
+    }
+
+    function atualizarBotoesDetalhe(dados) {
+        const etapa = String(dados?.etapa_atual || '');
+        const status = String(dados?.status_atual || '');
+        const documentosDisponiveis = Boolean(dados?.documentos_disponiveis);
+        const podeLancar = status === 'Concluído' || etapa === 'Liberada';
+        const podeManifestar = status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada';
+        const podeEstornar = Boolean(dados?.numero);
+        document.getElementById('btn-action-lancar').disabled = !podeLancar;
+        document.getElementById('btn-action-manifestar').disabled = !podeManifestar;
+        document.getElementById('btn-action-estornar').disabled = !podeEstornar;
+        document.getElementById('btn-action-xml').disabled = !documentosDisponiveis;
+        document.getElementById('btn-action-pdf').disabled = !documentosDisponiveis;
+    }
+
+    async function excluirPendenciaAtual() {
+        if (!detalhesSelecionados) return;
+        const numero = detalhesSelecionados.numero;
+        const confirmacao = prompt(`Confirme o número da NF ${numero} para excluí-la definitivamente da fila de pendências:`, '');
+        if (confirmacao === null) return;
+        if (String(confirmacao).trim() !== String(numero).trim()) { deToast('Número não confere. Exclusão cancelada.', 'err'); return; }
+        const motivo = prompt('Motivo da exclusão (mín. 5 caracteres):', '');
+        if (motivo === null) return;
+        if (!motivo || motivo.trim().length < 5) { deToast('Informe um motivo com no mínimo 5 caracteres.', 'err'); return; }
+        try {
+            const resp = await fetch('/api/excluir_nota_pendente', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ numero_nota: numero, confirmacao, motivo: motivo.trim() }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.sucesso) {
+                throw new Error(data.msg || data.error || (data.details && JSON.stringify(data.details)) || 'Erro na exclusão.');
+            }
+            deToast(`NF ${numero} excluída da fila de pendências.`, 'ok');
+            detalhesCache.delete(String(numero));
+            deNotaAberta = null;
+            mostrarPainel('de-panel-vazio');
+            await recarregarTudo();
+        } catch (e) {
+            deToast(e.message, 'err');
+        }
+    }
+
+    function renderizarDetalhe(dados) {
+        const body = document.getElementById('detail-body');
+        if (!dados) {
+            document.getElementById('detail-number').innerText = 'Nenhuma NF selecionada';
+            document.getElementById('detail-sub').innerText = 'Selecione um documento na lista para abrir o cockpit detalhado.';
+            body.innerHTML = '';
+            atualizarBotoesDetalhe(null);
+            return;
+        }
+
+        document.getElementById('detail-number').innerText = `NF ${dados.numero}`;
+        document.getElementById('detail-sub').innerText = `${dados.fornecedor || 'Fornecedor não informado'} · ${dados.etapa_atual || dados.status_atual || 'Sem etapa'} · Pedido ${dados.pedido_compra || '---'}`;
+
+        const pendencias = Array.isArray(dados.pendencias) && dados.pendencias.length
+            ? dados.pendencias.map((item) => `
+                <div class="doc-pendency-item severidade-${escapeHtml(item.severidade || 'info')}">
+                    <span class="doc-pendency-title">${escapeHtml(item.titulo || item.tipo || 'Pendência')}</span>
+                    <div class="doc-pendency-text">${escapeHtml(item.descricao || 'Sem descrição registrada.')}</div>
+                </div>`).join('')
+            : '<div class="doc-pendency-item" style="border-left:3px solid var(--doc-success); background:var(--doc-success-soft);"><span class="doc-pendency-title"><i class="fas fa-check"></i> Sem pendências</span><div class="doc-pendency-text">Este documento está sem pendências abertas na trilha fiscal.</div></div>';
+
+        const workflow = (dados.workflow || []).map((etapa) => `
+            <div class="doc-step ${escapeHtml(etapa.estado || 'pending')}">
+                <span class="doc-step-label">${escapeHtml(etapa.nome || '---')}</span>
+                <span class="doc-step-status">${etapa.estado === 'done' ? 'Concluída' : 'Pendente'}</span>
+            </div>`).join('');
+
+        const itens = (dados.itens || []).map((item) => `
+            <tr>
+                <td>${escapeHtml(item.codigo || '---')}</td>
+                <td>${escapeHtml(item.descricao || item.desc || 'Sem descrição')}</td>
+                <td>${escapeHtml(item.qtd ?? '---')}</td>
+                <td>${escapeHtml(item.unidade || 'UN')}</td>
+                <td>${escapeHtml(item.cfop || '---')}</td>
+                <td>${escapeHtml(item.pedido_compra || '---')}</td>
+            </tr>`).join('');
+
+        const timeline = (dados.timeline || []).length
+            ? dados.timeline.map((evento) => `
+                <div class="doc-timeline-item">
+                    <div class="doc-timeline-meta"><span>${escapeHtml(evento.data || '---')}</span><span>${escapeHtml(evento.tipo || 'Evento')}</span></div>
+                    <div class="doc-timeline-text">${escapeHtml(evento.descricao || 'Sem descrição')}</div>
+                </div>`).join('')
+            : '<div class="doc-timeline-item"><div class="doc-timeline-text">Ainda não há eventos cronológicos registrados para esta NF.</div></div>';
+
+        const ultimaGovernanca = dados.ultimo_evento_fiscal
+            ? `${dados.ultimo_evento_fiscal.evento || 'Evento'} · ${dados.ultimo_evento_fiscal.status || 'Sem status'} · ${dados.ultimo_evento_fiscal.data || '---'}`
+            : 'Sem evento fiscal adicional';
+        const manifestacao = dados.manifestacao ? `${dados.manifestacao.status || 'Sem status'} · ${dados.manifestacao.data || '---'}` : 'Não enviada';
+
+        const podeExcluirPendencia = (DE_IS_ADMIN || DE_ROOT.dataset.canLancamento === 'true') && String(dados.status_atual) === 'Pendente';
+        const acaoExclusao = podeExcluirPendencia
+            ? `<button class="doc-btn doc-btn-danger" type="button" onclick="excluirPendenciaAtual()" style="margin-top:12px;"><i class="fas fa-trash"></i> Excluir esta NF da fila de pendências</button>`
+            : '';
+
+        body.innerHTML = `
+            <section class="doc-card">
+                <h3>Máquina de estados</h3>
+                <div class="doc-workflow">${workflow}</div>
+            </section>
+            <section class="doc-two-col">
+                <div class="doc-card">
+                    <h3>Pendências e exceções</h3>
+                    <div class="doc-pendency-list">${pendencias}</div>
+                    ${acaoExclusao}
+                </div>
+                <div class="doc-card">
+                    <h3>Governança e dados-chave</h3>
+                    <div class="doc-summary-grid">
+                        <div class="doc-summary-item"><label>Pedido de compra</label><strong>${escapeHtml(dados.pedido_compra || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Importação</label><strong>${escapeHtml(dados.data_importacao || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Conferência</label><strong>${escapeHtml(dados.data_conferencia || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Lançamento</label><strong>${escapeHtml(dados.data_lancamento || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Conferido por</label><strong>${escapeHtml(dados.conferido_por || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Lançado por</label><strong>${escapeHtml(dados.lancado_por || '---')}</strong></div>
+                        <div class="doc-summary-item"><label>Valor total</label><strong>${escapeHtml(dados.valor_total || 'N/A')}</strong></div>
+                        <div class="doc-summary-item"><label>Impostos</label><strong>${escapeHtml(dados.impostos || 'N/A')}</strong></div>
+                        <div class="doc-summary-item"><label>Manifestação</label><strong>${escapeHtml(manifestacao)}</strong></div>
+                        <div class="doc-summary-item"><label>Último evento fiscal</label><strong>${escapeHtml(ultimaGovernanca)}</strong></div>
+                    </div>
+                </div>
+            </section>
+            <section class="doc-card">
+                <h3>Itens do documento</h3>
+                <div class="doc-table-wrap">
+                    <table class="doc-table">
+                        <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>UN</th><th>CFOP</th><th>Pedido</th></tr></thead>
+                        <tbody>${itens}</tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="doc-card">
+                <h3>Linha do tempo</h3>
+                <div class="doc-timeline-list">${timeline}</div>
+            </section>
+        `;
+        atualizarBotoesDetalhe(dados);
+    }
+
+    function fecharModalLancamento() { document.getElementById('modal-lancamento').style.display = 'none'; }
+    function fecharModalEstorno() { document.getElementById('modal-estorno').style.display = 'none'; document.getElementById('estorno-feedback').innerText = ''; }
+
+    function renderizarCamposCodigoPorItem(itens) {
+        const container = document.getElementById('codigo-itens-lista');
+        if (!itens.length) { container.innerHTML = '<div class="doc-form-help">Não foi possível carregar os itens XML desta nota.</div>'; return; }
+        container.innerHTML = itens.map((item, indice) => `
+            <div class="doc-item-code-card">
+                <div>
+                    <div class="doc-item-code-title">Item ${indice + 1}: ${escapeHtml(item.descricao || item.desc || 'Sem descrição')}</div>
+                    <div class="doc-item-code-sub">Qtd ${escapeHtml(item.qtd ?? '---')} · CFOP ${escapeHtml(item.cfop || '---')}</div>
+                </div>
+                <input class="doc-input item-material-code" data-item-id="${escapeHtml(item.id || '')}" value="${escapeHtml(item.codigo || '')}" placeholder="Código do material">
+            </div>`).join('');
+    }
+
+    function abrirModalLancamento() {
+        if (!detalhesSelecionados) return;
+        const dados = detalhesSelecionados;
+        document.getElementById('input-codigo-erp').value = '';
+        document.getElementById('input-codigo-material').value = '';
+        document.getElementById('input-manifestar-destinatario').checked = true;
+        document.getElementById('lancamento-resumo').innerText = `NF ${dados.numero} · ${dados.fornecedor || 'Fornecedor não informado'} · Etapa ${dados.etapa_atual || dados.status_atual || '---'}`;
+
+        const tipoBox = document.getElementById('tipo-documento-box');
+        const alertaBox = document.getElementById('alerta-pendencia-box');
+        const codigoMaterialWrap = document.getElementById('codigo-material-wrap');
+        const codigoItensWrap = document.getElementById('codigo-itens-wrap');
+        tipoBox.classList.add('hidden');
+        alertaBox.classList.add('hidden');
+        codigoMaterialWrap.classList.add('hidden');
+        codigoItensWrap.classList.add('hidden');
+
+        const pendenciaAtiva = (dados.pendencias || []).find((p) => p.severidade === 'warning' || p.severidade === 'alta');
+        if (pendenciaAtiva) {
+            alertaBox.classList.remove('hidden');
+            alertaBox.innerText = `Atenção: ${pendenciaAtiva.descricao || pendenciaAtiva.titulo}`;
+        }
+
+        const exigeCodigoPorItem = (dados.pendencias || []).some((p) => p.tipo === 'remessa');
+        if (exigeCodigoPorItem) {
+            tipoBox.classList.remove('hidden');
+            tipoBox.innerText = 'NF de remessa: vincule o código do material por item XML neste lançamento.';
+            codigoItensWrap.classList.remove('hidden');
+            renderizarCamposCodigoPorItem(dados.itens || []);
+        } else if (dados.material_cliente) {
+            tipoBox.classList.remove('hidden');
+            tipoBox.innerText = 'Material de cliente: informe também o código interno do material.';
+            codigoMaterialWrap.classList.remove('hidden');
+        }
+
+        document.getElementById('modal-lancamento').style.display = 'flex';
+        setTimeout(() => document.getElementById('input-codigo-erp').focus(), 80);
+    }
+
+    async function enviarDadosLancamento() {
+        if (!detalhesSelecionados) return;
+        const codigo = (document.getElementById('input-codigo-erp').value || '').trim();
+        if (!codigo) { exibirFeedback('error', 'Lançamento não realizado', 'O código do ERP é obrigatório para gravar a escrituração.'); return; }
+
+        const dados = detalhesSelecionados;
+        const codigoMaterial = (document.getElementById('input-codigo-material').value || '').trim();
+        const exigeCodigoPorItem = (dados.pendencias || []).some((p) => p.tipo === 'remessa');
+        let codigosMateriais = [];
+        if (exigeCodigoPorItem) {
+            codigosMateriais = Array.from(document.querySelectorAll('.item-material-code')).map((input) => ({
+                item_id: Number(input.dataset.itemId || 0), codigo_material: (input.value || '').trim(),
+            }));
+            const possuiVazio = codigosMateriais.some((item) => !item.item_id || !item.codigo_material);
+            if (!codigosMateriais.length || possuiVazio) { exibirFeedback('error', 'Lançamento não realizado', 'Informe o código do material para cada item XML da remessa.'); return; }
+        }
+        if (dados.material_cliente && !codigoMaterial) { exibirFeedback('error', 'Lançamento não realizado', 'Para material de cliente, informe o código do material.'); return; }
+
+        const resposta = await fetch('/api/confirmar_lancamento', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nota: dados.numero, codigo, codigo_material: codigoMaterial, codigos_materiais: codigosMateriais,
+                manifestar_destinatario: document.getElementById('input-manifestar-destinatario').checked,
+                idempotency_key: gerarIdempotencyKey(`lanc-${dados.numero}`),
+            }),
+        });
+        const resultado = await resposta.json();
+        if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha no lançamento', escapeHtml(resultado.msg || 'Não foi possível gravar a escrituração fiscal.')); return; }
+
+        fecharModalLancamento();
+        detalhesCache.delete(String(dados.numero));
+        await recarregarTudo();
+        await carregarDetalhes(dados.numero, true);
+
+        const textoConserto = resultado.conserto && Number(resultado.conserto.baixas_sugeridas || 0) > 0
+            ? ` Abra a central de conserto para validar ${resultado.conserto.baixas_sugeridas} sugestão(ões) de baixa.` : '';
+        exibirFeedback('success', resultado.idempotente ? 'Lançamento já existente' : 'Lançamento gravado', `${escapeHtml(resultado.msg || 'Escrituração fiscal registrada com sucesso.')}${textoConserto}`);
+    }
+
+    function popularMotivosEstorno(listaMotivos) {
+        const select = document.getElementById('estorno-motivo-padrao');
+        const motivos = Array.isArray(listaMotivos) && listaMotivos.length ? listaMotivos : ['Ajuste fiscal'];
+        select.innerHTML = motivos.map((motivo, indice) => `<option value="${escapeHtml(motivo)}" ${indice === 0 ? 'selected' : ''}>${escapeHtml(motivo)}</option>`).join('');
+    }
+
+    let tipoEstornoSelecionado = 'lancamento';
+
+    async function abrirModalEstorno() {
+        if (!detalhesSelecionados) return;
+        let possuiConferencia = false;
+        try {
+            const respChecklist = await fetch(`/api/checklist/${encodeURIComponent(detalhesSelecionados.numero)}`);
+            if (respChecklist.ok) { const checkData = await respChecklist.json(); possuiConferencia = checkData.existe === true; }
+        } catch (e) { console.warn('Erro ao buscar checklist:', e); }
+
+        const possuiLancamento = detalhesSelecionados.etapa === 'Lançado' || detalhesSelecionados.status === 'Lançado' || detalhesSelecionados.status_atual === 'Lançado' || detalhesSelecionados.etapa_atual === 'Lançada';
+
+        document.getElementById('estorno-resumo').innerText = `NF ${detalhesSelecionados.numero} · ${detalhesSelecionados.fornecedor || 'Fornecedor não informado'} · Último lançamento ${detalhesSelecionados.data_lancamento || '---'}`;
+        document.getElementById('estorno-complemento').value = '';
+        document.getElementById('estorno-motivo').value = '';
+        document.getElementById('estorno-feedback').innerText = '';
+        popularMotivosEstorno(detalhesSelecionados.motivos_estorno_padrao || []);
+
+        const btnLancamento = document.getElementById('btn-tipo-estorno-lancamento');
+        const btnConferencia = document.getElementById('btn-tipo-estorno-conferencia');
+        btnLancamento.disabled = !possuiLancamento;
+        btnLancamento.style.opacity = possuiLancamento ? '1' : '0.5';
+        btnLancamento.style.cursor = possuiLancamento ? 'pointer' : 'not-allowed';
+        btnConferencia.disabled = !possuiConferencia;
+        btnConferencia.style.opacity = possuiConferencia ? '1' : '0.5';
+        btnConferencia.style.cursor = possuiConferencia ? 'pointer' : 'not-allowed';
+        btnLancamento.title = possuiLancamento ? '' : 'Esta NF não possui lançamento para estornar';
+        btnConferencia.title = possuiConferencia ? '' : 'Esta NF não possui conferência registrada';
+
+        if (possuiLancamento) selecionarTipoEstorno('lancamento');
+        else if (possuiConferencia) selecionarTipoEstorno('conferencia');
+
+        document.getElementById('modal-estorno').style.display = 'flex';
+    }
+
+    function selecionarTipoEstorno(tipo) {
+        tipoEstornoSelecionado = tipo;
+        const btnLancamento = document.getElementById('btn-tipo-estorno-lancamento');
+        const btnConferencia = document.getElementById('btn-tipo-estorno-conferencia');
+        const fieldsLancamento = document.getElementById('estorno-lancamento-fields');
+        const fieldsConferencia = document.getElementById('estorno-conferencia-fields');
+        if (tipo === 'lancamento' && !btnLancamento.disabled) {
+            btnLancamento.style.border = '2px solid #3b82f6'; btnLancamento.style.background = 'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)';
+            btnConferencia.style.border = '2px solid #e2e8f0'; btnConferencia.style.background = '#fff';
+            fieldsLancamento.style.display = 'block'; fieldsConferencia.style.display = 'none';
+        } else if (tipo === 'conferencia' && !btnConferencia.disabled) {
+            btnConferencia.style.border = '2px solid #10b981'; btnConferencia.style.background = 'linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)';
+            btnLancamento.style.border = '2px solid #e2e8f0'; btnLancamento.style.background = '#fff';
+            fieldsLancamento.style.display = 'none'; fieldsConferencia.style.display = 'block';
+        }
+    }
+
+    async function confirmarEstorno() {
+        if (tipoEstornoSelecionado === 'lancamento') await confirmarEstornoLancamento();
+        else await confirmarEstornoConferencia();
+    }
+
+    async function confirmarEstornoLancamento() {
+        if (!detalhesSelecionados) return;
+        const motivo = (document.getElementById('estorno-motivo').value || '').trim();
+        if (motivo.length < 3) { document.getElementById('estorno-feedback').innerText = 'Descreva a observação do estorno com pelo menos 3 caracteres.'; return; }
+        const botao = document.getElementById('btn-confirmar-estorno');
+        botao.disabled = true;
+        const resposta = await fetch('/api/fiscal/estornar_lancamento', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo, motivo_padrao: document.getElementById('estorno-motivo-padrao').value, complemento: document.getElementById('estorno-complemento').value }),
+        });
+        const resultado = await resposta.json();
+        botao.disabled = false;
+        if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar o lançamento.'; return; }
+        const numero = detalhesSelecionados.numero;
+        fecharModalEstorno();
+        detalhesCache.delete(String(numero));
+        await recarregarTudo();
+        await carregarDetalhes(numero, true);
+        exibirFeedback('success', 'Lançamento estornado', escapeHtml(resultado.motivo || 'Estorno fiscal realizado com sucesso.'));
+    }
+
+    async function confirmarEstornoConferencia() {
+        if (!detalhesSelecionados) return;
+        const motivo = (document.getElementById('estorno-motivo').value || '').trim();
+        if (motivo.length < 3) { document.getElementById('estorno-feedback').innerText = 'Descreva a observação do estorno com pelo menos 3 caracteres.'; return; }
+        const botao = document.getElementById('btn-confirmar-estorno');
+        botao.disabled = true;
+        const resposta = await fetch('/api/fiscal/estornar_conferencia', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo }),
+        });
+        const resultado = await resposta.json();
+        botao.disabled = false;
+        if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar a conferência.'; return; }
+        const numero = detalhesSelecionados.numero;
+        fecharModalEstorno();
+        detalhesCache.delete(String(numero));
+        await recarregarTudo();
+        await carregarDetalhes(numero, true);
+        exibirFeedback('success', 'Conferência estornada', 'A conferência de recebimento foi estornada. O conferente deverá refazer o checklist.');
+    }
+
+    async function reenviarManifestacaoSelecionada() {
+        if (!detalhesSelecionados) return;
+        await reenviarManifestacao(detalhesSelecionados.numero);
+    }
+
+    async function reenviarManifestacao(numero) {
+        const resposta = await fetch('/api/fiscal/manifestar_destinatario', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: numero, idempotency_key: gerarIdempotencyKey(`mani-${numero}`) }),
+        });
+        const resultado = await resposta.json();
+        if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha na manifestação', escapeHtml(resultado.msg || 'Não foi possível enviar a confirmação da operação.')); return; }
+        detalhesCache.delete(String(numero));
+        await recarregarTudo();
+        await carregarDetalhes(numero, true);
+        exibirFeedback(resultado.idempotente ? 'info' : 'success', resultado.idempotente ? 'Manifestação já existente' : 'Manifestação enviada', escapeHtml(resultado.msg || 'Confirmação da operação enviada com sucesso.'));
+    }
+
+    function baixarDocumentoSelecionado(tipo) {
+        if (!detalhesSelecionados) return;
+        window.open(`/api/consyste/documento?nota=${encodeURIComponent(detalhesSelecionados.numero)}&tipo=${encodeURIComponent(tipo)}`, '_blank');
+    }
+
+    async function sincronizarErpLancamento() {
+        const btn = document.getElementById('de-btn-sync-erp');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sincronizando...';
+        try {
+            const resp = await fetch('/api/fiscal/erp_lancamento/sincronizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const dados = await resp.json().catch(() => null);
+            if (!resp.ok || !dados || dados.sucesso === false) { deToast((dados && dados.msg) || 'Falha ao sincronizar com o ERP.', 'err'); return; }
+            const r = dados.resultado || {};
+            const partes = [];
+            if (typeof r.lancadas === 'number') partes.push(`${r.lancadas} lançada(s)`);
+            if (typeof r.candidatas === 'number') partes.push(`${r.candidatas} consultada(s)`);
+            deToast(`Sincronização ERP concluída. ${partes.join(' · ')}`, 'ok');
+            await recarregarTudo();
+        } catch (err) {
+            deToast('Erro ao sincronizar com o ERP: ' + (err && err.message ? err.message : err), 'err');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+    }
+    document.getElementById('de-btn-sync-erp').addEventListener('click', sincronizarErpLancamento);
+
+    /* ======================================================================
+       INIT
+       ====================================================================== */
+    async function aplicarSelecaoInicialDaUrl() {
+        const params = new URLSearchParams(window.location.search || '');
+        const stage = (params.get('stage') || '').trim();
+        const notaUrl = (params.get('nota') || '').trim();
+
+        await carregarKpis();
+
+        if (!stage && !notaUrl) {
+            mostrarHub();
+            return;
+        }
+
+        const etapaInicial = DE_ETAPAS_VALIDAS.includes(stage) ? stage : 'importados_hoje';
+        mostrarVistaEstagio(etapaInicial);
+
+        if (notaUrl) {
+            document.getElementById('de-busca').value = notaUrl;
+            deBuscaAtual = notaUrl;
+            await carregarLista();
+            const row = document.querySelector(`.de-list-row[data-numero="${CSS.escape(notaUrl)}"]`);
+            if (row) row.click();
+            else deToast(`NF ${notaUrl} não está na fila desta etapa.`, 'err');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        aplicarSelecaoInicialDaUrl();
+    });
+</script>
+{% endblock %}

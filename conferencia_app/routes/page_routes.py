@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from flask import Blueprint, redirect, render_template, session
+from flask import Blueprint, redirect, render_template, request, session, url_for
 from sqlalchemy import func
 
-from ..auth import get_effective_permissions, login_required, permission_required
+from ..auth import get_effective_permissions, login_required, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     ActiveSession,
@@ -38,46 +38,18 @@ HOME_MODULES = [
         "metric_key": "recebimento_pendente",
     },
     {
-        "id": "pre_nota",
-        "title": "Pré-Nota de Entrada",
-        "subtitle": "Compras",
-        "description": "Central de importação, conferência inicial e preparo para auditoria.",
-        "href": "/upload",
-        "icon": "fa-file-import",
-        "permission": "PAGE_UPLOAD",
-        "section": "Compras",
-        "tone": "orange",
-        "priority": 96,
-        "keywords": ["pre-nota", "compra", "importacao", "xml"],
-        "metric_key": "recebimento_pendente",
-    },
-    {
-        "id": "auditor_xml",
-        "title": "Auditor XML",
-        "subtitle": "Fiscal",
-        "description": "Valide pedido, tributos e inconsistências antes de liberar a nota.",
-        "href": "/compras/auditor-xml",
-        "icon": "fa-shield-halved",
-        "permission": "PAGE_XML_AUDITOR",
-        "section": "Compras",
-        "tone": "orange",
-        "priority": 94,
-        "keywords": ["auditor", "xml", "pedido", "fiscal"],
-        "metric_key": "auditoria_pendente",
-    },
-    {
         "id": "documento_entrada",
         "title": "Documento de Entrada",
-        "subtitle": "Fiscal",
-        "description": "Feche o lançamento no GRV, manifeste e finalize a operação sem ruído.",
-        "href": "/lancamento",
-        "icon": "fa-file-signature",
-        "permission": "PAGE_LANCAMENTO",
+        "subtitle": "Compras · Fiscal",
+        "description": "Importação, auditoria fiscal e lançamento ERP num único fluxo por KPI.",
+        "href": "/upload",
+        "icon": "fa-file-invoice",
+        "permission": ["PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO"],
         "section": "Compras",
         "tone": "orange",
         "priority": 98,
-        "keywords": ["documento", "entrada", "grv", "lancamento"],
-        "metric_key": "notas_concluidas",
+        "keywords": ["pre-nota", "documento", "entrada", "auditor", "xml", "lancamento", "grv", "compra", "importacao"],
+        "metric_key": "recebimento_pendente",
     },
     {
         "id": "compras_cps",
@@ -652,7 +624,12 @@ def _build_available_modules(metrics: dict) -> list[dict]:
     modules = []
 
     for item in HOME_MODULES:
-        if not perms.get(item["permission"], False):
+        permission = item["permission"]
+        if isinstance(permission, (list, tuple)):
+            liberado = any(perms.get(key, False) for key in permission)
+        else:
+            liberado = perms.get(permission, False)
+        if not liberado:
             continue
 
         metric_value = metrics.get(item.get("metric_key") or "", 0)
@@ -677,9 +654,7 @@ def _build_available_modules(metrics: dict) -> list[dict]:
 def _metric_label_for_module(module_id: str, value: int | float) -> str:
     mapping = {
         "portaria": _fmt_metric(value, "NF pendente", "NFs pendentes"),
-        "pre_nota": _fmt_metric(value, "NF na fila", "NFs na fila"),
-        "auditor_xml": _fmt_metric(value, "auditoria pendente", "auditorias pendentes"),
-        "documento_entrada": _fmt_metric(value, "nota pronta", "notas prontas"),
+        "documento_entrada": _fmt_metric(value, "NF na fila", "NFs na fila"),
         "conferencia": _fmt_metric(value, "nota aguardando", "notas aguardando"),
         "notas_liberadas": _fmt_metric(value, "NF lançada", "NFs lançadas"),
         "etiquetas": _fmt_metric(value, "NF liberada", "NFs liberadas"),
@@ -904,21 +879,24 @@ def dashboard():
 
 
 @page_bp.route("/upload")
-@permission_required("PAGE_UPLOAD")
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 def upload_page():
-    return render_template("admin.html", user=session["username"])
+    is_admin = session.get("role") == "Admin"
+    return render_template("documento_entrada.html", user=session["username"], is_admin=is_admin)
 
 
 @page_bp.route("/compras/auditor-xml")
 @permission_required("PAGE_XML_AUDITOR")
 def compras_auditor_xml_page():
-    return render_template("auditor_xml.html", user=session["username"])
+    nota = request.args.get("nota", "")
+    destino = url_for("pages.upload_page", stage="auditoria", nota=nota) if nota else url_for("pages.upload_page", stage="auditoria")
+    return redirect(destino)
 
 
 @page_bp.route("/lancamento")
 @permission_required("PAGE_LANCAMENTO")
 def lancamento_page():
-    return render_template("lancamento.html", user=session.get("username", "Fiscal"))
+    return redirect(url_for("pages.upload_page", stage="lancamento"))
 
 
 @page_bp.route("/fiscal/liberadas")
