@@ -384,6 +384,7 @@
             <div class="eui-card__foot">
                 <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-voltar-2">Sair sem salvar</button>
                 <button class="eui-btn eui-btn--danger ce-admin-only" id="{{ prefix }}-btn-estornar-conf" style="display:none"><i class="fas fa-rotate-left"></i> Estornar conferência</button>
+                <button class="eui-btn eui-btn--warning ce-admin-only" id="{{ prefix }}-btn-seguir-sem-contagem" style="display:none"><i class="fas fa-forward"></i> Seguir p/ faturamento sem contagem</button>
                 <button class="eui-btn eui-btn--danger ce-admin-only" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
             </div>
@@ -1268,10 +1269,13 @@
                 if (CE_IS_ADMIN) {
                     const podeEstornar = ["conferido", "faturado", "finalizado_sem_conf"].includes(o.status_slug);
                     const podeFinalizarSem = !["expedido", "finalizado_sem_conf"].includes(o.status_slug);
+                    const podeSeguirSemContagem = ["pendente", "faturado_sem_conf"].includes(o.status_slug);
                     const bEst = el("btn-estornar-conf");
                     const bSem = el("btn-finalizar-sem-conf");
+                    const bSeguir = el("btn-seguir-sem-contagem");
                     if (bEst) bEst.style.display = podeEstornar ? "" : "none";
                     if (bSem) bSem.style.display = podeFinalizarSem ? "" : "none";
+                    if (bSeguir) bSeguir.style.display = podeSeguirSemContagem ? "" : "none";
                 }
 
                 el("view-dashboard").classList.add("hidden");
@@ -1455,6 +1459,33 @@
             }
         }
 
+        async function seguirSemContagem() {
+            if (!currentOrdem || !CE_IS_ADMIN) return;
+            const motivo = await pedirMotivo({
+                title: "Seguir para faturamento sem contagem",
+                sub: "Ação de Admin — a ordem <b>pula a contagem física</b> e segue direto para <b>Aguardando faturamento</b>. O restante do processo continua normal.",
+                okLabel: "Seguir sem contagem",
+                placeholder: "Ex.: material já conferido em outra etapa / liberação urgente…",
+                errLabel: "Informe o motivo para seguir sem contagem.",
+            });
+            if (motivo === null) return; // cancelou
+
+            const btn = el("btn-seguir-sem-contagem");
+            btn.disabled = true;
+            try {
+                await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/seguir-sem-contagem", {
+                    method: "POST", body: JSON.stringify({ motivo: motivo }),
+                });
+                toast("Ordem seguiu para aguardando faturamento.", "success");
+                voltarDashboard();
+                carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         async function estornarConferencia() {
             if (!currentOrdem || !CE_IS_ADMIN) return;
             const motivo = await pedirMotivo({
@@ -1583,6 +1614,8 @@
             if (bSem) bSem.addEventListener("click", finalizarSemConferencia);
             const bEst = el("btn-estornar-conf");
             if (bEst) bEst.addEventListener("click", estornarConferencia);
+            const bSeguir = el("btn-seguir-sem-contagem");
+            if (bSeguir) bSeguir.addEventListener("click", seguirSemContagem);
         }
         el("btn-limpar-filtro").addEventListener("click", () => aplicarFiltro(currentFilter, null));
 

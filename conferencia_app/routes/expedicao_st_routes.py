@@ -408,6 +408,73 @@ def finalizar_sem_conferencia_st(cod_ordem_compra):
 
 
 @expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/seguir-sem-contagem",
+    methods=["POST"],
+)
+@roles_required("Admin")
+def seguir_sem_contagem_st(cod_ordem_compra):
+    """Admin: pula a contagem e envia a ordem ST direto para 'Aguardando faturamento'.
+
+    Diferente de 'finalizar sem conferencia' (que encerra a ordem), esta acao
+    apenas dispensa a contagem fisica e mantem a ordem no fluxo normal, seguindo
+    para 'Conferido/Ag. Fat' (ou 'Faturado', quando a NF ja foi emitida).
+    """
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    if ordem.status not in (svc.STATUS_PENDENTE, svc.STATUS_FATURADO_SEM_CONF):
+        return jsonify({
+            "error": f"Ordem '{ordem.status}' nao pode seguir para faturamento sem contagem."
+        }), 400
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+    ordem.conferente = usuario
+    ordem.conferido_at = agora
+    if ordem.status == svc.STATUS_FATURADO_SEM_CONF:
+        ordem.status = svc.STATUS_FATURADO
+        if not ordem.faturado_at:
+            ordem.faturado_at = agora
+        ordem.conferido_pos_faturamento = True
+    else:
+        ordem.status = svc.STATUS_CONFERIDO
+    ordem.updated_at = agora
+
+    diff_cab = [{
+        "campo": "acao",
+        "label": "Ação",
+        "de": "",
+        "para": "Seguiu para faturamento sem contagem (Admin)",
+    }]
+    if motivo:
+        diff_cab.append({"campo": "motivo", "label": "Motivo", "de": "", "para": motivo})
+    log_svc.registrar_log(
+        origem="st",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="seguir_sem_contagem",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=diff_cab,
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
+@expedicao_st_bp.route(
     "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/estornar-conferencia",
     methods=["POST"],
 )
