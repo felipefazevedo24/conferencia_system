@@ -272,13 +272,43 @@ def _fotos_dir() -> str:
     return fotos_dir
 
 
+def _is_drive_quota_service_account_error(exc):
+    """Detecta o erro de service account sem cota de armazenamento no Drive."""
+    msg = str(exc).lower()
+    return (
+        "service account" in msg
+        and (
+            "cota" in msg
+            or "quota" in msg
+            or "storage" in msg
+            or "drive compartilhado" in msg
+        )
+    )
+
+
 def _salvar_foto_expedicao(foto, fotos_dir, prefix, registro_id):
-    """Persiste um FileStorage (Drive ou disco) e retorna (nome, caminho)."""
+    """Persiste um FileStorage (Drive ou disco) e retorna (nome, caminho).
+
+    Quando o Drive esta configurado mas a service account nao tem cota de
+    armazenamento, faz fallback para salvar a foto localmente em vez de falhar.
+    """
     ext = os.path.splitext(secure_filename(foto.filename or ""))[1] or ".jpg"
     nome = f"{prefix}_reg{registro_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
     if using_drive():
-        stored = upload_to_drive(foto, nome)
-        return nome, stored.file_path
+        try:
+            stored = upload_to_drive(foto, nome)
+            return nome, stored.file_path
+        except Exception as exc:  # noqa: BLE001
+            if not _is_drive_quota_service_account_error(exc):
+                raise
+            current_app.logger.warning(
+                "Drive sem cota para service account; salvando foto de pre-expedicao localmente: %s",
+                exc,
+            )
+            try:
+                foto.stream.seek(0)
+            except Exception:  # noqa: BLE001
+                pass
     caminho = os.path.join(fotos_dir, nome)
     foto.save(caminho)
     return nome, caminho
