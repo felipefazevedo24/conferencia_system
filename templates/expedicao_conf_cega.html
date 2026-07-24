@@ -58,6 +58,8 @@
     .ce-conf-item input.qtd { min-height: 42px; width: 100%; text-align: center; font-size: 17px; font-weight: 700; }
     .ce-conf-item.divergente { background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
     .ce-conf-item.ok-line { background: var(--eui-success-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
+    .ce-conf-item.js-faltando { background: var(--eui-danger-soft); border-radius: var(--eui-radius); padding-left: 10px; padding-right: 10px; }
+    .ce-conf-item.js-faltando input.qtd { border-color: var(--eui-danger); box-shadow: 0 0 0 2px var(--eui-danger-soft); }
     .ce-reveal { font-size: 11px; font-weight: 700; margin-top: 4px; }
     .ce-reveal.bad { color: var(--eui-danger); }
     .ce-reveal.good { color: var(--eui-success); }
@@ -1303,20 +1305,59 @@
             if (primeira) primeira.scrollIntoView({ behavior: "smooth", block: "center" });
         }
 
+        function limparMarcacoesFaltando() {
+            const wrap = el("conf-itens");
+            if (!wrap) return;
+            wrap.querySelectorAll(".ce-conf-item.js-faltando").forEach((row) => {
+                row.classList.remove("js-faltando");
+                const aviso = row.querySelector(".ce-reveal.bad.js-faltando-msg");
+                if (aviso) aviso.remove();
+            });
+        }
+
         async function finalizarConferencia() {
             if (!currentOrdem) return;
             const itens = [];
-            let faltando = false;
+            const faltantes = [];
             const intl = cfg.internacional && operacaoTipo === "internacional";
+            limparMarcacoesFaltando();
             el("conf-itens").querySelectorAll(".ce-conf-item[data-item-id]").forEach((row) => {
                 const inp = row.querySelector("input[data-qtd]");
                 if (!inp) return;
                 const id = parseInt(inp.dataset.qtd, 10);
                 const val = inp.value.trim();
-                if (val === "") faltando = true;
-                itens.push({ id, qtde_conferida: val === "" ? null : parseInt(val, 10) });
+                // Para <input type="number">, um valor invalido (ex.: caractere
+                // rejeitado pelo navegador) resulta em value "" mesmo depois de
+                // o usuario "digitar". Tratamos isso como item nao preenchido e
+                // destacamos exatamente qual linha ficou pendente.
+                const numero = val === "" ? null : parseInt(val, 10);
+                if (numero === null || Number.isNaN(numero)) {
+                    faltantes.push(row);
+                    row.classList.add("js-faltando");
+                    const info = row.querySelector(".info");
+                    if (info && !info.querySelector(".js-faltando-msg")) {
+                        const aviso = document.createElement("div");
+                        aviso.className = "ce-reveal bad js-faltando-msg";
+                        aviso.textContent = "Informe a quantidade conferida deste item.";
+                        info.appendChild(aviso);
+                    }
+                    itens.push({ id, qtde_conferida: null });
+                    return;
+                }
+                itens.push({ id, qtde_conferida: numero });
             });
-            if (faltando) { toast("Informe a quantidade conferida de todos os itens.", "error"); return; }
+            if (faltantes.length) {
+                faltantes[0].scrollIntoView({ behavior: "smooth", block: "center" });
+                const foco = faltantes[0].querySelector("input[data-qtd]");
+                if (foco) foco.focus();
+                toast(
+                    faltantes.length === 1
+                        ? "Informe a quantidade conferida do item destacado."
+                        : `Faltam ${faltantes.length} itens sem quantidade conferida (destacados).`,
+                    "error"
+                );
+                return;
+            }
 
             let volumes = [];
             if (intl) {

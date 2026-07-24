@@ -486,9 +486,19 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
         contagens[item_id] = svc._parse_int(entry.get("qtde_conferida"), None)
 
     itens = list(ordem.itens)
-    faltando = [it.id for it in itens if contagens.get(it.id) is None]
+    faltando = [it for it in itens if contagens.get(it.id) is None]
     if faltando:
-        return jsonify({"error": "Informe a quantidade conferida de todos os itens."}), 400
+        nomes = [
+            (it.cod_interno or it.item or f"item {it.id}")
+            for it in faltando
+        ]
+        detalhe = ", ".join(str(n) for n in nomes[:5])
+        if len(nomes) > 5:
+            detalhe += f" (+{len(nomes) - 5})"
+        return jsonify({
+            "error": f"Informe a quantidade conferida de todos os itens. Pendentes: {detalhe}.",
+            "itens_faltando": [it.id for it in faltando],
+        }), 400
 
     # Operacao internacional: o conferente adiciona manualmente a lista de
     # volumes do embarque. Cada volume exige especie, quantidade e as medidas
