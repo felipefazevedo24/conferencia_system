@@ -467,6 +467,23 @@ def seguir_sem_contagem_st(cod_ordem_compra):
     )
     db.session.commit()
 
+    # Aviso no Teams: mesmo sem contagem fisica, a ordem segue para faturamento.
+    try:
+        from ..services.teams_service import notificar_expedicao_conferida
+
+        observacao = "Sem contagem física (Admin)" + (f" — {motivo}" if motivo else "")
+        notificar_expedicao_conferida(
+            ordem.fornecedor or "Fornecedor não informado",
+            f"Ordem de compra {ordem.cod_ordem_compra}",
+            conferente=ordem.conferente,
+            observacao=observacao,
+            titulo="⏭️ Expedição seguiu sem contagem",
+            env_var="TEAMS_WEBHOOK_EXPEDICAO_ST_URL",
+            config_key="webhook_expedicao_st",
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao notificar Teams (seguir sem contagem ST %s)", cod_ordem_compra)
+
     return jsonify({
         "sucesso": True,
         "status": ordem.status,

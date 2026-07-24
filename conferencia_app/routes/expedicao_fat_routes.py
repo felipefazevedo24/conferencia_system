@@ -797,6 +797,21 @@ def seguir_sem_contagem_fat(cod_ordem_fat):
     )
     db.session.commit()
 
+    # Aviso no Teams: mesmo sem contagem fisica, a ordem segue para faturamento.
+    try:
+        from ..services.teams_service import notificar_expedicao_conferida
+
+        observacao = "Sem contagem física (Admin)" + (f" — {motivo}" if motivo else "")
+        notificar_expedicao_conferida(
+            ordem.cliente or "Cliente não informado",
+            f"Orçamento {ordem.orcamento or '—'}",
+            conferente=ordem.conferente,
+            observacao=observacao,
+            titulo="⏭️ Expedição seguiu sem contagem",
+        )
+    except Exception:
+        current_app.logger.exception("Falha ao notificar Teams (seguir sem contagem FAT %s)", cod_ordem_fat)
+
     return jsonify({
         "sucesso": True,
         "status": ordem.status,

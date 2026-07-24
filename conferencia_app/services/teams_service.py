@@ -101,6 +101,8 @@ def notificar_expedicao_conferida(
     peso_liquido: str | None = None,
     peso_bruto: str | None = None,
     especie_volumes: str | None = None,
+    observacao: str | None = None,
+    titulo: str = "✅ Conferência de expedição finalizada",
     env_var: str = "TEAMS_WEBHOOK_EXPEDICAO_URL",
     config_key: str = "webhook_expedicao",
 ) -> None:
@@ -120,9 +122,11 @@ def notificar_expedicao_conferida(
         partes.append(f"Peso líquido: {peso_liquido}")
     if peso_bruto:
         partes.append(f"Peso bruto: {peso_bruto}")
+    if observacao:
+        partes.append(observacao)
     subinfo = " · ".join(partes) or None
     enviar_card(
-        "✅ Conferência de expedição finalizada",
+        titulo,
         linha,
         subinfo,
         mencionar_canal=True,
