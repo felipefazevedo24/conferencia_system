@@ -39,7 +39,6 @@ from .routes.rastreamento_routes import rastreamento_bp
 from .routes.frota_routes import frota_bp
 from .routes.solicitacao_nf_routes import solicitacao_nf_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
-from .routes.wms_routes import wms_bp
 
 
 def create_app(test_config=None) -> Flask:
@@ -59,7 +58,6 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(atualizacao_cadastral_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(agendamento_bp)
-    app.register_blueprint(wms_bp)
     app.register_blueprint(conserto_bp)
     app.register_blueprint(boleto_bp)
     app.register_blueprint(cadastro_workflow_bp)
@@ -176,14 +174,6 @@ def create_app(test_config=None) -> Flask:
             iniciar_scheduler(app)
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler NF-e")
-
-    # Scheduler de sincronizacao ERP -> WMS (estoque + enderecos)
-    if app.config.get("ERP_SYNC_AUTO_ENABLED") and not app.config.get("TESTING"):
-        try:
-            from .services.erp_sync_scheduler import iniciar_scheduler as iniciar_sync_erp
-            iniciar_sync_erp(app)
-        except Exception:
-            app.logger.exception("Falha ao iniciar scheduler ERP Sync")
 
     # Scheduler de lancamento automatico via ERP (Postgres tcompras)
     if app.config.get("ERP_LANCAMENTO_AUTO_ENABLED") and not app.config.get("TESTING"):

@@ -1443,7 +1443,7 @@
             <div class="dashboard-hero-copy">
                 <span class="eyebrow">Cockpit operacional</span>
                 <h1>Columbia Sync</h1>
-                <p id="dashboard-subtitle">Recebimento, fiscal, WMS, expedicao e logistica.</p>
+                <p id="dashboard-subtitle">Recebimento, fiscal, expedicao e logistica.</p>
             </div>
             <div class="dashboard-toolbar">
                 <select id="op-selector" class="op-filter">
@@ -1484,7 +1484,7 @@
             <div class="overview-toolbar">
                 <div>
                     <div class="overview-heading">Resumo gerencial da operação</div>
-                    <div class="overview-subheading">Recebimento, fiscal, manifestação, WMS e expedição reunidos em uma leitura mais clara.</div>
+                    <div class="overview-subheading">Recebimento, fiscal, manifestação e expedição reunidos em uma leitura mais clara.</div>
                 </div>
                 <div class="overview-toolbar-actions">
                     <label for="overview-period">Período</label>
@@ -1510,8 +1510,6 @@
                     <div class="overview-grid overview-grid-secondary">
                 <div class="overview-card danger"><span class="kpi-label">Manifestação pendente</span><div class="kpi-value" id="ov-manifest-pendente">0</div><div class="overview-foot" id="ov-manifest-pendente-foot">Notas aguardando ação</div></div>
                 <div class="overview-card danger"><span class="kpi-label">Divergências</span><div class="kpi-value" id="ov-divergencias">0</div><div class="overview-foot" id="ov-divergencias-foot">Ocorrências no período</div></div>
-                <div class="overview-card success"><span class="kpi-label">Enderecamentos WMS</span><div class="kpi-value" id="ov-wms-end">0</div><div class="overview-foot" id="ov-wms-end-foot">Armazenagens realizadas</div></div>
-                <div class="overview-card process"><span class="kpi-label">Movimentações WMS</span><div class="kpi-value" id="ov-wms-mov">0</div><div class="overview-foot" id="ov-wms-mov-foot">Fluxo operacional do armazém</div></div>
                     </div>
                 </div>
             </details>
@@ -1530,18 +1528,6 @@
                             </div>
                             <div id="overview-geral" class="overview-list">
                                 <div class="overview-empty">Carregando consolidado geral...</div>
-                            </div>
-                        </div>
-                        <div class="overview-panel overview-category">
-                            <div class="overview-category-head">
-                                <div class="overview-category-copy">
-                                    <strong>WMS &amp; Armazem</strong>
-                                    <span>Fila de enderecamento, saldo, alertas e movimentacao recente.</span>
-                                </div>
-                                <span class="overview-category-tag" id="overview-wms-badge">Atualizando</span>
-                            </div>
-                            <div id="overview-wms" class="overview-list">
-                                <div class="overview-empty">Carregando indicadores do WMS...</div>
                             </div>
                         </div>
                     </div>
@@ -1853,11 +1839,9 @@
         }
     }
 
-    function renderOverviewKpis(consolidado, wmsCockpit) {
+    function renderOverviewKpis(consolidado) {
         const totais = consolidado?.totais || {};
         const manifestacao = consolidado?.manifestacao || {};
-        const wms = consolidado?.wms || {};
-        const wmsCards = wmsCockpit?.cards || {};
 
         document.getElementById('ov-importadas').innerText = formatarNumero(totais.notas_importadas || 0);
         document.getElementById('ov-conferidas').innerText = formatarNumero(totais.notas_conferidas || 0);
@@ -1865,8 +1849,6 @@
         document.getElementById('ov-manifest-ok').innerText = formatarNumero(manifestacao.sucesso || 0);
         document.getElementById('ov-manifest-pendente').innerText = formatarNumero(manifestacao.pendentes || 0);
         document.getElementById('ov-divergencias').innerText = formatarNumero(totais.divergencias_periodo || 0);
-        document.getElementById('ov-wms-end').innerText = formatarNumero(wms.enderecamentos_periodo || 0);
-        document.getElementById('ov-wms-mov').innerText = formatarNumero(wms.movimentacoes_periodo || 0);
 
         document.getElementById('ov-importadas-foot').innerText = `${formatarNumero(totais.usuarios_ativos || 0)} usuários ativos no período`;
         document.getElementById('ov-conferidas-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} notas com divergência`;
@@ -1874,8 +1856,6 @@
         document.getElementById('ov-manifest-ok-foot').innerText = `${formatarNumero(manifestacao.falha || 0)} falhas registradas`;
         document.getElementById('ov-manifest-pendente-foot').innerText = `${formatarNumero(totais.notas_lancadas || 0)} notas lançadas no total`;
         document.getElementById('ov-divergencias-foot').innerText = `${formatarNumero(totais.notas_com_divergencia || 0)} NFs impactadas`;
-        document.getElementById('ov-wms-end-foot').innerText = `${formatarNumero(wmsCards.pendentes_enderecamento || 0)} pendências de endereço abertas`;
-        document.getElementById('ov-wms-mov-foot').innerText = `${formatarNumero(wmsCards.movimentacoes_24h || 0)} movimentações nas últimas 24h`;
     }
 
     function renderOverviewGeral(consolidado, expedicao) {
@@ -1970,121 +1950,6 @@
         if (badge) badge.innerText = `${formatarNumero(consolidado.periodo_dias || 30)} dias`;
     }
 
-    function renderOverviewWms(consolidado, wmsCockpit) {
-        const container = document.getElementById('overview-wms');
-        const badge = document.getElementById('overview-wms-badge');
-        if (!container) return;
-
-        const wms = consolidado?.wms || {};
-        const cards = wmsCockpit?.cards || {};
-        const prioridades = wmsCockpit?.prioridades || {};
-        const notasPendentes = Array.isArray(wmsCockpit?.notas_pendentes) ? wmsCockpit.notas_pendentes.slice(0, 4) : [];
-        const movimentacoes = Array.isArray(wmsCockpit?.movimentacoes_recentes) ? wmsCockpit.movimentacoes_recentes.slice(0, 4) : [];
-
-        if (!consolidado && !wmsCockpit) {
-            container.innerHTML = '<div class="overview-empty">Não foi possível carregar o resumo do WMS agora.</div>';
-            if (badge) badge.innerText = 'Indisponível';
-            return;
-        }
-
-        const miniCards = [
-            {
-                label: 'Itens Ativos',
-                value: formatarNumero(wms.itens_ativos || 0),
-                meta: `${formatarNumero(wms.saldo_total || 0, 2)} em saldo total`
-            },
-            {
-                label: 'Sem Endereço',
-                value: formatarNumero(wms.itens_sem_endereco || 0),
-                meta: `${formatarNumero(wms.notas_sem_endereco || 0)} notas pendentes`
-            },
-            {
-                label: 'Integração Pendente',
-                value: formatarNumero(wms.integracoes_pendentes || 0),
-                meta: `${formatarNumero(wms.integracoes_falha || 0)} falhas abertas`
-            },
-            {
-                label: 'Alertas WMS',
-                value: formatarNumero(cards.alertas_abertos || 0),
-                meta: `${formatarNumero(cards.divergencias_abertas || 0)} divergências abertas`
-            }
-        ];
-
-        const prioridadeEntries = Object.entries(prioridades)
-            .sort((a, b) => {
-                const ordem = { Critica: 0, Alta: 1, Media: 2, Baixa: 3 };
-                return (ordem[a[0]] ?? 9) - (ordem[b[0]] ?? 9);
-            });
-
-        const prioridadesHtml = prioridadeEntries.length
-            ? prioridadeEntries.map(([prioridade, quantidade]) => `
-                <div class="overview-item">
-                    <div class="overview-item-main">
-                        <span class="overview-item-title">${escapeHtml(prioridade)}</span>
-                        <span class="overview-item-sub">Fila de endereçamento classificada automaticamente</span>
-                    </div>
-                    <div class="overview-item-metric">${formatarNumero(quantidade || 0)}</div>
-                </div>
-            `).join('')
-            : '<div class="overview-empty">Sem prioridades WMS para exibir.</div>';
-
-        const notasHtml = notasPendentes.length
-            ? notasPendentes.map((item) => `
-                <div class="overview-item">
-                    <div class="overview-item-main">
-                        <span class="overview-item-title">NF ${escapeHtml(item.numero_nota || '-')}</span>
-                        <span class="overview-item-sub">${formatarNumero(item.linhas || 0)} itens | ${formatarNumero(item.qtd_total || 0, 2)} em saldo pendente</span>
-                    </div>
-                    <div class="overview-item-metric">${formatarNumero(item.linhas || 0)}</div>
-                </div>
-            `).join('')
-            : '<div class="overview-empty">Nenhuma NF pendente de endereçamento.</div>';
-
-        const movimentacoesHtml = movimentacoes.length
-            ? movimentacoes.map((item) => `
-                <div class="overview-item">
-                    <div class="overview-item-main">
-                        <span class="overview-item-title">${escapeHtml(item.tipo_movimentacao || 'Movimentação')}</span>
-                        <span class="overview-item-sub">NF ${escapeHtml(item.numero_nota || '-')} | ${escapeHtml(item.usuario || 'Sem usuário')}</span>
-                    </div>
-                    <div class="overview-item-metric">${formatarNumero(item.qtd_movimentada || 0, 2)}</div>
-                </div>
-            `).join('')
-            : '<div class="overview-empty">Sem movimentações recentes registradas.</div>';
-
-        container.innerHTML = `
-            <div class="overview-mini-grid">
-                ${miniCards.map((card) => `
-                    <div class="overview-mini-card">
-                        <span class="label">${escapeHtml(card.label)}</span>
-                        <span class="value">${card.value}</span>
-                        <span class="meta">${escapeHtml(card.meta)}</span>
-                    </div>
-                `).join('')}
-            </div>
-
-            <div class="overview-section-title">
-                <span>Prioridades da Fila</span>
-                <span class="overview-badge">${formatarNumero(cards.pendentes_enderecamento || 0)} pendências</span>
-            </div>
-            <div class="overview-list">${prioridadesHtml}</div>
-
-            <div class="overview-section-title">
-                <span>Notas Pendentes</span>
-                <span class="overview-badge">${formatarNumero(wms.movimentacoes_periodo || 0)} mov. no período</span>
-            </div>
-            <div class="overview-list">${notasHtml}</div>
-
-            <div class="overview-section-title">
-                <span>Últimas Movimentações</span>
-                <span class="overview-badge">${formatarNumero(cards.movimentacoes_24h || 0)} em 24h</span>
-            </div>
-            <div class="overview-list">${movimentacoesHtml}</div>
-        `;
-
-        if (badge) badge.innerText = `${formatarNumero(cards.pendentes_enderecamento || 0)} pendências`;
-    }
-
     function renderOverviewUsuarios(consolidado) {
         const container = document.getElementById('overview-usuarios');
         const badge = document.getElementById('overview-users-badge');
@@ -2104,10 +1969,7 @@
         const totalProcessado = usuarios.reduce((acc, item) => acc + Number(item.total_processado || 0), 0);
         const linhas = usuarios.map((item) => `
             <tr>
-                <td>
-                    <strong>${escapeHtml(item.usuario || 'Sem usuário')}</strong>
-                    <span class="overview-muted">Qtd mov.: ${formatarNumero(item.qtd_movimentada_wms || 0, 2)} | Armz.: ${formatarNumero(item.qtd_armazenada_wms || 0, 2)}</span>
-                </td>
+                <td><strong>${escapeHtml(item.usuario || 'Sem usuário')}</strong></td>
                 <td>${formatarNumero(item.notas_importadas || 0)}</td>
                 <td>${formatarNumero(item.notas_conferidas || 0)}</td>
                 <td>${formatarNumero(item.notas_lancadas || 0)}</td>
@@ -2115,8 +1977,6 @@
                     ${formatarNumero(item.manifestacoes_sucesso || 0)}
                     <span class="overview-muted">Falha: ${formatarNumero(item.manifestacoes_falha || 0)}</span>
                 </td>
-                <td>${formatarNumero(item.enderecamentos_wms || 0)}</td>
-                <td>${formatarNumero(item.movimentacoes_wms || 0)}</td>
                 <td><strong>${formatarNumero(item.total_processado || 0)}</strong></td>
             </tr>
         `).join('');
@@ -2130,8 +1990,6 @@
                         <th>Conferidas</th>
                         <th>Lançadas</th>
                         <th>Manifestação</th>
-                        <th>End. WMS</th>
-                        <th>Mov. WMS</th>
                         <th>Total</th>
                     </tr>
                 </thead>
@@ -2143,8 +2001,6 @@
                         <td>${formatarNumero(totais.notas_conferidas || 0)}</td>
                         <td>${formatarNumero(totais.notas_lancadas || 0)}</td>
                         <td>${formatarNumero((totais.manifestacoes_sucesso || 0) + (totais.manifestacoes_falha || 0))}</td>
-                        <td>${formatarNumero(totais.enderecamentos_wms || 0)}</td>
-                        <td>${formatarNumero(totais.movimentacoes_wms || 0)}</td>
                         <td>${formatarNumero(totalProcessado || 0)}</td>
                     </tr>
                 </tfoot>
@@ -2159,15 +2015,13 @@
         const periodoSelecionado = document.getElementById('overview-period');
         const dias = Number(periodoSelecionado?.value || 30);
 
-        const [consolidado, wmsCockpit, expedicao] = await Promise.all([
+        const [consolidado, expedicao] = await Promise.all([
             fetchJsonSafe(`/api/upload/dashboard_consolidado?dias=${dias}`),
-            fetchJsonSafe('/api/wms/cockpit'),
             fetchJsonSafe('/api/expedicao/dashboard'),
         ]);
 
-        renderOverviewKpis(consolidado, wmsCockpit);
+        renderOverviewKpis(consolidado);
         renderOverviewGeral(consolidado, expedicao);
-        renderOverviewWms(consolidado, wmsCockpit);
         renderOverviewUsuarios(consolidado);
     }
 
@@ -2307,7 +2161,7 @@
         document.getElementById('band-recebimento').style.display = isExp ? 'none' : '';
         document.getElementById('band-expedicao').style.display = isExp ? '' : 'none';
         document.getElementById('band-sla').style.display = isExp ? 'none' : '';
-        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal, WMS e conformidade.';
+        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal e conformidade.';
     }
 
     function aplicarFiltroOperacaoV2() {
@@ -2315,7 +2169,7 @@
         document.getElementById('band-recebimento').style.display = isExp ? 'none' : '';
         document.getElementById('band-expedicao').style.display = isExp ? '' : 'none';
         document.getElementById('band-sla').style.display = isExp ? 'none' : '';
-        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal, WMS e conformidade.';
+        document.getElementById('dashboard-subtitle').innerText = isExp ? 'Expedicao, conferencia de carga e saida de mercadoria.' : 'Recebimento, fiscal e conformidade.';
         if (!operacaoPermiteBanda(activeBandId)) {
             activeBandId = isExp ? 'band-expedicao' : 'band-recebimento';
         }

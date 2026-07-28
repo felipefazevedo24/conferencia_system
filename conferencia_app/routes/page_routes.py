@@ -14,7 +14,6 @@ from ..models import (
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
     ItemNota,
-    ItemWMS,
     Usuario,
 )
 
@@ -136,76 +135,6 @@ HOME_MODULES = [
         "priority": 90,
         "keywords": ["conserto", "retorno", "estoque", "baixa"],
         "metric_key": "conserto_pendente",
-    },
-    {
-        "id": "wms",
-        "title": "WMS",
-        "subtitle": "Central de operações",
-        "description": "Painel único de recebimento, endereçamento, estoque e governança do armazém.",
-        "href": "/wms",
-        "icon": "fa-warehouse",
-        "permission": "PAGE_WMS",
-        "section": "Logística",
-        "tone": "cyan",
-        "priority": 90,
-        "keywords": ["wms", "estoque", "endereco", "armazem", "hub"],
-        "metric_key": "wms_pendente",
-    },
-    {
-        "id": "wms_enderecamento",
-        "title": "Endereçamento WMS",
-        "subtitle": "Operação",
-        "description": "Endereça pendências de entrada fiscal às posições do armazém.",
-        "href": "/wms/enderecamento",
-        "icon": "fa-map-marker-alt",
-        "permission": "PAGE_WMS",
-        "section": "Logística",
-        "tone": "cyan",
-        "priority": 87,
-        "keywords": ["wms", "enderecamento", "pendencia", "nota", "armazem"],
-        "metric_key": "wms_pendente",
-    },
-    {
-        "id": "wms_inventario",
-        "title": "Inventario Ciclico WMS",
-        "subtitle": "Acuracidade",
-        "description": "Abra contagens por SKU/local e aprove ajustes de saldo com rastreabilidade.",
-        "href": "/wms/inventario",
-        "icon": "fa-clipboard-list-check",
-        "permission": "PAGE_WMS",
-        "section": "Logistica",
-        "tone": "cyan",
-        "priority": 86,
-        "keywords": ["wms", "inventario", "contagem", "acuracidade", "estoque"],
-        "metric_key": "wms_pendente",
-    },
-    {
-        "id": "wms_enderecos",
-        "title": "Cadastro de Endereços WMS",
-        "subtitle": "Admin logística",
-        "description": "Mantenha o mapa mestre do armazém organizado e consistente.",
-        "href": "/admin/wms-enderecos",
-        "icon": "fa-map-location-dot",
-        "permission": "PAGE_ADMIN_WMS_ENDERECOS",
-        "section": "Logística",
-        "tone": "cyan",
-        "priority": 63,
-        "keywords": ["wms", "endereco", "cadastro", "armazem"],
-        "metric_key": "wms_pendente",
-    },
-    {
-        "id": "wms_governanca",
-        "title": "Governança WMS",
-        "subtitle": "Gestão",
-        "description": "Monitore parâmetros, divergências e capacidade operacional do armazém.",
-        "href": "/admin/wms-governanca",
-        "icon": "fa-sitemap",
-        "permission": "PAGE_ADMIN_WMS_GOVERNANCA",
-        "section": "Logística",
-        "tone": "cyan",
-        "priority": 65,
-        "keywords": ["wms", "governanca", "divergencia", "politica"],
-        "metric_key": "wms_pendente",
     },
     {
         "id": "agendamento_solicitacao",
@@ -544,7 +473,6 @@ def _build_home_metrics() -> dict:
         "auditoria_pendente": 0,
         "conserto_aberto": 0,
         "conserto_pendente": 0,
-        "wms_pendente": 0,
         "agendamento_ativo": 0,
         "expedicao_aberta": 0,
         "boletos_gerados": 0,
@@ -584,7 +512,6 @@ def _build_home_metrics() -> dict:
             .filter(ConsertoBaixa.status_baixa.in_(["Pendente de confirmacao", "Pendente de confirmação"]))
             .count()
         )
-        metrics["wms_pendente"] = ItemWMS.query.filter_by(status="Pendente Enderecamento", ativo=True).count()
         metrics["agendamento_ativo"] = (
             AgendamentoSolicitacao.query
             .filter(AgendamentoSolicitacao.status.notin_(["Concluida", "Cancelada"]))
@@ -659,9 +586,6 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
         "notas_liberadas": _fmt_metric(value, "NF lançada", "NFs lançadas"),
         "etiquetas": _fmt_metric(value, "NF liberada", "NFs liberadas"),
         "conserto": _fmt_metric(value, "pendência de baixa", "pendências de baixa"),
-        "wms": _fmt_metric(value, "item pendente", "itens pendentes"),
-        "wms_enderecos": _fmt_metric(value, "item pendente", "itens pendentes"),
-        "wms_governanca": _fmt_metric(value, "item pendente", "itens pendentes"),
         "expedicao_conferencia": _fmt_metric(value, "operação aberta", "operações abertas"),
         "expedicao_admin": _fmt_metric(value, "operação aberta", "operações abertas"),
         "romaneios": _fmt_metric(value, "operação aberta", "operações abertas"),
@@ -716,12 +640,6 @@ def _build_home_highlights(metrics: dict) -> list[dict]:
             "caption": "Retornos aguardando sua validação.",
             "tone": "violet",
         },
-        {
-            "label": "Pendências WMS",
-            "value": int(metrics["wms_pendente"]),
-            "caption": "Itens sem endereçamento fechado.",
-            "tone": "cyan",
-        },
     ]
 
 
@@ -748,8 +666,6 @@ def _build_priority_actions(modules: list[dict], metrics: dict) -> list[dict]:
         add_action("documento_entrada", "Fechar documento de entrada", f"{int(metrics['notas_concluidas'])} nota(s) prontas para lançamento.")
     if metrics["auditoria_pendente"] > 0:
         add_action("auditor_xml", "Tratar auditoria fiscal", f"{int(metrics['auditoria_pendente'])} nota(s) aguardando decisão fiscal.")
-    if metrics["wms_pendente"] > 0:
-        add_action("wms", "Endereçar itens no WMS", f"{int(metrics['wms_pendente'])} item(ns) sem endereço final.")
 
     if not actions:
         add_action("notas_liberadas", "Acompanhar histórico", f"Operação está estável em {today}. Use o painel para análise.")
@@ -917,30 +833,6 @@ def historico_page():
     return render_template("historico.html", user=session["username"])
 
 
-@page_bp.route("/wms")
-@permission_required("PAGE_WMS")
-def wms_page():
-    return render_template("wms_hub.html", user=session["username"])
-
-
-@page_bp.route("/wms/enderecamento")
-@permission_required("PAGE_WMS")
-def wms_enderecamento_page():
-    return render_template("wms.html", user=session["username"])
-
-
-@page_bp.route("/wms/coletor")
-@permission_required("PAGE_WMS")
-def wms_coletor_page():
-    return render_template("wms_coletor.html", user=session["username"])
-
-
-@page_bp.route("/wms/inventario")
-@permission_required("PAGE_WMS")
-def wms_inventario_page():
-    return render_template("wms_inventario.html", user=session["username"])
-
-
 @page_bp.route("/financeiro/faturamento")
 @permission_required("PAGE_FINANCEIRO_FATURAMENTO")
 def financeiro_faturamento_page():
@@ -963,24 +855,6 @@ def financeiro_classificacao_contabil_page():
 @permission_required("PAGE_FINANCEIRO_RELATORIO_CUSTOS")
 def financeiro_relatorio_custos_page():
     return render_template("relatorio_custos.html", user=session["username"])
-
-
-@page_bp.route("/admin/wms-enderecos")
-@permission_required("PAGE_ADMIN_WMS_ENDERECOS")
-def wms_enderecos_admin_page():
-    return render_template("admin_wms_enderecos.html", user=session["username"])
-
-
-@page_bp.route("/admin/wms-governanca")
-@permission_required("PAGE_ADMIN_WMS_GOVERNANCA")
-def wms_governanca_admin_page():
-    return render_template("admin_wms_governanca.html", user=session["username"])
-
-
-@page_bp.route("/wms/estoque")
-@permission_required("PAGE_WMS")
-def wms_estoque_tempo_real_page():
-    return render_template("estoque_tempo_real.html", user=session["username"])
 
 
 @page_bp.route("/expedicao/conferencia")

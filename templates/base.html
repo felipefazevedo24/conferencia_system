@@ -75,7 +75,6 @@
 
                 {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS')
                     or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO')
-                    or can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA')
                     or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                     or can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_FROTA') or can_access('PAGE_LOGISTICA_RASTREAMENTO')
                     or can_access('PAGE_CONSERTO') or can_access('PAGE_QUALIDADE') %}
@@ -115,21 +114,6 @@
                                 {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
                                 {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
                                 {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
-                        <div class="submenu-subgroup" data-subgroup="wms">
-                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-warehouse submenu-icon"></i> WMS <i class="fas fa-chevron-down submenu-chevron"></i></button>
-                            <div class="submenu-items">
-                                {% if can_access('PAGE_WMS') %}
-                                <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-compass"></i> Central WMS</a>
-                                <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
-                                <a href="/wms/estoque" class="list-group-item list-group-item-action"><i class="fas fa-cubes"></i> Estoque Tempo Real</a>
-                                {% endif %}
-                                {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
-                                {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governança WMS</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}
@@ -572,7 +556,7 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener("resize", closeAllFlyouts);
     sidebarScroll?.addEventListener("scroll", closeAllFlyouts, { passive: true });
 
-    // Subgrupos colapsáveis (Recebimento/Expedição/WMS/Transporte dentro de Logística)
+    // Subgrupos colapsáveis (Recebimento/Expedição/Transporte dentro de Logística)
     const SUBGROUP_KEY = "sidebar:subgroups:collapsed:v1";
     let collapsedSubs = [];
     try { collapsedSubs = JSON.parse(localStorage.getItem(SUBGROUP_KEY) || "[]") || []; } catch (_) { collapsedSubs = []; }

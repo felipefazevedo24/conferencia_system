@@ -915,18 +915,6 @@ def _aplicar_lancamento_local(
     return int(rows or 0)
 
 
-def _enfileirar_wms_se_disponivel(numero_nota: str, usuario: str) -> None:
-    """Reaproveita a fila de integracao WMS usada no lancamento manual, se existir."""
-    try:
-        from ..routes.api_routes import _enfileirar_integracao_wms_nota_lancada  # type: ignore
-    except Exception:
-        return
-    try:
-        _enfileirar_integracao_wms_nota_lancada(numero_nota, usuario)
-    except Exception:
-        logger.exception("Falha ao enfileirar integracao WMS para NF %s", numero_nota)
-
-
 def _manifestar_se_disponivel(numero_nota: str, usuario: str) -> dict[str, Any]:
     """Chama a manifestacao SEFAZ (via Consyste) igual o fluxo manual."""
     try:
@@ -1064,7 +1052,6 @@ def executar_ciclo() -> dict[str, Any]:
                     classificar_nota(str(n_nf))
                 except Exception:
                     logger.exception("Falha ao classificar contabilmente a NF %s", n_nf)
-                _enfileirar_wms_se_disponivel(n_nf, usuario)
                 try:
                     from .entrada_chapa_email_service import notificar_entrada_chapa_lancada
                     notificar_entrada_chapa_lancada(

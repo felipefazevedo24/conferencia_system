@@ -100,21 +100,8 @@ class Config:
         "GOOGLE_DRIVE_OAUTH_TOKEN_FILE",
         str(DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE) if DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE.exists() else "",
     )
-    INVENTREE_WMS_ENABLED = _env_bool("INVENTREE_WMS_ENABLED", "0")
-    INVENTREE_API_BASE = str(os.environ.get("INVENTREE_API_BASE", "")).strip().rstrip("/")
-    INVENTREE_API_TOKEN = str(os.environ.get("INVENTREE_API_TOKEN", "")).strip()
-    INVENTREE_ROOT_LOCATION_ID = _env_int("INVENTREE_ROOT_LOCATION_ID")
-    INVENTREE_PENDING_LOCATION_ID = _env_int("INVENTREE_PENDING_LOCATION_ID")
-    INVENTREE_DEFAULT_PART_CATEGORY_ID = _env_int("INVENTREE_DEFAULT_PART_CATEGORY_ID")
-    INVENTREE_TIMEOUT_SECONDS = int(os.environ.get("INVENTREE_TIMEOUT_SECONDS", "20"))
-    INVENTREE_STOCK_NOTE_PREFIX = str(os.environ.get("INVENTREE_STOCK_NOTE_PREFIX", "ERP/WMS")).strip() or "ERP/WMS"
-
     ERP_ESTOQUE_TIMEOUT = int(os.environ.get("ERP_ESTOQUE_TIMEOUT", "30"))
     ERP_ESTOQUE_PG_COMPANY = int(os.environ.get("ERP_ESTOQUE_PG_COMPANY", "1"))
-
-    # Sincronizacao automatica ERP -> WMS (estoque + enderecos)
-    ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
-    ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
 
     # Conferencia de Expedicao: API externa que retorna as ordens de faturamento.
     EXPEDICAO_FAT_API_URL = os.environ.get(

@@ -86,9 +86,6 @@ from ..models import (
     ExpedicaoRomaneioNF,
     ItemNota,
     ChecklistRecebimento,
-    LocalizacaoArmazem,
-    ItemWMS,
-    MovimentacaoWMS,
     BoletoContaReceber,
     ClassificacaoContabilItem,
     ClassificacaoContabilCompetencia,
@@ -106,9 +103,7 @@ from ..models import (
     PermissaoAcesso,
     SolicitacaoDevolucaoRecebimento,
     Usuario,
-    WMSIntegracaoEvento,
 )
-from ..services import WMSService
 from ..schemas.api_schemas import (
     AprovarSolicitacaoDevolucaoSchema,
     ConsysteEmissaoConsultarSchema,
@@ -1249,114 +1244,6 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
         descricao_evento="Operação não realizada",
         justificativa=justificativa,
     )
-
-
-def _armazenar_nota_no_wms(numero_nota: str, usuario: str):
-    """Registra itens da NF no WMS como pendentes usando a base oficial ERP/Postgres."""
-    try:
-        return WMSService.sincronizar_nota_lancada_erp(numero_nota, usuario)
-
-    except Exception as e:
-        current_app.logger.error(f"Erro ao integrar WMS para nota {numero_nota}: {str(e)}")
-        return {
-            'sucesso': False,
-            'itens_pendentes': 0,
-            'mensagem': f'Erro na integração WMS: {str(e)}'
-        }
-
-
-def _enfileirar_integracao_wms_nota_lancada(numero_nota: str, usuario: str):
-    numero_nota = str(numero_nota or '').strip()
-    usuario = str(usuario or 'Sistema').strip()
-    if not numero_nota:
-        return None, False
-
-    idempotency_key = f"nota_lancada:{numero_nota}"
-    evento = WMSIntegracaoEvento.query.filter_by(idempotency_key=idempotency_key).first()
-    if evento:
-        if evento.status in ('Falha', 'DeadLetter'):
-            evento.status = 'Pendente'
-            evento.proxima_tentativa_em = None
-            evento.ultima_erro = None
-            db.session.commit()
-        return evento, False
-
-    payload = {'numero_nota': numero_nota, 'usuario': usuario}
-    evento = WMSIntegracaoEvento(
-        idempotency_key=idempotency_key,
-        tipo_evento='NotaLancada',
-        referencia=numero_nota,
-        origem='Fiscal',
-        payload_json=json.dumps(payload, ensure_ascii=True),
-        status='Pendente',
-        tentativas=0,
-        criado_em=datetime.now(),
-    )
-    db.session.add(evento)
-    db.session.commit()
-    return evento, True
-
-
-def _processar_evento_integracao_wms(evento: WMSIntegracaoEvento):
-    evento.status = 'Processando'
-    evento.tentativas = int(evento.tentativas or 0) + 1
-    db.session.commit()
-
-    try:
-        payload = json.loads(evento.payload_json or '{}')
-        numero_nota = str(payload.get('numero_nota') or evento.referencia or '').strip()
-        usuario = str(payload.get('usuario') or 'Integrador').strip()
-
-        if evento.tipo_evento == 'NotaLancada':
-            resultado = _armazenar_nota_no_wms(numero_nota, usuario)
-        else:
-            resultado = {'sucesso': False, 'mensagem': f'Tipo de evento nao suportado: {evento.tipo_evento}'}
-
-        if resultado.get('sucesso'):
-            evento.status = 'Sucesso'
-            evento.processado_em = datetime.now()
-            evento.ultima_erro = None
-            evento.proxima_tentativa_em = None
-            db.session.commit()
-            return {'sucesso': True, 'resultado': resultado}
-
-        raise RuntimeError(resultado.get('mensagem') or 'Falha na integracao WMS')
-
-    except Exception as exc:
-        max_tentativas = 5
-        backoff_min = min(60, 2 ** int(evento.tentativas or 1))
-        evento.ultima_erro = str(exc)[:500]
-        evento.status = 'DeadLetter' if int(evento.tentativas or 0) >= max_tentativas else 'Falha'
-        evento.proxima_tentativa_em = datetime.now() + timedelta(minutes=backoff_min)
-        db.session.commit()
-        return {'sucesso': False, 'erro': str(exc)}
-
-
-def _processar_fila_integracao_wms(limite=20):
-    agora = datetime.now()
-    eventos = (
-        WMSIntegracaoEvento.query
-        .filter(
-            WMSIntegracaoEvento.status.in_(['Pendente', 'Falha']),
-            or_(WMSIntegracaoEvento.proxima_tentativa_em.is_(None), WMSIntegracaoEvento.proxima_tentativa_em <= agora),
-        )
-        .order_by(WMSIntegracaoEvento.criado_em.asc())
-        .limit(int(limite or 20))
-        .all()
-    )
-
-    processados = 0
-    sucesso = 0
-    falha = 0
-    for evento in eventos:
-        retorno = _processar_evento_integracao_wms(evento)
-        processados += 1
-        if retorno.get('sucesso'):
-            sucesso += 1
-        else:
-            falha += 1
-
-    return {'processados': processados, 'sucesso': sucesso, 'falha': falha}
 
 
 def _admin_access_query_from_request():
@@ -6957,25 +6844,6 @@ def resetar_nota_admin():
     nota_db = ItemNota.query.filter_by(numero_nota=numero_nota).first()
 
     if nota_db:
-        possui_enderecamento_wms = (
-            ItemWMS.query.filter(
-                ItemWMS.numero_nota == numero_nota,
-                ItemWMS.ativo == True,
-                ItemWMS.localizacao_id.isnot(None),
-            ).first()
-            is not None
-        )
-        if possui_enderecamento_wms:
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": "Não é permitido reverter conferência de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
-                    }
-                ),
-                409,
-            )
-
         possui_lancamento_ativo = (
             ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first() is not None
         )
@@ -7253,9 +7121,6 @@ def confirmar_lancamento():
                 manifestacao_result.get("status_code") or 502,
             )
 
-    # Integração com WMS via fila (idempotente), com tentativa imediata best-effort.
-    evento, criado = _enfileirar_integracao_wms_nota_lancada(numero_nota, session["username"])
-    processamento = _processar_evento_integracao_wms(evento) if evento else {"sucesso": False, "erro": "evento_nao_criado"}
     aviso_chapa = None
     try:
         from ..services.entrada_chapa_email_service import notificar_entrada_chapa_lancada
@@ -7274,13 +7139,6 @@ def confirmar_lancamento():
         {
             "sucesso": True,
             "manifestacao": manifestacao_result,
-            "wms": processamento.get("resultado") if processamento.get("sucesso") else None,
-            "aviso_wms": processamento.get("erro") if not processamento.get("sucesso") else None,
-            "fila_integracao": {
-                "evento_id": evento.id if evento else None,
-                "status": evento.status if evento else "NaoCriado",
-                "novo_evento": bool(criado),
-            },
             "aviso_chapa": aviso_chapa,
         }
     )
@@ -7305,16 +7163,6 @@ def manifestar_destinatario_fiscal():
         "msg": resultado.get("msg"),
         "idempotente": bool(resultado.get("idempotente")),
     }), status_http
-
-
-@api_bp.route("/api/wms/integracao/processar", methods=["POST"])
-@roles_required("Admin")
-def processar_fila_integracao_wms():
-    payload = request.get_json(silent=True) or {}
-    limite = int(payload.get("limite") or 20)
-    limite = max(1, min(limite, 200))
-    resultado = _processar_fila_integracao_wms(limite=limite)
-    return jsonify({"sucesso": True, "resultado": resultado})
 
 
 @api_bp.route("/api/fiscal/erp_lancamento/sincronizar", methods=["POST"])
@@ -7354,25 +7202,6 @@ def estornar_lancamento_fiscal():
     possui_lancamento = ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").first()
     if not possui_lancamento:
         return jsonify({"sucesso": False, "msg": "Nota não está lançada para estorno."}), 404
-
-    possui_enderecamento_wms = (
-        ItemWMS.query.filter(
-            ItemWMS.numero_nota == numero_nota,
-            ItemWMS.ativo == True,
-            ItemWMS.localizacao_id.isnot(None),
-        ).first()
-        is not None
-    )
-    if possui_enderecamento_wms:
-        return (
-            jsonify(
-                {
-                    "sucesso": False,
-                    "msg": "Não é permitido estornar lançamento fiscal de NF com material já endereçado no WMS. Estorne o endereçamento primeiro.",
-                }
-            ),
-            409,
-        )
 
     ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
         {
@@ -8615,10 +8444,6 @@ def upload_dashboard_consolidado():
                 "notas_lancadas": 0,
                 "manifestacoes_sucesso": 0,
                 "manifestacoes_falha": 0,
-                "enderecamentos_wms": 0,
-                "movimentacoes_wms": 0,
-                "qtd_movimentada_wms": 0.0,
-                "qtd_armazenada_wms": 0.0,
             },
         )
         return bucket
@@ -8639,8 +8464,6 @@ def upload_dashboard_consolidado():
         "manifestacoes_sucesso": 0,
         "manifestacoes_falha": 0,
         "manifestacoes_pendentes": 0,
-        "enderecamentos_wms": 0,
-        "movimentacoes_wms": 0,
     }
 
     conferencia_por_usuario = {}
@@ -8721,31 +8544,6 @@ def upload_dashboard_consolidado():
         0, totais["notas_lancadas"] - len(notas_manifestadas_sucesso)
     )
 
-    itens_wms_periodo = ItemWMS.query.filter(ItemWMS.data_armazenamento >= corte).all()
-    movimentacoes_wms_periodo = MovimentacaoWMS.query.filter(MovimentacaoWMS.data_movimentacao >= corte).all()
-    itens_wms_ativos = ItemWMS.query.filter_by(ativo=True).all()
-    itens_sem_endereco = [i for i in itens_wms_ativos if not i.localizacao_id]
-
-    totais["enderecamentos_wms"] = len(itens_wms_periodo)
-    totais["movimentacoes_wms"] = len(movimentacoes_wms_periodo)
-
-    for item in itens_wms_periodo:
-        bucket = user_bucket(item.usuario_armazenamento)
-        bucket["enderecamentos_wms"] += 1
-        bucket["qtd_armazenada_wms"] += float(item.qtd_recebida or 0)
-
-    for mov in movimentacoes_wms_periodo:
-        bucket = user_bucket(mov.usuario)
-        bucket["movimentacoes_wms"] += 1
-        bucket["qtd_movimentada_wms"] += float(mov.qtd_movimentada or 0)
-
-    integracoes_pendentes = WMSIntegracaoEvento.query.filter(
-        WMSIntegracaoEvento.status.in_(["Pendente", "Processando"])
-    ).count()
-    integracoes_falha = WMSIntegracaoEvento.query.filter(
-        WMSIntegracaoEvento.status.in_(["Falha", "DeadLetter"])
-    ).count()
-
     por_usuario = []
     for bucket in usuarios.values():
         bucket["total_processado"] = (
@@ -8754,8 +8552,6 @@ def upload_dashboard_consolidado():
             + bucket["notas_lancadas"]
             + bucket["manifestacoes_sucesso"]
             + bucket["manifestacoes_falha"]
-            + bucket["enderecamentos_wms"]
-            + bucket["movimentacoes_wms"]
         )
         por_usuario.append(bucket)
 
@@ -8793,16 +8589,6 @@ def upload_dashboard_consolidado():
                     key=lambda row: (row["notas_conferidas"] + row["notas_lancadas"]),
                     reverse=True,
                 )[:5],
-            },
-            "wms": {
-                "enderecamentos_periodo": totais["enderecamentos_wms"],
-                "movimentacoes_periodo": totais["movimentacoes_wms"],
-                "itens_ativos": len(itens_wms_ativos),
-                "saldo_total": round(sum(float(i.qtd_atual or 0) for i in itens_wms_ativos), 2),
-                "itens_sem_endereco": len(itens_sem_endereco),
-                "notas_sem_endereco": len({str(i.numero_nota or "").strip() for i in itens_sem_endereco if i.numero_nota}),
-                "integracoes_pendentes": integracoes_pendentes,
-                "integracoes_falha": integracoes_falha,
             },
             "por_usuario": por_usuario[:20],
         }
