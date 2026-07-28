@@ -51,6 +51,10 @@ STATUS_CONFERIDO = "Conferido/Ag. Fat"
 STATUS_FATURADO = "Faturado"
 # Faturado na origem SEM conferencia cega (trava a expedicao ate conferir).
 STATUS_FATURADO_SEM_CONF = "Faturado sem conferência"
+# A NF da ordem foi incluida em um romaneio de expedicao (Rascunho/Pronto).
+# Espelha o fluxo FAT: enquanto estiver "Em Romaneio" a ordem nao aparece mais
+# em "Faturado". So volta para Faturado se a NF for removida do romaneio.
+STATUS_EM_ROMANEIO = "Em Romaneio"
 STATUS_EXPEDIDO = "Expedido"
 # Encerrada por um Admin SEM conferencia fisica. Ordem sai da fila de pendentes
 # e NAO segue para o Registro de expedicao.
@@ -62,6 +66,7 @@ STATUS_SLUGS = {
     "Conferido": "conferido",  # compat: valor antigo
     STATUS_FATURADO: "faturado",
     STATUS_FATURADO_SEM_CONF: "faturado_sem_conf",
+    STATUS_EM_ROMANEIO: "romaneio",
     STATUS_EXPEDIDO: "expedido",
     STATUS_FINALIZADO_SEM_CONF: "finalizado_sem_conf",
 }
@@ -323,6 +328,77 @@ def marcar_expedido_por_nf(numero_nf, registro_id=None, usuario=None) -> int:
             ordem.expedido_by = usuario
             if registro_id:
                 ordem.expedicao_registro_id = registro_id
+            ordem.updated_at = agora
+            afetadas += 1
+    if afetadas:
+        db.session.commit()
+    return afetadas
+
+
+def _nfs_da_string(numero_nf) -> list:
+    if not numero_nf:
+        return []
+    bruto = str(numero_nf).replace(";", ",").replace("/", ",")
+    return [n.strip() for n in bruto.split(",") if n.strip()]
+
+
+def marcar_em_romaneio_por_nf(numero_nf) -> int:
+    """Move a(s) ordem(ns) de ST de Faturado para 'Em Romaneio' quando a NF
+    entra em um romaneio de expedicao. Espelha expedicao_fat_service."""
+    nfs = _nfs_da_string(numero_nf)
+    if not nfs:
+        return 0
+
+    ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
+    afetadas = 0
+    agora = datetime.now()
+    for ordem in ordens:
+        if ordem.status == STATUS_FATURADO:
+            ordem.status = STATUS_EM_ROMANEIO
+            ordem.updated_at = agora
+            afetadas += 1
+    if afetadas:
+        db.session.commit()
+    return afetadas
+
+
+def reverter_romaneio_por_nf(numero_nf) -> int:
+    """Estorna a(s) ordem(ns) de ST de 'Em Romaneio' de volta para Faturado —
+    usado quando a NF e removida do romaneio ou o romaneio (em Rascunho) e
+    deletado."""
+    nfs = _nfs_da_string(numero_nf)
+    if not nfs:
+        return 0
+
+    ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
+    afetadas = 0
+    agora = datetime.now()
+    for ordem in ordens:
+        if ordem.status == STATUS_EM_ROMANEIO:
+            ordem.status = STATUS_FATURADO
+            ordem.updated_at = agora
+            afetadas += 1
+    if afetadas:
+        db.session.commit()
+    return afetadas
+
+
+def reverter_expedicao_por_nf(numero_nf) -> int:
+    """Estorna a(s) ordem(ns) de ST de Expedido de volta para 'Em Romaneio' —
+    usado quando o romaneio expedido e estornado (Expedido -> Pronto)."""
+    nfs = _nfs_da_string(numero_nf)
+    if not nfs:
+        return 0
+
+    ordens = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.numero_nf.in_(nfs)).all()
+    afetadas = 0
+    agora = datetime.now()
+    for ordem in ordens:
+        if ordem.status == STATUS_EXPEDIDO:
+            ordem.status = STATUS_EM_ROMANEIO
+            ordem.expedido_at = None
+            ordem.expedido_by = None
+            ordem.expedicao_registro_id = None
             ordem.updated_at = agora
             afetadas += 1
     if afetadas:

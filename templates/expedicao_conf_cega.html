@@ -884,6 +884,7 @@
                     fecharMenuAcoes();
                     if (act === "conferir" || act === "ver") abrirConferencia(cod);
                     else if (act === "corrigir-nf") corrigirNf(cod);
+                    else if (act === "informar-nf") informarNf(cod);
                     else if (act === "fotos") abrirModalFotosPreexpedicao(cfg.apiBase, cod, ordemPorCod(cod));
                     else if (act === "ver-registro") verRegistroExpedicao(ordemPorCod(cod));
                 });
@@ -915,6 +916,9 @@
             } else if (o.editavel) {
                 itens += it("conferir", "fa-pen-to-square", "Editar conferência");
                 itens += it("ver", "fa-eye", "Detalhes");
+                if (s === "conferido" && CE_IS_ADMIN && cfg.podeInformarNf) {
+                    itens += "<hr>" + it("informar-nf", "fa-file-circle-plus", "Informar NF manualmente");
+                }
             } else {
                 itens += it("ver", "fa-eye", "Detalhes");
             }
@@ -1438,6 +1442,29 @@
             }
         }
 
+        async function informarNf(cod) {
+            if (!CE_IS_ADMIN || !cod) return;
+            const numeroNf = await pedirMotivo({
+                title: "Informar NF manualmente",
+                sub: "Ação de Admin — informe manualmente o número da NF desta ordem (ex.: a solicitação de faturamento foi excluída na origem antes da NF ser emitida). O número será validado no ERP e a ordem passará para Faturado.",
+                okLabel: "Informar NF",
+                label: "Número da NF",
+                placeholder: "Ex.: 55502",
+                errLabel: "Informe o número da NF.",
+            });
+            if (numeroNf === null) return; // cancelou
+
+            try {
+                const r = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod) + "/informar-nf", {
+                    method: "POST", body: JSON.stringify({ numero_nf: numeroNf }),
+                });
+                toast("NF " + r.numero_nf + " informada. Ordem faturada.", "success");
+                carregarDashboard();
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
         async function finalizarSemConferencia() {
             if (!currentOrdem || !CE_IS_ADMIN) return;
             const motivo = await pedirMotivo();
@@ -1664,7 +1691,7 @@
 
         const btnMontarRomaneio = el("btn-montar-romaneio");
         if (btnMontarRomaneio) {
-            btnMontarRomaneio.addEventListener("click", () => abrirModalMontarRomaneioGeral(cfg.apiBase));
+            btnMontarRomaneio.addEventListener("click", () => abrirModalMontarRomaneioGeral(cfg.apiBase, abrirViewRomaneios));
         }
 
         el("tbody").addEventListener("click", (e) => {
@@ -1988,6 +2015,7 @@
         refTipo: "fat",
         internacional: true,
         podeCorrigirNf: true,
+        podeInformarNf: true,
         colunas: (o) => ["#" + o.cod_ordem_fat, o.cliente, o.orcamento],
         previsao: (o) => o.dt_previsao_entrega,
         onCount: (n) => { $("fat-tab-count").textContent = n; },
@@ -1997,6 +2025,7 @@
         apiBase: "/api/expedicao/conf-cega-st",
         codKey: "cod_ordem_compra",
         refTipo: "st",
+        podeInformarNf: true,
         colunas: (o) => [o.cod_ordem_compra, o.fornecedor, o.n_os],
         previsao: (o) => o.dt_prevista_entrega,
         onCount: (n) => { $("st-tab-count").textContent = n; },
@@ -2026,7 +2055,13 @@
 
     // FUNÇÃO: Montar Romaneio (ação global — reúne NFes de uma ou mais ordens
     // faturadas em um único romaneio, independente da ordem de origem).
-    async function abrirModalMontarRomaneioGeral(apiBase) {
+    // Guarda a callback do controlador (FAT ou ST) que abriu o modal, para
+    // reabrir a view de Romaneios certa apos criar (cada aba tem seu proprio
+    // iframe/embed — nao pode assumir sempre a do FAT).
+    let _montarRomaneioAbrirView = null;
+
+    async function abrirModalMontarRomaneioGeral(apiBase, abrirViewCallback) {
+        _montarRomaneioAbrirView = typeof abrirViewCallback === "function" ? abrirViewCallback : null;
         try {
             const resp = await api(apiBase + "/ordens?status=faturado");
             const elegiveis = (resp.ordens || []).filter((o) => !o.romaneio && o.numero_nf);
@@ -2037,14 +2072,19 @@
             }
 
             const nfsDiv = $("ce-romaneio-nfs");
-            nfsDiv.innerHTML = elegiveis.map((o, i) => `
+            nfsDiv.innerHTML = elegiveis.map((o, i) => {
+                // ST nao tem "cliente"/"orcamento" — usa o fornecedor no lugar.
+                const nomeParte = o.cliente || o.fornecedor || "—";
+                const refParte = o.orcamento ? ` | Orç. ${escapeHtml(o.orcamento)}` : "";
+                return `
                 <div style="padding: 8px; margin-bottom: 8px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 6px; display: flex; align-items: center;">
-                    <input type="checkbox" id="ce-nf-${i}" data-nf="${escapeHtml(o.numero_nf)}" data-orcamento="${escapeHtml(o.orcamento || '')}" data-cliente="${escapeHtml(o.cliente || '')}" style="margin-right: 10px;" />
+                    <input type="checkbox" id="ce-nf-${i}" data-nf="${escapeHtml(o.numero_nf)}" data-orcamento="${escapeHtml(o.orcamento || '')}" data-cliente="${escapeHtml(nomeParte)}" style="margin-right: 10px;" />
                     <label for="ce-nf-${i}" style="cursor: pointer; flex: 1; margin: 0;">
-                        <strong>NF ${escapeHtml(o.numero_nf)}</strong> | ${escapeHtml(o.cliente || "—")} | Orç. ${escapeHtml(o.orcamento || "—")}
+                        <strong>NF ${escapeHtml(o.numero_nf)}</strong> | ${escapeHtml(nomeParte)}${refParte}
                     </label>
                 </div>
-            `).join("");
+            `;
+            }).join("");
 
             $("ce-romaneio-frete").value = "FOB";
             $("ce-romaneio-obs").value = "";
@@ -2115,12 +2155,14 @@
             
             toast(`Romaneio criado com ${nfsSelecionadas.length} NF(s)!`, "success");
             modal.classList.remove("open");
-            
+
             // Abre a view de Romaneios (embutida) já no romaneio recém-criado,
-            // sem navegar para fora da Conferência de Expedição.
+            // sem navegar para fora da Conferência de Expedição. Usa a callback
+            // da aba (FAT ou ST) que abriu o modal — cada uma tem seu próprio
+            // iframe/embed de Romaneios.
             setTimeout(() => {
-                if (typeof ctrlFat !== "undefined" && ctrlFat.abrirViewRomaneios) {
-                    ctrlFat.abrirViewRomaneios(romaneioId);
+                if (typeof _montarRomaneioAbrirView === "function") {
+                    _montarRomaneioAbrirView(romaneioId);
                 }
             }, 800);
             

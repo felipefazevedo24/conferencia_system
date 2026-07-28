@@ -281,14 +281,21 @@
     }
 
     // NFs Faturadas ainda sem romaneio — unica fonte usada para popular os
-    // seletores de NF (nunca digitacao livre, so selecao).
+    // seletores de NF (nunca digitacao livre, so selecao). Junta as duas
+    // origens (Faturamento e Servico de Terceiro): tudo que estiver Faturado
+    // aparece aqui, independente de ser FAT ou ST.
     async function carregarNfsFaturadasDisponiveis() {
-        try {
-            const data = await api("/api/expedicao/conf-cega/ordens?status=faturado");
-            return (data.ordens || []).filter((o) => o.numero_nf);
-        } catch (e) {
-            return [];
-        }
+        const [fatData, stData] = await Promise.all([
+            api("/api/expedicao/conf-cega/ordens?status=faturado").catch(() => ({ ordens: [] })),
+            api("/api/expedicao/conf-cega-st/ordens?status=faturado").catch(() => ({ ordens: [] })),
+        ]);
+        const fat = (fatData.ordens || [])
+            .filter((o) => o.numero_nf)
+            .map((o) => ({ numero_nf: o.numero_nf, cliente: o.cliente, orcamento: o.orcamento, origem: "FAT" }));
+        const st = (stData.ordens || [])
+            .filter((o) => o.numero_nf)
+            .map((o) => ({ numero_nf: o.numero_nf, cliente: o.fornecedor, orcamento: "", origem: "ST" }));
+        return [...fat, ...st];
     }
 
     function preencherSelectNfs(selectEl, nfsDisponiveis, nfsJaAdicionadas) {
@@ -297,7 +304,7 @@
         const valorAtual = selectEl.value;
         const opcoes = nfsDisponiveis.filter((o) => !jaAdicionadas.has(o.numero_nf));
         selectEl.innerHTML = '<option value="">' + (opcoes.length ? "Selecione uma NF faturada…" : "Nenhuma NF faturada disponível") + "</option>" +
-            opcoes.map((o) => `<option value="${escapeHtml(o.numero_nf)}">NF ${escapeHtml(o.numero_nf)} — ${escapeHtml(o.cliente || "—")} (Orç. ${escapeHtml(o.orcamento || "—")})</option>`).join("");
+            opcoes.map((o) => `<option value="${escapeHtml(o.numero_nf)}">NF ${escapeHtml(o.numero_nf)} — ${escapeHtml(o.cliente || "—")}${o.orcamento ? ` (Orç. ${escapeHtml(o.orcamento)})` : ""} [${escapeHtml(o.origem || "FAT")}]</option>`).join("");
         if (valorAtual && opcoes.some((o) => o.numero_nf === valorAtual)) {
             selectEl.value = valorAtual;
         }

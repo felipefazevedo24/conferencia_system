@@ -126,14 +126,44 @@ def listar_ordens_conf_st():
         return any(busca in os_val for os_val in os_por_ordem.get(ordem.id, ()))
 
     resumos = []
-    metricas = {"pendente": 0, "conferido": 0, "faturado_sem_conf": 0, "faturado": 0, "expedido": 0}
+    metricas = {"pendente": 0, "conferido": 0, "faturado_sem_conf": 0, "faturado": 0, "romaneio": 0, "expedido": 0}
     # Fila de conferencia (visao padrao): apenas ordens ainda nao faturadas.
     # Depois que a NF e emitida (Faturado) a ordem sai da fila e passa a ser
     # vista somente pelos filtros Faturado/Expedido (a "outra aba").
     fila_conferencia = ("pendente", "conferido")
+
+    # Mapeia numero_nf -> romaneio mais recente que a contem (mesma logica do
+    # FAT), para exibir a composicao (badge) nas etapas "Em Romaneio"/"Expedido".
+    from ..models import ExpedicaoRomaneio, ExpedicaoRomaneioNF
+
+    nf_para_romaneio = {}
+    linhas_nf = (
+        db.session.query(ExpedicaoRomaneioNF, ExpedicaoRomaneio)
+        .join(ExpedicaoRomaneio, ExpedicaoRomaneioNF.romaneio_id == ExpedicaoRomaneio.id)
+        .all()
+    )
+    for nf_row, rom in linhas_nf:
+        chave = str(nf_row.numero_nf or "").strip()
+        if not chave:
+            continue
+        existente = nf_para_romaneio.get(chave)
+        if not existente or rom.id > existente.id:
+            nf_para_romaneio[chave] = rom
+
     for ordem in ordens:
         sl = svc.status_slug(ordem.status)
         metricas[sl] = metricas.get(sl, 0) + 1
+
+        romaneio_info = None
+        if sl in ("romaneio", "expedido"):
+            rom = nf_para_romaneio.get(str(ordem.numero_nf or "").strip())
+            if rom:
+                romaneio_info = {
+                    "id": rom.id,
+                    "numero_romaneio": rom.numero_romaneio,
+                    "status": rom.status,
+                }
+
         # Busca por OS percorre TODOS os status; ignora a fila padrao e o
         # filtro de status enquanto houver termo de busca.
         if busca:
@@ -144,7 +174,10 @@ def listar_ordens_conf_st():
                 continue
         elif sl not in fila_conferencia:
             continue
-        resumos.append(_ordem_resumo(ordem, contagens.get(ordem.id, 0)))
+        resumo = _ordem_resumo(ordem, contagens.get(ordem.id, 0))
+        if sl in ("romaneio", "expedido"):
+            resumo["romaneio"] = romaneio_info
+        resumos.append(resumo)
 
     return jsonify({"ordens": resumos, "metricas": metricas})
 
@@ -510,6 +543,16 @@ def estornar_conferencia_st(cod_ordem_compra):
 
     slug = svc.status_slug(ordem.status)
     if slug not in ("conferido", "faturado", "finalizado_sem_conf"):
+        if slug == "romaneio":
+            return jsonify({
+                "error": "Nao e possivel estornar a Nota Fiscal, pois existe uma etapa posterior ativa (Romaneio). "
+                         "Realize primeiro o estorno do Romaneio (remova a NF do romaneio ou delete o romaneio)."
+            }), 400
+        if slug == "expedido":
+            return jsonify({
+                "error": "Nao e possivel estornar a Nota Fiscal, pois existe uma etapa posterior ativa (Expedicao). "
+                         "Realize primeiro o estorno da Expedicao e depois do Romaneio."
+            }), 400
         return jsonify({"error": "Nao ha conferencia para estornar nesta ordem."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -551,6 +594,75 @@ def estornar_conferencia_st(cod_ordem_compra):
 
     return jsonify({
         "sucesso": True,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/informar-nf", methods=["POST"])
+@roles_required("Admin")
+def informar_nf_ordem_st(cod_ordem_compra):
+    """Informa manualmente o numero da NF de uma ordem ST ja Conferida,
+    faturando-a (acao exclusiva de Admin).
+
+    A sincronizacao automatica so grava numero_nf e avanca para Faturado
+    quando a API externa de ST reporta a NF (expedicao_st_service.py). Se a
+    solicitacao de faturamento for excluida na origem antes da NF ser
+    emitida, a ordem fica presa em 'Conferido/Ag. Fat' para sempre — esta acao
+    destrava manualmente, buscando a NF diretamente no ERP para confirmar que
+    ela realmente existe e esta autorizada antes de faturar a ordem."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+
+    if ordem.status != svc.STATUS_CONFERIDO:
+        return jsonify({"error": "Só é possível informar a NF manualmente de ordens no status Conferido/Ag. Fat."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    if not numero_nf:
+        return jsonify({"error": "Informe o número da NF."}), 400
+
+    from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+
+    try:
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao consultar NF %s no ERP para informar-nf (ST)", numero_nf)
+        return jsonify({"error": f"Falha ao consultar a NF no ERP: {exc}"}), 502
+
+    if not nota or not nota.get("autorizada"):
+        return jsonify({
+            "error": f"NF {numero_nf} não encontrada ou não autorizada no ERP. Confira o número antes de informar."
+        }), 400
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+
+    ordem.numero_nf = str(nota.get("numero") or numero_nf).strip()
+    ordem.status = svc.STATUS_FATURADO
+    ordem.faturado_at = agora
+    ordem.updated_at = agora
+
+    log_svc.registrar_log(
+        origem="st",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="informar_nf_manual",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=False,
+        diff_cabecalho=[{"campo": "numero_nf", "label": "Número da NF", "de": "", "para": ordem.numero_nf}],
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "numero_nf": ordem.numero_nf,
         "status": ordem.status,
         "status_slug": svc.status_slug(ordem.status),
     })

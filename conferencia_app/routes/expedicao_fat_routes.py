@@ -958,6 +958,75 @@ def corrigir_nf_ordem_fat(cod_ordem_fat):
     return jsonify({"sucesso": True, "numero_nf": ordem.numero_nf})
 
 
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/informar-nf", methods=["POST"])
+@roles_required("Admin")
+def informar_nf_ordem_fat(cod_ordem_fat):
+    """Informa manualmente o numero da NF de uma ordem ja Conferida, faturando-a
+    (acao exclusiva de Admin).
+
+    A sincronizacao automatica so grava numero_nf e avanca para Faturado
+    quando a API externa de faturamento reporta a NF (expedicao_fat_service.py).
+    Se a solicitacao de faturamento for excluida na origem antes da NF ser
+    emitida, a ordem fica presa em 'Conferido/Ag. Fat' para sempre — esta acao
+    destrava manualmente, buscando a NF diretamente no ERP para confirmar que
+    ela realmente existe e esta autorizada antes de faturar a ordem."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+
+    if ordem.status != svc.STATUS_CONFERIDO:
+        return jsonify({"error": "Só é possível informar a NF manualmente de ordens no status Conferido/Ag. Fat."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    numero_nf = str(payload.get("numero_nf") or "").strip()
+    if not numero_nf:
+        return jsonify({"error": "Informe o número da NF."}), 400
+
+    from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+
+    try:
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao consultar NF %s no ERP para informar-nf", numero_nf)
+        return jsonify({"error": f"Falha ao consultar a NF no ERP: {exc}"}), 502
+
+    if not nota or not nota.get("autorizada"):
+        return jsonify({
+            "error": f"NF {numero_nf} não encontrada ou não autorizada no ERP. Confira o número antes de informar."
+        }), 400
+
+    agora = datetime.now()
+    usuario = session.get("username") or "desconhecido"
+    status_anterior = ordem.status
+
+    ordem.numero_nf = str(nota.get("numero") or numero_nf).strip()
+    ordem.status = svc.STATUS_FATURADO
+    ordem.faturado_at = agora
+    ordem.updated_at = agora
+
+    log_svc.registrar_log(
+        origem="fat",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_fat,
+        acao="informar_nf_manual",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=ordem.status,
+        divergente=False,
+        pos_faturamento=False,
+        diff_cabecalho=[{"campo": "numero_nf", "label": "Número da NF", "de": "", "para": ordem.numero_nf}],
+        diff_itens=[],
+    )
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "numero_nf": ordem.numero_nf,
+        "status": ordem.status,
+        "status_slug": svc.status_slug(ordem.status),
+    })
+
+
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/lookup", methods=["GET"])
 @roles_required(*ROLES)
 def lookup_ordem_conf_cega():

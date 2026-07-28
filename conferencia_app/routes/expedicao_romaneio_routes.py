@@ -11,10 +11,12 @@ from ..models import (
     ExpedicaoRomaneioExclusao,
     ExpedicaoOrdemFat,
     ExpedicaoOrdemFatItem,
+    ExpedicaoOrdemST,
     ExpedicaoConferenciaSimples,
 )
 from ..auth import permission_required, roles_required
 from ..services import expedicao_fat_service as fat_svc
+from ..services import expedicao_st_service as st_svc
 from ..services import cadastro_workflow_service as cad_svc
 from ..services import danfe_service
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
@@ -52,6 +54,8 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     agora = datetime.now()
 
     ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
+    if ordem is None:
+        ordem = ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
     registro = None
     if ordem is not None and ordem.expedicao_registro_id:
         registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
@@ -373,6 +377,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     # que veio no payload se a NF nao estiver rastreada em ExpedicaoOrdemFat
     # (ex.: NF fora do fluxo normal de faturamento).
     ordem_fat = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
+    ordem_st = None if ordem_fat else ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
     if ordem_fat:
         orcamento = ordem_fat.orcamento or payload.get("orcamento") or romaneio.orcamento
         cliente = ordem_fat.cliente or payload.get("cliente") or romaneio.cliente
@@ -391,6 +396,15 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         )
         oss_unicas = [str(v[0]).strip() for v in oss_itens if v[0] and str(v[0]).strip()]
         numeros_os = ", ".join(oss_unicas) if oss_unicas else (payload.get("numeros_os") or "")
+    elif ordem_st:
+        # Ordem de Servico de Terceiro (ST): mesma logica do FAT, usando o
+        # fornecedor no lugar do cliente (o fluxo ST nao tem orcamento).
+        orcamento = payload.get("orcamento") or romaneio.orcamento
+        cliente = ordem_st.fornecedor or payload.get("cliente") or romaneio.cliente
+        peso_bruto = _parse_float(ordem_st.peso_bruto, _parse_float(payload.get("peso_bruto")))
+        qtde_volumes = _parse_int(ordem_st.qtde_volumes, _parse_int(payload.get("qtde_volumes")))
+        especie_volumes = ordem_st.especie_volumes or payload.get("especie_volumes") or ""
+        numeros_os = ordem_st.n_os or payload.get("numeros_os") or ""
     else:
         orcamento = payload.get("orcamento") or romaneio.orcamento
         cliente = payload.get("cliente") or romaneio.cliente
@@ -427,9 +441,11 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
     
-    # Fluxo progressivo: a ordem cuja NF entrou no romaneio sai da etapa
-    # "Faturado" e passa para "Em Romaneio".
+    # Fluxo progressivo: a ordem (FAT ou ST — o numero_nf so existe em uma
+    # delas) cuja NF entrou no romaneio sai da etapa "Faturado" e passa para
+    # "Em Romaneio".
     fat_svc.marcar_em_romaneio_por_nf(numero_nf)
+    st_svc.marcar_em_romaneio_por_nf(numero_nf)
     
     return jsonify({
         "id": nf.id,
@@ -471,8 +487,10 @@ def remover_nf_do_romaneio(romaneio_id, nf_id):
     
     db.session.commit()
     
-    # Estorno da etapa atual: a ordem volta de "Em Romaneio" para "Faturado".
+    # Estorno da etapa atual: a ordem (FAT ou ST) volta de "Em Romaneio" para
+    # "Faturado".
     fat_svc.reverter_romaneio_por_nf(numero_nf_removido)
+    st_svc.reverter_romaneio_por_nf(numero_nf_removido)
     
     return jsonify({"message": "NF removida com sucesso."})
 
@@ -527,6 +545,11 @@ def expedir_romaneio(romaneio_id):
             registro_id=(registro.id if registro else None),
             usuario=session["username"],
         )
+        st_svc.marcar_expedido_por_nf(
+            nf.numero_nf,
+            registro_id=(registro.id if registro else None),
+            usuario=session["username"],
+        )
     db.session.commit()
 
     return jsonify({"message": "Romaneio expedido com sucesso."})
@@ -575,6 +598,7 @@ def estornar_expedicao_romaneio(romaneio_id):
     
     for nf in romaneio.nfs or []:
         fat_svc.reverter_expedicao_por_nf(nf.numero_nf)
+        st_svc.reverter_expedicao_por_nf(nf.numero_nf)
         # Reverte o Registro de Expedicao auto-finalizado de volta para
         # rascunho (mantem as fotos ja tiradas), permitindo re-expedir depois.
         numero_nf = str(nf.numero_nf or "").strip()
@@ -602,10 +626,17 @@ def _excluir_romaneio(romaneio: ExpedicaoRomaneio) -> None:
     tanto pela exclusao direta do Admin quanto pela aprovacao de uma
     solicitacao de exclusao."""
     numeros_nf = [nf.numero_nf for nf in (romaneio.nfs or [])]
+    # Remove as solicitacoes de exclusao (inclusive a que acabou de ser
+    # aprovada) antes do romaneio: sem isso, a linha "Aprovado" fica com
+    # romaneio_id apontando para um romaneio inexistente, violando a FK em
+    # bancos que a validam (Postgres/MySQL) e derrubando a aprovacao com
+    # Erro interno.
+    ExpedicaoRomaneioExclusao.query.filter_by(romaneio_id=romaneio.id).delete()
     db.session.delete(romaneio)
     db.session.commit()
     for numero_nf in numeros_nf:
         fat_svc.reverter_romaneio_por_nf(numero_nf)
+        st_svc.reverter_romaneio_por_nf(numero_nf)
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/deletar", methods=["DELETE"])
