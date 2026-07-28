@@ -103,7 +103,7 @@
     .msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
     .msg.err { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 
-    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(248, 250, 252, 0.78); backdrop-filter: blur(3px); z-index: 3000; align-items: center; justify-content: center; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
     .modal-card { background: #fff; border-radius: 16px; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18); padding: 32px 36px; max-width: 420px; width: 90%; text-align: center; animation: modalIn 0.18s ease-out; }
     @keyframes modalIn { from { transform: scale(0.93); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -513,6 +513,7 @@
         <p id="confirmText"></p>
         <div class="modal-actions">
             <button class="rec-btn rec-btn--success" type="button" onclick="responderConfirmacao(true)"><i class="fas fa-check"></i> Confirmar</button>
+            <button id="btnConfirmarCorrigir" class="rec-btn rec-btn--warning" type="button" onclick="responderConfirmacao('corrigir')" style="display:none;"><i class="fas fa-wrench"></i> Corrigir</button>
             <button class="rec-btn" type="button" onclick="responderConfirmacao(false)"><i class="fas fa-times"></i> Cancelar</button>
         </div>
     </div>
@@ -547,7 +548,6 @@
             <div id="vinculacoesContainer" style="display:flex; flex-direction:column; gap:16px;"></div>
         </div>
         <div style="padding:12px 20px; background:var(--rec-surface-alt); border-top:1px solid var(--rec-border); display:flex; justify-content:flex-end; gap:8px;">
-            <button id="btnConfirmarDivergencia" class="rec-btn rec-btn--warning" type="button" onclick="confirmarVinculacaoComDivergencia()" style="display:none;"><i class="fas fa-triangle-exclamation"></i> Confirmar mesmo com divergência</button>
             <button class="rec-btn" onclick="fecharModalVinculacao()"><i class="fas fa-times"></i> Fechar</button>
             <button class="rec-btn rec-btn--success" onclick="salvarVinculacoes()"><i class="fas fa-save"></i> Salvar Vinculações</button>
         </div>
@@ -1065,17 +1065,19 @@
 
     function toast(msg, tipo = 'ok') { deToast(msg, tipo === 'ok' ? 'ok' : 'err'); }
 
-    function confirmarAcao(msg) {
+    function confirmarAcao(msg, opcoes = {}) {
         if (confirmResolver) { confirmResolver(false); confirmResolver = null; }
         const overlay = document.getElementById('modalOverlay');
         document.getElementById('confirmText').textContent = msg;
+        const btnCorrigir = document.getElementById('btnConfirmarCorrigir');
+        if (btnCorrigir) btnCorrigir.style.display = opcoes.corrigir ? 'inline-flex' : 'none';
         overlay.classList.add('active');
         return new Promise((resolve) => { confirmResolver = resolve; });
     }
 
-    function responderConfirmacao(confirmado) {
+    function responderConfirmacao(resposta) {
         document.getElementById('modalOverlay').classList.remove('active');
-        if (confirmResolver) { confirmResolver(confirmado); confirmResolver = null; }
+        if (confirmResolver) { confirmResolver(resposta); confirmResolver = null; }
     }
 
     function fecharPendenciaObrigatoria() { document.getElementById('pendenciaOverlay').classList.remove('active'); }
@@ -1262,7 +1264,7 @@
         const wrap = document.getElementById('pedidoCompareWrap');
         if (!pedido) { abrirPendenciaObrigatoria('pedido'); return; }
         res.className = 'pedido-result warn';
-        res.textContent = 'Consultando planilha...';
+        res.textContent = 'Verificando o pedido de compras no GRV...';
         res.style.display = 'block';
         wrap.style.display = 'none';
         try {
@@ -1314,7 +1316,6 @@
 
     let xmlDados = {};
     let poDados = {};
-    let confirmacaoDivergenciaValor = { aceita: false, chave: '' };
     const CONVERSAO_OPCOES_AUDITOR = [
         { unidade: 'UN', fator: 1 }, { unidade: 'DUZIA', fator: 12 }, { unidade: 'DEZENA', fator: 10 },
         { unidade: 'CENTO', fator: 100 }, { unidade: 'MILHEIRO', fator: 1000 },
@@ -1356,65 +1357,6 @@
         }).join('');
     }
 
-    function obterDivergenciasValorSelecionadas() {
-        const pares = window.paresVinculacao || [];
-        const linhasPo = window.linhasPoVinculacao || [];
-        const selects = document.querySelectorAll('.vinculacao-select');
-        const divergencias = [];
-        for (const select of selects) {
-            if (select.disabled) continue;
-            const linhaPoSelecionada = select.value;
-            if (linhaPoSelecionada === '' || linhaPoSelecionada === null) continue;
-            const idxPar = parseInt(select.dataset.xmlIdx, 10);
-            const idxPo = parseInt(linhaPoSelecionada, 10);
-            if (!Number.isInteger(idxPar) || !Number.isInteger(idxPo)) continue;
-            const par = pares[idxPar];
-            const po = linhasPo[idxPo];
-            if (!par || !po) continue;
-            const nfValorUnit = Number(par.nf_valor_unit || 0);
-            const nfValorTotal = Number(par.nf_valor_total || 0);
-            const poValorUnit = Number(po.valor_unit || 0);
-            const poQtd = Number(po.qtd || 0);
-            const unitOk = Math.abs(nfValorUnit - poValorUnit) <= 0.01;
-            const totalOk = Math.abs((poQtd * poValorUnit) - nfValorTotal) <= 0.02;
-            if (!unitOk && !totalOk) divergencias.push({ linhaXml: Number(par.linha || (idxPar + 1)), linhaPo: idxPo + 1 });
-        }
-        return divergencias;
-    }
-
-    function atualizarEstadoConfirmacaoDivergencia() {
-        const btn = document.getElementById('btnConfirmarDivergencia');
-        if (!btn) return;
-        const divergencias = obterDivergenciasValorSelecionadas();
-        const chaveAtual = divergencias.map((d) => `${d.linhaXml}-${d.linhaPo}`).join('|');
-        if (chaveAtual !== confirmacaoDivergenciaValor.chave) {
-            confirmacaoDivergenciaValor.aceita = false;
-            confirmacaoDivergenciaValor.chave = chaveAtual;
-        }
-        if (!divergencias.length) { btn.style.display = 'none'; return; }
-        btn.style.display = 'inline-flex';
-        if (confirmacaoDivergenciaValor.aceita) {
-            btn.style.background = '#ecfdf5'; btn.style.color = '#166534'; btn.style.borderColor = '#86efac';
-            btn.innerHTML = `<i class="fas fa-check-circle"></i> Divergência de valor confirmada (${divergencias.length})`;
-        } else {
-            btn.style.background = '#fffbeb'; btn.style.color = '#92400e'; btn.style.borderColor = '#fcd34d';
-            btn.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Confirmar vinculação mesmo com divergência de valor (${divergencias.length})`;
-        }
-    }
-
-    function confirmarVinculacaoComDivergencia() {
-        const divergencias = obterDivergenciasValorSelecionadas();
-        if (!divergencias.length) {
-            confirmacaoDivergenciaValor = { aceita: false, chave: '' };
-            atualizarEstadoConfirmacaoDivergencia();
-            return;
-        }
-        confirmacaoDivergenciaValor.aceita = true;
-        confirmacaoDivergenciaValor.chave = divergencias.map((d) => `${d.linhaXml}-${d.linhaPo}`).join('|');
-        atualizarEstadoConfirmacaoDivergencia();
-        toast('Confirmação registrada. Agora você pode salvar a vinculação com divergência de valor.', 'ok');
-    }
-
     function montarResumoDivergenciasValor(divergencias) {
         if (!Array.isArray(divergencias) || !divergencias.length) return '';
         return divergencias.map((d) => `XML ${d.linhaXml}->PO ${d.linhaPo}`).join(', ');
@@ -1448,7 +1390,6 @@
     function renderPoLinkingInterface(pares, linhasPo, numeronota) {
         window.paresVinculacao = pares;
         window.linhasPoVinculacao = linhasPo;
-        confirmacaoDivergenciaValor = { aceita: false, chave: '' };
         const linhasPerfeitasReservadas = new Set(
             pares.filter((px) => Number.isInteger(px.po_index) && px.po_index >= 0 && px.qtd_ok && px.valor_ok).map((px) => Number(px.po_index))
         );
@@ -1463,10 +1404,12 @@
                 .map(({ po, idxPoOriginal }) => {
                     const selected = poSelecionada === idxPoOriginal ? 'selected' : '';
                     const codigoMaterial = (po.codigo_material || '').trim();
+                    const descricaoMaterial = (po.descricao_material || '').trim();
                     const pedidoPo = (po.pedido_compra || '').trim();
                     const pedidoTxt = pedidoPo ? `Pedido: ${pedidoPo} | ` : '';
+                    const descricaoTxt = descricaoMaterial ? ` - ${descricaoMaterial}` : '';
                     const codigoTxt = codigoMaterial ? ` | Cód. Material: ${codigoMaterial}` : '';
-                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
+                    return `<option value="${idxPoOriginal}" ${selected}>${pedidoTxt}Linha ${idxPoOriginal + 1}${descricaoTxt} - Qtd: ${Number(po.qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})} | R$ ${Number(po.valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}${codigoTxt}</option>`;
                 }).join('');
             const cardClasse = matchPerfeito ? 'ok' : 'divergencia';
             const statusHtml = matchPerfeito
@@ -1497,7 +1440,7 @@
                     </div>
                     <div class="vinculacao-select-wrap">
                         <label class="vinculacao-select-label">Selecione a linha do Pedido correspondente</label>
-                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" onchange="atualizarEstadoConfirmacaoDivergencia()" ${selectDisabled}>
+                        <select class="vinculacao-select" id="select_${idx}" data-item-id="${p.item_id}" data-xml-idx="${idx}" data-current-po="${linhaManualValida ? p.linha_po_vinculada : ''}" ${selectDisabled}>
                             <option value="">-- Sem vínculo manual (usar posição) --</option>
                             ${listaPoOptions}
                         </select>
@@ -1507,7 +1450,6 @@
                     </div>
                 </div>`;
         }).join('');
-        atualizarEstadoConfirmacaoDivergencia();
         document.getElementById('vinculacaoOverlay').classList.add('active');
     }
 
@@ -1522,7 +1464,6 @@
 
     function fecharModalVinculacao() {
         document.getElementById('vinculacaoOverlay').classList.remove('active');
-        confirmacaoDivergenciaValor = { aceita: false, chave: '' };
     }
 
     async function salvarVinculacoes() {
@@ -1589,12 +1530,15 @@
                 resultado.textContent = `Divergências após salvar: quantidade (${qtdDiv}) | valor (${valDiv}).`;
             }
             const vinculacaoOverlay = document.getElementById('vinculacaoOverlay');
-            const reabrirVinculacaoAoCancelar = vinculacaoOverlay?.classList.contains('active');
             if (vinculacaoOverlay) vinculacaoOverlay.classList.remove('active');
-            const confirmar = await confirmarAcao(`Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`);
-            if (!confirmar) {
-                toast('Vínculos salvos. Ajuste as linhas divergentes para prosseguir.', 'err');
-                if (reabrirVinculacaoAoCancelar) renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], auditorNotaSelecionada);
+            const resposta = await confirmarAcao(`Ainda existem ${paresDivergentes.length} divergência(s) após o reprocessamento. Deseja seguir mesmo com divergência?`, { corrigir: true });
+            if (resposta === 'corrigir') {
+                toast('Ajuste as linhas divergentes destacadas abaixo.', 'err');
+                renderPoLinkingInterface(reprocessado.pares || [], reprocessado.linhas_po || [], auditorNotaSelecionada);
+                return;
+            }
+            if (!resposta) {
+                toast('Vínculos salvos. As divergências continuam pendentes.', 'err');
                 return;
             }
             const divergenciasParaLog = paresDivergentes.filter((p) => Number.isInteger(p.po_index) && p.po_index >= 0)
