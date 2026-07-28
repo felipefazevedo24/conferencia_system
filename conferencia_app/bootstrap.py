@@ -569,78 +569,6 @@ def _ensure_item_nota_columns() -> None:
         conn.close()
 
 
-def _ensure_conserto_columns() -> None:
-    conn = db.engine.connect()
-    try:
-        cols_estoque = _get_column_names("conserto_estoque")
-        if cols_estoque and "tipo_controle" not in cols_estoque:
-            conn.execute(
-                db.text(
-                    "ALTER TABLE conserto_estoque ADD COLUMN tipo_controle VARCHAR(50) NOT NULL DEFAULT 'Meu em poder de terceiros'"
-                )
-            )
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_estoque",
-                "ix_conserto_estoque_tipo_controle",
-                "CREATE INDEX ix_conserto_estoque_tipo_controle ON conserto_estoque (tipo_controle)",
-            )
-        if cols_estoque and "tipo_operacao" not in cols_estoque:
-            conn.execute(
-                db.text(
-                    "ALTER TABLE conserto_estoque ADD COLUMN tipo_operacao VARCHAR(30) NOT NULL DEFAULT 'Conserto'"
-                )
-            )
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_estoque",
-                "ix_conserto_estoque_tipo_operacao",
-                "CREATE INDEX ix_conserto_estoque_tipo_operacao ON conserto_estoque (tipo_operacao)",
-            )
-        if cols_estoque and "cfop_remessa" not in cols_estoque:
-            conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN cfop_remessa VARCHAR(4)"))
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_estoque",
-                "ix_conserto_estoque_cfop_remessa",
-                "CREATE INDEX ix_conserto_estoque_cfop_remessa ON conserto_estoque (cfop_remessa)",
-            )
-        if cols_estoque and "numero_nf_remessa" not in cols_estoque:
-            conn.execute(db.text("ALTER TABLE conserto_estoque ADD COLUMN numero_nf_remessa VARCHAR(20)"))
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_estoque",
-                "ix_conserto_estoque_numero_nf_remessa",
-                "CREATE INDEX ix_conserto_estoque_numero_nf_remessa ON conserto_estoque (numero_nf_remessa)",
-            )
-
-        cols_baixa = _get_column_names("conserto_baixa")
-        if cols_baixa and "cfop_retorno" not in cols_baixa:
-            conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN cfop_retorno VARCHAR(4)"))
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_baixa",
-                "ix_conserto_baixa_cfop_retorno",
-                "CREATE INDEX ix_conserto_baixa_cfop_retorno ON conserto_baixa (cfop_retorno)",
-            )
-        if cols_baixa and "numero_nf_retorno" not in cols_baixa:
-            conn.execute(db.text("ALTER TABLE conserto_baixa ADD COLUMN numero_nf_retorno VARCHAR(20)"))
-            conn.commit()
-            _create_index_if_missing(
-                conn,
-                "conserto_baixa",
-                "ix_conserto_baixa_numero_nf_retorno",
-                "CREATE INDEX ix_conserto_baixa_numero_nf_retorno ON conserto_baixa (numero_nf_retorno)",
-            )
-    finally:
-        conn.close()
-
-
 def _ensure_expedicao_conferencia_simples_schema() -> None:
     conn = db.engine.connect()
     try:
@@ -975,11 +903,6 @@ def initialize_database(app: Flask) -> None:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
-            pass
-
-        try:
-            _ensure_conserto_columns()
-        except Exception:
             pass
 
         try:

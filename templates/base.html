@@ -54,8 +54,6 @@
                     <div class="submenu-panel" id="menu-recebimento">
                         {% if can_access('PAGE_PORTARIA') %}<a href="/portaria" class="list-group-item list-group-item-action"><i class="fas fa-file-import"></i> Inclusao XML</a>{% endif %}
                         {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
-                        {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
-                        {% if can_access('PAGE_CONSERTO') %}<a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>{% endif %}
                     </div>
                 </div>
                 {% else %}
@@ -73,11 +71,11 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS')
-                    or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO')
+                {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS')
+                    or can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_ROMANEIO')
                     or can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                     or can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_FROTA') or can_access('PAGE_LOGISTICA_RASTREAMENTO')
-                    or can_access('PAGE_CONSERTO') or can_access('PAGE_QUALIDADE') %}
+                    or can_access('PAGE_QUALIDADE') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-logistica" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-route"></i><span>Logística</span></span>
@@ -85,34 +83,23 @@
                     </button>
                     <div class="submenu-panel" id="menu-logistica">
 
-                        {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_ETIQUETAS') or can_access('PAGE_QUALIDADE') %}
+                        {% if can_access('PAGE_CONFERENCIA') or can_access('PAGE_FISCAL_LIBERADAS') or can_access('PAGE_QUALIDADE') %}
                         <div class="submenu-subgroup" data-subgroup="recebimento">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-box-open submenu-icon"></i> Recebimento <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
                                 {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
-                                {% if can_access('PAGE_ETIQUETAS') %}<a href="/recebimento/etiquetas" class="list-group-item list-group-item-action"><i class="fas fa-tag"></i> Etiquetas</a>{% endif %}
                                 {% if can_access('PAGE_QUALIDADE') %}<a href="/qualidade" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Qualidade</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}
 
-                        {% if can_access('PAGE_CONSERTO') %}
-                        <div class="submenu-subgroup" data-subgroup="estoque">
-                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-boxes-stacked submenu-icon"></i> Estoque <i class="fas fa-chevron-down submenu-chevron"></i></button>
-                            <div class="submenu-items">
-                                <a href="/conserto" class="list-group-item list-group-item-action"><i class="fas fa-tools"></i> Estoque em terceiros</a>
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_CONF_CEGA') or can_access('PAGE_EXPEDICAO_ADMIN') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
+                        {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') or can_access('PAGE_EXPEDICAO_CONF_CEGA') or can_access('PAGE_EXPEDICAO_ROMANEIO') %}
                         <div class="submenu-subgroup" data-subgroup="expedicao">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-truck-loading submenu-icon"></i> Expedição <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
                                 {% if can_access('PAGE_EXPEDICAO_CONF_CEGA') %}<a href="/expedicao/conferencia-cega" class="list-group-item list-group-item-action"><i class="fas fa-boxes-packing"></i> Conferência de expedição</a>{% endif %}
                                 {% if can_access('PAGE_EXPEDICAO_CONFERENCIA') %}<a href="/expedicao/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Registro de expedição</a>{% endif %}
-                                {% if can_access('PAGE_EXPEDICAO_ADMIN') %}<a href="/expedicao/admin" class="list-group-item list-group-item-action"><i class="fas fa-user-shield"></i> Controle admin</a>{% endif %}
                                 {% if can_access('PAGE_EXPEDICAO_ROMANEIO') %}<a href="/expedicao/romaneio" class="list-group-item list-group-item-action"><i class="fas fa-receipt"></i> Romaneios</a>{% endif %}
                             </div>
                         </div>

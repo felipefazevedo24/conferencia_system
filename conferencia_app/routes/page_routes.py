@@ -9,8 +9,6 @@ from ..models import (
     ActiveSession,
     AgendamentoSolicitacao,
     BoletoContaReceber,
-    ConsertoBaixa,
-    ConsertoEstoque,
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
     ItemNota,
@@ -109,34 +107,6 @@ HOME_MODULES = [
         "metric_key": "notas_lancadas",
     },
     {
-        "id": "etiquetas",
-        "title": "Etiquetas",
-        "subtitle": "Operação",
-        "description": "Imprima etiquetas com velocidade e controle sobre reimpressões.",
-        "href": "/recebimento/etiquetas",
-        "icon": "fa-tags",
-        "permission": "PAGE_ETIQUETAS",
-        "section": "Logística",
-        "tone": "teal",
-        "priority": 76,
-        "keywords": ["etiqueta", "impressao", "recebimento"],
-        "metric_key": "notas_lancadas",
-    },
-    {
-        "id": "conserto",
-        "title": "Controle de Conserto",
-        "subtitle": "Estoque especial",
-        "description": "Acompanhe saldos enviados, retornos, sugestões e confirmações de baixa.",
-        "href": "/conserto",
-        "icon": "fa-screwdriver-wrench",
-        "permission": "PAGE_CONSERTO",
-        "section": "Logística",
-        "tone": "violet",
-        "priority": 90,
-        "keywords": ["conserto", "retorno", "estoque", "baixa"],
-        "metric_key": "conserto_pendente",
-    },
-    {
         "id": "agendamento_solicitacao",
         "title": "Solicitar Coleta ou Entrega",
         "subtitle": "Abertura rápida",
@@ -232,20 +202,6 @@ HOME_MODULES = [
         "tone": "slate",
         "priority": 86,
         "keywords": ["expedicao", "saida", "registro", "embarque"],
-        "metric_key": "expedicao_aberta",
-    },
-    {
-        "id": "expedicao_admin",
-        "title": "Controle de Expedição",
-        "subtitle": "Admin",
-        "description": "Painel administrativo para decisões, aprovações e correções da saída.",
-        "href": "/expedicao/admin",
-        "icon": "fa-user-shield",
-        "permission": "PAGE_EXPEDICAO_ADMIN",
-        "section": "Logística",
-        "tone": "slate",
-        "priority": 70,
-        "keywords": ["expedicao", "admin", "controle", "saida"],
         "metric_key": "expedicao_aberta",
     },
     {
@@ -471,8 +427,6 @@ def _build_home_metrics() -> dict:
         "notas_concluidas": 0,
         "notas_lancadas": 0,
         "auditoria_pendente": 0,
-        "conserto_aberto": 0,
-        "conserto_pendente": 0,
         "agendamento_ativo": 0,
         "expedicao_aberta": 0,
         "boletos_gerados": 0,
@@ -505,12 +459,6 @@ def _build_home_metrics() -> dict:
             .filter(ItemNota.auditor_decisao == "PendenteDecisao")
             .scalar()
             or 0
-        )
-        metrics["conserto_aberto"] = ConsertoEstoque.query.filter_by(status="Em conserto").count()
-        metrics["conserto_pendente"] = (
-            ConsertoBaixa.query
-            .filter(ConsertoBaixa.status_baixa.in_(["Pendente de confirmacao", "Pendente de confirmação"]))
-            .count()
         )
         metrics["agendamento_ativo"] = (
             AgendamentoSolicitacao.query
@@ -584,10 +532,7 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
         "documento_entrada": _fmt_metric(value, "NF na fila", "NFs na fila"),
         "conferencia": _fmt_metric(value, "nota aguardando", "notas aguardando"),
         "notas_liberadas": _fmt_metric(value, "NF lançada", "NFs lançadas"),
-        "etiquetas": _fmt_metric(value, "NF liberada", "NFs liberadas"),
-        "conserto": _fmt_metric(value, "pendência de baixa", "pendências de baixa"),
         "expedicao_conferencia": _fmt_metric(value, "operação aberta", "operações abertas"),
-        "expedicao_admin": _fmt_metric(value, "operação aberta", "operações abertas"),
         "romaneios": _fmt_metric(value, "operação aberta", "operações abertas"),
         "faturamento": _fmt_metric(value, "boleto gerado", "boletos gerados"),
         "contas_receber": _fmt_metric(value, "boleto gerado", "boletos gerados"),
@@ -634,12 +579,6 @@ def _build_home_highlights(metrics: dict) -> list[dict]:
             "caption": "Conferidas e aguardando lançamento.",
             "tone": "orange",
         },
-        {
-            "label": "Pendências de conserto",
-            "value": int(metrics["conserto_pendente"]),
-            "caption": "Retornos aguardando sua validação.",
-            "tone": "violet",
-        },
     ]
 
 
@@ -660,8 +599,6 @@ def _build_priority_actions(modules: list[dict], metrics: dict) -> list[dict]:
                 }
             )
 
-    if metrics["conserto_pendente"] > 0:
-        add_action("conserto", "Validar baixas de conserto", f"{int(metrics['conserto_pendente'])} pendência(s) aguardando confirmação.")
     if metrics["notas_concluidas"] > 0:
         add_action("documento_entrada", "Fechar documento de entrada", f"{int(metrics['notas_concluidas'])} nota(s) prontas para lançamento.")
     if metrics["auditoria_pendente"] > 0:
@@ -821,12 +758,6 @@ def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
 
 
-@page_bp.route("/recebimento/etiquetas")
-@permission_required("PAGE_ETIQUETAS")
-def etiquetas_page():
-    return render_template("etiquetas.html", user=session.get("username", "Operação"))
-
-
 @page_bp.route("/historico")
 @permission_required("PAGE_ADMIN_HISTORICO")
 def historico_page():
@@ -903,12 +834,6 @@ def logistica_operacao_page():
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",
     )
-
-
-@page_bp.route("/expedicao/admin")
-@permission_required("PAGE_EXPEDICAO_ADMIN")
-def expedicao_admin_page():
-    return render_template("expedicao_admin.html", user=session["username"])
 
 
 @page_bp.route("/logistica/painel-motorista")

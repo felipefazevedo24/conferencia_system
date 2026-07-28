@@ -24,7 +24,6 @@ PERMISSION_CATALOG = {
     "PAGE_CONFERENCIA": "Recebimento > Conferencia cega",
     "PAGE_PORTARIA": "Recebimento > Inclusao XML (Portaria)",
     "PAGE_FISCAL_LIBERADAS": "Recebimento > NF-e liberadas",
-    "PAGE_ETIQUETAS": "Recebimento > Etiquetas",
     "PAGE_UPLOAD": "Compras > Pre-nota de entrada",
     "PAGE_XML_AUDITOR": "Compras > Auditor XML",
     "PAGE_LANCAMENTO": "Compras > Documento de entrada",
@@ -36,7 +35,6 @@ PERMISSION_CATALOG = {
     "PAGE_FINANCEIRO_RELATORIO_CUSTOS": "Controladoria > Contabilidade > Relatorio de custos",
     "PAGE_EXPEDICAO_CONFERENCIA": "Expedicao > Conferencia",
     "PAGE_EXPEDICAO_CONF_CEGA": "Expedicao > Conferencia de Expedicao (cega)",
-    "PAGE_EXPEDICAO_ADMIN": "Expedicao > Controle Admin",
     "PAGE_EXPEDICAO_ROMANEIO": "Expedicao > Romaneios",
     "PAGE_ADMIN_DASHBOARD": "Administração > Painel de controle",
     "PAGE_ADMIN_ATUALIZACOES": "Administração > Avisos de atualizações",
@@ -45,7 +43,6 @@ PERMISSION_CATALOG = {
     "PAGE_ADMIN_HISTORICO": "Administração > Logs e auditoria",
     "PAGE_ADMIN_ACESSOS": "Administração > Auditoria de acessos",
     "PAGE_ADMIN_EMAILS_NFE": "Administração > E-mails de NF-e",
-    "PAGE_CONSERTO": "Conserto > Central de Conserto",
     "PAGE_LOGISTICA_AGENDAMENTO": "Logistica > Gestao de Rotas",
     "PAGE_LOGISTICA_SOLICITACAO": "Logistica > Solicitar Coleta/Entrega",
     "PAGE_LOGISTICA_MOTORISTA": "Logistica > Painel do Motorista",  # motorista

@@ -4233,7 +4233,7 @@ def test_canhoto_expedicao_faz_fallback_local_quando_drive_sem_cota(tmp_path):
     assert arquivo.data == b"fake-canhoto-image"
 
 
-def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):
+def test_expedicao_faturamento_parcial_total(tmp_path):
     reports_dir = tmp_path / "eReports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -4281,7 +4281,6 @@ def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):
     assert detalhe.status_code == 200
     detalhe_data = detalhe.get_json()
     assert detalhe_data["total_items"] == 2
-    conferencia_id = detalhe_data["conferencia_id"]
 
     # Conferencia cega
     validacao = client.post(
@@ -4323,21 +4322,6 @@ def test_expedicao_faturamento_parcial_total_e_estorno_admin(tmp_path):
     )
     assert fechamento.status_code == 200
     assert fechamento.get_json()["status"] == "Fechada"
-
-    # Estorno total admin: deve reabrir
-    estorno = client.post(
-        "/api/admin/expedicao/estornar_total",
-        json={"conferencia_id": conferencia_id, "motivo": "Teste estorno"},
-    )
-    assert estorno.status_code == 200
-    assert estorno.get_json()["sucesso"] is True
-
-    detalhe_pos_estorno = client.get(
-        "/api/expedicao/conferencia/relatorio",
-        query_string={"file_name": html_file.name},
-    )
-    assert detalhe_pos_estorno.status_code == 200
-    assert detalhe_pos_estorno.get_json()["status"] == "Aberta"
 
 
 def test_validar_com_pendencia_retorna_instrucoes_operacionais(tmp_path):

@@ -180,9 +180,7 @@
             <div style="display:flex; gap:8px;">
                 <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
                 <button class="eui-btn eui-btn--primary" id="{{ prefix }}-btn-sync"><i class="fas fa-cloud-arrow-down"></i> Buscar da API</button>
-                {% if prefix == 'fat' %}
                 <button class="eui-btn eui-btn--warning" id="{{ prefix }}-btn-montar-romaneio" title="Reunir NFes faturadas (de uma ou mais ordens) em um novo romaneio"><i class="fas fa-receipt"></i> Montar Romaneio</button>
-                {% endif %}
             </div>
         </div>
 
@@ -271,7 +269,6 @@
         </div>
     </div>
 
-    {% if prefix == 'fat' %}
     <!-- ROMANEIOS — mesma tela de /expedicao/romaneio, embutida (embed=1) para
          não sair da Conferência de Expedição. -->
     <div id="{{ prefix }}-view-romaneios" class="ce-wrap hidden">
@@ -281,7 +278,6 @@
         </div>
         <iframe id="{{ prefix }}-iframe-romaneios" class="ce-romaneio-iframe"></iframe>
     </div>
-    {% endif %}
 
     <!-- CONFERÊNCIA CEGA -->
     <div id="{{ prefix }}-view-conferencia" class="ce-wrap hidden">
