@@ -170,8 +170,22 @@ def listar_romaneios():
             or busca in str(r.orcamento or "").lower()
             or busca in str(r.cliente or "").lower()
             or any(busca in str(nf.numero_nf or "").lower() for nf in (r.nfs or []))
+            or any(busca in str(nf.cliente or "").lower() for nf in (r.nfs or []))
         ]
     
+    def _clientes_do_romaneio(r):
+        # Um romaneio pode reunir NFs de clientes/fornecedores diferentes -
+        # lista todos os nomes distintos (na ordem em que aparecem), com
+        # fallback para o cliente do cabecalho se nenhuma NF tiver o campo.
+        nomes = []
+        for nf in (r.nfs or []):
+            nome = str(nf.cliente or "").strip()
+            if nome and nome not in nomes:
+                nomes.append(nome)
+        if not nomes and r.cliente:
+            nomes.append(r.cliente)
+        return nomes
+
     data = [
         {
             "id": r.id,
@@ -179,6 +193,7 @@ def listar_romaneios():
             "data_romaneio": r.data_romaneio.isoformat() if r.data_romaneio else None,
             "orcamento": r.orcamento,
             "cliente": r.cliente,
+            "clientes": _clientes_do_romaneio(r),
             "tipo_frete": r.tipo_frete,
             "peso_bruto_total": r.peso_bruto_total,
             "qtde_volumes_total": r.qtde_volumes_total,

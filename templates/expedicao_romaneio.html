@@ -19,9 +19,10 @@
     .rom-toolbar select { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
     
     /* LISTA DE ROMANEIOS */
-    .rom-list-wrap { overflow-x: auto; margin: 20px 0; }
+    .rom-list-wrap { overflow-x: auto; overflow-y: auto; max-height: 65vh; margin: 20px 0; }
     .rom-table { width: 100%; border-collapse: collapse; }
     .rom-table thead { background: #f3f4f6; }
+    .rom-table thead th { position: sticky; top: 0; background: #f3f4f6; z-index: 5; }
     .rom-table th { padding: 12px; text-align: left; font-size: 13px; font-weight: 700; border-bottom: 2px solid #e5e7eb; }
     .rom-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
     .rom-table tbody tr.rom-row-header:hover { background: #f9fafb; }
@@ -141,6 +142,7 @@
                         <th style="width: 40px;"></th>
                         <th style="width: 130px;">Número</th>
                         <th style="width: 100px;">Data</th>
+                        <th>Cliente</th>
                         <th style="width: 110px; text-align: center;">Ordens/NF</th>
                         <th style="width: 100px; text-align: center;">Volumes</th>
                         <th style="width: 90px;">Frete</th>
@@ -149,7 +151,7 @@
                     </tr>
                 </thead>
                 <tbody id="rom-tbody">
-                    <tr><td colspan="8" class="rom-empty">Carregando…</td></tr>
+                    <tr><td colspan="9" class="rom-empty">Carregando…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -347,7 +349,7 @@
         romaneiosCacheLista = romaneios;
         const tb = $("rom-tbody");
         if (!romaneios.length) {
-            tb.innerHTML = '<tr><td colspan="8" class="rom-empty">Nenhum romaneio encontrado</td></tr>';
+            tb.innerHTML = '<tr><td colspan="9" class="rom-empty">Nenhum romaneio encontrado</td></tr>';
             return;
         }
 
@@ -362,10 +364,16 @@
         const freteClass = r.tipo_frete === "CIF" ? "rom-badge--cif" : "rom-badge--fob";
         const aberto = expandidos.has(r.id);
 
+        const clientes = (r.clientes && r.clientes.length) ? r.clientes : (r.cliente ? [r.cliente] : []);
+        const clientesHtml = clientes.length
+            ? escapeHtml(clientes.join(", "))
+            : '<span style="color:#9ca3af;">—</span>';
+
         const linhaHeader = `<tr class="rom-row-header" data-id="${r.id}">
             <td><button class="rom-expand-btn${aberto ? " is-open" : ""}" onclick="toggleExpandirRomaneio(${r.id})" title="Ver detalhes"><i class="fas fa-chevron-right"></i></button></td>
             <td><strong>${escapeHtml(r.numero_romaneio)}</strong></td>
             <td>${new Date(r.data_romaneio).toLocaleDateString("pt-BR")}</td>
+            <td>${clientesHtml}</td>
             <td style="text-align: center;">${r.qtde_nfs}</td>
             <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
             <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span></td>
@@ -374,7 +382,7 @@
         </tr>`;
 
         const linhaDetalhe = `<tr class="rom-row-detail${aberto ? "" : " hidden"}" data-id="${r.id}">
-            <td colspan="8">${aberto ? renderDetalheRomaneio(r) : ""}</td>
+            <td colspan="9">${aberto ? renderDetalheRomaneio(r) : ""}</td>
         </tr>`;
 
         return linhaHeader + linhaDetalhe;
