@@ -347,34 +347,6 @@ HOME_MODULES = [
         "metric_key": "sessoes_ativas",
     },
     {
-        "id": "historico",
-        "title": "Logs e Auditoria",
-        "subtitle": "Administração",
-        "description": "Rastreie lançamentos, divergências e decisões críticas do sistema.",
-        "href": "/historico",
-        "icon": "fa-clipboard-list",
-        "permission": "PAGE_ADMIN_HISTORICO",
-        "section": "Administração",
-        "tone": "navy",
-        "priority": 66,
-        "keywords": ["historico", "log", "auditoria", "admin"],
-        "metric_key": "sessoes_ativas",
-    },
-    {
-        "id": "auditoria_acessos",
-        "title": "Auditoria de Acessos",
-        "subtitle": "Administração",
-        "description": "Monitore acessos sensíveis e acompanhe a atividade administrativa.",
-        "href": "/admin/acessos",
-        "icon": "fa-user-clock",
-        "permission": "PAGE_ADMIN_ACESSOS",
-        "section": "Administração",
-        "tone": "navy",
-        "priority": 64,
-        "keywords": ["acessos", "auditoria", "admin", "log"],
-        "metric_key": "sessoes_ativas",
-    },
-    {
         "id": "atualizacoes_cadastrais",
         "title": "Atualizações Cadastrais",
         "subtitle": "Administração",
@@ -758,12 +730,6 @@ def fiscal_liberadas_page():
     return render_template("notas_liberadas.html", user=session.get("username", "Fiscal"))
 
 
-@page_bp.route("/historico")
-@permission_required("PAGE_ADMIN_HISTORICO")
-def historico_page():
-    return render_template("historico.html", user=session["username"])
-
-
 @page_bp.route("/financeiro/faturamento")
 @permission_required("PAGE_FINANCEIRO_FATURAMENTO")
 def financeiro_faturamento_page():
@@ -902,12 +868,6 @@ def usuarios_page():
 @permission_required("PAGE_ADMIN_ATUALIZACOES")
 def atualizacoes_admin_page():
     return render_template("admin_atualizacoes.html", user=session["username"])
-
-
-@page_bp.route("/admin/acessos")
-@permission_required("PAGE_ADMIN_ACESSOS")
-def acessos_admin_page():
-    return render_template("admin_acessos.html", user=session["username"])
 
 
 @page_bp.route("/admin/atualizacoes-cadastrais")

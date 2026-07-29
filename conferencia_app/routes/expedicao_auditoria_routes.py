@@ -45,6 +45,10 @@ def _resultado_fat(ordem: ExpedicaoOrdemFat) -> dict:
         "status": ordem.status,
         "numero_nf": ordem.numero_nf,
         "created_at": _iso(ordem.created_at),
+        "excluido": bool(ordem.excluido),
+        "excluido_at": _iso(ordem.excluido_at),
+        "excluido_by": ordem.excluido_by,
+        "excluido_motivo": ordem.excluido_motivo,
         "historico": log_svc.listar_logs("fat", ordem.id),
     }
 
@@ -60,6 +64,10 @@ def _resultado_st(ordem: ExpedicaoOrdemST) -> dict:
         "status": ordem.status,
         "numero_nf": ordem.numero_nf,
         "created_at": _iso(ordem.created_at),
+        "excluido": bool(ordem.excluido),
+        "excluido_at": _iso(ordem.excluido_at),
+        "excluido_by": ordem.excluido_by,
+        "excluido_motivo": ordem.excluido_motivo,
         "historico": log_svc.listar_logs("st", ordem.id),
     }
 

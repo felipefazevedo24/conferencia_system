@@ -407,7 +407,7 @@ def test_fiscal_estorna_lancamento_e_volta_para_concluido(tmp_path):
         assert item.numero_lancamento is None
 
 
-def test_api_diferencia_estorno_de_lancamento_e_conferencia(tmp_path):
+def test_detalhes_nf_diferencia_estorno_de_lancamento_e_conferencia(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
@@ -438,16 +438,6 @@ def test_api_diferencia_estorno_de_lancamento_e_conferencia(tmp_path):
             )
         )
         db.session.commit()
-
-    response_estornos = client.get("/api/estornos_historico", query_string={"nota": "3000"})
-    assert response_estornos.status_code == 200
-    eventos = response_estornos.get_json()
-    assert [evento["tipo"] for evento in eventos[:2]] == [
-        "Estorno de conferência",
-        "Estorno de lançamento",
-    ]
-    assert eventos[0]["motivo"] == "Contagem divergente"
-    assert eventos[1]["motivo"] == "Ajuste fiscal de cadastro"
 
     response_detalhe = client.get("/api/detalhes_nf/3000")
     assert response_detalhe.status_code == 200
@@ -986,7 +976,7 @@ def test_documento_entrada_kpis_e_timeline_trazem_governanca(tmp_path):
     assert data_kpi["tempo_medio_importacao_lancamento_horas"] > 0
     assert data_kpi["produtividade_usuarios"][0]["usuario"] == "FELAZE"
 
-    response_timeline = client.get("/api/timeline/3000")
+    response_timeline = client.get("/api/conferencia/nota/3000/historico")
     assert response_timeline.status_code == 200
     timeline = response_timeline.get_json()
     assert any(item["tipo"] == "Governanca Fiscal" for item in timeline)
@@ -3283,21 +3273,6 @@ def test_excluir_nota_pendente_exige_confirmacao_e_motivo(tmp_path):
     )
     assert response.status_code == 200
     assert response.get_json()["sucesso"] is True
-
-
-def test_api_admin_acessos_retorna_paginacao(tmp_path):
-    app = build_test_app(tmp_path)
-    client = app.test_client()
-    login_admin(client)
-
-    response = client.get("/api/admin/acessos?page=1&per_page=20")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert "items" in data
-    assert "page" in data
-    assert "per_page" in data
-    assert "total" in data
-    assert "pages" in data
 
 
 def test_api_sla_dashboard_retorna_estrutura(tmp_path):

@@ -3,6 +3,7 @@
 Espelha a logica da aba de faturamento, porem usando a ORDEM DE COMPRA como
 base (Ordem de Compra -> ST -> OS -> material enviado)."""
 
+import os
 from datetime import datetime
 
 from flask import (
@@ -12,12 +13,19 @@ from flask import (
     request,
     session,
 )
+from werkzeug.utils import secure_filename
 
 from ..auth import permission_required, roles_required
 from ..extensions import db
-from ..models import ExpedicaoOrdemST, ExpedicaoOrdemSTItem
+from ..models import (
+    ExpedicaoOrdemST,
+    ExpedicaoOrdemSTItem,
+    ExpedicaoConferenciaSimples,
+    ExpedicaoConferenciaSimplesFoto,
+)
 from ..services import expedicao_st_service as svc
 from ..services import expedicao_log_service as log_svc
+from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 
 
 expedicao_st_bp = Blueprint("expedicao_st", __name__)
@@ -79,6 +87,223 @@ def _ordem_resumo(ordem: ExpedicaoOrdemST, total_itens: int | None = None) -> di
     }
 
 
+def _fotos_dir() -> str:
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    os.makedirs(fotos_dir, exist_ok=True)
+    return fotos_dir
+
+
+def _is_drive_quota_service_account_error(exc):
+    """Detecta o erro de service account sem cota de armazenamento no Drive."""
+    msg = str(exc).lower()
+    return (
+        "service account" in msg
+        and (
+            "cota" in msg
+            or "quota" in msg
+            or "storage" in msg
+            or "drive compartilhado" in msg
+        )
+    )
+
+
+def _salvar_foto_expedicao(foto, fotos_dir, prefix, registro_id):
+    """Persiste um FileStorage (Drive ou disco) e retorna (nome, caminho).
+
+    Quando o Drive esta configurado mas a service account nao tem cota de
+    armazenamento, faz fallback para salvar a foto localmente em vez de falhar."""
+    ext = os.path.splitext(secure_filename(foto.filename or ""))[1] or ".jpg"
+    nome = f"{prefix}_reg{registro_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    if using_drive():
+        try:
+            stored = upload_to_drive(foto, nome)
+            return nome, stored.file_path
+        except Exception as exc:  # noqa: BLE001
+            if not _is_drive_quota_service_account_error(exc):
+                raise
+            current_app.logger.warning(
+                "Drive sem cota para service account; salvando foto de pre-expedicao (ST) localmente: %s",
+                exc,
+            )
+            try:
+                foto.stream.seek(0)
+            except Exception:  # noqa: BLE001
+                pass
+    caminho = os.path.join(fotos_dir, nome)
+    foto.save(caminho)
+    return nome, caminho
+
+
+def _obter_ou_criar_registro_rascunho(ordem: ExpedicaoOrdemST, usuario):
+    """Localiza (ou cria) o Registro de Expedicao vinculado a uma ordem ST
+    faturada, para armazenar as fotos de material/cliente tiradas ANTES da
+    expedicao. Mesma logica do FAT, usando fornecedor/ordem de compra no
+    lugar de cliente/orcamento."""
+    registro = None
+    if ordem.expedicao_registro_id:
+        registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+    if registro is None and ordem.numero_nf:
+        registro = (
+            ExpedicaoConferenciaSimples.query
+            .filter_by(numero_nf=ordem.numero_nf, origem="Romaneio")
+            .filter(ExpedicaoConferenciaSimples.status.in_(
+                ["Pendente de expedição", "Pendente de expedicao"]))
+            .order_by(ExpedicaoConferenciaSimples.id.desc())
+            .first()
+        )
+    if registro is None:
+        registro = ExpedicaoConferenciaSimples(
+            orcamento=ordem.cod_ordem_compra or "",
+            ordem_compra=ordem.cod_ordem_compra or "",
+            numero_os=ordem.n_os or "",
+            tipo_referencia="Orcamento",
+            conferente=usuario,
+            numero_nf=ordem.numero_nf or "",
+            nome_cliente=ordem.fornecedor or "",
+            cliente_origem="Consyste",
+            nf_origem="Consyste",
+            origem="Romaneio",
+            status="Pendente de expedição",
+        )
+        db.session.add(registro)
+        db.session.flush()
+        ordem.expedicao_registro_id = registro.id
+    return registro
+
+
+def _fotos_preexpedicao_payload(registro):
+    """Serializa as fotos ja anexadas ao registro (material + cliente)."""
+    if registro is None:
+        return {"fotos_material": [], "foto_cliente_url": None}
+    fotos = (
+        ExpedicaoConferenciaSimplesFoto.query
+        .filter_by(conferencia_id=registro.id)
+        .order_by(ExpedicaoConferenciaSimplesFoto.id.asc())
+        .all()
+    )
+    return {
+        "registro_id": registro.id,
+        "fotos_material": [
+            {"id": f.id, "url": f"/api/expedicao/conferencia-simples/{registro.id}/foto/{f.id}"}
+            for f in fotos
+        ],
+        "foto_cliente_url": (
+            f"/api/expedicao/conferencia-simples/{registro.id}/foto-cliente"
+            if registro.foto_cliente_file_name else None
+        ),
+    }
+
+
+@expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/fotos-preexpedicao",
+    methods=["GET"],
+)
+@permission_required(PERMISSION)
+def listar_fotos_preexpedicao_st(cod_ordem_compra):
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    registro = None
+    if ordem.expedicao_registro_id:
+        registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+    elif ordem.numero_nf:
+        registro = (
+            ExpedicaoConferenciaSimples.query
+            .filter_by(numero_nf=ordem.numero_nf, origem="Romaneio")
+            .order_by(ExpedicaoConferenciaSimples.id.desc())
+            .first()
+        )
+    return jsonify(_fotos_preexpedicao_payload(registro))
+
+
+@expedicao_st_bp.route(
+    "/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>/fotos-preexpedicao",
+    methods=["POST"],
+)
+@roles_required(*ROLES)
+def upload_fotos_preexpedicao_st(cod_ordem_compra):
+    """Anexa fotos do material e/ou do cliente a uma ordem ST ja faturada,
+    ANTES da expedicao. Mesma logica do FAT (ver expedicao_fat_routes.py)."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+    if ordem.status not in (svc.STATUS_FATURADO, svc.STATUS_EM_ROMANEIO):
+        return jsonify({"error": "As fotos só podem ser tiradas quando a ordem está faturada."}), 400
+
+    fotos_material = [f for f in request.files.getlist("fotos_material") if f and f.filename]
+    foto_cliente = request.files.get("foto_cliente")
+    if not fotos_material and not (foto_cliente and foto_cliente.filename):
+        return jsonify({"error": "Envie ao menos uma foto do material ou do cliente."}), 400
+
+    usuario = session.get("username", "desconhecido")
+    registro = _obter_ou_criar_registro_rascunho(ordem, usuario)
+    fotos_dir = _fotos_dir()
+    agora = datetime.now()
+
+    try:
+        for foto in fotos_material:
+            nome, caminho = _salvar_foto_expedicao(foto, fotos_dir, "material", registro.id)
+            db.session.add(ExpedicaoConferenciaSimplesFoto(
+                conferencia_id=registro.id, file_name=nome, file_path=caminho,
+            ))
+        if foto_cliente and foto_cliente.filename:
+            nome, caminho = _salvar_foto_expedicao(foto_cliente, fotos_dir, "cliente", registro.id)
+            registro.foto_cliente_file_name = nome
+            registro.foto_cliente_file_path = caminho
+            registro.foto_cliente_uploaded_at = agora
+            registro.foto_cliente_uploaded_by = usuario
+    except Exception as exc:  # noqa: BLE001
+        db.session.rollback()
+        current_app.logger.exception("Falha ao salvar fotos de pre-expedicao (ST)")
+        return jsonify({"error": f"Falha ao salvar as fotos: {exc}"}), 502
+
+    registro.updated_at = agora
+    db.session.commit()
+    return jsonify({"sucesso": True, **_fotos_preexpedicao_payload(registro)})
+
+
+@expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_ordem_conf_st(cod_ordem_compra):
+    """Exclui (soft-delete) uma ordem ST do dashboard/fila. Mesma logica do
+    FAT (ver expedicao_fat_routes.py::excluir_ordem_conf_cega): a linha e o
+    historico continuam no banco, localizaveis pela Auditoria de Expedicao."""
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de compra nao encontrada."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+    if not motivo:
+        return jsonify({"error": "Informe o motivo da exclusão."}), 400
+
+    usuario = session.get("username", "desconhecido")
+    agora = datetime.now()
+    ordem.excluido = True
+    ordem.excluido_at = agora
+    ordem.excluido_by = usuario
+    ordem.excluido_motivo = motivo
+    ordem.updated_at = agora
+
+    log_svc.registrar_log(
+        origem="st",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_compra,
+        acao="exclusao",
+        usuario=usuario,
+        status_anterior=ordem.status,
+        status_novo=ordem.status,
+        divergente=bool(ordem.divergente),
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=[{"campo": "excluido", "label": "Exclusão", "de": "Não", "para": motivo}],
+        diff_itens=[],
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
 @expedicao_st_bp.route("/api/expedicao/conf-cega-st/sync", methods=["POST"])
 @roles_required(*ROLES)
 def sincronizar_conf_st():
@@ -96,7 +321,7 @@ def listar_ordens_conf_st():
     slug = (request.args.get("status") or "").strip().lower()
     busca = (request.args.get("q") or "").strip().lower()
 
-    ordens = ExpedicaoOrdemST.query.order_by(
+    ordens = ExpedicaoOrdemST.query.filter_by(excluido=False).order_by(
         ExpedicaoOrdemST.cod_ordem_compra.desc(),
     ).all()
 
@@ -186,7 +411,7 @@ def listar_ordens_conf_st():
 @expedicao_st_bp.route("/api/expedicao/conf-cega-st/ordens/<path:cod_ordem_compra>", methods=["GET"])
 @permission_required(PERMISSION)
 def obter_ordem_conf_st(cod_ordem_compra):
-    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
+    ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra, excluido=False).first()
     if not ordem:
         return jsonify({"error": "Ordem de compra nao encontrada."}), 404
 

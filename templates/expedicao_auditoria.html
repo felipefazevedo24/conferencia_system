@@ -27,13 +27,16 @@
     .aud-resultado.is-open .aud-chevron { transform: rotate(180deg); }
     .aud-resultado__body { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--eui-border); }
     .aud-resultado.is-open .aud-resultado__body { display: block; }
+    .aud-excluido { margin: 12px 0; padding: 10px 14px; border-radius: var(--eui-radius); background: var(--eui-danger-soft, #fee2e2); color: var(--eui-danger, #b91c1c); font-size: 12.5px; font-weight: 600; }
 
     .aud-historico { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
     .aud-hist-item { border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: var(--eui-radius); padding: 10px 14px; background: var(--eui-surface-2, #f8fafc); }
     .aud-hist-item.is-edicao { border-left-color: var(--eui-warning, #b45309); }
+    .aud-hist-item.is-exclusao { border-left-color: var(--eui-danger, #b91c1c); }
     .aud-hist-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
     .aud-hist-acao { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 2px 8px; border-radius: 999px; background: var(--eui-primary-soft, #e0e7ff); color: var(--eui-primary, #4338ca); }
     .aud-hist-item.is-edicao .aud-hist-acao { background: #fef3c7; color: #b45309; }
+    .aud-hist-item.is-exclusao .aud-hist-acao { background: #fee2e2; color: #b91c1c; }
     .aud-hist-meta { color: var(--eui-text-muted, #64748b); }
     .aud-hist-changes { font-size: 12px; margin: 2px 0 0; padding-left: 16px; }
     .aud-hist-changes li { margin: 2px 0; }
@@ -90,7 +93,8 @@
         }
         return '<div class="aud-historico">' + logs.map((h) => {
             const isEd = h.acao === "edicao";
-            const acaoLabel = isEd ? "Edição" : "Conferência";
+            const isExc = h.acao === "exclusao";
+            const acaoLabel = isExc ? "Exclusão" : (isEd ? "Edição" : "Conferência");
             const quando = fmtDataHora(h.created_at);
             const usuario = escapeHtml(h.usuario || "—");
             const codigo = h.codigo_interno ? `<span class="aud-hist-meta" style="font-family:monospace;">${escapeHtml(h.codigo_interno)}</span>` : "";
@@ -108,7 +112,7 @@
             const changesHtml = changes.length
                 ? `<ul class="aud-hist-changes">${changes.join("")}</ul>`
                 : '<div class="aud-hist-empty">Sem alterações de valores registradas.</div>';
-            return `<div class="aud-hist-item ${isEd ? "is-edicao" : ""}">
+            return `<div class="aud-hist-item ${isEd ? "is-edicao" : ""} ${isExc ? "is-exclusao" : ""}">
                 <div class="aud-hist-head">
                     <span class="aud-hist-acao">${acaoLabel}</span>
                     ${codigo}
@@ -130,6 +134,9 @@
         wrap.innerHTML = resultados.map((r, i) => {
             const origemClasse = r.origem === "st" ? "is-st" : "";
             const historicoHtml = renderHistoricoResultado(r.historico);
+            const excluidoHtml = r.excluido
+                ? `<div class="aud-excluido"><i class="fas fa-trash"></i> Excluído por ${escapeHtml(r.excluido_by || "—")} em ${fmtDataHora(r.excluido_at)} — motivo: ${escapeHtml(r.excluido_motivo || "—")}</div>`
+                : "";
             return `<div class="aud-resultado" id="aud-res-${i}">
                 <div class="aud-resultado__head" data-toggle="${i}">
                     <span class="aud-origem ${origemClasse}">${escapeHtml(r.origem_label)}</span>
@@ -140,7 +147,7 @@
                     <div class="aud-field"><span>NF</span><strong>${escapeHtml(r.numero_nf || "—")}</strong></div>
                     <i class="fas fa-chevron-down aud-chevron"></i>
                 </div>
-                <div class="aud-resultado__body">${historicoHtml}</div>
+                <div class="aud-resultado__body">${excluidoHtml}${historicoHtml}</div>
             </div>`;
         }).join("");
 

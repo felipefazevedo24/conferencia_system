@@ -622,6 +622,14 @@ class ExpedicaoOrdemFat(db.Model):
     expedido_by = db.Column(db.String(100))
     expedicao_registro_id = db.Column(db.Integer, index=True)
 
+    # Exclusao (Admin): a ordem some do dashboard/fila normal, mas a linha e
+    # todo o historico de conferencia continuam no banco para auditoria (ver
+    # expedicao_auditoria_routes.py) - nunca e apagada de fato.
+    excluido = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    excluido_at = db.Column(db.DateTime)
+    excluido_by = db.Column(db.String(100))
+    excluido_motivo = db.Column(db.String(300))
+
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
@@ -729,6 +737,13 @@ class ExpedicaoOrdemST(db.Model):
     expedido_at = db.Column(db.DateTime)
     expedido_by = db.Column(db.String(100))
     expedicao_registro_id = db.Column(db.Integer, index=True)
+
+    # Exclusao (Admin): mesma logica do FAT - some do dashboard, mas fica
+    # no banco para auditoria (ver expedicao_auditoria_routes.py).
+    excluido = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    excluido_at = db.Column(db.DateTime)
+    excluido_by = db.Column(db.String(100))
+    excluido_motivo = db.Column(db.String(300))
 
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)

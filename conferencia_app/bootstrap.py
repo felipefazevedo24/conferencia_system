@@ -755,6 +755,14 @@ def _ensure_expedicao_ordem_fat_columns() -> None:
             ))
         if "codigo_interno" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN codigo_interno VARCHAR(20)"))
+        if "excluido" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN excluido BOOLEAN NOT NULL DEFAULT 0"))
+        if "excluido_at" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN excluido_at DATETIME"))
+        if "excluido_by" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN excluido_by VARCHAR(100)"))
+        if "excluido_motivo" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN excluido_motivo VARCHAR(300)"))
         conn.commit()
 
         _backfill_codigo_interno(conn, "expedicao_ordem_fat", "OF-")
@@ -781,6 +789,14 @@ def _ensure_expedicao_ordem_st_columns() -> None:
             ))
         if "codigo_interno" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN codigo_interno VARCHAR(20)"))
+        if "excluido" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN excluido BOOLEAN NOT NULL DEFAULT 0"))
+        if "excluido_at" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN excluido_at DATETIME"))
+        if "excluido_by" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN excluido_by VARCHAR(100)"))
+        if "excluido_motivo" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN excluido_motivo VARCHAR(300)"))
         conn.commit()
 
         _backfill_codigo_interno(conn, "expedicao_ordem_st", "OC-")

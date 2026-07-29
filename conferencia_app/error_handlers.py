@@ -26,6 +26,15 @@ def register_error_handlers(app):
             return jsonify({"error": "Acesso negado"}), 403
         return render_template("acesso_negado.html", user=""), 403
 
+    @app.errorhandler(404)
+    def handle_not_found(err):
+        # Sem isso, uma rota /api inexistente devolvia a pagina HTML padrao do
+        # Flask; o front-end tenta ler a resposta como JSON e quebra com um
+        # erro generico de "JSON invalido" em vez do 404 real.
+        if request.path.startswith("/api") or request.path == "/validar":
+            return jsonify({"error": "Recurso nao encontrado"}), 404
+        return render_template("acesso_negado.html", user=""), 404
+
     @app.errorhandler(500)
     def handle_internal_error(err):
         import traceback

@@ -127,7 +127,7 @@ def listar_ordens_conf_cega():
     slug = (request.args.get("status") or "").strip().lower()
     busca = (request.args.get("q") or "").strip().lower()
 
-    ordens = ExpedicaoOrdemFat.query.order_by(
+    ordens = ExpedicaoOrdemFat.query.filter_by(excluido=False).order_by(
         ExpedicaoOrdemFat.cod_ordem_fat.desc(),
     ).all()
 
@@ -219,7 +219,7 @@ def listar_ordens_conf_cega():
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>", methods=["GET"])
 @permission_required(PERMISSION)
 def obter_ordem_conf_cega(cod_ordem_fat):
-    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat).first()
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
     if not ordem:
         return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
 
@@ -441,6 +441,48 @@ def upload_fotos_preexpedicao(cod_ordem_fat):
     db.session.commit()
     return jsonify({"sucesso": True, **_fotos_preexpedicao_payload(registro)})
 
+
+@expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>", methods=["DELETE"])
+@roles_required("Admin")
+def excluir_ordem_conf_cega(cod_ordem_fat):
+    """Exclui (soft-delete) uma ordem de faturamento do dashboard/fila.
+
+    A linha e todo o historico de conferencia NAO sao apagados do banco -
+    apenas somem da fila normal. Continuam localizaveis pela Auditoria de
+    Expedicao (codigo interno, cliente, ordem etc.), garantindo que a ordem
+    permaneca rastreavel mesmo apos a exclusao."""
+    ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod_ordem_fat, excluido=False).first()
+    if not ordem:
+        return jsonify({"error": "Ordem de faturamento nao encontrada."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+    if not motivo:
+        return jsonify({"error": "Informe o motivo da exclusão."}), 400
+
+    usuario = session.get("username", "desconhecido")
+    agora = datetime.now()
+    ordem.excluido = True
+    ordem.excluido_at = agora
+    ordem.excluido_by = usuario
+    ordem.excluido_motivo = motivo
+    ordem.updated_at = agora
+
+    log_svc.registrar_log(
+        origem="fat",
+        ordem_id=ordem.id,
+        cod_ordem=ordem.cod_ordem_fat,
+        acao="exclusao",
+        usuario=usuario,
+        status_anterior=ordem.status,
+        status_novo=ordem.status,
+        divergente=bool(ordem.divergente),
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
+        diff_cabecalho=[{"campo": "excluido", "label": "Exclusão", "de": "Não", "para": motivo}],
+        diff_itens=[],
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
 
 
 @expedicao_fat_bp.route("/api/expedicao/conf-cega/ordens/<int:cod_ordem_fat>/conferir", methods=["POST"])

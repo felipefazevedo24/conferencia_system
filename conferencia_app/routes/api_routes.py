@@ -1,47 +1,6 @@
 from flask import Blueprint
 api_bp = Blueprint("api", __name__)
-from sqlalchemy import desc
 
-from ..auth import permission_required
-
-from ..models import ActiveSession
-
-# Sessões ativas - ADMIN
-def listar_sessoes_ativas():
-    username = request.args.get("usuario")
-    query = ActiveSession.query.filter_by(is_active=True)
-    if username:
-        query = query.filter_by(username=username)
-    sessoes = query.order_by(desc(ActiveSession.last_activity)).all()
-    return jsonify([
-        {
-            "id": s.id,
-            "username": s.username,
-            "session_id": s.session_id,
-            "created_at": s.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            "last_activity": s.last_activity.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        for s in sessoes
-    ])
-
-def forcar_logout_sessao(sessao_id):
-    sessao = ActiveSession.query.get(sessao_id)
-    if not sessao or not sessao.is_active:
-        return jsonify({"sucesso": False, "msg": "Sessão não encontrada ou já inativa."}), 404
-    sessao.is_active = False
-    db.session.commit()
-    return jsonify({"sucesso": True, "msg": f"Sessão de {sessao.username} encerrada."})
-
-# Registrar rotas após definição de api_bp
-
-# Certifique-se de que api_bp está definido antes de registrar as rotas
-try:
-    api_bp
-except NameError:
-    from . import api_bp as api_bp
-
-api_bp.add_url_rule("/admin/sessoes", view_func=permission_required("PAGE_ADMIN_ACESSOS")(listar_sessoes_ativas), methods=["GET"])
-api_bp.add_url_rule("/admin/sessoes/<int:sessao_id>/logout", view_func=permission_required("PAGE_ADMIN_ACESSOS")(forcar_logout_sessao), methods=["POST"])
 from datetime import datetime
 import hashlib
 import csv
@@ -71,6 +30,7 @@ from ..auth import (
 )
 from ..extensions import db
 from ..models import (
+    ActiveSession,
     AvisoAtualizacao,
     ConferenciaLock,
     ExpedicaoConferencia,
@@ -973,39 +933,6 @@ def _manifestar_operacao_nao_realizada(numero_nota: str, usuario: str, justifica
     )
 
 
-def _admin_access_query_from_request():
-    q_usuario = (request.args.get("usuario") or "").strip().lower()
-    q_rota = (request.args.get("rota") or "").strip().lower()
-    q_metodo = (request.args.get("metodo") or "").strip().upper()
-    data_ini = _parse_date(request.args.get("data_ini"))
-    data_fim = _parse_date(request.args.get("data_fim"))
-
-    query = LogAcessoAdministrativo.query
-    if q_usuario:
-        query = query.filter(func.lower(LogAcessoAdministrativo.usuario).contains(q_usuario))
-    if q_rota:
-        query = query.filter(func.lower(LogAcessoAdministrativo.rota).contains(q_rota))
-    if q_metodo:
-        query = query.filter(LogAcessoAdministrativo.metodo == q_metodo)
-    if data_ini:
-        start_dt = datetime.combine(data_ini, datetime.min.time())
-        query = query.filter(LogAcessoAdministrativo.data >= start_dt)
-    if data_fim:
-        end_dt = datetime.combine(data_fim, datetime.max.time())
-        query = query.filter(LogAcessoAdministrativo.data <= end_dt)
-
-    return query
-
-
-def _serialize_admin_access_log(log):
-    return {
-        "usuario": log.usuario,
-        "rota": log.rota,
-        "metodo": log.metodo,
-        "data": log.data.strftime("%d/%m/%Y %H:%M:%S") if log.data else "---",
-    }
-
-
 def _build_historico_records(
     search_nota=None,
     status_filter=None,
@@ -1165,73 +1092,6 @@ def _build_historico_records(
     for rec in lista:
         rec.pop("data_ref", None)
     return lista
-
-
-def _build_estornos_records(search_nota=None):
-    eventos = []
-    termo = (search_nota or "").strip()
-
-    query_reversao = LogReversaoConferencia.query
-    query_estorno_lanc = LogEstornoLancamento.query
-    query_exclusao = LogExclusaoNota.query
-    if termo:
-        query_reversao = query_reversao.filter_by(numero_nota=termo)
-        query_estorno_lanc = query_estorno_lanc.filter_by(numero_nota=termo)
-        query_exclusao = query_exclusao.filter_by(numero_nota=termo)
-
-    reversoes_conf = query_reversao.all()
-    estornos_lanc = query_estorno_lanc.all()
-    exclusoes = query_exclusao.all()
-
-    for item in reversoes_conf:
-        eventos.append(
-            {
-                "nota": item.numero_nota,
-                "tipo": "Estorno de conferência",
-                "usuario": item.usuario_reversao,
-                "motivo": item.motivo,
-                "data": item.data_reversao,
-                "ordem": item.id,
-                "data_fmt": item.data_reversao.strftime("%d/%m/%Y %H:%M"),
-            }
-        )
-
-    for item in estornos_lanc:
-        motivo = item.motivo or ""
-        tipo = "Estorno de lançamento"
-        if motivo.startswith("[ESTORNO CONFER"):
-            tipo = "Estorno de conferência"
-            motivo = motivo.split("]", 1)[-1].strip() or motivo
-        eventos.append(
-            {
-                "nota": item.numero_nota,
-                "tipo": tipo,
-                "usuario": item.usuario_estorno,
-                "motivo": motivo,
-                "data": item.data_estorno,
-                "ordem": item.id,
-                "data_fmt": item.data_estorno.strftime("%d/%m/%Y %H:%M"),
-            }
-        )
-
-    for item in exclusoes:
-        eventos.append(
-            {
-                "nota": item.numero_nota,
-                "tipo": "Ajuste",
-                "usuario": item.usuario_exclusao,
-                "motivo": item.motivo,
-                "data": item.data_exclusao,
-                "ordem": item.id,
-                "data_fmt": item.data_exclusao.strftime("%d/%m/%Y %H:%M"),
-            }
-        )
-
-    eventos.sort(key=lambda e: (e["data"], e["ordem"]), reverse=True)
-    for e in eventos:
-        del e["data"]
-        del e["ordem"]
-    return eventos
 
 
 def _format_dt_br(value):
@@ -7211,18 +7071,6 @@ def api_historico():
     )
 
 
-@api_bp.route("/api/estornos_historico")
-@roles_required("Admin")
-def api_estornos_historico():
-    return jsonify(_build_estornos_records(request.args.get("nota")))
-
-
-@api_bp.route("/api/timeline/<nota>")
-@roles_required("Admin")
-def timeline_nota(nota):
-    return jsonify(_timeline_eventos(nota))
-
-
 @api_bp.route("/api/conferencia/nota/<nota>/historico")
 @roles_required("Admin", "Conferente", "Fiscal", "Logística")
 def api_conferencia_historico_nota(nota):
@@ -9444,64 +9292,6 @@ def restore_db():
             pass
 
 
-@api_bp.route("/api/historico/export.csv")
-@roles_required("Admin")
-def exportar_historico_csv():
-    records = _build_historico_records(
-        search_nota=request.args.get("nota"),
-        status_filter=request.args.get("status"),
-        fornecedor=request.args.get("fornecedor"),
-        conferente=request.args.get("conferente"),
-        revertido_por=request.args.get("revertido_por"),
-        data_ini=_parse_date(request.args.get("data_ini")),
-        data_fim=_parse_date(request.args.get("data_fim")),
-    )
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "nota",
-            "fornecedor",
-            "status",
-            "conferido_por",
-            "tempo_conf",
-            "divergencia",
-            "tentativas",
-            "codigo_lancamento",
-            "revertido_por",
-            "motivo_reversao",
-            "data_reversao",
-            "detalhe_divergencia",
-        ]
-    )
-    for r in records:
-        writer.writerow(
-            [
-                r["nota"],
-                r["fornecedor"],
-                r["status"],
-                r["conferido_por"],
-                r["tempo_conf"],
-                r["divergencia"],
-                r["tentativas"],
-                r["codigo_lancamento"],
-                r["revertido_por"],
-                r["motivo_reversao"],
-                r["data_reversao"],
-                r["detalhe_divergencia"],
-            ]
-        )
-
-    content = output.getvalue()
-    output.close()
-    return Response(
-        content,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=historico_conferencia.csv"},
-    )
-
-
 @api_bp.route("/api/stats")
 @login_required
 def get_stats():
@@ -9539,97 +9329,3 @@ def healthcheck():
     )
 
 
-@api_bp.route("/api/admin/acessos")
-@roles_required("Admin")
-def listar_acessos_admin():
-    page = _parse_positive_int(request.args.get("page"), default=1, min_value=1, max_value=100000)
-    per_page = _parse_positive_int(request.args.get("per_page"), default=50, min_value=10, max_value=200)
-
-    query = _admin_access_query_from_request()
-    total = query.count()
-    pages = max((total + per_page - 1) // per_page, 1)
-    if page > pages:
-        page = pages
-
-    logs = (
-        query.order_by(LogAcessoAdministrativo.data.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    return jsonify(
-        {
-            "items": [_serialize_admin_access_log(log) for log in logs],
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "pages": pages,
-        }
-    )
-
-
-@api_bp.route("/api/admin/acessos/export.csv")
-@roles_required("Admin")
-def exportar_acessos_admin_csv():
-    query = _admin_access_query_from_request()
-    logs = query.order_by(LogAcessoAdministrativo.data.desc()).limit(20000).all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["data", "usuario", "metodo", "rota"])
-    for log in logs:
-        writer.writerow(
-            [
-                log.data.strftime("%d/%m/%Y %H:%M:%S") if log.data else "---",
-                log.usuario,
-                log.metodo,
-                log.rota,
-            ]
-        )
-
-    content = output.getvalue()
-    output.close()
-    return Response(
-        content,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=auditoria_acessos_admin.csv"},
-    )
-
-
-@api_bp.route("/api/admin/acessos/resumo")
-@roles_required("Admin")
-def resumo_acessos_admin():
-    now = datetime.now()
-    last_24h = now - timedelta(hours=24)
-    last_7d = now - timedelta(days=7)
-
-    total_24h = LogAcessoAdministrativo.query.filter(LogAcessoAdministrativo.data >= last_24h).count()
-    total_7d = LogAcessoAdministrativo.query.filter(LogAcessoAdministrativo.data >= last_7d).count()
-
-    top_usuarios_raw = (
-        db.session.query(LogAcessoAdministrativo.usuario, func.count(LogAcessoAdministrativo.id).label("qtd"))
-        .filter(LogAcessoAdministrativo.data >= last_7d)
-        .group_by(LogAcessoAdministrativo.usuario)
-        .order_by(func.count(LogAcessoAdministrativo.id).desc())
-        .limit(5)
-        .all()
-    )
-
-    top_rotas_raw = (
-        db.session.query(LogAcessoAdministrativo.rota, func.count(LogAcessoAdministrativo.id).label("qtd"))
-        .filter(LogAcessoAdministrativo.data >= last_7d)
-        .group_by(LogAcessoAdministrativo.rota)
-        .order_by(func.count(LogAcessoAdministrativo.id).desc())
-        .limit(5)
-        .all()
-    )
-
-    return jsonify(
-        {
-            "total_24h": total_24h,
-            "total_7d": total_7d,
-            "top_usuarios": [{"usuario": u, "qtd": qtd} for u, qtd in top_usuarios_raw],
-            "top_rotas": [{"rota": r, "qtd": qtd} for r, qtd in top_rotas_raw],
-        }
-    )
