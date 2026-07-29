@@ -547,6 +547,26 @@
         .rc-hist-data { color: #64748b; font-size: 11px; font-weight: 700; margin-left: auto; font-family: monospace; }
         .rc-hist-desc { font-size: 13px; color: #334155; margin-top: 6px; font-weight: 600; }
         .rc-hist-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 22px; }
+
+        /* === LAYOUT ALINHADO À CONFERÊNCIA DE EXPEDIÇÃO (KPIs clicáveis + tabela com ID) === */
+        .eui-stat.is-clickable { cursor: pointer; }
+        .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+        .rc-table-wrap { overflow-x: auto; }
+        .rc-table { width: 100%; border-collapse: collapse; }
+        .rc-table thead th { text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-muted, #64748b); padding: 10px 12px; border-bottom: 1px solid var(--eui-border, #e2e8f0); white-space: nowrap; }
+        .rc-table tbody td { padding: 12px; border-bottom: 1px solid var(--eui-border, #eef2f7); font-size: 13px; color: #1e293b; vertical-align: middle; }
+        .rc-table tbody tr:hover { background: var(--eui-surface-2, #f8fafc); }
+        .rc-table .rc-cod { font-family: monospace; font-weight: 800; color: var(--eui-primary, #0f62c9); }
+        .rc-table .rc-nf { font-weight: 800; color: #14324d; }
+        .rc-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted, #64748b); font-weight: 600; }
+        .eui-btn--warning { background: var(--eui-warning, #d97706); border-color: var(--eui-warning, #d97706); color: #fff; }
+        .rc-modal-hist { position: fixed; inset: 0; z-index: 3400; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); padding: 20px; }
+        .rc-modal-hist.open { display: flex; }
+        .rc-modal-hist__box { background: #fff; border-radius: 16px; width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+        .rc-modal-hist__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f3; }
+        .rc-modal-hist__head h3 { margin: 0; font-size: 16px; font-weight: 800; color: #14324d; }
+        .rc-modal-hist__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #6b7280; }
+        .rc-modal-hist__body { padding: 16px 20px; overflow-y: auto; }
     </style>
 {% endblock %}
 
@@ -561,52 +581,80 @@
                 <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
             </div>
             <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
-                <input id="filtro-nota-pendente" class="eui-input" placeholder="Filtrar número da nota..." oninput="renderNotasPendentes()" style="min-width:240px;" />
+                <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" style="min-width:240px;" />
                 <button class="eui-btn eui-btn--primary" onclick="abrirConsultaOcorrencias()">
                     <i class="fas fa-history"></i> Histórico / Ocorrências
                 </button>
             </div>
         </header>
 
-        <!-- DASHBOARD RESUMO -->
+        <!-- KPIs / FLUXOS CLICÁVEIS (mesmo padrão da Conferência de Expedição) -->
         <div class="eui-stats" id="dashboard-resumo" style="margin-bottom:18px;">
-            <div class="eui-stat">
+            <div class="eui-stat is-clickable" data-filter="pendente" onclick="aplicarFiltroReceb('pendente', this)">
                 <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-inbox"></i></div>
                 <div class="eui-stat__body">
-                    <div class="eui-stat__label">Pendentes</div>
+                    <div class="eui-stat__label">Pendentes de conferência</div>
                     <div class="eui-stat__value" id="dash-pendentes">0</div>
-                    <div class="eui-stat__hint">Aguardando conferência</div>
+                    <div class="eui-stat__hint">Aguardando contagem física</div>
                 </div>
             </div>
-            <div class="eui-stat">
+            <div class="eui-stat is-clickable" data-filter="conferido" onclick="aplicarFiltroReceb('conferido', this)">
                 <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-clipboard-check"></i></div>
                 <div class="eui-stat__body">
-                    <div class="eui-stat__label">Em Conferência</div>
-                    <div class="eui-stat__value" id="dash-em-conf">0</div>
-                    <div class="eui-stat__hint">Sendo processadas</div>
+                    <div class="eui-stat__label">Conferido / Ag. Lançamento</div>
+                    <div class="eui-stat__value" id="dash-conferido">0</div>
+                    <div class="eui-stat__hint">Conferidas sem divergência</div>
                 </div>
             </div>
-            <div class="eui-stat">
+            <div class="eui-stat is-clickable" data-filter="divergencia" onclick="aplicarFiltroReceb('divergencia', this)">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Com divergência</div>
+                    <div class="eui-stat__value" id="dash-divergencia">0</div>
+                    <div class="eui-stat__hint">Conferidas com pendência</div>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="lancado" onclick="aplicarFiltroReceb('lancado', this)">
                 <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
                 <div class="eui-stat__body">
-                    <div class="eui-stat__label">Finalizadas Hoje</div>
-                    <div class="eui-stat__value" id="dash-finalizadas">0</div>
-                    <div class="eui-stat__hint">Conferidas com sucesso</div>
-                </div>
-            </div>
-            <div class="eui-stat">
-                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-exclamation-triangle"></i></div>
-                <div class="eui-stat__body">
-                    <div class="eui-stat__label">Críticas</div>
-                    <div class="eui-stat__value" id="dash-criticas">0</div>
-                    <div class="eui-stat__hint">Urgência máxima</div>
+                    <div class="eui-stat__label">Lançadas</div>
+                    <div class="eui-stat__value" id="dash-lancado">0</div>
+                    <div class="eui-stat__hint">Lançadas no ERP</div>
                 </div>
             </div>
         </div>
-        
+
         <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:10px;" class="alert-pendencia"></div>
-        
-        <div class="notas-grid" id="notas-pendentes"></div>
+
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-list-check"></i> Conferências de recebimento</h2>
+                    <p class="eui-card__sub" id="notas-subtitulo">Fila operacional das NF-es no recebimento.</p>
+                </div>
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="notas-btn-limpar-filtro" onclick="aplicarFiltroReceb(null, null)"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+            </div>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="rc-table-wrap">
+                    <table class="rc-table">
+                        <thead>
+                            <tr>
+                                <th width="120">ID Conferência</th>
+                                <th width="120">NF-e</th>
+                                <th>Fornecedor</th>
+                                <th width="200">Referência</th>
+                                <th width="150">Recebida em</th>
+                                <th width="180">Status</th>
+                                <th width="130" style="text-align:right;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notas-tbody">
+                            <tr><td colspan="7" class="rc-empty">Carregando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="conf-view" class="hidden">
@@ -840,12 +888,27 @@
         </div>
     </div>
 </div>
+
+<div id="modal-hist-nota" class="rc-modal-hist" role="dialog" aria-modal="true">
+    <div class="rc-modal-hist__box">
+        <div class="rc-modal-hist__head">
+            <h3><i class="fas fa-clock-rotate-left"></i> Histórico da NF <span id="hist-nota-ref">—</span></h3>
+            <button type="button" class="rc-modal-hist__close" onclick="fecharHistoricoNota()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rc-modal-hist__body">
+            <div id="rc-hist-modal-lista" class="rc-historico"></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let notaSel = "";
     let notasPendentesCache = [];
+    let metricasReceb = { pendente: 0, conferido: 0, divergencia: 0, lancado: 0 };
+    let filtroReceb = null;
+    let buscaRecebTimer = null;
     let dadosHistoricoCache = []; 
     let ultimosDadosValidacao = null;
     let notaReversaoSelecionada = null;
@@ -1005,11 +1068,40 @@
     // --- LOGICA DE CONFERENCIA ---
     async function carregarNotas() {
         try {
-            const res = await fetch('/api/pendentes_priorizadas');
+            const params = new URLSearchParams();
+            const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
+            if (termo) params.set('q', termo);
+            else if (filtroReceb) params.set('status', filtroReceb);
+            const qs = params.toString();
+            const res = await fetch('/api/conferencia/dashboard' + (qs ? ('?' + qs) : ''));
             const data = await res.json();
-            notasPendentesCache = Array.isArray(data) ? data : [];
+            metricasReceb = data.metricas || metricasReceb;
+            notasPendentesCache = Array.isArray(data.notas) ? data.notas : [];
+            atualizarDashboard();
             renderNotasPendentes();
         } catch (e) { mostrarMensagemOperacional('Erro ao carregar notas.', true); }
+    }
+
+    function agendarBuscaNotas() {
+        clearTimeout(buscaRecebTimer);
+        buscaRecebTimer = setTimeout(carregarNotas, 300);
+    }
+
+    function aplicarFiltroReceb(slug, elemento) {
+        filtroReceb = (filtroReceb === slug) ? null : slug;
+        document.querySelectorAll('#dashboard-resumo .eui-stat').forEach(el => el.classList.remove('is-active'));
+        if (filtroReceb) {
+            const alvo = elemento || document.querySelector(`#dashboard-resumo .eui-stat[data-filter="${filtroReceb}"]`);
+            if (alvo) alvo.classList.add('is-active');
+        }
+        const btn = document.getElementById('notas-btn-limpar-filtro');
+        if (btn) btn.classList.toggle('hidden', !filtroReceb);
+        const sub = document.getElementById('notas-subtitulo');
+        if (sub) {
+            const labels = { pendente: 'Pendentes de conferência.', conferido: 'Conferidas — aguardando lançamento.', divergencia: 'Conferidas com divergência.', lancado: 'Notas já lançadas no ERP.' };
+            sub.textContent = filtroReceb ? labels[filtroReceb] : 'Fila operacional das NF-es no recebimento.';
+        }
+        carregarNotas();
     }
 
     function getIniciais(nome) {
@@ -1034,78 +1126,88 @@
     }
 
     function atualizarDashboard() {
-        const pendentes = notasPendentesCache.length;
-        const criticas = notasPendentesCache.filter(n => n.prioridade_nivel >= 4).length;
-        document.getElementById('dash-pendentes').textContent = pendentes;
-        document.getElementById('dash-criticas').textContent = criticas;
-        // Em conferência e finalizadas hoje vêm do histórico (se disponível)
-        if (dadosHistoricoCache.length > 0) {
-            const hoje = new Date().toISOString().split('T')[0];
-            const finalizadasHoje = dadosHistoricoCache.filter(h => h.data_conf && h.data_conf.startsWith(hoje)).length;
-            document.getElementById('dash-finalizadas').textContent = finalizadasHoje;
-        }
+        document.getElementById('dash-pendentes').textContent = metricasReceb.pendente || 0;
+        document.getElementById('dash-conferido').textContent = metricasReceb.conferido || 0;
+        document.getElementById('dash-divergencia').textContent = metricasReceb.divergencia || 0;
+        document.getElementById('dash-lancado').textContent = metricasReceb.lancado || 0;
+    }
+
+    const RECEB_BADGE = {
+        pendente: 'eui-badge--warning',
+        conferido: 'eui-badge--info',
+        divergencia: 'eui-badge--danger',
+        lancado: 'eui-badge--success',
+    };
+
+    function _rcEsc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     }
 
     function renderNotasPendentes() {
-        const prioridadeLabels = { 0: 'Baixa', 1: 'Controlada', 2: 'Moderada', 3: 'Elevada', 4: 'Alta', 5: 'Crítica' };
-        const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
-        const notas = termo ? notasPendentesCache.filter(n => String(n.numero).includes(termo)) : notasPendentesCache;
-        const grid = document.getElementById('notas-pendentes');
+        const tbody = document.getElementById('notas-tbody');
+        const notas = notasPendentesCache;
 
         if (!notas.length) {
-            grid.innerHTML = `
-                <div class="empty-conferencia">
-                    <div>
-                        <div class="empty-conferencia-icon"><i class="fas fa-clipboard-check"></i></div>
-                        <h3>${termo ? 'Nenhuma NF encontrada' : 'Não há conferências pendentes'}</h3>
-                        <p>${termo ? 'Revise o número digitado ou limpe o filtro para voltar à fila completa.' : 'Todas as notas liberadas para recebimento já foram tratadas. Quando uma nova NF estiver pronta para contagem, ela aparecerá nesta fila.'}</p>
-                    </div>
-                </div>
-            `;
-            atualizarDashboard();
+            const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
+            const msg = termo ? 'Nenhuma NF encontrada para esta busca.'
+                : (filtroReceb ? 'Nenhuma NF neste fluxo.' : 'Não há conferências na fila.');
+            tbody.innerHTML = `<tr><td colspan="7" class="rc-empty">${msg}</td></tr>`;
             return;
         }
-        
-        grid.innerHTML = notas.map(n => {
-            const iniciais = getIniciais(n.fornecedor);
-            const horas = n.idade_horas || 0;
-            const tempoClass = getTempoEsperaClass(horas);
-            const tempoLabel = formatarTempoEspera(horas);
-            const isCritica = n.prioridade_nivel >= 4;
-            const isUrgente = horas >= 24 || n.prioridade_nivel === 5;
-            
-            return `
-            <div class="nota-card" onclick="abrir('${n.numero}')">
-                ${isUrgente ? '<span class="badge-urgente"><i class="fas fa-bolt"></i> URGENTE</span>' : ''}
-                <div style="display: flex; gap: 14px; align-items: flex-start;">
-                    <div class="fornecedor-avatar">${iniciais}</div>
-                    <div style="flex: 1; min-width: 0;">
-                        <span class="status-label"><i class="fas fa-circle" style="font-size:8px"></i> AGUARDANDO</span>
-                        <strong>NF-e: ${n.numero}</strong>
-                        <div style="font-size:12px; color:#64748b; font-weight:600; margin-top:4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${n.fornecedor}</div>
-                    </div>
-                </div>
-                <div style="font-size:11px; color:#334155; font-weight:700; margin-top:10px;">${n.remessa ? 'NF de remessa' : (n.material_cliente ? 'Material do cliente' : `Pedido: ${n.pedido_compra || '---'}`)}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <div style="font-size:11px; color:#475569; font-weight:700;">Liberada: ${n.data_liberacao || '---'}</div>
-                    <span class="tempo-espera ${tempoClass}"><i class="fas fa-clock"></i> ${tempoLabel}</span>
-                </div>
-                ${n.prioridade_nivel !== undefined ? `
-                    <div class="priority-row">
-                        <span class="priority-pill p${n.prioridade_nivel}">${prioridadeLabels[n.prioridade_nivel]}</span>
-                        <span class="priority-age">${n.idade_label || tempoLabel}</span>
-                    </div>
-                    <div class="priority-track">
-                        <div class="priority-fill p${n.prioridade_nivel}" style="width:${(n.prioridade_nivel/5)*100}%;"></div>
-                    </div>
-                ` : ''}
-                <div class="mini-progress">
-                    ${Array(5).fill(0).map((_, i) => `<div class="mini-progress-dot ${i < (n.prioridade_nivel || 0) ? (n.prioridade_nivel >= 4 ? 'danger' : n.prioridade_nivel >= 2 ? 'warning' : 'filled') : ''}"></div>`).join('')}
-                </div>
-            </div>
-        `}).join('');
-        
-        atualizarDashboard();
+
+        tbody.innerHTML = notas.map(n => {
+            const badge = RECEB_BADGE[n.status_slug] || 'eui-badge--neutral';
+            const ref = n.remessa ? 'NF de remessa'
+                : (n.material_cliente ? 'Material do cliente'
+                : (n.pedido_compra ? ('Pedido: ' + _rcEsc(n.pedido_compra)) : '—'));
+            const divTag = (n.tem_divergencia && n.status_slug !== 'divergencia')
+                ? ` <span class="eui-badge eui-badge--danger" style="margin-left:4px;"><span class="eui-badge__dot"></span>Diverg.</span>` : '';
+            const lanc = n.status_slug === 'lancado' && n.numero_lancamento
+                ? `<div style="font-size:11px; color:#64748b; margin-top:2px;">Lanç.: ${_rcEsc(n.numero_lancamento)}</div>` : '';
+            const acao = n.status_slug === 'pendente'
+                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}')"><i class="fas fa-barcode"></i> Conferir</button>`
+                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="verHistoricoNota('${_rcEsc(n.numero)}')"><i class="fas fa-clock-rotate-left"></i> Histórico</button>`;
+            return `<tr>
+                <td class="rc-cod">${_rcEsc(n.codigo_conferencia)}</td>
+                <td class="rc-nf">${_rcEsc(n.numero)}</td>
+                <td>${_rcEsc(n.fornecedor)}</td>
+                <td>${ref}</td>
+                <td>${_rcEsc(n.data_liberacao)}</td>
+                <td><span class="eui-badge ${badge}"><span class="eui-badge__dot"></span>${_rcEsc(n.status_label)}</span>${divTag}${lanc}</td>
+                <td style="text-align:right;">${acao}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function verHistoricoNota(nota) {
+        const modal = document.getElementById('modal-hist-nota');
+        document.getElementById('hist-nota-ref').textContent = nota;
+        const box = document.getElementById('rc-hist-modal-lista');
+        box.innerHTML = '<div class="rc-hist-empty">Carregando…</div>';
+        modal.classList.add('open');
+        try {
+            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico');
+            if (!r.ok) throw new Error();
+            const lista = await r.json();
+            box.innerHTML = (!lista || !lista.length)
+                ? '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>'
+                : lista.slice().reverse().map(e => {
+                    const cat = _rcCategoria(e.tipo);
+                    return `<div class="rc-hist-item ${cat.item}">
+                        <div class="rc-hist-head-row">
+                            <span class="rc-hist-tipo ${cat.tag}">${_rcEscape(e.tipo)}</span>
+                            <span class="rc-hist-data">${_rcEscape(e.data)}</span>
+                        </div>
+                        <div class="rc-hist-desc">${_rcEscape(e.descricao)}</div>
+                    </div>`;
+                }).join('');
+        } catch (e) {
+            box.innerHTML = '<div class="rc-hist-empty">Não foi possível carregar o histórico.</div>';
+        }
+    }
+
+    function fecharHistoricoNota() {
+        document.getElementById('modal-hist-nota').classList.remove('open');
     }
 
     function _rcEscape(s) {

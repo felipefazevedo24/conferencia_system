@@ -195,6 +195,23 @@ class ItemNota(db.Model):
     data_emissao = db.Column(db.DateTime, nullable=True, index=True)
 
 
+class ConferenciaRecebimento(db.Model):
+    """Identificador sequencial e rastreável por NF na conferência de recebimento.
+
+    Espelha o padrão da conferência de expedição (código interno por ordem):
+    cada NF que passa pela fila recebe um código estável ``RC-000123`` usado
+    na tela como "ID da conferência".
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), unique=True, index=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    @property
+    def codigo(self):
+        return f"RC-{self.id:06d}"
+
+
 class ClassificacaoContabilPadrao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fornecedor_norm = db.Column(db.String(180), nullable=False, default="", index=True)

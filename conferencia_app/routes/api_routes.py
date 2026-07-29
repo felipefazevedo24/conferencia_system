@@ -44,6 +44,7 @@ from ..models import (
     ExpedicaoFaturamentoItem,
     ExpedicaoRomaneioNF,
     ItemNota,
+    ConferenciaRecebimento,
     ChecklistRecebimento,
     BoletoContaReceber,
     ClassificacaoContabilItem,
@@ -5461,6 +5462,137 @@ def listar_pendentes_priorizadas():
             priorizadas.append(item)
     priorizadas.sort(key=lambda x: x["score"], reverse=True)
     return jsonify(priorizadas)
+
+
+def _codigos_conferencia_recebimento(numeros):
+    """Retorna {numero_nota: 'RC-000123'} criando o código quando faltar."""
+    numeros = [n for n in numeros if n]
+    if not numeros:
+        return {}
+    existentes = {
+        c.numero_nota: c
+        for c in ConferenciaRecebimento.query.filter(
+            ConferenciaRecebimento.numero_nota.in_(numeros)
+        ).all()
+    }
+    novos = [n for n in numeros if n not in existentes]
+    for numero in novos:
+        registro = ConferenciaRecebimento(numero_nota=numero)
+        db.session.add(registro)
+        existentes[numero] = registro
+    if novos:
+        db.session.commit()
+    return {numero: registro.codigo for numero, registro in existentes.items()}
+
+
+_RECEB_BUCKETS = {
+    "pendente": "Pendente de conferência",
+    "conferido": "Conferido / Ag. Lançamento",
+    "divergencia": "Com divergência",
+    "lancado": "Lançada",
+}
+
+
+@api_bp.route("/api/conferencia/dashboard")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+def conferencia_dashboard():
+    """Dashboard unificado da conferência de recebimento (layout igual à expedição).
+
+    Classifica cada NF em um dos quatro fluxos e devolve métricas + lista com
+    o ID rastreável (RC-XXXXXX) por conferência.
+    """
+    status_filtro = (request.args.get("status") or "").strip().lower()
+    termo = (request.args.get("q") or "").strip().lower()
+
+    statuses_por_nota = {}
+    reps = {}
+    counts = {}
+    datas = {}
+    for it in ItemNota.query.order_by(ItemNota.id.asc()).all():
+        numero = it.numero_nota
+        if not numero:
+            continue
+        statuses_por_nota.setdefault(numero, set()).add((it.status or "").strip())
+        counts[numero] = counts.get(numero, 0) + 1
+        if numero not in reps:
+            reps[numero] = it
+        dref = it.data_lancamento or it.fim_conferencia or it.data_importacao
+        if dref and (datas.get(numero) is None or dref > datas[numero]):
+            datas[numero] = dref
+
+    notas_com_diverg = {
+        r[0] for r in db.session.query(LogDivergencia.numero_nota).distinct().all() if r[0]
+    }
+
+    bucket_por_nota = {}
+    for numero, statuses in statuses_por_nota.items():
+        if "Pendente" in statuses:
+            bucket = "pendente"
+        elif "Lançado" in statuses:
+            bucket = "lancado"
+        elif "Concluído" in statuses:
+            bucket = "divergencia" if numero in notas_com_diverg else "conferido"
+        else:
+            continue
+        bucket_por_nota[numero] = bucket
+
+    metricas = {"pendente": 0, "conferido": 0, "divergencia": 0, "lancado": 0}
+    for bucket in bucket_por_nota.values():
+        metricas[bucket] = metricas.get(bucket, 0) + 1
+
+    if termo:
+        alvo = [
+            numero
+            for numero in bucket_por_nota
+            if termo in numero.lower()
+            or termo in ((reps[numero].fornecedor or "").lower())
+        ]
+    elif status_filtro in metricas:
+        alvo = [n for n, b in bucket_por_nota.items() if b == status_filtro]
+    else:
+        alvo = [
+            n for n, b in bucket_por_nota.items()
+            if b in ("pendente", "conferido", "divergencia")
+        ]
+
+    ordem_bucket = {"pendente": 0, "divergencia": 1, "conferido": 2, "lancado": 3}
+
+    def _sort_key(numero):
+        bucket = bucket_por_nota[numero]
+        data = datas.get(numero) or datetime.min
+        # Pendentes: mais antigas primeiro (maior urgência). Demais: mais recentes primeiro.
+        ordinal = data.timestamp() if bucket == "pendente" else -data.timestamp()
+        return (ordem_bucket.get(bucket, 9), ordinal)
+
+    alvo.sort(key=_sort_key)
+    LIMITE = 400
+    alvo = alvo[:LIMITE]
+
+    codigos = _codigos_conferencia_recebimento(alvo)
+
+    notas = []
+    for numero in alvo:
+        rep = reps[numero]
+        bucket = bucket_por_nota[numero]
+        data = datas.get(numero)
+        notas.append(
+            {
+                "codigo_conferencia": codigos.get(numero, "—"),
+                "numero": numero,
+                "fornecedor": rep.fornecedor or "—",
+                "pedido_compra": rep.pedido_compra or "",
+                "material_cliente": bool(rep.material_cliente),
+                "remessa": bool(rep.remessa),
+                "numero_lancamento": rep.numero_lancamento or "",
+                "total_itens": counts.get(numero, 0),
+                "status_slug": bucket,
+                "status_label": _RECEB_BUCKETS.get(bucket, bucket),
+                "tem_divergencia": numero in notas_com_diverg,
+                "data_liberacao": data.strftime("%d/%m/%Y %H:%M") if data else "---",
+            }
+        )
+
+    return jsonify({"metricas": metricas, "notas": notas})
 
 
 @api_bp.route("/api/excluir_nota_pendente", methods=["POST"])
