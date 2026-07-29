@@ -4262,6 +4262,41 @@ def test_canhoto_expedicao_faz_fallback_local_quando_drive_sem_cota(tmp_path):
     assert arquivo.data == b"fake-canhoto-image"
 
 
+def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
+    """Regressao: sincronizar_ordens() apagava e recriava os itens a cada
+    ciclo (o poll automatico roda a cada poucos minutos), trocando o id de
+    cada item no meio de uma conferencia em andamento. O conferente
+    preenchia as quantidades com os ids antigos (ja carregados no
+    navegador) e, ao finalizar, TODOS os itens apareciam como "sem
+    quantidade informada" mesmo estando preenchidos - porque o id enviado
+    nao batia mais com o id (novo) no banco."""
+    app = build_test_app(tmp_path)
+
+    linhas = [
+        {"cod_ordem_fat": 5001, "cliente": "Cliente A", "orcamento": "ORC1", "status": "em_aberto",
+         "cod_interno": "MAT1", "item": "Material 1", "n_os": "OS1", "qtde_a_faturar": 10},
+        {"cod_ordem_fat": 5001, "cliente": "Cliente A", "orcamento": "ORC1", "status": "em_aberto",
+         "cod_interno": "MAT2", "item": "Material 2", "n_os": "OS1", "qtde_a_faturar": 5},
+    ]
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoOrdemFat, ExpedicaoOrdemFatItem
+        from conferencia_app.services import expedicao_fat_service as svc
+
+        with patch.object(svc, "buscar_ordens_api", return_value=linhas):
+            svc.sincronizar_ordens()
+            ordem = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=5001).first()
+            ids_antes = sorted(it.id for it in ordem.itens)
+
+            # Simula o poll automatico rodando de novo enquanto o conferente
+            # ainda esta com a tela aberta (mesmos dados vindos da origem).
+            svc.sincronizar_ordens()
+            ordem_depois = ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=5001).first()
+            ids_depois = sorted(it.id for it in ordem_depois.itens)
+
+        assert ids_antes == ids_depois
+
+
 def test_expedicao_faturamento_parcial_total(tmp_path):
     reports_dir = tmp_path / "eReports"
     reports_dir.mkdir(parents=True, exist_ok=True)

@@ -253,21 +253,46 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
             ordem.dt_prevista_entrega = dt_prev
 
         # Enquanto pendente, mantem o snapshot dos itens sincronizado.
+        #
+        # IMPORTANTE: atualiza em vez de apagar-e-recriar (mesmo motivo do
+        # FAT, ver expedicao_fat_service.py::sincronizar_ordens) - preservar
+        # o id de cada item entre ciclos de sync evita que uma conferencia em
+        # andamento perca a correspondencia de ids e todos os itens voltem
+        # como "sem quantidade informada" ao finalizar, mesmo preenchidos.
         if ordem.status == STATUS_PENDENTE:
-            ExpedicaoOrdemSTItem.query.filter_by(ordem_id=ordem.id).delete()
+            existentes = {
+                it.linha: it
+                for it in ExpedicaoOrdemSTItem.query.filter_by(ordem_id=ordem.id).all()
+            }
+            linhas_atuais = set()
             for idx, r in enumerate(rows):
-                db.session.add(ExpedicaoOrdemSTItem(
-                    ordem_id=ordem.id,
-                    linha=idx,
-                    cod_interno=_first(r, "cod_interno", "codigo_interno"),
-                    item=_limpar_descricao(_first(r, "item", "descricao", "descricao_item")),
-                    n_os=_first(r, "n_os", "os", "ordem_servico", "num_os"),
-                    qtde_a_faturar=_parse_int(
-                        r.get("qtde_a_faturar")
-                        if r.get("qtde_a_faturar") is not None
-                        else r.get("qtde")
-                    ),
-                ))
+                linhas_atuais.add(idx)
+                cod_interno = _first(r, "cod_interno", "codigo_interno")
+                nome_item = _limpar_descricao(_first(r, "item", "descricao", "descricao_item"))
+                n_os = _first(r, "n_os", "os", "ordem_servico", "num_os")
+                qtde = _parse_int(
+                    r.get("qtde_a_faturar")
+                    if r.get("qtde_a_faturar") is not None
+                    else r.get("qtde")
+                )
+                item_db = existentes.get(idx)
+                if item_db:
+                    item_db.cod_interno = cod_interno
+                    item_db.item = nome_item
+                    item_db.n_os = n_os
+                    item_db.qtde_a_faturar = qtde
+                else:
+                    db.session.add(ExpedicaoOrdemSTItem(
+                        ordem_id=ordem.id,
+                        linha=idx,
+                        cod_interno=cod_interno,
+                        item=nome_item,
+                        n_os=n_os,
+                        qtde_a_faturar=qtde,
+                    ))
+            for linha, item_db in existentes.items():
+                if linha not in linhas_atuais:
+                    db.session.delete(item_db)
 
         # O endpoint /expedicao_terceiro retorna a FILA de ST. Guardamos a NF
         # para exibicao e para a baixa por expedicao (marcar_expedido_por_nf).

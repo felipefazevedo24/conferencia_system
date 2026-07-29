@@ -170,17 +170,46 @@ def sincronizar_ordens(timeout: int | None = None) -> dict:
 
         # Enquanto ainda pendente de conferencia, mantem o snapshot dos itens
         # sincronizado com a origem. Apos conferido, preserva o que foi contado.
+        #
+        # IMPORTANTE: atualiza em vez de apagar-e-recriar. O poll automatico
+        # (expedicao_sync_scheduler, a cada poucos minutos) chama esta funcao
+        # continuamente; se ela recriasse as linhas a cada ciclo, o id de cada
+        # item mudava no meio de uma conferencia em andamento. O conferente
+        # preenchia as quantidades usando os ids antigos (ja carregados no
+        # navegador), o sync rodava em paralelo e trocava os ids, e ao
+        # finalizar TODOS os itens apareciam como "sem quantidade informada"
+        # mesmo com os campos preenchidos certinho na tela. Casar por linha
+        # (posicao) preserva o id de quem continua na mesma posicao.
         if ordem.status == STATUS_PENDENTE:
-            ExpedicaoOrdemFatItem.query.filter_by(ordem_id=ordem.id).delete()
+            existentes = {
+                it.linha: it
+                for it in ExpedicaoOrdemFatItem.query.filter_by(ordem_id=ordem.id).all()
+            }
+            linhas_atuais = set()
             for idx, r in enumerate(rows):
-                db.session.add(ExpedicaoOrdemFatItem(
-                    ordem_id=ordem.id,
-                    linha=idx,
-                    cod_interno=str(r.get("cod_interno") or "").strip(),
-                    item=str(r.get("item") or "").strip(),
-                    n_os=str(r.get("n_os") or "").strip(),
-                    qtde_a_faturar=_parse_int(r.get("qtde_a_faturar")),
-                ))
+                linhas_atuais.add(idx)
+                cod_interno = str(r.get("cod_interno") or "").strip()
+                nome_item = str(r.get("item") or "").strip()
+                n_os = str(r.get("n_os") or "").strip()
+                qtde = _parse_int(r.get("qtde_a_faturar"))
+                item_db = existentes.get(idx)
+                if item_db:
+                    item_db.cod_interno = cod_interno
+                    item_db.item = nome_item
+                    item_db.n_os = n_os
+                    item_db.qtde_a_faturar = qtde
+                else:
+                    db.session.add(ExpedicaoOrdemFatItem(
+                        ordem_id=ordem.id,
+                        linha=idx,
+                        cod_interno=cod_interno,
+                        item=nome_item,
+                        n_os=n_os,
+                        qtde_a_faturar=qtde,
+                    ))
+            for linha, item_db in existentes.items():
+                if linha not in linhas_atuais:
+                    db.session.delete(item_db)
 
         # Deteccao de faturado (NF preenchida na origem).
         #  - Se ja estava Conferido -> Faturado (fluxo normal).
