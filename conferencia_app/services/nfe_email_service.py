@@ -963,6 +963,31 @@ def enviar_nfe_por_email(
     if not nota:
         return {"sucesso": False, "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.", "numero_nf": numero_nf}
 
+    # Idempotencia: este e o UNICO ponto por onde todo envio passa (auto no
+    # faturamento, scheduler, envio manual e reenvio), entao a trava fica
+    # aqui em vez de em cada chamador. Se ja existe um log Enviado/Pendente
+    # para esta NF, nao envia de novo - protege contra clique duplo, retry de
+    # rede/HTTP e sobreposicao entre gatilhos (ex.: auto do faturamento e o
+    # scheduler processando a mesma NF quase ao mesmo tempo). "Reenvio" e a
+    # unica origem que pode repetir, pois e uma acao explicita do usuario.
+    if origem != "Reenvio":
+        ja_enviado = EmailNFEnviado.query.filter(
+            EmailNFEnviado.numero_nf == nota.numero,
+            EmailNFEnviado.status.in_(["Enviado", "Pendente"]),
+        ).order_by(EmailNFEnviado.id.desc()).first()
+        if ja_enviado:
+            return {
+                "sucesso": ja_enviado.status == "Enviado",
+                "ja_enviado": True,
+                "log_id": ja_enviado.id,
+                "numero_nf": nota.numero,
+                "status": ja_enviado.status,
+                "erro": (
+                    f"NF-e {nota.numero} ja possui envio {ja_enviado.status.lower()} "
+                    f"(log {ja_enviado.id}); use Reenviar na tela de historico se necessario."
+                ),
+            }
+
     # Modo teste (homologacao): quando ligado, todos os envios sao redirecionados
     # para NFE_EMAIL_TESTE_DESTINO (felaze@colmac.com). Em producao (modo_teste=False)
     # o e-mail vai para o cliente/fornecedor resolvido + os e-mails internos em CC.

@@ -2846,6 +2846,60 @@ def test_envio_nfe_industrializacao_anexa_pdf_pedido_compra(tmp_path):
         assert "PedidoCompra-11560.pdf" in filenames
 
 
+def test_envio_nfe_nao_duplica_quando_chamado_duas_vezes(tmp_path):
+    app = build_test_app(tmp_path)
+    app.config.update(
+        MAIL_SENDER="fiscal@teste.com",
+        MAIL_PASSWORD="senha",
+        MAIL_SENDER_NAME="Fiscal Teste",
+        NFE_EMAIL_MODO_TESTE=False,
+    )
+    xml_bytes = build_test_nfe_xml(
+        "9400",
+        [{"codigo": "P1", "descricao": "Produto teste", "cfop": "5102", "quantidade": "1.0000"}],
+    )
+    chave = "5" * 44
+
+    mensagens = []
+
+    def fake_enviar_smtp(_app, msg, **_kwargs):
+        mensagens.append(msg)
+
+    with app.app_context(), patch(
+        "conferencia_app.services.nfe_email_service.buscar_nfe_emitida_erp",
+        return_value={
+            "numero": "9400",
+            "chave": chave,
+            "autorizada": True,
+            "dest_nome": "Cliente Teste",
+            "dest_cnpj": "11222333000144",
+            "email_danfe": "",
+            "xml_bytes": xml_bytes,
+            "pdf_bytes": b"%PDF-1.4 DANFE ERP",
+        },
+    ), patch(
+        "conferencia_app.services.nfe_email_service.enviar_mensagem_smtp",
+        side_effect=fake_enviar_smtp,
+    ):
+        from conferencia_app.services.nfe_email_service import enviar_nfe_por_email
+
+        # Simula clique duplo / retry de rede: a mesma NF chamada 2x seguidas,
+        # como aconteceria se o botao de faturar/enviar for acionado 2x ou se
+        # o gatilho automatico do faturamento sobrepuser o scheduler.
+        primeiro = enviar_nfe_por_email(
+            "9400", chave=chave, override_email="cliente@teste.com", origem="Auto", envio_assincrono=False,
+        )
+        segundo = enviar_nfe_por_email(
+            "9400", chave=chave, override_email="cliente@teste.com", origem="Auto", envio_assincrono=False,
+        )
+
+        assert primeiro["sucesso"] is True
+        assert segundo["sucesso"] is True
+        assert segundo.get("ja_enviado") is True
+        assert len(mensagens) == 1
+        assert EmailNFEnviado.query.filter_by(numero_nf="9400").count() == 1
+
+
 def test_scheduler_nfe_nao_repete_nota_duplicada_ou_aguardando_manual(tmp_path):
     app = build_test_app(tmp_path)
     app.config.update(NFE_EMAIL_AUTO_DESDE="2026-05-13")
