@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria de Expedição{% endblock %}
+{% block shell_title %}Auditoria de Expedição{% endblock %}
+
+{% block extra_head %}
+<style>
+    .aud-wrap { display: grid; gap: 18px; }
+    .aud-search { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .aud-search .eui-input-group { flex: 1; min-width: 260px; position: relative; }
+    .aud-search .eui-input-group i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--eui-text-muted, #8a94a6); font-size: 13px; pointer-events: none; }
+    .aud-search .eui-input-group .eui-input { width: 100%; padding-left: 34px; }
+    .aud-hint { font-size: 12px; color: var(--eui-text-muted, #64748b); margin-top: 6px; }
+    .aud-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+
+    .aud-resultado { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); overflow: hidden; }
+    .aud-resultado + .aud-resultado { margin-top: 12px; }
+    .aud-resultado__head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; }
+    .aud-resultado__head:hover { background: var(--eui-surface-2, #f8fafc); }
+    .aud-cod { font-family: monospace; font-weight: 700; color: var(--eui-primary, #4338ca); }
+    .aud-origem { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: var(--eui-primary-soft, #e0e7ff); color: var(--eui-primary, #4338ca); }
+    .aud-origem.is-st { background: #fef3c7; color: #b45309; }
+    .aud-field { display: flex; flex-direction: column; gap: 2px; }
+    .aud-field span { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--eui-muted); }
+    .aud-field strong { font-size: 13px; color: var(--eui-text); font-weight: 600; }
+    .aud-chevron { margin-left: auto; color: var(--eui-muted); transition: transform .15s ease; }
+    .aud-resultado.is-open .aud-chevron { transform: rotate(180deg); }
+    .aud-resultado__body { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--eui-border); }
+    .aud-resultado.is-open .aud-resultado__body { display: block; }
+
+    .aud-historico { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+    .aud-hist-item { border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: var(--eui-radius); padding: 10px 14px; background: var(--eui-surface-2, #f8fafc); }
+    .aud-hist-item.is-edicao { border-left-color: var(--eui-warning, #b45309); }
+    .aud-hist-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+    .aud-hist-acao { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 2px 8px; border-radius: 999px; background: var(--eui-primary-soft, #e0e7ff); color: var(--eui-primary, #4338ca); }
+    .aud-hist-item.is-edicao .aud-hist-acao { background: #fef3c7; color: #b45309; }
+    .aud-hist-meta { color: var(--eui-text-muted, #64748b); }
+    .aud-hist-changes { font-size: 12px; margin: 2px 0 0; padding-left: 16px; }
+    .aud-hist-changes li { margin: 2px 0; }
+    .aud-hist-de { color: var(--eui-danger); text-decoration: line-through; }
+    .aud-hist-para { color: var(--eui-success, #15803d); font-weight: 700; }
+    .aud-hist-empty { color: var(--eui-text-muted, #64748b); font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="aud-wrap">
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div>
+                <h2 class="eui-card__title"><i class="fas fa-magnifying-glass-chart"></i> Auditoria de Expedição</h2>
+                <p class="eui-card__sub">Ferramenta restrita a Admin. Localize qualquer ordem de faturamento (FAT) ou de serviço de terceiro (ST) e seu histórico completo de conferências, mesmo que ela tenha sumido da API de origem.</p>
+            </div>
+        </div>
+        <div class="eui-card__body">
+            <div class="aud-search">
+                <div class="eui-input-group">
+                    <i class="fas fa-search"></i>
+                    <input type="search" id="aud-busca" class="eui-input" autocomplete="off"
+                           placeholder="Código interno (OF-/OC-/CNF-), cliente/fornecedor, ordem de compra ou nº da ordem de faturamento...">
+                </div>
+                <button class="eui-btn eui-btn--primary" id="aud-btn-buscar" type="button"><i class="fas fa-search"></i> Buscar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__body">
+            <div id="aud-resultados"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function escapeHtml(str) {
+        return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function fmtDataHora(iso) {
+        if (!iso) return "—";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return "—";
+        return d.toLocaleString("pt-BR");
+    }
+
+    function renderHistoricoResultado(historico) {
+        const logs = Array.isArray(historico) ? historico : [];
+        if (!logs.length) {
+            return '<div class="aud-hist-empty">Nenhuma conferência/edição registrada.</div>';
+        }
+        return '<div class="aud-historico">' + logs.map((h) => {
+            const isEd = h.acao === "edicao";
+            const acaoLabel = isEd ? "Edição" : "Conferência";
+            const quando = fmtDataHora(h.created_at);
+            const usuario = escapeHtml(h.usuario || "—");
+            const codigo = h.codigo_interno ? `<span class="aud-hist-meta" style="font-family:monospace;">${escapeHtml(h.codigo_interno)}</span>` : "";
+            const tags = [];
+            if (h.divergente) tags.push('<span class="aud-hist-meta"><i class="fas fa-triangle-exclamation"></i> Divergente</span>');
+            if (h.pos_faturamento) tags.push('<span class="aud-hist-meta"><i class="fas fa-clock-rotate-left"></i> Pós-faturamento</span>');
+            const changes = [];
+            (h.cabecalho || []).forEach((c) => {
+                changes.push(`<li>${escapeHtml(c.label || c.campo)}: <span class="aud-hist-de">${escapeHtml(String(c.de ?? "—"))}</span> → <span class="aud-hist-para">${escapeHtml(String(c.para ?? "—"))}</span></li>`);
+            });
+            (h.itens || []).forEach((it) => {
+                const nome = escapeHtml(it.item || it.cod_interno || ("Item " + it.id));
+                changes.push(`<li>${nome}: <span class="aud-hist-de">${escapeHtml(String(it.de ?? "—"))}</span> → <span class="aud-hist-para">${escapeHtml(String(it.para ?? "—"))}</span></li>`);
+            });
+            const changesHtml = changes.length
+                ? `<ul class="aud-hist-changes">${changes.join("")}</ul>`
+                : '<div class="aud-hist-empty">Sem alterações de valores registradas.</div>';
+            return `<div class="aud-hist-item ${isEd ? "is-edicao" : ""}">
+                <div class="aud-hist-head">
+                    <span class="aud-hist-acao">${acaoLabel}</span>
+                    ${codigo}
+                    <span class="aud-hist-meta"><i class="fas fa-user"></i> ${usuario}</span>
+                    <span class="aud-hist-meta"><i class="fas fa-clock"></i> ${quando}</span>
+                    ${tags.join(" ")}
+                </div>
+                ${changesHtml}
+            </div>`;
+        }).join("") + '</div>';
+    }
+
+    function renderResultados(resultados) {
+        const wrap = document.getElementById("aud-resultados");
+        if (!resultados.length) {
+            wrap.innerHTML = '<div class="aud-empty">Nenhum resultado encontrado.</div>';
+            return;
+        }
+        wrap.innerHTML = resultados.map((r, i) => {
+            const origemClasse = r.origem === "st" ? "is-st" : "";
+            const historicoHtml = renderHistoricoResultado(r.historico);
+            return `<div class="aud-resultado" id="aud-res-${i}">
+                <div class="aud-resultado__head" data-toggle="${i}">
+                    <span class="aud-origem ${origemClasse}">${escapeHtml(r.origem_label)}</span>
+                    ${r.codigo_interno ? `<span class="aud-cod">${escapeHtml(r.codigo_interno)}</span>` : '<span class="aud-hint">Sem código interno registrado</span>'}
+                    <div class="aud-field"><span>Cliente/Fornecedor</span><strong>${escapeHtml(r.cliente_fornecedor || "—")}</strong></div>
+                    <div class="aud-field"><span>Ordem</span><strong>${escapeHtml(r.cod_ordem || "—")}</strong></div>
+                    <div class="aud-field"><span>Status</span><strong>${escapeHtml(r.status || "—")}</strong></div>
+                    <div class="aud-field"><span>NF</span><strong>${escapeHtml(r.numero_nf || "—")}</strong></div>
+                    <i class="fas fa-chevron-down aud-chevron"></i>
+                </div>
+                <div class="aud-resultado__body">${historicoHtml}</div>
+            </div>`;
+        }).join("");
+
+        wrap.querySelectorAll("[data-toggle]").forEach((head) => {
+            head.addEventListener("click", () => {
+                head.closest(".aud-resultado").classList.toggle("is-open");
+            });
+        });
+    }
+
+    async function buscar() {
+        const q = document.getElementById("aud-busca").value.trim();
+        const wrap = document.getElementById("aud-resultados");
+        if (!q) {
+            wrap.innerHTML = '<div class="aud-empty">Digite um código interno, cliente/fornecedor ou nº de ordem para buscar.</div>';
+            return;
+        }
+        wrap.innerHTML = '<div class="aud-empty"><i class="fas fa-spinner fa-spin"></i> Buscando...</div>';
+        try {
+            const res = await fetch(`/api/expedicao/auditoria/buscar?q=${encodeURIComponent(q)}`);
+            if (!res.ok) throw new Error("Falha na busca");
+            const data = await res.json();
+            renderResultados(data.resultados || []);
+        } catch (err) {
+            wrap.innerHTML = '<div class="aud-empty">Erro ao buscar. Tente novamente.</div>';
+        }
+    }
+
+    document.getElementById("aud-btn-buscar").addEventListener("click", buscar);
+    document.getElementById("aud-busca").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") buscar();
+    });
+    document.getElementById("aud-resultados").innerHTML = '<div class="aud-empty">Digite um código interno, cliente/fornecedor ou nº de ordem para buscar.</div>';
+</script>
+{% endblock %}

@@ -237,6 +237,7 @@ def sincronizar_ordens(timeout: int | None = None, cod_empresa: int | None = Non
             ordem = ExpedicaoOrdemST(cod_ordem_compra=cod, status=STATUS_PENDENTE)
             db.session.add(ordem)
             db.session.flush()
+            ordem.codigo_interno = f"OC-{ordem.id:06d}"
             criadas += 1
         else:
             atualizadas += 1

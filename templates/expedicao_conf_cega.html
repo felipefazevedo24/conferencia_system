@@ -144,6 +144,12 @@
     .ce-actions-menu button.is-danger { color: #dc2626; }
     .ce-actions-menu hr { border: none; border-top: 1px solid #eef0f3; margin: 4px 0; }
 
+    /* Menu suspenso do toolbar (dashboard) e das ações admin (rodapé da conferência). */
+    .ce-dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); padding: 8px; flex-direction: column; gap: 6px; min-width: 240px; }
+    .ce-dropdown-menu.open { display: flex; }
+    .ce-dropdown-menu .eui-btn { width: 100%; justify-content: flex-start; white-space: nowrap; }
+    .ce-dropdown-menu--up { top: auto; bottom: calc(100% + 6px); }
+
     /* Modal de fotos de pré-expedição (material + cliente, ordem Faturada). */
     .ce-fotos-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px); z-index: 10050; display: flex; align-items: center; justify-content: center; padding: 16px; }
     .ce-fotos-overlay.hidden { display: none; }
@@ -177,10 +183,13 @@
                 </div>
                 <button class="eui-btn eui-btn--ghost hidden" id="{{ prefix }}-btn-limpar-busca" title="Limpar busca"><i class="fas fa-xmark"></i></button>
             </div>
-            <div style="display:flex; gap:8px;">
-                <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
-                <button class="eui-btn eui-btn--primary" id="{{ prefix }}-btn-sync"><i class="fas fa-cloud-arrow-down"></i> Buscar da API</button>
-                <button class="eui-btn eui-btn--warning" id="{{ prefix }}-btn-montar-romaneio" title="Reunir NFes faturadas (de uma ou mais ordens) em um novo romaneio"><i class="fas fa-receipt"></i> Montar Romaneio</button>
+            <div style="position:relative;">
+                <button class="eui-btn eui-btn--ghost" type="button" id="{{ prefix }}-btn-toolbar-menu"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
+                <div class="ce-dropdown-menu" id="{{ prefix }}-toolbar-menu">
+                    <button class="eui-btn eui-btn--ghost" id="{{ prefix }}-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <button class="eui-btn eui-btn--primary" id="{{ prefix }}-btn-sync"><i class="fas fa-cloud-arrow-down"></i> Buscar da API</button>
+                    <button class="eui-btn eui-btn--warning" id="{{ prefix }}-btn-montar-romaneio" title="Reunir NFes faturadas (de uma ou mais ordens) em um novo romaneio"><i class="fas fa-receipt"></i> Montar Romaneio</button>
+                </div>
             </div>
         </div>
 
@@ -379,9 +388,14 @@
             </div>
             <div class="eui-card__foot">
                 <button class="eui-btn eui-btn--subtle" id="{{ prefix }}-btn-voltar-2">Sair sem salvar</button>
-                <button class="eui-btn eui-btn--danger ce-admin-only" id="{{ prefix }}-btn-estornar-conf" style="display:none"><i class="fas fa-rotate-left"></i> Estornar conferência</button>
-                <button class="eui-btn eui-btn--warning ce-admin-only" id="{{ prefix }}-btn-seguir-sem-contagem" style="display:none"><i class="fas fa-forward"></i> Seguir p/ faturamento sem contagem</button>
-                <button class="eui-btn eui-btn--danger ce-admin-only" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
+                <div class="ce-admin-only" id="{{ prefix }}-admin-menu-wrap" style="display:none; position:relative;">
+                    <button class="eui-btn eui-btn--ghost" type="button" id="{{ prefix }}-btn-admin-menu"><i class="fas fa-user-shield"></i> Ações admin</button>
+                    <div class="ce-dropdown-menu ce-dropdown-menu--up" id="{{ prefix }}-admin-menu">
+                        <button class="eui-btn eui-btn--danger" id="{{ prefix }}-btn-estornar-conf" style="display:none"><i class="fas fa-rotate-left"></i> Estornar conferência</button>
+                        <button class="eui-btn eui-btn--warning" id="{{ prefix }}-btn-seguir-sem-contagem" style="display:none"><i class="fas fa-forward"></i> Seguir p/ faturamento sem contagem</button>
+                        <button class="eui-btn eui-btn--danger" id="{{ prefix }}-btn-finalizar-sem-conf" style="display:none"><i class="fas fa-user-shield"></i> Finalizar sem conferir</button>
+                    </div>
+                </div>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
             </div>
         </div>
@@ -1096,8 +1110,11 @@
                 const romInfo = (o.status_slug === "romaneio" || o.status_slug === "expedido") ? badgeRomaneio(o.romaneio) : "";
                 const c = cfg.colunas(o);
                 const prev = fmtDataBR(typeof cfg.previsao === "function" ? cfg.previsao(o) : null);
+                const codInterno = o.codigo_interno
+                    ? `<div style="margin-top:2px; font-size:11px; color:var(--eui-text-muted, #8a94a6); font-family:monospace;">${escapeHtml(o.codigo_interno)}</div>`
+                    : "";
                 return `<tr>
-                    <td><b>${escapeHtml(c[0])}</b></td>
+                    <td><b>${escapeHtml(c[0])}</b>${codInterno}</td>
                     <td>${escapeHtml(c[1]) || "—"}</td>
                     <td>${escapeHtml(c[2]) || "—"}</td>
                     <td>${prev}</td>
@@ -1212,9 +1229,13 @@
                 const changesHtml = changes.length
                     ? `<ul class="ce-hist-changes">${changes.join("")}</ul>`
                     : (isEd ? '<div class="ce-hist-empty">Sem alterações de valores.</div>' : '<div class="ce-hist-empty">Conferência registrada.</div>');
+                const codInternoLog = h.codigo_interno
+                    ? `<span class="ce-hist-meta" style="font-family:monospace;">${escapeHtml(h.codigo_interno)}</span>`
+                    : "";
                 return `<div class="ce-hist-item ${isEd ? "is-edicao" : ""}">
                     <div class="ce-hist-head">
                         <span class="ce-hist-acao">${acaoLabel}</span>
+                        ${codInternoLog}
                         <span class="ce-hist-meta"><i class="fas fa-user"></i> ${usuario}</span>
                         <span class="ce-hist-meta"><i class="fas fa-clock"></i> ${quando}</span>
                         ${tags.join(" ")}
@@ -1235,7 +1256,10 @@
                     : (editando ? "Editar conferência" : "Detalhes");
                 const icone = semConf ? "fa-triangle-exclamation" : (editando ? "fa-pen-to-square" : "fa-barcode");
                 const c = cfg.colunas(o);
-                el("conf-titulo").innerHTML = `<i class="fas ${icone}"></i> ${titulo} · ${escapeHtml(c[0])}`;
+                const codInternoTitulo = o.codigo_interno
+                    ? ` <span style="font-family:monospace; font-size:12px; color:var(--eui-text-muted, #8a94a6); font-weight:normal;">(${escapeHtml(o.codigo_interno)})</span>`
+                    : "";
+                el("conf-titulo").innerHTML = `<i class="fas ${icone}"></i> ${titulo} · ${escapeHtml(c[0])}${codInternoTitulo}`;
                 el("conf-a").textContent = c[0] || "—";
                 el("conf-b").textContent = c[1] || "—";
                 el("conf-c").textContent = c[2] || "—";
@@ -1276,6 +1300,8 @@
                     if (bEst) bEst.style.display = podeEstornar ? "" : "none";
                     if (bSem) bSem.style.display = podeFinalizarSem ? "" : "none";
                     if (bSeguir) bSeguir.style.display = podeSeguirSemContagem ? "" : "none";
+                    const wrapAdmin = el("admin-menu-wrap");
+                    if (wrapAdmin) wrapAdmin.style.display = (podeEstornar || podeFinalizarSem || podeSeguirSemContagem) ? "" : "none";
                 }
 
                 el("view-dashboard").classList.add("hidden");
@@ -1689,6 +1715,28 @@
         if (btnMontarRomaneio) {
             btnMontarRomaneio.addEventListener("click", () => abrirModalMontarRomaneioGeral(cfg.apiBase, abrirViewRomaneios));
         }
+
+        // Menus suspensos (toolbar do dashboard e ações admin da conferência):
+        // agrupam botões que antes ficavam soltos lado a lado.
+        function wireDropdown(btnName, menuName) {
+            const btn = el(btnName);
+            const menu = el(menuName);
+            if (!btn || !menu) return;
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                menu.classList.toggle("open");
+            });
+            menu.addEventListener("click", (e) => {
+                if (e.target.closest("button")) menu.classList.remove("open");
+            });
+            document.addEventListener("click", (e) => {
+                if (!menu.classList.contains("open")) return;
+                if (menu.contains(e.target) || btn.contains(e.target)) return;
+                menu.classList.remove("open");
+            });
+        }
+        wireDropdown("btn-toolbar-menu", "toolbar-menu");
+        wireDropdown("btn-admin-menu", "admin-menu");
 
         el("tbody").addEventListener("click", (e) => {
             const kebabBtn = e.target.closest("[data-kebab]");

@@ -55,6 +55,7 @@ def _ordem_resumo(ordem: ExpedicaoOrdemST, total_itens: int | None = None) -> di
         total_itens = ExpedicaoOrdemSTItem.query.filter_by(ordem_id=ordem.id).count()
     return {
         "id": ordem.id,
+        "codigo_interno": ordem.codigo_interno,
         "cod_ordem_compra": ordem.cod_ordem_compra,
         "fornecedor": ordem.fornecedor,
         "n_os": ordem.n_os,

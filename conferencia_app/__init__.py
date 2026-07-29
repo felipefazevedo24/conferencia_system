@@ -29,6 +29,7 @@ from .routes.expedicao_avulso_routes import expedicao_avulso_bp
 from .routes.expedicao_fat_routes import expedicao_fat_bp
 from .routes.expedicao_st_routes import expedicao_st_bp
 from .routes.expedicao_romaneio_routes import expedicao_romaneio_bp
+from .routes.expedicao_auditoria_routes import expedicao_auditoria_bp
 from .routes.facilities_routes import facilities_bp
 from .routes.nfe_email_routes import nfe_email_bp
 from .routes.page_routes import page_bp
@@ -64,6 +65,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_st_bp)
     app.register_blueprint(expedicao_avulso_bp)
     app.register_blueprint(expedicao_romaneio_bp)
+    app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(qualidade_bp)

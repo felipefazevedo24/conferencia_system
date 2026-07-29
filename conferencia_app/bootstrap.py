@@ -753,7 +753,15 @@ def _ensure_expedicao_ordem_fat_columns() -> None:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_fat ADD COLUMN operacao_tipo VARCHAR(20) NOT NULL DEFAULT 'nacional'"
             ))
+        if "codigo_interno" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_fat ADD COLUMN codigo_interno VARCHAR(20)"))
         conn.commit()
+
+        _backfill_codigo_interno(conn, "expedicao_ordem_fat", "OF-")
+        _create_index_if_missing(
+            conn, "expedicao_ordem_fat", "ix_expedicao_ordem_fat_codigo_interno",
+            "CREATE UNIQUE INDEX ix_expedicao_ordem_fat_codigo_interno ON expedicao_ordem_fat (codigo_interno)",
+        )
     finally:
         conn.close()
 
@@ -771,9 +779,55 @@ def _ensure_expedicao_ordem_st_columns() -> None:
             conn.execute(db.text(
                 "ALTER TABLE expedicao_ordem_st ADD COLUMN conferido_pos_faturamento BOOLEAN NOT NULL DEFAULT 0"
             ))
+        if "codigo_interno" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_ordem_st ADD COLUMN codigo_interno VARCHAR(20)"))
         conn.commit()
+
+        _backfill_codigo_interno(conn, "expedicao_ordem_st", "OC-")
+        _create_index_if_missing(
+            conn, "expedicao_ordem_st", "ix_expedicao_ordem_st_codigo_interno",
+            "CREATE UNIQUE INDEX ix_expedicao_ordem_st_codigo_interno ON expedicao_ordem_st (codigo_interno)",
+        )
     finally:
         conn.close()
+
+
+def _ensure_expedicao_conferencia_log_columns() -> None:
+    """Garante a coluna de codigo interno na trilha de auditoria da expedicao."""
+    if not _has_table("expedicao_conferencia_log"):
+        return
+    cols = _get_column_names("expedicao_conferencia_log")
+    conn = db.engine.connect()
+    try:
+        if "codigo_interno" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_conferencia_log ADD COLUMN codigo_interno VARCHAR(20)"))
+        conn.commit()
+
+        _backfill_codigo_interno(conn, "expedicao_conferencia_log", "CNF-")
+        _create_index_if_missing(
+            conn, "expedicao_conferencia_log", "ix_expedicao_conferencia_log_codigo_interno",
+            "CREATE UNIQUE INDEX ix_expedicao_conferencia_log_codigo_interno ON expedicao_conferencia_log (codigo_interno)",
+        )
+    finally:
+        conn.close()
+
+
+def _backfill_codigo_interno(conn, table_name: str, prefixo: str) -> None:
+    """Preenche codigo_interno das linhas antigas (NULL) com {prefixo}{id:06d}.
+
+    Feito linha a linha via ORM/parametros (nao concatenacao de string) para
+    ficar portavel entre SQLite/Postgres/MySQL."""
+    rows = conn.execute(
+        db.text(f"SELECT id FROM {table_name} WHERE codigo_interno IS NULL")
+    ).fetchall()
+    for (row_id,) in rows:
+        codigo = f"{prefixo}{row_id:06d}"
+        conn.execute(
+            db.text(f"UPDATE {table_name} SET codigo_interno = :codigo WHERE id = :id"),
+            {"codigo": codigo, "id": row_id},
+        )
+    if rows:
+        conn.commit()
 
 
 def _ensure_solicitacao_nf_columns() -> None:
@@ -917,6 +971,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_expedicao_ordem_st_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_conferencia_log_columns()
         except Exception:
             pass
 

@@ -70,6 +70,8 @@ def registrar_log(
         created_at=datetime.now(),
     )
     db.session.add(log)
+    db.session.flush()
+    log.codigo_interno = f"CNF-{log.id:06d}"
     return log
 
 
@@ -89,6 +91,7 @@ def listar_logs(origem: str, ordem_id: int) -> list:
             detalhes = {}
         resultado.append({
             "id": lg.id,
+            "codigo_interno": lg.codigo_interno,
             "acao": lg.acao,
             "usuario": lg.usuario,
             "status_anterior": lg.status_anterior,

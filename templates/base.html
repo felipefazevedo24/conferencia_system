@@ -182,6 +182,7 @@
                         {% if can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') %}<a href="/admin/atualizacoes-cadastrais" class="list-group-item list-group-item-action"><i class="fas fa-address-card"></i> Atualizações cadastrais</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestão de acessos</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_HISTORICO') %}<a href="/historico" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-list"></i> Logs e auditoria</a>{% endif %}
+                        {% if session.get('role') == 'Admin' %}<a href="/expedicao/auditoria" class="list-group-item list-group-item-action"><i class="fas fa-magnifying-glass-chart"></i> Auditoria de Expedição</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_ACESSOS') %}<a href="/admin/acessos" class="list-group-item list-group-item-action"><i class="fas fa-user-clock"></i> Auditoria de acessos</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_EMAILS_NFE') %}<a href="/faturamento/emails-nfe" class="list-group-item list-group-item-action"><i class="fas fa-envelope-open-text"></i> E-mails de NF-e</a>{% endif %}
                     </div>

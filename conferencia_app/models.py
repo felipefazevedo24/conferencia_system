@@ -578,6 +578,10 @@ class ExpedicaoOrdemFat(db.Model):
     __tablename__ = "expedicao_ordem_fat"
 
     id = db.Column(db.Integer, primary_key=True)
+    # ID interno permanente e rastreavel (ex.: OF-000123), gerado uma unica
+    # vez na criacao e nunca mais alterado - permite localizar a ordem no
+    # Sync mesmo que ela suma da origem (API de faturamento).
+    codigo_interno = db.Column(db.String(20), unique=True, index=True)
     cod_ordem_fat = db.Column(db.Integer, nullable=False, unique=True, index=True)
     cliente = db.Column(db.String(160))
     orcamento = db.Column(db.String(80), index=True)
@@ -690,6 +694,10 @@ class ExpedicaoOrdemST(db.Model):
     __tablename__ = "expedicao_ordem_st"
 
     id = db.Column(db.Integer, primary_key=True)
+    # ID interno permanente e rastreavel (ex.: OC-000123), gerado uma unica
+    # vez na criacao e nunca mais alterado - mesmo proposito do
+    # ExpedicaoOrdemFat.codigo_interno, para a aba de Servico de Terceiro.
+    codigo_interno = db.Column(db.String(20), unique=True, index=True)
     cod_ordem_compra = db.Column(db.String(80), nullable=False, unique=True, index=True)
     fornecedor = db.Column(db.String(160))
     n_os = db.Column(db.String(120))  # pode agregar varias OS separadas por virgula
@@ -764,6 +772,10 @@ class ExpedicaoConferenciaLog(db.Model):
     __tablename__ = "expedicao_conferencia_log"
 
     id = db.Column(db.Integer, primary_key=True)
+    # ID interno permanente e rastreavel (ex.: CNF-000123) para citar/buscar
+    # este evento de conferencia especifico na auditoria (ver
+    # expedicao_auditoria_routes.py).
+    codigo_interno = db.Column(db.String(20), unique=True, index=True)
     origem = db.Column(db.String(10), nullable=False, index=True)  # "fat" | "st"
     ordem_id = db.Column(db.Integer, nullable=False, index=True)
     cod_ordem = db.Column(db.String(80), nullable=False, index=True)
