@@ -167,6 +167,7 @@
     .ce-fotos-thumb .ce-fotos-remove { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(220,38,38,.9); color: #fff; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .ce-fotos-thumb .ce-fotos-badge { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(15,23,42,.65); color: #fff; font-size: 9px; text-align: center; padding: 2px; }
     .ce-fotos-empty { font-size: 12px; color: #94a3b8; }
+    .ce-fotos-botoes { display: flex; gap: 8px; flex-wrap: wrap; }
     .ce-fotos-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid #eef0f3; }
 </style>
 {% endblock %}
@@ -606,13 +607,21 @@
                 <label class="ce-fotos-label">Fotos do material</label>
                 <div id="ce-fotos-material-grid" class="ce-fotos-grid"></div>
                 <input type="file" id="ce-fotos-material-input" accept="image/*" capture="environment" multiple hidden onchange="ceAddFotosMaterial(this)">
-                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-material-input').click()"><i class="fas fa-camera"></i> Adicionar fotos do material</button>
+                <input type="file" id="ce-fotos-material-input-anexar" accept="image/*" multiple hidden onchange="ceAddFotosMaterial(this)">
+                <div class="ce-fotos-botoes">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-material-input').click()"><i class="fas fa-camera"></i> Tirar foto do material</button>
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-material-input-anexar').click()"><i class="fas fa-paperclip"></i> Anexar da galeria</button>
+                </div>
             </section>
             <section>
                 <label class="ce-fotos-label">Foto do cliente (recebedor)</label>
                 <div id="ce-fotos-cliente-grid" class="ce-fotos-grid"></div>
                 <input type="file" id="ce-fotos-cliente-input" accept="image/*" capture="environment" hidden onchange="ceSetFotoCliente(this)">
-                <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-cliente-input').click()"><i class="fas fa-camera"></i> Adicionar foto do cliente</button>
+                <input type="file" id="ce-fotos-cliente-input-anexar" accept="image/*" hidden onchange="ceSetFotoCliente(this)">
+                <div class="ce-fotos-botoes">
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-cliente-input').click()"><i class="fas fa-camera"></i> Tirar foto do cliente</button>
+                    <button type="button" class="eui-btn eui-btn--subtle eui-btn--sm" onclick="document.getElementById('ce-fotos-cliente-input-anexar').click()"><i class="fas fa-paperclip"></i> Anexar da galeria</button>
+                </div>
             </section>
         </div>
         <div class="ce-fotos-foot">
