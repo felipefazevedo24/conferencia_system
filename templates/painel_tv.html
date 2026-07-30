@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f62c9">
 <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <title>Painel Operacional — Recebimento & Expedição</title>
 <style>
   :root {
@@ -51,13 +52,15 @@
   }
   .brand .sub { color: var(--muted); font-size: clamp(11px, 1.4vh, 15px); font-weight: 500; }
   .logo-badge {
-    background: #fff;
-    border-radius: 14px;
-    padding: clamp(8px, 1.1vh, 12px) clamp(12px, 1.6vh, 18px);
     display: grid; place-items: center;
-    box-shadow: 0 8px 26px rgba(0,0,0,.4);
+    filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
   }
-  .logo-badge img { height: clamp(30px, 4.6vh, 54px); display: block; }
+  .logo-badge img { height: clamp(36px, 5.4vh, 62px); display: block; }
+  .brand::after {
+    content: "";
+    width: 1px; align-self: stretch; margin: 4px 0;
+    background: linear-gradient(180deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+  }
   .live {
     display: inline-flex; align-items: center; gap: 8px;
     background: rgba(52,211,153,.12); color: var(--ok);
@@ -140,26 +143,43 @@
     gap: clamp(10px, 1.4vh, 18px);
     min-height: 0;
     overflow: hidden;
+    position: relative;
+    box-shadow: 0 24px 48px -22px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
   }
+  .panel::before {
+    content: ""; position: absolute; top: 0; left: 10%; right: 10%; height: 3px;
+    border-radius: 0 0 8px 8px;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    opacity: .8;
+  }
+  .rec::before { color: var(--recebimento); }
+  .exp::before { color: var(--expedicao); }
+  .compras-atr::before { color: #f87171; }
+  .compras-sem::before { color: #34d399; }
   .panel-head { display: flex; align-items: center; gap: 14px; }
   .panel-head .icon {
     width: clamp(38px, 5vh, 56px); height: clamp(38px, 5vh, 56px);
     border-radius: 16px; display: grid; place-items: center;
-    font-size: clamp(20px, 2.8vh, 30px);
+    font-size: clamp(18px, 2.5vh, 26px);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
   }
   .panel-head h2 { font-size: clamp(17px, 2.3vh, 28px); font-weight: 800; letter-spacing:.3px; }
   .panel-head .tag { margin-left: auto; color: var(--muted); font-size: clamp(11px,1.4vh,15px); font-weight:600; }
   .mode-switch { display: flex; gap: 8px; margin-left: 14px; }
   .mode-pill {
-    font-size: clamp(10px,1.3vh,14px); font-weight: 700;
+    font: inherit; font-size: clamp(10px,1.3vh,14px); font-weight: 700;
     padding: 5px 12px; border-radius: 999px;
     color: var(--muted); background: rgba(255,255,255,.05);
-    border: 1px solid var(--border); transition: all .35s ease;
+    border: 1px solid var(--border); transition: all .2s ease;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
+  .mode-pill:hover { color: var(--text); background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.24); transform: translateY(-1px); }
+  .mode-pill:focus-visible { outline: 2px solid var(--recebimento); outline-offset: 2px; }
   .mode-pill.active {
     color: #08243f; background: var(--expedicao);
     border-color: var(--expedicao); box-shadow: 0 0 0 3px rgba(251,191,36,.2);
   }
+  .mode-pill.active:hover { transform: none; background: var(--expedicao); color: #08243f; }
   .exp .hero, .exp .grid2, .exp .feed .list,
   .rec .hero, .rec .grid2, .rec .feed .list { transition: opacity .3s ease; }
   .exp.switching .hero, .exp.switching .grid2, .exp.switching .feed .list,
@@ -169,19 +189,25 @@
   .exp .icon { background: rgba(251,191,36,.15); color: var(--expedicao); }
   .exp .accent { color: var(--expedicao); }
 
-  /* hero metric */
+  /* hero metric — grid fixo (nao flex) para a coluna do numero nunca variar
+     de tamanho conforme o texto do label ao lado (era a causa do numero de
+     um card aparentar maior/menor que o do outro). */
   .hero {
     border-radius: 18px;
     padding: clamp(12px, 2vh, 24px);
-    display: flex; align-items: center; justify-content: space-between;
+    display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 16px;
     border: 1px solid var(--border);
     background: var(--card-2);
     position: relative; overflow: hidden;
   }
   .rec .hero { background: linear-gradient(120deg, rgba(61,165,244,.20), rgba(15,98,201,.05)); }
   .exp .hero { background: linear-gradient(120deg, rgba(251,191,36,.18), rgba(251,191,36,.04)); }
-  .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; max-width: 60%; }
-  .hero .num { font-size: clamp(46px, 9vh, 120px); font-weight: 900; line-height: .9; font-variant-numeric: tabular-nums; }
+  .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; }
+  .hero .num {
+    font-size: clamp(46px, 9vh, 120px); font-weight: 900; line-height: .9;
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+    text-align: right; min-width: 1.2em;
+  }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.3vh,16px); }
   .stat {
@@ -227,7 +253,11 @@
     animation: slidein .4s cubic-bezier(.2,.9,.3,1);
   }
   .toast.out { animation: slideout .5s forwards; }
-  .toast .tico { font-size: 26px; line-height: 1; }
+  .toast .tico { font-size: 22px; line-height: 1; color: var(--muted); width: 1.2em; text-align: center; }
+  .toast.chegada .tico { color: var(--recebimento); }
+  .toast.conferencia .tico { color: var(--recebimento-2); }
+  .toast.lancamento .tico { color: var(--ok); }
+  .toast.expedicao .tico { color: var(--expedicao); }
   .toast .ttl { font-weight: 800; font-size: clamp(13px,1.7vh,18px); }
   .toast .dtl { color: var(--muted); font-size: clamp(11px,1.4vh,15px); margin-top: 2px; }
   .toast.chegada { border-left-color: var(--recebimento); }
@@ -291,7 +321,7 @@
     <!-- RECEBIMENTO -->
     <section class="panel rec">
       <div class="panel-head">
-        <div class="icon">📥</div>
+        <div class="icon"><i class="fas fa-inbox"></i></div>
         <h2>Recebimento</h2>
         <div class="tag" id="rec-tag">—</div>
       </div>
@@ -309,7 +339,7 @@
     <!-- EXPEDIÇÃO -->
     <section class="panel exp">
       <div class="panel-head">
-        <div class="icon">🚚</div>
+        <div class="icon"><i class="fas fa-truck-fast"></i></div>
         <h2>Expedição</h2>
         <div class="tag" id="exp-tag">—</div>
       </div>
@@ -333,7 +363,7 @@
         <!-- ATRASADAS -->
         <section class="panel compras compras-atr">
           <div class="panel-head">
-            <div class="icon">⚠️</div>
+            <div class="icon"><i class="fas fa-triangle-exclamation"></i></div>
             <h2>OCs atrasadas</h2>
             <div class="tag" id="oc-atr-tag">—</div>
           </div>
@@ -349,7 +379,7 @@
         <!-- A CHEGAR NA SEMANA -->
         <section class="panel compras compras-sem">
           <div class="panel-head">
-            <div class="icon">📅</div>
+            <div class="icon"><i class="fas fa-calendar-days"></i></div>
             <h2>A chegar (próximo dia)</h2>
             <div class="tag" id="oc-sem-tag">—</div>
           </div>
@@ -372,7 +402,7 @@
 <script>
 (function () {
   const POLL_MS = 5000;
-  const ICONS = { chegada: "📦", conferencia: "🔎", lancamento: "✅", expedicao: "🚚" };
+  const ICONS = { chegada: "fa-box", conferencia: "fa-magnifying-glass", lancamento: "fa-circle-check", expedicao: "fa-truck-fast" };
   const seenKeys = new Set();
   let firstLoad = true;
   let audioCtx = null;
@@ -421,7 +451,7 @@
     const el = document.createElement("div");
     el.className = "toast " + ev.tipo;
     el.innerHTML =
-      '<div class="tico">' + (ICONS[ev.tipo] || "🔔") + '</div>' +
+      '<div class="tico"><i class="fas ' + (ICONS[ev.tipo] || "fa-bell") + '"></i></div>' +
       '<div><div class="ttl"></div><div class="dtl"></div></div>';
     el.querySelector(".ttl").textContent = ev.titulo;
     el.querySelector(".dtl").textContent = ev.detalhe || "";
@@ -525,7 +555,7 @@
     box._phase = "";
     box._doneScroll = false;
     box._pausedAt = Date.now() + 2000;
-    if (!items.length) { box.innerHTML = '<div class="empty">' + (emptyMsg || "Nada pendente 🎉") + "</div>"; return; }
+    if (!items.length) { box.innerHTML = '<div class="empty">' + (emptyMsg || "Nada pendente") + "</div>"; return; }
     box.innerHTML = items.map(buildRow).join("");
   }
 
@@ -563,7 +593,7 @@
   let lastData = null;
   let expIdx = 0;
   const EXP_VIEWS = [
-    { key: "pendente",          label: "Pendentes de conferência",         hero: 'Pendentes de <span class="accent">conferência</span>',              empty: "Nada pendente 🎉" },
+    { key: "pendente",          label: "Pendentes de conferência",         hero: 'Pendentes de <span class="accent">conferência</span>',              empty: "Nada pendente" },
     { key: "conferido",         label: "Conferidos · aguard. faturamento", hero: 'Conferidos · <span class="accent">aguardando faturamento</span>',   empty: "Nada aguardando faturamento" },
     { key: "faturado_sem_conf", label: "Faturados sem conferência",        hero: 'Faturados <span class="accent">sem conferência</span>',            empty: "Nenhum faturado sem conferência" },
     { key: "faturado",          label: "Faturados · a expedir",            hero: 'Faturados · <span class="accent">a expedir</span>',                empty: "Nada faturado a expedir" },
@@ -585,7 +615,7 @@
     $("exp-hero-label").innerHTML = view.hero;
     setNum("exp-pend-conf", cat.total);
     $("exp-modes").innerHTML = EXP_VIEWS.map((v, i) =>
-      '<span class="mode-pill' + (i === expIdx ? " active" : "") + '">' + v.label + "</span>"
+      '<button type="button" class="mode-pill' + (i === expIdx ? " active" : "") + '" data-idx="' + i + '">' + v.label + "</button>"
     ).join("");
     $("exp-feed-title").textContent = view.label;
     $("exp-count").textContent = (cat.lista || []).length + " itens";
@@ -595,7 +625,7 @@
   // ----- Recebimento: 4 categorias consolidadas -----
   let recIdx = 0;
   const REC_VIEWS = [
-    { key: "pendente_conf", label: "Pendentes de conferência", hero: 'Notas pendentes de <span class="accent">conferência</span>', empty: "Nada pendente 🎉" },
+    { key: "pendente_conf", label: "Pendentes de conferência", hero: 'Notas pendentes de <span class="accent">conferência</span>', empty: "Nada pendente" },
     { key: "conferidas",    label: "Conferidas hoje",          hero: 'Notas <span class="accent">conferidas</span> hoje',          empty: "Nenhuma conferida hoje" },
     { key: "pendente_lanc", label: "Pendentes de lançamento",  hero: 'Notas pendentes de <span class="accent">lançamento</span>',  empty: "Nada aguardando lançamento" },
     { key: "lancadas",      label: "Lançadas hoje",            hero: 'Notas <span class="accent">lançadas</span> hoje',            empty: "Nada lançado hoje" },
@@ -614,23 +644,47 @@
     $("rec-hero-label").innerHTML = view.hero;
     setNum("rec-pend-conf", cat.total);
     $("rec-modes").innerHTML = REC_VIEWS.map((v, i) =>
-      '<span class="mode-pill' + (i === recIdx ? " active" : "") + '">' + v.label + "</span>"
+      '<button type="button" class="mode-pill' + (i === recIdx ? " active" : "") + '" data-idx="' + i + '">' + v.label + "</button>"
     ).join("");
     $("rec-feed-title").textContent = view.label;
     $("rec-count").textContent = (cat.lista || []).length + " notas";
     renderList("rec-list", cat.lista || [], buildRecCons, view.empty);
   }
 
-  function toggleExpMode() {
-    if (!lastData) return;
+  // Clique manual num pill: pula direto pra visao escolhida (sem esperar a
+  // rotacao automatica) e reinicia o cronometro daquele card.
+  function jumpExpTo(idx) {
+    if (!lastData || idx === expIdx) return;
     const panel = document.querySelector(".panel.exp");
     panel.classList.add("switching");
     setTimeout(() => {
-      expIdx = (expIdx + 1) % EXP_VIEWS.length;
+      expIdx = idx;
       renderExpedicao();
       panel.classList.remove("switching");
-    }, 300);
+    }, 200);
+    expLastRot = Date.now();
   }
+
+  function jumpRecTo(idx) {
+    if (!lastData || idx === recIdx) return;
+    const panel = document.querySelector(".panel.rec");
+    panel.classList.add("switching");
+    setTimeout(() => {
+      recIdx = idx;
+      renderRecebimento();
+      panel.classList.remove("switching");
+    }, 200);
+    recLastRot = Date.now();
+  }
+
+  $("exp-modes").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-idx]");
+    if (btn) jumpExpTo(Number(btn.dataset.idx));
+  });
+  $("rec-modes").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-idx]");
+    if (btn) jumpRecTo(Number(btn.dataset.idx));
+  });
 
   // ----- Carrossel de slides + rotacao das visoes de expedicao -----
   const SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
@@ -771,7 +825,7 @@
       setNum("oc-sem-total", sem.total || 0);
       $("oc-atr-tag").textContent = (atr.total || 0) + " OCs";
       $("oc-sem-tag").textContent = (sem.total || 0) + " OCs";
-      renderList("oc-atr-list", atr.lista || [], buildOcItem("atraso"), d.erro ? "ERP indisponível" : "Nenhuma OC atrasada 🎉");
+      renderList("oc-atr-list", atr.lista || [], buildOcItem("atraso"), d.erro ? "ERP indisponível" : "Nenhuma OC atrasada");
       renderList("oc-sem-list", sem.lista || [], buildOcItem("semana"), d.erro ? "ERP indisponível" : "Nada a chegar no próximo dia");
     } catch (e) {
       renderList("oc-atr-list", [], buildOcItem("atraso"), "ERP indisponível");
