@@ -38,6 +38,7 @@ from .routes.qualidade_routes import qualidade_bp
 from .routes.rastreamento_routes import rastreamento_bp
 from .routes.frota_routes import frota_bp
 from .routes.solicitacao_nf_routes import solicitacao_nf_bp
+from .routes.logistica_inventario_routes import logistica_inventario_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
 
 
@@ -68,9 +69,9 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
-    app.register_blueprint(qualidade_bp)
     app.register_blueprint(rastreamento_bp)
     app.register_blueprint(frota_bp)
+    app.register_blueprint(logistica_inventario_bp)
     app.register_blueprint(viagem_bp)
     app.register_blueprint(motorista_bp)
     app.register_blueprint(solicitacao_nf_bp)
@@ -200,5 +201,14 @@ def create_app(test_config=None) -> Flask:
             iniciar_expedicao_sync(app)
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler Expedicao Sync")
+
+    # Lembretes FOB: reenviar aviso de coleta a cada 2 dias enquanto o
+    # romaneio nao estiver expedido.
+    if app.config.get("ROMANEIO_FOB_REMINDER_ENABLED") and not app.config.get("TESTING"):
+        try:
+            from .services.romaneio_fob_reminder_scheduler import iniciar_scheduler as iniciar_romaneio_fob_reminder
+            iniciar_romaneio_fob_reminder(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Romaneio FOB")
 
     return app

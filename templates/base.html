@@ -105,6 +105,32 @@
                         </div>
                         {% endif %}
 
+                        {% if can_access('PAGE_WMS') or can_access('PAGE_ADMIN_WMS_ENDERECOS') or can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}
+                        <div class="submenu-subgroup" data-subgroup="wms">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-warehouse submenu-icon"></i> WMS <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                {% if can_access('PAGE_WMS') %}
+                                <a href="/wms" class="list-group-item list-group-item-action"><i class="fas fa-compass"></i> Central WMS</a>
+                                <a href="/wms/enderecamento" class="list-group-item list-group-item-action"><i class="fas fa-map-marker-alt"></i> Endereçamento</a>
+                                <a href="/wms/estoque" class="list-group-item list-group-item-action"><i class="fas fa-cubes"></i> Estoque Tempo Real</a>
+                                {% endif %}
+                                {% if can_access('PAGE_ADMIN_WMS_ENDERECOS') %}<a href="/admin/wms-enderecos" class="list-group-item list-group-item-action"><i class="fas fa-map-signs"></i> Cadastro de endereços</a>{% endif %}
+                                {% if can_access('PAGE_ADMIN_WMS_GOVERNANCA') %}<a href="/admin/wms-governanca" class="list-group-item list-group-item-action"><i class="fas fa-sliders-h"></i> Governança WMS</a>{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') %}
+                        <div class="submenu-subgroup" data-subgroup="inventario">
+                            <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-clipboard-list submenu-icon"></i> Inventário <i class="fas fa-chevron-down submenu-chevron"></i></button>
+                            <div class="submenu-items">
+                                <a href="/logistica/inventario" class="list-group-item list-group-item-action"><i class="fas fa-grid-2"></i> Módulo de Inventário</a>
+                                <a href="/logistica/inventario/novo" class="list-group-item list-group-item-action"><i class="fas fa-plus-circle"></i> Criar Novo Inventário</a>
+                                <a href="/logistica/inventario/consulta" class="list-group-item list-group-item-action"><i class="fas fa-magnifying-glass"></i> Inventário Realizado</a>
+                            </div>
+                        </div>
+                        {% endif %}
+
                         {% if can_access('PAGE_LOGISTICA_AGENDAMENTO') or can_access('PAGE_LOGISTICA_SOLICITACAO') or can_access('PAGE_LOGISTICA_MOTORISTA')
                             or can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_FROTA') or can_access('PAGE_LOGISTICA_RASTREAMENTO') %}
                         <div class="submenu-subgroup" data-subgroup="transporte">

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Inventario{% endblock %}
+{% block shell_title %}Inventario{% endblock %}
+
+{% block extra_head %}
+<style>
+    .inv-home-shell { max-width: 980px; margin: 0 auto; padding: 14px; }
+    .inv-home-hero {
+        border-radius: 16px;
+        padding: 20px;
+        color: #fff;
+        background: linear-gradient(120deg, #0f172a 0%, #0b5fc9 60%, #11a6c7 100%);
+        box-shadow: 0 14px 30px rgba(2, 16, 41, .25);
+    }
+    .inv-home-hero h1 { margin: 0; font-size: 24px; font-weight: 800; }
+    .inv-home-hero p { margin: 8px 0 0; color: rgba(255,255,255,.88); }
+    .inv-cards {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(240px, 1fr));
+        gap: 12px;
+    }
+    .inv-card {
+        background: #fff;
+        border: 1px solid #dce7f4;
+        border-radius: 14px;
+        padding: 14px;
+        display: grid;
+        gap: 8px;
+        box-shadow: 0 6px 20px rgba(10, 31, 68, .08);
+    }
+    .inv-card h3 { margin: 0; font-size: 17px; color: #17375d; }
+    .inv-card p { margin: 0; color: #4b617f; font-size: 13px; line-height: 1.4; }
+    .inv-btn {
+        margin-top: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-decoration: none;
+        border: 1px solid #bdd2ea;
+        color: #1f3d60;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-weight: 700;
+        background: #f7fbff;
+    }
+    .inv-btn.primary {
+        border-color: #0a6ed1;
+        background: #0a6ed1;
+        color: #fff;
+    }
+    @media (max-width: 860px) {
+        .inv-cards { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="inv-home-shell">
+    <section class="inv-home-hero">
+        <h1><i class="fas fa-warehouse"></i> Inventario Logistica</h1>
+        <p>Modulo de inventario no mesmo nivel de Recebimento e Expedicao para registrar, consultar e exportar dados.</p>
+    </section>
+
+    <section class="inv-cards">
+        <article class="inv-card">
+            <h3><i class="fas fa-plus-circle"></i> Criar Novo Inventario</h3>
+            <p>Lance local, produto, unidade, quantidade, lote e observacoes com apoio de leitura por camera no tablet.</p>
+            <a class="inv-btn primary" href="/logistica/inventario/novo"><i class="fas fa-arrow-right"></i> Abrir</a>
+        </article>
+        <article class="inv-card">
+            <h3><i class="fas fa-magnifying-glass"></i> Inventario Realizado</h3>
+            <p>Filtre por local e produto para consultar historico. A exportacao para Excel fica dentro desta tela para facilitar a analise.</p>
+            <a class="inv-btn" href="/logistica/inventario/consulta"><i class="fas fa-arrow-right"></i> Abrir</a>
+        </article>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Novo Inventario{% endblock %}
+{% block shell_title %}Novo Inventario{% endblock %}
+
+{% block extra_head %}
+<style>
+    :root {
+        --inv-bg: #f3f6fb;
+        --inv-card: #ffffff;
+        --inv-line: #d9e2ee;
+        --inv-ink: #102033;
+        --inv-muted: #5c6f86;
+        --inv-blue: #0a6ed1;
+        --inv-ok: #15803d;
+        --inv-danger: #b91c1c;
+    }
+    body { background: var(--inv-bg); }
+    .inv-shell { max-width: 1040px; margin: 0 auto; padding: 14px; color: var(--inv-ink); }
+    .inv-hero {
+        background: linear-gradient(135deg, #0f172a, #123e72 55%, #0a6ed1);
+        color: #fff;
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, .22);
+    }
+    .inv-hero h1 { margin: 0; font-size: 22px; font-weight: 800; }
+    .inv-hero p { margin: 6px 0 0; font-size: 13px; color: rgba(255,255,255,.85); }
+    .inv-card {
+        margin-top: 14px;
+        background: var(--inv-card);
+        border: 1px solid var(--inv-line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+    }
+    .inv-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        gap: 12px;
+    }
+    .inv-field { display: grid; gap: 6px; }
+    .inv-label {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .4px;
+        text-transform: uppercase;
+        color: var(--inv-muted);
+    }
+    .inv-input, .inv-select, .inv-textarea {
+        width: 100%;
+        border: 1px solid #bfd0e3;
+        border-radius: 10px;
+        padding: 10px 11px;
+        font-size: 14px;
+        background: #fff;
+        color: var(--inv-ink);
+    }
+    .inv-input:focus, .inv-select:focus, .inv-textarea:focus {
+        outline: none;
+        border-color: var(--inv-blue);
+        box-shadow: 0 0 0 3px rgba(10, 110, 209, .14);
+    }
+    .inv-scan-wrap {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+    }
+    .inv-btn {
+        border: 1px solid var(--inv-line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        background: #fff;
+        color: #1f334a;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+    }
+    .inv-btn.primary { background: var(--inv-blue); border-color: var(--inv-blue); color: #fff; }
+    .inv-btn.ghost { background: #f8fbff; }
+    .inv-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .inv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .inv-status {
+        display: none;
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .inv-status.show { display: block; }
+    .inv-status.ok { background: #dcfce7; color: #14532d; }
+    .inv-status.err { background: #fee2e2; color: #991b1b; }
+    .inv-status.info { background: #e8f2ff; color: #1e3a8a; }
+    .inv-table-wrap { overflow: auto; }
+    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .inv-table th, .inv-table td { border-bottom: 1px solid #e6edf6; padding: 9px 8px; text-align: left; }
+    .inv-table th { background: #f7fbff; color: #35506e; font-size: 11px; text-transform: uppercase; letter-spacing: .35px; }
+
+    .scan-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(3, 12, 24, .72);
+        z-index: 11000;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+    }
+    .scan-modal.open { display: flex; }
+    .scan-box {
+        width: min(680px, 100%);
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid #d8e0ea;
+        padding: 12px;
+    }
+    .scan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .scan-head h3 { margin: 0; font-size: 16px; }
+    .scan-video-wrap {
+        border: 1px solid #d8e0ea;
+        border-radius: 12px;
+        background: #0b1320;
+        overflow: hidden;
+        position: relative;
+    }
+    .scan-video {
+        width: 100%;
+        display: block;
+        max-height: 62vh;
+        object-fit: cover;
+    }
+    .scan-tip {
+        margin-top: 8px;
+        color: #5b6b7f;
+        font-size: 12px;
+    }
+
+    @media (max-width: 760px) {
+        .inv-shell { padding: 10px; }
+        .inv-grid { grid-template-columns: 1fr; }
+        .inv-scan-wrap { grid-template-columns: 1fr; }
+        .inv-actions { flex-direction: column; }
+        .inv-btn { width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="inv-shell">
+    <section class="inv-hero">
+        <h1><i class="fas fa-plus-circle"></i> Novo Inventario - Logistica</h1>
+        <p>Registre o saldo inicial por local e produto. Leitura por camera para tablet e digitacao manual quando necessario.</p>
+    </section>
+
+    <section class="inv-card" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="inv-btn" href="/logistica/inventario"><i class="fas fa-grid-2"></i> Modulo Inventario</a>
+        <a class="inv-btn" href="/logistica/inventario/consulta"><i class="fas fa-magnifying-glass"></i> Consulta de Inventario</a>
+        <a class="inv-btn" href="/api/logistica/inventario-inicial/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
+    </section>
+
+    <section class="inv-card">
+        <div class="inv-grid">
+            <div class="inv-field">
+                <label class="inv-label" for="inv-local">Local</label>
+                <div class="inv-scan-wrap">
+                    <input id="inv-local" class="inv-input" autocomplete="off" placeholder="Bipe ou digite o local" />
+                    <button type="button" class="inv-btn ghost" data-scan-target="inv-local"><i class="fas fa-camera"></i> Ler</button>
+                </div>
+            </div>
+
+            <div class="inv-field">
+                <label class="inv-label" for="inv-codigo">Cod. Produto</label>
+                <div class="inv-scan-wrap">
+                    <input id="inv-codigo" class="inv-input" autocomplete="off" placeholder="Bipe ou digite o codigo" />
+                    <button type="button" class="inv-btn ghost" data-scan-target="inv-codigo"><i class="fas fa-camera"></i> Ler</button>
+                </div>
+            </div>
+
+            <div class="inv-field">
+                <label class="inv-label" for="inv-unidade">Unidade de medida</label>
+                <select id="inv-unidade" class="inv-select"></select>
+            </div>
+
+            <div class="inv-field">
+                <label class="inv-label" for="inv-quantidade">Quantidade</label>
+                <input id="inv-quantidade" class="inv-input" type="number" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+            </div>
+
+            <div class="inv-field">
+                <label class="inv-label" for="inv-lote">Lote</label>
+                <input id="inv-lote" class="inv-input" autocomplete="off" placeholder="Informe o lote" />
+            </div>
+
+            <div class="inv-field" style="grid-column: 1 / -1;">
+                <label class="inv-label" for="inv-obs">Obs</label>
+                <textarea id="inv-obs" class="inv-textarea" rows="3" placeholder="Comentarios livres"></textarea>
+            </div>
+        </div>
+
+        <div class="inv-actions">
+            <button type="button" class="inv-btn" id="inv-limpar"><i class="fas fa-eraser"></i> Limpar</button>
+            <button type="button" class="inv-btn primary" id="inv-salvar"><i class="fas fa-floppy-disk"></i> Salvar registro</button>
+        </div>
+
+        <div id="inv-status" class="inv-status"></div>
+    </section>
+
+    <section class="inv-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+            <h3 style="margin:0; font-size:16px;">Ultimos registros</h3>
+            <button type="button" class="inv-btn" id="inv-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+        </div>
+        <div class="inv-table-wrap">
+            <table class="inv-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Local</th>
+                        <th>Cod. Produto</th>
+                        <th>Unid.</th>
+                        <th>Qtd</th>
+                        <th>Lote</th>
+                        <th>Obs</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody id="inv-tbody">
+                    <tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div class="scan-modal" id="scan-modal">
+    <div class="scan-box">
+        <div class="scan-head">
+            <h3><i class="fas fa-camera"></i> Leitura de codigo de barras</h3>
+            <button type="button" class="inv-btn" id="scan-fechar"><i class="fas fa-xmark"></i> Fechar</button>
+        </div>
+        <div class="scan-video-wrap">
+            <video id="scan-video" class="scan-video" autoplay playsinline muted></video>
+        </div>
+        <div class="scan-tip" id="scan-tip">Aponte a camera para o codigo. Se seu navegador nao suportar leitura nativa, use digitacao manual.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const unidadeSel = document.getElementById('inv-unidade');
+    const tbody = document.getElementById('inv-tbody');
+    const statusBox = document.getElementById('inv-status');
+    const modal = document.getElementById('scan-modal');
+    const video = document.getElementById('scan-video');
+    const tip = document.getElementById('scan-tip');
+
+    let scanTargetId = null;
+    let scanStream = null;
+    let rafId = null;
+    let detector = null;
+
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function showStatus(msg, kind = 'info') {
+        statusBox.textContent = msg;
+        statusBox.className = `inv-status show ${kind === 'ok' ? 'ok' : (kind === 'err' ? 'err' : 'info')}`;
+    }
+
+    async function api(url, opts = {}) {
+        const resp = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || data.msg || `HTTP ${resp.status}`);
+        return data;
+    }
+
+    function preencherUnidades(unidades) {
+        const lista = Array.isArray(unidades) && unidades.length ? unidades : ['UN'];
+        unidadeSel.innerHTML = lista.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+    }
+
+    function limparFormulario() {
+        document.getElementById('inv-local').value = '';
+        document.getElementById('inv-codigo').value = '';
+        document.getElementById('inv-quantidade').value = '';
+        document.getElementById('inv-lote').value = '';
+        document.getElementById('inv-obs').value = '';
+        document.getElementById('inv-local').focus();
+    }
+
+    function fmtData(iso) {
+        if (!iso) return '-';
+        try { return new Date(iso).toLocaleString('pt-BR'); } catch (_) { return iso; }
+    }
+
+    function renderRegistros(rows) {
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Nenhum registro ainda.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+            <tr>
+                <td>${esc(fmtData(r.criado_em))}</td>
+                <td><strong>${esc(r.local_codigo)}</strong></td>
+                <td><strong>${esc(r.codigo_produto)}</strong></td>
+                <td>${esc(r.unidade_medida)}</td>
+                <td>${Number(r.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
+                <td>${esc(r.lote || '-')}</td>
+                <td>${esc(r.observacao || '-')}</td>
+                <td>${esc(r.criado_por || '-')}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function carregarUnidades() {
+        try {
+            const data = await api('/api/logistica/inventario-inicial/unidades');
+            preencherUnidades(data.unidades || []);
+        } catch (err) {
+            preencherUnidades(['UN', 'KG', 'L', 'M']);
+            showStatus(`Falha ao carregar unidades: ${err.message}`, 'err');
+        }
+    }
+
+    async function carregarRegistros() {
+        try {
+            const data = await api('/api/logistica/inventario-inicial?limit=120');
+            renderRegistros(data.registros || []);
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    async function salvarRegistro() {
+        const localCodigo = (document.getElementById('inv-local').value || '').trim();
+        const codigoProduto = (document.getElementById('inv-codigo').value || '').trim();
+        const unidade = (unidadeSel.value || 'UN').trim();
+        const quantidadeTxt = (document.getElementById('inv-quantidade').value || '').trim();
+        const lote = (document.getElementById('inv-lote').value || '').trim();
+        const observacao = (document.getElementById('inv-obs').value || '').trim();
+
+        if (!localCodigo) { showStatus('Informe o Local.', 'err'); return; }
+        if (!codigoProduto) { showStatus('Informe o Cod. Produto.', 'err'); return; }
+        if (!quantidadeTxt) { showStatus('Informe a Quantidade.', 'err'); return; }
+
+        const quantidade = Number(String(quantidadeTxt).replace(',', '.'));
+        if (!Number.isFinite(quantidade) || quantidade <= 0) {
+            showStatus('Quantidade invalida.', 'err');
+            return;
+        }
+
+        const btnSalvar = document.getElementById('inv-salvar');
+        btnSalvar.disabled = true;
+        try {
+            await api('/api/logistica/inventario-inicial', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    local_codigo: localCodigo,
+                    codigo_produto: codigoProduto,
+                    unidade_medida: unidade,
+                    quantidade,
+                    lote,
+                    observacao,
+                }),
+            });
+            showStatus('Registro salvo com sucesso.', 'ok');
+            limparFormulario();
+            await carregarRegistros();
+        } catch (err) {
+            showStatus(`Falha ao salvar: ${err.message}`, 'err');
+        } finally {
+            btnSalvar.disabled = false;
+        }
+    }
+
+    async function abrirScanner(targetId) {
+        scanTargetId = targetId;
+
+        if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
+            showStatus('Leitura por camera indisponivel neste navegador.', 'err');
+            return;
+        }
+
+        if (!('BarcodeDetector' in window)) {
+            showStatus('Seu navegador nao suporta leitura nativa. Use digitacao manual.', 'info');
+            return;
+        }
+
+        try {
+            detector = new window.BarcodeDetector({ formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'] });
+        } catch (_) {
+            showStatus('Falha ao iniciar leitor de codigo. Use digitacao manual.', 'err');
+            return;
+        }
+
+        try {
+            scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            video.srcObject = scanStream;
+            modal.classList.add('open');
+            tip.textContent = 'Aponte a camera para o codigo de barras.';
+            iniciarLoopScanner();
+        } catch (err) {
+            showStatus(`Nao foi possivel abrir a camera: ${err.message}`, 'err');
+        }
+    }
+
+    function pararScanner() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        if (scanStream) {
+            scanStream.getTracks().forEach((t) => t.stop());
+            scanStream = null;
+        }
+        video.srcObject = null;
+        modal.classList.remove('open');
+    }
+
+    function iniciarLoopScanner() {
+        const loop = async () => {
+            if (!detector || !video || video.readyState < 2) {
+                rafId = requestAnimationFrame(loop);
+                return;
+            }
+            try {
+                const codes = await detector.detect(video);
+                if (codes && codes.length) {
+                    const code = (codes[0].rawValue || '').trim();
+                    if (code && scanTargetId) {
+                        const input = document.getElementById(scanTargetId);
+                        if (input) {
+                            input.value = code;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            showStatus(`Codigo lido para ${scanTargetId === 'inv-local' ? 'Local' : 'Cod. Produto'}.`, 'ok');
+                        }
+                        pararScanner();
+                        return;
+                    }
+                }
+            } catch (_) {
+                // Mantem loop silencioso para nao gerar ruido.
+            }
+            rafId = requestAnimationFrame(loop);
+        };
+        rafId = requestAnimationFrame(loop);
+    }
+
+    document.querySelectorAll('[data-scan-target]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirScanner(btn.getAttribute('data-scan-target')));
+    });
+
+    document.getElementById('scan-fechar').addEventListener('click', pararScanner);
+    modal.addEventListener('click', (ev) => {
+        if (ev.target === modal) pararScanner();
+    });
+
+    document.getElementById('inv-salvar').addEventListener('click', salvarRegistro);
+    document.getElementById('inv-atualizar').addEventListener('click', carregarRegistros);
+    document.getElementById('inv-limpar').addEventListener('click', () => {
+        limparFormulario();
+        showStatus('Formulario limpo.', 'info');
+    });
+
+    document.getElementById('inv-obs').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) salvarRegistro();
+    });
+
+    carregarUnidades();
+    carregarRegistros();
+})();
+</script>
+{% endblock %}

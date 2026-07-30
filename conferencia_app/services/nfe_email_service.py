@@ -612,6 +612,40 @@ def _email_do_cadastro_cliente(cnpj: str, nome: str) -> str:
     return ""
 
 
+def _telefone_do_cadastro_cliente(cnpj: str, nome: str) -> str:
+    def _extrair_fone(cad: AgendamentoCliente | None) -> str:
+        if not cad:
+            return ""
+        for valor in (cad.telefone, cad.telefone_secundario):
+            digitos = _somente_digitos(valor)
+            if digitos:
+                return digitos
+        return ""
+
+    if cnpj:
+        cad = (
+            AgendamentoCliente.query
+            .filter(AgendamentoCliente.cnpj_cpf == cnpj)
+            .order_by(AgendamentoCliente.ativo.desc(), AgendamentoCliente.id.asc())
+            .first()
+        )
+        fone = _extrair_fone(cad)
+        if fone:
+            return fone
+    if nome:
+        like = f"%{nome.strip()}%"
+        cad = (
+            AgendamentoCliente.query
+            .filter(AgendamentoCliente.nome.ilike(like))
+            .order_by(AgendamentoCliente.ativo.desc())
+            .first()
+        )
+        fone = _extrair_fone(cad)
+        if fone:
+            return fone
+    return ""
+
+
 def resolver_destinatario(numero_nf: str, chave: str | None = None, override_email: str | None = None) -> dict:
     """Sugere e-mail para envio da NF-e. Ordem: manual -> cadastro -> XML.
 
@@ -638,9 +672,11 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
 
     email_manual = (override_email or "").strip()
     if email_manual and _valido_email(email_manual):
+        telefone_cad = _telefone_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome)
         return {
             "email": email_manual,
             "fonte_email": "Manual",
+            "telefone": telefone_cad,
             "dest_nome": nota.dest_nome,
             "dest_cnpj": nota.dest_cnpj,
             "numero": nota.numero,
@@ -652,6 +688,9 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
     if nota.dest_cnpj:
         hit = buscar_email_cadastro_erp(nota.dest_cnpj)
         if hit and _valido_email(hit.get("email")):
+            telefone_hit = _somente_digitos(
+                hit.get("telefone") or hit.get("telefone_secundario") or hit.get("celular") or hit.get("whatsapp")
+            )
             current_app.logger.info(
                 "NF-e %s: destinatario resolvido via GRV/Postgres (CNPJ %s -> %s).",
                 nota.numero, nota.dest_cnpj, hit["email"],
@@ -659,6 +698,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
             return {
                 "email": hit["email"],
                 "fonte_email": "GRVPostgres",
+                "telefone": telefone_hit,
                 "dest_nome": nota.dest_nome or hit.get("nome", ""),
                 "dest_cnpj": nota.dest_cnpj,
                 "numero": nota.numero,
@@ -680,6 +720,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
     # 2) Cadastro interno (AgendamentoCliente)
     email_cad = _email_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome)
     if email_cad:
+        telefone_cad = _telefone_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome)
         current_app.logger.info(
             "NF-e %s: destinatario resolvido via cadastro interno/planilha (CNPJ %s -> %s).",
             nota.numero, nota.dest_cnpj, email_cad,
@@ -687,6 +728,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
         return {
             "email": email_cad,
             "fonte_email": "Cadastro",
+            "telefone": telefone_cad,
             "dest_nome": nota.dest_nome,
             "dest_cnpj": nota.dest_cnpj,
             "numero": nota.numero,
@@ -695,6 +737,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
         }
 
     if _valido_email(nota.dest_email_xml):
+        telefone_cad = _telefone_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome)
         current_app.logger.info(
             "NF-e %s: destinatario resolvido via e-mail do XML (%s).",
             nota.numero, nota.dest_email_xml,
@@ -702,6 +745,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
         return {
             "email": nota.dest_email_xml,
             "fonte_email": "XML",
+            "telefone": telefone_cad,
             "dest_nome": nota.dest_nome,
             "dest_cnpj": nota.dest_cnpj,
             "numero": nota.numero,
@@ -718,6 +762,7 @@ def _resolver_destinatario_da_nota(nota: NotaEmitida, override_email: str | None
     return {
         "email": "",
         "fonte_email": "",
+        "telefone": _telefone_do_cadastro_cliente(nota.dest_cnpj, nota.dest_nome),
         "dest_nome": nota.dest_nome,
         "dest_cnpj": nota.dest_cnpj,
         "numero": nota.numero,
@@ -942,6 +987,593 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password, log_id):
                     db.session.commit()
             except Exception:  # pragma: no cover - defensivo
                 db.session.rollback()
+
+
+def _fmt_num_ptbr(valor: Any, casas: int = 2) -> str:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        numero = 0.0
+    texto = f"{numero:,.{casas}f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _montar_corpo_html_aviso_coleta_fob(
+    *,
+    numero_nf: str,
+    nome_cliente: str,
+    qtde_volumes: int,
+    peso: float,
+    horario_atendimento: str,
+    endereco_retirada: str,
+    modo_teste: bool,
+    destino_real: str,
+) -> str:
+    aviso_teste = ""
+    if modo_teste:
+        aviso_teste = f"""
+        <tr><td style=\"padding:0 32px\">
+            <div style=\"margin-top:8px;padding:12px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-family:Arial,Helvetica,sans-serif\">
+                <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatario)'}</strong>.
+            </div>
+        </td></tr>"""
+
+    cliente = (nome_cliente or "Cliente").strip()
+    peso_fmt = _fmt_num_ptbr(peso, 2)
+
+    return f"""\
+        <!DOCTYPE html>
+        <html lang=\"pt-BR\">
+        <head>
+            <meta charset=\"UTF-8\"/>
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>
+            <title>Mercadoria Disponivel para Coleta</title>
+        </head>
+        <body style=\"margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">
+            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f1f5f9\" style=\"background:#f1f5f9;padding:28px 12px\">
+                <tr><td align=\"center\">
+                    <table role=\"presentation\" width=\"640\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#ffffff\" style=\"max-width:640px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px\">
+                        <tr>
+                            <td bgcolor=\"#1e3a8a\" style=\"background-color:#1e3a8a;padding:20px 28px;border-top-left-radius:10px;border-top-right-radius:10px;font-size:22px;font-weight:700;color:#ffffff\">
+                                Mercadoria Disponivel para Coleta
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:24px 28px 10px;font-size:14px;line-height:1.6;color:#1e293b\">
+                                Prezado(a) Sr.(a) <strong>{cliente}</strong>,
+                                <br><br>
+                                Informamos que seu pedido sob a nota fiscal n&ordm; <strong>{numero_nf}</strong>
+                                encontra-se pronto para expedicao e disponivel para coleta em nossa unidade.
+                                <br><br>
+                                Conforme acordado na modalidade <strong>FOB (Free On Board)</strong>,
+                                solicitamos que seja providenciado o transporte para retirada da mercadoria
+                                dentro do prazo estabelecido.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:0 28px 6px;font-size:14px;line-height:1.7;color:#0f172a\">
+                                <strong>Dados para coleta:</strong>
+                                <ul style=\"margin:8px 0 0 18px;padding:0\">
+                                    <li><strong>Pedido:</strong> {numero_nf}</li>
+                                    <li><strong>Volume(s):</strong> {int(qtde_volumes or 0)}</li>
+                                    <li><strong>Peso:</strong> {peso_fmt} kg</li>
+                                    <li><strong>Endereco para retirada:</strong> {endereco_retirada}</li>
+                                    <li><strong>Horario de atendimento:</strong> {horario_atendimento}</li>
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:14px 28px 0;font-size:14px;line-height:1.7;color:#1e293b\">
+                                Solicitamos a gentileza de nos informar os dados da transportadora e a previsao de coleta para que possamos agilizar o processo.
+                                <br><br>
+                                Em caso de duvidas, permanecemos a disposicao.
+                                <br><br>
+                                Atenciosamente,
+                                <br><br>
+                                Logistics team<br>
+                                Columbia Machine Brasil<br>
+                                Cel/whatsapp: (19) 99996-5208<br>
+                                logistica@colmac.com
+                            </td>
+                        </tr>
+
+                        {aviso_teste}
+
+                        <tr>
+                            <td style=\"padding:20px 28px 24px;font-size:11px;color:#64748b\">
+                                powered by <strong style=\"color:#1e3a8a\">Columbia Sync</strong>
+                            </td>
+                        </tr>
+                    </table>
+                </td></tr>
+            </table>
+        </body>
+        </html>"""
+
+
+def _montar_texto_whatsapp_aviso_fob(
+    *,
+    numero_nf: str,
+    nome_cliente: str,
+    qtde_volumes: int,
+    peso: float,
+    horario_atendimento: str,
+    endereco_retirada: str,
+) -> str:
+    cliente = (nome_cliente or "Cliente").strip()
+    return (
+        f"Prezado(a) {cliente},\n\n"
+        f"A NF {numero_nf} esta disponivel para coleta (FOB).\n"
+        f"Volumes: {int(qtde_volumes or 0)}\n"
+        f"Peso: {_fmt_num_ptbr(peso)} kg\n"
+        f"Endereco de retirada: {endereco_retirada}\n"
+        f"Horario de atendimento: {horario_atendimento}\n\n"
+        "Por favor, nos informe a transportadora e a previsao de coleta.\n\n"
+        "Logistica Columbia Machine Brasil"
+    )
+
+
+def _montar_texto_whatsapp_lembrete_fob(*, numero_nf: str, nome_cliente: str) -> str:
+    cliente = (nome_cliente or "Cliente").strip()
+    return (
+        f"Prezado(a) {cliente},\n\n"
+        f"Lembrete: a NF {numero_nf} segue disponivel para coleta (FOB).\n"
+        "Solicitamos programar a retirada e informar previsao de coleta.\n\n"
+        "Logistica Columbia Machine Brasil"
+    )
+
+
+def _enviar_whatsapp_fob(*, telefone_real: str, texto: str, contexto: str) -> dict:
+    app = current_app._get_current_object()
+
+    if not app.config.get("WHATSAPP_FOB_ENABLED", False):
+        return {"sucesso": False, "ignorado": True, "motivo": "WHATSAPP_FOB_ENABLED=0"}
+
+    modo_teste = bool(app.config.get("WHATSAPP_MODO_TESTE", True))
+    destino_teste = _somente_digitos(app.config.get("WHATSAPP_TESTE_DESTINO") or "")
+    destino_real = _somente_digitos(telefone_real)
+
+    if modo_teste and not destino_teste:
+        return {
+            "sucesso": False,
+            "ignorado": True,
+            "motivo": "WHATSAPP_MODO_TESTE=1 sem WHATSAPP_TESTE_DESTINO configurado.",
+        }
+
+    destino = destino_teste if modo_teste else destino_real
+    if not destino:
+        return {"sucesso": False, "ignorado": True, "motivo": "Telefone de destino indisponivel."}
+
+    from .whatsapp_service import enviar_texto_whatsapp
+
+    return enviar_texto_whatsapp(destino, texto, contexto=contexto)
+
+
+def _montar_corpo_html_lembrete_coleta_fob(
+        *,
+        numero_nf: str,
+        nome_cliente: str,
+        modo_teste: bool,
+        destino_real: str,
+) -> str:
+        aviso_teste = ""
+        if modo_teste:
+                aviso_teste = f"""
+                <tr><td style=\"padding:0 32px\">
+                    <div style=\"margin-top:8px;padding:12px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-family:Arial,Helvetica,sans-serif\">
+                        <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatario)'}</strong>.
+                    </div>
+                </td></tr>"""
+
+        cliente = (nome_cliente or "Cliente").strip()
+
+        return f"""\
+        <!DOCTYPE html>
+        <html lang=\"pt-BR\">
+        <head>
+            <meta charset=\"UTF-8\"/>
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>
+            <title>Lembrete de Coleta</title>
+        </head>
+        <body style=\"margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">
+            <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f1f5f9\" style=\"background:#f1f5f9;padding:28px 12px\">
+                <tr><td align=\"center\">
+                    <table role=\"presentation\" width=\"680\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#ffffff\" style=\"max-width:680px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px\">
+                        <tr>
+                            <td bgcolor=\"#1e3a8a\" style=\"background-color:#1e3a8a;padding:20px 28px;border-top-left-radius:10px;border-top-right-radius:10px;font-size:22px;font-weight:700;color:#ffffff\">
+                                Lembrete de Coleta – Nota Fiscal {numero_nf}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:24px 28px 10px;font-size:14px;line-height:1.65;color:#1e293b\">
+                                Prezado(a) {cliente}, gostaríamos de lembrar que a Nota Fiscal <strong>{numero_nf}</strong>
+                                permanece disponivel para coleta em nossa expedicao.
+                                <br><br>
+                                Conforme a condicao de venda FOB, a retirada da mercadoria deve ser realizada pelo transporte contratado por sua empresa.
+                                <br><br>
+                                Solicitamos, por gentileza, o envio da programacao de coleta ou dos dados da transportadora para que possamos prosseguir com a liberacao da carga.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:0 28px 0;font-size:14px;line-height:1.7;color:#0f172a\">
+                                <strong>Importante:</strong>
+                                <ul style=\"margin:8px 0 0 18px;padding:0\">
+                                    <li>Após <strong>7 (sete) dias corridos da emissão da Nota Fiscal</strong>, o prazo de pagamento passará a ser contabilizado.</li>
+                                    <li>Eventuais solicitações de <strong>prorrogação do prazo de pagamento em razão da ausência de coleta</strong> estarão sujeitas à análise e aprovação prévia, mediante negociação específica.</li>
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style=\"padding:14px 28px 0;font-size:14px;line-height:1.7;color:#1e293b\">
+                                Ficamos à disposição para quaisquer esclarecimentos.
+                                <br><br>
+                                Atenciosamente
+                                <br><br>
+                                Logistics team<br>
+                                Columbia Machine Brasil<br>
+                                Cel/whatsapp: (19) 99996-5208<br>
+                                logistica@colmac.com
+                            </td>
+                        </tr>
+
+                        {aviso_teste}
+
+                        <tr>
+                            <td style=\"padding:20px 28px 24px;font-size:11px;color:#64748b\">
+                                powered by <strong style=\"color:#1e3a8a\">Columbia Sync</strong>
+                            </td>
+                        </tr>
+                    </table>
+                </td></tr>
+            </table>
+        </body>
+        </html>"""
+
+
+def enviar_aviso_coleta_fob(
+    numero_nf: str,
+    *,
+    nome_cliente: str = "",
+    qtde_volumes: int = 0,
+    peso: float = 0,
+    disparado_por: str = "sistema",
+    origem: str = "RomaneioFOB",
+    envio_assincrono: bool = True,
+) -> dict:
+    """Envia aviso de mercadoria disponivel para coleta para frete FOB.
+
+    Reaproveita a mesma logica de resolucao de e-mail do envio de NF.
+    """
+    app = current_app._get_current_object()
+    numero_nf_limpo = str(numero_nf or "").strip()
+    if not numero_nf_limpo:
+        return {"sucesso": False, "erro": "numero_nf e obrigatorio."}
+
+    existente = (
+        EmailNFEnviado.query
+        .filter_by(numero_nf=numero_nf_limpo, origem=origem)
+        .filter(EmailNFEnviado.status.in_(["Pendente", "Enviado"]))
+        .order_by(EmailNFEnviado.id.desc())
+        .first()
+    )
+    if existente:
+        return {
+            "sucesso": True,
+            "ignorado": True,
+            "motivo": "Aviso FOB ja enviado para esta NF.",
+            "numero_nf": numero_nf_limpo,
+            "log_id": existente.id,
+        }
+
+    nota = _resolver_nota(numero_nf_limpo, None)
+    if not nota:
+        return {
+            "sucesso": False,
+            "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.",
+            "numero_nf": numero_nf_limpo,
+        }
+
+    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
+    resolvido = _resolver_destinatario_da_nota(nota, None)
+    destino_real = resolvido["email"]
+    fonte = resolvido["fonte_email"]
+    telefone_real = str(resolvido.get("telefone") or "")
+
+    destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
+
+    cc_final: list[str] = []
+    if not modo_teste:
+        cc_config_raw = str(app.config.get("NFE_EMAIL_CC") or "")
+        for e in re.split(r"[,;\s]+", cc_config_raw):
+            e = e.strip()
+            if _valido_email(e) and e not in cc_final:
+                cc_final.append(e)
+
+    if not destino_real and cc_final:
+        destino_real = cc_final.pop(0)
+        fonte = "CC"
+        app.logger.warning(
+            "Aviso FOB NF-e %s: sem e-mail do cliente, enviando para CC %s.",
+            nota.numero,
+            destino_real,
+        )
+
+    if not destino_real:
+        log = EmailNFEnviado(
+            numero_nf=nota.numero,
+            chave_acesso=nota.chave,
+            destinatario_email="",
+            destinatario_nome=nota.dest_nome,
+            destinatario_cnpj=nota.dest_cnpj,
+            fonte_email="",
+            origem=origem,
+            status="Falha",
+            erro_mensagem="Sem e-mail no cadastro/XML para aviso FOB.",
+            disparado_por=disparado_por,
+        )
+        db.session.add(log)
+        db.session.commit()
+        return {
+            "sucesso": False,
+            "erro": "Nenhum e-mail disponivel.",
+            "log_id": log.id,
+            "numero_nf": nota.numero,
+        }
+
+    destino_efetivo = destino_teste if (modo_teste and _valido_email(destino_teste)) else destino_real
+
+    smtp_server = app.config.get("MAIL_SMTP_SERVER")
+    smtp_port = int(app.config.get("MAIL_SMTP_PORT", 587))
+    sender = app.config.get("MAIL_SENDER") or ""
+    password = app.config.get("MAIL_PASSWORD") or ""
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+    if not sender or not password:
+        return {"sucesso": False, "erro": "SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD)."}
+
+    assunto_base = f"Mercadoria Disponivel para Coleta - Pedido n\u00ba {nota.numero}"
+    assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = assunto
+    msg["From"] = f"{sender_name} <{sender}>"
+    msg["To"] = destino_efetivo
+    if cc_final:
+        msg["Cc"] = ", ".join(cc_final)
+
+    horario = str(
+        app.config.get(
+            "ROMANEIO_FOB_HORARIO_ATENDIMENTO",
+            "Segunda a sexta, das 06:00 as 16:00",
+        )
+        or "Segunda a sexta, das 06:00 as 16:00"
+    ).strip()
+    endereco = str(
+        app.config.get(
+            "ROMANEIO_FOB_ENDERECO_RETIRADA",
+            "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850",
+        )
+        or "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850"
+    ).strip()
+
+    corpo_html = _montar_corpo_html_aviso_coleta_fob(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+        qtde_volumes=int(qtde_volumes or 0),
+        peso=float(peso or 0),
+        horario_atendimento=horario,
+        endereco_retirada=endereco,
+        modo_teste=modo_teste,
+        destino_real=destino_real,
+    )
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(f"Mercadoria disponivel para coleta - Pedido {nota.numero}", "plain", "utf-8"))
+    alt.attach(MIMEText(corpo_html, "html", "utf-8"))
+    msg.attach(alt)
+
+    log = EmailNFEnviado(
+        numero_nf=nota.numero,
+        chave_acesso=nota.chave,
+        destinatario_email=destino_efetivo,
+        destinatario_nome=nota.dest_nome,
+        destinatario_cnpj=nota.dest_cnpj,
+        cc_emails=(", ".join(cc_final) if cc_final else None),
+        assunto=assunto,
+        fonte_email=fonte,
+        origem=origem,
+        status="Pendente",
+        anexou_xml=False,
+        anexou_pdf=False,
+        disparado_por=disparado_por,
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    if envio_assincrono:
+        thread = threading.Thread(
+            target=_send_async,
+            args=(app, msg, smtp_server, smtp_port, sender, password, log.id),
+            daemon=True,
+        )
+        thread.start()
+    else:
+        _send_async(app, msg, smtp_server, smtp_port, sender, password, log.id)
+        db.session.refresh(log)
+
+    wa_texto = _montar_texto_whatsapp_aviso_fob(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+        qtde_volumes=int(qtde_volumes or 0),
+        peso=float(peso or 0),
+        horario_atendimento=horario,
+        endereco_retirada=endereco,
+    )
+    wa_resultado = _enviar_whatsapp_fob(
+        telefone_real=telefone_real,
+        texto=wa_texto,
+        contexto=f"FOB aviso NF {nota.numero}",
+    )
+
+    return {
+        "sucesso": bool(log.status == "Enviado") if not envio_assincrono else True,
+        "log_id": log.id,
+        "numero_nf": nota.numero,
+        "chave": nota.chave,
+        "destinatario": destino_efetivo,
+        "destinatario_real": destino_real,
+        "modo_teste": modo_teste,
+        "fonte_email": fonte,
+        "whatsapp": wa_resultado,
+        "status": log.status,
+        "erro": log.erro_mensagem if log.status == "Falha" else None,
+    }
+
+
+def enviar_lembrete_coleta_fob(
+    numero_nf: str,
+    *,
+    nome_cliente: str = "",
+    disparado_por: str = "sistema",
+    origem: str = "RomaneioFOB-Lembrete",
+    envio_assincrono: bool = True,
+) -> dict:
+    """Envia o lembrete de coleta FOB para a NF informada."""
+    app = current_app._get_current_object()
+    numero_nf_limpo = str(numero_nf or "").strip()
+    if not numero_nf_limpo:
+        return {"sucesso": False, "erro": "numero_nf e obrigatorio."}
+
+    nota = _resolver_nota(numero_nf_limpo, None)
+    if not nota:
+        return {
+            "sucesso": False,
+            "erro": "NF nao encontrada/autorizada no ERP a partir de 13/05/2026.",
+            "numero_nf": numero_nf_limpo,
+        }
+
+    modo_teste = bool(app.config.get("NFE_EMAIL_MODO_TESTE", True))
+    resolvido = _resolver_destinatario_da_nota(nota, None)
+    destino_real = resolvido["email"]
+    fonte = resolvido["fonte_email"]
+    telefone_real = str(resolvido.get("telefone") or "")
+    destino_teste = str(app.config.get("NFE_EMAIL_TESTE_DESTINO") or "").strip()
+
+    cc_final: list[str] = []
+    if not modo_teste:
+        cc_config_raw = str(app.config.get("NFE_EMAIL_CC") or "")
+        for e in re.split(r"[,;\s]+", cc_config_raw):
+            e = e.strip()
+            if _valido_email(e) and e not in cc_final:
+                cc_final.append(e)
+
+    if not destino_real and cc_final:
+        destino_real = cc_final.pop(0)
+        fonte = "CC"
+        app.logger.warning(
+            "Lembrete FOB NF-e %s: sem e-mail do cliente, enviando para CC %s.",
+            nota.numero,
+            destino_real,
+        )
+
+    if not destino_real:
+        log = EmailNFEnviado(
+            numero_nf=nota.numero,
+            chave_acesso=nota.chave,
+            destinatario_email="",
+            destinatario_nome=nota.dest_nome,
+            destinatario_cnpj=nota.dest_cnpj,
+            fonte_email="",
+            origem=origem,
+            status="Falha",
+            erro_mensagem="Sem e-mail no cadastro/XML para lembrete FOB.",
+            disparado_por=disparado_por,
+        )
+        db.session.add(log)
+        db.session.commit()
+        return {"sucesso": False, "erro": "Nenhum e-mail disponivel.", "log_id": log.id, "numero_nf": nota.numero}
+
+    destino_efetivo = destino_teste if (modo_teste and _valido_email(destino_teste)) else destino_real
+
+    smtp_server = app.config.get("MAIL_SMTP_SERVER")
+    smtp_port = int(app.config.get("MAIL_SMTP_PORT", 587))
+    sender = app.config.get("MAIL_SENDER") or ""
+    password = app.config.get("MAIL_PASSWORD") or ""
+    sender_name = app.config.get("MAIL_SENDER_NAME", "Columbia Sync")
+    if not sender or not password:
+        return {"sucesso": False, "erro": "SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD)."}
+
+    assunto_base = f"Lembrete de Coleta - Nota Fiscal {nota.numero}"
+    assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = assunto
+    msg["From"] = f"{sender_name} <{sender}>"
+    msg["To"] = destino_efetivo
+    if cc_final:
+        msg["Cc"] = ", ".join(cc_final)
+
+    corpo_html = _montar_corpo_html_lembrete_coleta_fob(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+        modo_teste=modo_teste,
+        destino_real=destino_real,
+    )
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(f"Lembrete de coleta - Nota Fiscal {nota.numero}", "plain", "utf-8"))
+    alt.attach(MIMEText(corpo_html, "html", "utf-8"))
+    msg.attach(alt)
+
+    log = EmailNFEnviado(
+        numero_nf=nota.numero,
+        chave_acesso=nota.chave,
+        destinatario_email=destino_efetivo,
+        destinatario_nome=nota.dest_nome,
+        destinatario_cnpj=nota.dest_cnpj,
+        cc_emails=(", ".join(cc_final) if cc_final else None),
+        assunto=assunto,
+        fonte_email=fonte,
+        origem=origem,
+        status="Pendente",
+        anexou_xml=False,
+        anexou_pdf=False,
+        disparado_por=disparado_por,
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    if envio_assincrono:
+        thread = threading.Thread(
+            target=_send_async,
+            args=(app, msg, smtp_server, smtp_port, sender, password, log.id),
+            daemon=True,
+        )
+        thread.start()
+    else:
+        _send_async(app, msg, smtp_server, smtp_port, sender, password, log.id)
+        db.session.refresh(log)
+
+    wa_texto = _montar_texto_whatsapp_lembrete_fob(
+        numero_nf=nota.numero,
+        nome_cliente=nome_cliente or nota.dest_nome,
+    )
+    wa_resultado = _enviar_whatsapp_fob(
+        telefone_real=telefone_real,
+        texto=wa_texto,
+        contexto=f"FOB lembrete NF {nota.numero}",
+    )
+
+    return {
+        "sucesso": bool(log.status == "Enviado") if not envio_assincrono else True,
+        "log_id": log.id,
+        "numero_nf": nota.numero,
+        "chave": nota.chave,
+        "destinatario": destino_efetivo,
+        "destinatario_real": destino_real,
+        "modo_teste": modo_teste,
+        "fonte_email": fonte,
+        "whatsapp": wa_resultado,
+        "status": log.status,
+        "erro": log.erro_mensagem if log.status == "Falha" else None,
+    }
 
 
 def enviar_nfe_por_email(

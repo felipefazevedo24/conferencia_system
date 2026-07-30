@@ -246,6 +246,25 @@ class Config:
     NFE_EMAIL_BACKGROUND_SCHEDULER_ENABLED = os.environ.get("NFE_EMAIL_BACKGROUND_SCHEDULER_ENABLED", "0") == "1"
     NFE_EMAIL_AUTO_DESDE = os.environ.get("NFE_EMAIL_AUTO_DESDE", "2026-05-13")  # piso minimo: 2026-05-13
     NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
+    # Lembrete de coleta FOB: primeira notificação + recorrencia a cada 2 dias
+    # enquanto o romaneio nao estiver com status "Expedido".
+    ROMANEIO_FOB_REMINDER_ENABLED = os.environ.get("ROMANEIO_FOB_REMINDER_ENABLED", "1") == "1"
+    ROMANEIO_FOB_REMINDER_POLL_INTERVAL_SECONDS = int(os.environ.get("ROMANEIO_FOB_REMINDER_POLL_INTERVAL_SECONDS", "3600"))
+    ROMANEIO_FOB_HORARIO_ATENDIMENTO = os.environ.get("ROMANEIO_FOB_HORARIO_ATENDIMENTO", "Segunda a sexta, das 06:00 as 16:00")
+    ROMANEIO_FOB_ENDERECO_RETIRADA = os.environ.get(
+        "ROMANEIO_FOB_ENDERECO_RETIRADA",
+        "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850",
+    )
+    # WhatsApp profissional para comunicacao FOB (Meta Cloud API)
+    WHATSAPP_FOB_ENABLED = os.environ.get("WHATSAPP_FOB_ENABLED", "0") == "1"
+    WHATSAPP_PROVIDER = str(os.environ.get("WHATSAPP_PROVIDER", "META_CLOUD") or "META_CLOUD").strip()
+    WHATSAPP_META_API_VERSION = str(os.environ.get("WHATSAPP_META_API_VERSION", "v21.0") or "v21.0").strip()
+    WHATSAPP_META_PHONE_NUMBER_ID = str(os.environ.get("WHATSAPP_META_PHONE_NUMBER_ID", "") or "").strip()
+    WHATSAPP_META_ACCESS_TOKEN = str(os.environ.get("WHATSAPP_META_ACCESS_TOKEN", "") or "").strip()
+    WHATSAPP_TIMEOUT_SECONDS = int(os.environ.get("WHATSAPP_TIMEOUT_SECONDS", "15"))
+    WHATSAPP_DEFAULT_COUNTRY_CODE = str(os.environ.get("WHATSAPP_DEFAULT_COUNTRY_CODE", "55") or "55").strip()
+    WHATSAPP_MODO_TESTE = os.environ.get("WHATSAPP_MODO_TESTE", "1") == "1"
+    WHATSAPP_TESTE_DESTINO = str(os.environ.get("WHATSAPP_TESTE_DESTINO", "") or "").strip()
     # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
     NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")
     # Roteamento por CFOP: quando algum item da NF tiver um destes CFOPs, o envio

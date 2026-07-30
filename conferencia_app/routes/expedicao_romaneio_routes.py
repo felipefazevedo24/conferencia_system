@@ -22,6 +22,7 @@ from ..services import danfe_service
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
 from ..services.expedicao_photo_storage import using_drive, upload_bytes_to_drive
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
+from ..services.nfe_email_service import enviar_aviso_coleta_fob
 
 expedicao_romaneio_bp = Blueprint("expedicao_romaneio", __name__)
 
@@ -334,10 +335,12 @@ def atualizar_romaneio(romaneio_id):
         romaneio.orcamento = str(payload["orcamento"]).strip()
     if "cliente" in payload:
         romaneio.cliente = str(payload["cliente"]).strip()
+    disparar_aviso_fob = False
     if "tipo_frete" in payload:
         frete = str(payload["tipo_frete"]).strip().upper()
         if frete not in ("FOB", "CIF"):
             return jsonify({"error": "Tipo de frete deve ser FOB ou CIF."}), 400
+        disparar_aviso_fob = (frete == "FOB")
         romaneio.tipo_frete = frete
     if "transportadora" in payload:
         romaneio.transportadora = str(payload["transportadora"]).strip()
@@ -357,6 +360,28 @@ def atualizar_romaneio(romaneio_id):
     romaneio.atualizado_por = session["username"]
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
+
+    # Ao montar/atualizar romaneio com frete FOB, dispara aviso de coleta para
+    # cada NF usando o mesmo resolvedor de e-mails do envio da NF-e.
+    if disparar_aviso_fob and (romaneio.nfs or []):
+        usuario = session.get("username", "sistema")
+        for nf in romaneio.nfs:
+            try:
+                enviar_aviso_coleta_fob(
+                    numero_nf=nf.numero_nf,
+                    nome_cliente=nf.cliente or romaneio.cliente or "",
+                    qtde_volumes=int(nf.qtde_volumes or 0),
+                    peso=float(nf.peso_bruto or 0),
+                    disparado_por=usuario,
+                    origem="RomaneioFOB",
+                    envio_assincrono=True,
+                )
+            except Exception:
+                current_app.logger.exception(
+                    "Falha ao disparar aviso FOB para NF %s (romaneio %s).",
+                    nf.numero_nf,
+                    romaneio.numero_romaneio,
+                )
     
     return jsonify({"message": "Romaneio atualizado com sucesso."})
 
