@@ -47,6 +47,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_RASTREAMENTO": "Logistica > Rastreamento de Veiculos",
     "PAGE_LOGISTICA_FROTA": "Logistica > Gestao de Frota",
     "PAGE_LOGISTICA_VIAGEM": "Logistica > Gestao de Viagens",
+    "PAGE_LOGISTICA_INVENTARIO": "Logistica > Modulo de Inventario",
     "PAGE_FACILITIES_ADMIN": "Facilities > Painel de Gestao (Admin)",
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
     "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",
@@ -91,6 +92,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_RASTREAMENTO",
         "PAGE_LOGISTICA_FROTA",
         "PAGE_LOGISTICA_VIAGEM",
+        "PAGE_LOGISTICA_INVENTARIO",
         "PAGE_CADASTRO_WORKFLOW",
     },
     "Portaria": {

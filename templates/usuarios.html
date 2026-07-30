@@ -26,6 +26,15 @@
         .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
         .page-header-erp h2 i { color: var(--sap-blue); font-size: 24px; }
 
+        /* Abas (Usuários / Permissões) — evita empilhar tudo numa unica tela */
+        .ua-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: #eef2f7; border: 1px solid var(--border-color); margin-bottom: 20px; }
+        .ua-tab { border: none; background: transparent; color: #64748b; font-weight: 700; font-size: 13px; padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
+        .ua-tab:hover { color: #1e293b; }
+        .ua-tab.is-active { background: white; color: var(--sap-blue); box-shadow: 0 4px 12px rgba(10,110,209,.15); }
+        .ua-tab .ua-tab-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: #e2e8f0; color: #64748b; font-size: 11px; font-weight: 700; }
+        .ua-tab.is-active .ua-tab-count { background: var(--sap-blue); color: #fff; }
+        .ua-tabpanel.hidden { display: none; }
+
         .management-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
 
         /* Cards Estilizados */
@@ -78,11 +87,17 @@
         }
         .btn-delete:hover { background: var(--danger-erp); color: white; border-color: var(--danger-erp); }
 
-        .permissions-card { margin-top: 20px; }
+        .permissions-card { margin-top: 0; }
         .permissions-toolbar { display: grid; grid-template-columns: 170px 280px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: 16px; }
         .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(340px, 1fr)); gap: 10px; }
         .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px; background: #fafcff; }
         .perm-item small { color: #64748b; font-size: 10px; }
+        .perm-section { margin-bottom: 24px; }
+        .perm-section:last-child { margin-bottom: 0; }
+        .perm-section-title {
+            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--sap-blue); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid #eef2f7;
+        }
 
         @media (max-width: 960px) {
             .management-grid { grid-template-columns: 1fr; }
@@ -98,6 +113,12 @@
         <h2><i class="fas fa-user-lock"></i> Gestão de Acessos e Usuários</h2>
     </div>
 
+    <div class="ua-tabs" id="ua-tabs">
+        <button type="button" class="ua-tab is-active" data-tab="usuarios"><i class="fas fa-users"></i> Usuários <span class="ua-tab-count" id="ua-tab-count-usuarios">0</span></button>
+        <button type="button" class="ua-tab" data-tab="permissoes"><i class="fas fa-shield-halved"></i> Permissões</button>
+    </div>
+
+    <div class="ua-tabpanel" data-panel="usuarios">
     <div class="management-grid">
         <div class="card-sap">
             <h3>Manutenção de Cadastro</h3>
@@ -153,7 +174,9 @@
             </div>
         </div>
     </div>
+    </div>
 
+    <div class="ua-tabpanel hidden" data-panel="permissoes">
     <div class="card-sap permissions-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <h3 style="margin:0; border:none; padding:0;">Permissões Granulares por Aba</h3>
@@ -191,7 +214,8 @@
         </div>
 
         <div id="perms-meta" style="font-size:12px; color:#64748b; margin-bottom:14px;">Selecione o alvo para editar as abas permitidas.</div>
-        <div id="perms-grid" class="permissions-grid"></div>
+        <div id="perms-groups"></div>
+    </div>
     </div>
 </div>
 {% endblock %}
@@ -271,6 +295,9 @@
                 </td>
             </tr>
         `).join('');
+
+        const tabCount = document.getElementById('ua-tab-count-usuarios');
+        if (tabCount) tabCount.textContent = users.length;
     }
 
     async function resetarSenha(username) {
@@ -327,25 +354,44 @@
 
     function renderPermissoesGrid(efetivo, base = {}, overrides = {}) {
         permissoesEditando = { ...efetivo };
-        const grid = document.getElementById('perms-grid');
+        const wrap = document.getElementById('perms-groups');
         if (!catalogoPermissoes.length) {
-            grid.innerHTML = '<div>Nenhuma permissão cadastrada.</div>';
+            wrap.innerHTML = '<div>Nenhuma permissão cadastrada.</div>';
             return;
         }
 
-        grid.innerHTML = catalogoPermissoes.map(p => {
-            const checked = !!efetivo[p.key] ? 'checked' : '';
-            const baseVal = !!base[p.key];
-            const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
-            const origem = hasOverride ? 'customizado' : (baseVal ? 'padrão do cargo: permitido' : 'padrão do cargo: bloqueado');
+        // Agrupa por modulo (primeira parte do label, antes de " > "), pra nao
+        // jogar todas as ~30 permissoes numa grade unica sem organizacao.
+        const grupos = {};
+        catalogoPermissoes.forEach((p) => {
+            const partes = p.label.split(' > ');
+            const secao = partes[0];
+            const nomeCurto = partes.slice(1).join(' > ') || p.label;
+            if (!grupos[secao]) grupos[secao] = [];
+            grupos[secao].push({ ...p, nomeCurto });
+        });
+
+        wrap.innerHTML = Object.keys(grupos).sort().map((secao) => {
+            const itensHtml = grupos[secao].map((p) => {
+                const checked = !!efetivo[p.key] ? 'checked' : '';
+                const baseVal = !!base[p.key];
+                const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, p.key);
+                const origem = hasOverride ? 'customizado' : (baseVal ? 'padrão do cargo: permitido' : 'padrão do cargo: bloqueado');
+                return `
+                    <label class="perm-item">
+                        <input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)">
+                        <div>
+                            <div style="font-size:12px; font-weight:700; color:#1e293b;">${p.nomeCurto}</div>
+                            <small>${p.key} | ${origem}</small>
+                        </div>
+                    </label>
+                `;
+            }).join('');
             return `
-                <label class="perm-item">
-                    <input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)">
-                    <div>
-                        <div style="font-size:12px; font-weight:700; color:#1e293b;">${p.label}</div>
-                        <small>${p.key} | ${origem}</small>
-                    </div>
-                </label>
+                <div class="perm-section">
+                    <h4 class="perm-section-title">${secao}</h4>
+                    <div class="permissions-grid">${itensHtml}</div>
+                </div>
             `;
         }).join('');
     }
@@ -404,7 +450,19 @@
         await carregarPermissoesAlvo();
     }
     
+    function ativarAba(nomeAba) {
+        document.querySelectorAll('.ua-tab').forEach((tab) => {
+            tab.classList.toggle('is-active', tab.dataset.tab === nomeAba);
+        });
+        document.querySelectorAll('.ua-tabpanel').forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.panel !== nomeAba);
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
+        document.querySelectorAll('.ua-tab').forEach((tab) => {
+            tab.addEventListener('click', () => ativarAba(tab.dataset.tab));
+        });
         await carregarUsuarios();
         await carregarCatalogoPermissoes();
         alternarEscopoPermissao();

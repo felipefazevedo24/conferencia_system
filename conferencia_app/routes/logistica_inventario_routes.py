@@ -15,7 +15,7 @@ from ..models import LogisticaInventarioInicial
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
 
-PERMISSION = "PAGE_LOGISTICA_AGENDAMENTO"
+PERMISSION = "PAGE_LOGISTICA_INVENTARIO"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
 ]

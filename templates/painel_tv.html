@@ -79,6 +79,21 @@
     70% { box-shadow: 0 0 0 14px rgba(52,211,153,0); }
     100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
   }
+  .audio-indicator {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: clamp(30px, 3.6vh, 40px); height: clamp(30px, 3.6vh, 40px);
+    border-radius: 50%; font-size: clamp(13px, 1.6vh, 17px);
+    background: rgba(52,211,153,.12); color: var(--ok);
+    border: 1px solid rgba(52,211,153,.3); cursor: pointer;
+    transition: all .2s ease;
+  }
+  .audio-indicator.is-muted {
+    background: rgba(248,113,113,.12); color: var(--warn); border-color: rgba(248,113,113,.35);
+    animation: mutedPulse 2s infinite;
+  }
+  @keyframes mutedPulse {
+    0%, 100% { opacity: 1; } 50% { opacity: .55; }
+  }
   .clock { text-align: right; }
   .clock .time { font-size: clamp(22px, 3vh, 40px); font-weight: 800; font-variant-numeric: tabular-nums; }
   .clock .date { color: var(--muted); font-size: clamp(11px, 1.4vh, 16px); text-transform: capitalize; }
@@ -307,6 +322,7 @@
     <div style="display:flex;align-items:center;gap:20px">
       <div class="slides-nav" id="slides-nav"></div>
       <div id="live" class="live"><span class="dot"></span><span id="live-text">Ao vivo</span></div>
+      <button type="button" id="audio-indicator" class="audio-indicator" title="Som"><i class="fas fa-volume-high"></i></button>
       <div class="clock">
         <div class="time" id="clock-time">--:--</div>
         <div class="date" id="clock-date">—</div>
@@ -406,22 +422,64 @@
   const seenKeys = new Set();
   let firstLoad = true;
   let audioCtx = null;
+  let audioUnlocked = false;
 
   const $ = (id) => document.getElementById(id);
 
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        return null;
+      }
+    }
+    return audioCtx;
+  }
+
+  function updateAudioIndicator() {
+    const btn = $("audio-indicator");
+    if (!btn) return;
+    btn.classList.toggle("is-muted", !audioUnlocked);
+    btn.title = audioUnlocked ? "Som ativado" : "Som bloqueado pelo navegador — toque aqui para ativar";
+    btn.innerHTML = '<i class="fas ' + (audioUnlocked ? "fa-volume-high" : "fa-volume-xmark") + '"></i>';
+  }
+
+  // O painel roda numa TV sem ninguem interagindo, e a maioria dos
+  // navegadores so libera audio apos algum gesto do usuario (autoplay
+  // policy). Tenta desbloquear no carregamento, em qualquer interacao que
+  // porventura aconteca e quando a aba volta a ficar visivel. Se o
+  // navegador/kiosk estiver configurado com autoplay liberado (ex.: Chrome
+  // com --autoplay-policy=no-user-gesture-required), resume() já libera
+  // sozinho, sem precisar de nenhum toque.
+  function tryUnlockAudio() {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => {
+        audioUnlocked = ctx.state === "running";
+        updateAudioIndicator();
+      }).catch(() => {});
+    } else {
+      audioUnlocked = true;
+      updateAudioIndicator();
+    }
+  }
+
   function beep() {
+    const ctx = ensureAudioCtx();
+    if (!ctx || ctx.state === "suspended") { tryUnlockAudio(); return; }
     try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
       o.type = "sine"; o.frequency.value = 880;
       g.gain.value = 0.05;
-      o.connect(g); g.connect(audioCtx.destination);
+      o.connect(g); g.connect(ctx.destination);
       o.start();
-      o.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.12);
-      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
-      o.stop(audioCtx.currentTime + 0.36);
-    } catch (e) { /* autoplay pode bloquear; ignora */ }
+      o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      o.stop(ctx.currentTime + 0.36);
+    } catch (e) { /* falha pontual do audio; ignora */ }
   }
 
   function setNum(id, val) {
@@ -832,6 +890,17 @@
       renderList("oc-sem-list", [], buildOcItem("semana"), "ERP indisponível");
     }
   }
+
+  ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
+    document.addEventListener(evt, tryUnlockAudio, { passive: true });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) tryUnlockAudio();
+  });
+  $("audio-indicator").addEventListener("click", tryUnlockAudio);
+  updateAudioIndicator();
+  tryUnlockAudio();
+  setInterval(tryUnlockAudio, 10000);
 
   updateClock();
   setInterval(updateClock, 1000 * 15);

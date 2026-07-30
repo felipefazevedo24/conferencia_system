@@ -197,7 +197,7 @@ HOME_MODULES = [
         "description": "Funcionalidade de inventario da Logistica com criacao de registros, consulta por filtros e exportacao em Excel.",
         "href": "/logistica/inventario",
         "icon": "fa-clipboard-list",
-        "permission": "PAGE_LOGISTICA_AGENDAMENTO",
+        "permission": "PAGE_LOGISTICA_INVENTARIO",
         "section": "Logística",
         "tone": "cyan",
         "priority": 84,
