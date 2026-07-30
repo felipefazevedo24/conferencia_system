@@ -1,117 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}Administração de Segurança | ERP FAM{% endblock %}
+{% block title %}Gestão de Acessos | Columbia Sync{% endblock %}
+{% block shell_title %}Gestão de Acessos{% endblock %}
 
 {% block extra_head %}
-    <style>
-        :root { 
-            --sap-blue: #0a6ed1;
-            --sap-hover: #085caf;
-            --erp-bg: #f4f6f9;
-            --border-color: #dbe2e8;
-            --protheus-gray: #32363a;
-            --card-shadow: 0 8px 24px rgba(26, 49, 74, 0.1);
-            --danger-erp: #d92d20;
-        }
+<style>
+    /* Abas (Usuários / Permissões) — mesmo padrão das abas FAT/ST/Avulso da
+       Conferência de Expedição, usando as variáveis do design system EUI. */
+    .ua-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); margin-bottom: var(--eui-space-5); }
+    .ua-tab { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 9px 18px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
+    .ua-tab:hover { color: var(--eui-text); }
+    .ua-tab.is-active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .ua-tab-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--eui-surface-3); color: var(--eui-muted); font-size: 11px; font-weight: 700; }
+    .ua-tab.is-active .ua-tab-count { background: var(--eui-primary); color: #fff; }
+    .ua-tabpanel.hidden { display: none; }
 
-        body { background-color: var(--erp-bg); color: #333; font-family: "72", "Segoe UI", Arial, sans-serif; font-size: 13px; }
-        .main-content { padding: 25px; max-width: 1240px; margin: 0 auto; }
-        
-        /* Cabeçalho Branco Padrão */
-        .page-header-erp { 
-            background: #ffffff; padding: 18px 25px; border-bottom: 4px solid var(--sap-blue);
-            margin-bottom: 25px; border-radius: 12px; box-shadow: var(--card-shadow);
-            display: flex; align-items: center; color: #000000; border: 1px solid var(--border-color);
-        }
-        .page-header-erp h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
-        .page-header-erp h2 i { color: var(--sap-blue); font-size: 24px; }
+    .ua-grid { display: grid; grid-template-columns: 360px 1fr; gap: var(--eui-space-5); align-items: start; }
+    @media (max-width: 960px) { .ua-grid { grid-template-columns: 1fr; } }
 
-        /* Abas (Usuários / Permissões) — evita empilhar tudo numa unica tela */
-        .ua-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: #eef2f7; border: 1px solid var(--border-color); margin-bottom: 20px; }
-        .ua-tab { border: none; background: transparent; color: #64748b; font-weight: 700; font-size: 13px; padding: 10px 18px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
-        .ua-tab:hover { color: #1e293b; }
-        .ua-tab.is-active { background: white; color: var(--sap-blue); box-shadow: 0 4px 12px rgba(10,110,209,.15); }
-        .ua-tab .ua-tab-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: #e2e8f0; color: #64748b; font-size: 11px; font-weight: 700; }
-        .ua-tab.is-active .ua-tab-count { background: var(--sap-blue); color: #fff; }
-        .ua-tabpanel.hidden { display: none; }
+    .ua-table-wrap { overflow-x: auto; }
+    .ua-table { width: 100%; border-collapse: collapse; }
+    .ua-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); background: var(--eui-surface-2); }
+    .ua-table td { padding: 10px 14px; border-bottom: 1px solid var(--eui-border); font-size: 13px; color: var(--eui-text); vertical-align: middle; }
+    .ua-table tbody tr:hover td { background: var(--eui-surface-2); }
+    .ua-table .ua-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
-        .management-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+    .ua-perm-toolbar { display: grid; grid-template-columns: 170px 260px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: var(--eui-space-5); }
+    @media (max-width: 960px) { .ua-perm-toolbar { grid-template-columns: 1fr; } }
 
-        /* Cards Estilizados */
-        .card-sap { 
-            background: white; border: 1px solid var(--border-color); padding: 25px; 
-            border-radius: 16px; box-shadow: var(--card-shadow);
-        }
-        .card-sap h3 { 
-            font-size: 13px; font-weight: 800; color: var(--protheus-gray); margin-bottom: 20px; 
-            text-transform: uppercase; border-bottom: 2px solid #f0f4f8; padding-bottom: 10px;
-        }
-
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; }
-        
-        input[type="text"], input[type="password"], select { 
-            width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; 
-            font-size: 13px; transition: all 0.2s; box-sizing: border-box;
-        }
-        input:focus, select:focus { border-color: var(--sap-blue); outline: none; box-shadow: 0 0 0 3px rgba(10,110,209,0.1); }
-
-        /* Botões */
-        .btn-sap { 
-            padding: 10px 18px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; 
-            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
-            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-        }
-        .btn-save { width: 100%; background: var(--sap-blue); color: white; margin-top: 10px; }
-        .btn-save:hover { background: var(--sap-hover); transform: translateY(-1px); }
-
-        .btn-refresh { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-        .btn-refresh:hover { background: #e2e8f0; }
-
-        /* Tabela de Usuários */
-        .table-container { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f8fafc; padding: 14px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #edf2f7; }
-        td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; background: white; }
-        tr:hover td { background: #f0f7ff; }
-
-        /* Badges de Role */
-        .badge-role { padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
-        .role-admin { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
-        .role-fiscal { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
-        .role-conferente, .role-portaria { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-
-        .btn-delete { 
-            color: var(--danger-erp); cursor: pointer; font-size: 14px; border: 1px solid #fee2e2; 
-            background: #fef2f2; border-radius: 8px; padding: 8px; transition: all 0.2s;
-        }
-        .btn-delete:hover { background: var(--danger-erp); color: white; border-color: var(--danger-erp); }
-
-        .permissions-card { margin-top: 0; }
-        .permissions-toolbar { display: grid; grid-template-columns: 170px 280px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: 16px; }
-        .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(340px, 1fr)); gap: 10px; }
-        .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px; background: #fafcff; }
-        .perm-item small { color: #64748b; font-size: 10px; }
-        .perm-section { margin-bottom: 24px; }
-        .perm-section:last-child { margin-bottom: 0; }
-        .perm-section-title {
-            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
-            color: var(--sap-blue); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid #eef2f7;
-        }
-
-        @media (max-width: 960px) {
-            .management-grid { grid-template-columns: 1fr; }
-            .permissions-toolbar { grid-template-columns: 1fr; }
-            .permissions-grid { grid-template-columns: 1fr; }
-        }
-    </style>
+    .perm-section { margin-bottom: var(--eui-space-6); }
+    .perm-section:last-child { margin-bottom: 0; }
+    .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--eui-border); }
+    .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(300px, 1fr)); gap: 10px; }
+    @media (max-width: 960px) { .permissions-grid { grid-template-columns: 1fr; } }
+    .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 9px 10px; background: var(--eui-surface-2); }
+    .perm-item strong { display: block; font-size: 12px; font-weight: 700; color: var(--eui-text); }
+    .perm-item small { color: var(--eui-muted); font-size: 10px; }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="main-content">
-    <div class="page-header-erp">
-        <h2><i class="fas fa-user-lock"></i> Gestão de Acessos e Usuários</h2>
-    </div>
+<div class="eui-scope">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Administração</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-user-lock"></i> Gestão de Acessos</h1>
+            <p class="eui-page-header__sub">Cadastro de usuários e permissões granulares por cargo ou por pessoa.</p>
+        </div>
+    </header>
 
     <div class="ua-tabs" id="ua-tabs">
         <button type="button" class="ua-tab is-active" data-tab="usuarios"><i class="fas fa-users"></i> Usuários <span class="ua-tab-count" id="ua-tab-count-usuarios">0</span></button>
@@ -119,103 +55,107 @@
     </div>
 
     <div class="ua-tabpanel" data-panel="usuarios">
-    <div class="management-grid">
-        <div class="card-sap">
-            <h3>Manutenção de Cadastro</h3>
-            <div class="form-group">
-                <label>Username (Identificador)</label>
-                <input type="text" id="reg-user" placeholder="Ex: FELAZE" style="text-transform:uppercase">
+        <div class="ua-grid">
+            <div class="eui-card">
+                <div class="eui-card__head">
+                    <h3 class="eui-card__title"><i class="fas fa-user-plus"></i> Novo usuário</h3>
+                </div>
+                <div class="eui-card__body">
+                    <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
+                        <label class="eui-field__label">Username (identificador)</label>
+                        <input type="text" id="reg-user" class="eui-input" placeholder="Ex: FELAZE" style="text-transform:uppercase">
+                    </div>
+                    <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
+                        <label class="eui-field__label">E-mail</label>
+                        <input type="email" id="reg-email" class="eui-input" placeholder="Ex: felaze@colmac.com">
+                    </div>
+                    <div class="eui-field" style="margin-bottom: var(--eui-space-4);">
+                        <label class="eui-field__label">Perfil de acesso</label>
+                        <select id="reg-role" class="eui-select">
+                            <option value="Logistica">LOGÍSTICA</option>
+                            <option value="Portaria">PORTARIA</option>
+                            <option value="Fiscal">FISCAL</option>
+                            <option value="Controladoria">CONTROLADORIA</option>
+                            <option value="Compras">COMPRAS</option>
+                            <option value="Motorista">MOTORISTA</option>
+                            <option value="Solicitante">SOLICITANTE</option>
+                            <option value="Qualidade">QUALIDADE</option>
+                            <option value="Admin">ADMINISTRADOR</option>
+                        </select>
+                    </div>
+                    <button class="eui-btn eui-btn--primary" style="width:100%;" onclick="salvarUsuario()">
+                        <i class="fas fa-user-plus"></i> Efetivar registro
+                    </button>
+                    <p class="eui-field__hint" style="margin-top:12px;"><i class="fas fa-circle-info"></i> O usuário definirá a própria senha no primeiro acesso pelo e-mail cadastrado.</p>
+                </div>
             </div>
-            <div class="form-group">
-                <label>E-mail</label>
-                <input type="email" id="reg-email" placeholder="Ex: felaze@colmac.com">
-            </div>
-            <div class="form-group">
-                <label>Perfil de Acesso</label>
-                <select id="reg-role">
-                    <option value="Logistica">LOGÍSTICA</option>
-                    <option value="Portaria">PORTARIA</option>
-                    <option value="Fiscal">FISCAL</option>
-                    <option value="Controladoria">CONTROLADORIA</option>
-                    <option value="Compras">COMPRAS</option>
-                    <option value="Motorista">MOTORISTA</option>
-                    <option value="Solicitante">SOLICITANTE</option>
-                    <option value="Qualidade">QUALIDADE</option>
-                    <option value="Admin">ADMINISTRADOR</option>
-                </select>
-            </div>
-            <button class="btn-sap btn-save" onclick="salvarUsuario()">
-                <i class="fas fa-user-plus"></i> Efetivar Registro
-            </button>
-            <p style="margin-top:12px;font-size:11px;color:#64748b"><i class="fas fa-info-circle"></i> O usuário definirá a própria senha no primeiro acesso pelo e-mail cadastrado.</p>
-        </div>
 
-        <div class="card-sap">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0; border:none; padding:0;">Usuários com Acesso ao Sistema</h3>
-                <button class="btn-sap btn-refresh" onclick="carregarUsuarios()">
-                    <i class="fas fa-sync-alt"></i> Sincronizar
-                </button>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Identificador</th>
-                            <th>E-mail</th>
-                            <th>Perfil</th>
-                            <th>Senha</th>
-                            <th width="120" style="text-align:center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="lista-usuarios-corpo">
-                        </tbody>
-                </table>
+            <div class="eui-card">
+                <div class="eui-card__head">
+                    <h3 class="eui-card__title"><i class="fas fa-users"></i> Usuários com acesso ao sistema</h3>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="carregarUsuarios()">
+                        <i class="fas fa-rotate"></i> Sincronizar
+                    </button>
+                </div>
+                <div class="eui-card__body ua-table-wrap">
+                    <table class="ua-table">
+                        <thead>
+                            <tr>
+                                <th>Identificador</th>
+                                <th>E-mail</th>
+                                <th>Perfil</th>
+                                <th>Senha</th>
+                                <th style="text-align:right;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-usuarios-corpo"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
     </div>
 
     <div class="ua-tabpanel hidden" data-panel="permissoes">
-    <div class="card-sap permissions-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; border:none; padding:0;">Permissões Granulares por Aba</h3>
-        </div>
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <h3 class="eui-card__title"><i class="fas fa-shield-halved"></i> Permissões granulares por aba</h3>
+            </div>
+            <div class="eui-card__body">
+                <div class="ua-perm-toolbar">
+                    <div class="eui-field" style="margin-bottom:0;">
+                        <label class="eui-field__label">Escopo</label>
+                        <select id="perm-scope" class="eui-select" onchange="alternarEscopoPermissao()">
+                            <option value="ROLE">Cargo</option>
+                            <option value="USER">Usuário específico</option>
+                        </select>
+                    </div>
+                    <div class="eui-field" id="wrap-role" style="margin-bottom:0;">
+                        <label class="eui-field__label">Cargo</label>
+                        <select id="perm-role" class="eui-select">
+                            <option value="Admin">Admin</option>
+                            <option value="Fiscal">Fiscal</option>
+                            <option value="Controladoria">Controladoria</option>
+                            <option value="Financeiro">Financeiro (legado)</option>
+                            <option value="Compras">Compras</option>
+                            <option value="Portaria">Portaria</option>
+                            <option value="Motorista">Motorista</option>
+                            <option value="Logística">Logística</option>
+                            <option value="Solicitante">Solicitante</option>
+                            <option value="Qualidade">Qualidade</option>
+                        </select>
+                    </div>
+                    <div class="eui-field" id="wrap-user" style="margin-bottom:0; display:none;">
+                        <label class="eui-field__label">Usuário</label>
+                        <select id="perm-user" class="eui-select"></select>
+                    </div>
+                    <button class="eui-btn eui-btn--ghost" onclick="carregarPermissoesAlvo()"><i class="fas fa-filter"></i> Carregar</button>
+                    <button class="eui-btn eui-btn--primary" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar permissões</button>
+                </div>
 
-        <div class="permissions-toolbar">
-            <div class="form-group" style="margin-bottom:0;">
-                <label>Escopo</label>
-                <select id="perm-scope" onchange="alternarEscopoPermissao()">
-                    <option value="ROLE">Cargo</option>
-                    <option value="USER">Usuário específico</option>
-                </select>
+                <div id="perms-meta" class="eui-field__hint" style="margin-bottom:14px;">Selecione o alvo para editar as abas permitidas.</div>
+                <div id="perms-groups"></div>
             </div>
-            <div class="form-group" id="wrap-role" style="margin-bottom:0;">
-                <label>Cargo</label>
-                <select id="perm-role">
-                    <option value="Admin">Admin</option>
-                    <option value="Fiscal">Fiscal</option>
-                    <option value="Controladoria">Controladoria</option>
-                    <option value="Financeiro">Financeiro (legado)</option>
-                    <option value="Compras">Compras</option>
-                    <option value="Portaria">Portaria</option>
-                    <option value="Motorista">Motorista</option>
-                    <option value="Logística">Logística</option>
-                    <option value="Solicitante">Solicitante</option>
-                    <option value="Qualidade">Qualidade</option>
-                </select>
-            </div>
-            <div class="form-group" id="wrap-user" style="margin-bottom:0; display:none;">
-                <label>Usuário</label>
-                <select id="perm-user"></select>
-            </div>
-            <button class="btn-sap btn-refresh" onclick="carregarPermissoesAlvo()"><i class="fas fa-filter"></i> Carregar</button>
-            <button class="btn-sap btn-save" style="width:auto; margin-top:0;" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar Permissões</button>
         </div>
-
-        <div id="perms-meta" style="font-size:12px; color:#64748b; margin-bottom:14px;">Selecione o alvo para editar as abas permitidas.</div>
-        <div id="perms-groups"></div>
-    </div>
     </div>
 </div>
 {% endblock %}
@@ -226,25 +166,36 @@
     let catalogoPermissoes = [];
     let permissoesEditando = {};
 
+    const ROLE_BADGE = {
+        admin: 'eui-badge--primary',
+        fiscal: 'eui-badge--success',
+        controladoria: 'eui-badge--info',
+        logistica: 'eui-badge--info',
+        logística: 'eui-badge--info',
+        compras: 'eui-badge--warning',
+        qualidade: 'eui-badge--violet',
+    };
+
+    function escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     async function salvarUsuario() {
         const u = document.getElementById('reg-user').value.trim().toUpperCase();
         const e = document.getElementById('reg-email').value.trim().toLowerCase();
         const r = document.getElementById('reg-role').value;
-        
+
         if(!u || !e) return alert("Erro: Defina o usuário e o e-mail.");
-        
-        console.log('Enviando:', {username: u, email: e, role: r});
-        
+
         try {
-            const res = await fetch('/api/registrar', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({username: u, email: e, role: r}) 
+            const res = await fetch('/api/registrar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, email: e, role: r})
             });
-            
+
             const text = await res.text();
-            console.log('Resposta bruta:', text);
-            
+
             let data;
             try {
                 data = JSON.parse(text);
@@ -252,12 +203,12 @@
                 alert("Erro: Resposta inválida do servidor: " + text.substring(0, 200));
                 return;
             }
-            
-            if(data.sucesso) { 
-                alert("Usuário registrado. Ele definirá a senha no primeiro login."); 
+
+            if(data.sucesso) {
+                alert("Usuário registrado. Ele definirá a senha no primeiro login.");
                 document.getElementById('reg-user').value = '';
                 document.getElementById('reg-email').value = '';
-                carregarUsuarios(); 
+                carregarUsuarios();
             } else {
                 const detalhes = data.details ? JSON.stringify(data.details) : '';
                 alert("Falha: " + (data.msg || data.error || '') + (detalhes ? '\nDetalhes: ' + detalhes : ''));
@@ -274,27 +225,30 @@
         usuariosCache = users;
         atualizarSelectUsuarios();
 
-        document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => `
+        document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => {
+            const badgeCls = ROLE_BADGE[u.role.toLowerCase()] || 'eui-badge--neutral';
+            return `
             <tr>
-                <td><b style="color:var(--sap-blue)">${u.username}</b></td>
-                <td>${u.email || '<span style="color:#94a3b8">—</span>'}</td>
-                <td><span class="badge-role role-${u.role.toLowerCase()}">${u.role}</span></td>
-                <td>${u.tem_senha ? '<span style="color:#16a34a"><i class="fas fa-check-circle"></i> Definida</span>' : '<span style="color:#d97706"><i class="fas fa-clock"></i> Pendente</span>'}</td>
-                <td style="text-align:center">
-                    <div style="display:flex;gap:4px;justify-content:center">
-                        <button class="btn-delete" title="Redefinir Senha" onclick="resetarSenha('${u.username}')" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af">
+                <td><strong style="color:var(--eui-primary);">${escapeHtml(u.username)}</strong></td>
+                <td>${u.email ? escapeHtml(u.email) : '<span style="color:var(--eui-muted-2);">—</span>'}</td>
+                <td><span class="eui-badge ${badgeCls}">${escapeHtml(u.role)}</span></td>
+                <td>${u.tem_senha ? '<span style="color:var(--eui-success);"><i class="fas fa-circle-check"></i> Definida</span>' : '<span style="color:var(--eui-warning);"><i class="fas fa-clock"></i> Pendente</span>'}</td>
+                <td>
+                    <div class="ua-row-actions">
+                        <button class="eui-btn eui-btn--ghost eui-btn--icon eui-btn--sm" title="Redefinir senha" onclick="resetarSenha('${u.username}')">
                             <i class="fas fa-key"></i>
                         </button>
-                        <button class="btn-delete" title="Limpar Senha (forçar recadastro)" onclick="limparSenha('${u.username}')" style="background:#fefce8;border-color:#fde68a;color:#92400e">
+                        <button class="eui-btn eui-btn--ghost eui-btn--icon eui-btn--sm" title="Limpar senha (forçar recadastro)" onclick="limparSenha('${u.username}')">
                             <i class="fas fa-eraser"></i>
                         </button>
-                        <button class="btn-delete" title="Remover Acesso" onclick="deletarUsuario('${u.username}')">
+                        <button class="eui-btn eui-btn--danger eui-btn--icon eui-btn--sm" title="Remover acesso" onclick="deletarUsuario('${u.username}')">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         const tabCount = document.getElementById('ua-tab-count-usuarios');
         if (tabCount) tabCount.textContent = users.length;
@@ -381,15 +335,15 @@
                     <label class="perm-item">
                         <input type="checkbox" ${checked} onchange="alterarPermissaoChave('${p.key}', this.checked)">
                         <div>
-                            <div style="font-size:12px; font-weight:700; color:#1e293b;">${p.nomeCurto}</div>
-                            <small>${p.key} | ${origem}</small>
+                            <strong>${escapeHtml(p.nomeCurto)}</strong>
+                            <small>${escapeHtml(p.key)} | ${origem}</small>
                         </div>
                     </label>
                 `;
             }).join('');
             return `
                 <div class="perm-section">
-                    <h4 class="perm-section-title">${secao}</h4>
+                    <h4 class="perm-section-title">${escapeHtml(secao)}</h4>
                     <div class="permissions-grid">${itensHtml}</div>
                 </div>
             `;
@@ -449,7 +403,7 @@
         alert(`Permissões atualizadas (${data.atualizadas}).`);
         await carregarPermissoesAlvo();
     }
-    
+
     function ativarAba(nomeAba) {
         document.querySelectorAll('.ua-tab').forEach((tab) => {
             tab.classList.toggle('is-active', tab.dataset.tab === nomeAba);
