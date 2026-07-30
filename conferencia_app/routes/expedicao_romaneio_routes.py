@@ -43,6 +43,34 @@ def _parse_int(valor, default=0) -> int:
     return int(_parse_float(valor, default))
 
 
+def _dados_nf_do_bridge(numero_nf: str) -> dict | None:
+    """Busca os dados reais de uma NF-e emitida direto na bridge Postgres do
+    ERP (mesma fonte usada no envio de e-mail e no destinatário do romaneio),
+    para permitir incluir manualmente no romaneio uma NF que NÃO passou pela
+    Conferência de Expedição (sem ExpedicaoOrdemFat/ST correspondente).
+    Retorna None se a NF não for encontrada/autorizada no ERP ou não tiver
+    XML disponível - nesse caso o chamador cai no fallback manual (payload)."""
+    try:
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+        xml_bytes = (nota or {}).get("xml_bytes")
+        if not xml_bytes:
+            return None
+        nfe = danfe_service.parse_nfe_xml(xml_bytes)
+        vol_peso_raw = str(nfe.get("vol_pesoB") or "").strip()
+        vol_qtd_raw = str(nfe.get("vol_qtd") or "").strip()
+        return {
+            "cliente": nfe.get("dest_nome") or "",
+            "peso_bruto": _parse_float(vol_peso_raw) if vol_peso_raw else None,
+            "qtde_volumes": _parse_int(vol_qtd_raw) if vol_qtd_raw else None,
+            "especie_volumes": nfe.get("vol_esp") or "",
+        }
+    except Exception:
+        current_app.logger.warning(
+            "Falha ao buscar NF %s na bridge do ERP para inclusão manual no romaneio", numero_nf, exc_info=True
+        )
+        return None
+
+
 def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     """Ao expedir o romaneio, garante um Registro de Expedicao ja Finalizado
     para a NF. Se ja existir um rascunho (fotos do material/cliente tiradas na
@@ -446,11 +474,20 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         especie_volumes = ordem_st.especie_volumes or payload.get("especie_volumes") or ""
         numeros_os = ordem_st.n_os or payload.get("numeros_os") or ""
     else:
+        # NF que nao passou pela Conferencia de Expedicao (sem ExpedicaoOrdemFat/
+        # ST correspondente) - busca os dados reais direto na bridge Postgres do
+        # ERP em vez de confiar apenas no que foi digitado manualmente.
+        dados_bridge = _dados_nf_do_bridge(numero_nf)
+        dados_bridge = dados_bridge or {}
         orcamento = payload.get("orcamento") or romaneio.orcamento
-        cliente = payload.get("cliente") or romaneio.cliente
-        peso_bruto = _parse_float(payload.get("peso_bruto"))
-        qtde_volumes = _parse_int(payload.get("qtde_volumes"))
-        especie_volumes = payload.get("especie_volumes") or ""
+        cliente = dados_bridge.get("cliente") or payload.get("cliente") or romaneio.cliente
+        peso_bruto = dados_bridge.get("peso_bruto")
+        if peso_bruto is None:
+            peso_bruto = _parse_float(payload.get("peso_bruto"))
+        qtde_volumes = dados_bridge.get("qtde_volumes")
+        if qtde_volumes is None:
+            qtde_volumes = _parse_int(payload.get("qtde_volumes"))
+        especie_volumes = dados_bridge.get("especie_volumes") or payload.get("especie_volumes") or ""
         numeros_os = payload.get("numeros_os") or ""
     
     nf = ExpedicaoRomaneioNF(

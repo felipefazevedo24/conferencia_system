@@ -201,6 +201,10 @@
                     </select>
                     <button type="button" class="eui-btn eui-btn--primary" id="rom-btn-add-nf" style="white-space: nowrap;"><i class="fas fa-plus"></i> Adicionar</button>
                 </div>
+                <div class="rom-nf-input-group" style="margin-top: 8px;">
+                    <input type="text" id="rom-nf-manual" class="rom-input" placeholder="Ou digite o número de uma NF que não passou pela conferência…">
+                    <button type="button" class="eui-btn eui-btn--ghost" id="rom-btn-add-nf-manual" style="white-space: nowrap;" title="Busca os dados da NF direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
+                </div>
                 <div class="rom-nfs-list" id="rom-nfs-container"></div>
             </div>
 
@@ -521,6 +525,10 @@
                         <option value="">Selecione uma NF faturada…</option>
                     </select>
                     <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="adicionarNfInline(${r.id})"><i class="fas fa-plus"></i> Adicionar</button>
+                </div>
+                <div class="rom-add-nf-inline" style="margin-top: 6px;">
+                    <input type="text" class="rom-input" id="rom-nf-manual-inline-${r.id}" placeholder="Ou digite o número de uma NF que não passou pela conferência…">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="adicionarNfManualInline(${r.id})" title="Busca os dados da NF direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
                 </div>` : ""}
             </div>`;
     }
@@ -556,6 +564,24 @@
                 method: "POST",
                 body: JSON.stringify({ numero_nf: numeroNf }),
             });
+            toast("NF adicionada!");
+            expandidos.add(id);
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    async function adicionarNfManualInline(id) {
+        const input = $(`rom-nf-manual-inline-${id}`);
+        const numeroNf = input.value.trim();
+        if (!numeroNf) { toast("Digite o número da NF.", "error"); return; }
+        try {
+            await api(`/api/expedicao/romaneio-fat/${id}/nf`, {
+                method: "POST",
+                body: JSON.stringify({ numero_nf: numeroNf }),
+            });
+            input.value = "";
             toast("NF adicionada!");
             expandidos.add(id);
             carregarRomaneios();
@@ -768,6 +794,29 @@
                 method: "POST",
                 body: JSON.stringify({ numero_nf: nf }),
             });
+            const atualizado = await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`);
+            romaneioAtual = atualizado;
+            nfsAtual = atualizado.nfs || [];
+            renderNFsList();
+            await atualizarSelectModal();
+            toast("NF adicionada!");
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    });
+
+    $("rom-btn-add-nf-manual").addEventListener("click", async () => {
+        const input = $("rom-nf-manual");
+        const nf = input.value.trim();
+        if (!nf) { toast("Digite o número da NF.", "error"); return; }
+        if (!romaneioAtual || !romaneioAtual.id) { toast("Romaneio ainda não foi criado.", "error"); return; }
+
+        try {
+            await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf`, {
+                method: "POST",
+                body: JSON.stringify({ numero_nf: nf }),
+            });
+            input.value = "";
             const atualizado = await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`);
             romaneioAtual = atualizado;
             nfsAtual = atualizado.nfs || [];

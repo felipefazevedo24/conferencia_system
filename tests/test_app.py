@@ -4297,6 +4297,65 @@ def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
         assert ids_antes == ids_depois
 
 
+def test_adicionar_nf_manual_ao_romaneio_busca_dados_na_bridge_erp(tmp_path):
+    """NF que nao passou pela Conferencia de Expedicao (sem ExpedicaoOrdemFat/
+    ST correspondente) deve puxar cliente/peso/volumes direto do XML da NF-e
+    retornado pela bridge do ERP, em vez de depender so do que foi digitado."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    xml_bytes = """
+    <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
+        <NFe>
+            <infNFe Id="NFe12345678901234567890123456789012345678901234">
+                <ide><nNF>8800</nNF></ide>
+                <emit><xNome>COLUMBIA MACHINE BRASIL</xNome></emit>
+                <dest><xNome>Cliente Fora Da Conferencia</xNome><CNPJ>11222333000144</CNPJ></dest>
+                <transp>
+                    <vol><qVol>3</qVol><esp>Caixa</esp><pesoB>45.500</pesoB></vol>
+                </transp>
+                <total><ICMSTot><vNF>100.00</vNF></ICMSTot></total>
+            </infNFe>
+        </NFe>
+    </nfeProc>
+    """.encode("utf-8")
+
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoRomaneio
+
+        romaneio = ExpedicaoRomaneio(
+            numero_romaneio="ROM-TESTE-MANUAL",
+            data_romaneio=datetime.now(),
+            tipo_frete="FOB",
+            status="Rascunho",
+            criado_por="ADMIN",
+        )
+        db.session.add(romaneio)
+        db.session.commit()
+        romaneio_id = romaneio.id
+
+    with patch(
+        "conferencia_app.routes.expedicao_romaneio_routes.buscar_nfe_emitida_erp",
+        return_value={"numero": "8800", "chave": "1" * 44, "autorizada": True, "xml_bytes": xml_bytes},
+    ):
+        resp = client.post(
+            f"/api/expedicao/romaneio-fat/{romaneio_id}/nf",
+            json={"numero_nf": "8800"},
+        )
+
+    assert resp.status_code == 201
+    with app.app_context():
+        from conferencia_app.models import ExpedicaoRomaneioNF
+
+        nf = ExpedicaoRomaneioNF.query.filter_by(romaneio_id=romaneio_id, numero_nf="8800").first()
+        assert nf is not None
+        assert nf.cliente == "Cliente Fora Da Conferencia"
+        assert nf.qtde_volumes == 3
+        assert nf.especie_volumes == "Caixa"
+        assert round(nf.peso_bruto, 1) == 45.5
+
+
 def test_expedicao_faturamento_parcial_total(tmp_path):
     reports_dir = tmp_path / "eReports"
     reports_dir.mkdir(parents=True, exist_ok=True)
