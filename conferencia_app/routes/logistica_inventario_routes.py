@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 
-from flask import Blueprint, jsonify, render_template, request, session, send_file
+from flask import Blueprint, current_app, jsonify, render_template, request, session, send_file
 from openpyxl import Workbook
 
 from ..auth import permission_required
 from ..extensions import db
 from ..models import LogisticaInventarioInicial
+from ..services.erp_estoque_service import buscar_estoque_grv, qtde_grv_para
 
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
@@ -21,8 +22,8 @@ UNIDADES_PADRAO = [
 ]
 
 
-def _fmt_registro(row: LogisticaInventarioInicial) -> dict:
-    return {
+def _fmt_registro(row: LogisticaInventarioInicial, estoque_grv: dict | None = None) -> dict:
+    dados = {
         "id": row.id,
         "local_codigo": row.local_codigo,
         "codigo_produto": row.codigo_produto,
@@ -34,6 +35,15 @@ def _fmt_registro(row: LogisticaInventarioInicial) -> dict:
         "criado_em": row.criado_em.isoformat() if row.criado_em else None,
         "atualizado_em": row.atualizado_em.isoformat() if row.atualizado_em else None,
     }
+    # So calculado quando explicitamente pedido (tela de consulta/revisao).
+    # A tela de contagem (Novo Inventario) NUNCA passa estoque_grv, para nao
+    # vesar a conferencia com o saldo esperado - mesma logica da conferencia
+    # cega usada no resto do sistema.
+    if estoque_grv is not None:
+        qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv)
+        dados["qtde_grv"] = qtde_grv
+        dados["divergente"] = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > 0.001)
+    return dados
 
 
 def _build_query(local: str = "", codigo: str = ""):
@@ -98,7 +108,23 @@ def listar_inventario_inicial():
     query = _build_query(local=local, codigo=codigo)
 
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).limit(limite).all()
-    return jsonify({"registros": [_fmt_registro(row) for row in rows]})
+
+    # A comparacao com o GRV so e calculada quando explicitamente pedida
+    # (tela de consulta) - a tela de contagem nunca passa esse parametro,
+    # entao nunca recebe o saldo esperado antes de fechar a contagem.
+    estoque_grv = None
+    erro_grv = None
+    if request.args.get("comparar_grv") == "1":
+        try:
+            estoque_grv = buscar_estoque_grv()
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.warning("Falha ao consultar estoque no GRV para comparacao: %s", exc)
+            erro_grv = str(exc)
+
+    resposta = {"registros": [_fmt_registro(row, estoque_grv) for row in rows]}
+    if request.args.get("comparar_grv") == "1":
+        resposta["grv_indisponivel"] = erro_grv if estoque_grv is None else None
+    return jsonify(resposta)
 
 
 @logistica_inventario_bp.route("/api/logistica/inventario-inicial/exportar", methods=["GET"])
@@ -106,9 +132,17 @@ def listar_inventario_inicial():
 def exportar_inventario_inicial_excel():
     local = (request.args.get("local") or "").strip().lower()
     codigo = (request.args.get("codigo") or "").strip().lower()
+    comparar_grv = request.args.get("comparar_grv") == "1"
 
     query = _build_query(local=local, codigo=codigo)
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).all()
+
+    estoque_grv = None
+    if comparar_grv:
+        try:
+            estoque_grv = buscar_estoque_grv()
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.warning("Falha ao consultar estoque no GRV para exportar comparacao: %s", exc)
 
     wb = Workbook()
     ws = wb.active
@@ -124,21 +158,26 @@ def exportar_inventario_inicial_excel():
         "Observacao",
         "Criado Por",
     ]
+    if comparar_grv:
+        headers += ["Qtde GRV", "Divergente"]
     ws.append(headers)
 
     for row in rows:
-        ws.append(
-            [
-                row.criado_em.strftime("%d/%m/%Y %H:%M:%S") if row.criado_em else "",
-                row.local_codigo,
-                row.codigo_produto,
-                row.unidade_medida,
-                float(row.quantidade or 0),
-                row.lote or "",
-                row.observacao or "",
-                row.criado_por,
-            ]
-        )
+        linha = [
+            row.criado_em.strftime("%d/%m/%Y %H:%M:%S") if row.criado_em else "",
+            row.local_codigo,
+            row.codigo_produto,
+            row.unidade_medida,
+            float(row.quantidade or 0),
+            row.lote or "",
+            row.observacao or "",
+            row.criado_por,
+        ]
+        if comparar_grv:
+            qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv) if estoque_grv is not None else None
+            divergente = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > 0.001)
+            linha += [qtde_grv if qtde_grv is not None else "N/D", "SIM" if divergente else "NAO"]
+        ws.append(linha)
 
     for col in ws.columns:
         max_len = 0

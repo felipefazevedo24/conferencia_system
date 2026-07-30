@@ -4262,6 +4262,57 @@ def test_canhoto_expedicao_faz_fallback_local_quando_drive_sem_cota(tmp_path):
     assert arquivo.data == b"fake-canhoto-image"
 
 
+def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
+    """A listagem de inventario so calcula/retorna a comparacao com o GRV
+    quando comparar_grv=1 e passado explicitamente (usado so pela tela de
+    consulta) - a tela de contagem nunca deve receber esse campo, para nao
+    vesar a conferencia com o saldo esperado."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioInicial
+
+        db.session.add(LogisticaInventarioInicial(
+            local_codigo="A01-02", codigo_produto="SKU-OK", unidade_medida="UN",
+            quantidade=10, criado_por="ADMIN",
+        ))
+        db.session.add(LogisticaInventarioInicial(
+            local_codigo="A01-03", codigo_produto="SKU-DIV", unidade_medida="UN",
+            quantidade=5, criado_por="ADMIN",
+        ))
+        db.session.commit()
+
+    # Tela de contagem (Novo Inventario): sem comparar_grv, sem vazamento.
+    resp_cego = client.get("/api/logistica/inventario-inicial?limit=10")
+    for registro in resp_cego.get_json()["registros"]:
+        assert "qtde_grv" not in registro
+        assert "divergente" not in registro
+
+    estoque_fake = {
+        "por_local": {
+            "SKU-OK|A01-02": {"qtde_total": 10},
+            "SKU-DIV|A01-03": {"qtde_total": 8},
+        },
+        "por_codigo": {
+            "SKU-OK": {"qtde_total": 10.0},
+            "SKU-DIV": {"qtde_total": 8.0},
+        },
+    }
+    with patch(
+        "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv",
+        return_value=estoque_fake,
+    ):
+        resp_comparado = client.get("/api/logistica/inventario-inicial?limit=10&comparar_grv=1")
+
+    registros = {r["codigo_produto"]: r for r in resp_comparado.get_json()["registros"]}
+    assert registros["SKU-OK"]["qtde_grv"] == 10.0
+    assert registros["SKU-OK"]["divergente"] is False
+    assert registros["SKU-DIV"]["qtde_grv"] == 8.0
+    assert registros["SKU-DIV"]["divergente"] is True
+
+
 def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):
     """Regressao: sincronizar_ordens() apagava e recriava os itens a cada
     ciclo (o poll automatico roda a cada poucos minutos), trocando o id de

@@ -52,6 +52,12 @@
     .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .inv-table th, .inv-table td { padding: 8px; border-bottom: 1px solid #e4ebf5; text-align: left; }
     .inv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .35px; color: #3b5676; background: #f6faff; }
+    .inv-table tr.is-divergente td { background: #fff4f2; }
+    .inv-badge-div { display:inline-flex; align-items:center; gap:5px; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+    .inv-badge-div.ok { background: #dcfce7; color: #166534; }
+    .inv-badge-div.divergente { background: #fee2e2; color: #991b1b; }
+    .inv-badge-div.nd { background: #f1f5f9; color: #64748b; }
+    .inv-grv-aviso { margin-top: 8px; font-size: 12px; color: #b45309; }
     @media (max-width: 780px) {
         .inv-cons-grid { grid-template-columns: 1fr; }
     }
@@ -84,6 +90,8 @@
             <a class="inv-btn" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventario</a>
         </div>
 
+        <div id="inv-grv-aviso" class="inv-grv-aviso" style="display:none;"></div>
+
         <div class="inv-table-wrap">
             <table class="inv-table">
                 <thead>
@@ -92,14 +100,16 @@
                         <th>Local</th>
                         <th>Cod. Produto</th>
                         <th>Unid.</th>
-                        <th>Qtd</th>
+                        <th>Qtd contada</th>
+                        <th>Qtd GRV</th>
+                        <th>Situação</th>
                         <th>Lote</th>
                         <th>Obs</th>
                         <th>Usuario</th>
                     </tr>
                 </thead>
                 <tbody id="tb-consulta">
-                    <tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
+                    <tr><td colspan="10" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -123,6 +133,7 @@
         const p = new URLSearchParams();
         if (fltLocal.value.trim()) p.set('local', fltLocal.value.trim());
         if (fltCodigo.value.trim()) p.set('codigo', fltCodigo.value.trim());
+        p.set('comparar_grv', '1');
         return p;
     }
 
@@ -136,18 +147,33 @@
         try { return new Date(iso).toLocaleString('pt-BR'); } catch (_) { return iso; }
     }
 
+    function fmtQtd(v) {
+        return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+    }
+
+    function situacaoHtml(r) {
+        if (r.qtde_grv === null || r.qtde_grv === undefined) {
+            return '<span class="inv-badge-div nd">N/D no GRV</span>';
+        }
+        return r.divergente
+            ? '<span class="inv-badge-div divergente"><i class="fas fa-triangle-exclamation"></i> Divergente</span>'
+            : '<span class="inv-badge-div ok"><i class="fas fa-circle-check"></i> OK</span>';
+    }
+
     function render(rows) {
         if (!rows || !rows.length) {
-            tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Nenhum registro encontrado.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#64748b;padding:14px;">Nenhum registro encontrado.</td></tr>';
             return;
         }
         tb.innerHTML = rows.map((r) => `
-            <tr>
+            <tr class="${r.divergente ? 'is-divergente' : ''}">
                 <td>${esc(fmtData(r.criado_em))}</td>
                 <td>${esc(r.local_codigo)}</td>
                 <td>${esc(r.codigo_produto)}</td>
                 <td>${esc(r.unidade_medida)}</td>
-                <td>${Number(r.quantidade || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>
+                <td>${fmtQtd(r.quantidade)}</td>
+                <td>${(r.qtde_grv === null || r.qtde_grv === undefined) ? '—' : fmtQtd(r.qtde_grv)}</td>
+                <td>${situacaoHtml(r)}</td>
                 <td>${esc(r.lote || '-')}</td>
                 <td>${esc(r.observacao || '-')}</td>
                 <td>${esc(r.criado_por || '-')}</td>
@@ -160,13 +186,20 @@
         const p = paramsAtual();
         p.set('limit', '500');
         const url = '/api/logistica/inventario-inicial?' + p.toString();
+        const avisoGrv = document.getElementById('inv-grv-aviso');
         try {
             const resp = await fetch(url, { credentials: 'same-origin' });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || data.msg || `HTTP ${resp.status}`);
             render(data.registros || []);
+            if (data.grv_indisponivel) {
+                avisoGrv.style.display = '';
+                avisoGrv.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Não foi possível consultar o saldo do GRV agora; a coluna "Qtd GRV" ficará vazia até a próxima tentativa.';
+            } else {
+                avisoGrv.style.display = 'none';
+            }
         } catch (err) {
-            tb.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+            tb.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
         }
     }
 
