@@ -18,6 +18,10 @@
     .ua-grid { display: grid; grid-template-columns: 360px 1fr; gap: var(--eui-space-5); align-items: start; }
     @media (max-width: 960px) { .ua-grid { grid-template-columns: 1fr; } }
 
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+    #ua-metrics { margin-bottom: var(--eui-space-5); }
+
     .ua-table-wrap { overflow-x: auto; }
     .ua-table { width: 100%; border-collapse: collapse; }
     .ua-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); background: var(--eui-surface-2); }
@@ -55,6 +59,37 @@
     </div>
 
     <div class="ua-tabpanel" data-panel="usuarios">
+        <div class="eui-stats" id="ua-metrics">
+            <div class="eui-stat is-clickable" data-filter="">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-users"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Total de usuários</span>
+                    <span class="eui-stat__value" id="ua-m-total">0</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="admin">
+                <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-user-shield"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Administradores</span>
+                    <span class="eui-stat__value" id="ua-m-admin">0</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="definida">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Senha definida</span>
+                    <span class="eui-stat__value" id="ua-m-definida">0</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="pendente">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Senha pendente</span>
+                    <span class="eui-stat__value" id="ua-m-pendente">0</span>
+                </div>
+            </div>
+        </div>
+
         <div class="ua-grid">
             <div class="eui-card">
                 <div class="eui-card__head">
@@ -93,9 +128,15 @@
             <div class="eui-card">
                 <div class="eui-card__head">
                     <h3 class="eui-card__title"><i class="fas fa-users"></i> Usuários com acesso ao sistema</h3>
-                    <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="carregarUsuarios()">
-                        <i class="fas fa-rotate"></i> Sincronizar
-                    </button>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <div class="eui-toolbar__search" style="min-width:220px;">
+                            <i class="fas fa-magnifying-glass"></i>
+                            <input type="search" id="ua-busca" class="eui-input" autocomplete="off" placeholder="Buscar por usuário, e-mail ou perfil…">
+                        </div>
+                        <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="carregarUsuarios()">
+                            <i class="fas fa-rotate"></i> Sincronizar
+                        </button>
+                    </div>
                 </div>
                 <div class="eui-card__body ua-table-wrap">
                     <table class="ua-table">
@@ -165,6 +206,8 @@
     let usuariosCache = [];
     let catalogoPermissoes = [];
     let permissoesEditando = {};
+    let currentFilterUsuarios = '';
+    let currentBuscaUsuarios = '';
 
     const ROLE_BADGE = {
         admin: 'eui-badge--primary',
@@ -224,10 +267,27 @@
         const users = await res.json();
         usuariosCache = users;
         atualizarSelectUsuarios();
+        atualizarMetricasUsuarios();
+        renderUsuarios();
+    }
 
-        document.getElementById('lista-usuarios-corpo').innerHTML = users.map(u => {
-            const badgeCls = ROLE_BADGE[u.role.toLowerCase()] || 'eui-badge--neutral';
-            return `
+    function atualizarMetricasUsuarios() {
+        const total = usuariosCache.length;
+        const admins = usuariosCache.filter((u) => u.role === 'Admin').length;
+        const definida = usuariosCache.filter((u) => u.tem_senha).length;
+        const pendente = total - definida;
+        document.getElementById('ua-m-total').textContent = total;
+        document.getElementById('ua-m-admin').textContent = admins;
+        document.getElementById('ua-m-definida').textContent = definida;
+        document.getElementById('ua-m-pendente').textContent = pendente;
+
+        const tabCount = document.getElementById('ua-tab-count-usuarios');
+        if (tabCount) tabCount.textContent = total;
+    }
+
+    function renderUsuariosLinha(u) {
+        const badgeCls = ROLE_BADGE[u.role.toLowerCase()] || 'eui-badge--neutral';
+        return `
             <tr>
                 <td><strong style="color:var(--eui-primary);">${escapeHtml(u.username)}</strong></td>
                 <td>${u.email ? escapeHtml(u.email) : '<span style="color:var(--eui-muted-2);">—</span>'}</td>
@@ -248,10 +308,38 @@
                 </td>
             </tr>
         `;
-        }).join('');
+    }
 
-        const tabCount = document.getElementById('ua-tab-count-usuarios');
-        if (tabCount) tabCount.textContent = users.length;
+    // Busca ignora o filtro dos KPIs e olha todos os usuarios (mesmo padrao
+    // da busca na Conferencia de Expedicao); sem busca, filtra pelo KPI ativo.
+    function renderUsuarios() {
+        let lista = usuariosCache;
+        if (currentBuscaUsuarios) {
+            const termo = currentBuscaUsuarios.toLowerCase();
+            lista = lista.filter((u) =>
+                u.username.toLowerCase().includes(termo)
+                || (u.email || '').toLowerCase().includes(termo)
+                || u.role.toLowerCase().includes(termo)
+            );
+        } else if (currentFilterUsuarios === 'admin') {
+            lista = lista.filter((u) => u.role === 'Admin');
+        } else if (currentFilterUsuarios === 'definida') {
+            lista = lista.filter((u) => u.tem_senha);
+        } else if (currentFilterUsuarios === 'pendente') {
+            lista = lista.filter((u) => !u.tem_senha);
+        }
+
+        document.querySelectorAll('#ua-metrics .eui-stat').forEach((el) => {
+            el.classList.toggle('is-active', !currentBuscaUsuarios && el.dataset.filter === currentFilterUsuarios);
+        });
+
+        const corpo = document.getElementById('lista-usuarios-corpo');
+        if (!lista.length) {
+            const motivo = currentBuscaUsuarios ? ' para esta busca' : '';
+            corpo.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--eui-muted);">Nenhum usuário encontrado${motivo}.</td></tr>`;
+            return;
+        }
+        corpo.innerHTML = lista.map(renderUsuariosLinha).join('');
     }
 
     async function resetarSenha(username) {
@@ -417,6 +505,25 @@
         document.querySelectorAll('.ua-tab').forEach((tab) => {
             tab.addEventListener('click', () => ativarAba(tab.dataset.tab));
         });
+
+        document.querySelectorAll('#ua-metrics .eui-stat').forEach((el) => {
+            el.addEventListener('click', () => {
+                currentFilterUsuarios = el.dataset.filter;
+                currentBuscaUsuarios = '';
+                document.getElementById('ua-busca').value = '';
+                renderUsuarios();
+            });
+        });
+
+        let buscaUsuariosTimer = null;
+        document.getElementById('ua-busca').addEventListener('input', (e) => {
+            clearTimeout(buscaUsuariosTimer);
+            buscaUsuariosTimer = setTimeout(() => {
+                currentBuscaUsuarios = e.target.value.trim();
+                renderUsuarios();
+            }, 250);
+        });
+
         await carregarUsuarios();
         await carregarCatalogoPermissoes();
         alternarEscopoPermissao();
