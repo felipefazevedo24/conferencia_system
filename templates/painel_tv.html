@@ -317,24 +317,21 @@
 
   /* ---------- Frota ao vivo (mapa) ---------- */
   .frota-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(10px,1.3vh,16px); flex: 0 0 auto; }
-  .frota-map { flex: 1 1 auto; min-height: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-soft); }
-  .frota-pin {
-    width: 26px; height: 26px; border-radius: 50%;
-    display: grid; place-items: center; font-size: 12px;
+  .frota-map { flex: 1 1 auto; min-height: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
+  /* Mapa fica com as cores normais do OpenStreetMap (sem filtro escuro) -
+     numa TV ninguem clica/toca pra abrir popup, entao o nome do veiculo e a
+     localizacao ficam escritos direto no proprio marcador, sempre visiveis. */
+  .frota-pill {
+    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
     background: var(--frota); color: #06283a;
+    padding: 5px 10px; border-radius: 14px;
+    font-size: 11px; font-weight: 800; white-space: nowrap;
     border: 2px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.35);
   }
-  .frota-pin.idle { background: var(--muted); color: #0c2547; }
-  /* "Modo noturno" pobre: inverte/ajusta os tiles claros do OpenStreetMap
-     pra combinar com o tema escuro do painel, sem depender de um provedor
-     de tiles escuros pago. Marcadores/popups ficam fora do filtro. */
-  .frota-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.7); }
-  .frota-map .leaflet-popup-content-wrapper { background: var(--card); color: var(--text); border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.4); }
-  .frota-map .leaflet-popup-tip { background: var(--card); }
-  .frota-map .leaflet-popup-content { font-family: inherit; font-size: clamp(11px,1.4vh,14px); margin: 10px 14px; }
-  .frota-map .leaflet-popup-content b { color: var(--text); }
-  .frota-map .leaflet-control-attribution { background: rgba(7,26,51,.65); color: var(--muted); font-size: 9px; }
-  .frota-map .leaflet-control-attribution a { color: var(--muted); }
+  .frota-pill.idle { background: var(--muted); color: #0c2547; }
+  .frota-pill__row { display: flex; align-items: center; gap: 6px; }
+  .frota-pill .loc { font-size: 9px; font-weight: 600; opacity: .8; }
+  .frota-map .leaflet-control-attribution { background: rgba(255,255,255,.75); color: #475569; font-size: 9px; }
 </style>
 </head>
 <body>
@@ -946,20 +943,17 @@
   let frotaMap = null;
   let frotaLayer = null;
 
+  // Numa TV ninguem clica/toca pra abrir popup, entao o nome do veiculo (e
+  // o destino da viagem, quando houver) ficam escritos direto no marcador,
+  // sempre visiveis - sem depender de interacao.
   function frotaMarkerIcon(v) {
-    return L.divIcon({
-      className: "",
-      html: '<div class="frota-pin' + (v.em_viagem ? "" : " idle") + '"><i class="fas fa-car"></i></div>',
-      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15],
-    });
-  }
-
-  function popupFrotaTv(v) {
     const viagem = v.viagem;
-    const info = viagem
-      ? "<b>" + esc(viagem.codigo || "Viagem") + "</b>" + (viagem.motorista_nome ? " · " + esc(viagem.motorista_nome) : "")
-      : "Sem viagem em andamento";
-    return "<div>" + esc(v.veiculo_label || "Veículo") + " · " + esc(v.placa || "") + "<br>" + info + "</div>";
+    const loc = viagem && viagem.destino_label
+      ? '<span class="loc">→ ' + esc(viagem.destino_label) + "</span>"
+      : (viagem && viagem.motorista_nome ? '<span class="loc">' + esc(viagem.motorista_nome) + "</span>" : "");
+    const html = '<div class="frota-pill' + (v.em_viagem ? "" : " idle") + '">' +
+      '<div class="frota-pill__row"><i class="fas fa-car"></i><span>' + esc(v.veiculo_label || v.placa || "Veículo") + "</span></div>" + loc + "</div>";
+    return L.divIcon({ className: "", html, iconSize: null, iconAnchor: [16, 14] });
   }
 
   function initFrotaMap(base) {
@@ -990,7 +984,7 @@
       veiculos.forEach((v) => {
         const lat = Number(v.latitude), lng = Number(v.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-        L.marker([lat, lng], { icon: frotaMarkerIcon(v) }).bindPopup(popupFrotaTv(v)).addTo(frotaLayer);
+        L.marker([lat, lng], { icon: frotaMarkerIcon(v) }).addTo(frotaLayer);
         bounds.push([lat, lng]);
       });
       if (bounds.length > 1) frotaMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });

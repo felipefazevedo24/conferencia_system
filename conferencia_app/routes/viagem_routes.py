@@ -215,6 +215,7 @@ def _viagem_resumo_mapa(v: Viagem | None) -> dict | None:
         "status": v.status,
         "titulo": v.titulo,
         "motorista_nome": v.motorista_nome,
+        "destino_label": v.destino_label,
         "saida_prevista": v.saida_prevista.isoformat() if v.saida_prevista else None,
         "saida_real": v.saida_real.isoformat() if v.saida_real else None,
         "retorno_previsto": v.retorno_previsto.isoformat() if v.retorno_previsto else None,
