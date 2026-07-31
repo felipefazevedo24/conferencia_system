@@ -62,9 +62,13 @@
       </div>
       {% endfor %}
       {% if tipo == 'material' %}
-      <div class="cw-field full">
+      <div class="cw-field">
         <label for="imagem_produto">Imagem do produto</label>
         <input class="cw-input" id="imagem_produto" name="imagem_produto" type="file" accept="image/png,image/jpeg,image/webp">
+      </div>
+      <div class="cw-field">
+        <label for="arquivo_anexo">Anexo (PDF, DOC, XLS ou imagem)</label>
+        <input class="cw-input" id="arquivo_anexo" name="arquivo_anexo" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
       </div>
       {% endif %}
       <div class="cw-field full">
@@ -74,7 +78,7 @@
     </div>
     <div class="cw-actions" style="margin-top:16px">
       <button class="cw-btn primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }}</button>
-      <button class="cw-btn soft" type="button" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
+      <button class="cw-btn soft" type="button" id="btnVerificarDuplicidade" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
     </div>
     <div id="dupBox" style="margin-top:12px"></div>
   </form>
@@ -97,20 +101,35 @@ if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
   });
 }
 async function verificarDuplicidade(){
+  const box = document.getElementById('dupBox');
+  const btn = document.getElementById('btnVerificarDuplicidade');
   const tipo = document.querySelector('[name="tipo"]').value;
   const params = new URLSearchParams({tipo});
   ['documento','descricao'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.value) params.set(id, el.value);
   });
-  const res = await fetch(`/cadastros/api/duplicidade?${params.toString()}`);
-  const data = await res.json();
-  const box = document.getElementById('dupBox');
-  if (!data.duplicidades || !data.duplicidades.length) {
-    box.innerHTML = '<div class="cw-alert" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">Nenhuma duplicidade encontrada.</div>';
-    return;
+
+  if (btn) btn.disabled = true;
+  box.innerHTML = '<div class="cw-alert" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8"><i class="fas fa-spinner fa-spin"></i> Verificando duplicidade...</div>';
+
+  try {
+    const res = await fetch(`/cadastros/api/duplicidade?${params.toString()}`);
+    if (!res.ok) {
+      const erro = await res.json().catch(() => ({}));
+      throw new Error(erro.error || `Falha na verificação (HTTP ${res.status}).`);
+    }
+    const data = await res.json();
+    if (!data.duplicidades || !data.duplicidades.length) {
+      box.innerHTML = '<div class="cw-alert" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">Nenhuma duplicidade encontrada.</div>';
+      return;
+    }
+    box.innerHTML = '<div class="cw-alert">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
+  } catch (err) {
+    box.innerHTML = `<div class="cw-alert err"><i class="fas fa-triangle-exclamation"></i> Não foi possível verificar duplicidade: ${err.message}</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  box.innerHTML = '<div class="cw-alert">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
 }
 
 </script>
