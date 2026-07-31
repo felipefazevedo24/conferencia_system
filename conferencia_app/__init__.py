@@ -184,14 +184,6 @@ def create_app(test_config=None) -> Flask:
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler ERP Lancamento")
 
-    # Scheduler Facilities: alertas de vencimento NR-6 (diário às 08:00)
-    if not app.config.get("TESTING"):
-        try:
-            from .services.facilities_scheduler import iniciar_scheduler as iniciar_facilities_nr6
-            iniciar_facilities_nr6(app)
-        except Exception:
-            app.logger.exception("Falha ao iniciar scheduler Facilities NR-6")
-
     # Scheduler de sincronizacao das ordens de Conferencia de Expedicao
     # (Faturamento + ST). Solucao satelite: busca continua no servidor para
     # nao perder ordens no intervalo entre solicitacao e faturamento.

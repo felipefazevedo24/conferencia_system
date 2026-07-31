@@ -35,7 +35,7 @@ if not os.path.isdir(os.path.join(ROOT_DIR, "conferencia_app")):
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from flask import Blueprint, Flask, g, jsonify, redirect, request, session
+from flask import Blueprint, Flask, g, jsonify, request, session
 import psycopg2  # type: ignore
 
 from conferencia_app.bootstrap import initialize_database
@@ -1040,7 +1040,7 @@ def _registrar_facilities_na_bridge(app: Flask) -> None:
 
     @pages_bp.route("/")
     def home():
-        return redirect("/facilities/admin")
+        return jsonify({"ok": True, "service": "erp-lancamento-api-bridge", "facilities": True})
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(pages_bp)
@@ -1097,14 +1097,6 @@ def _registrar_facilities_na_bridge(app: Flask) -> None:
         return {"asset_version": asset_version}
 
     initialize_database(app)
-
-    if not app.config.get("TESTING"):
-        try:
-            from conferencia_app.services.facilities_scheduler import iniciar_scheduler as iniciar_facilities_nr6
-
-            iniciar_facilities_nr6(app)
-        except Exception:
-            app.logger.exception("Falha ao iniciar scheduler Facilities NR-6")
 
 
 def create_app() -> Flask:

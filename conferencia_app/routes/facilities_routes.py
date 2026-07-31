@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, date, timedelta
 
-from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
+from flask import Blueprint, current_app, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
 from ..auth import login_required, permission_required
@@ -255,61 +255,6 @@ def _add_months(d: date, months: int) -> date:
     day = min(d.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
     return date(year, month, day)
-
-
-# ============================================================================
-# PÁGINAS (REQUEREM LOGIN)
-# ============================================================================
-
-@facilities_bp.route("/facilities/solicitar-epi")
-@login_required
-@permission_required("PAGE_FACILITIES_GESTOR")
-def page_solicitar_epi():
-    """Página para solicitar EPI/Uniforme — exclusivo para gestores e admins."""
-    return render_template("facilities_solicitar_epi.html")
-
-
-@facilities_bp.route("/facilities/minhas-solicitacoes")
-@login_required
-@permission_required("PAGE_FACILITIES_GESTOR")
-def page_minhas_solicitacoes():
-    """Tela do gestor de setor: acompanha o status das solicitacoes que ele abriu."""
-    return render_template("facilities_minhas_solicitacoes.html")
-
-
-@facilities_bp.route("/facilities/almoxarife")
-@login_required
-@permission_required("PAGE_FACILITIES_ADMIN")
-def page_almoxarife():
-    """Tela do almoxarife: apenas itens LIBERADOS aguardando entrega fisica."""
-    return render_template("facilities_almoxarife.html")
-
-
-@facilities_bp.route("/facilities/relatorio-consumo")
-@login_required
-@permission_required("PAGE_FACILITIES_ADMIN")
-def page_relatorio_consumo():
-    """Relatório de consumo de EPI/Uniforme por setor."""
-    return render_template("facilities_relatorio_consumo.html")
-
-
-@facilities_bp.route("/facilities/cronograma-limpeza")
-@login_required
-def page_cronograma_limpeza():
-    """Página para ver cronograma de limpeza (colaborador logado)."""
-    return render_template("facilities_cronograma_limpeza.html")
-
-
-# ============================================================================
-# PÁGINAS ADMIN (REQUER LOGIN)
-# ============================================================================
-
-@facilities_bp.route("/facilities/admin")
-@login_required
-@permission_required("PAGE_FACILITIES_ADMIN")
-def page_facilities_admin():
-    """Painel de gestão Facilities (Admin)"""
-    return render_template("facilities_admin.html")
 
 
 # ============================================================================
@@ -880,10 +825,7 @@ def _notificar_gestores_nova_solicitacao(solicitacao: FacilitiesEpiSolicitacao) 
         return
 
     solicitante_nome = solicitacao.colaborador.nome if solicitacao.colaborador else "-"
-    try:
-        url_admin = url_for("facilities.page_facilities_admin", _external=True)
-    except Exception:
-        url_admin = "/facilities/admin"
+    url_admin = "/facilities/admin"
 
     enviar_email_solicitacao_epi(
         destinatarios_emails=emails,
@@ -957,10 +899,7 @@ def _notificar_gestor_retorno_epi(solicitacao: "FacilitiesEpiSolicitacao", acao:
         or "Gestor"
     )
     colaborador_nome = solicitacao.colaborador.nome if solicitacao.colaborador else "?"
-    try:
-        url_ficha = url_for("facilities.pagina_ficha_epi", id=solicitacao.id, _external=True)
-    except Exception:
-        url_ficha = f"/facilities/ficha-epi/{solicitacao.id}"
+    url_ficha = f"/facilities/ficha-epi/{solicitacao.id}"
 
     enviar_email_retorno_epi(
         destinatario_email=email_destino,
@@ -2360,13 +2299,6 @@ def api_gerar_limpezas_da_semana():
     return jsonify({"criados": criados})
 
 
-@facilities_bp.route("/facilities/qr/<token>")
-def facilities_qr_template(token):
-    """Landing para QR Code de template de limpeza - abre pagina de conclusao."""
-    t = FacilitiesLimpezaTemplate.query.filter_by(qr_code=token).first_or_404()
-    return render_template("facilities_limpeza_qr.html", template=t)
-
-
 # ============================================================================
 # KANBAN - TAREFAS DE PROJETO
 # ============================================================================
@@ -2507,50 +2439,6 @@ def api_registrar_impedimento(id):
     db.session.commit()
     _audit("projeto_tarefa", t.id, "impedimento", descricao[:200])
     return jsonify({"id": t.id, "status": t.status, "foto": nome_foto})
-
-
-# ============================================================================
-# TELA DE RETIRADA (colaborador/QR)
-# ============================================================================
-
-@facilities_bp.route("/facilities/retirar/<int:id>")
-@login_required
-def pagina_retirar_epi(id):
-    """Pagina dedicada para retirada com assinatura (signature_pad)."""
-    s = FacilitiesEpiSolicitacao.query.get_or_404(id)
-    return render_template("facilities_retirar_epi.html", solicitacao=s)
-
-
-# ============================================================================
-# FICHA IMPRIMÍVEL (HTML — abre nova aba, Ctrl+P para imprimir)
-# ============================================================================
-
-@facilities_bp.route("/facilities/ficha-epi/<int:id>")
-@login_required
-def pagina_ficha_epi(id):
-    """Ficha NR-6 imprimível em HTML. Disponível para qualquer status."""
-    from datetime import datetime as _dt
-    from flask import current_app
-    s = FacilitiesEpiSolicitacao.query.get_or_404(id)
-    assinatura_url = None
-    if s.assinatura_path:
-        assinatura_url = f"/api/facilities/epi-solicitacoes/{s.id}/assinatura"
-    agora = _dt.now().strftime("%d/%m/%Y %H:%M")
-    empresa_nome = current_app.config.get("EMPRESA_NOME", "Columbia")
-    empresa_cnpj = current_app.config.get("EMPRESA_CNPJ", "")
-    logo_url = current_app.config.get("EMPRESA_LOGO_URL", "")
-    # Se for um caminho relativo (sem http), prefixamos /static/
-    if logo_url and not logo_url.startswith("http"):
-        logo_url = f"/static/{logo_url.lstrip('/')}"
-    return render_template(
-        "facilities_ficha_epi.html",
-        sol=s,
-        assinatura_url=assinatura_url,
-        agora=agora,
-        empresa_nome=empresa_nome,
-        empresa_cnpj=empresa_cnpj,
-        logo_url=logo_url,
-    )
 
 
 # ============================================================================
