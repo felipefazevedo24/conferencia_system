@@ -1,9 +1,33 @@
 from flask import Flask
 from flask import g, request, session
 import os
+import subprocess
 import time
 import warnings
 from datetime import datetime, timedelta
+
+
+def _compute_build_info() -> str:
+    # Le o commit atual do HEAD uma unica vez, no import do modulo (nao a
+    # cada request) - serve pra confirmar visualmente (rodape) se um deploy
+    # (ex.: PythonAnywhere) de fato reiniciou o processo apos um git pull,
+    # ja que so atualizar os arquivos no disco nao troca o codigo em memoria.
+    try:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=3,
+        ).decode().strip()
+        commit_date = subprocess.check_output(
+            ["git", "log", "-1", "--format=%cd", "--date=format:%d/%m %H:%M"],
+            cwd=repo_root, stderr=subprocess.DEVNULL, timeout=3,
+        ).decode().strip()
+        return f"{commit} · {commit_date}"
+    except Exception:
+        return "dev"
+
+
+_BUILD_INFO = _compute_build_info()
 
 # Silencia warning cosmético do openpyxl ("Workbook contains no default style")
 # emitido ao ler XLSX gerados por ferramentas que não preenchem o style default.
@@ -146,7 +170,7 @@ def create_app(test_config=None) -> Flask:
             asset_version = str(int(max(mtimes))) if mtimes else str(int(time.time()))
         except Exception:
             asset_version = str(int(time.time()))
-        return {"asset_version": asset_version}
+        return {"asset_version": asset_version, "build_info": _BUILD_INFO}
 
     initialize_database(app)
 
