@@ -2,7 +2,45 @@
 {% block title %}Solicitação {{ solicitacao.numero }} | Columbia Sync{% endblock %}
 {% block shell_title %}Solicitação {{ solicitacao.numero }}{% endblock %}
 {% block shell_subtitle %}Status, responsável, SLA, checklist e histórico completo.{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Componentes proprios desta tela, em cima das variaveis do design
+       system EUI (mesmo tratamento dado a usuarios.html / documento_entrada.html).
+       Os demais blocos (card, badge, botao, kebab, input, foto) sao 100% EUI. */
+    .cwd-stack { display: grid; gap: var(--eui-space-5); }
+
+    .cwd-steps { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: var(--eui-space-2) 0; }
+    .cwd-step { display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; flex: 1; min-width: 92px; text-align: center; }
+    .cwd-step:not(:first-child)::before { content: ""; position: absolute; top: 15px; right: 50%; width: 100%; height: 2px; background: var(--eui-border); z-index: 0; }
+    .cwd-step.is-done:not(:first-child)::before, .cwd-step.is-active:not(:first-child)::before { background: var(--eui-primary); }
+    .cwd-step__node { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--eui-surface-3); color: var(--eui-muted); font-size: 12px; font-weight: 700; z-index: 1; }
+    .cwd-step.is-done .cwd-step__node { background: var(--eui-primary); color: #fff; }
+    .cwd-step.is-active .cwd-step__node { background: var(--eui-primary); color: #fff; box-shadow: 0 0 0 4px var(--eui-primary-soft); }
+    .cwd-step__label { font-size: 11px; font-weight: 600; color: var(--eui-muted); }
+    .cwd-step.is-active .cwd-step__label, .cwd-step.is-done .cwd-step__label { color: var(--eui-text); }
+
+    .cwd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--eui-space-4); }
+    .cwd-grid .eui-field.full { grid-column: 1 / -1; }
+    .cwd-readonly { min-height: 38px; padding: 8px 12px; border-radius: var(--eui-radius-sm); background: var(--eui-surface-2); border: 1px solid var(--eui-border); font-size: 13px; color: var(--eui-text); font-weight: 500; display: flex; align-items: center; word-break: break-word; }
+    .cwd-chip { display: inline-flex; align-items: center; border-radius: 999px; background: var(--eui-info-soft); color: var(--eui-info-soft-text); padding: 2px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; margin-left: 6px; }
+
+    .cwd-checks { display: grid; gap: 8px; }
+    .cwd-check { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); background: var(--eui-surface-2); }
+    .cwd-check span { font-size: 13px; color: var(--eui-text); font-weight: 500; }
+    .cwd-check select { max-width: 170px; }
+
+    .cwd-timeline { display: grid; gap: 10px; }
+    .cwd-event { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); }
+    .cwd-event__icon { width: 30px; height: 30px; border-radius: 50%; background: var(--eui-primary-soft); color: var(--eui-primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; }
+    .cwd-event__body strong { display: block; font-size: 12px; color: var(--eui-text); }
+    .cwd-event__body p { margin: 4px 0 0; font-size: 13px; color: var(--eui-text-soft); }
+    .cwd-event__body span { display: block; margin-top: 4px; font-size: 11px; color: var(--eui-muted-2); }
+
+    @media (max-width: 760px) { .cwd-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
 {% macro valor_campo(campo, dados, campo_opcoes) -%}
   {%- if campo_opcoes.get(campo) -%}
     {%- set selecionado = namespace(texto='') -%}
@@ -14,334 +52,375 @@
     {{ dados.get(campo) or '-' }}
   {%- endif -%}
 {%- endmacro %}
+
 {% block content %}
-<section class="cw-shell">
-  {% set pode_editar = (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
-  {% set titulo = dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or tipos[solicitacao.tipo].label %}
-  {% set status_label = solicitacao.status|replace('Validacao','Validação')|replace('Correcao','Correção') %}
-  {% set etapa_label = solicitacao.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído') %}
-  <div class="cw-topbar">
-    <a class="cw-btn ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
-    {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" onsubmit="return confirm('Cancelar esta solicitação de cadastro?');">
-      <input type="hidden" name="acao" value="cancelar">
-      <button class="cw-btn danger" type="submit"><i class="fas fa-ban"></i> Cancelar minha solicitação</button>
-    </form>
+{% set pode_editar = (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
+{% set titulo = dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or tipos[solicitacao.tipo].label %}
+{% set status_label = solicitacao.status|replace('Validacao','Validação')|replace('Correcao','Correção') %}
+{% set etapa_label = solicitacao.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído') %}
+{% set cadastro_direto_fiscal = solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
+{% set etapas = ['Abertura', 'Fiscal', 'Conclusão'] if cadastro_direto_fiscal else ['Abertura', 'Compras', 'Fiscal', 'Decisão', 'Conclusão'] %}
+{% set status_badge = {
+    'Em Validacao Compras': 'eui-badge--info',
+    'Em Validacao Fiscal': 'eui-badge--violet',
+    'Pendente de Correcao': 'eui-badge--warning',
+    'Cadastrado': 'eui-badge--success',
+    'Reprovado': 'eui-badge--danger',
+    'Cancelado': 'eui-badge--neutral',
+} %}
+<div class="eui-scope cwd-stack">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">#{{ solicitacao.numero }} · {{ tipos[solicitacao.tipo].label }}</div>
+            <h1 class="eui-page-header__title">{{ titulo }}</h1>
+            <p class="eui-page-header__sub">Aberto por {{ solicitacao.solicitante }} em {{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M') }}</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span class="eui-badge {{ status_badge.get(solicitacao.status, 'eui-badge--neutral') }}">{{ status_label }}</span>
+            {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" onsubmit="return confirm('Cancelar esta solicitação de cadastro?');">
+                <input type="hidden" name="acao" value="cancelar">
+                <button class="eui-btn eui-btn--danger" type="submit"><i class="fas fa-ban"></i> Cancelar minha solicitação</button>
+            </form>
+            {% endif %}
+            <a class="eui-btn eui-btn--ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+        </div>
+    </header>
+
+    {% if request.args.get('erro') %}
+    <div class="eui-callout eui-callout--danger"><i class="fas fa-triangle-exclamation"></i> {{ request.args.get('erro') }}</div>
     {% endif %}
-  </div>
+    {% if solicitacao.alerta_duplicidade %}
+    <div class="eui-callout eui-callout--warning"><i class="fas fa-copy"></i> Esta solicitação foi aberta com alerta de possível duplicidade registrado.</div>
+    {% endif %}
 
-  <div class="cw-case-top">
-    <div class="cw-case-user"><i class="fas fa-user-circle"></i> {{ solicitacao.solicitante }}</div>
-    <div class="cw-case-title">{{ tipos[solicitacao.tipo].label|upper }}</div>
-    <div class="cw-case-number">#{{ solicitacao.numero }}</div>
-  </div>
+    <div class="eui-card">
+        <div class="eui-card__body">
+            <div class="cwd-steps">
+                {% for etapa in etapas %}
+                {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusão' and solicitacao.status == 'Cadastrado') %}
+                <div class="cwd-step {% if active %}is-active{% elif loop.index == 1 %}is-done{% endif %}">
+                    <div class="cwd-step__node">
+                        {% if etapa == 'Decisão' %}<i class="fas fa-question"></i>{% elif etapa == 'Conclusão' %}<i class="fas fa-check"></i>{% else %}{{ loop.index }}{% endif %}
+                    </div>
+                    <span class="cwd-step__label">{{ etapa }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 
-  <div class="cw-progress-line">
-    {% set cadastro_direto_fiscal = solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
-    {% set etapas = ['Abertura', 'Fiscal', 'Conclusão'] if cadastro_direto_fiscal else ['Abertura', 'Compras', 'Fiscal', 'Decisão', 'Conclusão'] %}
-    {% for etapa in etapas %}
-    {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusão' and solicitacao.status == 'Cadastrado') %}
-    <div class="cw-progress-step {% if active %}active{% elif loop.index == 1 %}done{% endif %}">
-      <div class="cw-progress-node">
-        {% if etapa == 'Decisão' %}<i class="fas fa-question"></i>{% elif etapa == 'Conclusão' %}<i class="fas fa-check"></i>{% else %}{{ loop.index }}{% endif %}
-      </div>
-      <span>{{ etapa }}</span>
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-circle-info"></i> Resumo</h3>
+        </div>
+        <div class="eui-card__body">
+            <div class="eui-detail-info">
+                <div><span>Etapa atual</span><strong>{{ etapa_label }}</strong></div>
+                <div><span>SLA</span><strong>{% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}Sem pendência{% endif %}</strong></div>
+                <div><span>Responsável</span><strong>{{ solicitacao.responsavel_atual or 'Fila da célula' }}</strong></div>
+                <div><span>Documento</span><strong>{{ dados.get('documento') or '-' }}</strong></div>
+            </div>
+        </div>
+    </div>
+
+    {% if solicitacao.tipo == 'material' %}
+    {% for grupo_key, grupo_titulo, campos in tipos[solicitacao.tipo].field_groups %}
+    {% set grupo_editavel = pode_editar and ((grupo_key == 'compras' and solicitacao.departamento_atual == 'Compras' and can_compras) or (grupo_key == 'fiscal' and solicitacao.departamento_atual == 'Fiscal' and can_fiscal)) %}
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-layer-group"></i> {{ grupo_titulo }}</h3>
+            <span class="eui-badge eui-badge--neutral">
+                {% if grupo_key == 'solicitante' %}Informado na abertura
+                {% elif grupo_key == 'compras' %}Preenchido por Compras
+                {% else %}Validado pelo Fiscal{% endif %}
+            </span>
+        </div>
+        <div class="eui-card__body">
+            {% if grupo_editavel %}
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+                <input type="hidden" name="acao" value="salvar_dados">
+                <div class="cwd-grid">
+                    {% for campo, label, obrigatorio in campos %}
+                    <div class="eui-field {% if campo in ['ncm_sugestao_justificativa'] %}full{% endif %}">
+                        <label class="eui-field__label">{{ label }}{% if campo == 'ncm_sugerido' %}<span class="cwd-chip">sugerido</span>{% endif %}</label>
+                        {% if campo_opcoes.get(campo) %}
+                        <select class="eui-select" name="campo_{{ campo }}">
+                            <option value="">Selecione...</option>
+                            {% for valor, texto in campo_opcoes.get(campo) %}
+                            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
+                        {% endif %}
+                        {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
+                        <span class="eui-field__hint">{{ dados.get('ncm_sugestao_justificativa') }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="eui-field full">
+                        <label class="eui-field__label">Comentário da edição</label>
+                        <textarea class="eui-textarea" name="comentario" placeholder="Opcional"></textarea>
+                    </div>
+                </div>
+                <button class="eui-btn eui-btn--ghost" type="submit" style="margin-top:var(--eui-space-4)"><i class="fas fa-save"></i> Salvar informações</button>
+            </form>
+            {% else %}
+            <div class="cwd-grid">
+                {% for campo, label, obrigatorio in campos %}
+                <div class="eui-field">
+                    <label class="eui-field__label">{{ label }}{% if campo == 'ncm_sugerido' %}<span class="cwd-chip">sugerido</span>{% endif %}</label>
+                    <div class="cwd-readonly">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
+                    {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
+                    <span class="eui-field__hint">{{ dados.get('ncm_sugestao_justificativa') }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
     </div>
     {% endfor %}
-  </div>
 
-  {% if request.args.get('erro') %}<div class="cw-alert err">{{ request.args.get('erro') }}</div>{% endif %}
-
-  <div class="cw-case-summary">
-    <div class="cw-summary-main">
-      <span class="cw-status-badge {{ 'danger' if prazo.vencida else 'info' }}">{{ status_label }}</span>
-      <h2>{{ titulo }}</h2>
-      <p>{{ tipos[solicitacao.tipo].label }} aberto por {{ solicitacao.solicitante }} em {{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M') }}</p>
-    </div>
-    <div class="cw-summary-grid">
-      <div><span>Etapa atual</span><strong>{{ etapa_label }}</strong></div>
-      <div><span>SLA</span><strong>{% if prazo.horas is not none %}{{ 'Vencida' if prazo.vencida else prazo.horas ~ 'h restantes' }}{% else %}Sem pendência{% endif %}</strong></div>
-      <div><span>Responsável</span><strong>{{ solicitacao.responsavel_atual or 'Fila da célula' }}</strong></div>
-      <div><span>Documento</span><strong>{{ dados.get('documento') or '-' }}</strong></div>
-    </div>
-  </div>
-
-  <div class="cw-workflow-board">
-    <div class="cw-stage-title">{{ etapa_label }} - {{ status_label }}</div>
-    <div class="cw-message-card">
-      <div class="cw-message-icon"><i class="fas fa-play"></i></div>
-      <div>
-        <strong>{{ solicitacao.solicitante }}</strong>
-        <span>{{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M:%S') }}</span>
-        <p>Solicitação aberta para {{ tipos[solicitacao.tipo].label }}.</p>
-        <em>Abertura</em>
-      </div>
-    </div>
-
-    <div class="cw-stage-title">{{ etapa_label }} - Dados para Cadastro no ERP</div>
-    {% if can_fiscal and solicitacao.departamento_atual == 'Fiscal' and solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin:10px 0 14px">
-      <input type="hidden" name="acao" value="consultar_cnpj">
-      <button class="cw-btn primary" type="submit"><i class="fas fa-id-card"></i> Consultar CNPJ e IE</button>
-    </form>
-    {% endif %}
-    {% if solicitacao.tipo == 'material' %}
-    <div class="cw-section-stack">
-      {% for grupo_key, grupo_titulo, campos in tipos[solicitacao.tipo].field_groups %}
-      {% set grupo_editavel = pode_editar and ((grupo_key == 'compras' and solicitacao.departamento_atual == 'Compras' and can_compras) or (grupo_key == 'fiscal' and solicitacao.departamento_atual == 'Fiscal' and can_fiscal)) %}
-      <section class="cw-data-section">
-        <div class="cw-data-section-head">
-          <h3>{{ grupo_titulo }}</h3>
-          {% if grupo_key == 'solicitante' %}
-          <span>Informado na abertura</span>
-          {% elif grupo_key == 'compras' %}
-          <span>Preenchido por Compras</span>
-          {% else %}
-          <span>Validado pelo Fiscal</span>
-          {% endif %}
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-paperclip"></i> Anexos e referência visual</h3>
+            <span class="eui-badge eui-badge--neutral">{{ 'Editável nesta etapa' if pode_editar else 'Enviado pelo solicitante' }}</span>
         </div>
-        {% if grupo_editavel %}
-        <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form">
-          <input type="hidden" name="acao" value="salvar_dados">
-          <div class="cw-form-grid">
-            {% for campo, label, obrigatorio in campos %}
-            <div class="cw-field {% if campo in ['ncm_sugestao_justificativa'] %}full{% endif %}">
-              <label>{{ label }}{% if campo == 'ncm_sugerido' %} <span class="cw-origin-chip">sugerido</span>{% endif %}</label>
-              {% if campo_opcoes.get(campo) %}
-              <select class="cw-select" name="campo_{{ campo }}">
-                <option value="">Selecione...</option>
-                {% for valor, texto in campo_opcoes.get(campo) %}
-                <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
-                {% endfor %}
-              </select>
-              {% else %}
-              <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
-              {% endif %}
-              {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
-              <small class="cw-field-help">{{ dados.get('ncm_sugestao_justificativa') }}</small>
-              {% endif %}
-            </div>
-            {% endfor %}
-            <div class="cw-field full">
-              <label>Comentário da edição</label>
-              <textarea class="cw-textarea" name="comentario" placeholder="Opcional"></textarea>
-            </div>
-          </div>
-          <button class="cw-btn soft" type="submit" style="margin-top:12px"><i class="fas fa-save"></i> Salvar informações</button>
-        </form>
-        {% else %}
-        <div class="cw-form-grid">
-          {% for campo, label, obrigatorio in campos %}
-          <div class="cw-field">
-            <label>{{ label }}{% if campo == 'ncm_sugerido' %} <span class="cw-origin-chip">sugerido</span>{% endif %}</label>
-            <div class="cw-read-value">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
-            {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
-            <small class="cw-field-help">{{ dados.get('ncm_sugestao_justificativa') }}</small>
-            {% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </section>
-      {% endfor %}
-      <section class="cw-data-section">
-        <div class="cw-data-section-head">
-          <h3>Anexos e referência visual</h3>
-          <span>{{ 'Editável nesta etapa' if pode_editar else 'Enviado pelo solicitante' }}</span>
-        </div>
-        {% if pode_editar %}
-        <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" enctype="multipart/form-data">
-          <input type="hidden" name="acao" value="atualizar_anexos">
-          <div class="cw-attachment-grid">
-            <div>
-              {% if anexos_info.imagem %}
-              <a class="cw-image-preview" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
-                <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
-              </a>
-              {% endif %}
-              <div class="cw-field" style="margin-top:10px">
-                <label>{{ 'Substituir imagem do produto' if anexos_info.imagem else 'Imagem do produto' }}</label>
-                <input class="cw-input" type="file" name="imagem_produto" accept="image/png,image/jpeg,image/webp">
-              </div>
-              <div class="cw-field">
-                <label>{{ 'Substituir anexo' if anexos_info.arquivo else 'Anexo (PDF, DOC, XLS ou imagem)' }}</label>
-                {% if anexos_info.arquivo %}
-                <small class="cw-field-help"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></small>
+        <div class="eui-card__body">
+            {% if pode_editar %}
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" enctype="multipart/form-data">
+                <input type="hidden" name="acao" value="atualizar_anexos">
+                <div class="cwd-grid">
+                    <div class="eui-field">
+                        {% if anexos_info.imagem %}
+                        <div class="eui-photos" style="grid-template-columns:140px; margin-bottom:10px;">
+                            <a class="eui-photo" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
+                                <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
+                            </a>
+                        </div>
+                        {% endif %}
+                        <label class="eui-field__label">{{ 'Substituir imagem do produto' if anexos_info.imagem else 'Imagem do produto' }}</label>
+                        <input class="eui-input" type="file" name="imagem_produto" accept="image/png,image/jpeg,image/webp">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label">{{ 'Substituir anexo' if anexos_info.arquivo else 'Anexo (PDF, DOC, XLS ou imagem)' }}</label>
+                        {% if anexos_info.arquivo %}
+                        <span class="eui-field__hint"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener" style="color:var(--eui-primary);text-decoration:none;font-weight:600;"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></span>
+                        {% endif %}
+                        <input class="eui-input" type="file" name="arquivo_anexo" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
+                    </div>
+                    <div class="eui-field full">
+                        <label class="eui-field__label">Observações</label>
+                        <textarea class="eui-textarea" name="anexos" style="min-height:120px">{{ anexos_info.observacoes }}</textarea>
+                    </div>
+                </div>
+                <button class="eui-btn eui-btn--ghost" type="submit" style="margin-top:var(--eui-space-4)"><i class="fas fa-save"></i> Salvar anexos</button>
+            </form>
+            {% elif anexos_info.observacoes or anexos_info.imagem or anexos_info.arquivo %}
+            <div class="cwd-grid">
+                {% if anexos_info.imagem %}
+                <div class="eui-photos" style="grid-template-columns:140px;">
+                    <a class="eui-photo" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
+                        <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
+                    </a>
+                </div>
                 {% endif %}
-                <input class="cw-input" type="file" name="arquivo_anexo" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
-              </div>
+                <div class="eui-field full">
+                    <div class="cwd-readonly" style="min-height:auto; padding:10px 12px;">{{ anexos_info.observacoes or 'Sem observações adicionais.' }}</div>
+                    {% if anexos_info.arquivo %}
+                    <span class="eui-field__hint" style="margin-top:8px;"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener" style="color:var(--eui-primary);text-decoration:none;font-weight:600;"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></span>
+                    {% endif %}
+                </div>
             </div>
-            <div class="cw-field">
-              <label>Observações</label>
-              <textarea class="cw-textarea" name="anexos" style="min-height:140px">{{ anexos_info.observacoes }}</textarea>
-            </div>
-          </div>
-          <button class="cw-btn soft" type="submit" style="margin-top:12px"><i class="fas fa-save"></i> Salvar anexos</button>
-        </form>
-        {% elif anexos_info.observacoes or anexos_info.imagem or anexos_info.arquivo %}
-        <div class="cw-attachment-grid">
-          {% if anexos_info.imagem %}
-          <a class="cw-image-preview" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
-            <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
-          </a>
-          {% endif %}
-          <div>
-            <div class="cw-read-value">{{ anexos_info.observacoes or 'Sem observações adicionais.' }}</div>
-            {% if anexos_info.arquivo %}
-            <small class="cw-field-help" style="display:block;margin-top:8px;"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></small>
+            {% else %}
+            <div class="cwd-readonly">Nenhum anexo enviado.</div>
             {% endif %}
-          </div>
         </div>
-        {% else %}
-        <div class="cw-read-value">Nenhum anexo enviado.</div>
-        {% endif %}
-      </section>
     </div>
-    {% elif pode_editar %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form">
-      <input type="hidden" name="acao" value="salvar_dados">
-      <div class="cw-form-grid">
-        {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
-        <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
-          <label>{{ label }}</label>
-          {% if campo_opcoes.get(campo) %}
-          <select class="cw-select" name="campo_{{ campo }}">
-            <option value="">Selecione...</option>
-            {% for valor, texto in campo_opcoes.get(campo) %}
-            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
-            {% endfor %}
-          </select>
-          {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
-          <textarea class="cw-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
-          {% else %}
-          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
-          {% endif %}
-        </div>
-        {% endfor %}
-        <div class="cw-field full">
-          <label>Comentário da edição</label>
-          <textarea class="cw-textarea" name="comentario" placeholder="Opcional"></textarea>
-        </div>
-      </div>
-      <button class="cw-btn soft" type="submit" style="margin-top:12px"><i class="fas fa-save"></i> Salvar informações</button>
-    </form>
-    {% else %}
-    <div class="cw-filled-form">
-      <div class="cw-form-grid">
-        {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
-        <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
-          <label>{{ label }}</label>
-          {% if campo_opcoes.get(campo) %}
-            <div class="cw-read-value">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
-          {% else %}
-            <div class="cw-read-value">{{ dados.get(campo) or '-' }}</div>
-          {% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
 
-    {% if solicitacao.alerta_duplicidade %}
-    <div class="cw-alert" style="margin-top:14px">Esta solicitação foi aberta com alerta de possível duplicidade registrado.</div>
+    {% else %}
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-id-card"></i> Dados do cadastro</h3>
+            {% if can_fiscal and solicitacao.departamento_atual == 'Fiscal' and cadastro_direto_fiscal %}
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+                <input type="hidden" name="acao" value="consultar_cnpj">
+                <button class="eui-btn eui-btn--primary eui-btn--sm" type="submit"><i class="fas fa-id-card"></i> Consultar CNPJ e IE</button>
+            </form>
+            {% endif %}
+        </div>
+        <div class="eui-card__body">
+            {% if pode_editar %}
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+                <input type="hidden" name="acao" value="salvar_dados">
+                <div class="cwd-grid">
+                    {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
+                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                        <label class="eui-field__label">{{ label }}</label>
+                        {% if campo_opcoes.get(campo) %}
+                        <select class="eui-select" name="campo_{{ campo }}">
+                            <option value="">Selecione...</option>
+                            {% for valor, texto in campo_opcoes.get(campo) %}
+                            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+                            {% endfor %}
+                        </select>
+                        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+                        <textarea class="eui-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
+                        {% else %}
+                        <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="eui-field full">
+                        <label class="eui-field__label">Comentário da edição</label>
+                        <textarea class="eui-textarea" name="comentario" placeholder="Opcional"></textarea>
+                    </div>
+                </div>
+                <button class="eui-btn eui-btn--ghost" type="submit" style="margin-top:var(--eui-space-4)"><i class="fas fa-save"></i> Salvar informações</button>
+            </form>
+            {% else %}
+            <div class="cwd-grid">
+                {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
+                <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                    <label class="eui-field__label">{{ label }}</label>
+                    <div class="cwd-readonly">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
     {% endif %}
 
     {% if is_solicitante and solicitacao.status == 'Pendente de Correcao' %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" style="margin-top:18px">
-      <input type="hidden" name="acao" value="responder_correcao">
-      <div class="cw-stage-title">Correção do Requerente</div>
-      <div class="cw-form-grid">
-        {% set campos_correcao = tipos[solicitacao.tipo].solicitante_fields if tipos[solicitacao.tipo].solicitante_fields is defined else tipos[solicitacao.tipo].fields %}
-        {% for campo, label, obrigatorio in campos_correcao %}
-        <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
-          <label>{{ label }}</label>
-          {% if campo_opcoes.get(campo) %}
-          <select class="cw-select" name="campo_{{ campo }}" {% if obrigatorio %}required{% endif %}>
-            <option value="">Selecione...</option>
-            {% for valor, texto in campo_opcoes.get(campo) %}
-            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
-            {% endfor %}
-          </select>
-          {% else %}
-          <input class="cw-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
-          {% endif %}
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-rotate-left"></i> Correção do Requerente</h3>
+            <span class="eui-badge eui-badge--warning">Ação necessária</span>
         </div>
-        {% endfor %}
-        <div class="cw-field full"><label>Comentário</label><textarea class="cw-textarea" name="comentario" required></textarea></div>
-      </div>
-      <button class="cw-btn primary" type="submit" style="margin-top:12px"><i class="fas fa-paper-plane"></i> Reenviar</button>
-    </form>
+        <div class="eui-card__body">
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+                <input type="hidden" name="acao" value="responder_correcao">
+                <div class="cwd-grid">
+                    {% set campos_correcao = tipos[solicitacao.tipo].solicitante_fields if tipos[solicitacao.tipo].solicitante_fields is defined else tipos[solicitacao.tipo].fields %}
+                    {% for campo, label, obrigatorio in campos_correcao %}
+                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                        <label class="eui-field__label">{{ label }}</label>
+                        {% if campo_opcoes.get(campo) %}
+                        <select class="eui-select" name="campo_{{ campo }}" {% if obrigatorio %}required{% endif %}>
+                            <option value="">Selecione...</option>
+                            {% for valor, texto in campo_opcoes.get(campo) %}
+                            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="eui-field full">
+                        <label class="eui-field__label">Comentário</label>
+                        <textarea class="eui-textarea" name="comentario" required></textarea>
+                    </div>
+                </div>
+                <button class="eui-btn eui-btn--primary" type="submit" style="margin-top:var(--eui-space-4)"><i class="fas fa-paper-plane"></i> Reenviar</button>
+            </form>
+        </div>
+    </div>
     {% endif %}
 
     {% if pode_editar %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" style="margin-top:16px">
-        <div class="cw-stage-title">Checklist {{ solicitacao.departamento_atual }}</div>
-        <div class="cw-checks">
-          {% for chk in solicitacao.checklists if chk.departamento == solicitacao.departamento_atual %}
-          <label class="cw-check">
-            <span>{{ chk.item }}</span>
-            <select class="cw-select" name="check_{{ chk.id }}">
-              {% for valor in ['Sim','Não','Não se aplica'] %}
-              <option value="{{ valor }}" {% if chk.valor == valor %}selected{% endif %}>{{ valor }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          {% endfor %}
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-clipboard-check"></i> Checklist {{ solicitacao.departamento_atual }}</h3>
         </div>
-        <div class="cw-field" style="margin-top:12px">
-          <label>Comentário</label>
-          <textarea class="cw-textarea" name="comentario"></textarea>
+        <div class="eui-card__body">
+            <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
+                <div class="cwd-checks">
+                    {% for chk in solicitacao.checklists if chk.departamento == solicitacao.departamento_atual %}
+                    <label class="cwd-check">
+                        <span>{{ chk.item }}</span>
+                        <select class="eui-select" name="check_{{ chk.id }}">
+                            {% for valor in ['Sim','Não','Não se aplica'] %}
+                            <option value="{{ valor }}" {% if chk.valor == valor %}selected{% endif %}>{{ valor }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="eui-field" style="margin-top:var(--eui-space-4)">
+                    <label class="eui-field__label">Comentário</label>
+                    <textarea class="eui-textarea" name="comentario"></textarea>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:var(--eui-space-4)">
+                    <div>
+                        {% if solicitacao.departamento_atual == 'Compras' %}
+                        <button class="eui-btn eui-btn--primary" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
+                        {% elif solicitacao.departamento_atual == 'Fiscal' %}
+                        <button class="eui-btn eui-btn--primary" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
+                        {% endif %}
+                    </div>
+                    <div class="eui-kebab">
+                        <button type="button" class="eui-btn eui-btn--ghost" data-action="toggle-kebab"><i class="fas fa-ellipsis-vertical"></i> Mais ações</button>
+                        <div class="eui-kebab__menu">
+                            <button name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Solicitar correção</button>
+                            {% if solicitacao.departamento_atual == 'Fiscal' and not cadastro_direto_fiscal %}
+                            <button name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Devolver para Compras</button>
+                            {% endif %}
+                            <div class="eui-kebab__divider"></div>
+                            <button name="acao" value="reprovar" type="submit" class="is-danger"><i class="fas fa-xmark"></i> Reprovar cadastro</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
-        <div class="cw-actions" style="margin-top:12px; justify-content:space-between;">
-          <div class="cw-actions">
-            {% if solicitacao.departamento_atual == 'Compras' %}
-            <button class="cw-btn ok" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
-            {% elif solicitacao.departamento_atual == 'Fiscal' %}
-            <button class="cw-btn ok" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
-            {% endif %}
-          </div>
-          <div class="cw-dropdown">
-            <button type="button" class="cw-btn ghost" onclick="document.getElementById('cw-mais-acoes-menu').classList.toggle('open')">
-              <i class="fas fa-ellipsis-vertical"></i> Mais ações
-            </button>
-            <div class="cw-dropdown-menu" id="cw-mais-acoes-menu">
-              <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Solicitar correção</button>
-              {% if solicitacao.departamento_atual == 'Fiscal' and not cadastro_direto_fiscal %}
-              <button class="cw-btn soft" name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Devolver para Compras</button>
-              {% endif %}
-              <button class="cw-btn danger" name="acao" value="reprovar" type="submit"><i class="fas fa-xmark"></i> Reprovar cadastro</button>
-            </div>
-          </div>
-        </div>
-    </form>
+    </div>
     {% endif %}
 
-  </div>
-
-  <div class="cw-workflow-board">
-    <div class="cw-stage-title">Histórico completo</div>
-    <div class="cw-stream">
-      {% for h in solicitacao.historicos %}
-      <div class="cw-message-card">
-        <div class="cw-message-icon"><i class="fas fa-info"></i></div>
-        <div>
-          <strong>{{ h.data_hora.strftime('%d/%m/%Y %H:%M') }} - {{ h.usuario }} - {{ h.departamento }} - {{ h.acao }}</strong>
-          <p>{{ h.comentario or 'Sem comentário.' }}</p>
-          <span>{{ h.data_hora.strftime('%d/%m/%Y %H:%M:%S') }}</span>
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <h3 class="eui-card__title"><i class="fas fa-clock-rotate-left"></i> Histórico completo</h3>
         </div>
-      </div>
-      {% endfor %}
+        <div class="eui-card__body">
+            <div class="cwd-timeline">
+                <div class="cwd-event">
+                    <div class="cwd-event__icon"><i class="fas fa-play"></i></div>
+                    <div class="cwd-event__body">
+                        <strong>{{ solicitacao.data_abertura.strftime('%d/%m/%Y %H:%M') }} - {{ solicitacao.solicitante }} - Abertura</strong>
+                        <p>Solicitação aberta para {{ tipos[solicitacao.tipo].label }}.</p>
+                    </div>
+                </div>
+                {% for h in solicitacao.historicos %}
+                <div class="cwd-event">
+                    <div class="cwd-event__icon"><i class="fas fa-info"></i></div>
+                    <div class="cwd-event__body">
+                        <strong>{{ h.data_hora.strftime('%d/%m/%Y %H:%M') }} - {{ h.usuario }} - {{ h.departamento }} - {{ h.acao }}</strong>
+                        <p>{{ h.comentario or 'Sem comentário.' }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-  </div>
-</section>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('click', (ev) => {
-  const menu = document.getElementById('cw-mais-acoes-menu');
-  if (!menu || !menu.classList.contains('open')) return;
-  if (!menu.parentElement.contains(ev.target)) menu.classList.remove('open');
+    const toggle = ev.target.closest('[data-action="toggle-kebab"]');
+    if (toggle) {
+        const kebab = toggle.closest('.eui-kebab');
+        const wasOpen = kebab.classList.contains('is-open');
+        document.querySelectorAll('.eui-kebab.is-open').forEach((el) => el.classList.remove('is-open'));
+        if (!wasOpen) kebab.classList.add('is-open');
+        return;
+    }
+    if (!ev.target.closest('.eui-kebab')) {
+        document.querySelectorAll('.eui-kebab.is-open').forEach((el) => el.classList.remove('is-open'));
+    }
 });
 </script>
 {% endblock %}

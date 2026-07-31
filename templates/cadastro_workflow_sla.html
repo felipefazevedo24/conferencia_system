@@ -2,28 +2,34 @@
 {% block title %}SLA de Cadastros | Columbia Sync{% endblock %}
 {% block shell_title %}SLA de Cadastros{% endblock %}
 {% block shell_subtitle %}Prazos por etapa do workflow.{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+
 {% block content %}
-<section class="cw-shell">
-  <div class="cw-head">
-    <div class="cw-title">
-      <h1>Configurar SLA</h1>
-      <p>Defina o prazo de atendimento, em horas, para Compras e Fiscal.</p>
+<div class="eui-scope" style="display:grid; gap: var(--eui-space-5); max-width:640px;">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Cadastros ERP</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clock"></i> Configurar SLA</h1>
+            <p class="eui-page-header__sub">Defina o prazo de atendimento, em horas, para Compras e Fiscal.</p>
+        </div>
+        <a class="eui-btn eui-btn--ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+    </header>
+
+    <div class="eui-card">
+        <div class="eui-card__body">
+            <form method="post">
+                <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap: var(--eui-space-4);">
+                    <div class="eui-field">
+                        <label class="eui-field__label">SLA Compras (horas)</label>
+                        <input class="eui-input" type="number" min="1" name="sla_Compras" value="{{ sla_compras }}">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label">SLA Fiscal (horas)</label>
+                        <input class="eui-input" type="number" min="1" name="sla_Fiscal" value="{{ sla_fiscal }}">
+                    </div>
+                </div>
+                <button class="eui-btn eui-btn--primary" type="submit" style="margin-top:var(--eui-space-5)"><i class="fas fa-save"></i> Salvar SLA</button>
+            </form>
+        </div>
     </div>
-    <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
-  </div>
-  <form class="cw-panel" method="post">
-    <div class="cw-form-grid">
-      <div class="cw-field">
-        <label>SLA Compras (horas)</label>
-        <input class="cw-input" type="number" min="1" name="sla_Compras" value="{{ sla_compras }}">
-      </div>
-      <div class="cw-field">
-        <label>SLA Fiscal (horas)</label>
-        <input class="cw-input" type="number" min="1" name="sla_Fiscal" value="{{ sla_fiscal }}">
-      </div>
-    </div>
-    <button class="cw-btn primary" type="submit" style="margin-top:16px"><i class="fas fa-save"></i> Salvar SLA</button>
-  </form>
-</section>
+</div>
 {% endblock %}

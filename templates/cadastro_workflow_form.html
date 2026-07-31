@@ -2,87 +2,103 @@
 {% block title %}Nova Solicitação de Cadastro | Columbia Sync{% endblock %}
 {% block shell_title %}Nova Solicitação{% endblock %}
 {% block shell_subtitle %}Abertura com validação de duplicidade antes do envio.{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/cadastro_workflow.css?v={{ asset_version }}">{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cwn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--eui-space-4); }
+    .cwn-grid .eui-field.full { grid-column: 1 / -1; }
+    @media (max-width: 760px) { .cwn-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<section class="cw-shell">
-  <div class="cw-head">
-    <div class="cw-title">
-      <h1>Nova solicitação de cadastro</h1>
-      <p>Para cliente, fornecedor e transportadora, informe somente o CNPJ. A consulta do cartão CNPJ acontece na etapa Fiscal.</p>
-    </div>
-    <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
-  </div>
+{% set destino = 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' %}
+<div class="eui-scope" style="display:grid; gap: var(--eui-space-5);">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Cadastros ERP</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-file-circle-plus"></i> Nova solicitação de cadastro</h1>
+            <p class="eui-page-header__sub">Para cliente, fornecedor e transportadora, informe somente o CNPJ. A consulta do cartão CNPJ acontece na etapa Fiscal.</p>
+        </div>
+        <a class="eui-btn eui-btn--ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+    </header>
 
-  {% if erro %}<div class="cw-alert err">{{ erro }}</div>{% endif %}
-  {% if duplicidades %}
-  <div class="cw-alert">
-    Foram encontrados registros semelhantes. A solicitação ainda pode ser aberta, mas o alerta ficará registrado.
-    {% for dup in duplicidades %}
-      <div><strong>{{ dup.numero }}</strong> - {{ dup.motivo }} - {{ dup.resumo }}</div>
-    {% endfor %}
-  </div>
-  {% endif %}
+    {% if erro %}
+    <div class="eui-callout eui-callout--danger"><i class="fas fa-triangle-exclamation"></i> {{ erro }}</div>
+    {% endif %}
+    {% if duplicidades %}
+    <div class="eui-callout eui-callout--warning" style="flex-direction:column; align-items:stretch; gap:6px;">
+        <div><i class="fas fa-copy"></i> Foram encontrados registros semelhantes. A solicitação ainda pode ser aberta, mas o alerta ficará registrado.</div>
+        {% for dup in duplicidades %}
+        <div><strong>{{ dup.numero }}</strong> - {{ dup.motivo }} - {{ dup.resumo }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
-  <form class="cw-panel" method="post" id="cwForm" enctype="multipart/form-data">
-    <div class="cw-panel-head">
-      <div>
-        <h2>Dados da solicitação</h2>
-        <p>{{ tipos[tipo].label }} segue para {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }} após o envio.</p>
-      </div>
-      <span class="cw-route-pill">
-        <i class="fas fa-route"></i>
-        Solicitante -> {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }}
-      </span>
-    </div>
-    <div class="cw-form-grid">
-      <div class="cw-field full">
-        <label for="tipoSelect">Tipo de cadastro</label>
-        <select class="cw-select" name="tipo" id="tipoSelect" onchange="window.location='{{ url_for('cadastro_workflow.novo') }}?tipo='+this.value">
-          {% for key, meta in tipos.items() %}
-          <option value="{{ key }}" {% if tipo == key %}selected{% endif %}>{{ meta.label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% set campos_form = tipos[tipo].solicitante_fields if tipos[tipo].solicitante_fields is defined else tipos[tipo].fields %}
-      {% for campo, label, obrigatorio in campos_form %}
-      <div class="cw-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
-        <label for="{{ campo }}">{{ label }}{% if obrigatorio %} *{% endif %}</label>
-        {% if campo_opcoes.get(campo) %}
-        <select class="cw-select" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>
-          <option value="">Selecione...</option>
-          {% for valor, texto in campo_opcoes.get(campo) %}
-          <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
-          {% endfor %}
-        </select>
-        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
-        <textarea class="cw-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
-        {% else %}
-        <input class="cw-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
-        {% endif %}
-      </div>
-      {% endfor %}
-      {% if tipo == 'material' %}
-      <div class="cw-field">
-        <label for="imagem_produto">Imagem do produto</label>
-        <input class="cw-input" id="imagem_produto" name="imagem_produto" type="file" accept="image/png,image/jpeg,image/webp">
-      </div>
-      <div class="cw-field">
-        <label for="arquivo_anexo">Anexo (PDF, DOC, XLS ou imagem)</label>
-        <input class="cw-input" id="arquivo_anexo" name="arquivo_anexo" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
-      </div>
-      {% endif %}
-      <div class="cw-field full">
-        <label for="anexos">Anexos e observações</label>
-        <textarea class="cw-textarea" id="anexos" name="anexos" placeholder="Informe links, nomes de arquivos ou observações sobre documentos anexos."></textarea>
-      </div>
-    </div>
-    <div class="cw-actions" style="margin-top:16px">
-      <button class="cw-btn primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' }}</button>
-      <button class="cw-btn soft" type="button" id="btnVerificarDuplicidade" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
-    </div>
-    <div id="dupBox" style="margin-top:12px"></div>
-  </form>
-</section>
+    <form method="post" id="cwForm" enctype="multipart/form-data">
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h3 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Dados da solicitação</h3>
+                    <p class="eui-card__sub">{{ tipos[tipo].label }} segue para {{ destino }} após o envio.</p>
+                </div>
+                <span class="eui-badge eui-badge--info"><i class="fas fa-route"></i> Solicitante &rarr; {{ destino }}</span>
+            </div>
+            <div class="eui-card__body">
+                <div class="cwn-grid">
+                    <div class="eui-field full">
+                        <label class="eui-field__label" for="tipoSelect">Tipo de cadastro</label>
+                        <select class="eui-select" name="tipo" id="tipoSelect" onchange="window.location='{{ url_for('cadastro_workflow.novo') }}?tipo='+this.value">
+                            {% for key, meta in tipos.items() %}
+                            <option value="{{ key }}" {% if tipo == key %}selected{% endif %}>{{ meta.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% set campos_form = tipos[tipo].solicitante_fields if tipos[tipo].solicitante_fields is defined else tipos[tipo].fields %}
+                    {% for campo, label, obrigatorio in campos_form %}
+                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                        <label class="eui-field__label" for="{{ campo }}">{{ label }}{% if obrigatorio %} *{% endif %}</label>
+                        {% if campo_opcoes.get(campo) %}
+                        <select class="eui-select" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>
+                            <option value="">Selecione...</option>
+                            {% for valor, texto in campo_opcoes.get(campo) %}
+                            <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
+                            {% endfor %}
+                        </select>
+                        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
+                        {% else %}
+                        <input class="eui-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% if tipo == 'material' %}
+                    <div class="eui-field">
+                        <label class="eui-field__label" for="imagem_produto">Imagem do produto</label>
+                        <input class="eui-input" id="imagem_produto" name="imagem_produto" type="file" accept="image/png,image/jpeg,image/webp">
+                    </div>
+                    <div class="eui-field">
+                        <label class="eui-field__label" for="arquivo_anexo">Anexo (PDF, DOC, XLS ou imagem)</label>
+                        <input class="eui-input" id="arquivo_anexo" name="arquivo_anexo" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
+                    </div>
+                    {% endif %}
+                    <div class="eui-field full">
+                        <label class="eui-field__label" for="anexos">Anexos e observações</label>
+                        <textarea class="eui-textarea" id="anexos" name="anexos" placeholder="Informe links, nomes de arquivos ou observações sobre documentos anexos."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="eui-card__foot" style="justify-content:flex-start;">
+                <button class="eui-btn eui-btn--primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ destino }}</button>
+                <button class="eui-btn eui-btn--ghost" type="button" id="btnVerificarDuplicidade" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
+            </div>
+        </div>
+        <div id="dupBox" style="margin-top:var(--eui-space-4)"></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
 const tipoAtual = "{{ tipo }}";
 const tiposPessoaJuridica = new Set(["cliente", "fornecedor", "transportadora"]);
@@ -111,7 +127,7 @@ async function verificarDuplicidade(){
   });
 
   if (btn) btn.disabled = true;
-  box.innerHTML = '<div class="cw-alert" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8"><i class="fas fa-spinner fa-spin"></i> Verificando duplicidade...</div>';
+  box.innerHTML = '<div class="eui-callout eui-callout--info"><i class="fas fa-spinner fa-spin"></i> Verificando duplicidade...</div>';
 
   try {
     const res = await fetch(`/cadastros/api/duplicidade?${params.toString()}`);
@@ -121,16 +137,15 @@ async function verificarDuplicidade(){
     }
     const data = await res.json();
     if (!data.duplicidades || !data.duplicidades.length) {
-      box.innerHTML = '<div class="cw-alert" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">Nenhuma duplicidade encontrada.</div>';
+      box.innerHTML = '<div class="eui-callout eui-callout--success">Nenhuma duplicidade encontrada.</div>';
       return;
     }
-    box.innerHTML = '<div class="cw-alert">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
+    box.innerHTML = '<div class="eui-callout eui-callout--warning" style="flex-direction:column; align-items:stretch; gap:6px;">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
   } catch (err) {
-    box.innerHTML = `<div class="cw-alert err"><i class="fas fa-triangle-exclamation"></i> Não foi possível verificar duplicidade: ${err.message}</div>`;
+    box.innerHTML = `<div class="eui-callout eui-callout--danger"><i class="fas fa-triangle-exclamation"></i> Não foi possível verificar duplicidade: ${err.message}</div>`;
   } finally {
     if (btn) btn.disabled = false;
   }
 }
-
 </script>
 {% endblock %}
