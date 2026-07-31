@@ -739,9 +739,11 @@ def torre_controle():
     return jsonify({"resumo": resumo, "items": items[:40], "gerado_em": agora.isoformat()})
 
 
-@viagem_bp.route("/mapa-frota", methods=["GET"])
-@permission_required_any(PERM, "PAGE_LOGISTICA_RASTREAMENTO")
-def mapa_frota():
+def dados_mapa_frota() -> dict:
+    """Posicao atual de cada veiculo ativo (ultimo ping de GPS da viagem em
+    andamento, com fallback para o rastreamento manual). Funcao pura (sem
+    jsonify) para poder ser reaproveitada tanto pela rota autenticada
+    /api/viagem/mapa-frota quanto pelo painel de TV publico."""
     try:
         from ..services import rastreamento_store
 
@@ -810,12 +812,18 @@ def mapa_frota():
             "viagem": _viagem_resumo_mapa(viagem),
         })
 
-    return jsonify({
+    return {
         "base": rastreamento.get("base") or {},
         "veiculos": saida,
         "sem_posicao": sem_posicao,
         "gerado_em": datetime.now().isoformat(),
-    })
+    }
+
+
+@viagem_bp.route("/mapa-frota", methods=["GET"])
+@permission_required_any(PERM, "PAGE_LOGISTICA_RASTREAMENTO")
+def mapa_frota():
+    return jsonify(dados_mapa_frota())
 
 
 @viagem_bp.route("/agenda", methods=["GET"])

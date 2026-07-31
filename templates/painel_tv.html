@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0f62c9">
 <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <title>Painel Operacional — Recebimento & Expedição</title>
 <style>
   :root {
@@ -22,6 +24,7 @@
     --expedicao-2: #f59e0b;
     --ok: #34d399;
     --warn: #f87171;
+    --frota: #22d3ee;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -171,6 +174,9 @@
   .exp::before { color: var(--expedicao); }
   .compras-atr::before { color: #f87171; }
   .compras-sem::before { color: #34d399; }
+  .frota::before { color: var(--frota); }
+  .frota .icon { background: rgba(34,211,238,.16); color: var(--frota); }
+  .frota .accent { color: var(--frota); }
   .panel-head { display: flex; align-items: center; gap: 14px; }
   .panel-head .icon {
     width: clamp(38px, 5vh, 56px); height: clamp(38px, 5vh, 56px);
@@ -308,6 +314,27 @@
   .badge.tipo-fat { background: rgba(251,191,36,.16); color: var(--expedicao); border: 1px solid rgba(251,191,36,.42); }
   .badge.tipo-oc { background: rgba(139,124,246,.18); color: #b9adff; border: 1px solid rgba(139,124,246,.42); }
   .empty { color: var(--muted); text-align: center; padding: 18px; font-size: clamp(12px,1.5vh,16px); }
+
+  /* ---------- Frota ao vivo (mapa) ---------- */
+  .frota-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(10px,1.3vh,16px); flex: 0 0 auto; }
+  .frota-map { flex: 1 1 auto; min-height: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-soft); }
+  .frota-pin {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 12px;
+    background: var(--frota); color: #06283a;
+    border: 2px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.35);
+  }
+  .frota-pin.idle { background: var(--muted); color: #0c2547; }
+  /* "Modo noturno" pobre: inverte/ajusta os tiles claros do OpenStreetMap
+     pra combinar com o tema escuro do painel, sem depender de um provedor
+     de tiles escuros pago. Marcadores/popups ficam fora do filtro. */
+  .frota-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.7); }
+  .frota-map .leaflet-popup-content-wrapper { background: var(--card); color: var(--text); border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.4); }
+  .frota-map .leaflet-popup-tip { background: var(--card); }
+  .frota-map .leaflet-popup-content { font-family: inherit; font-size: clamp(11px,1.4vh,14px); margin: 10px 14px; }
+  .frota-map .leaflet-popup-content b { color: var(--text); }
+  .frota-map .leaflet-control-attribution { background: rgba(7,26,51,.65); color: var(--muted); font-size: 9px; }
+  .frota-map .leaflet-control-attribution a { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -409,6 +436,25 @@
           </div>
         </section>
       </div>
+    </section>
+    {% endif %}
+
+    <!-- SLIDE 3: FROTA (mapa ao vivo, GPS do motorista em viagem) -->
+    {% if show_frota|default(true) %}
+    <section class="slide slide-frota" data-slide="frota">
+      <section class="panel frota" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-car"></i></div>
+          <h2>Frota em tempo real</h2>
+          <div class="tag" id="frota-tag">—</div>
+        </div>
+        <div class="frota-kpis">
+          <div class="stat"><div class="n" id="frota-mapa">0</div><div class="t">No mapa</div></div>
+          <div class="stat ok"><div class="n" id="frota-viagem">0</div><div class="t">Em viagem</div></div>
+          <div class="stat"><div class="n" id="frota-sem">0</div><div class="t">Sem posição</div></div>
+        </div>
+        <div class="frota-map" id="frota-map"></div>
+      </section>
     </section>
     {% endif %}
   </main>
@@ -783,6 +829,7 @@
     renderSlideDots();
     if (SLIDES[slideIdx] === "operacao") { expIdx = 0; recIdx = 0; renderExpedicao(); renderRecebimento(); }
     if (SLIDES[slideIdx] === "compras") pollCompras();
+    if (SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
     resetSlideTiming();
   }
 
@@ -891,6 +938,72 @@
     }
   }
 
+  // ----- Frota: mapa ao vivo (GPS do motorista em viagem) -----
+  // Mesmo endpoint usado no Mapa da Frota / Rastreamento de Veiculos
+  // autenticados, so que aqui exposto sem login (ver painel_tv_routes.py).
+  // Nao participa de poll()/toast() de proposito: posicao de veiculo nao
+  // deve tocar som, so os eventos de recebimento/expedicao tocam.
+  let frotaMap = null;
+  let frotaLayer = null;
+
+  function frotaMarkerIcon(v) {
+    return L.divIcon({
+      className: "",
+      html: '<div class="frota-pin' + (v.em_viagem ? "" : " idle") + '"><i class="fas fa-car"></i></div>',
+      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15],
+    });
+  }
+
+  function popupFrotaTv(v) {
+    const viagem = v.viagem;
+    const info = viagem
+      ? "<b>" + esc(viagem.codigo || "Viagem") + "</b>" + (viagem.motorista_nome ? " · " + esc(viagem.motorista_nome) : "")
+      : "Sem viagem em andamento";
+    return "<div>" + esc(v.veiculo_label || "Veículo") + " · " + esc(v.placa || "") + "<br>" + info + "</div>";
+  }
+
+  function initFrotaMap(base) {
+    if (frotaMap) return;
+    const lat = Number(base && base.latitude) || -22.8531;
+    const lng = Number(base && base.longitude) || -47.2158;
+    frotaMap = L.map("frota-map", {
+      zoomControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false,
+    }).setView([lat, lng], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap",
+    }).addTo(frotaMap);
+    frotaLayer = L.layerGroup().addTo(frotaMap);
+  }
+
+  let frotaAt = 0;
+  async function pollFrota() {
+    if (Date.now() - frotaAt < 5000) return;
+    frotaAt = Date.now();
+    try {
+      const r = await fetch("/api/painel/frota", { cache: "no-store" });
+      const d = await r.json();
+      initFrotaMap(d.base);
+      frotaLayer.clearLayers();
+      const veiculos = d.veiculos || [];
+      const bounds = [];
+      veiculos.forEach((v) => {
+        const lat = Number(v.latitude), lng = Number(v.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        L.marker([lat, lng], { icon: frotaMarkerIcon(v) }).bindPopup(popupFrotaTv(v)).addTo(frotaLayer);
+        bounds.push([lat, lng]);
+      });
+      if (bounds.length > 1) frotaMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+      else if (bounds.length === 1) frotaMap.setView(bounds[0], 13);
+      setTimeout(() => frotaMap && frotaMap.invalidateSize(), 60);
+      const emViagem = veiculos.filter((v) => v.em_viagem).length;
+      setNum("frota-mapa", veiculos.length);
+      setNum("frota-viagem", emViagem);
+      setNum("frota-sem", d.sem_posicao || 0);
+      $("frota-tag").textContent = veiculos.length + " veículo(s)";
+    } catch (e) { /* silencioso - nao afeta o indicador "Ao vivo" do painel principal */ }
+  }
+
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });
   });
@@ -907,10 +1020,12 @@
   renderSlideDots();
   poll();
   pollCompras();
+  pollFrota();
   setInterval(poll, POLL_MS);
   setInterval(autoScroll, 60);
   setInterval(carouselTick, 500);
   setInterval(pollCompras, 90000);
+  setInterval(pollFrota, 8000);
 })();
 </script>
 </body>

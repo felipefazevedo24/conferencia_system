@@ -430,12 +430,12 @@ def _coletar_eventos() -> list[dict]:
 
 @painel_tv_bp.route("/painel")
 def painel_tv_page():
-    return render_template("painel_tv.html", show_compras=True)
+    return render_template("painel_tv.html", show_compras=True, show_frota=True)
 
 
 @painel_tv_bp.route("/painel/recebimento-expedicao")
 def painel_tv_rec_exp_page():
-    return render_template("painel_tv.html", show_compras=False)
+    return render_template("painel_tv.html", show_compras=False, show_frota=False)
 
 
 @painel_tv_bp.route("/api/painel/indicadores")
@@ -446,6 +446,20 @@ def painel_tv_indicadores():
         db.session.rollback()
         raise
     return jsonify(dados)
+
+
+@painel_tv_bp.route("/api/painel/frota")
+def painel_tv_frota():
+    # Mesma fonte de dados do Mapa da Frota / Rastreamento de Veiculos
+    # (autenticados) - aqui exposta sem login, no mesmo padrao publico dos
+    # demais endpoints deste painel, para alimentar o mapa ao vivo na TV.
+    from .viagem_routes import dados_mapa_frota
+
+    try:
+        return jsonify(dados_mapa_frota())
+    except Exception:
+        current_app.logger.exception("Falha ao buscar frota para o painel TV")
+        return jsonify({"base": {}, "veiculos": [], "sem_posicao": 0})
 
 
 # ---------------------------------------------------------------------------
