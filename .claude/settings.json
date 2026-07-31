@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -k \"romaneio or conf_cega or expedicao\" -q)"
+    ]
+  }
+}

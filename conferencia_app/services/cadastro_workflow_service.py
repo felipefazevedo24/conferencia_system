@@ -539,6 +539,30 @@ def mover_etapa(solicitacao, status, etapa, departamento, responsavel=None):
     solicitacao.etapa_iniciada_em = datetime.now()
 
 
+CATEGORIAS_VISIVEIS = [
+    ("em_analise", "Em análise"),
+    ("atendimento_compras", "Em atendimento (Compras)"),
+    ("atendimento_fiscal", "Em atendimento (Fiscal)"),
+    ("finalizado", "Cadastro finalizado"),
+]
+
+
+def categoria_visivel(solicitacao) -> str | None:
+    """Deriva uma das 4 categorias do workflow (mesmo esquema visual da
+    Conferencia de Expedicao) a partir do status/departamento/responsavel
+    ja existentes - nao muda o modelo de status, so agrupa pra exibicao.
+    Retorna None para os status de excecao (correcao/reprovado/cancelado),
+    que continuam visiveis na lista e no filtro de status, so nao entram
+    numa das 4 categorias principais."""
+    if solicitacao.status == "Cadastrado":
+        return "finalizado"
+    if solicitacao.status == "Em Validacao Compras":
+        return "atendimento_compras" if solicitacao.responsavel_atual else "em_analise"
+    if solicitacao.status == "Em Validacao Fiscal":
+        return "atendimento_fiscal" if solicitacao.responsavel_atual else "em_analise"
+    return None
+
+
 def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: str = "", form=None):
     form = form or {}
     comentario = (comentario or "").strip()
@@ -546,6 +570,23 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
     exige_comentario = {"corrigir", "devolver_solicitante", "devolver_compras", "reprovar"}
     if acao in exige_comentario and not comentario:
         raise ValueError("Comentário obrigatório para esta ação.")
+
+    # Atribui automaticamente o responsavel na primeira acao real que
+    # Compras/Fiscal/Admin fizer sobre o chamado - a solicitacao sai de
+    # "Em analise" pra "Em atendimento" no momento em que alguem realmente
+    # mexe nela, sem depender de um botao "Atender" separado (que nao
+    # travava nenhuma outra acao e so confundia na tela de detalhe).
+    acoes_de_atendimento = {
+        "salvar_dados", "atualizar_anexos", "consultar_cnpj", "aprovar_compras",
+        "devolver_solicitante", "devolver_compras", "finalizar", "reprovar",
+    }
+    if (
+        acao in acoes_de_atendimento
+        and role in {"Compras", "Fiscal", "Admin"}
+        and solicitacao.departamento_atual in {"Compras", "Fiscal"}
+        and not solicitacao.responsavel_atual
+    ):
+        solicitacao.responsavel_atual = usuario
 
     if acao == "assumir":
         if role not in {"Compras", "Fiscal", "Admin"}:
@@ -567,6 +608,17 @@ def executar_acao(solicitacao, acao: str, usuario: str, role: str, comentario: s
                 dados[key.replace("campo_", "", 1)] = value
         set_dados(solicitacao, dados)
         registrar_evento(solicitacao, usuario, depto_usuario, "Dados atualizados", comentario or "Informações revisadas pelo departamento responsável.")
+    elif acao == "atualizar_anexos":
+        # A gravacao do arquivo em si (request.files) acontece na rota, que
+        # tem acesso ao request - aqui so valida permissao e registra o
+        # evento no historico, igual as demais acoes.
+        if role not in {"Compras", "Fiscal", "Admin"}:
+            raise ValueError("Usuário sem permissão para atualizar anexos.")
+        if role == "Compras" and solicitacao.departamento_atual != "Compras":
+            raise ValueError("Compras só pode atualizar anexos na etapa de Compras.")
+        if role == "Fiscal" and solicitacao.departamento_atual != "Fiscal":
+            raise ValueError("Fiscal só pode atualizar anexos na etapa Fiscal.")
+        registrar_evento(solicitacao, usuario, depto_usuario, "Anexos atualizados", comentario or "Anexo/observações atualizados.")
     elif acao == "consultar_cnpj":
         if role not in {"Fiscal", "Admin"}:
             raise ValueError("Somente Fiscal pode consultar o cartão CNPJ nesta etapa.")

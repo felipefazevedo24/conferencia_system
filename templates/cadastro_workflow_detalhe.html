@@ -20,6 +20,16 @@
   {% set titulo = dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or tipos[solicitacao.tipo].label %}
   {% set status_label = solicitacao.status|replace('Validacao','Validação')|replace('Correcao','Correção') %}
   {% set etapa_label = solicitacao.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído') %}
+  <div class="cw-topbar">
+    <a class="cw-btn ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
+    {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
+    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" onsubmit="return confirm('Cancelar esta solicitação de cadastro?');">
+      <input type="hidden" name="acao" value="cancelar">
+      <button class="cw-btn danger" type="submit"><i class="fas fa-ban"></i> Cancelar minha solicitação</button>
+    </form>
+    {% endif %}
+  </div>
+
   <div class="cw-case-top">
     <div class="cw-case-user"><i class="fas fa-user-circle"></i> {{ solicitacao.solicitante }}</div>
     <div class="cw-case-title">{{ tipos[solicitacao.tipo].label|upper }}</div>
@@ -134,22 +144,58 @@
         {% endif %}
       </section>
       {% endfor %}
-      {% if anexos_info.observacoes or anexos_info.imagem %}
       <section class="cw-data-section">
         <div class="cw-data-section-head">
           <h3>Anexos e referência visual</h3>
-          <span>Enviado pelo solicitante</span>
+          <span>{{ 'Editável nesta etapa' if pode_editar else 'Enviado pelo solicitante' }}</span>
         </div>
+        {% if pode_editar %}
+        <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form" enctype="multipart/form-data">
+          <input type="hidden" name="acao" value="atualizar_anexos">
+          <div class="cw-attachment-grid">
+            <div>
+              {% if anexos_info.imagem %}
+              <a class="cw-image-preview" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
+                <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
+              </a>
+              {% endif %}
+              <div class="cw-field" style="margin-top:10px">
+                <label>{{ 'Substituir imagem do produto' if anexos_info.imagem else 'Imagem do produto' }}</label>
+                <input class="cw-input" type="file" name="imagem_produto" accept="image/png,image/jpeg,image/webp">
+              </div>
+              <div class="cw-field">
+                <label>{{ 'Substituir anexo' if anexos_info.arquivo else 'Anexo (PDF, DOC, XLS ou imagem)' }}</label>
+                {% if anexos_info.arquivo %}
+                <small class="cw-field-help"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></small>
+                {% endif %}
+                <input class="cw-input" type="file" name="arquivo_anexo" accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp">
+              </div>
+            </div>
+            <div class="cw-field">
+              <label>Observações</label>
+              <textarea class="cw-textarea" name="anexos" style="min-height:140px">{{ anexos_info.observacoes }}</textarea>
+            </div>
+          </div>
+          <button class="cw-btn soft" type="submit" style="margin-top:12px"><i class="fas fa-save"></i> Salvar anexos</button>
+        </form>
+        {% elif anexos_info.observacoes or anexos_info.imagem or anexos_info.arquivo %}
         <div class="cw-attachment-grid">
           {% if anexos_info.imagem %}
           <a class="cw-image-preview" href="{{ anexos_info.imagem.url }}" target="_blank" rel="noopener">
             <img src="{{ anexos_info.imagem.url }}" alt="Imagem do produto">
           </a>
           {% endif %}
-          <div class="cw-read-value">{{ anexos_info.observacoes or 'Sem observações adicionais.' }}</div>
+          <div>
+            <div class="cw-read-value">{{ anexos_info.observacoes or 'Sem observações adicionais.' }}</div>
+            {% if anexos_info.arquivo %}
+            <small class="cw-field-help" style="display:block;margin-top:8px;"><a href="{{ anexos_info.arquivo.url }}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> {{ anexos_info.arquivo.nome }}</a></small>
+            {% endif %}
+          </div>
         </div>
+        {% else %}
+        <div class="cw-read-value">Nenhum anexo enviado.</div>
+        {% endif %}
       </section>
-      {% endif %}
     </div>
     {% elif pode_editar %}
     <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" class="cw-filled-form">
@@ -246,37 +292,30 @@
           <label>Comentário</label>
           <textarea class="cw-textarea" name="comentario"></textarea>
         </div>
-        <div class="cw-actions" style="margin-top:12px">
-          {% if solicitacao.departamento_atual == 'Compras' %}
-          <button class="cw-btn ok" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
-          <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Correção</button>
-          {% elif solicitacao.departamento_atual == 'Fiscal' %}
-          <button class="cw-btn ok" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
-          <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Correção</button>
-          {% if not cadastro_direto_fiscal %}
-          <button class="cw-btn soft" name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Compras</button>
-          {% endif %}
-          {% endif %}
-          <button class="cw-btn danger" name="acao" value="reprovar" type="submit"><i class="fas fa-xmark"></i> Reprovar</button>
+        <div class="cw-actions" style="margin-top:12px; justify-content:space-between;">
+          <div class="cw-actions">
+            {% if solicitacao.departamento_atual == 'Compras' %}
+            <button class="cw-btn ok" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
+            {% elif solicitacao.departamento_atual == 'Fiscal' %}
+            <button class="cw-btn ok" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
+            {% endif %}
+          </div>
+          <div class="cw-dropdown">
+            <button type="button" class="cw-btn ghost" onclick="document.getElementById('cw-mais-acoes-menu').classList.toggle('open')">
+              <i class="fas fa-ellipsis-vertical"></i> Mais ações
+            </button>
+            <div class="cw-dropdown-menu" id="cw-mais-acoes-menu">
+              <button class="cw-btn warn" name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Solicitar correção</button>
+              {% if solicitacao.departamento_atual == 'Fiscal' and not cadastro_direto_fiscal %}
+              <button class="cw-btn soft" name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Devolver para Compras</button>
+              {% endif %}
+              <button class="cw-btn danger" name="acao" value="reprovar" type="submit"><i class="fas fa-xmark"></i> Reprovar cadastro</button>
+            </div>
+          </div>
         </div>
     </form>
     {% endif %}
 
-    {% if pode_editar and not solicitacao.responsavel_atual %}
-    <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}" style="margin-top:16px">
-      <button class="cw-btn primary" name="acao" value="assumir" type="submit"><i class="fas fa-hand-paper"></i> Atender</button>
-    </form>
-    {% endif %}
-
-    <div class="cw-actions" style="margin-top:16px">
-      <a class="cw-btn soft" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
-      {% if is_solicitante and solicitacao.status not in ['Cadastrado','Cancelado','Reprovado'] %}
-      <form method="post" action="{{ url_for('cadastro_workflow.acao', solicitacao_id=solicitacao.id) }}">
-        <input type="hidden" name="acao" value="cancelar">
-        <button class="cw-btn danger" type="submit"><i class="fas fa-ban"></i> Cancelar</button>
-      </form>
-      {% endif %}
-    </div>
   </div>
 
   <div class="cw-workflow-board">
@@ -295,4 +334,14 @@
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('click', (ev) => {
+  const menu = document.getElementById('cw-mais-acoes-menu');
+  if (!menu || !menu.classList.contains('open')) return;
+  if (!menu.parentElement.contains(ev.target)) menu.classList.remove('open');
+});
+</script>
 {% endblock %}
