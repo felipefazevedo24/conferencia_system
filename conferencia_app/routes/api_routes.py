@@ -306,7 +306,7 @@ def api_integracao_expedicao_coletas():
     for reg in registros:
         foto_cliente_url = None
         if reg.foto_cliente_file_name:
-            foto_cliente_url = f"{base}/api/integracao/expedicao/coletas/{reg.id}/foto-cliente"
+            foto_cliente_url = f"{base}/api/expedicao/conferencia-simples/{reg.id}/foto-cliente"
 
         link_columbia = f"{base}/expedicao/conferencia?q={reg.numero_nf or ''}"
 
@@ -332,34 +332,6 @@ def api_integracao_expedicao_coletas():
             "dados": dados,
         }
     )
-
-
-@api_bp.route("/api/integracao/expedicao/coletas/<int:registro_id>/foto-cliente", methods=["GET"])
-def api_integracao_expedicao_coletas_foto_cliente(registro_id: int):
-    """Retorna a foto do cliente para consumo externo da integração."""
-    if not _token_integracao_expedicao_valido():
-        return jsonify({"sucesso": False, "erro": "Token de integracao invalido."}), 401
-
-    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
-    if not registro:
-        return jsonify({"sucesso": False, "erro": "Registro de expedição não encontrado."}), 404
-
-    if not registro.foto_cliente_file_name:
-        return jsonify({"sucesso": False, "erro": "Registro sem foto do cliente."}), 404
-
-    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
-    if not fotos_dir:
-        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
-
-    caminho = _resolver_foto_expedicao(
-        fotos_dir,
-        registro.foto_cliente_file_name,
-        registro.foto_cliente_file_path,
-    )
-    if not caminho:
-        return jsonify({"sucesso": False, "erro": "Arquivo de foto do cliente não encontrado."}), 404
-
-    return _send_foto_expedicao(caminho, registro.foto_cliente_file_name)
 
 
 def _get_db_file_path() -> str:
