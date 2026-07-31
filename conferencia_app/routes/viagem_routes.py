@@ -13,7 +13,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
-from ..auth import permission_required
+from ..auth import permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoMotorista,
@@ -740,7 +740,7 @@ def torre_controle():
 
 
 @viagem_bp.route("/mapa-frota", methods=["GET"])
-@permission_required(PERM)
+@permission_required_any(PERM, "PAGE_LOGISTICA_RASTREAMENTO")
 def mapa_frota():
     try:
         from ..services import rastreamento_store

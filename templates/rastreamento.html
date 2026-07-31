@@ -44,8 +44,6 @@
     .doc-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
     .doc-btn-primary { background: linear-gradient(135deg, #155eef, #0b2a6b); color: #fff; }
     .doc-btn-secondary { background: #fff; color: var(--doc-primary); border: 1.5px solid var(--doc-primary); }
-    .doc-btn-success { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; }
-    .doc-btn-warning { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
 
     .doc-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 22px; }
     .doc-kpi-card { padding: 18px; border-radius: 16px; background: linear-gradient(135deg, #fff, #f8fafc); border: 1px solid var(--doc-border); box-shadow: var(--doc-shadow); display: flex; align-items: center; gap: 14px; }
@@ -57,11 +55,6 @@
     .doc-kpi-label { font-size: 11px; font-weight: 700; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; }
     .doc-kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
     .doc-kpi-foot { font-size: 11px; color: var(--doc-muted); margin-top: 2px; }
-
-    .doc-tabs { display: flex; gap: 6px; border-bottom: 2px solid var(--doc-border); margin-bottom: 18px; flex-wrap: wrap; }
-    .doc-tab { background: transparent; border: none; padding: 10px 18px; font-weight: 700; font-size: 13px; color: var(--doc-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
-    .doc-tab.active { color: var(--doc-primary); border-bottom-color: var(--doc-primary); background: linear-gradient(180deg, rgba(21,94,239,.05), transparent); }
-    .doc-tab:hover:not(.active) { color: #0f172a; }
 
     .doc-workspace { display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
     @media (max-width: 1100px) { .doc-workspace { grid-template-columns: 1fr; } }
@@ -83,30 +76,12 @@
     .veh-status.online { background: var(--doc-success-soft); color: var(--doc-success); }
     .veh-status.offline { background: #f1f5f9; color: #64748b; }
     .veh-status.stale { background: var(--doc-warning-soft); color: var(--doc-warning); }
+    .veh-status.danger { background: var(--doc-danger-soft); color: var(--doc-danger); }
     .veh-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--doc-border); font-size: 11.5px; color: var(--doc-muted); }
     .veh-foot strong { color: #0f172a; font-weight: 700; }
 
     .doc-detail { background: var(--doc-card); border: 1px solid var(--doc-border); border-radius: 16px; box-shadow: var(--doc-shadow); overflow: hidden; display: flex; flex-direction: column; min-height: 620px; }
     #map-container { flex: 1; min-height: 580px; }
-    #map-iframe-portal { width: 100%; height: 78vh; min-height: 600px; border: 0; border-radius: 16px; }
-
-    .iframe-shell { background: var(--doc-card); border: 1px solid var(--doc-border); border-radius: 16px; box-shadow: var(--doc-shadow); overflow: hidden; }
-    .iframe-hint { padding: 14px 18px; background: #fef3c7; border-bottom: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
-
-    .doc-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: none; z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
-    .doc-modal-overlay.show { display: flex; }
-    .doc-modal { background: #fff; border-radius: 16px; max-width: 520px; width: 100%; box-shadow: 0 24px 48px rgba(0,0,0,.25); overflow: hidden; }
-    .doc-modal-head { padding: 16px 20px; border-bottom: 1px solid var(--doc-border); display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #0b2a6b, #155eef); color: #fff; }
-    .doc-modal-head h3 { margin: 0; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
-    .doc-modal-close { background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }
-    .doc-modal-body { padding: 20px; }
-    .doc-modal-foot { padding: 14px 20px; border-top: 1px solid var(--doc-border); display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
-    .doc-form-block { margin-bottom: 14px; }
-    .doc-form-label { font-size: 11.5px; font-weight: 800; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; display: block; }
-    .doc-form-help { font-size: 11.5px; color: var(--doc-muted); margin-top: 4px; }
-    .doc-input { width: 100%; padding: 10px 12px; border: 1.5px solid var(--doc-border); border-radius: 8px; font-size: 13px; background: #fff; }
-    .doc-input:focus { border-color: var(--doc-primary); outline: none; box-shadow: 0 0 0 3px rgba(21,94,239,.15); }
-    .doc-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
     .doc-feedback { position: fixed; top: 20px; right: 20px; padding: 14px 18px; border-radius: 12px; background: #fff; border-left: 4px solid var(--doc-primary); box-shadow: 0 10px 24px rgba(0,0,0,.15); z-index: 2100; display: none; max-width: 380px; }
     .doc-feedback.show { display: block; animation: slideIn .3s ease; }
@@ -118,11 +93,13 @@
 
     .leaflet-popup-content { font-family: "Segoe UI", sans-serif; font-size: 13px; }
     .leaflet-popup-content strong { color: #0f172a; }
+    .leaflet-popup-content a { color: var(--doc-primary); font-weight: 700; }
 
     .veh-marker-pill { background: #155eef; color: #fff; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; box-shadow: 0 3px 10px rgba(0,0,0,.25); white-space: nowrap; border: 2px solid #fff; }
     .veh-marker-pill.base { background: #64748b; }
     .veh-marker-pill.online { background: #16a34a; }
     .veh-marker-pill.stale { background: #f59e0b; }
+    .veh-marker-pill.danger { background: #dc2626; }
 </style>
 {% endblock %}
 
@@ -132,126 +109,33 @@
         <div>
             <div class="doc-kicker"><i class="fas fa-location-crosshairs"></i> Logística · Rastreamento</div>
             <h1 class="doc-title">Rastreamento de Veículos</h1>
-            <p class="doc-subtitle">Acompanhe em tempo real onde estão os veículos da frota e abra o portal Locartrack direto pelo sistema.</p>
+            <p class="doc-subtitle">Posição ao vivo da frota, direto do GPS do motorista em viagem — sem depender de portal externo.</p>
         </div>
         <div class="doc-hero-actions">
-            <a id="btn-abrir-portal" class="doc-btn doc-btn-primary" href="#" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> Abrir Locartrack</a>
-            {% if is_admin %}
-            <button class="doc-btn doc-btn-secondary" onclick="abrirCredenciais()"><i class="fas fa-key"></i> Credenciais</button>
-            {% endif %}
             <button class="doc-btn doc-btn-secondary" onclick="carregarEstado()"><i class="fas fa-rotate"></i> Atualizar</button>
         </div>
     </div>
 
     <div class="doc-kpi-grid">
-        <div class="doc-kpi-card"><div class="doc-kpi-icon total"><i class="fas fa-truck"></i></div><div><div class="doc-kpi-label">Frota</div><div class="doc-kpi-value" id="kpi-total">—</div><div class="doc-kpi-foot">veículos monitorados</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon em-rota"><i class="fas fa-route"></i></div><div><div class="doc-kpi-label">Em rota</div><div class="doc-kpi-value" id="kpi-rota">—</div><div class="doc-kpi-foot">fora da base</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon na-base"><i class="fas fa-warehouse"></i></div><div><div class="doc-kpi-label">Na base</div><div class="doc-kpi-value" id="kpi-base">—</div><div class="doc-kpi-foot">até 1 km da sede</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon total"><i class="fas fa-car"></i></div><div><div class="doc-kpi-label">No mapa</div><div class="doc-kpi-value" id="kpi-total">—</div><div class="doc-kpi-foot">veículos com posição</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon em-rota"><i class="fas fa-route"></i></div><div><div class="doc-kpi-label">Em viagem</div><div class="doc-kpi-value" id="kpi-rota">—</div><div class="doc-kpi-foot">com viagem em andamento</div></div></div>
+        <div class="doc-kpi-card"><div class="doc-kpi-icon na-base"><i class="fas fa-ban"></i></div><div><div class="doc-kpi-label">Sem posição</div><div class="doc-kpi-value" id="kpi-base">—</div><div class="doc-kpi-foot">ainda sem GPS reportado</div></div></div>
         <div class="doc-kpi-card"><div class="doc-kpi-icon atualizacao"><i class="fas fa-clock"></i></div><div><div class="doc-kpi-label">Última atualização</div><div class="doc-kpi-value" id="kpi-ultima">—</div><div class="doc-kpi-foot" id="kpi-ultima-foot">posição mais recente</div></div></div>
     </div>
 
-    <div class="doc-tabs">
-        <button class="doc-tab active" data-tab="mapa" onclick="trocarTab('mapa')"><i class="fas fa-map-location-dot"></i> Mapa ao vivo</button>
-        <button class="doc-tab" data-tab="portal" onclick="trocarTab('portal')"><i class="fas fa-window-maximize"></i> Portal Locartrack</button>
-    </div>
-
-    <div id="tab-mapa">
-        <div class="doc-workspace">
-            <div class="doc-panel">
-                <div class="doc-panel-head">
-                    <div class="doc-panel-title">Frota</div>
-                    <span class="doc-panel-count" id="lista-count">0</span>
-                </div>
-                <div class="veh-list" id="veh-list"><div style="padding:20px;color:var(--doc-muted);text-align:center;font-size:13px;">Carregando...</div></div>
+    <div class="doc-workspace">
+        <div class="doc-panel">
+            <div class="doc-panel-head">
+                <div class="doc-panel-title">Frota</div>
+                <span class="doc-panel-count" id="lista-count">0</span>
             </div>
-            <div class="doc-detail">
-                <div id="map-container"></div>
-            </div>
+            <div class="veh-list" id="veh-list"><div style="padding:20px;color:var(--doc-muted);text-align:center;font-size:13px;">Carregando...</div></div>
         </div>
-    </div>
-
-    <div id="tab-portal" style="display:none;">
-        <div class="iframe-shell">
-            <div class="iframe-hint">
-                <i class="fas fa-circle-info"></i>
-                <div>Portal oficial do Locartrack embutido. Faça login com as credenciais da empresa para ver a localização em tempo real.</div>
-            </div>
-            <iframe id="map-iframe-portal" src="about:blank" referrerpolicy="no-referrer"></iframe>
+        <div class="doc-detail">
+            <div id="map-container"></div>
         </div>
     </div>
 </div>
-
-<!-- Modal: atualizar posicao -->
-<div class="doc-modal-overlay" id="modal-posicao">
-    <div class="doc-modal">
-        <div class="doc-modal-head">
-            <h3 id="modal-posicao-titulo">Atualizar posição</h3>
-            <button class="doc-modal-close" onclick="fecharModal('modal-posicao')">×</button>
-        </div>
-        <div class="doc-modal-body">
-            <div class="doc-form-help" style="margin-bottom:12px;">
-                Cole a latitude e longitude que aparecem no portal Locartrack. Dica: no portal, clique no veículo e copie as coordenadas que aparecem no mapa.
-            </div>
-            <input type="hidden" id="pos-veiculo-id">
-            <div class="doc-form-row">
-                <div class="doc-form-block">
-                    <label class="doc-form-label">Latitude</label>
-                    <input type="text" id="pos-lat" class="doc-input" placeholder="-22.8531">
-                </div>
-                <div class="doc-form-block">
-                    <label class="doc-form-label">Longitude</label>
-                    <input type="text" id="pos-lng" class="doc-input" placeholder="-47.2158">
-                </div>
-            </div>
-            <div class="doc-form-block">
-                <label class="doc-form-label">Velocidade (km/h, opcional)</label>
-                <input type="text" id="pos-vel" class="doc-input" placeholder="0">
-            </div>
-            <div class="doc-form-block">
-                <label class="doc-form-label">Observação (opcional)</label>
-                <input type="text" id="pos-obs" class="doc-input" placeholder="Ex.: Saindo para entrega cliente X">
-            </div>
-        </div>
-        <div class="doc-modal-foot">
-            <button class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-posicao')">Cancelar</button>
-            <button class="doc-btn doc-btn-primary" onclick="salvarPosicao()"><i class="fas fa-save"></i> Salvar posição</button>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: credenciais (admin) -->
-{% if is_admin %}
-<div class="doc-modal-overlay" id="modal-credenciais">
-    <div class="doc-modal">
-        <div class="doc-modal-head">
-            <h3>Credenciais Locartrack</h3>
-            <button class="doc-modal-close" onclick="fecharModal('modal-credenciais')">×</button>
-        </div>
-        <div class="doc-modal-body">
-            <div class="doc-form-help" style="margin-bottom:12px; background:#fef3c7; border:1px solid #fcd34d; color:#92400e; padding:10px; border-radius:8px;">
-                <i class="fas fa-shield-alt"></i> As credenciais ficam salvas apenas neste servidor (pasta <code>instance/</code>), fora do controle de versão.
-            </div>
-            <div class="doc-form-block">
-                <label class="doc-form-label">URL do portal</label>
-                <input type="text" id="cred-url" class="doc-input" placeholder="https://locartrack.plataforma.app.br/web/franqueado">
-            </div>
-            <div class="doc-form-block">
-                <label class="doc-form-label">Login (CNPJ)</label>
-                <input type="text" id="cred-login" class="doc-input" placeholder="Ex.: 30482274000125">
-            </div>
-            <div class="doc-form-block">
-                <label class="doc-form-label">Senha</label>
-                <input type="password" id="cred-senha" class="doc-input" placeholder="Deixe em branco para manter a senha atual" autocomplete="new-password">
-                <div class="doc-form-help" id="cred-senha-status"></div>
-            </div>
-        </div>
-        <div class="doc-modal-foot">
-            <button class="doc-btn doc-btn-secondary" onclick="fecharModal('modal-credenciais')">Cancelar</button>
-            <button class="doc-btn doc-btn-primary" onclick="salvarCredenciais()"><i class="fas fa-save"></i> Salvar</button>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <div id="feedback" class="doc-feedback">
     <div class="doc-feedback-title" id="feedback-title"></div>
@@ -283,33 +167,27 @@
         setTimeout(() => fb.classList.remove('show'), 3500);
     }
 
-    function haversineKm(lat1, lng1, lat2, lng2) {
-        const R = 6371, toRad = d => d * Math.PI / 180;
-        const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
-        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
-        return 2 * R * Math.asin(Math.sqrt(a));
-    }
-
-    function veiculoStatus(v, baseLat, baseLng) {
-        if (v.latitude == null || v.longitude == null) return { label: 'SEM POSIÇÃO', classe: 'offline', naBase: false };
-        const idadeMin = v.atualizado_em ? (Date.now() - new Date(v.atualizado_em).getTime()) / 60000 : 999;
-        const dist = haversineKm(baseLat, baseLng, v.latitude, v.longitude);
-        const naBase = dist <= 1;
-        if (idadeMin > 180) return { label: 'DESATUALIZADO', classe: 'stale', naBase };
-        if (naBase) return { label: 'NA BASE', classe: 'offline', naBase: true };
-        return { label: 'EM ROTA', classe: 'online', naBase: false };
+    // Status deriva de "em viagem" + idade da ultima posicao - mesma logica
+    // usada no Mapa da Frota (classeMarker), so aqui com rotulo pt-BR pra
+    // mostrar na lista lateral.
+    function veiculoStatus(v) {
+        if (v.latitude == null || v.longitude == null) return { label: 'SEM POSIÇÃO', classe: 'offline' };
+        if (!v.em_viagem) return { label: 'PARADO', classe: 'offline' };
+        const idadeMin = v.atualizado_em ? (Date.now() - new Date(v.atualizado_em).getTime()) / 60000 : null;
+        if (idadeMin === null || idadeMin > 15) return { label: 'SEM SINAL', classe: 'danger' };
+        if (idadeMin > 5) return { label: 'ATUALIZANDO', classe: 'stale' };
+        return { label: 'EM ROTA', classe: 'online' };
     }
 
     async function carregarEstado() {
         try {
-            const r = await fetch('/api/rastreamento/estado');
-            if (!r.ok) throw new Error('Falha ao buscar estado');
-            ESTADO = await r.json();
-            document.getElementById('btn-abrir-portal').href = ESTADO.portal_url || '#';
+            const r = await fetch('/api/viagem/mapa-frota', { credentials: 'same-origin' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.msg || data.error || 'Falha ao buscar posições');
+            ESTADO = data;
             renderKpis();
             renderLista();
             renderMapa();
-            atualizarPortalIframe();
         } catch (err) {
             feedback('error', 'Erro', err.message);
         }
@@ -317,54 +195,55 @@
 
     function renderKpis() {
         if (!ESTADO) return;
-        const base = ESTADO.base || {};
-        let emRota = 0, naBase = 0, ultima = null;
-        for (const v of (ESTADO.veiculos || [])) {
-            const st = veiculoStatus(v, base.latitude, base.longitude);
-            if (st.classe === 'online') emRota++;
-            if (st.naBase) naBase++;
+        const veiculos = ESTADO.veiculos || [];
+        let emRota = 0, ultima = null;
+        for (const v of veiculos) {
+            if (v.em_viagem) emRota++;
             if (v.atualizado_em) {
                 const d = new Date(v.atualizado_em);
                 if (!ultima || d > ultima) ultima = d;
             }
         }
-        document.getElementById('kpi-total').textContent = (ESTADO.veiculos || []).length;
+        document.getElementById('kpi-total').textContent = veiculos.length;
         document.getElementById('kpi-rota').textContent = emRota;
-        document.getElementById('kpi-base').textContent = naBase;
+        document.getElementById('kpi-base').textContent = ESTADO.sem_posicao || 0;
         document.getElementById('kpi-ultima').textContent = ultima ? formatDateHuman(ultima.toISOString()) : '—';
     }
 
     function renderLista() {
         if (!ESTADO) return;
-        const base = ESTADO.base || {};
         const veiculos = ESTADO.veiculos || [];
         document.getElementById('lista-count').textContent = veiculos.length;
         const html = veiculos.map(v => {
-            const st = veiculoStatus(v, base.latitude, base.longitude);
-            const selected = VEICULO_SELECIONADO === v.id ? ' selected' : '';
+            const st = veiculoStatus(v);
+            const selected = VEICULO_SELECIONADO === v.veiculo_id ? ' selected' : '';
+            const viagemInfo = v.viagem
+                ? `${escapeHtml(v.viagem.codigo || 'Viagem')}${v.viagem.motorista_nome ? ' · ' + escapeHtml(v.viagem.motorista_nome) : ''}`
+                : 'Sem viagem em andamento';
             return `
-                <div class="veh-card${selected}" onclick="selecionarVeiculo('${v.id}')">
+                <div class="veh-card${selected}" onclick="selecionarVeiculo(${v.veiculo_id})">
                     <div class="veh-card-head">
                         <div>
-                            <div class="veh-apelido">${escapeHtml(v.apelido || v.marca_modelo || v.placa)}</div>
+                            <div class="veh-apelido">${escapeHtml(v.veiculo_label || v.placa)}</div>
                             <div class="veh-placa">${escapeHtml(v.placa || '—')}</div>
-                            <div class="veh-modelo">${escapeHtml(v.marca_modelo || '')}</div>
+                            <div class="veh-modelo">${viagemInfo}</div>
                         </div>
                         <span class="veh-status ${st.classe}">${st.label}</span>
                     </div>
                     <div class="veh-foot">
                         <span><i class="fas fa-clock"></i> <strong>${formatDateHuman(v.atualizado_em)}</strong></span>
-                        <button class="doc-btn doc-btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="event.stopPropagation();abrirPosicao('${v.id}')"><i class="fas fa-map-pin"></i> Posição</button>
+                        ${v.velocidade_kmh != null ? `<span><i class="fas fa-gauge-high"></i> <strong>${Number(v.velocidade_kmh).toFixed(0)} km/h</strong></span>` : ''}
                     </div>
                 </div>`;
         }).join('');
-        document.getElementById('veh-list').innerHTML = html || '<div style="padding:20px;color:var(--doc-muted);text-align:center;font-size:13px;">Nenhum veículo cadastrado.</div>';
+        document.getElementById('veh-list').innerHTML = html || '<div style="padding:20px;color:var(--doc-muted);text-align:center;font-size:13px;">Nenhum veículo com posição no momento.</div>';
     }
 
     function renderMapa() {
         if (!ESTADO) return;
         const base = ESTADO.base || {};
-        const centerLat = base.latitude, centerLng = base.longitude;
+        const centerLat = Number(base.latitude) || -22.8531;
+        const centerLng = Number(base.longitude) || -47.2158;
         if (!MAP) {
             MAP = L.map('map-container').setView([centerLat, centerLng], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -372,25 +251,24 @@
                 attribution: '© OpenStreetMap'
             }).addTo(MAP);
         }
-        // limpa marcadores
         Object.values(MARKERS).forEach(m => MAP.removeLayer(m));
         MARKERS = {};
-        // base
         const baseIcon = L.divIcon({ className: '', html: `<div class="veh-marker-pill base"><i class="fas fa-warehouse"></i> Base</div>`, iconSize: [90, 28], iconAnchor: [45, 14] });
         MARKERS['_base'] = L.marker([centerLat, centerLng], { icon: baseIcon }).addTo(MAP)
-            .bindPopup(`<strong>Base Columbia Machine</strong><br>${escapeHtml(base.endereco || '')}`);
-        // veiculos
+            .bindPopup(`<strong>${escapeHtml(base.nome || 'Base Columbia Machine')}</strong><br>${escapeHtml(base.endereco || '')}`);
         const pontos = [[centerLat, centerLng]];
         for (const v of (ESTADO.veiculos || [])) {
             if (v.latitude == null || v.longitude == null) continue;
-            const st = veiculoStatus(v, centerLat, centerLng);
-            const icon = L.divIcon({ className: '', html: `<div class="veh-marker-pill ${st.classe === 'online' ? 'online' : st.classe === 'stale' ? 'stale' : ''}"><i class="fas fa-truck"></i> ${escapeHtml(v.apelido || v.placa)}</div>`, iconSize: [120, 28], iconAnchor: [60, 14] });
+            const st = veiculoStatus(v);
+            const icon = L.divIcon({ className: '', html: `<div class="veh-marker-pill ${st.classe}"><i class="fas fa-car"></i> ${escapeHtml(v.veiculo_label || v.placa)}</div>`, iconSize: [130, 28], iconAnchor: [65, 14] });
+            const viagemHtml = v.viagem
+                ? `<br><small>${escapeHtml(v.viagem.codigo || 'Viagem')}${v.viagem.motorista_nome ? ' · ' + escapeHtml(v.viagem.motorista_nome) : ''}</small><br><a href="/logistica/viagens?vid=${Number(v.viagem.id)}">Ver viagem</a>`
+                : '';
             const popupHtml = `
-                <strong>${escapeHtml(v.apelido || '')}</strong> · ${escapeHtml(v.placa)}<br>
-                ${escapeHtml(v.marca_modelo || '')}<br>
+                <strong>${escapeHtml(v.veiculo_label || '')}</strong> · ${escapeHtml(v.placa || '')}<br>
                 <small>Posição: ${v.latitude.toFixed(5)}, ${v.longitude.toFixed(5)}</small><br>
-                <small>Atualizado: ${formatDateHuman(v.atualizado_em)}</small>`;
-            MARKERS[v.id] = L.marker([v.latitude, v.longitude], { icon }).addTo(MAP).bindPopup(popupHtml);
+                <small>Atualizado: ${formatDateHuman(v.atualizado_em)}</small>${viagemHtml}`;
+            MARKERS[v.veiculo_id] = L.marker([v.latitude, v.longitude], { icon }).addTo(MAP).bindPopup(popupHtml);
             pontos.push([v.latitude, v.longitude]);
         }
         if (pontos.length > 1) {
@@ -402,97 +280,19 @@
     function selecionarVeiculo(id) {
         VEICULO_SELECIONADO = id;
         renderLista();
-        const v = (ESTADO.veiculos || []).find(x => x.id === id);
+        const v = (ESTADO.veiculos || []).find(x => x.veiculo_id === id);
         if (v && v.latitude != null && MAP) {
             MAP.setView([v.latitude, v.longitude], 15, { animate: true });
             if (MARKERS[id]) MARKERS[id].openPopup();
         }
     }
 
-    function trocarTab(nome) {
-        document.querySelectorAll('.doc-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === nome));
-        document.getElementById('tab-mapa').style.display = nome === 'mapa' ? '' : 'none';
-        document.getElementById('tab-portal').style.display = nome === 'portal' ? '' : 'none';
-        if (nome === 'mapa' && MAP) setTimeout(() => MAP.invalidateSize(), 50);
-        if (nome === 'portal') atualizarPortalIframe();
-    }
-
-    function atualizarPortalIframe() {
-        const iframe = document.getElementById('map-iframe-portal');
-        const url = (ESTADO && ESTADO.portal_url) || 'https://locartrack.plataforma.app.br/';
-        if (iframe && iframe.src !== url) iframe.src = url;
-    }
-
-    // Modal de posicao
-    function abrirPosicao(id) {
-        const v = (ESTADO.veiculos || []).find(x => x.id === id);
-        if (!v) return;
-        document.getElementById('modal-posicao-titulo').textContent = `Atualizar posição · ${v.apelido || v.placa}`;
-        document.getElementById('pos-veiculo-id').value = id;
-        document.getElementById('pos-lat').value = v.latitude ?? '';
-        document.getElementById('pos-lng').value = v.longitude ?? '';
-        document.getElementById('pos-vel').value = v.velocidade_kmh ?? '';
-        document.getElementById('pos-obs').value = '';
-        document.getElementById('modal-posicao').classList.add('show');
-    }
-    function fecharModal(id) { document.getElementById(id).classList.remove('show'); }
-
-    async function salvarPosicao() {
-        const id = document.getElementById('pos-veiculo-id').value;
-        const lat = document.getElementById('pos-lat').value.trim();
-        const lng = document.getElementById('pos-lng').value.trim();
-        const vel = document.getElementById('pos-vel').value.trim();
-        const obs = document.getElementById('pos-obs').value.trim();
-        if (!lat || !lng) { feedback('error', 'Preencha lat/long', ''); return; }
-        try {
-            const r = await fetch(`/api/rastreamento/veiculos/${id}/posicao`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude: lat, longitude: lng, velocidade_kmh: vel || null, observacao: obs })
-            });
-            const data = await r.json();
-            if (!r.ok || !data.sucesso) throw new Error(data.msg || 'Erro');
-            fecharModal('modal-posicao');
-            feedback('success', 'Posição atualizada', '');
-            carregarEstado();
-        } catch (err) {
-            feedback('error', 'Erro', err.message);
-        }
-    }
-
-    {% if is_admin %}
-    function abrirCredenciais() {
-        document.getElementById('cred-url').value = (ESTADO && ESTADO.portal_url) || '';
-        document.getElementById('cred-login').value = (ESTADO && ESTADO.portal_login) || '';
-        document.getElementById('cred-senha').value = '';
-        document.getElementById('cred-senha-status').textContent = ESTADO && ESTADO.portal_senha_cadastrada ? 'Senha já cadastrada. Deixe em branco para manter.' : 'Nenhuma senha cadastrada ainda.';
-        document.getElementById('modal-credenciais').classList.add('show');
-    }
-    async function salvarCredenciais() {
-        const url = document.getElementById('cred-url').value.trim();
-        const login = document.getElementById('cred-login').value.trim();
-        const senha = document.getElementById('cred-senha').value;
-        try {
-            const r = await fetch('/api/rastreamento/credenciais', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ portal_url: url, portal_login: login, portal_senha: senha })
-            });
-            const data = await r.json();
-            if (!r.ok || !data.sucesso) throw new Error(data.msg || 'Erro');
-            fecharModal('modal-credenciais');
-            feedback('success', 'Credenciais salvas', '');
-            carregarEstado();
-        } catch (err) {
-            feedback('error', 'Erro', err.message);
-        }
-    }
-    {% endif %}
-
     document.addEventListener('DOMContentLoaded', () => {
         carregarEstado();
-        // Auto refresh a cada 60s
-        setInterval(carregarEstado, 60000);
+        // Atualiza a cada 10s - o ping do motorista ja e limitado a ~15s no
+        // minimo (throttle no app/pagina do motorista), entao isso ja
+        // acompanha a posicao praticamente em tempo real.
+        setInterval(carregarEstado, 10000);
     });
 </script>
 {% endblock %}
