@@ -255,8 +255,16 @@ class Config:
         "ROMANEIO_FOB_ENDERECO_RETIRADA",
         "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850",
     )
+    # Token de autenticacao para API externa de expedicao.
+    # Quando vazio, o endpoint de integracao permanece aberto apenas para uso local.
+    EXPEDICAO_INTEGRACAO_TOKEN = str(os.environ.get("EXPEDICAO_INTEGRACAO_TOKEN", "") or "").strip()
     # WhatsApp profissional para comunicacao FOB (Meta Cloud API)
     WHATSAPP_FOB_ENABLED = os.environ.get("WHATSAPP_FOB_ENABLED", "0") == "1"
+    # Integracao Inventario -> sistema externo / GRV
+    INVENTARIO_INTEGRACAO_TOKEN = str(os.environ.get("INVENTARIO_INTEGRACAO_TOKEN", "") or "").strip()
+    INVENTARIO_GRV_API_URL = str(os.environ.get("INVENTARIO_GRV_API_URL", "") or "").strip()
+    INVENTARIO_GRV_API_TOKEN = str(os.environ.get("INVENTARIO_GRV_API_TOKEN", "") or "").strip()
+    INVENTARIO_GRV_API_TIMEOUT = int(os.environ.get("INVENTARIO_GRV_API_TIMEOUT", "30") or 30)
     WHATSAPP_PROVIDER = str(os.environ.get("WHATSAPP_PROVIDER", "META_CLOUD") or "META_CLOUD").strip()
     WHATSAPP_META_API_VERSION = str(os.environ.get("WHATSAPP_META_API_VERSION", "v21.0") or "v21.0").strip()
     WHATSAPP_META_PHONE_NUMBER_ID = str(os.environ.get("WHATSAPP_META_PHONE_NUMBER_ID", "") or "").strip()

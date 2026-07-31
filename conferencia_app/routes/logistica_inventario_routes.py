@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session, send_file
 from openpyxl import Workbook
+import requests
 
 from ..auth import permission_required
 from ..extensions import db
@@ -17,6 +21,7 @@ from ..services.erp_estoque_service import buscar_estoque_grv, qtde_grv_para
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
 
 PERMISSION = "PAGE_LOGISTICA_INVENTARIO"
+INVENTARIO_EXPORT_JSON_REL_PATH = "inventario_material_local.json"
 UNIDADES_PADRAO = [
     "UN", "PC", "CX", "PCT", "RL", "KG", "G", "MG", "L", "ML", "M", "CM", "MM", "M2", "M3",
 ]
@@ -53,6 +58,123 @@ def _build_query(local: str = "", codigo: str = ""):
     if codigo:
         query = query.filter(LogisticaInventarioInicial.codigo_produto.ilike(f"%{codigo}%"))
     return query
+
+
+def _token_integracao_inventario_recebido() -> str:
+    token = str(request.headers.get("X-Integracao-Token") or "").strip()
+    if token:
+        return token
+    auth = str(request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return str(request.args.get("token") or "").strip()
+
+
+def _token_integracao_inventario_valido() -> bool:
+    # Usa token proprio do inventario; se ausente, reaproveita token da integracao de expedicao.
+    esperado = str(
+        current_app.config.get("INVENTARIO_INTEGRACAO_TOKEN")
+        or current_app.config.get("EXPEDICAO_INTEGRACAO_TOKEN")
+        or ""
+    ).strip()
+    if not esperado:
+        return True
+    return _token_integracao_inventario_recebido() == esperado
+
+
+def _gerar_dados_material_local(rows: list[LogisticaInventarioInicial]) -> list[dict]:
+    # Mantem apenas a versao mais recente por par (material, local).
+    mais_recente_por_chave: dict[tuple[str, str], LogisticaInventarioInicial] = {}
+    for row in rows:
+        codigo = str(row.codigo_produto or "").strip().upper()
+        local = str(row.local_codigo or "").strip().upper()
+        if not codigo or not local:
+            continue
+        chave = (codigo, local)
+        atual = mais_recente_por_chave.get(chave)
+        if not atual or (row.atualizado_em or row.criado_em or datetime.min) > (atual.atualizado_em or atual.criado_em or datetime.min):
+            mais_recente_por_chave[chave] = row
+
+    saida = []
+    for (codigo, local), row in sorted(mais_recente_por_chave.items()):
+        saida.append(
+            {
+                "codigo_material": codigo,
+                "local": local,
+                "quantidade": float(row.quantidade or 0),
+                "unidade": str(row.unidade_medida or "UN"),
+                "atualizado_em": (row.atualizado_em or row.criado_em).isoformat() if (row.atualizado_em or row.criado_em) else None,
+            }
+        )
+    return saida
+
+
+def _montar_payload_material_local() -> dict:
+    rows = (
+        LogisticaInventarioInicial.query
+        .order_by(LogisticaInventarioInicial.atualizado_em.desc(), LogisticaInventarioInicial.id.desc())
+        .all()
+    )
+    dados = _gerar_dados_material_local(rows)
+    return {
+        "sucesso": True,
+        "gerado_em": datetime.now().isoformat(),
+        "total": len(dados),
+        "dados": dados,
+    }
+
+
+def _salvar_snapshot_inventario_json(payload: dict) -> Path:
+    static_dir = Path(__file__).resolve().parents[2] / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    out_path = static_dir / INVENTARIO_EXPORT_JSON_REL_PATH
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
+
+
+def _enviar_para_grv(payload: dict) -> dict:
+    api_url = str(
+        os.environ.get("INVENTARIO_GRV_API_URL")
+        or os.environ.get("ERP_LANCAMENTO_API_URL")
+        or current_app.config.get("INVENTARIO_GRV_API_URL")
+        or current_app.config.get("ERP_LANCAMENTO_API_URL")
+        or ""
+    ).strip()
+    token = str(
+        os.environ.get("INVENTARIO_GRV_API_TOKEN")
+        or os.environ.get("ERP_LANCAMENTO_API_TOKEN")
+        or current_app.config.get("INVENTARIO_GRV_API_TOKEN")
+        or current_app.config.get("ERP_LANCAMENTO_API_TOKEN")
+        or ""
+    ).strip()
+    timeout = int(
+        os.environ.get("INVENTARIO_GRV_API_TIMEOUT")
+        or os.environ.get("ERP_LANCAMENTO_API_TIMEOUT")
+        or current_app.config.get("INVENTARIO_GRV_API_TIMEOUT")
+        or current_app.config.get("ERP_LANCAMENTO_API_TIMEOUT")
+        or 30
+    )
+
+    if not api_url:
+        return {"enviado": False, "motivo": "INVENTARIO_GRV_API_URL nao configurada."}
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+        "User-Agent": "ColumbiaSync/Inventario-GRV",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    resp = requests.post(api_url, headers=headers, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    body = resp.json() if (resp.headers.get("content-type", "").lower().find("json") >= 0) else {}
+    return {
+        "enviado": True,
+        "status_code": resp.status_code,
+        "resposta": body if isinstance(body, dict) else {},
+    }
 
 
 @logistica_inventario_bp.route("/logistica/inventario")
@@ -238,3 +360,34 @@ def criar_inventario_inicial():
     db.session.commit()
 
     return jsonify({"sucesso": True, "registro": _fmt_registro(row)}), 201
+
+
+@logistica_inventario_bp.route("/api/integracao/inventario/material-local", methods=["GET"])
+def inventario_material_local_integracao():
+    if not _token_integracao_inventario_valido():
+        return jsonify({"sucesso": False, "erro": "Token de integracao invalido."}), 401
+    return jsonify(_montar_payload_material_local())
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-inicial/sincronizar-grv", methods=["POST"])
+@permission_required(PERMISSION)
+def sincronizar_inventario_grv():
+    payload = _montar_payload_material_local()
+    _salvar_snapshot_inventario_json(payload)
+
+    grv = {}
+    try:
+        grv = _enviar_para_grv(payload)
+    except Exception as exc:
+        grv = {"enviado": False, "erro": str(exc)}
+
+    base_url = request.url_root.rstrip("/")
+    return jsonify(
+        {
+            "sucesso": True,
+            "total": payload.get("total", 0),
+            "snapshot_url": f"{base_url}/static/{INVENTARIO_EXPORT_JSON_REL_PATH}",
+            "integracao_url": f"{base_url}/api/integracao/inventario/material-local",
+            "grv": grv,
+        }
+    )

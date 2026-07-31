@@ -238,11 +238,128 @@ def _normalize_external_payload(payload):
     return {"raw": str(payload)[:1000]}
 
 
+def _base_url_columbia() -> str:
+    base = str(current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if base:
+        return base
+    return request.url_root.rstrip("/")
+
+
+def _token_integracao_expedicao_informado() -> str:
+    token = str(request.headers.get("X-Integracao-Token") or "").strip()
+    if token:
+        return token
+    auth = str(request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return str(request.args.get("token") or "").strip()
+
+
+def _token_integracao_expedicao_valido() -> bool:
+    esperado = str(current_app.config.get("EXPEDICAO_INTEGRACAO_TOKEN") or "").strip()
+    if not esperado:
+        return True
+    informado = _token_integracao_expedicao_informado()
+    return bool(informado and informado == esperado)
+
+
 def _consyste_token_configurado_corretamente() -> bool:
     token = str(current_app.config.get("CONSYSTE_TOKEN") or "").strip()
     if not token:
         return False
     return True
+
+
+@api_bp.route("/api/integracao/expedicao/coletas", methods=["GET"])
+def api_integracao_expedicao_coletas():
+    """API externa para consumo de dados de expedicao por outro sistema.
+
+    Campos retornados por item:
+    - nota_fiscal
+    - orcamento
+    - os
+    - foto_cliente_url
+    - data_expedicao
+    - link_columbia
+    """
+    if not _token_integracao_expedicao_valido():
+        return jsonify({"sucesso": False, "erro": "Token de integracao invalido."}), 401
+
+    numero_nf = str(request.args.get("numero_nf") or "").strip()
+    limite_raw = str(request.args.get("limite") or "200").strip()
+    try:
+        limite = int(limite_raw)
+    except ValueError:
+        limite = 200
+    limite = max(1, min(limite, 1000))
+
+    query = ExpedicaoConferenciaSimples.query
+    query = query.filter(ExpedicaoConferenciaSimples.expedido_at.isnot(None))
+
+    if numero_nf:
+        query = query.filter(ExpedicaoConferenciaSimples.numero_nf == numero_nf)
+
+    registros = query.order_by(ExpedicaoConferenciaSimples.expedido_at.desc()).limit(limite).all()
+    base = _base_url_columbia()
+
+    dados = []
+    for reg in registros:
+        foto_cliente_url = None
+        if reg.foto_cliente_file_name:
+            foto_cliente_url = f"{base}/api/integracao/expedicao/coletas/{reg.id}/foto-cliente"
+
+        link_columbia = f"{base}/expedicao/conferencia?q={reg.numero_nf or ''}"
+
+        dados.append(
+            {
+                "nota_fiscal": reg.numero_nf or "",
+                "orcamento": reg.orcamento or "",
+                "os": reg.numero_os or "",
+                "foto_cliente_url": foto_cliente_url,
+                "data_expedicao": reg.expedido_at.isoformat() if reg.expedido_at else None,
+                "link_columbia": link_columbia,
+            }
+        )
+
+    return jsonify(
+        {
+            "sucesso": True,
+            "total": len(dados),
+            "filtros": {
+                "numero_nf": numero_nf or None,
+                "limite": limite,
+            },
+            "dados": dados,
+        }
+    )
+
+
+@api_bp.route("/api/integracao/expedicao/coletas/<int:registro_id>/foto-cliente", methods=["GET"])
+def api_integracao_expedicao_coletas_foto_cliente(registro_id: int):
+    """Retorna a foto do cliente para consumo externo da integração."""
+    if not _token_integracao_expedicao_valido():
+        return jsonify({"sucesso": False, "erro": "Token de integracao invalido."}), 401
+
+    registro = ExpedicaoConferenciaSimples.query.get(registro_id)
+    if not registro:
+        return jsonify({"sucesso": False, "erro": "Registro de expedição não encontrado."}), 404
+
+    if not registro.foto_cliente_file_name:
+        return jsonify({"sucesso": False, "erro": "Registro sem foto do cliente."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+
+    caminho = _resolver_foto_expedicao(
+        fotos_dir,
+        registro.foto_cliente_file_name,
+        registro.foto_cliente_file_path,
+    )
+    if not caminho:
+        return jsonify({"sucesso": False, "erro": "Arquivo de foto do cliente não encontrado."}), 404
+
+    return _send_foto_expedicao(caminho, registro.foto_cliente_file_name)
 
 
 def _get_db_file_path() -> str:

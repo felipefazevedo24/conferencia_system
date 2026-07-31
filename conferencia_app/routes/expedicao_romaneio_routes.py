@@ -43,6 +43,19 @@ def _parse_int(valor, default=0) -> int:
     return int(_parse_float(valor, default))
 
 
+def _calcular_totais_nfs(nfs: list) -> tuple[float, int]:
+    peso_total = sum(_parse_float(getattr(nf, "peso_bruto", 0) or 0) for nf in (nfs or []))
+    volumes_total = sum(_parse_int(getattr(nf, "qtde_volumes", 0) or 0) for nf in (nfs or []))
+    return peso_total, volumes_total
+
+
+def _recalcular_totais_romaneio(romaneio: ExpedicaoRomaneio) -> tuple[float, int]:
+    peso_total, volumes_total = _calcular_totais_nfs(romaneio.nfs or [])
+    romaneio.peso_bruto_total = peso_total
+    romaneio.qtde_volumes_total = volumes_total
+    return peso_total, volumes_total
+
+
 def _dados_nf_do_bridge(numero_nf: str) -> dict | None:
     """Busca os dados reais de uma NF-e emitida direto na bridge Postgres do
     ERP (mesma fonte usada no envio de e-mail e no destinatário do romaneio),
@@ -215,8 +228,10 @@ def listar_romaneios():
             nomes.append(r.cliente)
         return nomes
 
-    data = [
-        {
+    data = []
+    for r in romaneios:
+        peso_total, volumes_total = _calcular_totais_nfs(r.nfs or [])
+        data.append({
             "id": r.id,
             "numero_romaneio": r.numero_romaneio,
             "data_romaneio": r.data_romaneio.isoformat() if r.data_romaneio else None,
@@ -224,8 +239,8 @@ def listar_romaneios():
             "cliente": r.cliente,
             "clientes": _clientes_do_romaneio(r),
             "tipo_frete": r.tipo_frete,
-            "peso_bruto_total": r.peso_bruto_total,
-            "qtde_volumes_total": r.qtde_volumes_total,
+            "peso_bruto_total": peso_total,
+            "qtde_volumes_total": volumes_total,
             "qtde_nfs": len(r.nfs) if r.nfs else 0,
             "nfs": [
                 {
@@ -242,9 +257,7 @@ def listar_romaneios():
             "criado_por": r.criado_por,
             "criado_em": r.criado_em.isoformat() if r.criado_em else None,
             "exclusao_pendente": _exclusao_pendente_dict(r.id) if r.status == "Rascunho" else None,
-        }
-        for r in romaneios
-    ]
+        })
     
     return jsonify({"romaneios": data})
 
@@ -299,6 +312,8 @@ def obter_romaneio(romaneio_id):
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
     
+    peso_total, volumes_total = _calcular_totais_nfs(romaneio.nfs or [])
+
     return jsonify({
         "id": romaneio.id,
         "numero_romaneio": romaneio.numero_romaneio,
@@ -310,8 +325,8 @@ def obter_romaneio(romaneio_id):
         "placa": romaneio.placa,
         "motorista_nome": romaneio.motorista,
         "motorista_documento": romaneio.motorista_documento,
-        "peso_bruto_total": romaneio.peso_bruto_total,
-        "qtde_volumes_total": romaneio.qtde_volumes_total,
+        "peso_bruto_total": peso_total,
+        "qtde_volumes_total": volumes_total,
         "observacao_1": romaneio.observacao_1,
         "observacao_2": romaneio.observacao_2,
         "observacao_3": romaneio.observacao_3,
@@ -504,9 +519,8 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     
     db.session.add(nf)
     
-    # Atualiza totais do romaneio
-    romaneio.peso_bruto_total = sum(n.peso_bruto for n in romaneio.nfs or []) + peso_bruto
-    romaneio.qtde_volumes_total = sum(n.qtde_volumes for n in romaneio.nfs or []) + qtde_volumes
+    # Atualiza totais sempre pela lista real de NFs, sem duplicar a NF recém-adicionada.
+    _recalcular_totais_romaneio(romaneio)
     
     # Se for a primeira NF, usa seus dados como padrão
     if len(romaneio.nfs or []) == 1:
@@ -551,15 +565,13 @@ def remover_nf_do_romaneio(romaneio_id, nf_id):
     if not nf or nf.romaneio_id != romaneio_id:
         return jsonify({"error": "NF não encontrada neste romaneio."}), 404
     
-    peso_removido = nf.peso_bruto
-    qtde_volumes_removido = nf.qtde_volumes
     numero_nf_removido = nf.numero_nf
     
     db.session.delete(nf)
+    db.session.flush()
     
-    # Atualiza totais
-    romaneio.peso_bruto_total = max(0, romaneio.peso_bruto_total - peso_removido)
-    romaneio.qtde_volumes_total = max(0, romaneio.qtde_volumes_total - qtde_volumes_removido)
+    # Atualiza totais pela lista remanescente para manter consistência.
+    _recalcular_totais_romaneio(romaneio)
     romaneio.atualizado_em = datetime.now()
     
     db.session.commit()

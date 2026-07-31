@@ -1014,7 +1014,7 @@ def _montar_corpo_html_aviso_coleta_fob(
         aviso_teste = f"""
         <tr><td style=\"padding:0 32px\">
             <div style=\"margin-top:8px;padding:12px 16px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;font-family:Arial,Helvetica,sans-serif\">
-                <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatario)'}</strong>.
+                <strong>[MODO TESTE]</strong> Este e-mail seria enviado para <strong>{destino_real or '(sem destinatário)'}</strong>.
             </div>
         </td></tr>"""
 
@@ -1027,7 +1027,7 @@ def _montar_corpo_html_aviso_coleta_fob(
         <head>
             <meta charset=\"UTF-8\"/>
             <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>
-            <title>Mercadoria Disponivel para Coleta</title>
+            <title>Mercadoria Disponível para Coleta</title>
         </head>
         <body style=\"margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a\">
             <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f1f5f9\" style=\"background:#f1f5f9;padding:28px 12px\">
@@ -1035,7 +1035,7 @@ def _montar_corpo_html_aviso_coleta_fob(
                     <table role=\"presentation\" width=\"640\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#ffffff\" style=\"max-width:640px;width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px\">
                         <tr>
                             <td bgcolor=\"#1e3a8a\" style=\"background-color:#1e3a8a;padding:20px 28px;border-top-left-radius:10px;border-top-right-radius:10px;font-size:22px;font-weight:700;color:#ffffff\">
-                                Mercadoria Disponivel para Coleta
+                                Mercadoria Disponível para Coleta
                             </td>
                         </tr>
                         <tr>
@@ -1043,7 +1043,7 @@ def _montar_corpo_html_aviso_coleta_fob(
                                 Prezado(a) Sr.(a) <strong>{cliente}</strong>,
                                 <br><br>
                                 Informamos que seu pedido sob a nota fiscal n&ordm; <strong>{numero_nf}</strong>
-                                encontra-se pronto para expedicao e disponivel para coleta em nossa unidade.
+                                encontra-se pronto para expedição e disponível para coleta em nossa unidade.
                                 <br><br>
                                 Conforme acordado na modalidade <strong>FOB (Free On Board)</strong>,
                                 solicitamos que seja providenciado o transporte para retirada da mercadoria
@@ -1057,22 +1057,22 @@ def _montar_corpo_html_aviso_coleta_fob(
                                     <li><strong>Pedido:</strong> {numero_nf}</li>
                                     <li><strong>Volume(s):</strong> {int(qtde_volumes or 0)}</li>
                                     <li><strong>Peso:</strong> {peso_fmt} kg</li>
-                                    <li><strong>Endereco para retirada:</strong> {endereco_retirada}</li>
-                                    <li><strong>Horario de atendimento:</strong> {horario_atendimento}</li>
+                                    <li><strong>Endereço para retirada:</strong> {endereco_retirada}</li>
+                                    <li><strong>Horário de atendimento:</strong> {horario_atendimento}</li>
                                 </ul>
                             </td>
                         </tr>
                         <tr>
                             <td style=\"padding:14px 28px 0;font-size:14px;line-height:1.7;color:#1e293b\">
-                                Solicitamos a gentileza de nos informar os dados da transportadora e a previsao de coleta para que possamos agilizar o processo.
+                                Solicitamos a gentileza de nos informar os dados da transportadora e a previsão de coleta para que possamos agilizar o processo.
                                 <br><br>
-                                Em caso de duvidas, permanecemos a disposicao.
+                                Em caso de dúvidas, permanecemos à disposição.
                                 <br><br>
                                 Atenciosamente,
                                 <br><br>
-                                Logistics team<br>
+                                Equipe de Logística<br>
                                 Columbia Machine Brasil<br>
-                                Cel/whatsapp: (19) 99996-5208<br>
+                                Cel./WhatsApp: (19) 99996-5208<br>
                                 logistica@colmac.com
                             </td>
                         </tr>
@@ -1187,11 +1187,11 @@ def _montar_corpo_html_lembrete_coleta_fob(
                         <tr>
                             <td style=\"padding:24px 28px 10px;font-size:14px;line-height:1.65;color:#1e293b\">
                                 Prezado(a) {cliente}, gostaríamos de lembrar que a Nota Fiscal <strong>{numero_nf}</strong>
-                                permanece disponivel para coleta em nossa expedicao.
+                                permanece disponível para coleta em nossa expedição.
                                 <br><br>
-                                Conforme a condicao de venda FOB, a retirada da mercadoria deve ser realizada pelo transporte contratado por sua empresa.
+                                Conforme a condição de venda FOB, a retirada da mercadoria deve ser realizada pelo transporte contratado por sua empresa.
                                 <br><br>
-                                Solicitamos, por gentileza, o envio da programacao de coleta ou dos dados da transportadora para que possamos prosseguir com a liberacao da carga.
+                                Solicitamos, por gentileza, o envio da programação de coleta ou dos dados da transportadora para que possamos prosseguir com a liberação da carga.
                             </td>
                         </tr>
                         <tr>
@@ -1209,9 +1209,9 @@ def _montar_corpo_html_lembrete_coleta_fob(
                                 <br><br>
                                 Atenciosamente
                                 <br><br>
-                                Logistics team<br>
+                                Equipe de Logística<br>
                                 Columbia Machine Brasil<br>
-                                Cel/whatsapp: (19) 99996-5208<br>
+                                Cel./WhatsApp: (19) 99996-5208<br>
                                 logistica@colmac.com
                             </td>
                         </tr>
@@ -1330,7 +1330,7 @@ def enviar_aviso_coleta_fob(
     if not sender or not password:
         return {"sucesso": False, "erro": "SMTP nao configurado (MAIL_SENDER/MAIL_PASSWORD)."}
 
-    assunto_base = f"Mercadoria Disponivel para Coleta - Pedido n\u00ba {nota.numero}"
+    assunto_base = f"Mercadoria Disponivel para Coleta -Nota Fiscal n\u00ba {nota.numero}"
     assunto = f"[TESTE] {assunto_base}" if modo_teste else assunto_base
 
     msg = MIMEMultipart("mixed")
@@ -1343,16 +1343,16 @@ def enviar_aviso_coleta_fob(
     horario = str(
         app.config.get(
             "ROMANEIO_FOB_HORARIO_ATENDIMENTO",
-            "Segunda a sexta, das 06:00 as 16:00",
+            "Segunda a sexta, das 06:00 às 16:00",
         )
-        or "Segunda a sexta, das 06:00 as 16:00"
+        or "Segunda a sexta, das 06:00 às 16:00"
     ).strip()
     endereco = str(
         app.config.get(
             "ROMANEIO_FOB_ENDERECO_RETIRADA",
-            "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850",
+            "Estrada Carlos Roberto Pratavieira, 600, Hortolândia, São Paulo, 13184-850",
         )
-        or "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850"
+        or "Estrada Carlos Roberto Pratavieira, 600, Hortolândia, São Paulo, 13184-850"
     ).strip()
 
     corpo_html = _montar_corpo_html_aviso_coleta_fob(
@@ -1366,7 +1366,7 @@ def enviar_aviso_coleta_fob(
         destino_real=destino_real,
     )
     alt = MIMEMultipart("alternative")
-    alt.attach(MIMEText(f"Mercadoria disponivel para coleta - Pedido {nota.numero}", "plain", "utf-8"))
+    alt.attach(MIMEText(f"Mercadoria disponível para coleta - Pedido {nota.numero}", "plain", "utf-8"))
     alt.attach(MIMEText(corpo_html, "html", "utf-8"))
     msg.attach(alt)
 

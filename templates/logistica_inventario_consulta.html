@@ -58,6 +58,18 @@
     .inv-badge-div.divergente { background: #fee2e2; color: #991b1b; }
     .inv-badge-div.nd { background: #f1f5f9; color: #64748b; }
     .inv-grv-aviso { margin-top: 8px; font-size: 12px; color: #b45309; }
+    .inv-sync-status {
+        display: none;
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .inv-sync-status.show { display: block; }
+    .inv-sync-status.ok { background: #dcfce7; color: #14532d; }
+    .inv-sync-status.err { background: #fee2e2; color: #991b1b; }
+    .inv-sync-status.info { background: #e8f2ff; color: #1e3a8a; }
     @media (max-width: 780px) {
         .inv-cons-grid { grid-template-columns: 1fr; }
     }
@@ -87,8 +99,11 @@
             <button class="inv-btn primary" id="btn-filtrar" type="button"><i class="fas fa-filter"></i> Filtrar</button>
             <button class="inv-btn" id="btn-limpar" type="button"><i class="fas fa-eraser"></i> Limpar</button>
             <a class="inv-btn" id="btn-exportar" href="/api/logistica/inventario-inicial/exportar"><i class="fas fa-file-excel"></i> Exportar Excel</a>
+            <button class="inv-btn" id="btn-sync-grv" type="button"><i class="fas fa-cloud-arrow-up"></i> Enviar Local para GRV</button>
+            <a class="inv-btn" id="btn-json-integracao" href="/api/integracao/inventario/material-local" target="_blank"><i class="fas fa-code"></i> Ver JSON Integracao</a>
             <a class="inv-btn" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventario</a>
         </div>
+        <div id="sync-status" class="inv-sync-status"></div>
 
         <div id="inv-grv-aviso" class="inv-grv-aviso" style="display:none;"></div>
 
@@ -124,6 +139,9 @@
     const fltLocal = document.getElementById('flt-local');
     const fltCodigo = document.getElementById('flt-codigo');
     const btnExportar = document.getElementById('btn-exportar');
+    const btnSyncGrv = document.getElementById('btn-sync-grv');
+    const btnJsonIntegracao = document.getElementById('btn-json-integracao');
+    const syncStatus = document.getElementById('sync-status');
 
     function esc(v) {
         return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -137,9 +155,16 @@
         return p;
     }
 
+    function showSyncStatus(msg, kind) {
+        syncStatus.textContent = msg;
+        syncStatus.className = `inv-sync-status show ${kind || 'info'}`;
+    }
+
     function atualizarLinkExportar() {
         const p = paramsAtual();
         btnExportar.href = '/api/logistica/inventario-inicial/exportar' + (p.toString() ? `?${p.toString()}` : '');
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        btnJsonIntegracao.href = '/api/integracao/inventario/material-local' + (token ? `?token=${encodeURIComponent(token)}` : '');
     }
 
     function fmtData(iso) {
@@ -203,7 +228,34 @@
         }
     }
 
+    async function sincronizarGrv() {
+        btnSyncGrv.disabled = true;
+        showSyncStatus('Sincronizando inventario com API/GRV...', 'info');
+        try {
+            const resp = await fetch('/api/logistica/inventario-inicial/sincronizar-grv', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || data.msg || `HTTP ${resp.status}`);
+
+            const grv = data.grv || {};
+            const msg = grv.enviado
+                ? `Sincronizado com sucesso. Total: ${data.total || 0}. API GRV atualizada.`
+                : `Sincronizado localmente. Total: ${data.total || 0}. ${grv.motivo || grv.erro || 'GRV nao configurado.'}`;
+            showSyncStatus(msg, grv.enviado ? 'ok' : 'info');
+            await buscar();
+        } catch (err) {
+            showSyncStatus(`Falha na sincronizacao: ${err.message}`, 'err');
+        } finally {
+            btnSyncGrv.disabled = false;
+        }
+    }
+
     document.getElementById('btn-filtrar').addEventListener('click', buscar);
+    btnSyncGrv.addEventListener('click', sincronizarGrv);
     document.getElementById('btn-limpar').addEventListener('click', () => {
         fltLocal.value = '';
         fltCodigo.value = '';
