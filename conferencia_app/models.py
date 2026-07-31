@@ -2042,6 +2042,13 @@ class ExpedicaoRomaneio(db.Model):
     assinatura_conferente_uploadado_em = db.Column(db.DateTime)
     assinatura_conferente_uploadado_por = db.Column(db.String(100))
 
+    # Foto do carregamento (tirada durante o carregamento do caminhao, com o
+    # romaneio ja Pronto)
+    foto_carregamento_file_name = db.Column(db.String(260))
+    foto_carregamento_file_path = db.Column(db.String(500))
+    foto_carregamento_uploadado_em = db.Column(db.DateTime)
+    foto_carregamento_uploadado_por = db.Column(db.String(100))
+
     # Status: Rascunho (em construção), Pronto (finalizado), Expedido (já expedido)
     status = db.Column(db.String(30), nullable=False, default="Rascunho", index=True)
     

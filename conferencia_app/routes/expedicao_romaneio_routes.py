@@ -368,23 +368,28 @@ def atualizar_romaneio(romaneio_id):
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
     
-    if romaneio.status != "Rascunho":
-        return jsonify({"error": "Apenas romaneios em Rascunho podem ser editados."}), 400
-    
+    if romaneio.status not in ("Rascunho", "Pronto"):
+        return jsonify({"error": "Apenas romaneios em Rascunho ou Pronto podem ser editados."}), 400
+
+    # Com o romaneio Pronto, so os dados do transportador (transportadora,
+    # placa, motorista/conferente e CPF/CNPJ) podem ser corrigidos - os demais
+    # campos exigem voltar para Rascunho (estornar finalizacao).
+    somente_dados_transportador = romaneio.status == "Pronto"
+
     payload = request.get_json(silent=True) or {}
-    
-    # Atualiza campos permitidos
-    if "orcamento" in payload:
-        romaneio.orcamento = str(payload["orcamento"]).strip()
-    if "cliente" in payload:
-        romaneio.cliente = str(payload["cliente"]).strip()
+
     disparar_aviso_fob = False
-    if "tipo_frete" in payload:
-        frete = str(payload["tipo_frete"]).strip().upper()
-        if frete not in ("FOB", "CIF"):
-            return jsonify({"error": "Tipo de frete deve ser FOB ou CIF."}), 400
-        disparar_aviso_fob = (frete == "FOB")
-        romaneio.tipo_frete = frete
+    if not somente_dados_transportador:
+        if "orcamento" in payload:
+            romaneio.orcamento = str(payload["orcamento"]).strip()
+        if "cliente" in payload:
+            romaneio.cliente = str(payload["cliente"]).strip()
+        if "tipo_frete" in payload:
+            frete = str(payload["tipo_frete"]).strip().upper()
+            if frete not in ("FOB", "CIF"):
+                return jsonify({"error": "Tipo de frete deve ser FOB ou CIF."}), 400
+            disparar_aviso_fob = (frete == "FOB")
+            romaneio.tipo_frete = frete
     if "transportadora" in payload:
         romaneio.transportadora = str(payload["transportadora"]).strip()
     if "placa" in payload:
@@ -393,12 +398,13 @@ def atualizar_romaneio(romaneio_id):
         romaneio.motorista = str(payload["motorista"]).strip()
     if "motorista_documento" in payload:
         romaneio.motorista_documento = str(payload["motorista_documento"]).strip()
-    if "observacao_1" in payload:
-        romaneio.observacao_1 = str(payload["observacao_1"]).strip()
-    if "observacao_2" in payload:
-        romaneio.observacao_2 = str(payload["observacao_2"]).strip()
-    if "observacao_3" in payload:
-        romaneio.observacao_3 = str(payload["observacao_3"]).strip()
+    if not somente_dados_transportador:
+        if "observacao_1" in payload:
+            romaneio.observacao_1 = str(payload["observacao_1"]).strip()
+        if "observacao_2" in payload:
+            romaneio.observacao_2 = str(payload["observacao_2"]).strip()
+        if "observacao_3" in payload:
+            romaneio.observacao_3 = str(payload["observacao_3"]).strip()
     
     romaneio.atualizado_por = session["username"]
     romaneio.atualizado_em = datetime.now()
@@ -461,6 +467,19 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     # (ex.: NF fora do fluxo normal de faturamento).
     ordem_fat = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
     ordem_st = None if ordem_fat else ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
+
+    ordem_com_conferencia = ordem_fat or ordem_st
+    if ordem_com_conferencia:
+        registro_conferencia = None
+        if ordem_com_conferencia.expedicao_registro_id:
+            registro_conferencia = ExpedicaoConferenciaSimples.query.get(
+                ordem_com_conferencia.expedicao_registro_id
+            )
+        if not registro_conferencia or not registro_conferencia.foto_cliente_file_name:
+            return jsonify({
+                "error": "É necessário anexar a foto do cliente antes de incluir esta NF no romaneio."
+            }), 400
+
     if ordem_fat:
         orcamento = ordem_fat.orcamento or payload.get("orcamento") or romaneio.orcamento
         cliente = ordem_fat.cliente or payload.get("cliente") or romaneio.cliente
@@ -1028,3 +1047,85 @@ def obter_assinatura_romaneio(romaneio_id, tipo):
     except Exception as exc:
         current_app.logger.exception("Falha ao baixar assinatura do romaneio")
         return jsonify({"error": f"Falha ao baixar assinatura: {exc}"}), 502
+
+
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["POST"])
+@roles_required(*ROLES)
+def salvar_foto_carregamento_romaneio(romaneio_id):
+    """Salva a foto do carregamento (câmera do celular/tablet), tirada com o
+    romaneio já Pronto para expedir."""
+    romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
+    if not romaneio:
+        return jsonify({"error": "Romaneio não encontrado."}), 404
+
+    if romaneio.status not in ("Pronto", "Expedido"):
+        return jsonify({"error": "A foto de carregamento só pode ser tirada com o romaneio Pronto."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    imagem = str(payload.get("imagem_base64") or "").strip()
+    if not imagem:
+        return jsonify({"error": "Nenhuma foto recebida."}), 400
+    if "," in imagem:
+        imagem = imagem.split(",", 1)[1]
+
+    try:
+        dados_png = base64.b64decode(imagem)
+    except Exception:
+        return jsonify({"error": "Foto inválida."}), 400
+
+    nome_arquivo = f"romaneio{romaneio_id}_carregamento_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+
+    if using_drive():
+        try:
+            stored = upload_bytes_to_drive(dados_png, nome_arquivo, mimetype="image/png")
+            caminho = stored.file_path
+        except Exception as exc:
+            current_app.logger.exception("Falha ao enviar foto de carregamento do romaneio para o Drive")
+            return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
+    else:
+        fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "") or os.path.join(
+            current_app.instance_path, "expedicao_romaneio_carregamento"
+        )
+        os.makedirs(fotos_dir, exist_ok=True)
+        caminho = os.path.join(fotos_dir, nome_arquivo)
+        with open(caminho, "wb") as f:
+            f.write(dados_png)
+
+    agora = datetime.now()
+    romaneio.foto_carregamento_file_name = nome_arquivo
+    romaneio.foto_carregamento_file_path = caminho
+    romaneio.foto_carregamento_uploadado_em = agora
+    romaneio.foto_carregamento_uploadado_por = session["username"]
+    romaneio.atualizado_em = agora
+    db.session.commit()
+
+    return jsonify({
+        "message": "Foto de carregamento salva com sucesso.",
+        "url": f"/api/expedicao/romaneio-fat/{romaneio_id}/foto-carregamento",
+    })
+
+
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["GET"])
+@permission_required(PERMISSION)
+def obter_foto_carregamento_romaneio(romaneio_id):
+    romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
+    if not romaneio:
+        return jsonify({"error": "Romaneio não encontrado."}), 404
+
+    if not romaneio.foto_carregamento_file_name:
+        return jsonify({"error": "Foto de carregamento não encontrada."}), 404
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "") or os.path.join(
+        current_app.instance_path, "expedicao_romaneio_carregamento"
+    )
+    caminho = _resolver_foto_expedicao(
+        fotos_dir, romaneio.foto_carregamento_file_name, romaneio.foto_carregamento_file_path
+    )
+    if not caminho:
+        return jsonify({"error": "Arquivo da foto não encontrado."}), 404
+
+    try:
+        return _send_foto_expedicao(caminho, romaneio.foto_carregamento_file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar foto de carregamento do romaneio")
+        return jsonify({"error": f"Falha ao baixar foto: {exc}"}), 502

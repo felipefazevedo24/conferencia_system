@@ -618,6 +618,13 @@
             $("rom-motorista").value = r.motorista_nome || "";
             $("rom-documento").value = r.motorista_documento || "";
 
+            // Fora do Rascunho, so os dados do transportador continuam
+            // editaveis (o resto exige estornar a finalizacao primeiro).
+            const somenteTransportador = r.status !== "Rascunho";
+            $("rom-data").disabled = somenteTransportador;
+            $("rom-orcamento").disabled = somenteTransportador;
+            $("rom-cliente").disabled = somenteTransportador;
+
             renderNFsList();
             $("rom-modal").classList.add("open");
             atualizarSelectModal();

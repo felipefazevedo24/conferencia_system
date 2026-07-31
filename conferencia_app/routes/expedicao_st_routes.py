@@ -229,8 +229,8 @@ def upload_fotos_preexpedicao_st(cod_ordem_compra):
     ordem = ExpedicaoOrdemST.query.filter_by(cod_ordem_compra=cod_ordem_compra).first()
     if not ordem:
         return jsonify({"error": "Ordem de compra nao encontrada."}), 404
-    if ordem.status not in (svc.STATUS_FATURADO, svc.STATUS_EM_ROMANEIO):
-        return jsonify({"error": "As fotos só podem ser tiradas quando a ordem está faturada."}), 400
+    if ordem.status == svc.STATUS_EXPEDIDO:
+        return jsonify({"error": "As fotos não podem mais ser alteradas após a expedição."}), 400
 
     fotos_material = [f for f in request.files.getlist("fotos_material") if f and f.filename]
     foto_cliente = request.files.get("foto_cliente")

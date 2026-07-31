@@ -923,6 +923,7 @@
             if (s === "pendente" || s === "faturado_sem_conf") {
                 const lbl = s === "faturado_sem_conf" ? "Conferir p/ expedir" : "Conferir";
                 itens += it("conferir", "fa-barcode", lbl);
+                itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
             } else if (s === "faturado") {
                 itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
                 itens += it("ver", "fa-eye", "Detalhes da conferência");
@@ -937,6 +938,7 @@
                 itens += it("ver-registro", "fa-clipboard-list", "Ver registro de expedição");
             } else if (o.editavel) {
                 itens += it("conferir", "fa-pen-to-square", "Editar conferência");
+                itens += it("fotos", "fa-camera", "Tirar fotos (material + cliente)");
                 itens += it("ver", "fa-eye", "Detalhes");
                 if (s === "conferido" && CE_IS_ADMIN && cfg.podeInformarNf) {
                     itens += "<hr>" + it("informar-nf", "fa-file-circle-plus", "Informar NF manualmente");

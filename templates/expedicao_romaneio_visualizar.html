@@ -314,6 +314,33 @@
             </div>
         </div>
 
+        <!-- FOTO DO CARREGAMENTO -->
+        {% if romaneio.status in ('Pronto', 'Expedido') %}
+        <div class="rom-doc-section rom-carregamento-section" style="margin-top: 30px;">
+            <div class="rom-doc-section-title">Foto do Carregamento</div>
+            <div class="rom-assinatura-box" id="rom-carregamento-box">
+                {% if romaneio.foto_carregamento_file_name %}
+                    <img class="rom-assinatura-img" style="max-height: 220px;" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/foto-carregamento?v={{ romaneio.foto_carregamento_uploadado_em }}" alt="Foto do carregamento">
+                    <div class="rom-assinatura-meta">Foto tirada por {{ romaneio.foto_carregamento_uploadado_por }} em {{ romaneio.foto_carregamento_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.foto_carregamento_uploadado_em else '' }}</div>
+                    <div class="rom-assinatura-actions">
+                        <label class="eui-btn eui-btn--ghost eui-btn--sm" style="cursor: pointer;">
+                            <i class="fas fa-camera"></i> Trocar foto
+                            <input type="file" accept="image/*" capture="environment" id="rom-carregamento-input" style="display:none;">
+                        </label>
+                    </div>
+                {% else %}
+                    <div class="rom-assinatura-canvas-wrap" style="height: 140px; display: flex; align-items: center; justify-content: center;">
+                        <label class="eui-btn eui-btn--primary" style="cursor: pointer;">
+                            <i class="fas fa-camera"></i> Tirar foto do carregamento
+                            <input type="file" accept="image/*" capture="environment" id="rom-carregamento-input" style="display:none;">
+                        </label>
+                    </div>
+                {% endif %}
+                <div class="rom-assinatura-label">Carregamento</div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- RODAPÉ COM INFORMAÇÕES GERENCIAIS -->
         <div style="margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 9px; color: #999;">
             <div>Romaneio: <strong>{{ romaneio.numero_romaneio }}</strong> | Criado por: {{ romaneio.criado_por }} em {{ romaneio.criado_em.strftime('%d/%m/%Y %H:%M') if romaneio.criado_em else '—' }}</div>
@@ -404,6 +431,30 @@
             alert(e.message);
         }
     };
+
+    const carregamentoInput = document.getElementById("rom-carregamento-input");
+    if (carregamentoInput) {
+        carregamentoInput.addEventListener("change", async () => {
+            const arquivo = carregamentoInput.files && carregamentoInput.files[0];
+            if (!arquivo) return;
+            const leitor = new FileReader();
+            leitor.onload = async () => {
+                try {
+                    const resp = await fetch(`/api/expedicao/romaneio-fat/${romaneioId}/foto-carregamento`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ imagem_base64: leitor.result }),
+                    });
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) throw new Error(data.error || "Falha ao salvar foto do carregamento.");
+                    window.location.reload();
+                } catch (e) {
+                    alert(e.message);
+                }
+            };
+            leitor.readAsDataURL(arquivo);
+        });
+    }
 })();
 </script>
 {% endblock %}
