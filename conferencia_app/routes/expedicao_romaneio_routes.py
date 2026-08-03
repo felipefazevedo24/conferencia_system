@@ -69,6 +69,27 @@ def _gerar_solicitacao_entrega_cif(romaneio) -> None:
         )
 
 
+def _cancelar_solicitacao_entrega_cif(romaneio, motivo: str = "") -> None:
+    """Estorna a Solicitacao de Entrega CIF gerada automaticamente quando o
+    romaneio e estornado/excluido. Best-effort: nunca interrompe o fluxo."""
+    try:
+        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
+            return
+        from ..services.solicitacao_logistica_cif_service import (
+            cancelar_solicitacao_entrega_para_romaneio,
+        )
+
+        usuario = session.get("username", "sistema")
+        cancelar_solicitacao_entrega_para_romaneio(
+            romaneio, usuario=usuario, motivo=motivo, commit=True
+        )
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao estornar Solicitacao de Entrega CIF do romaneio %s.",
+            getattr(romaneio, "numero_romaneio", None),
+        )
+
+
 def _calcular_totais_nfs(nfs: list) -> tuple[float, int]:
     peso_total = sum(_parse_float(getattr(nf, "peso_bruto", 0) or 0) for nf in (nfs or []))
     volumes_total = sum(_parse_int(getattr(nf, "qtde_volumes", 0) or 0) for nf in (nfs or []))
@@ -820,7 +841,11 @@ def estornar_finalizacao_romaneio(romaneio_id):
     romaneio.atualizado_por = session["username"]
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
-    
+
+    _cancelar_solicitacao_entrega_cif(
+        romaneio, motivo=f"Finalizacao do romaneio {romaneio.numero_romaneio} estornada (voltou para Rascunho)."
+    )
+
     return jsonify({"message": "Finalização estornada. Romaneio voltou para Rascunho."})
 
 
@@ -880,6 +905,11 @@ def _excluir_romaneio(romaneio: ExpedicaoRomaneio) -> None:
     devolve as ordens cujas NFs estavam nele para 'Faturado'. Reutilizada
     tanto pela exclusao direta do Admin quanto pela aprovacao de uma
     solicitacao de exclusao."""
+    # Estorna a Solicitacao de Entrega CIF (se houver) antes de apagar o
+    # romaneio, pois a busca depende do romaneio.id.
+    _cancelar_solicitacao_entrega_cif(
+        romaneio, motivo=f"Romaneio {romaneio.numero_romaneio} excluido."
+    )
     numeros_nf = [nf.numero_nf for nf in (romaneio.nfs or [])]
     # Remove as solicitacoes de exclusao (inclusive a que acabou de ser
     # aprovada) antes do romaneio: sem isso, a linha "Aprovado" fica com

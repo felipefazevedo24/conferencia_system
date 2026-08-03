@@ -386,6 +386,53 @@ def gerar_solicitacoes_entrega_cif(app=None) -> dict:
     return _run()
 
 
+def cancelar_solicitacao_entrega_para_romaneio(
+    romaneio,
+    *,
+    usuario: str = "sistema",
+    motivo: str = "",
+    commit: bool = True,
+) -> tuple[bool, AgendamentoSolicitacao | None, str]:
+    """Cancela (estorna) a Solicitacao de Entrega gerada automaticamente para um
+    romaneio CIF. Usada quando o romaneio e estornado/excluido. Nao cancela
+    solicitacoes que ja foram concluidas nem as ja canceladas."""
+    if not romaneio:
+        return False, None, "Romaneio inexistente."
+
+    row = _buscar_entrega_existente(getattr(romaneio, "id", 0) or 0)
+    if not row:
+        return False, None, "Nenhuma solicitacao automatica de entrega para este romaneio."
+    if row.status in ("Cancelada", "Concluida"):
+        return False, row, f"Solicitacao ja esta '{row.status}'."
+
+    agora = datetime.now()
+    status_anterior = row.status
+    row.status = "Cancelada"
+    row.cancelado_por = usuario or "sistema"
+    row.cancelado_em = agora
+    row.motivo_cancelamento = (motivo or "Romaneio estornado/excluido.")[:500]
+    row.cancelamento_pendente = False
+    row.atualizado_em = agora
+
+    try:
+        from ..routes.agendamento_routes import _registrar_historico
+
+        _registrar_historico(
+            row.id,
+            evento="CANCELADA_AUTO_CIF",
+            usuario=usuario or "sistema",
+            status_anterior=status_anterior,
+            status_novo="Cancelada",
+            detalhe=row.motivo_cancelamento,
+        )
+    except Exception:
+        current_app.logger.debug("CIF auto entrega: falha ao registrar historico de cancelamento", exc_info=True)
+
+    if commit:
+        db.session.commit()
+    return True, row, "Solicitacao de entrega cancelada."
+
+
 # ---------------------------------------------------------------------------
 # Regra 1 - Coleta a partir de OC CIF
 # ---------------------------------------------------------------------------
