@@ -87,7 +87,7 @@
                         <div class="submenu-subgroup" data-subgroup="recebimento">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-box-open submenu-icon"></i> Recebimento <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
-                                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferencia cega</a>{% endif %}
+                                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="list-group-item list-group-item-action"><i class="fas fa-barcode"></i> Conferência de Recebimento</a>{% endif %}
                                 {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="list-group-item list-group-item-action"><i class="fas fa-box-open"></i> NF-e liberadas</a>{% endif %}
                                 {% if can_access('PAGE_QUALIDADE') %}<a href="/qualidade" class="list-group-item list-group-item-action"><i class="fas fa-clipboard-check"></i> Qualidade</a>{% endif %}
                             </div>

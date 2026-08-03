@@ -1686,7 +1686,7 @@
             <div class="menu-grid">
                 <a href="/" class="btn-module"><i class="fas fa-house"></i><span>Menu principal</span></a>
                 {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="btn-module"><i class="fas fa-file-invoice"></i><span>Documento de Entrada</span></a>{% endif %}
-                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="btn-module"><i class="fas fa-barcode"></i><span>Conferência cega</span></a>{% endif %}
+                {% if can_access('PAGE_CONFERENCIA') %}<a href="/conferencia" class="btn-module"><i class="fas fa-barcode"></i><span>Conferência de Recebimento</span></a>{% endif %}
                 {% if can_access('PAGE_FISCAL_LIBERADAS') %}<a href="/fiscal/liberadas" class="btn-module"><i class="fas fa-box-open"></i><span>NFs liberadas</span></a>{% endif %}
                 {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="btn-module"><i class="fas fa-user-shield"></i><span>Usuários</span></a>{% endif %}
             </div>
