@@ -5,8 +5,6 @@
 
 {% block extra_head %}
 <style>
-    /* Abas (Usuários / Permissões) — mesmo padrão das abas FAT/ST/Avulso da
-       Conferência de Expedição, usando as variáveis do design system EUI. */
     .ua-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); margin-bottom: var(--eui-space-5); }
     .ua-tab { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 9px 18px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all .15s ease; }
     .ua-tab:hover { color: var(--eui-text); }
@@ -15,31 +13,76 @@
     .ua-tab.is-active .ua-tab-count { background: var(--eui-primary); color: #fff; }
     .ua-tabpanel.hidden { display: none; }
 
-    .ua-grid { display: grid; grid-template-columns: 360px 1fr; gap: var(--eui-space-5); align-items: start; }
-    @media (max-width: 960px) { .ua-grid { grid-template-columns: 1fr; } }
-
     .eui-stat.is-clickable { cursor: pointer; }
     .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
     #ua-metrics { margin-bottom: var(--eui-space-5); }
 
-    .ua-table-wrap { overflow-x: auto; }
-    .ua-table { width: 100%; border-collapse: collapse; }
-    .ua-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); background: var(--eui-surface-2); }
-    .ua-table td { padding: 10px 14px; border-bottom: 1px solid var(--eui-border); font-size: 13px; color: var(--eui-text); vertical-align: middle; }
-    .ua-table tbody tr:hover td { background: var(--eui-surface-2); }
-    .ua-table .ua-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .ua-grid { display: grid; grid-template-columns: 380px 1fr; gap: var(--eui-space-5); align-items: start; }
+    @media (max-width: 1100px) { .ua-grid { grid-template-columns: 1fr; } }
 
-    .ua-perm-toolbar { display: grid; grid-template-columns: 170px 260px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: var(--eui-space-5); }
+    .ua-wizard-steps { display: grid; gap: 8px; margin-bottom: 14px; }
+    .ua-step { display: flex; align-items: center; gap: 8px; color: var(--eui-muted); font-size: 12px; font-weight: 700; }
+    .ua-step-dot { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--eui-border-strong); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+    .ua-step.active { color: var(--eui-primary); }
+    .ua-step.active .ua-step-dot { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
+    .ua-step.done .ua-step-dot { background: var(--eui-success); border-color: var(--eui-success); color: #fff; }
+    .ua-wizard-pane { display: none; }
+    .ua-wizard-pane.active { display: block; }
+    .ua-wizard-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .ua-wizard-summary { display: grid; gap: 8px; font-size: 12px; color: var(--eui-text-soft); padding: 12px; border: 1px dashed var(--eui-border-strong); border-radius: var(--eui-radius); background: var(--eui-surface-2); }
+
+    .ua-users-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .ua-table-wrap { overflow: auto; }
+    .ua-table { width: 100%; border-collapse: collapse; }
+    .ua-table th { text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--eui-muted); border-bottom: 1px solid var(--eui-border); background: var(--eui-surface-2); white-space: nowrap; }
+    .ua-table td { padding: 10px 12px; border-bottom: 1px solid var(--eui-border); font-size: 13px; color: var(--eui-text); vertical-align: middle; }
+    .ua-table tbody tr:hover td { background: var(--eui-surface-2); }
+    .ua-row-actions { display: inline-flex; gap: 6px; }
+    .ua-user-link { border: none; background: transparent; padding: 0; color: var(--eui-primary); font-weight: 800; cursor: pointer; }
+    .ua-muted { color: var(--eui-muted); font-size: 12px; }
+
+    .ua-bulk { display: inline-flex; gap: 8px; align-items: center; }
+    .ua-top-note { margin-top: 10px; color: var(--eui-muted); font-size: 11px; font-weight: 600; }
+
+    .ua-perm-toolbar { display: grid; grid-template-columns: 170px 220px 1fr auto auto; gap: 10px; align-items: end; margin-bottom: var(--eui-space-4); }
     @media (max-width: 960px) { .ua-perm-toolbar { grid-template-columns: 1fr; } }
+    .ua-perm-search { margin-bottom: 10px; }
+    .ua-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 
     .perm-section { margin-bottom: var(--eui-space-6); }
     .perm-section:last-child { margin-bottom: 0; }
     .perm-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--eui-primary); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--eui-border); }
-    .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(300px, 1fr)); gap: 10px; }
+    .permissions-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 10px; }
     @media (max-width: 960px) { .permissions-grid { grid-template-columns: 1fr; } }
     .perm-item { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); padding: 9px 10px; background: var(--eui-surface-2); }
     .perm-item strong { display: block; font-size: 12px; font-weight: 700; color: var(--eui-text); }
     .perm-item small { color: var(--eui-muted); font-size: 10px; }
+
+    .ua-drawer { position: fixed; top: 0; right: -720px; width: min(720px, 100%); height: 100vh; background: #fff; z-index: 3300; box-shadow: -18px 0 40px rgba(15, 23, 42, 0.2); transition: right .2s ease; display: grid; grid-template-rows: auto 1fr; }
+    .ua-drawer.open { right: 0; }
+    .ua-drawer-head { padding: 16px; border-bottom: 1px solid var(--eui-border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .ua-drawer-title { margin: 0; font-size: 16px; color: var(--eui-text); font-weight: 800; }
+    .ua-drawer-body { overflow: auto; padding: 14px 16px 24px; display: grid; gap: 12px; }
+    .ua-drawer-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ua-drawer-tab { border: 1px solid var(--eui-border); background: var(--eui-surface-2); border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .ua-drawer-tab.active { border-color: var(--eui-primary); color: var(--eui-primary); background: #eff6ff; }
+    .ua-drawer-pane { display: none; }
+    .ua-drawer-pane.active { display: block; }
+    .ua-kv { display: grid; grid-template-columns: 180px 1fr; gap: 8px 10px; font-size: 12px; }
+    .ua-kv div:nth-child(odd) { color: var(--eui-muted); font-weight: 700; }
+    .ua-kv div:nth-child(even) { color: var(--eui-text); font-weight: 600; }
+    .ua-list { display: grid; gap: 8px; }
+    .ua-list-item { border: 1px solid var(--eui-border); border-radius: 10px; background: var(--eui-surface-2); padding: 10px; }
+    .ua-list-item strong { display: block; font-size: 12px; color: var(--eui-text); }
+    .ua-list-item small { color: var(--eui-muted); font-size: 11px; }
+
+    .ua-overlay { position: fixed; inset: 0; background: rgba(248,250,252,.76); backdrop-filter: blur(3px); display: none; z-index: 3200; }
+    .ua-overlay.show { display: block; }
+
+    .ua-toast-wrap { position: fixed; top: 70px; right: 16px; z-index: 3500; display: grid; gap: 8px; width: min(360px, calc(100vw - 32px)); }
+    .ua-toast { border-radius: 10px; border: 1px solid var(--eui-border); background: #fff; box-shadow: var(--eui-shadow-md); padding: 10px 12px; font-size: 12px; font-weight: 700; color: var(--eui-text-soft); }
+    .ua-toast.success { border-color: #bbf7d0; color: #166534; }
+    .ua-toast.error { border-color: #fecaca; color: #991b1b; }
 </style>
 {% endblock %}
 
@@ -67,6 +110,20 @@
                     <span class="eui-stat__value" id="ua-m-total">0</span>
                 </div>
             </div>
+            <div class="eui-stat is-clickable" data-filter="ativos">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-user-check"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Ativos</span>
+                    <span class="eui-stat__value" id="ua-m-ativos">0</span>
+                </div>
+            </div>
+            <div class="eui-stat is-clickable" data-filter="inativos">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-user-lock"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Bloqueados/inativos</span>
+                    <span class="eui-stat__value" id="ua-m-inativos">0</span>
+                </div>
+            </div>
             <div class="eui-stat is-clickable" data-filter="admin">
                 <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-user-shield"></i></div>
                 <div class="eui-stat__body">
@@ -74,18 +131,18 @@
                     <span class="eui-stat__value" id="ua-m-admin">0</span>
                 </div>
             </div>
-            <div class="eui-stat is-clickable" data-filter="definida">
-                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div>
+            <div class="eui-stat is-clickable" data-filter="convite">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-envelope-open-text"></i></div>
                 <div class="eui-stat__body">
-                    <span class="eui-stat__label">Senha definida</span>
-                    <span class="eui-stat__value" id="ua-m-definida">0</span>
+                    <span class="eui-stat__label">Convites pendentes</span>
+                    <span class="eui-stat__value" id="ua-m-convite">0</span>
                 </div>
             </div>
-            <div class="eui-stat is-clickable" data-filter="pendente">
-                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-clock"></i></div>
+            <div class="eui-stat is-clickable" data-filter="sem_acesso_30d">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-hourglass-half"></i></div>
                 <div class="eui-stat__body">
-                    <span class="eui-stat__label">Senha pendente</span>
-                    <span class="eui-stat__value" id="ua-m-pendente">0</span>
+                    <span class="eui-stat__label">Sem acesso em 30 dias</span>
+                    <span class="eui-stat__value" id="ua-m-sem-acesso">0</span>
                 </div>
             </div>
         </div>
@@ -93,45 +150,83 @@
         <div class="ua-grid">
             <div class="eui-card">
                 <div class="eui-card__head">
-                    <h3 class="eui-card__title"><i class="fas fa-user-plus"></i> Novo usuário</h3>
+                    <h3 class="eui-card__title"><i class="fas fa-user-plus"></i> Novo usuário (wizard)</h3>
                 </div>
                 <div class="eui-card__body">
-                    <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
-                        <label class="eui-field__label">Username (identificador)</label>
-                        <input type="text" id="reg-user" class="eui-input" placeholder="Ex: FELAZE" style="text-transform:uppercase">
+                    <div class="ua-wizard-steps" id="ua-wizard-steps">
+                        <div class="ua-step active" data-step="1"><span class="ua-step-dot">1</span>Dados básicos</div>
+                        <div class="ua-step" data-step="2"><span class="ua-step-dot">2</span>Perfil e segurança</div>
+                        <div class="ua-step" data-step="3"><span class="ua-step-dot">3</span>Revisar e convidar</div>
                     </div>
-                    <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
-                        <label class="eui-field__label">E-mail</label>
-                        <input type="email" id="reg-email" class="eui-input" placeholder="Ex: felaze@colmac.com">
+
+                    <div class="ua-wizard-pane active" data-pane="1">
+                        <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
+                            <label class="eui-field__label">Username (identificador)</label>
+                            <input type="text" id="reg-user" class="eui-input" placeholder="Ex: FELAZE" style="text-transform:uppercase">
+                        </div>
+                        <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
+                            <label class="eui-field__label">E-mail</label>
+                            <input type="email" id="reg-email" class="eui-input" placeholder="Ex: felaze@colmac.com">
+                        </div>
                     </div>
-                    <div class="eui-field" style="margin-bottom: var(--eui-space-4);">
-                        <label class="eui-field__label">Perfil de acesso</label>
-                        <select id="reg-role" class="eui-select">
-                            <option value="Logistica">LOGÍSTICA</option>
-                            <option value="Portaria">PORTARIA</option>
-                            <option value="Fiscal">FISCAL</option>
-                            <option value="Controladoria">CONTROLADORIA</option>
-                            <option value="Compras">COMPRAS</option>
-                            <option value="Motorista">MOTORISTA</option>
-                            <option value="Solicitante">SOLICITANTE</option>
-                            <option value="Qualidade">QUALIDADE</option>
-                            <option value="Admin">ADMINISTRADOR</option>
-                        </select>
+
+                    <div class="ua-wizard-pane" data-pane="2">
+                        <div class="eui-field" style="margin-bottom: var(--eui-space-4);">
+                            <label class="eui-field__label">Perfil de acesso</label>
+                            <select id="reg-role" class="eui-select">
+                                <option value="Logistica">LOGÍSTICA</option>
+                                <option value="Portaria">PORTARIA</option>
+                                <option value="Fiscal">FISCAL</option>
+                                <option value="Controladoria">CONTROLADORIA</option>
+                                <option value="Compras">COMPRAS</option>
+                                <option value="Motorista">MOTORISTA</option>
+                                <option value="Solicitante">SOLICITANTE</option>
+                                <option value="Qualidade">QUALIDADE</option>
+                                <option value="Admin">ADMINISTRADOR</option>
+                            </select>
+                        </div>
+                        <div class="eui-field" style="margin-bottom: var(--eui-space-3);">
+                            <label class="eui-field__label">Status inicial</label>
+                            <select id="reg-ativo" class="eui-select">
+                                <option value="true" selected>Ativo</option>
+                                <option value="false">Inativo</option>
+                            </select>
+                        </div>
                     </div>
-                    <button class="eui-btn eui-btn--primary" style="width:100%;" onclick="salvarUsuario()">
-                        <i class="fas fa-user-plus"></i> Efetivar registro
-                    </button>
-                    <p class="eui-field__hint" style="margin-top:12px;"><i class="fas fa-circle-info"></i> O usuário definirá a própria senha no primeiro acesso pelo e-mail cadastrado.</p>
+
+                    <div class="ua-wizard-pane" data-pane="3">
+                        <div class="ua-wizard-summary" id="ua-summary"></div>
+                    </div>
+
+                    <div class="ua-wizard-actions">
+                        <button type="button" class="eui-btn eui-btn--ghost" id="ua-btn-prev" onclick="wizardPrev()" style="display:none;">Voltar</button>
+                        <button type="button" class="eui-btn eui-btn--primary" id="ua-btn-next" onclick="wizardNext()">Próximo</button>
+                        <button type="button" class="eui-btn eui-btn--success" id="ua-btn-submit" onclick="salvarUsuario()" style="display:none;">
+                            <i class="fas fa-paper-plane"></i> Criar e enviar convite
+                        </button>
+                    </div>
+                    <p class="ua-top-note"><i class="fas fa-circle-info"></i> Após criar, o usuário recebe e-mail com link seguro de ativação (24h).</p>
                 </div>
             </div>
 
             <div class="eui-card">
                 <div class="eui-card__head">
                     <h3 class="eui-card__title"><i class="fas fa-users"></i> Usuários com acesso ao sistema</h3>
-                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <div class="ua-users-toolbar">
                         <div class="eui-toolbar__search" style="min-width:220px;">
                             <i class="fas fa-magnifying-glass"></i>
                             <input type="search" id="ua-busca" class="eui-input" autocomplete="off" placeholder="Buscar por usuário, e-mail ou perfil…">
+                        </div>
+                        <div class="ua-bulk">
+                            <select id="ua-bulk-action" class="eui-select" style="width: 220px; min-height:32px;">
+                                <option value="">Ação em lote...</option>
+                                <option value="ativar">Ativar selecionados</option>
+                                <option value="inativar">Inativar selecionados</option>
+                                <option value="reenviar_convite">Reenviar convite</option>
+                                <option value="limpar_senha">Limpar senha + reenviar convite</option>
+                                <option value="forcar_troca_senha">Forçar troca de senha</option>
+                            </select>
+                            <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="aplicarAcaoLote()"><i class="fas fa-bolt"></i> Aplicar</button>
                         </div>
                         <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="carregarUsuarios()">
                             <i class="fas fa-rotate"></i> Sincronizar
@@ -142,10 +237,14 @@
                     <table class="ua-table">
                         <thead>
                             <tr>
+                                <th><input type="checkbox" id="ua-check-all" onclick="toggleAllUsers(this.checked)"></th>
                                 <th>Identificador</th>
                                 <th>E-mail</th>
                                 <th>Perfil</th>
+                                <th>Status</th>
                                 <th>Senha</th>
+                                <th>Último acesso</th>
+                                <th>Sessões</th>
                                 <th style="text-align:right;">Ações</th>
                             </tr>
                         </thead>
@@ -193,12 +292,49 @@
                     <button class="eui-btn eui-btn--primary" onclick="salvarPermissoesAlvo()"><i class="fas fa-save"></i> Salvar permissões</button>
                 </div>
 
+                <div class="eui-toolbar__search ua-perm-search">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input type="search" id="perm-search" class="eui-input" placeholder="Buscar permissão por nome/chave..." oninput="renderPermissoesGrid(permissoesEditando, window._permBaseAtual || {}, window._permOverridesAtual || {})">
+                </div>
+
+                <div class="ua-presets">
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="aplicarPresetPermissoes('admin')">Preset Admin</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="aplicarPresetPermissoes('operacional')">Preset Operacional</button>
+                    <button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="aplicarPresetPermissoes('somente_leitura')">Somente leitura</button>
+                </div>
+
                 <div id="perms-meta" class="eui-field__hint" style="margin-bottom:14px;">Selecione o alvo para editar as abas permitidas.</div>
                 <div id="perms-groups"></div>
             </div>
         </div>
     </div>
 </div>
+
+<div class="ua-overlay" id="ua-overlay" onclick="closeUserDrawer()"></div>
+<aside class="ua-drawer" id="ua-drawer">
+    <div class="ua-drawer-head">
+        <div>
+            <h3 class="ua-drawer-title" id="ua-drawer-title">Detalhes do usuário</h3>
+            <div class="ua-muted" id="ua-drawer-sub"></div>
+        </div>
+        <button class="eui-btn eui-btn--ghost eui-btn--icon" onclick="closeUserDrawer()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="ua-drawer-body">
+        <div class="ua-drawer-tabs" id="ua-drawer-tabs">
+            <button class="ua-drawer-tab active" data-tab="resumo" onclick="setDrawerTab('resumo')">Resumo</button>
+            <button class="ua-drawer-tab" data-tab="permissoes" onclick="setDrawerTab('permissoes')">Permissões efetivas</button>
+            <button class="ua-drawer-tab" data-tab="sessoes" onclick="setDrawerTab('sessoes')">Sessões</button>
+            <button class="ua-drawer-tab" data-tab="auditoria" onclick="setDrawerTab('auditoria')">Auditoria</button>
+        </div>
+
+        <div class="ua-drawer-pane active" data-pane="resumo"><div class="ua-kv" id="ua-detail-resumo"></div></div>
+        <div class="ua-drawer-pane" data-pane="permissoes"><div class="ua-list" id="ua-detail-permissoes"></div></div>
+        <div class="ua-drawer-pane" data-pane="sessoes"><div class="ua-list" id="ua-detail-sessoes"></div></div>
+        <div class="ua-drawer-pane" data-pane="auditoria"><div class="ua-list" id="ua-detail-auditoria"></div></div>
+    </div>
+</aside>
+
+<div class="ua-toast-wrap" id="ua-toast-wrap"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -208,6 +344,8 @@
     let permissoesEditando = {};
     let currentFilterUsuarios = '';
     let currentBuscaUsuarios = '';
+    let wizardStep = 1;
+    let drawerDetalhes = null;
 
     const ROLE_BADGE = {
         admin: 'eui-badge--primary',
@@ -223,78 +361,170 @@
         return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    function notify(msg, type = 'info') {
+        const wrap = document.getElementById('ua-toast-wrap');
+        const el = document.createElement('div');
+        el.className = `ua-toast ${type === 'success' ? 'success' : type === 'error' ? 'error' : ''}`;
+        el.textContent = msg;
+        wrap.appendChild(el);
+        setTimeout(() => {
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 200);
+        }, 3200);
+    }
+
+    async function api(url, opts = {}) {
+        const headers = opts.headers || {};
+        if (!headers['Content-Type'] && opts.body !== undefined) headers['Content-Type'] = 'application/json';
+        const res = await fetch(url, { ...opts, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.sucesso === false) throw new Error(data.msg || data.error || 'Falha na operação.');
+        return data;
+    }
+
+    function wizardValidateCurrent() {
+        if (wizardStep === 1) {
+            const u = document.getElementById('reg-user').value.trim().toUpperCase();
+            const e = document.getElementById('reg-email').value.trim().toLowerCase();
+            if (!u || !e) {
+                notify('Preencha usuário e e-mail para continuar.', 'error');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function updateWizardUI() {
+        document.querySelectorAll('.ua-step').forEach((el) => {
+            const step = Number(el.dataset.step);
+            el.classList.toggle('active', step === wizardStep);
+            el.classList.toggle('done', step < wizardStep);
+        });
+        document.querySelectorAll('.ua-wizard-pane').forEach((el) => {
+            el.classList.toggle('active', Number(el.dataset.pane) === wizardStep);
+        });
+
+        document.getElementById('ua-btn-prev').style.display = wizardStep > 1 ? '' : 'none';
+        document.getElementById('ua-btn-next').style.display = wizardStep < 3 ? '' : 'none';
+        document.getElementById('ua-btn-submit').style.display = wizardStep === 3 ? '' : 'none';
+
+        const summary = document.getElementById('ua-summary');
+        if (summary) {
+            summary.innerHTML = `
+                <div><strong>Usuário:</strong> ${escapeHtml(document.getElementById('reg-user').value.trim().toUpperCase() || '—')}</div>
+                <div><strong>E-mail:</strong> ${escapeHtml(document.getElementById('reg-email').value.trim().toLowerCase() || '—')}</div>
+                <div><strong>Perfil:</strong> ${escapeHtml(document.getElementById('reg-role').value || '—')}</div>
+                <div><strong>Status inicial:</strong> ${document.getElementById('reg-ativo').value === 'true' ? 'Ativo' : 'Inativo'}</div>
+                <div><strong>Convite:</strong> envio automático por e-mail (validade 24h).</div>
+            `;
+        }
+    }
+
+    function wizardNext() {
+        if (!wizardValidateCurrent()) return;
+        wizardStep = Math.min(3, wizardStep + 1);
+        updateWizardUI();
+    }
+
+    function wizardPrev() {
+        wizardStep = Math.max(1, wizardStep - 1);
+        updateWizardUI();
+    }
+
     async function salvarUsuario() {
         const u = document.getElementById('reg-user').value.trim().toUpperCase();
         const e = document.getElementById('reg-email').value.trim().toLowerCase();
         const r = document.getElementById('reg-role').value;
+        const ativo = document.getElementById('reg-ativo').value === 'true';
 
-        if(!u || !e) return alert("Erro: Defina o usuário e o e-mail.");
+        if(!u || !e) {
+            notify('Defina usuário e e-mail.', 'error');
+            return;
+        }
 
         try {
-            const res = await fetch('/api/registrar', {
+            const data = await api('/api/registrar', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, email: e, role: r})
+                body: JSON.stringify({username: u, email: e, role: r, ativo})
             });
 
-            const text = await res.text();
-
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch(e) {
-                alert("Erro: Resposta inválida do servidor: " + text.substring(0, 200));
-                return;
+            if (!ativo) {
+                await api('/api/admin/usuarios/acoes_lote', {
+                    method: 'POST',
+                    body: JSON.stringify({ usernames: [u], action: 'inativar' })
+                });
             }
-
-            if(data.sucesso) {
-                alert("Usuário registrado. Ele definirá a senha no primeiro login.");
-                document.getElementById('reg-user').value = '';
-                document.getElementById('reg-email').value = '';
-                carregarUsuarios();
-            } else {
-                const detalhes = data.details ? JSON.stringify(data.details) : '';
-                alert("Falha: " + (data.msg || data.error || '') + (detalhes ? '\nDetalhes: ' + detalhes : ''));
-            }
+            notify(data.msg || 'Usuário registrado com sucesso.', 'success');
+            document.getElementById('reg-user').value = '';
+            document.getElementById('reg-email').value = '';
+            document.getElementById('reg-role').value = 'Logistica';
+            document.getElementById('reg-ativo').value = 'true';
+            wizardStep = 1;
+            updateWizardUI();
+            await carregarUsuarios();
         } catch(err) {
-            console.error('Erro na requisição:', err);
-            alert("Erro de conexão: " + err.message);
+            notify(err.message || 'Falha ao cadastrar usuário.', 'error');
         }
     }
 
     async function carregarUsuarios() {
-        const res = await fetch('/api/listar_usuarios');
-        const users = await res.json();
-        usuariosCache = users;
+        const data = await api('/api/listar_usuarios');
+        usuariosCache = data.usuarios || [];
         atualizarSelectUsuarios();
-        atualizarMetricasUsuarios();
+        atualizarMetricasUsuarios(data.kpis || {});
         renderUsuarios();
     }
 
-    function atualizarMetricasUsuarios() {
-        const total = usuariosCache.length;
-        const admins = usuariosCache.filter((u) => u.role === 'Admin').length;
-        const definida = usuariosCache.filter((u) => u.tem_senha).length;
-        const pendente = total - definida;
-        document.getElementById('ua-m-total').textContent = total;
-        document.getElementById('ua-m-admin').textContent = admins;
-        document.getElementById('ua-m-definida').textContent = definida;
-        document.getElementById('ua-m-pendente').textContent = pendente;
+    function atualizarMetricasUsuarios(k) {
+        document.getElementById('ua-m-total').textContent = k.total || 0;
+        document.getElementById('ua-m-ativos').textContent = k.ativos || 0;
+        document.getElementById('ua-m-inativos').textContent = k.inativos || 0;
+        document.getElementById('ua-m-admin').textContent = k.admins || 0;
+        document.getElementById('ua-m-convite').textContent = k.convites_pendentes || 0;
+        document.getElementById('ua-m-sem-acesso').textContent = k.sem_acesso_30d || 0;
 
         const tabCount = document.getElementById('ua-tab-count-usuarios');
-        if (tabCount) tabCount.textContent = total;
+        if (tabCount) tabCount.textContent = k.total || 0;
+    }
+
+    function userStatusBadge(u) {
+        if (!u.ativo) return '<span class="eui-badge eui-badge--danger">Inativo</span>';
+        return '<span class="eui-badge eui-badge--success">Ativo</span>';
+    }
+
+    function userSenhaStatus(u) {
+        if (u.tem_senha) return '<span style="color:var(--eui-success);"><i class="fas fa-circle-check"></i> Definida</span>';
+        if (u.convite_pendente) return '<span style="color:var(--eui-warning);"><i class="fas fa-envelope"></i> Convite pendente</span>';
+        return '<span style="color:var(--eui-warning);"><i class="fas fa-clock"></i> Pendente</span>';
+    }
+
+    function formatDatePt(v) {
+        if (!v) return '—';
+        const dt = new Date(v);
+        if (Number.isNaN(dt.getTime())) return '—';
+        return dt.toLocaleString('pt-BR');
     }
 
     function renderUsuariosLinha(u) {
         const badgeCls = ROLE_BADGE[u.role.toLowerCase()] || 'eui-badge--neutral';
         return `
             <tr>
-                <td><strong style="color:var(--eui-primary);">${escapeHtml(u.username)}</strong></td>
+                <td><input type="checkbox" class="ua-check-user" value="${escapeHtml(u.username)}"></td>
+                <td><button type="button" class="ua-user-link" onclick="openUserDrawer('${escapeHtml(u.username)}')">${escapeHtml(u.username)}</button></td>
                 <td>${u.email ? escapeHtml(u.email) : '<span style="color:var(--eui-muted-2);">—</span>'}</td>
                 <td><span class="eui-badge ${badgeCls}">${escapeHtml(u.role)}</span></td>
-                <td>${u.tem_senha ? '<span style="color:var(--eui-success);"><i class="fas fa-circle-check"></i> Definida</span>' : '<span style="color:var(--eui-warning);"><i class="fas fa-clock"></i> Pendente</span>'}</td>
+                <td>${userStatusBadge(u)}</td>
+                <td>${userSenhaStatus(u)}</td>
+                <td class="ua-muted">${formatDatePt(u.ultimo_acesso_em)}</td>
+                <td>${u.sessoes_ativas || 0}</td>
                 <td>
                     <div class="ua-row-actions">
+                        <button class="eui-btn eui-btn--ghost eui-btn--icon eui-btn--sm" title="Reenviar convite" onclick="reenviarConvite('${u.username}')">
+                            <i class="fas fa-envelope"></i>
+                        </button>
+                        <button class="eui-btn eui-btn--ghost eui-btn--icon eui-btn--sm" title="${u.ativo ? 'Inativar' : 'Ativar'}" onclick="alternarStatusUsuario('${u.username}', ${u.ativo ? 'false' : 'true'})">
+                            <i class="fas ${u.ativo ? 'fa-user-slash' : 'fa-user-check'}"></i>
+                        </button>
                         <button class="eui-btn eui-btn--ghost eui-btn--icon eui-btn--sm" title="Redefinir senha" onclick="resetarSenha('${u.username}')">
                             <i class="fas fa-key"></i>
                         </button>
@@ -310,8 +540,6 @@
         `;
     }
 
-    // Busca ignora o filtro dos KPIs e olha todos os usuarios (mesmo padrao
-    // da busca na Conferencia de Expedicao); sem busca, filtra pelo KPI ativo.
     function renderUsuarios() {
         let lista = usuariosCache;
         if (currentBuscaUsuarios) {
@@ -323,10 +551,20 @@
             );
         } else if (currentFilterUsuarios === 'admin') {
             lista = lista.filter((u) => u.role === 'Admin');
-        } else if (currentFilterUsuarios === 'definida') {
-            lista = lista.filter((u) => u.tem_senha);
-        } else if (currentFilterUsuarios === 'pendente') {
-            lista = lista.filter((u) => !u.tem_senha);
+        } else if (currentFilterUsuarios === 'ativos') {
+            lista = lista.filter((u) => !!u.ativo);
+        } else if (currentFilterUsuarios === 'inativos') {
+            lista = lista.filter((u) => !u.ativo);
+        } else if (currentFilterUsuarios === 'convite') {
+            lista = lista.filter((u) => !!u.convite_pendente);
+        } else if (currentFilterUsuarios === 'sem_acesso_30d') {
+            const limit = new Date();
+            limit.setDate(limit.getDate() - 30);
+            lista = lista.filter((u) => {
+                if (!u.ativo) return false;
+                if (!u.ultimo_acesso_em) return true;
+                return new Date(u.ultimo_acesso_em) < limit;
+            });
         }
 
         document.querySelectorAll('#ua-metrics .eui-stat').forEach((el) => {
@@ -336,43 +574,106 @@
         const corpo = document.getElementById('lista-usuarios-corpo');
         if (!lista.length) {
             const motivo = currentBuscaUsuarios ? ' para esta busca' : '';
-            corpo.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--eui-muted);">Nenhum usuário encontrado${motivo}.</td></tr>`;
+            corpo.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--eui-muted);">Nenhum usuário encontrado${motivo}.</td></tr>`;
             return;
         }
         corpo.innerHTML = lista.map(renderUsuariosLinha).join('');
     }
 
+    function selectedUsers() {
+        return Array.from(document.querySelectorAll('.ua-check-user:checked')).map((el) => el.value);
+    }
+
+    function toggleAllUsers(checked) {
+        document.querySelectorAll('.ua-check-user').forEach((el) => { el.checked = !!checked; });
+    }
+
+    async function aplicarAcaoLote() {
+        const action = document.getElementById('ua-bulk-action').value;
+        const usernames = selectedUsers();
+        if (!action) return notify('Selecione uma ação em lote.', 'error');
+        if (!usernames.length) return notify('Selecione ao menos um usuário.', 'error');
+        if (!confirm(`Aplicar ação "${action}" para ${usernames.length} usuário(s)?`)) return;
+        try {
+            const data = await api('/api/admin/usuarios/acoes_lote', {
+                method: 'POST',
+                body: JSON.stringify({ action, usernames })
+            });
+            notify(`Ação concluída. Alterados: ${data.alterados}. E-mails enviados: ${data.emails_enviados}.`, 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Falha na ação em lote.', 'error');
+        }
+    }
+
     async function resetarSenha(username) {
-        const novaSenha = prompt(`Digite a nova senha para ${username} (mín. 4 caracteres):`);
-        if (!novaSenha || novaSenha.length < 4) return alert('Senha inválida (mínimo 4 caracteres).');
-        const res = await fetch(`/api/admin/usuario/${encodeURIComponent(username)}/resetar_senha`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({nova_senha: novaSenha})
-        });
-        const data = await res.json();
-        alert(data.msg || (data.sucesso ? 'Senha redefinida.' : 'Erro.'));
-        if (data.sucesso) carregarUsuarios();
+        const novaSenha = prompt(`Digite a nova senha para ${username} (mín. 8, com maiúscula, minúscula, número e símbolo):`);
+        if (!novaSenha || novaSenha.length < 8) {
+            notify('Senha inválida. Mínimo de 8 caracteres.', 'error');
+            return;
+        }
+        try {
+            const data = await api(`/api/admin/usuario/${encodeURIComponent(username)}/resetar_senha`, {
+                method: 'POST',
+                body: JSON.stringify({nova_senha: novaSenha})
+            });
+            notify(data.msg || 'Senha redefinida.', 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Erro ao resetar senha.', 'error');
+        }
     }
 
     async function limparSenha(username) {
-        if (!confirm(`Limpar a senha de ${username}? Ele precisará se cadastrar novamente no próximo login.`)) return;
-        const res = await fetch(`/api/admin/usuario/${encodeURIComponent(username)}/limpar_senha`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({})
-        });
-        const data = await res.json();
-        alert(data.msg || (data.sucesso ? 'Senha removida.' : 'Erro.'));
-        if (data.sucesso) carregarUsuarios();
+        if (!confirm(`Limpar a senha de ${username}?`)) return;
+        try {
+            const data = await api(`/api/admin/usuario/${encodeURIComponent(username)}/limpar_senha`, {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+            notify(data.msg || 'Senha removida.', 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Erro ao limpar senha.', 'error');
+        }
+    }
+
+    async function reenviarConvite(username) {
+        try {
+            const data = await api(`/api/admin/usuario/${encodeURIComponent(username)}/reenviar_convite`, {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+            notify(data.msg || 'Convite reenviado.', 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Erro ao reenviar convite.', 'error');
+        }
+    }
+
+    async function alternarStatusUsuario(username, ativar) {
+        const action = ativar ? 'ativar' : 'inativar';
+        try {
+            await api('/api/admin/usuarios/acoes_lote', {
+                method: 'POST',
+                body: JSON.stringify({ action, usernames: [username] })
+            });
+            notify(`Usuário ${ativar ? 'ativado' : 'inativado'} com sucesso.`, 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Erro ao alterar status.', 'error');
+        }
     }
 
     async function deletarUsuario(user) {
         if(!confirm(`Deseja realmente remover o acesso de [${user}]?`)) return;
-        const res = await fetch(`/api/deletar_usuario/${user}`, { method: 'DELETE' });
-        const data = await res.json();
-        if(data.sucesso) carregarUsuarios();
-        else alert("Erro: " + data.msg);
+        try {
+            await api(`/api/deletar_usuario/${encodeURIComponent(user)}`, { method: 'DELETE' });
+            notify('Usuário removido com sucesso.', 'success');
+            await carregarUsuarios();
+        } catch (err) {
+            notify(err.message || 'Erro ao remover usuário.', 'error');
+        }
     }
 
     function atualizarSelectUsuarios() {
@@ -397,21 +698,30 @@
     function renderPermissoesGrid(efetivo, base = {}, overrides = {}) {
         permissoesEditando = { ...efetivo };
         const wrap = document.getElementById('perms-groups');
+        window._permBaseAtual = { ...base };
+        window._permOverridesAtual = { ...overrides };
         if (!catalogoPermissoes.length) {
             wrap.innerHTML = '<div>Nenhuma permissão cadastrada.</div>';
             return;
         }
 
-        // Agrupa por modulo (primeira parte do label, antes de " > "), pra nao
-        // jogar todas as ~30 permissoes numa grade unica sem organizacao.
+        const termo = (document.getElementById('perm-search')?.value || '').trim().toLowerCase();
+
         const grupos = {};
         catalogoPermissoes.forEach((p) => {
             const partes = p.label.split(' > ');
             const secao = partes[0];
             const nomeCurto = partes.slice(1).join(' > ') || p.label;
+            const searchable = `${p.key} ${p.label} ${nomeCurto}`.toLowerCase();
+            if (termo && !searchable.includes(termo)) return;
             if (!grupos[secao]) grupos[secao] = [];
             grupos[secao].push({ ...p, nomeCurto });
         });
+
+        if (!Object.keys(grupos).length) {
+            wrap.innerHTML = '<div class="ua-muted">Nenhuma permissão encontrada para o filtro informado.</div>';
+            return;
+        }
 
         wrap.innerHTML = Object.keys(grupos).sort().map((secao) => {
             const itensHtml = grupos[secao].map((p) => {
@@ -442,6 +752,24 @@
         permissoesEditando[chave] = !!valor;
     }
 
+    function aplicarPresetPermissoes(tipo) {
+        if (!catalogoPermissoes.length) return;
+        if (tipo === 'admin') {
+            catalogoPermissoes.forEach((p) => { permissoesEditando[p.key] = true; });
+        } else if (tipo === 'somente_leitura') {
+            catalogoPermissoes.forEach((p) => { permissoesEditando[p.key] = false; });
+        } else if (tipo === 'operacional') {
+            catalogoPermissoes.forEach((p) => {
+                const key = (p.key || '').toUpperCase();
+                permissoesEditando[p.key] = key.includes('PAGE_CONFERENCIA')
+                    || key.includes('PAGE_FISCAL_LIBERADAS')
+                    || key.includes('PAGE_EXPEDICAO')
+                    || key.includes('PAGE_LOGISTICA');
+            });
+        }
+        renderPermissoesGrid(permissoesEditando, window._permBaseAtual || {}, window._permOverridesAtual || {});
+    }
+
     async function carregarPermissoesAlvo() {
         const scope = document.getElementById('perm-scope').value;
         let url = '';
@@ -450,14 +778,17 @@
             url = `/api/permissoes/role/${encodeURIComponent(role)}`;
         } else {
             const username = document.getElementById('perm-user').value;
-            if (!username) return alert('Selecione um usuário para configurar.');
+            if (!username) {
+                notify('Selecione um usuário para configurar.', 'error');
+                return;
+            }
             url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
         }
 
         const res = await fetch(url);
         const data = await res.json();
         if (!res.ok) {
-            alert(data.msg || 'Erro ao carregar permissões.');
+            notify(data.msg || 'Erro ao carregar permissões.', 'error');
             return;
         }
 
@@ -474,7 +805,10 @@
             url = `/api/permissoes/role/${encodeURIComponent(role)}`;
         } else {
             const username = document.getElementById('perm-user').value;
-            if (!username) return alert('Selecione um usuário para configurar.');
+            if (!username) {
+                notify('Selecione um usuário para configurar.', 'error');
+                return;
+            }
             url = `/api/permissoes/usuario/${encodeURIComponent(username)}`;
         }
 
@@ -485,11 +819,83 @@
         });
         const data = await res.json();
         if (!res.ok || !data.sucesso) {
-            alert(data.msg || 'Falha ao salvar permissões.');
+            notify(data.msg || 'Falha ao salvar permissões.', 'error');
             return;
         }
-        alert(`Permissões atualizadas (${data.atualizadas}).`);
+        notify(`Permissões atualizadas (${data.atualizadas}).`, 'success');
         await carregarPermissoesAlvo();
+    }
+
+    function setDrawerTab(tab) {
+        document.querySelectorAll('.ua-drawer-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+        document.querySelectorAll('.ua-drawer-pane').forEach((el) => el.classList.toggle('active', el.dataset.pane === tab));
+    }
+
+    function closeUserDrawer() {
+        document.getElementById('ua-drawer').classList.remove('open');
+        document.getElementById('ua-overlay').classList.remove('show');
+    }
+
+    function renderDrawerDetails(payload) {
+        const user = payload.usuario || {};
+        document.getElementById('ua-drawer-title').textContent = `Usuário ${user.username || ''}`;
+        document.getElementById('ua-drawer-sub').textContent = `${user.role || ''} · ${user.ativo ? 'Ativo' : 'Inativo'}`;
+
+        const resumo = document.getElementById('ua-detail-resumo');
+        resumo.innerHTML = `
+            <div>Username</div><div>${escapeHtml(user.username || '—')}</div>
+            <div>E-mail</div><div>${escapeHtml(user.email || '—')}</div>
+            <div>Perfil</div><div>${escapeHtml(user.role || '—')}</div>
+            <div>Status</div><div>${user.ativo ? 'Ativo' : 'Inativo'}</div>
+            <div>Tem senha</div><div>${user.tem_senha ? 'Sim' : 'Não'}</div>
+            <div>Criado em</div><div>${formatDatePt(user.criado_em)}</div>
+            <div>Criado por</div><div>${escapeHtml(user.criado_por || '—')}</div>
+            <div>Convite enviado</div><div>${formatDatePt(user.convite_enviado_em)}</div>
+            <div>Convite expira</div><div>${formatDatePt(user.convite_expires_at)}</div>
+            <div>Convite aceito</div><div>${formatDatePt(user.convite_aceito_em)}</div>
+            <div>Último login</div><div>${formatDatePt(user.ultimo_login_em)}</div>
+            <div>Último acesso</div><div>${formatDatePt(user.ultimo_acesso_em)}</div>
+        `;
+
+        const permissoes = Object.entries((payload.permissoes || {}).efetivo || {})
+            .filter(([, v]) => !!v)
+            .map(([k]) => `<div class="ua-list-item"><strong>${escapeHtml(k)}</strong></div>`)
+            .join('');
+        document.getElementById('ua-detail-permissoes').innerHTML = permissoes || '<div class="ua-muted">Sem permissões efetivas.</div>';
+
+        const sessoesHtml = (payload.sessoes || []).map((s) => `
+            <div class="ua-list-item">
+                <strong>${escapeHtml(s.device || 'Dispositivo')}</strong>
+                <small>IP: ${escapeHtml(s.ip || '—')} · Criada: ${formatDatePt(s.created_at)} · Última atividade: ${formatDatePt(s.last_activity)} · ${s.is_active ? 'Ativa' : 'Encerrada'}</small>
+            </div>
+        `).join('');
+        document.getElementById('ua-detail-sessoes').innerHTML = sessoesHtml || '<div class="ua-muted">Sem sessões registradas.</div>';
+
+        const auditoriaHtml = (payload.auditoria || []).map((a) => {
+            let detalhes = a.detalhes || '{}';
+            try { detalhes = JSON.stringify(JSON.parse(detalhes)); } catch (e) { detalhes = String(detalhes || ''); }
+            return `
+                <div class="ua-list-item">
+                    <strong>${escapeHtml(a.acao || 'AÇÃO')}</strong>
+                    <small>${escapeHtml(a.ator || 'sistema')} · ${formatDatePt(a.criado_em)} · IP ${escapeHtml(a.ip || '—')}</small>
+                    <div class="ua-muted" style="margin-top:6px;">${escapeHtml(detalhes)}</div>
+                </div>
+            `;
+        }).join('');
+        document.getElementById('ua-detail-auditoria').innerHTML = auditoriaHtml || '<div class="ua-muted">Sem auditoria registrada.</div>';
+    }
+
+    async function openUserDrawer(username) {
+        try {
+            const data = await api(`/api/admin/usuario/${encodeURIComponent(username)}/detalhes`);
+            drawerDetalhes = data;
+            renderDrawerDetails(data);
+            setDrawerTab('resumo');
+            document.getElementById('ua-overlay').classList.add('show');
+            document.getElementById('ua-drawer').classList.add('open');
+        } catch (err) {
+            notify(err.message || 'Falha ao carregar detalhes do usuário.', 'error');
+        }
     }
 
     function ativarAba(nomeAba) {
@@ -524,6 +930,7 @@
             }, 250);
         });
 
+        updateWizardUI();
         await carregarUsuarios();
         await carregarCatalogoPermissoes();
         alternarEscopoPermissao();

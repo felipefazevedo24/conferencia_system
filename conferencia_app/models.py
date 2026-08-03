@@ -19,10 +19,31 @@ class Usuario(db.Model):
     email = db.Column(db.String(160), unique=True, nullable=True, index=True)
     password = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), default="Logística")
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     nome_exibicao = db.Column(db.String(120), nullable=True)
     telefone = db.Column(db.String(40), nullable=True)
     tema = db.Column(db.String(10), nullable=True)  # 'claro' | 'escuro'
     senha_atualizada_em = db.Column(db.DateTime, nullable=True)
+    ultimo_login_em = db.Column(db.DateTime, nullable=True, index=True)
+    convite_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    convite_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    convite_enviado_em = db.Column(db.DateTime, nullable=True)
+    convite_aceito_em = db.Column(db.DateTime, nullable=True)
+    forcar_troca_senha = db.Column(db.Boolean, nullable=False, default=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_por = db.Column(db.String(100), nullable=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_por = db.Column(db.String(100), nullable=True)
+
+
+class UsuarioGestaoAuditoria(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ator_username = db.Column(db.String(100), nullable=False, index=True)
+    alvo_username = db.Column(db.String(80), nullable=False, index=True)
+    acao = db.Column(db.String(60), nullable=False, index=True)
+    detalhes = db.Column(db.Text, nullable=True)
+    ip_address = db.Column(db.String(64), nullable=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
 class AvisoAtualizacao(db.Model):

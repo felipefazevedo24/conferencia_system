@@ -1,3 +1,6 @@
+import hashlib
+import re
+
 from ..models import ActiveSession
 from ..extensions import db
 import uuid
@@ -14,6 +17,25 @@ from ..schemas.api_schemas import LoginSchema
 auth_bp = Blueprint("auth", __name__)
 login_schema = LoginSchema()
 _login_attempts = {}
+
+
+def _hash_invite_token(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def _password_policy_error(password: str) -> str | None:
+    pwd = str(password or "")
+    if len(pwd) < 8:
+        return "A senha deve ter pelo menos 8 caracteres."
+    if not re.search(r"[A-Z]", pwd):
+        return "A senha deve conter pelo menos 1 letra maiúscula."
+    if not re.search(r"[a-z]", pwd):
+        return "A senha deve conter pelo menos 1 letra minúscula."
+    if not re.search(r"\d", pwd):
+        return "A senha deve conter pelo menos 1 número."
+    if not re.search(r"[^A-Za-z0-9]", pwd):
+        return "A senha deve conter pelo menos 1 caractere especial."
+    return None
 
 
 def _attempt_key(username: str, ip: str) -> str:
@@ -67,6 +89,13 @@ def login_page():
 
         user = Usuario.query.filter_by(username=username).first()
 
+        if user and not bool(getattr(user, "ativo", True)):
+            return jsonify({
+                "sucesso": False,
+                "code": "USER_DISABLED",
+                "msg": "Seu acesso está inativo. Procure um administrador.",
+            }), 403
+
         # Usuário sem senha definida — precisa se cadastrar
         if user and not user.password:
             return jsonify({
@@ -100,6 +129,7 @@ def login_page():
                 ip_address=(request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()[:64],
                 user_agent=(request.headers.get("User-Agent", "") or "")[:400],
             ))
+            user.ultimo_login_em = datetime.now()
             db.session.commit()
             _login_attempts.pop(key, None)
             redirect_to = "/"
@@ -135,6 +165,7 @@ def login_page():
         "login.html",
         login_message=request.args.get("msg") or "",
         login_message_type=request.args.get("type") or "",
+        invite_token=(request.args.get("invite") or "").strip(),
     )
 
 
@@ -151,26 +182,73 @@ def _mask_email(email):
 
 @auth_bp.route("/cadastrar-senha", methods=["POST"])
 def cadastrar_senha():
-    """First-time password registration: user provides email + new password."""
+    """Ativação de senha via convite (token) com fallback por e-mail."""
     data = request.json or {}
     email = (data.get("email") or "").strip().lower()
     nova_senha = (data.get("senha") or "").strip()
+    token = (data.get("token") or "").strip()
 
-    if not email or not nova_senha:
-        return jsonify({"sucesso": False, "msg": "E-mail e senha são obrigatórios."}), 400
-    if len(nova_senha) < 4:
-        return jsonify({"sucesso": False, "msg": "A senha deve ter pelo menos 4 caracteres."}), 400
+    if not nova_senha:
+        return jsonify({"sucesso": False, "msg": "Senha obrigatória."}), 400
 
-    user = Usuario.query.filter(func.lower(Usuario.email) == email).first()
-    if not user:
-        return jsonify({"sucesso": False, "msg": "E-mail não encontrado no sistema. Fale com um administrador."}), 404
-    if user.password:
-        return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente ou peça a um admin para resetar."}), 409
+    policy_error = _password_policy_error(nova_senha)
+    if policy_error:
+        return jsonify({"sucesso": False, "msg": policy_error}), 400
+
+    user = None
+    if token:
+        token_hash = _hash_invite_token(token)
+        user = Usuario.query.filter_by(convite_token_hash=token_hash).first()
+        if not user:
+            return jsonify({"sucesso": False, "msg": "Convite inválido."}), 400
+        if not bool(getattr(user, "ativo", True)):
+            return jsonify({"sucesso": False, "msg": "Este usuário está inativo. Procure um administrador."}), 403
+        if user.convite_expires_at and user.convite_expires_at < datetime.now():
+            return jsonify({"sucesso": False, "msg": "Convite expirado. Solicite um novo envio ao administrador."}), 400
+        if email and user.email and str(user.email).lower() != email:
+            return jsonify({"sucesso": False, "msg": "O e-mail informado não corresponde ao convite."}), 400
+    else:
+        if not email:
+            return jsonify({"sucesso": False, "msg": "E-mail é obrigatório quando não há token."}), 400
+        user = Usuario.query.filter(func.lower(Usuario.email) == email).first()
+        if not user:
+            return jsonify({"sucesso": False, "msg": "E-mail não encontrado no sistema. Fale com um administrador."}), 404
+
+    if user.password and not bool(getattr(user, "forcar_troca_senha", False)):
+        return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente."}), 409
 
     user.password = generate_password_hash(nova_senha)
     user.senha_atualizada_em = datetime.now()
+    user.convite_token_hash = None
+    user.convite_expires_at = None
+    user.convite_aceito_em = datetime.now()
+    user.forcar_troca_senha = False
+    user.atualizado_em = datetime.now()
     db.session.commit()
-    return jsonify({"sucesso": True, "msg": "Senha cadastrada com sucesso! Faça login com seu usuário e a senha definida.", "username": user.username})
+    return jsonify({"sucesso": True, "msg": "Senha cadastrada com sucesso! Faça login com seu usuário e senha.", "username": user.username})
+
+
+@auth_bp.route("/api/convite/validar", methods=["GET"])
+def validar_convite_ativacao():
+    token = (request.args.get("token") or "").strip()
+    if not token:
+        return jsonify({"sucesso": False, "msg": "Token ausente."}), 400
+
+    user = Usuario.query.filter_by(convite_token_hash=_hash_invite_token(token)).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Convite inválido."}), 404
+    if not bool(getattr(user, "ativo", True)):
+        return jsonify({"sucesso": False, "msg": "Usuário inativo."}), 403
+    if user.convite_expires_at and user.convite_expires_at < datetime.now():
+        return jsonify({"sucesso": False, "msg": "Convite expirado."}), 410
+
+    return jsonify({
+        "sucesso": True,
+        "username": user.username,
+        "email": user.email or "",
+        "role": user.role,
+        "expires_at": user.convite_expires_at.isoformat() if user.convite_expires_at else None,
+    })
 
 
 @auth_bp.route("/logout")

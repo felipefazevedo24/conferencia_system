@@ -24,7 +24,24 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password):
 
 
 def enviar_email_registro(destinatario_email: str, username: str, role: str, url_login: str):
-    """Send welcome email when a new user is registered."""
+  """Compatibilidade: envio antigo de boas-vindas sem token dedicado."""
+  return enviar_email_convite_acesso(
+    destinatario_email=destinatario_email,
+    username=username,
+    role=role,
+    invite_link=url_login,
+    expires_at_text="acesso imediato",
+  )
+
+
+def enviar_email_convite_acesso(
+  destinatario_email: str,
+  username: str,
+  role: str,
+  invite_link: str,
+  expires_at_text: str,
+) -> bool:
+  """Envia convite de ativação de conta com link único e validade."""
     app = current_app._get_current_object()
     smtp_server = app.config.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
     smtp_port = app.config.get("MAIL_SMTP_PORT", 587)
@@ -34,10 +51,10 @@ def enviar_email_registro(destinatario_email: str, username: str, role: str, url
 
     if not sender or not password:
         app.logger.warning("E-mail não configurado. Pulando envio.")
-        return
+      return False
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Bem-vindo ao Columbia Sync"
+    msg["Subject"] = "Convite de acesso - Columbia Sync"
     msg["From"] = f"{sender_name} <{sender}>"
     msg["To"] = destinatario_email
 
@@ -45,20 +62,20 @@ def enviar_email_registro(destinatario_email: str, username: str, role: str, url
     <html>
     <body style="font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px;">
       <div style="max-width: 520px; margin: auto; background: #fff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h2 style="color: #333; margin-bottom: 4px;">Bem-vindo ao Columbia Sync!</h2>
-        <p style="color: #666; font-size: 14px;">Seu acesso foi criado com sucesso.</p>
+        <h2 style="color: #1f2937; margin-bottom: 4px;">Seu acesso ao Columbia Sync foi criado</h2>
+        <p style="color: #666; font-size: 14px;">Para concluir o cadastro, ative sua conta no botão abaixo.</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
         <table style="font-size: 15px; color: #333;">
           <tr><td style="padding: 6px 12px 6px 0; font-weight: bold;">Usuário:</td><td>{username}</td></tr>
           <tr><td style="padding: 6px 12px 6px 0; font-weight: bold;">Perfil:</td><td>{role}</td></tr>
-          <tr><td style="padding: 6px 12px 6px 0; font-weight: bold;">Senha temporária:</td><td>HyC!4DVaFV</td></tr>
+          <tr><td style="padding: 6px 12px 6px 0; font-weight: bold;">Validade do convite:</td><td>{expires_at_text}</td></tr>
         </table>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
         <p style="font-size: 14px; color: #555;">
-          No seu primeiro acesso, você deverá cadastrar uma senha usando o e-mail registrado.
+          Este link e único. Ao abrir, você definirá sua senha de acesso.
         </p>
-        <a href="{url_login}" style="display: inline-block; margin-top: 12px; padding: 10px 24px; background: #0d6efd; color: #fff; text-decoration: none; border-radius: 5px; font-size: 14px;">
-          Acessar o Sistema
+        <a href="{invite_link}" style="display: inline-block; margin-top: 12px; padding: 10px 24px; background: #0f62c9; color: #fff; text-decoration: none; border-radius: 6px; font-size: 14px;">
+          Ativar conta e definir senha
         </a>
         <p style="margin-top: 24px; font-size: 12px; color: #999;">
           Este é um e-mail automático. Não responda.
@@ -76,6 +93,7 @@ def enviar_email_registro(destinatario_email: str, username: str, role: str, url
     )
     thread.daemon = True
     thread.start()
+    return True
 
 
 def enviar_email_solicitacao_epi(

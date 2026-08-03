@@ -10,12 +10,13 @@ import re
 import os
 import shutil
 import tempfile
+import secrets
 import uuid
 from datetime import timedelta
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, send_file, session
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -63,6 +64,7 @@ from ..models import (
     PermissaoAcesso,
     SolicitacaoDevolucaoRecebimento,
     Usuario,
+    UsuarioGestaoAuditoria,
 )
 from ..schemas.api_schemas import (
     AprovarSolicitacaoDevolucaoSchema,
@@ -98,6 +100,7 @@ from ..services.classificacao_contabil_service import (
     normalizar_texto,
     resumo_classificacoes,
 )
+from ..services.email_service import enviar_email_convite_acesso
 
 
 def _parse_aviso_datetime(value):
@@ -1496,6 +1499,163 @@ def _build_notas_liberadas_records(search_nota=None):
     return registros
 
 
+def _hash_invite_token(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def _password_policy_error(password: str) -> str | None:
+    pwd = str(password or "")
+    if len(pwd) < 8:
+        return "Senha deve ter pelo menos 8 caracteres."
+    if not re.search(r"[A-Z]", pwd):
+        return "Senha deve conter letra maiúscula."
+    if not re.search(r"[a-z]", pwd):
+        return "Senha deve conter letra minúscula."
+    if not re.search(r"\d", pwd):
+        return "Senha deve conter número."
+    if not re.search(r"[^A-Za-z0-9]", pwd):
+        return "Senha deve conter caractere especial."
+    return None
+
+
+def _friendly_device(user_agent: str | None) -> str:
+    ua = (user_agent or "").lower()
+    if not ua:
+        return "Dispositivo desconhecido"
+    if "android" in ua:
+        so = "Android"
+    elif "iphone" in ua or "ipad" in ua or "ios" in ua:
+        so = "iOS"
+    elif "windows" in ua:
+        so = "Windows"
+    elif "mac os" in ua or "macintosh" in ua:
+        so = "macOS"
+    elif "linux" in ua:
+        so = "Linux"
+    else:
+        so = "Outro sistema"
+
+    if "edg" in ua:
+        nav = "Edge"
+    elif "chrome" in ua and "chromium" not in ua:
+        nav = "Chrome"
+    elif "firefox" in ua:
+        nav = "Firefox"
+    elif "safari" in ua:
+        nav = "Safari"
+    else:
+        nav = "Navegador"
+    return f"{nav} · {so}"
+
+
+def _registrar_auditoria_usuario(alvo_username: str, acao: str, detalhes: dict | None = None) -> None:
+    try:
+        log = UsuarioGestaoAuditoria(
+            ator_username=(session.get("username") or "sistema")[:100],
+            alvo_username=(alvo_username or "")[:80],
+            acao=(acao or "")[:60],
+            detalhes=json.dumps(detalhes or {}, ensure_ascii=True)[:8000],
+            ip_address=((request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip() or "")[:64],
+        )
+        db.session.add(log)
+    except Exception:
+        # Nao interrompe o fluxo por falha de auditoria.
+        pass
+
+
+def _gerar_convite_usuario(user: Usuario, horas_validade: int = 24) -> tuple[str, datetime]:
+    token = secrets.token_urlsafe(32)
+    expira_em = datetime.now() + timedelta(hours=max(1, int(horas_validade)))
+    user.convite_token_hash = _hash_invite_token(token)
+    user.convite_expires_at = expira_em
+    user.convite_enviado_em = datetime.now()
+    user.atualizado_em = datetime.now()
+    user.atualizado_por = session.get("username")
+    return token, expira_em
+
+
+def _build_invite_link(token: str) -> str:
+    base = _base_url_columbia()
+    return f"{base}/login?invite={token}"
+
+
+def _enviar_convite(user: Usuario, token: str, expira_em: datetime) -> bool:
+    if not user.email:
+        return False
+    expires_at_text = expira_em.strftime("%d/%m/%Y %H:%M")
+    return bool(
+        enviar_email_convite_acesso(
+            destinatario_email=user.email,
+            username=user.username,
+            role=user.role,
+            invite_link=_build_invite_link(token),
+            expires_at_text=expires_at_text,
+        )
+    )
+
+
+def _fetch_usuarios_overview() -> tuple[list[dict], dict]:
+    now = datetime.now()
+    limite_inativo = now - timedelta(days=30)
+
+    rows = (
+        db.session.query(
+            Usuario,
+            func.max(ActiveSession.last_activity).label("ultimo_acesso"),
+            func.sum(case((ActiveSession.is_active == True, 1), else_=0)).label("sessoes_ativas"),  # noqa: E712
+        )
+        .outerjoin(ActiveSession, ActiveSession.username == Usuario.username)
+        .group_by(Usuario.id)
+        .all()
+    )
+
+    usuarios = []
+    for user, ultimo_acesso, sessoes_ativas in rows:
+        convite_pendente = bool(
+            user.convite_token_hash and (user.convite_expires_at is None or user.convite_expires_at >= now) and not user.convite_aceito_em
+        )
+        usuarios.append(
+            {
+                "username": user.username,
+                "email": user.email or "",
+                "role": user.role,
+                "tem_senha": bool(user.password),
+                "ativo": bool(getattr(user, "ativo", True)),
+                "convite_pendente": convite_pendente,
+                "forcar_troca_senha": bool(getattr(user, "forcar_troca_senha", False)),
+                "convite_expires_at": user.convite_expires_at.isoformat() if user.convite_expires_at else None,
+                "convite_enviado_em": user.convite_enviado_em.isoformat() if user.convite_enviado_em else None,
+                "ultimo_login_em": user.ultimo_login_em.isoformat() if user.ultimo_login_em else None,
+                "ultimo_acesso_em": ultimo_acesso.isoformat() if ultimo_acesso else None,
+                "sessoes_ativas": int(sessoes_ativas or 0),
+            }
+        )
+
+    total = len(usuarios)
+    ativos = sum(1 for u in usuarios if u["ativo"])
+    inativos = total - ativos
+    admins = sum(1 for u in usuarios if (u.get("role") or "").lower() == "admin")
+    convites = sum(1 for u in usuarios if u["convite_pendente"])
+    sem_acesso_30d = sum(
+        1
+        for u in usuarios
+        if u["ativo"] and (not u["ultimo_acesso_em"] or datetime.fromisoformat(u["ultimo_acesso_em"]) < limite_inativo)
+    )
+
+    kpis = {
+        "total": total,
+        "ativos": ativos,
+        "inativos": inativos,
+        "admins": admins,
+        "convites_pendentes": convites,
+        "sem_acesso_30d": sem_acesso_30d,
+        "senhas_definidas": sum(1 for u in usuarios if u["tem_senha"]),
+        "senhas_pendentes": sum(1 for u in usuarios if not u["tem_senha"]),
+    }
+    usuarios.sort(key=lambda item: ((item.get("ativo") is False), item.get("username") or ""))
+    return usuarios, kpis
+
+
 @api_bp.route("/api/registrar", methods=["POST"])
 @roles_required("Admin")
 def registrar():
@@ -1504,13 +1664,11 @@ def registrar():
         username = (data.get("username") or "").strip().upper()
         email = (data.get("email") or "").strip().lower()
         role = data.get("role")
-        # Normaliza "Logistica" sem acento para "Logística"
         if role == "Logistica":
             role = "Logística"
 
         if Usuario.query.filter_by(username=username).first():
             return jsonify({"sucesso": False, "msg": "Usuário já existe"}), 400
-
         if Usuario.query.filter(func.lower(Usuario.email) == email).first():
             return jsonify({"sucesso": False, "msg": "E-mail já cadastrado"}), 400
 
@@ -1519,10 +1677,25 @@ def registrar():
             email=email,
             password=None,
             role=role,
+            ativo=True,
+            criado_em=datetime.now(),
+            criado_por=session.get("username"),
+            atualizado_em=datetime.now(),
+            atualizado_por=session.get("username"),
         )
+        token, expira_em = _gerar_convite_usuario(novo, horas_validade=24)
         db.session.add(novo)
+        _registrar_auditoria_usuario(username, "CRIAR_USUARIO", {"role": role, "email": email})
         db.session.commit()
-        return jsonify({"sucesso": True})
+
+        email_enviado = _enviar_convite(novo, token, expira_em)
+        return jsonify(
+            {
+                "sucesso": True,
+                "email_enviado": bool(email_enviado),
+                "msg": "Usuário criado e convite processado com sucesso." if email_enviado else "Usuário criado. SMTP não configurado para envio automático.",
+            }
+        )
     except Exception as e:
         db.session.rollback()
         import traceback
@@ -1533,8 +1706,188 @@ def registrar():
 @api_bp.route("/api/listar_usuarios")
 @roles_required("Admin")
 def listar_usuarios():
-    usuarios = Usuario.query.all()
-    return jsonify([{"username": u.username, "email": u.email or "", "role": u.role, "tem_senha": bool(u.password)} for u in usuarios])
+    usuarios, kpis = _fetch_usuarios_overview()
+    return jsonify({"usuarios": usuarios, "kpis": kpis})
+
+
+@api_bp.route("/api/admin/usuario/<username>/detalhes", methods=["GET"])
+@roles_required("Admin")
+def admin_usuario_detalhes(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+
+    base = get_base_role_permissions(user.role)
+    overrides = {
+        row.permission_key: bool(row.allow)
+        for row in PermissaoAcesso.query.filter_by(scope_type="USER", scope_id=username).all()
+    }
+    efetivo = get_effective_permissions(username=username, role=user.role)
+
+    sessoes = (
+        ActiveSession.query
+        .filter_by(username=username)
+        .order_by(ActiveSession.last_activity.desc())
+        .limit(12)
+        .all()
+    )
+    sessoes_payload = [
+        {
+            "session_id": s.session_id,
+            "is_active": bool(s.is_active),
+            "device": _friendly_device(getattr(s, "user_agent", None)),
+            "ip": getattr(s, "ip_address", None) or "—",
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "last_activity": s.last_activity.isoformat() if s.last_activity else None,
+        }
+        for s in sessoes
+    ]
+
+    auditoria_rows = (
+        UsuarioGestaoAuditoria.query
+        .filter_by(alvo_username=username)
+        .order_by(UsuarioGestaoAuditoria.criado_em.desc())
+        .limit(25)
+        .all()
+    )
+    auditoria = [
+        {
+            "ator": row.ator_username,
+            "acao": row.acao,
+            "detalhes": row.detalhes or "{}",
+            "ip": row.ip_address or "—",
+            "criado_em": row.criado_em.isoformat() if row.criado_em else None,
+        }
+        for row in auditoria_rows
+    ]
+
+    ultimo_acesso = (
+        db.session.query(func.max(ActiveSession.last_activity))
+        .filter(ActiveSession.username == username)
+        .scalar()
+    )
+
+    return jsonify(
+        {
+            "sucesso": True,
+            "usuario": {
+                "username": user.username,
+                "email": user.email or "",
+                "role": user.role,
+                "ativo": bool(getattr(user, "ativo", True)),
+                "tem_senha": bool(user.password),
+                "forcar_troca_senha": bool(getattr(user, "forcar_troca_senha", False)),
+                "criado_em": user.criado_em.isoformat() if user.criado_em else None,
+                "criado_por": user.criado_por or "—",
+                "convite_enviado_em": user.convite_enviado_em.isoformat() if user.convite_enviado_em else None,
+                "convite_expires_at": user.convite_expires_at.isoformat() if user.convite_expires_at else None,
+                "convite_aceito_em": user.convite_aceito_em.isoformat() if user.convite_aceito_em else None,
+                "ultimo_login_em": user.ultimo_login_em.isoformat() if user.ultimo_login_em else None,
+                "ultimo_acesso_em": ultimo_acesso.isoformat() if ultimo_acesso else None,
+            },
+            "permissoes": {
+                "base": base,
+                "overrides": overrides,
+                "efetivo": efetivo,
+            },
+            "sessoes": sessoes_payload,
+            "auditoria": auditoria,
+        }
+    )
+
+
+@api_bp.route("/api/admin/usuario/<username>/reenviar_convite", methods=["POST"])
+@roles_required("Admin")
+def admin_reenviar_convite(username):
+    user = Usuario.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
+    if not user.email:
+        return jsonify({"sucesso": False, "msg": "Usuário sem e-mail cadastrado."}), 400
+    if not bool(getattr(user, "ativo", True)):
+        return jsonify({"sucesso": False, "msg": "Usuário inativo."}), 400
+
+    token, expira_em = _gerar_convite_usuario(user, horas_validade=24)
+    _registrar_auditoria_usuario(username, "REENVIAR_CONVITE", {"email": user.email})
+    db.session.commit()
+    email_enviado = _enviar_convite(user, token, expira_em)
+    return jsonify({
+        "sucesso": True,
+        "email_enviado": bool(email_enviado),
+        "msg": "Convite reenviado." if email_enviado else "Convite atualizado, mas SMTP não está configurado.",
+    })
+
+
+@api_bp.route("/api/admin/usuarios/acoes_lote", methods=["POST"])
+@roles_required("Admin")
+def admin_usuarios_acoes_lote():
+    payload = request.get_json() or {}
+    usernames = [str(u or "").strip().upper() for u in (payload.get("usernames") or [])]
+    action = str(payload.get("action") or "").strip().lower()
+
+    if not usernames:
+        return jsonify({"sucesso": False, "msg": "Nenhum usuário informado."}), 400
+
+    permitidas = {"ativar", "inativar", "reenviar_convite", "forcar_troca_senha", "limpar_senha"}
+    if action not in permitidas:
+        return jsonify({"sucesso": False, "msg": "Ação inválida."}), 400
+
+    users = Usuario.query.filter(Usuario.username.in_(usernames)).all()
+    found = {u.username for u in users}
+    missing = [u for u in usernames if u not in found]
+    current_user = (session.get("username") or "").upper()
+    alterados = 0
+    email_enviados = 0
+    convites_pendentes_envio = []
+
+    for user in users:
+        if user.username == current_user and action in {"inativar", "limpar_senha"}:
+            continue
+
+        if action == "ativar":
+            user.ativo = True
+            user.atualizado_em = datetime.now()
+            user.atualizado_por = session.get("username")
+            _registrar_auditoria_usuario(user.username, "ATIVAR_USUARIO", {})
+            alterados += 1
+        elif action == "inativar":
+            user.ativo = False
+            user.atualizado_em = datetime.now()
+            user.atualizado_por = session.get("username")
+            ActiveSession.query.filter_by(username=user.username, is_active=True).update({"is_active": False})  # noqa: E712
+            _registrar_auditoria_usuario(user.username, "INATIVAR_USUARIO", {})
+            alterados += 1
+        elif action == "forcar_troca_senha":
+            user.forcar_troca_senha = True
+            user.atualizado_em = datetime.now()
+            user.atualizado_por = session.get("username")
+            _registrar_auditoria_usuario(user.username, "FORCAR_TROCA_SENHA", {})
+            alterados += 1
+        elif action == "limpar_senha":
+            user.password = None
+            user.forcar_troca_senha = False
+            token, expira_em = _gerar_convite_usuario(user, horas_validade=24)
+            alterados += 1
+            _registrar_auditoria_usuario(user.username, "LIMPAR_SENHA", {})
+            convites_pendentes_envio.append((user, token, expira_em))
+        elif action == "reenviar_convite":
+            token, expira_em = _gerar_convite_usuario(user, horas_validade=24)
+            alterados += 1
+            _registrar_auditoria_usuario(user.username, "REENVIAR_CONVITE", {})
+            convites_pendentes_envio.append((user, token, expira_em))
+
+    db.session.commit()
+    for user, token, expira_em in convites_pendentes_envio:
+        if _enviar_convite(user, token, expira_em):
+            email_enviados += 1
+    return jsonify(
+        {
+            "sucesso": True,
+            "alterados": alterados,
+            "emails_enviados": email_enviados,
+            "nao_encontrados": missing,
+        }
+    )
 
 
 @api_bp.route("/api/admin/usuario/<username>/resetar_senha", methods=["POST"])
@@ -1544,9 +1897,17 @@ def admin_resetar_senha(username):
     if not user:
         return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
     nova_senha = (request.json or {}).get("nova_senha", "").strip()
-    if not nova_senha or len(nova_senha) < 4:
-        return jsonify({"sucesso": False, "msg": "Senha deve ter pelo menos 4 caracteres."}), 400
+    policy_error = _password_policy_error(nova_senha)
+    if policy_error:
+        return jsonify({"sucesso": False, "msg": policy_error}), 400
     user.password = generate_password_hash(nova_senha)
+    user.senha_atualizada_em = datetime.now()
+    user.forcar_troca_senha = False
+    user.convite_token_hash = None
+    user.convite_expires_at = None
+    user.atualizado_em = datetime.now()
+    user.atualizado_por = session.get("username")
+    _registrar_auditoria_usuario(username, "RESETAR_SENHA", {})
     db.session.commit()
     return jsonify({"sucesso": True, "msg": f"Senha de {username} alterada com sucesso."})
 
@@ -1554,12 +1915,24 @@ def admin_resetar_senha(username):
 @api_bp.route("/api/admin/usuario/<username>/limpar_senha", methods=["POST"])
 @roles_required("Admin")
 def admin_limpar_senha(username):
+    if username.upper() == (session.get("username") or "").upper():
+        return jsonify({"sucesso": False, "msg": "Você não pode limpar sua própria senha."}), 400
+
     user = Usuario.query.filter_by(username=username).first()
     if not user:
         return jsonify({"sucesso": False, "msg": "Usuário não encontrado."}), 404
     user.password = None
+    token, expira_em = _gerar_convite_usuario(user, horas_validade=24)
+    _registrar_auditoria_usuario(username, "LIMPAR_SENHA", {})
     db.session.commit()
-    return jsonify({"sucesso": True, "msg": f"Senha de {username} removida. O usuário precisará se cadastrar novamente."})
+    email_enviado = _enviar_convite(user, token, expira_em)
+    return jsonify(
+        {
+            "sucesso": True,
+            "email_enviado": bool(email_enviado),
+            "msg": f"Senha de {username} removida e convite regenerado.",
+        }
+    )
 
 
 def _usuario_atual():
@@ -1893,6 +2266,7 @@ def salvar_permissoes_usuario(username):
         row.updated_by = session.get("username")
         row.updated_at = datetime.now()
 
+    _registrar_auditoria_usuario(username, "SALVAR_PERMISSOES_USUARIO", {"total": len(permissoes)})
     db.session.commit()
     return jsonify({"sucesso": True, "atualizadas": len(permissoes)})
 
@@ -1900,12 +2274,14 @@ def salvar_permissoes_usuario(username):
 @api_bp.route("/api/deletar_usuario/<username>", methods=["DELETE"])
 @roles_required("Admin")
 def deletar_usuario(username):
-    if username == session.get("username"):
+    if (username or "").upper() == (session.get("username") or "").upper():
         return jsonify({"sucesso": False, "msg": "Erro: mesma conta"}), 400
 
     user = Usuario.query.filter_by(username=username).first()
     if user:
         PermissaoAcesso.query.filter_by(scope_type="USER", scope_id=username).delete()
+        ActiveSession.query.filter_by(username=username).delete()
+        _registrar_auditoria_usuario(username, "DELETAR_USUARIO", {"role": user.role, "email": user.email or ""})
         db.session.delete(user)
         db.session.commit()
         return jsonify({"sucesso": True})

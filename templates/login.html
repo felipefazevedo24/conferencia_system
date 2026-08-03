@@ -87,6 +87,7 @@
 
                     <!-- Registration form (hidden by default) -->
                     <form id="register-form" novalidate style="display:none">
+                        <input type="hidden" id="reg-token" value="">
                         <div class="field">
                             <label for="reg-email">
                                 <span>Seu e-mail corporativo</span>
@@ -101,7 +102,7 @@
                         <div class="field">
                             <label for="reg-pass">
                                 <span>Defina sua senha</span>
-                                <span class="field-note">Mínimo 4 caracteres</span>
+                                <span class="field-note">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo</span>
                             </label>
                             <div class="input-shell has-action">
                                 <input type="password" id="reg-pass" name="new-password" autocomplete="new-password" placeholder="Escolha uma senha segura">
@@ -147,7 +148,7 @@
                         <h2 class="brand-title">Sincronizamos seus processos e elevamos seus resultados.</h2>
                         <div class="brand-pill" aria-live="polite">
                             <i class="fas fa-check"></i>
-                            <span id="brand-pill-text" class="brand-pill-text">Operacao 100% integrada</span>
+                            <span id="brand-pill-text" class="brand-pill-text">Operação 100% integrada</span>
                         </div>
                     </div>
 
@@ -190,6 +191,8 @@
         const cardTitle = document.getElementById("card-title");
         const cardCopy = document.getElementById("card-copy");
         const brandPillText = document.getElementById("brand-pill-text");
+        const inviteTokenFromUrl = "{{ invite_token|default('', true) }}";
+        let activeInviteToken = inviteTokenFromUrl || "";
 
         const BRAND_PILL_MESSAGES = [
             "Conferência de recebimento",
@@ -287,7 +290,7 @@
             }
 
             if (capsOn) {
-                passMeta.textContent = "Atencao: sua senha pode estar sendo digitada em maiusculas.";
+                passMeta.textContent = "Atenção: sua senha pode estar sendo digitada em letras maiúsculas.";
                 passMeta.className = "field-meta warning";
             }
         }
@@ -304,13 +307,20 @@
         passInput.addEventListener("keydown", updateCapsLockState);
 
         /* ── Switch to registration view ── */
-        function showRegistrationForm(emailHint) {
+        function showRegistrationForm(emailHint, prefillEmail = "", lockEmail = false) {
             loginForm.style.display = "none";
             registerForm.style.display = "";
             cardTitle.textContent = "Primeiro acesso";
-            cardCopy.textContent = "Cadastre sua senha para acessar o sistema.";
+            cardCopy.textContent = "Ative sua conta e cadastre sua senha para acessar o sistema.";
             if (emailHint) {
                 document.getElementById("email-hint").textContent = `Dica: ${emailHint}`;
+            }
+            const regEmail = document.getElementById("reg-email");
+            const regToken = document.getElementById("reg-token");
+            regToken.value = activeInviteToken;
+            regEmail.readOnly = !!lockEmail;
+            if (prefillEmail) {
+                regEmail.value = prefillEmail;
             }
             document.getElementById("reg-email").focus();
         }
@@ -344,14 +354,15 @@
             const email = document.getElementById("reg-email").value.trim();
             const senha = document.getElementById("reg-pass").value;
             const confirma = document.getElementById("reg-pass-confirm").value;
+            const token = document.getElementById("reg-token").value.trim();
 
             if (!email) {
                 showFeedback("warning", "Informe o e-mail cadastrado pelo administrador.");
                 pulseError();
                 return;
             }
-            if (!senha || senha.length < 4) {
-                showFeedback("warning", "A senha deve ter pelo menos 4 caracteres.");
+            if (!senha || senha.length < 8) {
+                showFeedback("warning", "A senha deve ter pelo menos 8 caracteres.");
                 pulseError();
                 return;
             }
@@ -370,7 +381,7 @@
                 const response = await fetch("/cadastrar-senha", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, senha })
+                    body: JSON.stringify({ email, senha, token })
                 });
                 const data = await response.json();
                 if (data.sucesso) {
@@ -465,7 +476,7 @@
                 showFeedback(data.code === "RATE_LIMIT" ? "warning" : "error", data.msg || "Não foi possível autenticar.", detail);
                 pulseError();
             } catch (error) {
-                showFeedback("error", "Falha de comunicacao com o sistema.", "Verifique sua conexao ou tente novamente em alguns instantes.");
+                showFeedback("error", "Falha de comunicação com o sistema.", "Verifique sua conexão ou tente novamente em alguns instantes.");
                 pulseError();
             } finally {
                 setLoading(false);
@@ -491,8 +502,28 @@
             }
         });
 
+        async function tryHydrateInviteToken() {
+            if (!activeInviteToken) return;
+            try {
+                const response = await fetch(`/api/convite/validar?token=${encodeURIComponent(activeInviteToken)}`);
+                const data = await response.json();
+                if (!response.ok || !data.sucesso) {
+                    showFeedback("warning", data.msg || "Convite inválido ou expirado.");
+                    return;
+                }
+                const detalhe = data.expires_at
+                    ? `Convite válido para ${data.username} até ${new Date(data.expires_at).toLocaleString("pt-BR")}.`
+                    : `Convite válido para ${data.username}.`;
+                showFeedback("info", "Convite identificado.", detalhe);
+                showRegistrationForm(data.email ? `Convite para ${data.email}` : "Convite confirmado", data.email || "", !!data.email);
+            } catch (err) {
+                showFeedback("warning", "Não foi possível validar o convite agora.");
+            }
+        }
+
         hydrateRememberedUser();
         startBrandPillRotation();
+        tryHydrateInviteToken();
     </script>
 </body>
 </html>
