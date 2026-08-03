@@ -9,6 +9,7 @@ from ..models import (
     ExpedicaoRomaneio,
     ExpedicaoRomaneioNF,
     ExpedicaoRomaneioExclusao,
+    ExpedicaoRomaneioFotoCarregamento,
     ExpedicaoOrdemFat,
     ExpedicaoOrdemFatItem,
     ExpedicaoOrdemST,
@@ -1095,6 +1096,7 @@ def visualizar_romaneio(romaneio_id):
         romaneio=romaneio,
         remetente=_remetente_completo(),
         destinatario=_destinatario_completo(romaneio),
+        fotos_carregamento=_fotos_carregamento_payload(romaneio),
     )
 
 
@@ -1195,11 +1197,51 @@ def obter_assinatura_romaneio(romaneio_id, tipo):
         return jsonify({"error": f"Falha ao baixar assinatura: {exc}"}), 502
 
 
+def _fotos_dir_carregamento() -> str:
+    return current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "") or os.path.join(
+        current_app.instance_path, "expedicao_romaneio_carregamento"
+    )
+
+
+def _fotos_carregamento_payload(romaneio) -> list:
+    """Lista as fotos de carregamento do romaneio: as multiplas fotos novas
+    (tabela ExpedicaoRomaneioFotoCarregamento) + a foto unica legada (colunas
+    foto_carregamento_* de ExpedicaoRomaneio), quando existir, para nao
+    esconder fotos ja tiradas antes desta mudanca."""
+    fotos = (
+        ExpedicaoRomaneioFotoCarregamento.query
+        .filter_by(romaneio_id=romaneio.id)
+        .order_by(ExpedicaoRomaneioFotoCarregamento.id.asc())
+        .all()
+    )
+    itens = [
+        {
+            "id": f.id,
+            "url": f"/api/expedicao/romaneio-fat/{romaneio.id}/foto-carregamento/{f.id}",
+            "uploaded_at": f.uploaded_at.strftime("%d/%m/%Y %H:%M") if f.uploaded_at else None,
+            "uploaded_by": f.uploaded_by,
+        }
+        for f in fotos
+    ]
+    if romaneio.foto_carregamento_file_name:
+        itens.insert(0, {
+            "id": "legacy",
+            "url": f"/api/expedicao/romaneio-fat/{romaneio.id}/foto-carregamento",
+            "uploaded_at": (
+                romaneio.foto_carregamento_uploadado_em.strftime("%d/%m/%Y %H:%M")
+                if romaneio.foto_carregamento_uploadado_em else None
+            ),
+            "uploaded_by": romaneio.foto_carregamento_uploadado_por,
+        })
+    return itens
+
+
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["POST"])
 @roles_required(*ROLES)
 def salvar_foto_carregamento_romaneio(romaneio_id):
-    """Salva a foto do carregamento (câmera do celular/tablet), tirada com o
-    romaneio já Pronto para expedir."""
+    """Salva uma foto do carregamento (câmera ou galeria do celular/tablet),
+    tirada com o romaneio já Pronto para expedir. Cada chamada adiciona uma
+    nova foto; o romaneio pode ter varias."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
@@ -1229,31 +1271,65 @@ def salvar_foto_carregamento_romaneio(romaneio_id):
             current_app.logger.exception("Falha ao enviar foto de carregamento do romaneio para o Drive")
             return jsonify({"error": f"Falha ao enviar foto para o Drive: {exc}"}), 502
     else:
-        fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "") or os.path.join(
-            current_app.instance_path, "expedicao_romaneio_carregamento"
-        )
+        fotos_dir = _fotos_dir_carregamento()
         os.makedirs(fotos_dir, exist_ok=True)
         caminho = os.path.join(fotos_dir, nome_arquivo)
         with open(caminho, "wb") as f:
             f.write(dados_png)
 
     agora = datetime.now()
-    romaneio.foto_carregamento_file_name = nome_arquivo
-    romaneio.foto_carregamento_file_path = caminho
-    romaneio.foto_carregamento_uploadado_em = agora
-    romaneio.foto_carregamento_uploadado_por = session["username"]
+    foto = ExpedicaoRomaneioFotoCarregamento(
+        romaneio_id=romaneio.id,
+        file_name=nome_arquivo,
+        file_path=caminho,
+        uploaded_at=agora,
+        uploaded_by=session["username"],
+    )
+    db.session.add(foto)
     romaneio.atualizado_em = agora
     db.session.commit()
 
     return jsonify({
         "message": "Foto de carregamento salva com sucesso.",
-        "url": f"/api/expedicao/romaneio-fat/{romaneio_id}/foto-carregamento",
+        "id": foto.id,
+        "url": f"/api/expedicao/romaneio-fat/{romaneio_id}/foto-carregamento/{foto.id}",
     })
+
+
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/fotos-carregamento", methods=["GET"])
+@permission_required(PERMISSION)
+def listar_fotos_carregamento_romaneio(romaneio_id):
+    romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
+    if not romaneio:
+        return jsonify({"error": "Romaneio não encontrado."}), 404
+    return jsonify({"fotos": _fotos_carregamento_payload(romaneio)})
+
+
+@expedicao_romaneio_bp.route(
+    "/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento/<int:foto_id>", methods=["GET"]
+)
+@permission_required(PERMISSION)
+def obter_foto_carregamento_individual_romaneio(romaneio_id, foto_id):
+    foto = ExpedicaoRomaneioFotoCarregamento.query.filter_by(id=foto_id, romaneio_id=romaneio_id).first()
+    if not foto:
+        return jsonify({"error": "Foto não encontrada."}), 404
+
+    caminho = _resolver_foto_expedicao(_fotos_dir_carregamento(), foto.file_name, foto.file_path)
+    if not caminho:
+        return jsonify({"error": "Arquivo da foto não encontrado."}), 404
+
+    try:
+        return _send_foto_expedicao(caminho, foto.file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar foto de carregamento do romaneio")
+        return jsonify({"error": f"Falha ao baixar foto: {exc}"}), 502
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/foto-carregamento", methods=["GET"])
 @permission_required(PERMISSION)
 def obter_foto_carregamento_romaneio(romaneio_id):
+    """Mantido para compatibilidade com a foto unica legada (tirada antes de
+    este romaneio suportar multiplas fotos de carregamento)."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
@@ -1261,11 +1337,8 @@ def obter_foto_carregamento_romaneio(romaneio_id):
     if not romaneio.foto_carregamento_file_name:
         return jsonify({"error": "Foto de carregamento não encontrada."}), 404
 
-    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "") or os.path.join(
-        current_app.instance_path, "expedicao_romaneio_carregamento"
-    )
     caminho = _resolver_foto_expedicao(
-        fotos_dir, romaneio.foto_carregamento_file_name, romaneio.foto_carregamento_file_path
+        _fotos_dir_carregamento(), romaneio.foto_carregamento_file_name, romaneio.foto_carregamento_file_path
     )
     if not caminho:
         return jsonify({"error": "Arquivo da foto não encontrado."}), 404

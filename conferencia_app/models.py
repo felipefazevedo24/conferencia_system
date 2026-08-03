@@ -2153,6 +2153,26 @@ class ExpedicaoRomaneioExclusao(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+class ExpedicaoRomaneioFotoCarregamento(db.Model):
+    """Fotos do carregamento do romaneio (multiplas, tiradas durante o
+    carregamento do caminhao). Complementa as colunas legadas
+    foto_carregamento_* de ExpedicaoRomaneio, que guardavam so uma foto."""
+
+    __tablename__ = "expedicao_romaneio_foto_carregamento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    romaneio_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_romaneio.id"),
+        nullable=False,
+        index=True,
+    )
+    file_name = db.Column(db.String(260), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_by = db.Column(db.String(100))
+
+
 class PlannerBoard(db.Model):
     __tablename__ = "planner_board"
 

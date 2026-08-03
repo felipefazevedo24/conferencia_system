@@ -274,7 +274,7 @@
 <div class="rom-actions-menu" id="rom-actions-menu"></div>
 
 <!-- Inputs ocultos de captura de foto (carregamento / comprovante FOB) -->
-<input type="file" id="rom-input-foto-carregamento" accept="image/*" style="display:none">
+<input type="file" id="rom-input-foto-carregamento" accept="image/*" multiple style="display:none">
 <input type="file" id="rom-input-comprovante-fob" accept="image/*" capture="environment" style="display:none">
 
 <!-- MODAL DE COMPROVANTES (CIF - um por NF) -->
@@ -828,8 +828,18 @@
         window.open(`/expedicao/conferencia?q=${encodeURIComponent(primeiraNf)}`, "_blank");
     }
 
-    // FOTO DE CARREGAMENTO — captura direto pelo menu de Ações (sem precisar
-    // abrir "Visualizar"). Reaproveita a mesma rota já usada la.
+    // FOTO DE CARREGAMENTO — captura/anexa direto pelo menu de Ações (sem
+    // precisar abrir "Visualizar"). Aceita varias fotos de uma vez (câmera ou
+    // galeria); cada uma vira uma foto nova, o romaneio pode ter varias.
+    function lerComoDataUrl(arquivo) {
+        return new Promise((resolve, reject) => {
+            const leitor = new FileReader();
+            leitor.onload = () => resolve(leitor.result);
+            leitor.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+            leitor.readAsDataURL(arquivo);
+        });
+    }
+
     let romaneioIdFotoCarregamento = null;
     function tirarFotoCarregamento(romaneioId) {
         romaneioIdFotoCarregamento = romaneioId;
@@ -837,22 +847,26 @@
     }
     $("rom-input-foto-carregamento").addEventListener("change", async () => {
         const input = $("rom-input-foto-carregamento");
-        const arquivo = input.files && input.files[0];
+        const arquivos = Array.from(input.files || []);
+        const romaneioId = romaneioIdFotoCarregamento;
         input.value = "";
-        if (!arquivo || !romaneioIdFotoCarregamento) return;
-        const leitor = new FileReader();
-        leitor.onload = async () => {
+        if (!arquivos.length || !romaneioId) return;
+        let salvas = 0;
+        for (const arquivo of arquivos) {
             try {
-                await api(`/api/expedicao/romaneio-fat/${romaneioIdFotoCarregamento}/foto-carregamento`, {
+                const dataUrl = await lerComoDataUrl(arquivo);
+                await api(`/api/expedicao/romaneio-fat/${romaneioId}/foto-carregamento`, {
                     method: "POST",
-                    body: JSON.stringify({ imagem_base64: leitor.result }),
+                    body: JSON.stringify({ imagem_base64: dataUrl }),
                 });
-                toast("Foto de carregamento salva!");
+                salvas++;
             } catch (e) {
                 toast(e.message, "error");
             }
-        };
-        leitor.readAsDataURL(arquivo);
+        }
+        if (salvas) {
+            toast(salvas === 1 ? "Foto de carregamento salva!" : `${salvas} fotos de carregamento salvas!`);
+        }
     });
 
     // COMPROVANTE DE ENTREGA (FOB) — uma foto unica finaliza todas as NFs do romaneio.

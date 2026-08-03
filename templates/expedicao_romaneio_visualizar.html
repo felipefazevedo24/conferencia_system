@@ -314,28 +314,30 @@
             </div>
         </div>
 
-        <!-- FOTO DO CARREGAMENTO -->
+        <!-- FOTOS DO CARREGAMENTO -->
         {% if romaneio.status in ('Pronto', 'Expedido') %}
         <div class="rom-doc-section rom-carregamento-section" style="margin-top: 30px;">
-            <div class="rom-doc-section-title">Foto do Carregamento</div>
-            <div class="rom-assinatura-box" id="rom-carregamento-box">
-                {% if romaneio.foto_carregamento_file_name %}
-                    <img class="rom-assinatura-img" style="max-height: 220px;" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/foto-carregamento?v={{ romaneio.foto_carregamento_uploadado_em }}" alt="Foto do carregamento">
-                    <div class="rom-assinatura-meta">Foto tirada por {{ romaneio.foto_carregamento_uploadado_por }} em {{ romaneio.foto_carregamento_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.foto_carregamento_uploadado_em else '' }}</div>
-                    <div class="rom-assinatura-actions">
-                        <label class="eui-btn eui-btn--ghost eui-btn--sm" style="cursor: pointer;">
-                            <i class="fas fa-camera"></i> Trocar foto
-                            <input type="file" accept="image/*" capture="environment" id="rom-carregamento-input" style="display:none;">
-                        </label>
+            <div class="rom-doc-section-title">Fotos do Carregamento</div>
+            <div class="rom-assinatura-box" id="rom-carregamento-box" style="align-items: stretch;">
+                {% if fotos_carregamento %}
+                    <div class="eui-photos">
+                        {% for foto in fotos_carregamento %}
+                        <div class="eui-photo">
+                            <a href="{{ foto.url }}" target="_blank" rel="noopener noreferrer" title="{{ foto.uploaded_by or '' }}">
+                                <img src="{{ foto.url }}" alt="Foto do carregamento">
+                            </a>
+                        </div>
+                        {% endfor %}
                     </div>
                 {% else %}
-                    <div class="rom-assinatura-canvas-wrap" style="height: 140px; display: flex; align-items: center; justify-content: center;">
-                        <label class="eui-btn eui-btn--primary" style="cursor: pointer;">
-                            <i class="fas fa-camera"></i> Tirar foto do carregamento
-                            <input type="file" accept="image/*" capture="environment" id="rom-carregamento-input" style="display:none;">
-                        </label>
-                    </div>
+                    <div class="eui-caption" style="padding: 20px 0; text-align: center;">Nenhuma foto de carregamento ainda.</div>
                 {% endif %}
+                <div class="rom-assinatura-actions" style="margin-top: 10px;">
+                    <label class="eui-btn eui-btn--primary eui-btn--sm" style="cursor: pointer;">
+                        <i class="fas fa-camera"></i> Adicionar fotos
+                        <input type="file" accept="image/*" multiple id="rom-carregamento-input" style="display:none;">
+                    </label>
+                </div>
                 <div class="rom-assinatura-label">Carregamento</div>
             </div>
         </div>
@@ -432,27 +434,35 @@
         }
     };
 
+    function lerComoDataUrl(arquivo) {
+        return new Promise((resolve, reject) => {
+            const leitor = new FileReader();
+            leitor.onload = () => resolve(leitor.result);
+            leitor.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+            leitor.readAsDataURL(arquivo);
+        });
+    }
+
     const carregamentoInput = document.getElementById("rom-carregamento-input");
     if (carregamentoInput) {
         carregamentoInput.addEventListener("change", async () => {
-            const arquivo = carregamentoInput.files && carregamentoInput.files[0];
-            if (!arquivo) return;
-            const leitor = new FileReader();
-            leitor.onload = async () => {
+            const arquivos = Array.from(carregamentoInput.files || []);
+            if (!arquivos.length) return;
+            for (const arquivo of arquivos) {
                 try {
+                    const dataUrl = await lerComoDataUrl(arquivo);
                     const resp = await fetch(`/api/expedicao/romaneio-fat/${romaneioId}/foto-carregamento`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ imagem_base64: leitor.result }),
+                        body: JSON.stringify({ imagem_base64: dataUrl }),
                     });
                     const data = await resp.json().catch(() => ({}));
                     if (!resp.ok) throw new Error(data.error || "Falha ao salvar foto do carregamento.");
-                    window.location.reload();
                 } catch (e) {
                     alert(e.message);
                 }
-            };
-            leitor.readAsDataURL(arquivo);
+            }
+            window.location.reload();
         });
     }
 })();
