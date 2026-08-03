@@ -7773,6 +7773,19 @@ def conferencia_divergencia_produto():
     return jsonify({"sucesso": True})
 
 
+def _fmt_qtd(valor):
+    """Formata quantidade sem casas decimais desnecessárias (10.0 -> '10')."""
+    if valor is None:
+        return "—"
+    try:
+        f = float(valor)
+    except (TypeError, ValueError):
+        return str(valor)
+    if f == int(f):
+        return str(int(f))
+    return f"{f:.4f}".rstrip("0").rstrip(".")
+
+
 def _timeline_eventos(nota):
     itens = ItemNota.query.filter_by(numero_nota=nota).all()
     eventos = []
@@ -7813,6 +7826,39 @@ def _timeline_eventos(nota):
                     "data": log.data_erro,
                     "tipo": "Divergência",
                     "descricao": f"{log.item_descricao} - usuário {log.usuario_erro}",
+                }
+            )
+
+        # Detalhe da contagem física: cada tentativa que o conferente registrou,
+        # com quantidade esperada x contada, para evidenciar erros e repetições.
+        descricoes_itens = {i.id: (i.descricao or f"Item #{i.id}") for i in itens}
+        tentativas = (
+            LogTentativaConferencia.query.filter_by(numero_nota=nota)
+            .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
+            .all()
+        )
+        for t in tentativas:
+            desc_item = descricoes_itens.get(t.item_id, f"Item #{t.item_id}")
+            unidade = (t.unidade_informada or "").strip()
+            esperada = _fmt_qtd(t.qtd_esperada)
+            digitada = _fmt_qtd(t.qtd_digitada)
+            convertida = _fmt_qtd(t.qtd_convertida)
+            partes = [f"{desc_item}: contou {digitada}"]
+            if unidade:
+                partes[0] += f" {unidade}"
+            if t.qtd_convertida is not None and t.qtd_digitada is not None and abs((t.qtd_convertida or 0) - (t.qtd_digitada or 0)) > 0.0001:
+                partes[0] += f" (= {convertida})"
+            partes.append(f"esperado {esperada}")
+            divergente = str(t.status_item or "").upper() != "OK"
+            if divergente and t.motivo:
+                partes.append(f"motivo: {t.motivo}")
+            corpo = " · ".join(partes)
+            prefixo_tent = f"[Tentativa {t.tentativa_numero}] " if (t.tentativa_numero or 1) > 1 else ""
+            eventos.append(
+                {
+                    "data": t.data,
+                    "tipo": "Divergência de contagem" if divergente else "Contagem",
+                    "descricao": f"{prefixo_tent}{corpo} — conferente {t.usuario or '---'}",
                 }
             )
 
