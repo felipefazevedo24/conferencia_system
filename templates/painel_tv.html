@@ -169,37 +169,40 @@
   /* ---------- Painel de planejamento de tarefas ---------- */
   .plan .icon { background: rgba(167,139,250,.16); color: var(--plan); }
   .plan .accent { color: var(--plan); }
-  .plan-cols {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(clamp(150px,14vw,220px), 1fr));
-    gap: 10px; margin-top: clamp(6px,1vh,12px);
+  .plan-board {
+    flex: 1 1 auto; min-height: 0; margin-top: clamp(8px,1.4vh,16px);
+    display: flex; gap: clamp(8px,1vw,14px); overflow-x: auto; padding-bottom: 4px;
   }
-  .plan-col-card {
+  .plan-kcol {
+    flex: 1 1 0; min-width: clamp(200px,18vw,300px); display: flex; flex-direction: column;
     background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-top: 4px solid var(--plan); border-radius: 12px;
-    padding: clamp(9px,1.2vh,14px) clamp(11px,1.4vh,16px);
+    border-top: 4px solid var(--plan); border-radius: 14px; min-height: 0;
   }
-  .plan-col-card .pc-title {
-    display: flex; align-items: center; gap: 8px; font-size: clamp(12px,1.5vh,16px);
-    font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .plan-kcol.is-done { border-top-color: var(--ok); }
+  .plan-khead {
+    display: flex; align-items: center; gap: 8px; padding: clamp(9px,1.2vh,14px) clamp(11px,1.4vh,16px);
+    border-bottom: 1px solid var(--border);
   }
-  .plan-col-card .pc-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-  .plan-col-card .pc-num { font-size: clamp(22px,3.2vh,38px); font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; }
-  .plan-col-card .pc-atr { font-size: clamp(9px,1.1vh,12px); color: #f87171; text-transform: uppercase; letter-spacing: .4px; }
-  .plan-col-card.is-done { border-top-color: var(--ok); }
-  .plan-col-card.is-done .pc-num { color: var(--ok); }
-
-  .plan-item {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: rgba(255,255,255,.035); border: 1px solid var(--border);
-    border-left: 4px solid #f87171; border-radius: 12px;
-    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px);
+  .plan-khead .kc-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .plan-khead .kc-title { font-size: clamp(12px,1.5vh,17px); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+  .plan-khead .kc-count { font-size: clamp(11px,1.3vh,15px); font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .plan-klist { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: clamp(7px,1vh,11px); display: flex; flex-direction: column; gap: 7px; }
+  .plan-task {
+    background: rgba(255,255,255,.04); border: 1px solid var(--border);
+    border-left: 4px solid var(--plan); border-radius: 10px;
+    padding: clamp(7px,1vh,11px) clamp(9px,1.2vh,13px);
   }
-  .plan-item .pi-main { min-width: 0; }
-  .plan-item .pi-main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-  .plan-item .pi-main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .plan-item .pi-dias { text-align: right; white-space: nowrap; }
-  .plan-item .pi-dias b { font-size: clamp(14px,1.9vh,20px); font-weight: 800; color: #f87171; font-variant-numeric: tabular-nums; }
-  .plan-item .pi-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .plan-task.atrasada { border-left-color: #f87171; }
+  .plan-task .pt-title { font-size: clamp(12px,1.5vh,17px); font-weight: 800; line-height: 1.25; }
+  .plan-task .pt-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 5px; }
+  .plan-task .pt-chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: clamp(9px,1.1vh,12px);
+    font-weight: 700; color: var(--muted); background: rgba(255,255,255,.05);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
+  }
+  .plan-task .pt-chip.prazo.atrasada { color: #f87171; border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.12); }
+  .plan-task .pt-chip.prio-Alta, .plan-task .pt-chip.prio-Critica { color: #fbbf24; border-color: rgba(251,191,36,.5); }
+  .plan-klist .empty, .plan-board .empty { color: var(--muted); font-size: clamp(11px,1.3vh,14px); padding: 10px; text-align: center; }
 
   .panel {
     background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
@@ -514,15 +517,7 @@
           <h2>Planejamento de Tarefas</h2>
           <div class="tag" id="plan-tag">—</div>
         </div>
-        <div class="hero">
-          <div class="label">Tarefas em <span class="accent">andamento</span></div>
-          <div class="num accent" id="plan-andamento">0</div>
-        </div>
-        <div class="plan-cols" id="plan-cols"></div>
-        <div class="feed" style="margin-top:clamp(10px,1.6vh,20px);">
-          <div class="feed-title"><span>Tarefas atrasadas</span><span id="plan-atr-count"></span></div>
-          <div class="oc-grid" id="plan-atr-list"><div class="empty">Carregando…</div></div>
-        </div>
+        <div class="plan-board" id="plan-board"><div class="empty">Carregando…</div></div>
       </section>
     </section>
     {% endif %}
@@ -1096,46 +1091,51 @@
 
   let planAt = 0;
   async function pollPlanejamento() {
-    if (Date.now() - planAt < 30000 && $("plan-cols")._sig) return;
+    if (Date.now() - planAt < 30000 && $("plan-board")._sig) return;
     planAt = Date.now();
     try {
       const r = await fetch("/api/painel/planejamento", { cache: "no-store" });
       const d = await r.json();
       const k = d.kpis || {};
-      setNum("plan-andamento", k.andamento || 0);
-      $("plan-tag").textContent = (k.total || 0) + " tarefas";
+      const atrTag = k.atrasadas ? " · " + k.atrasadas + " atrasada(s)" : "";
+      $("plan-tag").textContent = (k.total || 0) + " tarefas" + atrTag;
       const cols = d.colunas || [];
       const sig = JSON.stringify(cols);
-      if ($("plan-cols")._sig !== sig) {
-        $("plan-cols")._sig = sig;
-        $("plan-cols").innerHTML = cols.length
+      if ($("plan-board")._sig !== sig) {
+        $("plan-board")._sig = sig;
+        $("plan-board").innerHTML = cols.length
           ? cols.map(buildPlanCol).join("")
           : '<div class="empty">Sem colunas.</div>';
       }
-      const atr = d.atrasadas || [];
-      $("plan-atr-count").textContent = atr.length ? atr.length + " atrasada(s)" : "";
-      renderList("plan-atr-list", atr, buildPlanItem, "Nenhuma tarefa atrasada");
     } catch (e) {
-      $("plan-cols").innerHTML = '<div class="empty">Indisponível</div>';
-      renderList("plan-atr-list", [], buildPlanItem, "Indisponível");
+      $("plan-board")._sig = "";
+      $("plan-board").innerHTML = '<div class="empty">Indisponível</div>';
     }
   }
 
   function buildPlanCol(c) {
-    const atr = c.atrasadas ? '<div class="pc-atr">' + c.atrasadas + " atrasada(s)</div>" : "";
-    return '<div class="plan-col-card' + (c.is_done ? " is-done" : "") + '">' +
-      '<div class="pc-title"><span class="pc-dot" style="background:' + esc(c.color || "#a78bfa") + '"></span>' + esc(c.titulo) + "</div>" +
-      '<div class="pc-num">' + (c.total || 0) + "</div>" + atr + "</div>";
+    const color = esc(c.color || "#a78bfa");
+    const cards = (c.cards || []).map((t) => buildPlanTask(t, color)).join("") ||
+      '<div class="empty">Sem tarefas</div>';
+    return '<div class="plan-kcol' + (c.is_done ? " is-done" : "") + '">' +
+      '<div class="plan-khead"><span class="kc-dot" style="background:' + color + '"></span>' +
+      '<span class="kc-title">' + esc(c.titulo) + "</span>" +
+      '<span class="kc-count">' + (c.total || 0) + "</span></div>" +
+      '<div class="plan-klist">' + cards + "</div></div>";
   }
 
-  function buildPlanItem(it) {
-    const dias = it.dias || 0;
-    const diasTxt = dias === 1 ? "1 dia" : dias + " dias";
-    const resp = it.responsavel ? " · " + esc(it.responsavel) : "";
-    return '<div class="plan-item">' +
-      '<div class="pi-main"><b>' + esc(it.titulo) + "</b><span>" + esc(it.coluna || "—") + resp + "</span></div>" +
-      '<div class="pi-dias"><b>' + esc(it.prazo || "—") + "</b><span>há " + diasTxt + "</span></div>" +
-      "</div>";
+  function buildPlanTask(t, color) {
+    const atr = t.atrasada ? " atrasada" : "";
+    const chips = [];
+    if (t.responsavel) chips.push('<span class="pt-chip"><i class="fas fa-user"></i>' + esc(t.responsavel) + "</span>");
+    if (t.prioridade) chips.push('<span class="pt-chip prio-' + esc(t.prioridade) + '"><i class="fas fa-flag"></i>' + esc(t.prioridade) + "</span>");
+    if (t.prazo) {
+      const dias = t.dias_atraso ? " (+" + t.dias_atraso + "d)" : "";
+      chips.push('<span class="pt-chip prazo' + atr + '"><i class="fas fa-calendar"></i>' + esc(t.prazo) + dias + "</span>");
+    }
+    const meta = chips.length ? '<div class="pt-meta">' + chips.join("") + "</div>" : "";
+    return '<div class="plan-task' + atr + '" style="border-left-color:' + (t.atrasada ? "#f87171" : color) + '">' +
+      '<div class="pt-title">' + esc(t.titulo) + "</div>" + meta + "</div>";
   }
 
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {

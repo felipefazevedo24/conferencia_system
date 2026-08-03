@@ -460,23 +460,35 @@ def _coletar_planejamento() -> dict:
         n = len(cards)
         total += n
         col_atrasadas = 0
+        cards_data = []
         if col.is_done:
             concluidas += n
         else:
             andamento += n
-            for c in cards:
-                if c.prazo and c.prazo < hoje:
-                    col_atrasadas += 1
-                    lista_atrasadas.append(
-                        {
-                            "titulo": c.titulo,
-                            "coluna": col.titulo,
-                            "responsavel": c.responsavel or "",
-                            "prioridade": c.prioridade or "",
-                            "prazo": c.prazo.strftime("%d/%m") if c.prazo else "",
-                            "dias": (hoje - c.prazo).days if c.prazo else 0,
-                        }
-                    )
+        for c in cards:
+            atrasada = bool(c.prazo and c.prazo < hoje and not col.is_done)
+            if atrasada:
+                col_atrasadas += 1
+            card_info = {
+                "titulo": c.titulo,
+                "responsavel": c.responsavel or "",
+                "prioridade": c.prioridade or "",
+                "prazo": c.prazo.strftime("%d/%m") if c.prazo else "",
+                "atrasada": atrasada,
+                "dias_atraso": (hoje - c.prazo).days if atrasada else 0,
+            }
+            cards_data.append(card_info)
+            if atrasada:
+                lista_atrasadas.append(
+                    {
+                        "titulo": c.titulo,
+                        "coluna": col.titulo,
+                        "responsavel": c.responsavel or "",
+                        "prioridade": c.prioridade or "",
+                        "prazo": c.prazo.strftime("%d/%m") if c.prazo else "",
+                        "dias": (hoje - c.prazo).days if c.prazo else 0,
+                    }
+                )
         atrasadas += col_atrasadas
         colunas_data.append(
             {
@@ -485,6 +497,7 @@ def _coletar_planejamento() -> dict:
                 "is_done": bool(col.is_done),
                 "total": n,
                 "atrasadas": col_atrasadas,
+                "cards": cards_data[:30],
             }
         )
 
