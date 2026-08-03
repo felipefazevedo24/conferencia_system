@@ -334,6 +334,29 @@
         .btn-secondary { background: #e2e8f0; color: #475569; }
         .btn-sap:hover { transform: translateY(-1px); filter: brightness(1.02); }
 
+        /* === MENU DE ACOES (3 pontinhos) da conferencia === */
+        .conf-menu { position: relative; display: inline-block; }
+        .conf-menu__btn { background: #fff; color: #475569; border: 1px solid #cbd5e1; padding: 12px 15px; box-shadow: 0 8px 16px rgba(27,49,71,0.06); }
+        .conf-menu__btn:hover { background: #f1f5f9; }
+        .conf-menu.open .conf-menu__btn { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+        .conf-menu__list {
+            position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 60;
+            min-width: 260px; padding: 6px; background: #fff;
+            border: 1px solid #e2e8f0; border-radius: 14px;
+            box-shadow: 0 20px 45px rgba(15,23,42,0.18);
+            display: none;
+        }
+        .conf-menu.open .conf-menu__list { display: block; animation: conf-menu-in .14s ease; }
+        @keyframes conf-menu-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .conf-menu__item {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            padding: 11px 12px; border: none; background: transparent; border-radius: 10px;
+            font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; text-align: left;
+            transition: background .15s ease;
+        }
+        .conf-menu__item:hover { background: #f1f5f9; }
+        .conf-menu__item i { width: 18px; text-align: center; }
+
         .modal-sap { border-radius: 24px; overflow: hidden; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
         /* Fundo do modal transparente (sem aquele wash branco atras do card) */
         .modal-overlay { background: transparent !important; backdrop-filter: none !important; }
@@ -706,17 +729,6 @@
         <div class="conf-panel">
             <div class="conf-header">
                 <h3 id="n-atual">EXECUÇÃO DE CONFERÊNCIA FÍSICA</h3>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button class="btn-sap" style="background:#b45309; color:#fff;" onclick="abrirModalDivergenciaProduto()">
-                        <i class="fas fa-triangle-exclamation"></i> Divergência de produto
-                    </button>
-                    <button class="btn-sap btn-warning" onclick="abrirModalSemConferencia()">
-                        <i class="fas fa-forward"></i> Não passou pela conferência
-                    </button>
-                    <button class="btn-sap btn-danger" onclick="abrirModalDevolucao()">
-                        <i class="fas fa-undo-alt"></i> Recusar Mercadoria
-                    </button>
-                </div>
             </div>
 
             <div class="conf-progress">
@@ -745,7 +757,23 @@
                 </table>
             </div>
 
-            <div style="padding: 20px 25px; display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; border-top: 1px solid #edf2f7;">
+            <div style="padding: 20px 25px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; background: #f8fafc; border-top: 1px solid #edf2f7;">
+                <div class="conf-menu" id="conf-menu">
+                    <button type="button" class="btn-sap conf-menu__btn" onclick="toggleConfMenu(event)" aria-haspopup="true" aria-expanded="false" title="Mais ações">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <div class="conf-menu__list" id="conf-menu-list" role="menu">
+                        <button type="button" class="conf-menu__item" role="menuitem" onclick="fecharConfMenu(); abrirModalDivergenciaProduto();">
+                            <i class="fas fa-triangle-exclamation" style="color:#b45309;"></i> Divergência de produto
+                        </button>
+                        <button type="button" class="conf-menu__item" role="menuitem" onclick="fecharConfMenu(); abrirModalSemConferencia();">
+                            <i class="fas fa-forward" style="color:#d97706;"></i> Não passou pela conferência
+                        </button>
+                        <button type="button" class="conf-menu__item" role="menuitem" onclick="fecharConfMenu(); abrirModalDevolucao();">
+                            <i class="fas fa-undo-alt" style="color:#d44d45;"></i> Recusar Mercadoria
+                        </button>
+                    </div>
+                </div>
                 <button class="btn-sap" style="background: #e2e8f0; color: #475569;" onclick="cancelarConferencia()">Sair sem salvar</button>
                 <button class="btn-sap btn-success" id="btn-finalizar" onclick="validar()" disabled style="padding: 12px 30px; font-size: 14px;">
                     <i class="fas fa-check-double"></i> Validar Conferência
@@ -1739,6 +1767,29 @@
         document.getElementById('btn-finalizar').disabled = Array.from(inputs).some(i => i.value === "");
         atualizarProgressoConferencia();
     }
+
+    function toggleConfMenu(e) {
+        if (e) e.stopPropagation();
+        const menu = document.getElementById('conf-menu');
+        if (!menu) return;
+        const aberto = menu.classList.toggle('open');
+        menu.querySelector('.conf-menu__btn')?.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    }
+
+    function fecharConfMenu() {
+        const menu = document.getElementById('conf-menu');
+        if (!menu) return;
+        menu.classList.remove('open');
+        menu.querySelector('.conf-menu__btn')?.setAttribute('aria-expanded', 'false');
+    }
+
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('conf-menu');
+        if (menu && menu.classList.contains('open') && !menu.contains(e.target)) fecharConfMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') fecharConfMenu();
+    });
 
     function abrirModalDevolucao() {
         if (!notaSel) {
