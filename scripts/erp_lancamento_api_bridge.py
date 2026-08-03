@@ -1101,11 +1101,12 @@ def _registrar_facilities_na_bridge(app: Flask) -> None:
     # com schema desatualizado, o bootstrap nao deve derrubar a inicializacao.
     try:
         initialize_database(app)
-    except Exception:
+    except Exception as exc:
         app.logger.warning(
-            "initialize_database ignorado na bridge (banco da aplicacao indisponivel "
-            "ou com schema desatualizado). A bridge ERP/Facilities continua ativa.",
-            exc_info=True,
+            "initialize_database ignorado na bridge (%s: %s). "
+            "A bridge ERP/Facilities usa Postgres direto e continua ativa.",
+            type(exc).__name__,
+            str(exc).splitlines()[0] if str(exc) else "sem detalhe",
         )
 
 
