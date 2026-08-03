@@ -1096,7 +1096,17 @@ def _registrar_facilities_na_bridge(app: Flask) -> None:
             asset_version = str(int(time.time()))
         return {"asset_version": asset_version}
 
-    initialize_database(app)
+    # A bridge (VM ERP + ngrok) usa Postgres direto para ERP/Facilities e NAO
+    # depende do banco da aplicacao (MySQL). Se esse banco estiver ausente ou
+    # com schema desatualizado, o bootstrap nao deve derrubar a inicializacao.
+    try:
+        initialize_database(app)
+    except Exception:
+        app.logger.warning(
+            "initialize_database ignorado na bridge (banco da aplicacao indisponivel "
+            "ou com schema desatualizado). A bridge ERP/Facilities continua ativa.",
+            exc_info=True,
+        )
 
 
 def create_app() -> Flask:
