@@ -251,6 +251,10 @@ def roles_required(*roles):
         @wraps(fn)
         @login_required
         def decorated_view(*args, **kwargs):
+            if is_admin_session():
+                _registrar_acesso_admin(path=request.path, method=request.method)
+                return fn(*args, **kwargs)
+
             if session.get("role") not in roles:
                 if request.path.startswith("/api") or request.path == "/validar":
                     return jsonify({"error": "Acesso negado", "msg": f"Requer role: {roles}"}), 403
@@ -271,6 +275,10 @@ def permission_required(permission_key: str, *roles):
         @login_required
         def decorated_view(*args, **kwargs):
             is_api = request.path.startswith("/api") or request.path == "/validar"
+            if is_admin_session():
+                _registrar_acesso_admin(path=request.path, method=request.method)
+                return fn(*args, **kwargs)
+
             if roles and session.get("role") not in roles:
                 if is_api:
                     return jsonify({"error": "Acesso negado"}), 403
@@ -301,6 +309,10 @@ def permission_required_any(*permission_keys: str):
         @login_required
         def decorated_view(*args, **kwargs):
             is_api = request.path.startswith("/api") or request.path == "/validar"
+            if is_admin_session():
+                _registrar_acesso_admin(path=request.path, method=request.method)
+                return fn(*args, **kwargs)
+
             if not any(has_permission(key) for key in permission_keys):
                 if is_api:
                     return jsonify({"error": "Acesso negado", "msg": f"Permissão necessária: {permission_keys}"}), 403
