@@ -146,6 +146,16 @@
 
     .plan-card.dragging { opacity: .45; transform: rotate(1deg); }
 
+    .plan-grip { cursor: grab; color: #9db2c8; font-size: 12px; }
+    .plan-grip:active { cursor: grabbing; }
+    .plan-col-head { cursor: grab; }
+    .plan-col-head:active { cursor: grabbing; }
+    .plan-col.col-dragging { opacity: .5; }
+    .plan-col.col-drop-before { box-shadow: -3px 0 0 0 #0f62c9; }
+    .plan-col.col-drop-after { box-shadow: 3px 0 0 0 #0f62c9; }
+    .plan-card.card-drop-before { box-shadow: 0 -3px 0 -1px #0f62c9; }
+    .plan-cards.cards-drop-end { box-shadow: inset 0 -4px 0 -1px #0f62c9; }
+
     .plan-card-title { margin: 0; font-size: 14px; line-height: 1.3; color: #0f2d4b; font-weight: 800; }
 
     .plan-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
@@ -572,6 +582,7 @@ let board = null;
 let editingTaskId = null;
 let editingColumnId = null;
 let draggingCardId = null;
+let draggingColumnId = null;
 let checklistDraft = [];
 let selectedLabelIds = [];
 let confirmResolver = null;
@@ -659,9 +670,10 @@ function renderBoard() {
             : '<div class="plan-empty">Nenhuma tarefa nesta coluna.</div>';
 
         return `
-            <section class="plan-col" data-col-id="${col.id}" ondragover="onColumnDragOver(event)" ondragleave="onColumnDragLeave(event)" ondrop="onColumnDrop(event, ${col.id})">
-                <header class="plan-col-head">
+            <section class="plan-col" data-col-id="${col.id}" ondragover="onColOver(event, ${col.id})" ondragleave="onColLeave(event)" ondrop="onColDrop(event, ${col.id})">
+                <header class="plan-col-head" draggable="true" ondragstart="onColumnDragStart(event, ${col.id})" ondragend="onColumnDragEnd(event)">
                     <div class="plan-col-title">
+                        <span class="plan-grip" title="Arraste para reordenar a coluna"><i class="fas fa-grip-vertical"></i></span>
                         <span class="plan-dot" style="background:${esc(col.color || '#0f62c9')}"></span>
                         <span>${esc(col.titulo)}</span>
                     </div>
@@ -1095,43 +1107,141 @@ async function removeLabel(labelId) {
 
 function onCardDragStart(event, cardId) {
     draggingCardId = cardId;
+    draggingColumnId = null;
     event.currentTarget.classList.add("dragging");
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", String(cardId));
+    event.dataTransfer.setData("text/plain", "card:" + cardId);
+    event.stopPropagation();
 }
 
 function onCardDragEnd(event) {
     event.currentTarget.classList.remove("dragging");
     draggingCardId = null;
-    document.querySelectorAll(".plan-col").forEach(el => el.classList.remove("drag-over"));
+    clearDragCues();
 }
 
-function onColumnDragOver(event) {
+function onColumnDragStart(event, columnId) {
+    draggingColumnId = columnId;
+    draggingCardId = null;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", "col:" + columnId);
+    const section = event.currentTarget.closest(".plan-col");
+    if (section) section.classList.add("col-dragging");
+}
+
+function onColumnDragEnd() {
+    draggingColumnId = null;
+    clearDragCues();
+}
+
+function clearDragCues() {
+    document.querySelectorAll(".plan-col").forEach(el =>
+        el.classList.remove("drag-over", "col-drop-before", "col-drop-after", "col-dragging"));
+    document.querySelectorAll(".plan-card").forEach(el => el.classList.remove("card-drop-before"));
+    document.querySelectorAll(".plan-cards").forEach(el => el.classList.remove("cards-drop-end"));
+}
+
+function computeCardIndex(section, clientY) {
+    const container = section.querySelector(".plan-cards");
+    const cards = container ? [...container.querySelectorAll(".plan-card:not(.dragging)")] : [];
+    let index = cards.length;
+    for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) { index = i; break; }
+    }
+    return { index, cards, container };
+}
+
+function showCardInsertionCue(section, clientY) {
+    const { index, cards, container } = computeCardIndex(section, clientY);
+    cards.forEach(c => c.classList.remove("card-drop-before"));
+    if (container) container.classList.remove("cards-drop-end");
+    if (index < cards.length) {
+        cards[index].classList.add("card-drop-before");
+    } else if (container) {
+        container.classList.add("cards-drop-end");
+    }
+}
+
+function onColOver(event, columnId) {
     event.preventDefault();
-    event.currentTarget.classList.add("drag-over");
+    const section = event.currentTarget;
+    if (draggingColumnId) {
+        document.querySelectorAll(".plan-col").forEach(el =>
+            el.classList.remove("col-drop-before", "col-drop-after"));
+        if (draggingColumnId !== columnId) {
+            const rect = section.getBoundingClientRect();
+            const before = event.clientX < rect.left + rect.width / 2;
+            section.classList.add(before ? "col-drop-before" : "col-drop-after");
+        }
+    } else {
+        section.classList.add("drag-over");
+        showCardInsertionCue(section, event.clientY);
+    }
 }
 
-function onColumnDragLeave(event) {
-    event.currentTarget.classList.remove("drag-over");
+function onColLeave(event) {
+    const section = event.currentTarget;
+    if (section.contains(event.relatedTarget)) return;
+    section.classList.remove("drag-over", "col-drop-before", "col-drop-after");
+    section.querySelectorAll(".plan-card").forEach(el => el.classList.remove("card-drop-before"));
+    const container = section.querySelector(".plan-cards");
+    if (container) container.classList.remove("cards-drop-end");
 }
 
-async function onColumnDrop(event, columnId) {
+async function onColDrop(event, columnId) {
     event.preventDefault();
-    event.currentTarget.classList.remove("drag-over");
-    const cardId = Number(event.dataTransfer.getData("text/plain") || draggingCardId || 0);
+    const section = event.currentTarget;
+
+    if (draggingColumnId) {
+        const draggedId = draggingColumnId;
+        const rect = section.getBoundingClientRect();
+        const before = event.clientX < rect.left + rect.width / 2;
+        clearDragCues();
+        if (draggedId && draggedId !== columnId) {
+            await reorderColumns(draggedId, columnId, before);
+        }
+        return;
+    }
+
+    const { index } = computeCardIndex(section, event.clientY);
+    const cardId = draggingCardId || parseCardId(event.dataTransfer.getData("text/plain"));
+    clearDragCues();
     if (!cardId || !columnId) return;
-
-    const colEl = document.getElementById(`cards-col-${columnId}`);
-    const pos = colEl ? colEl.querySelectorAll(".plan-card").length : 0;
 
     try {
         await api(`/api/planejamento/cards/${cardId}/move`, {
             method: "POST",
-            body: JSON.stringify({ to_column_id: columnId, position: pos }),
+            body: JSON.stringify({ to_column_id: columnId, position: index }),
         });
         await loadBoard();
     } catch (err) {
         notify(err.message || "Falha ao mover card.", "error");
+    }
+}
+
+function parseCardId(data) {
+    const m = String(data || "").match(/^card:(\d+)$/);
+    return m ? Number(m[1]) : 0;
+}
+
+async function reorderColumns(draggedId, targetId, before) {
+    const ids = (board.columns || []).map(c => c.id);
+    const from = ids.indexOf(draggedId);
+    if (from === -1) return;
+    ids.splice(from, 1);
+    const targetIdx = ids.indexOf(targetId);
+    if (targetIdx === -1) return;
+    ids.splice(before ? targetIdx : targetIdx + 1, 0, draggedId);
+
+    try {
+        await api("/api/planejamento/columns/reorder", {
+            method: "POST",
+            body: JSON.stringify({ column_ids: ids }),
+        });
+        await loadBoard();
+    } catch (err) {
+        notify(err.message || "Falha ao reordenar colunas.", "error");
     }
 }
 
