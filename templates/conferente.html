@@ -595,9 +595,9 @@
         .rc-table .rc-nf { font-weight: 800; color: #14324d; }
         .rc-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted, #64748b); font-weight: 600; }
         .eui-btn--warning { background: var(--eui-warning, #d97706); border-color: var(--eui-warning, #d97706); color: #fff; }
-        .rc-modal-hist { position: fixed; inset: 0; z-index: 3400; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .28); backdrop-filter: blur(1px); padding: 20px; }
+        .rc-modal-hist { position: fixed; inset: 0; z-index: 3400; display: none; align-items: center; justify-content: center; background: transparent; padding: 20px; }
         .rc-modal-hist.open { display: flex; }
-        .rc-modal-hist__box { background: #fff; border-radius: 16px; width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+        .rc-modal-hist__box { background: #fff; border-radius: 16px; width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.28), 0 0 0 1px rgba(15,23,42,.08); }
         .rc-modal-hist__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f3; }
         .rc-modal-hist__head h3 { margin: 0; font-size: 16px; font-weight: 800; color: #14324d; }
         .rc-modal-hist__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #6b7280; }
@@ -1300,7 +1300,7 @@
             const lista = await r.json();
             box.innerHTML = (!lista || !lista.length)
                 ? '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>'
-                : lista.slice().reverse().map(e => {
+                : lista.map(e => {
                     const cat = _rcCategoria(e.tipo);
                     return `<div class="rc-hist-item ${cat.item}">
                         <div class="rc-hist-head-row">
@@ -1337,8 +1337,8 @@
             box.innerHTML = '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>';
             return;
         }
-        // Mais recente primeiro.
-        box.innerHTML = lista.slice().reverse().map(e => {
+        // Ordem cronológica (mais antigo primeiro).
+        box.innerHTML = lista.map(e => {
             const cat = _rcCategoria(e.tipo);
             return `<div class="rc-hist-item ${cat.item}">
                 <div class="rc-hist-head-row">
