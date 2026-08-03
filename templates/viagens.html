@@ -381,6 +381,23 @@
     .doc-filters select, .doc-filters input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 10px !important; font-size: 13px !important; }
     .doc-modal { border-radius: 12px !important; box-shadow: 0 20px 50px rgba(15,23,42,0.18) !important; }
     .doc-modal-head { background: #fff !important; border-bottom: 1px solid #eef2f7 !important; color: #0f172a !important; }
+
+    /* === Hub Solicitações: badge de origem automática === */
+    .rt-badge.b-cif{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(13,148,136,.08));color:#0f766e;border:1px solid rgba(13,148,136,.25)}
+
+    /* === Tabela de solicitações responsiva (vira cards no celular/tablet) === */
+    @media (max-width: 860px){
+        #erpTable thead{display:none}
+        #erpTable, #erpTable tbody, #erpTable tr, #erpTable td{display:block;width:100%}
+        #erpTable tr{border:1px solid #e2e8f0;border-radius:14px;margin-bottom:12px;padding:10px 12px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.05)}
+        #erpTable td{border:none;padding:6px 4px;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:right}
+        #erpTable td::before{content:attr(data-label);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:left;flex:0 0 42%}
+        #erpTable td[data-label="Ações"], #erpTable td[data-label="Rota"]{justify-content:flex-end}
+        #erpTable td[data-label="Ações"]::before, #erpTable td[data-label="Rota"]::before{content:''}
+        #erpTable td:empty{display:none}
+        .rt-filters{width:100%}
+        .rt-filters .form-control, .rt-filters .form-select{max-width:none !important;flex:1 1 140px}
+    }
 </style>
 {% endblock %}
 
@@ -826,8 +843,9 @@
                 <p class="rt-copy">Gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas.</p>
             </div>
             <div class="rt-actions">
+                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<button class="btn btn-primary" type="button" onclick="openNovaSolicitacao()"><i class="fas fa-plus"></i> Nova solicitação</button>{% endif %}
                 <a class="btn" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
-                <button class="btn btn-primary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
+                <button class="btn btn-outline-secondary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
             </div>
         </div>
     </section>
@@ -841,6 +859,7 @@
                 <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option><option value="AVULSA">Avulsa</option></select>
                 <select id="boardStatus" class="form-select" style="max-width:170px"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Alocada">Alocada</option><option value="EmAndamento">Em andamento</option><option value="EmRota">Em rota</option><option value="Concluida">Concluída</option></select>
                 <select id="boardPrioridade" class="form-select" style="max-width:150px"><option value="">Prioridade</option><option value="Critica">Crítica</option><option value="Alta">Alta</option><option value="Media">Média</option><option value="Baixa">Baixa</option></select>
+                <select id="boardOrigem" class="form-select" style="max-width:170px" onchange="renderTable(rtState.allCards||[])"><option value="">Todas as origens</option><option value="AutoCIF">Automático (CIF)</option><option value="Manual">Manual</option></select>
                 <button class="btn btn-outline-secondary" type="button" onclick="loadDashboard()"><i class="fas fa-filter"></i></button>
             </div>
         </div>
@@ -911,6 +930,21 @@
 <div class="modal fade" id="alocarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Alocar rota</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="alocarForm"><div class="modal-body"><input type="hidden" id="alocarSolicitacaoId"><div class="mb-3"><label class="form-label">Departamento solicitante <span class="text-danger">*</span></label><select id="alocarDepartamento" class="form-select" required><option value="">Selecione o departamento...</option><option value="COMPRAS">COMPRAS</option><option value="ASSISTÊNCIA TÉCNICA">ASSISTÊNCIA TÉCNICA</option><option value="ENGENHARIA/PCP">ENGENHARIA/PCP</option><option value="LOGÍSTICA">LOGÍSTICA</option><option value="FACILITIES">FACILITIES</option></select></div><div class="mb-3"><label class="form-label">Veículo</label><select id="alocarVeiculo" class="form-select"></select></div><div class="mb-3"><label class="form-label">Motorista</label><select id="alocarMotorista" class="form-select"><option value="">Sem motorista definido</option></select></div><div class="mb-3"><label class="form-label">Saída planejada</label><input id="alocarSaida" type="datetime-local" class="form-control"></div><div><label class="form-label">Observações</label><textarea id="alocarObservacao" class="form-control" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
 <div class="modal fade" id="cancelarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="cancelarTitulo">Solicitar cancelamento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="cancelarForm"><div class="modal-body"><input type="hidden" id="cancelarSolicitacaoId"><label class="form-label">Motivo</label><textarea id="cancelarMotivo" class="form-control" rows="4" required></textarea></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-danger" id="cancelarSubmit" type="submit">Solicitar cancelamento</button></div></form></div></div></div>
 <div class="modal fade" id="motoristaModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Editar motorista</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="motoristaForm"><div class="modal-body"><input type="hidden" id="motoristaId"><div class="mb-3"><label class="form-label">Nome</label><input id="motoristaNome" class="form-control" required></div><div class="mb-3"><label class="form-label">Telefone</label><input id="motoristaTelefone" class="form-control"></div><div class="mb-3"><label class="form-label">CNH</label><input id="motoristaCnh" class="form-control"></div><div class="mb-3"><label class="form-label">Observações</label><textarea id="motoristaObservacoes" class="form-control" rows="3"></textarea></div><div class="form-check"><input id="motoristaAtivo" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="motoristaAtivo">Motorista ativo</label></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Fechar</button><button class="btn btn-primary" type="submit">Salvar</button></div></form></div></div></div>
+
+<div class="modal fade" id="novaSolicitacaoModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title"><i class="fas fa-clipboard-list" style="margin-right:8px;color:var(--frota-amber)"></i>Nova solicitação de transporte</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form id="novaSolicitacaoForm"><div class="modal-body">
+    <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Tipo <span class="text-danger">*</span></label><select id="nsTipo" class="form-select" required onchange="nsToggleTipo()"><option value="COLETA">Coleta (buscar no fornecedor)</option><option value="ENTREGA">Entrega (levar ao cliente)</option><option value="AVULSA">Avulsa (uso interno do veículo)</option></select></div>
+        <div class="col-md-6"><label class="form-label">Prioridade</label><select id="nsPrioridade" class="form-select"><option value="Media">Média</option><option value="Alta">Alta</option><option value="Critica">Crítica</option><option value="Baixa">Baixa</option></select></div>
+        <div class="col-md-6" id="nsBoxOc"><label class="form-label">Número da OC</label><input id="nsOc" class="form-control" placeholder="Ex.: 12345"><small class="text-muted">Preencha para o sistema buscar fornecedor e itens automaticamente.</small></div>
+        <div class="col-md-6" id="nsBoxNf" style="display:none"><label class="form-label">Número da NF</label><input id="nsNf" class="form-control" placeholder="Ex.: 987654"><small class="text-muted">Preencha para o sistema buscar cliente e itens automaticamente.</small></div>
+        <div class="col-md-6" id="nsBoxRef" style="display:none"><label class="form-label">Referência</label><input id="nsRef" class="form-control" placeholder="Identificação do uso avulso"></div>
+        <div class="col-12"><label class="form-label">Local / endereço <span class="text-muted">(opcional se informar OC/NF)</span></label><input id="nsLocal" class="form-control" placeholder="Ex.: Rua Exemplo, 100 - Cidade/UF"></div>
+        <div class="col-md-6"><label class="form-label">Data desejada</label><input id="nsData" type="datetime-local" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Prazo limite</label><input id="nsPrazo" type="datetime-local" class="form-control"></div>
+        <div class="col-12"><label class="form-label">Observações</label><textarea id="nsObs" class="form-control" rows="3" placeholder="Detalhes que ajudem a logística (janela de horário, contato, volumes...)"></textarea></div>
+    </div>
+    <div id="nsState" class="rt-state" style="display:none;margin-top:12px"></div>
+</div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" id="nsSubmit" type="submit"><i class="fas fa-paper-plane"></i> Enviar solicitação</button></div></form></div></div></div>
 
 <script>
 // -------------------- util
@@ -2054,7 +2088,13 @@ function sortCards(cards){
 }
 
 function renderTable(cards){
-    const filtered=cards.filter(filterTab);
+    const origem=(document.getElementById('boardOrigem')?.value)||'';
+    const filtered=cards.filter(filterTab).filter(c=>{
+        if(!origem)return true;
+        if(origem==='AutoCIF')return c.origem_documento==='AutoCIF';
+        if(origem==='Manual')return c.origem_documento!=='AutoCIF';
+        return true;
+    });
     const sorted=sortCards(filtered);
     const total=sorted.length;
     const pages=Math.max(1,Math.ceil(total/rtState.perPage));
@@ -2068,20 +2108,20 @@ function renderTable(cards){
         const canConcluir=c.status==='EmRota'||c.status==='EmAndamento'||c.status==='Alocada';
         const st=statusOperacional(c);
         return `<tr onclick="openDetalhe(${c.id})">
-            <td><strong>${c.codigo}</strong></td>
-            <td><span class="rt-badge b-blue">${c.tipo_label}</span></td>
-            <td><span class="rt-badge ${st.cls}">${st.label}</span>${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
-            <td><span class="rt-badge ${rtBadge('priority',c.prioridade)}">${c.prioridade_label}</span></td>
-            <td title="${c.parceiro_razao_social||''}">${c.parceiro_nome||'---'}</td>
-            <td>${c.documento_tipo} ${c.documento_numero||'---'}</td>
-            <td>${c.endereco?.cidade||'---'}/${c.endereco?.uf||''}</td>
-            <td>${c.departamento_solicitante||'<span class="text-muted">---</span>'}</td>
-            <td>${c.motorista?.nome||'<span class="text-muted">---</span>'}</td>
-            <td>${c.veiculo?.nome||'<span class="text-muted">---</span>'}</td>
-            <td>${c.data_hora_saida_prevista_label||'---'}</td>
-            <td>${c.km_estimado?rtKm(c.km_estimado):'---'}</td>
-            <td onclick="event.stopPropagation()">${c.google_maps_url?`<a href="${c.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" title="Google Maps"><i class="fas fa-map-location-dot"></i></a>`:''}</td>
-            <td onclick="event.stopPropagation()">
+            <td data-label="Código"><strong>${c.codigo}</strong>${c.origem_documento==='AutoCIF'?'<span class="rt-badge b-cif" style="margin-left:6px;font-size:9px" title="Gerada automaticamente (CIF)"><i class="fas fa-robot" style="margin-right:3px"></i>Auto CIF</span>':''}</td>
+            <td data-label="Tipo"><span class="rt-badge b-blue">${c.tipo_label}</span></td>
+            <td data-label="Status"><span class="rt-badge ${st.cls}">${st.label}</span>${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
+            <td data-label="Prior."><span class="rt-badge ${rtBadge('priority',c.prioridade)}">${c.prioridade_label}</span></td>
+            <td data-label="Parceiro" title="${c.parceiro_razao_social||''}">${c.parceiro_nome||'---'}</td>
+            <td data-label="Documento">${c.documento_tipo} ${c.documento_numero||'---'}</td>
+            <td data-label="Cidade/UF">${c.endereco?.cidade||'---'}/${c.endereco?.uf||''}</td>
+            <td data-label="Depto">${c.departamento_solicitante||'<span class="text-muted">---</span>'}</td>
+            <td data-label="Motorista">${c.motorista?.nome||'<span class="text-muted">---</span>'}</td>
+            <td data-label="Veículo">${c.veiculo?.nome||'<span class="text-muted">---</span>'}</td>
+            <td data-label="Saída prev.">${c.data_hora_saida_prevista_label||'---'}</td>
+            <td data-label="KM">${c.km_estimado?rtKm(c.km_estimado):'---'}</td>
+            <td data-label="Rota" onclick="event.stopPropagation()">${c.google_maps_url?`<a href="${c.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" title="Google Maps"><i class="fas fa-map-location-dot"></i></a>`:''}</td>
+            <td data-label="Ações" onclick="event.stopPropagation()">
                 <div class="rt-inline">
                 ${canAlocar?`<button class="btn btn-outline-primary btn-sm" onclick="openAlocarModal(${c.id})" title="Alocar"><i class="fas fa-truck"></i></button>`:''}
                 ${canRota?`<button class="btn btn-outline-success btn-sm" onclick="updateStatusSol(${c.id},'EmRota')" title="Em rota"><i class="fas fa-road"></i></button>`:''}
@@ -2332,6 +2372,53 @@ async function anexarAViagem(sid,vid){
 alocarForm.addEventListener('submit',async e=>{e.preventDefault();const dept=document.getElementById('alocarDepartamento').value;if(!dept){showToast('Selecione o departamento solicitante.','error');return;}const sid=alocarSolicitacaoId.value;const payload={veiculo_id:alocarVeiculo.value,motorista_id:alocarMotorista.value||'',data_hora_saida_prevista:alocarSaida.value,observacoes_logistica:alocarObservacao.value.trim(),origem_latitude:rtState.geo?.lat||'',origem_longitude:rtState.geo?.lng||'',departamento_solicitante:dept};const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/alocar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alocar.','error');return setBoard(d.error||'Falha ao alocar.',true);}showToast('Rota alocada com sucesso!','success');getAlocarModal().hide();await refreshAll();if(payload.veiculo_id && payload.motorista_id){setTimeout(()=>abrirMontarViagem(sid,payload.motorista_id,payload.veiculo_id),400);}});
 cancelarForm.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${cancelarSolicitacaoId.value}/cancelar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motivo:cancelarMotivo.value.trim()})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao cancelar.','error');return setBoard(d.error||'Falha ao cancelar.',true);}showToast(d.mensagem||'Cancelamento solicitado. Aguardando aprovação do solicitante.','info',5000);getCancelarModal().hide();getDetalheModal().hide();await refreshAll();});
 motoristaForm.addEventListener('submit',async e=>{e.preventDefault();const payload={id:motoristaId.value||'',nome:motoristaNome.value.trim(),telefone:motoristaTelefone.value.trim(),cnh:motoristaCnh.value.trim(),observacoes:motoristaObservacoes.value.trim(),ativo:motoristaAtivo.checked};const r=await fetch('/api/logistica/agendamento-veiculos/motoristas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao salvar motorista.','error');motoristaState.textContent=d.error||'Falha ao salvar motorista.';motoristaState.classList.add('error');return;}showToast('Motorista salvo com sucesso!','success');getMotoristaModal().hide();await loadMotoristas();await loadDashboard();});
+const getNovaSolicitacaoModal=()=>bootstrap.Modal.getOrCreateInstance(document.getElementById('novaSolicitacaoModal'));
+function nsToggleTipo(){
+    const tipo=document.getElementById('nsTipo').value;
+    document.getElementById('nsBoxOc').style.display=tipo==='COLETA'?'':'none';
+    document.getElementById('nsBoxNf').style.display=tipo==='ENTREGA'?'':'none';
+    document.getElementById('nsBoxRef').style.display=tipo==='AVULSA'?'':'none';
+}
+function openNovaSolicitacao(){
+    const form=document.getElementById('novaSolicitacaoForm');
+    form.reset();
+    document.getElementById('nsTipo').value='COLETA';
+    document.getElementById('nsPrioridade').value='Media';
+    nsToggleTipo();
+    const nsState=document.getElementById('nsState');
+    nsState.style.display='none';nsState.classList.remove('error');
+    getNovaSolicitacaoModal().show();
+}
+document.getElementById('novaSolicitacaoForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const tipo=document.getElementById('nsTipo').value;
+    const numero_oc=(document.getElementById('nsOc').value||'').trim();
+    const numero_nf=(document.getElementById('nsNf').value||'').trim();
+    const referencia_avulsa=(document.getElementById('nsRef').value||'').trim();
+    const local_solicitante=(document.getElementById('nsLocal').value||'').trim();
+    if(tipo==='COLETA'&&!numero_oc&&!local_solicitante){showToast('Informe a OC ou o local da coleta.','error');return;}
+    if(tipo==='ENTREGA'&&!numero_nf&&!local_solicitante){showToast('Informe a NF ou o local da entrega.','error');return;}
+    const payload={
+        tipo,
+        prioridade:document.getElementById('nsPrioridade').value,
+        numero_oc,numero_nf,referencia_avulsa,local_solicitante,
+        data_desejada:document.getElementById('nsData').value||'',
+        prazo_limite:document.getElementById('nsPrazo').value||'',
+        observacoes_solicitante:(document.getElementById('nsObs').value||'').trim(),
+    };
+    const btn=document.getElementById('nsSubmit');
+    const nsState=document.getElementById('nsState');
+    btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    try{
+        const r=await fetch('/api/logistica/agendamento-veiculos/solicitacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const d=await r.json();
+        if(!r.ok||!d.sucesso){nsState.textContent=d.error||'Falha ao criar solicitação.';nsState.classList.add('error');nsState.style.display='block';showToast(d.error||'Falha ao criar solicitação.','error');return;}
+        showToast(`Solicitação ${d.solicitacao?.codigo||''} criada!`,'success',5000);
+        getNovaSolicitacaoModal().hide();
+        await refreshAll();
+    }catch(err){nsState.textContent='Erro de conexão ao criar solicitação.';nsState.classList.add('error');nsState.style.display='block';showToast('Erro de conexão.','error');}
+    finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Enviar solicitação';}
+});
 if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>rtState.geo={lat:p.coords.latitude,lng:p.coords.longitude},()=>{},{enableHighAccuracy:true,timeout:8000,maximumAge:300000});}
 // auto-switch de tab via URL param (após todos os consts e listeners)
 (function() {
