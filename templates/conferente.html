@@ -970,9 +970,9 @@
             return { tipo: 'ok', mensagem: '' };
         }
         if (diferenca <= Math.max(margem, 0.0001)) {
-            return { tipo: 'warning', mensagem: `Peso/medida diferente da NF, mas dentro da tolerância de 2% para ${String(unidade || '').toUpperCase()}. Será informado como divergência de peso.` };
+            return { tipo: 'warning', mensagem: 'Quantidade diferente da NF.' };
         }
-        return { tipo: 'erro', mensagem: `Quantidade fora da tolerância de 2% para ${String(unidade || '').toUpperCase()}. Vai exigir pendência.` };
+        return { tipo: 'erro', mensagem: 'Quantidade diferente da NF.' };
     }
 
     function mostrarMensagemOperacional(msg, isErro = false) {
@@ -1277,7 +1277,6 @@
                 <td style="text-align:center; font-weight:800; color:#475569;">${i.unidade || 'UN'}</td>
                 <td style="text-align: center;">
                     <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${i.unidade || 'UN'}" oninput="atualizarStatusLinha(this)" step="0.001">
-                    ${unidadeTemTolerancia(i.unidade) ? `<div style="margin-top:4px; font-size:10px; color:#92400e; font-weight:700;">${formatarFaixaTolerancia(i.qtd_esperada, i.unidade)}</div>` : ''}
                     <div class="item-alerta" data-id="${i.id}"></div>
                 </td>
                 <td style="text-align:center;">

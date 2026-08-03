@@ -6395,12 +6395,7 @@ def validar():
 
             if not _quantidade_esta_dentro_da_tolerancia(item, quantidade_convertida):
                 msg_erro = _compose_motivo_pendencia(item.id, motivos_itens, motivos_tipos, motivos_observacoes) or "Divergência"
-                unidade_item = _normalize_unidade_medida(item.unidade_comercial)
-                msg_resultado = (
-                    f"Quantidade fora da tolerância de 2% para {unidade_item}."
-                    if unidade_item in {"KG", "MM"}
-                    else "Quantidade divergente."
-                )
+                msg_resultado = "Quantidade diferente da NF."
                 motivo_tipo = str(motivos_tipos.get(str(item.id)) or "Não classificado")[:80]
                 destino_fisico = str(destinos_itens.get(str(item.id)) or "Aguardando decisão fiscal")[:80]
                 evidencia = str(evidencias_itens.get(str(item.id)) or "")[:300]
@@ -6442,7 +6437,7 @@ def validar():
             else:
                 divergencia_tolerada = _quantidade_divergente_mas_tolerada(item, quantidade_convertida)
                 msg_ok = (
-                    f"Quantidade diferente da NF, mas dentro da tolerância de 2% para {_normalize_unidade_medida(item.unidade_comercial)}. Será informado como divergência de peso."
+                    "Quantidade diferente da NF."
                     if divergencia_tolerada
                     else "Conferido."
                 )
