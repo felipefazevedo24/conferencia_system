@@ -76,6 +76,29 @@ def main() -> int:
         dialect = bind.dialect
         inspector = inspect(bind)
 
+        # Mostra ANTES de tudo em qual banco vamos mexer, com a senha mascarada.
+        # Isso evita rodar sem querer no SQLite local achando que era o MySQL.
+        try:
+            url = bind.url
+            alvo = f"{url.drivername} | host={url.host or '(local)'} | db={url.database}"
+        except Exception:  # noqa: BLE001
+            alvo = dialect.name
+        print("=" * 60)
+        print(f"BANCO ALVO: {alvo}")
+        print("=" * 60)
+        if dialect.name == "sqlite":
+            print("")
+            print("################################################################")
+            print("# ATENCAO: este e o banco SQLITE (nao e o MySQL de producao!).  #")
+            print("# Se voce queria corrigir a PRODUCAO, ABORTE (Ctrl+C) e rode    #")
+            print("# depois de exportar a DATABASE_URL do MySQL. Veja instrucoes   #")
+            print("# passadas pelo suporte. Continuando em 5s para uso local...    #")
+            print("################################################################")
+            print("")
+            import time
+
+            time.sleep(5)
+
         existentes_tabelas = set(inspector.get_table_names())
 
         tabelas_criadas: list[str] = []
