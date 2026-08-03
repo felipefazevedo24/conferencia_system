@@ -1,4 +1,5 @@
 import logging
+import os
 from logging.config import fileConfig
 
 from flask import current_app
@@ -10,8 +11,11 @@ from alembic import context
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# Em alguns ambientes (ex.: flask db upgrade no PythonAnywhere),
+# config.config_file_name pode apontar para um caminho que nao existe.
+# Nesse caso, segue sem quebrar a execucao da migration.
+if config.config_file_name and os.path.exists(config.config_file_name):
+    fileConfig(config.config_file_name)
 logger = logging.getLogger('alembic.env')
 
 
