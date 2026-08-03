@@ -2,6 +2,7 @@ from .models import ActiveSession
 from .extensions import db
 from flask import abort
 import datetime
+import unicodedata
 # Middleware para atualizar sessão ativa e forçar logout se necessário
 def check_active_session():
     session_id = session.get("session_id")
@@ -124,16 +125,26 @@ def get_permission_catalog() -> dict:
     return dict(PERMISSION_CATALOG)
 
 
+def _normalize_role_key(role: str | None) -> str:
+    txt = unicodedata.normalize("NFKD", str(role or ""))
+    txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
+    return txt.strip().casefold()
+
+
 def get_base_role_permissions(role: str) -> dict:
     role = (role or "").strip()
-    allowed = BASE_ROLE_PERMISSIONS.get(role, set())
+    allowed = BASE_ROLE_PERMISSIONS.get(role)
+    if allowed is None:
+        target = _normalize_role_key(role)
+        match = next((k for k in BASE_ROLE_PERMISSIONS.keys() if _normalize_role_key(k) == target), None)
+        allowed = BASE_ROLE_PERMISSIONS.get(match, set())
     return {key: key in allowed for key in PERMISSION_CATALOG.keys()}
 
 
 def is_admin_role(role: str | None) -> bool:
     """Avalia papel administrativo de forma tolerante a caixa/variações."""
-    role_txt = (role or "").strip().casefold()
-    return role_txt in {"admin", "administrador"}
+    role_txt = _normalize_role_key(role)
+    return "admin" in role_txt
 
 
 def is_admin_session() -> bool:
@@ -143,6 +154,17 @@ def is_admin_session() -> bool:
 def _resolve_permissions(username: str | None = None, role: str | None = None) -> dict:
     role = (role or session.get("role") or "").strip()
     username = (username or session.get("username") or "").strip()
+
+    # Recupera role do banco quando a sessão vier sem role (ou corrompida).
+    if not role and username:
+        try:
+            from .models import Usuario
+
+            user = Usuario.query.filter_by(username=username).first()
+            if user and user.role:
+                role = str(user.role).strip()
+        except Exception:
+            role = role or ""
 
     # Admin sempre tem acesso total para evitar lockout operacional.
     if is_admin_role(role):
