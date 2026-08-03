@@ -2147,6 +2147,12 @@ class PlannerBoard(db.Model):
         cascade="all, delete-orphan",
         order_by="PlannerColumn.order_index.asc(), PlannerColumn.id.asc()",
     )
+    labels = db.relationship(
+        "PlannerLabel",
+        backref="board",
+        cascade="all, delete-orphan",
+        order_by="PlannerLabel.order_index.asc(), PlannerLabel.id.asc()",
+    )
 
 
 class PlannerColumn(db.Model):
@@ -2186,3 +2192,72 @@ class PlannerCard(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     concluido_em = db.Column(db.DateTime, index=True)
+
+    labels = db.relationship(
+        "PlannerCardLabel",
+        backref="card",
+        cascade="all, delete-orphan",
+        order_by="PlannerCardLabel.id.asc()",
+    )
+    comentarios = db.relationship(
+        "PlannerCardComment",
+        backref="card",
+        cascade="all, delete-orphan",
+        order_by="PlannerCardComment.criado_em.asc(), PlannerCardComment.id.asc()",
+    )
+    checklist_itens = db.relationship(
+        "PlannerChecklistItem",
+        backref="card",
+        cascade="all, delete-orphan",
+        order_by="PlannerChecklistItem.order_index.asc(), PlannerChecklistItem.id.asc()",
+    )
+
+
+class PlannerLabel(db.Model):
+    __tablename__ = "planner_label"
+
+    id = db.Column(db.Integer, primary_key=True)
+    board_id = db.Column(db.Integer, db.ForeignKey("planner_board.id"), nullable=False, index=True)
+    nome = db.Column(db.String(60), nullable=False)
+    color = db.Column(db.String(20), nullable=False, default="#0f62c9")
+    order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class PlannerCardLabel(db.Model):
+    __tablename__ = "planner_card_label"
+
+    id = db.Column(db.Integer, primary_key=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("planner_card.id"), nullable=False, index=True)
+    label_id = db.Column(db.Integer, db.ForeignKey("planner_label.id"), nullable=False, index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    label = db.relationship("PlannerLabel")
+
+    __table_args__ = (
+        db.UniqueConstraint("card_id", "label_id", name="ux_planner_card_label"),
+    )
+
+
+class PlannerCardComment(db.Model):
+    __tablename__ = "planner_card_comment"
+
+    id = db.Column(db.Integer, primary_key=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("planner_card.id"), nullable=False, index=True)
+    texto = db.Column(db.Text, nullable=False)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class PlannerChecklistItem(db.Model):
+    __tablename__ = "planner_checklist_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("planner_card.id"), nullable=False, index=True)
+    texto = db.Column(db.String(240), nullable=False)
+    is_done = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)

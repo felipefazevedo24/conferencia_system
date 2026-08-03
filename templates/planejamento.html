@@ -4,340 +4,327 @@
 
 {% block extra_head %}
 <style>
-    .plan-wrap {
-        max-width: 1560px;
-        margin: 0 auto;
-        display: grid;
-        gap: 16px;
-    }
+    .plan-wrap { max-width: 1540px; margin: 0 auto; display: grid; gap: 16px; }
 
-    .plan-top {
+    .plan-hero {
+        border: 1px solid rgba(201, 214, 228, 0.95);
+        border-radius: 24px;
+        background: linear-gradient(140deg, #ffffff 0%, #f2f8ff 100%);
+        box-shadow: 0 10px 26px rgba(13, 31, 52, 0.09);
+        padding: 22px;
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
+        gap: 14px;
         flex-wrap: wrap;
-        background: linear-gradient(135deg, #ffffff 0%, #edf4ff 100%);
-        border: 1px solid #d7e5f4;
-        border-radius: 18px;
-        padding: 18px;
+    }
+
+    .plan-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid rgba(15, 98, 201, 0.18);
+        background: rgba(15, 98, 201, 0.08);
+        color: #0f62c9;
+        border-radius: 999px;
+        font-size: 10px;
+        letter-spacing: .11em;
+        text-transform: uppercase;
+        font-weight: 800;
+        padding: 6px 10px;
     }
 
     .plan-title {
-        margin: 0;
-        color: #0d2743;
-        font-size: 27px;
-        font-weight: 800;
-        letter-spacing: -0.02em;
+        margin: 10px 0 0;
+        color: #0f2238;
         font-family: var(--font-display);
+        font-size: clamp(28px, 3vw, 40px);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1;
     }
 
-    .plan-sub {
-        margin-top: 6px;
-        color: #57708a;
-        font-size: 13px;
-    }
+    .plan-sub { margin-top: 10px; color: #5b748f; font-size: 13px; line-height: 1.65; max-width: 780px; }
 
-    .plan-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
+    .plan-actions { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
 
     .plan-btn {
-        border: 1px solid #c4d6ea;
+        border: 1px solid #c8daed;
         background: #fff;
-        color: #12395e;
-        border-radius: 10px;
+        color: #123b63;
+        border-radius: 12px;
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 800;
         padding: 10px 14px;
         cursor: pointer;
     }
 
-    .plan-btn.primary {
-        background: #0f62c9;
-        border-color: #0f62c9;
-        color: #fff;
-    }
+    .plan-btn.primary { background: #0f62c9; border-color: #0f62c9; color: #fff; }
+    .plan-btn.danger { border-color: #fecaca; color: #b91c1c; }
 
-    .plan-kpis {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(170px, 1fr));
-        gap: 12px;
-    }
+    .plan-kpis { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 12px; }
 
     .plan-kpi {
-        border: 1px solid #dce8f5;
-        border-radius: 14px;
-        padding: 14px;
+        border: 1px solid rgba(206, 219, 232, 0.95);
+        border-radius: 16px;
         background: #fff;
+        box-shadow: 0 8px 20px rgba(14, 34, 55, 0.06);
+        padding: 13px 14px;
     }
 
     .plan-kpi .lbl {
-        color: #67809a;
-        font-size: 11px;
-        font-weight: 700;
+        color: #647d96;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .1em;
         text-transform: uppercase;
-        letter-spacing: .07em;
     }
 
     .plan-kpi .val {
-        margin-top: 6px;
-        color: #0b2b4d;
-        font-size: 26px;
+        margin-top: 8px;
+        color: #0f2238;
+        font-family: var(--font-display);
+        font-size: 30px;
+        line-height: 1;
+        letter-spacing: -0.04em;
         font-weight: 800;
     }
 
-    .plan-board {
-        display: flex;
-        gap: 14px;
-        overflow-x: auto;
-        padding-bottom: 10px;
-    }
+    .plan-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; }
 
     .plan-col {
-        width: 330px;
-        min-width: 330px;
+        width: 332px;
+        min-width: 332px;
+        max-height: calc(100vh - 286px);
+        border: 1px solid #d5e3f1;
+        border-radius: 16px;
         background: #f8fbff;
-        border: 1px solid #d6e3f0;
-        border-radius: 14px;
         display: flex;
         flex-direction: column;
-        max-height: calc(100vh - 275px);
     }
 
-    .plan-col.drag-over {
-        border-color: #0f62c9;
-        box-shadow: 0 0 0 2px rgba(15, 98, 201, 0.16);
-    }
+    .plan-col.drag-over { border-color: #0f62c9; box-shadow: 0 0 0 2px rgba(15, 98, 201, 0.14); }
 
     .plan-col-head {
+        border-bottom: 1px solid #dce8f3;
+        padding: 11px 12px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 8px;
-        padding: 12px;
-        border-bottom: 1px solid #dde8f2;
     }
 
-    .plan-col-title {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-        font-weight: 800;
-        color: #0b2c4f;
-    }
+    .plan-col-title { font-size: 14px; color: #102d4a; font-weight: 800; display: inline-flex; gap: 8px; align-items: center; }
+    .plan-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .plan-col-count { color: #6f879f; font-size: 11px; font-weight: 800; }
+    .plan-col-tools { display: inline-flex; gap: 6px; }
 
-    .plan-dot {
-        width: 11px;
-        height: 11px;
-        border-radius: 50%;
-        display: inline-block;
-    }
-
-    .plan-col-count {
-        color: #7890a7;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .plan-col-menu {
+    .plan-icon-btn {
         border: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
         background: transparent;
-        color: #597491;
+        color: #67819a;
         cursor: pointer;
-        font-size: 14px;
     }
 
-    .plan-cards {
-        padding: 10px;
-        overflow-y: auto;
-        display: grid;
-        gap: 10px;
-    }
+    .plan-icon-btn:hover { background: #eaf2fb; color: #0f62c9; }
+
+    .plan-cards { padding: 10px; display: grid; gap: 10px; overflow-y: auto; }
 
     .plan-card {
-        border: 1px solid #d5e3f1;
-        background: #fff;
+        border: 1px solid #d2e2f0;
         border-radius: 12px;
+        background: #fff;
         padding: 10px;
         cursor: grab;
     }
 
-    .plan-card.dragging {
-        opacity: .45;
-        transform: rotate(1deg);
-    }
+    .plan-card.dragging { opacity: .45; transform: rotate(1deg); }
 
-    .plan-card-top {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 8px;
-    }
+    .plan-card-title { margin: 0; font-size: 14px; line-height: 1.3; color: #0f2d4b; font-weight: 800; }
 
-    .plan-card-title {
-        margin: 0;
-        color: #0f2f52;
-        font-size: 14px;
-        font-weight: 800;
-        line-height: 1.3;
-    }
+    .plan-badges { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 
-    .plan-badge {
+    .plan-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
         font-size: 10px;
         font-weight: 800;
-        border-radius: 999px;
-        padding: 3px 8px;
-        text-transform: uppercase;
         letter-spacing: .05em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border: 1px solid transparent;
     }
 
-    .b-baixa { background: #e0f2fe; color: #0c4a6e; }
-    .b-media { background: #ecfeff; color: #155e75; }
-    .b-alta { background: #fff7ed; color: #9a3412; }
-    .b-critica { background: #fee2e2; color: #991b1b; }
+    .p-baixa { background: #e0f2fe; color: #0c4a6e; }
+    .p-media { background: #ecfeff; color: #155e75; }
+    .p-alta { background: #fff7ed; color: #9a3412; }
+    .p-critica { background: #fee2e2; color: #991b1b; }
 
-    .plan-card-desc {
-        margin-top: 8px;
-        color: #526f8b;
-        font-size: 12px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-    }
+    .plan-card-desc { margin-top: 8px; color: #536f89; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
 
-    .plan-card-meta {
-        margin-top: 10px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        font-size: 11px;
-        color: #6d879f;
-    }
+    .plan-card-meta { margin-top: 8px; color: #6a8299; display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; }
 
     .plan-chip {
-        border: 1px solid #d7e6f4;
+        border: 1px solid #d6e4f2;
+        background: #f8fbff;
         border-radius: 999px;
         padding: 2px 8px;
-        background: #f8fbff;
         font-weight: 700;
     }
 
-    .plan-chip.overdue {
-        border-color: #fecaca;
-        color: #b91c1c;
-        background: #fff1f2;
+    .plan-chip.overdue { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+
+    .plan-check-mini {
+        border: 1px solid #d8e5f2;
+        background: #f6fbff;
+        color: #335b80;
+        border-radius: 8px;
+        font-size: 10px;
+        padding: 2px 6px;
+        font-weight: 700;
     }
 
     .plan-empty {
-        border: 1px dashed #c9d9ea;
+        border: 1px dashed #c6d8ea;
         border-radius: 10px;
-        padding: 16px;
-        font-size: 12px;
-        color: #6f879f;
-        text-align: center;
         background: #fbfdff;
-    }
-
-    .plan-col-foot {
-        padding: 10px;
-        border-top: 1px solid #dde8f2;
-    }
-
-    .plan-link-btn {
-        width: 100%;
-        border: 1px dashed #b8d1ea;
-        background: #fff;
-        color: #0f62c9;
-        border-radius: 10px;
+        color: #6e87a0;
         font-size: 12px;
-        font-weight: 800;
-        padding: 9px;
-        cursor: pointer;
+        text-align: center;
+        padding: 14px;
     }
+
+    .plan-col-foot { padding: 10px; border-top: 1px solid #dce8f3; }
+    .plan-col-foot .plan-btn { width: 100%; text-align: center; }
+
+    .sync-toast-wrap {
+        position: fixed;
+        right: 16px;
+        top: 76px;
+        z-index: 3500;
+        width: min(360px, calc(100vw - 32px));
+        display: grid;
+        gap: 8px;
+    }
+
+    .sync-toast {
+        border-radius: 12px;
+        border: 1px solid #cbe0f4;
+        box-shadow: 0 12px 26px rgba(12, 28, 47, 0.15);
+        background: #fff;
+        padding: 10px 12px;
+        color: #143a60;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .sync-toast.error { border-color: #fecaca; color: #991b1b; }
+    .sync-toast.success { border-color: #bbf7d0; color: #166534; }
 
     .plan-modal-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(10, 23, 40, .42);
-        z-index: 3000;
         display: none;
         align-items: center;
         justify-content: center;
+        z-index: 3100;
         padding: 16px;
+        background: rgba(12, 40, 70, 0.22);
+        backdrop-filter: blur(3px);
     }
 
     .plan-modal {
-        width: 100%;
-        max-width: 650px;
+        width: min(860px, 100%);
+        border: 1px solid #d2e3f3;
+        border-radius: 18px;
         background: #fff;
-        border-radius: 16px;
-        border: 1px solid #d8e4f0;
-        box-shadow: 0 24px 60px rgba(8, 31, 57, .3);
+        box-shadow: 0 24px 56px rgba(12, 32, 56, 0.26);
         overflow: hidden;
     }
 
+    .plan-modal.small { width: min(560px, 100%); }
+
     .plan-modal-head {
+        border-bottom: 1px solid #dce8f3;
         padding: 14px 16px;
-        border-bottom: 1px solid #e1ebf5;
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
-    .plan-modal-title {
-        margin: 0;
-        font-size: 16px;
-        color: #123559;
-        font-weight: 800;
-    }
+    .plan-modal-title { margin: 0; color: #12365a; font-size: 16px; font-weight: 800; }
+    .plan-close { border: none; background: transparent; color: #6d8297; font-size: 17px; cursor: pointer; }
 
-    .plan-close {
-        border: none;
-        background: transparent;
-        font-size: 17px;
-        color: #6b8298;
-        cursor: pointer;
-    }
+    .plan-modal-body { padding: 16px; display: grid; gap: 12px; max-height: 68vh; overflow-y: auto; }
 
-    .plan-modal-body {
-        padding: 16px;
-        display: grid;
-        gap: 10px;
-    }
+    .plan-grid-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
 
-    .plan-grid-2 {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .plan-field label {
-        display: block;
-        font-size: 12px;
-        color: #5f7892;
-        font-weight: 700;
-        margin-bottom: 4px;
-    }
+    .plan-field label { display: block; margin-bottom: 4px; color: #607892; font-size: 12px; font-weight: 700; }
 
     .plan-field input,
     .plan-field textarea,
     .plan-field select {
         width: 100%;
-        border: 1px solid #c9dbeb;
+        border: 1px solid #c8dcec;
         border-radius: 10px;
-        padding: 10px 11px;
-        font-size: 13px;
-        color: #0e3155;
         background: #fff;
+        color: #113656;
+        font-size: 13px;
+        padding: 10px 11px;
     }
 
-    .plan-field textarea { min-height: 110px; resize: vertical; }
+    .plan-field textarea { min-height: 90px; resize: vertical; }
+
+    .plan-label-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .plan-label-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        border: 1px solid #d3e5f5;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        user-select: none;
+        color: #12385c;
+    }
+
+    .plan-label-chip.active { border-color: #0f62c9; box-shadow: 0 0 0 2px rgba(15, 98, 201, 0.16); }
+    .plan-label-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+    .plan-checklist, .plan-comments { display: grid; gap: 8px; }
+
+    .plan-check-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #d8e6f4;
+        border-radius: 10px;
+        padding: 8px;
+    }
+
+    .plan-check-item.done { opacity: .75; }
+    .plan-check-item.done .txt { text-decoration: line-through; }
+    .plan-check-item .txt { flex: 1; color: #193d62; font-size: 12px; font-weight: 600; }
+
+    .plan-comment {
+        border: 1px solid #d8e6f4;
+        border-radius: 10px;
+        background: #fbfdff;
+        padding: 8px;
+    }
+
+    .plan-comment-meta { color: #5f7893; font-size: 11px; font-weight: 700; }
+    .plan-comment-text { color: #26496c; font-size: 12px; margin-top: 5px; white-space: pre-wrap; }
 
     .plan-modal-foot {
-        border-top: 1px solid #e1ebf5;
+        border-top: 1px solid #dce8f3;
         padding: 12px 16px;
         display: flex;
         justify-content: space-between;
@@ -345,20 +332,14 @@
         flex-wrap: wrap;
     }
 
-    .plan-msg {
-        color: #b91c1c;
-        font-size: 12px;
-        min-height: 18px;
-        font-weight: 600;
-    }
+    .plan-msg { color: #b91c1c; font-size: 12px; min-height: 17px; font-weight: 700; }
 
-    @media (max-width: 1100px) {
+    @media (max-width: 1120px) {
         .plan-kpis { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
     }
 
-    @media (max-width: 700px) {
+    @media (max-width: 780px) {
         .plan-grid-2 { grid-template-columns: 1fr; }
-        .plan-kpis { grid-template-columns: 1fr 1fr; }
         .plan-col { min-width: 88vw; width: 88vw; }
     }
 </style>
@@ -366,27 +347,31 @@
 
 {% block content %}
 <div class="plan-wrap">
-    <section class="plan-top">
+    <section class="plan-hero">
         <div>
-            <h1 class="plan-title"><i class="fas fa-table-columns"></i> Planejamento de Tarefas</h1>
-            <div class="plan-sub">Kanban colaborativo no Sync para organizar backlog, execução e entrega com rastreabilidade.</div>
+            <span class="plan-kicker"><i class="fas fa-user-shield"></i> Administração</span>
+            <h1 class="plan-title">Planejamento de Tarefas</h1>
+            <div class="plan-sub">Board Kanban integrado ao Sync para gestão interna: backlog, execução, revisão e entrega com histórico por card.</div>
         </div>
         <div class="plan-actions">
-            <button class="plan-btn" onclick="openColumnPrompt()"><i class="fas fa-plus"></i> Nova coluna</button>
-            <button class="plan-btn primary" onclick="openCardModal()"><i class="fas fa-circle-plus"></i> Nova tarefa</button>
+            <button class="plan-btn" onclick="openColumnModal()"><i class="fas fa-plus"></i> Nova coluna</button>
+            <button class="plan-btn" onclick="openLabelModal()"><i class="fas fa-tags"></i> Etiquetas</button>
+            <button class="plan-btn primary" onclick="openTaskModal()"><i class="fas fa-circle-plus"></i> Nova tarefa</button>
         </div>
     </section>
 
     <section class="plan-kpis">
-        <div class="plan-kpi"><div class="lbl">Tarefas abertas</div><div class="val" id="kpi-open">0</div></div>
-        <div class="plan-kpi"><div class="lbl">Concluídas</div><div class="val" id="kpi-done">0</div></div>
-        <div class="plan-kpi"><div class="lbl">Atrasadas</div><div class="val" id="kpi-overdue">0</div></div>
-        <div class="plan-kpi"><div class="lbl">Total de cards</div><div class="val" id="kpi-total">0</div></div>
-        <div class="plan-kpi"><div class="lbl">Colunas</div><div class="val" id="kpi-columns">0</div></div>
+        <article class="plan-kpi"><div class="lbl">Tarefas abertas</div><div class="val" id="kpi-open">0</div></article>
+        <article class="plan-kpi"><div class="lbl">Concluídas</div><div class="val" id="kpi-done">0</div></article>
+        <article class="plan-kpi"><div class="lbl">Atrasadas</div><div class="val" id="kpi-overdue">0</div></article>
+        <article class="plan-kpi"><div class="lbl">Total de cards</div><div class="val" id="kpi-total">0</div></article>
+        <article class="plan-kpi"><div class="lbl">Total de colunas</div><div class="val" id="kpi-columns">0</div></article>
     </section>
 
     <section id="board" class="plan-board"></section>
 </div>
+
+<div class="sync-toast-wrap" id="toast-wrap"></div>
 
 <div class="plan-modal-backdrop" id="task-modal-wrap">
     <div class="plan-modal">
@@ -395,22 +380,22 @@
             <button class="plan-close" onclick="closeTaskModal()"><i class="fas fa-times"></i></button>
         </div>
         <div class="plan-modal-body">
-            <div class="plan-field">
-                <label>Título</label>
-                <input id="f-titulo" maxlength="180" placeholder="Ex.: Revisar fluxo de cadastro de clientes">
-            </div>
-            <div class="plan-field">
-                <label>Descrição</label>
-                <textarea id="f-descricao" placeholder="Contexto, checklist, links, dependências..."></textarea>
-            </div>
             <div class="plan-grid-2">
+                <div class="plan-field" style="grid-column:1 / -1;">
+                    <label>Título</label>
+                    <input id="f-titulo" maxlength="180" placeholder="Ex.: Ajustar relatório de faturamento">
+                </div>
+                <div class="plan-field" style="grid-column:1 / -1;">
+                    <label>Descrição</label>
+                    <textarea id="f-descricao" placeholder="Contexto, links, critérios de aceite, observações..."></textarea>
+                </div>
                 <div class="plan-field">
                     <label>Coluna</label>
                     <select id="f-coluna"></select>
                 </div>
                 <div class="plan-field">
                     <label>Responsável</label>
-                    <input id="f-responsavel" maxlength="100" placeholder="Nome do responsável">
+                    <select id="f-responsavel"></select>
                 </div>
                 <div class="plan-field">
                     <label>Prazo</label>
@@ -425,13 +410,31 @@
                         <option>Critica</option>
                     </select>
                 </div>
+                <div class="plan-field" style="grid-column:1 / -1;">
+                    <label>Etiquetas</label>
+                    <div id="task-label-list" class="plan-label-list"></div>
+                </div>
+                <div class="plan-field" style="grid-column:1 / -1;">
+                    <label>Checklist</label>
+                    <div id="checklist-list" class="plan-checklist"></div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <input id="checklist-new" placeholder="Adicionar item no checklist...">
+                        <button class="plan-btn" type="button" onclick="addChecklistItem()">Adicionar</button>
+                    </div>
+                </div>
+                <div class="plan-field" style="grid-column:1 / -1;">
+                    <label>Comentários</label>
+                    <div id="comments-list" class="plan-comments"></div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <textarea id="comment-new" placeholder="Novo comentário..." style="min-height:64px;"></textarea>
+                        <button class="plan-btn" type="button" onclick="addComment()">Comentar</button>
+                    </div>
+                </div>
             </div>
-            <div id="task-msg" class="plan-msg"></div>
+            <div class="plan-msg" id="task-msg"></div>
         </div>
         <div class="plan-modal-foot">
-            <div>
-                <button id="btn-delete-task" class="plan-btn" style="display:none;border-color:#fecaca;color:#b91c1c;" onclick="deleteTask()">Excluir tarefa</button>
-            </div>
+            <button id="btn-delete-task" class="plan-btn danger" style="display:none;" onclick="confirmDeleteTask()">Excluir tarefa</button>
             <div style="display:flex;gap:8px;">
                 <button class="plan-btn" onclick="closeTaskModal()">Cancelar</button>
                 <button class="plan-btn primary" onclick="saveTask()">Salvar</button>
@@ -440,276 +443,659 @@
     </div>
 </div>
 
+<div class="plan-modal-backdrop" id="column-modal-wrap">
+    <div class="plan-modal small">
+        <div class="plan-modal-head">
+            <h3 class="plan-modal-title" id="column-modal-title">Nova coluna</h3>
+            <button class="plan-close" onclick="closeColumnModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="plan-modal-body">
+            <div class="plan-field">
+                <label>Nome da coluna</label>
+                <input id="col-titulo" maxlength="80" placeholder="Ex.: Homologação">
+            </div>
+            <div class="plan-grid-2">
+                <div class="plan-field">
+                    <label>Cor</label>
+                    <input id="col-color" type="color" value="#0f62c9">
+                </div>
+                <div class="plan-field">
+                    <label>Tipo</label>
+                    <select id="col-done">
+                        <option value="false">Coluna de trabalho</option>
+                        <option value="true">Coluna de concluído</option>
+                    </select>
+                </div>
+            </div>
+            <div class="plan-msg" id="col-msg"></div>
+        </div>
+        <div class="plan-modal-foot">
+            <button id="btn-delete-col" class="plan-btn danger" style="display:none;" onclick="confirmDeleteColumn()">Excluir coluna</button>
+            <div style="display:flex;gap:8px;">
+                <button class="plan-btn" onclick="closeColumnModal()">Cancelar</button>
+                <button class="plan-btn primary" onclick="saveColumn()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="plan-modal-backdrop" id="label-modal-wrap">
+    <div class="plan-modal small">
+        <div class="plan-modal-head">
+            <h3 class="plan-modal-title">Etiquetas do board</h3>
+            <button class="plan-close" onclick="closeLabelModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="plan-modal-body">
+            <div id="label-manager-list" class="plan-label-list"></div>
+            <div class="plan-grid-2">
+                <div class="plan-field">
+                    <label>Nome</label>
+                    <input id="label-new-name" maxlength="60" placeholder="Ex.: Bug crítico">
+                </div>
+                <div class="plan-field">
+                    <label>Cor</label>
+                    <input id="label-new-color" type="color" value="#0f62c9">
+                </div>
+            </div>
+            <div class="plan-msg" id="label-msg"></div>
+        </div>
+        <div class="plan-modal-foot">
+            <span></span>
+            <div style="display:flex;gap:8px;">
+                <button class="plan-btn" onclick="closeLabelModal()">Fechar</button>
+                <button class="plan-btn primary" onclick="createLabel()">Criar etiqueta</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="plan-modal-backdrop" id="confirm-modal-wrap">
+    <div class="plan-modal small">
+        <div class="plan-modal-head">
+            <h3 class="plan-modal-title">Confirmação</h3>
+            <button class="plan-close" onclick="closeConfirm(false)"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="plan-modal-body">
+            <div id="confirm-text" style="color:#27496c;font-size:14px;font-weight:600;"></div>
+        </div>
+        <div class="plan-modal-foot">
+            <span></span>
+            <div style="display:flex;gap:8px;">
+                <button class="plan-btn" onclick="closeConfirm(false)">Cancelar</button>
+                <button class="plan-btn primary" onclick="closeConfirm(true)">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    let board = null;
-    let editingTaskId = null;
-    let draggingCardId = null;
+let board = null;
+let editingTaskId = null;
+let editingColumnId = null;
+let draggingCardId = null;
+let checklistDraft = [];
+let selectedLabelIds = [];
+let confirmResolver = null;
 
-    function esc(v) {
-        return (v == null ? "" : String(v)).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function esc(v) {
+    return (v == null ? "" : String(v)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+}
+
+function prioClass(p) {
+    const key = (p || "Media").toLowerCase();
+    if (key === "baixa") return "p-baixa";
+    if (key === "alta") return "p-alta";
+    if (key === "critica") return "p-critica";
+    return "p-media";
+}
+
+function notify(message, type = "info") {
+    const wrap = document.getElementById("toast-wrap");
+    const el = document.createElement("div");
+    el.className = `sync-toast ${type === "error" ? "error" : type === "success" ? "success" : ""}`;
+    el.textContent = message;
+    wrap.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = "0";
+        setTimeout(() => el.remove(), 220);
+    }, 3300);
+}
+
+function askConfirm(message) {
+    document.getElementById("confirm-text").textContent = message;
+    document.getElementById("confirm-modal-wrap").style.display = "flex";
+    return new Promise(resolve => { confirmResolver = resolve; });
+}
+
+function closeConfirm(ok) {
+    document.getElementById("confirm-modal-wrap").style.display = "none";
+    if (confirmResolver) {
+        const fn = confirmResolver;
+        confirmResolver = null;
+        fn(ok);
     }
+}
 
-    function prioClass(p) {
-        const key = (p || "Media").toLowerCase();
-        if (key === "baixa") return "b-baixa";
-        if (key === "alta") return "b-alta";
-        if (key === "critica") return "b-critica";
-        return "b-media";
-    }
+async function api(url, opts = {}) {
+    const headers = opts.headers || {};
+    if (!headers["Content-Type"] && opts.body !== undefined) headers["Content-Type"] = "application/json";
+    const res = await fetch(url, { ...opts, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.msg || "Falha na operação.");
+    return data;
+}
 
-    async function api(url, opts = {}) {
-        const res = await fetch(url, {
-            headers: { "Content-Type": "application/json" },
-            ...opts,
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.msg || "Falha na operação");
-        return data;
-    }
-
-    async function loadBoard() {
+async function loadBoard() {
+    try {
         const data = await api("/api/planejamento/board");
         board = data.board;
         renderKpis(board.kpis || {});
         renderBoard();
         fillColumnSelect();
+        fillResponsibleSelect();
+        renderLabelManager();
+    } catch (err) {
+        notify(err.message || "Não foi possível carregar o board.", "error");
+    }
+}
+
+function renderKpis(k) {
+    document.getElementById("kpi-open").textContent = k.open_cards || 0;
+    document.getElementById("kpi-done").textContent = k.done_cards || 0;
+    document.getElementById("kpi-overdue").textContent = k.overdue_cards || 0;
+    document.getElementById("kpi-total").textContent = k.total_cards || 0;
+    document.getElementById("kpi-columns").textContent = k.columns || 0;
+}
+
+function renderBoard() {
+    const host = document.getElementById("board");
+    if (!board || !Array.isArray(board.columns)) {
+        host.innerHTML = '<div class="plan-empty">Sem dados do board.</div>';
+        return;
     }
 
-    function renderKpis(k) {
-        document.getElementById("kpi-open").textContent = k.open_cards || 0;
-        document.getElementById("kpi-done").textContent = k.done_cards || 0;
-        document.getElementById("kpi-overdue").textContent = k.overdue_cards || 0;
-        document.getElementById("kpi-total").textContent = k.total_cards || 0;
-        document.getElementById("kpi-columns").textContent = k.columns || 0;
-    }
+    host.innerHTML = board.columns.map((col) => {
+        const cardsHtml = (col.cards || []).length
+            ? col.cards.map(renderCard).join("")
+            : '<div class="plan-empty">Nenhuma tarefa nesta coluna.</div>';
 
-    function renderBoard() {
-        const host = document.getElementById("board");
-        if (!board || !Array.isArray(board.columns)) {
-            host.innerHTML = '<div class="plan-empty">Sem board carregado.</div>';
-            return;
-        }
-
-        host.innerHTML = board.columns.map((col) => {
-            const cardsHtml = (col.cards || []).length
-                ? col.cards.map((card) => renderCard(card)).join("")
-                : '<div class="plan-empty">Nenhuma tarefa nesta coluna.</div>';
-
-            return `
-                <div class="plan-col" data-col-id="${col.id}" ondragover="onColumnDragOver(event, ${col.id})" ondragleave="onColumnDragLeave(event)" ondrop="onColumnDrop(event, ${col.id})">
-                    <div class="plan-col-head">
-                        <div class="plan-col-title">
-                            <span class="plan-dot" style="background:${esc(col.color || '#0f62c9')}"></span>
-                            <span>${esc(col.titulo)}</span>
-                            ${col.is_done ? '<span class="plan-badge b-baixa">Done</span>' : ''}
-                        </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="plan-col-count">${(col.cards || []).length}</span>
-                            <button class="plan-col-menu" title="Editar coluna" onclick="editColumn(${col.id})"><i class="fas fa-pen"></i></button>
-                        </div>
-                    </div>
-                    <div class="plan-cards" id="cards-col-${col.id}">${cardsHtml}</div>
-                    <div class="plan-col-foot">
-                        <button class="plan-link-btn" onclick="openCardModal(${col.id})"><i class="fas fa-plus"></i> Adicionar tarefa</button>
-                    </div>
-                </div>
-            `;
-        }).join("");
-    }
-
-    function renderCard(card) {
-        const overdueChip = card.overdue ? '<span class="plan-chip overdue"><i class="fas fa-clock"></i> Atrasada</span>' : '';
         return `
-            <article class="plan-card" draggable="true" data-card-id="${card.id}" onclick="openCardModal(null, ${card.id})" ondragstart="onCardDragStart(event, ${card.id})" ondragend="onCardDragEnd(event)">
-                <div class="plan-card-top">
-                    <h4 class="plan-card-title">${esc(card.titulo)}</h4>
-                    <span class="plan-badge ${prioClass(card.prioridade)}">${esc(card.prioridade)}</span>
-                </div>
-                ${card.descricao ? `<div class="plan-card-desc">${esc(card.descricao)}</div>` : ''}
-                <div class="plan-card-meta">
-                    ${card.responsavel ? `<span class="plan-chip"><i class="fas fa-user"></i> ${esc(card.responsavel)}</span>` : ''}
-                    ${card.prazo ? `<span class="plan-chip"><i class="fas fa-calendar"></i> ${esc(card.prazo)}</span>` : ''}
-                    ${overdueChip}
-                </div>
-            </article>
+            <section class="plan-col" data-col-id="${col.id}" ondragover="onColumnDragOver(event)" ondragleave="onColumnDragLeave(event)" ondrop="onColumnDrop(event, ${col.id})">
+                <header class="plan-col-head">
+                    <div class="plan-col-title">
+                        <span class="plan-dot" style="background:${esc(col.color || '#0f62c9')}"></span>
+                        <span>${esc(col.titulo)}</span>
+                    </div>
+                    <div class="plan-col-tools">
+                        <span class="plan-col-count">${(col.cards || []).length}</span>
+                        <button class="plan-icon-btn" title="Editar coluna" onclick="openColumnModal(${col.id})"><i class="fas fa-pen"></i></button>
+                    </div>
+                </header>
+                <div class="plan-cards" id="cards-col-${col.id}">${cardsHtml}</div>
+                <footer class="plan-col-foot">
+                    <button class="plan-btn" onclick="openTaskModal(${col.id})"><i class="fas fa-plus"></i> Adicionar tarefa</button>
+                </footer>
+            </section>
         `;
+    }).join("");
+}
+
+function renderCard(card) {
+    const labels = (card.labels || []).map(l =>
+        `<span class="plan-pill" style="background:${esc(l.color)}22;border-color:${esc(l.color)}66;color:#183e63;text-transform:none;letter-spacing:0;">${esc(l.nome)}</span>`
+    ).join("");
+    const check = card.checklist_total > 0
+        ? `<span class="plan-check-mini">Checklist ${card.checklist_done}/${card.checklist_total}</span>` : "";
+    return `
+        <article class="plan-card" draggable="true" data-card-id="${card.id}" onclick="openTaskModal(null, ${card.id})" ondragstart="onCardDragStart(event, ${card.id})" ondragend="onCardDragEnd(event)">
+            <h4 class="plan-card-title">${esc(card.titulo)}</h4>
+            <div class="plan-badges">
+                <span class="plan-pill ${prioClass(card.prioridade)}">${esc(card.prioridade)}</span>
+                ${labels}
+            </div>
+            ${card.descricao ? `<div class="plan-card-desc">${esc(card.descricao)}</div>` : ""}
+            <div class="plan-card-meta">
+                ${card.responsavel ? `<span class="plan-chip"><i class="fas fa-user"></i> ${esc(card.responsavel)}</span>` : ""}
+                ${card.prazo ? `<span class="plan-chip"><i class="fas fa-calendar"></i> ${esc(card.prazo)}</span>` : ""}
+                ${check}
+                ${card.overdue ? '<span class="plan-chip overdue"><i class="fas fa-clock"></i> Atrasada</span>' : ""}
+            </div>
+        </article>
+    `;
+}
+
+function fillColumnSelect() {
+    const sel = document.getElementById("f-coluna");
+    sel.innerHTML = (board.columns || []).map(c => `<option value="${c.id}">${esc(c.titulo)}</option>`).join("");
+}
+
+function fillResponsibleSelect() {
+    const sel = document.getElementById("f-responsavel");
+    const admins = board.responsaveis_admin || [];
+    sel.innerHTML = `<option value="">(Sem responsável)</option>` + admins.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+}
+
+function findCard(cardId) {
+    for (const col of (board.columns || [])) {
+        const card = (col.cards || []).find(c => c.id === cardId);
+        if (card) return { col, card };
     }
+    return null;
+}
 
-    function fillColumnSelect() {
-        const sel = document.getElementById("f-coluna");
-        sel.innerHTML = (board.columns || []).map((c) => `<option value="${c.id}">${esc(c.titulo)}</option>`).join("");
+function renderTaskLabelChoices() {
+    const host = document.getElementById("task-label-list");
+    const labels = board.labels || [];
+    if (!labels.length) {
+        host.innerHTML = '<div class="plan-empty">Sem etiquetas cadastradas.</div>';
+        return;
     }
+    host.innerHTML = labels.map(l => {
+        const active = selectedLabelIds.includes(l.id);
+        return `<button type="button" class="plan-label-chip ${active ? 'active' : ''}" onclick="toggleLabel(${l.id})"><span class="plan-label-dot" style="background:${esc(l.color)}"></span>${esc(l.nome)}</button>`;
+    }).join("");
+}
 
-    function openTaskModal() {
-        document.getElementById("task-modal-wrap").style.display = "flex";
+function toggleLabel(id) {
+    if (selectedLabelIds.includes(id)) {
+        selectedLabelIds = selectedLabelIds.filter(v => v !== id);
+    } else {
+        selectedLabelIds.push(id);
     }
+    renderTaskLabelChoices();
+}
 
-    function closeTaskModal() {
-        document.getElementById("task-modal-wrap").style.display = "none";
-        document.getElementById("task-msg").textContent = "";
-        editingTaskId = null;
+function renderChecklist() {
+    const host = document.getElementById("checklist-list");
+    if (!checklistDraft.length) {
+        host.innerHTML = '<div class="plan-empty">Sem itens de checklist.</div>';
+        return;
     }
+    host.innerHTML = checklistDraft.map((item, idx) => `
+        <div class="plan-check-item ${item.is_done ? 'done' : ''}">
+            <input type="checkbox" ${item.is_done ? 'checked' : ''} onchange="toggleChecklist(${idx}, this.checked)">
+            <div class="txt">${esc(item.texto)}</div>
+            <button class="plan-icon-btn" type="button" onclick="removeChecklist(${idx})"><i class="fas fa-trash"></i></button>
+        </div>
+    `).join("");
+}
 
-    function openCardModal(columnId = null, cardId = null) {
-        openTaskModal();
-        editingTaskId = cardId || null;
-        document.getElementById("task-msg").textContent = "";
-        document.getElementById("btn-delete-task").style.display = cardId ? "inline-block" : "none";
-
-        if (!cardId) {
-            document.getElementById("task-modal-title").textContent = "Nova tarefa";
-            document.getElementById("f-titulo").value = "";
-            document.getElementById("f-descricao").value = "";
-            document.getElementById("f-responsavel").value = "";
-            document.getElementById("f-prazo").value = "";
-            document.getElementById("f-prioridade").value = "Media";
-            if (columnId) document.getElementById("f-coluna").value = String(columnId);
-            return;
-        }
-
-        const found = findCardById(cardId);
-        if (!found) return;
-        const { col, card } = found;
-
-        document.getElementById("task-modal-title").textContent = "Editar tarefa";
-        document.getElementById("f-titulo").value = card.titulo || "";
-        document.getElementById("f-descricao").value = card.descricao || "";
-        document.getElementById("f-responsavel").value = card.responsavel || "";
-        document.getElementById("f-prazo").value = card.prazo || "";
-        document.getElementById("f-prioridade").value = card.prioridade || "Media";
-        document.getElementById("f-coluna").value = String(col.id);
+function toggleChecklist(idx, done) {
+    if (!checklistDraft[idx]) return;
+    checklistDraft[idx].is_done = !!done;
+    renderChecklist();
+    if (checklistDraft[idx].id) {
+        api(`/api/planejamento/checklist/${checklistDraft[idx].id}`, { method: "PATCH", body: JSON.stringify({ is_done: !!done }) })
+            .then(() => loadBoard())
+            .catch(err => notify(err.message, "error"));
     }
+}
 
-    function findCardById(cardId) {
-        for (const col of (board.columns || [])) {
-            const card = (col.cards || []).find((c) => c.id === cardId);
-            if (card) return { col, card };
-        }
-        return null;
-    }
+async function removeChecklist(idx) {
+    const item = checklistDraft[idx];
+    if (!item) return;
+    const ok = await askConfirm("Excluir este item do checklist?");
+    if (!ok) return;
 
-    async function saveTask() {
-        const msg = document.getElementById("task-msg");
-        msg.textContent = "";
+    if (item.id) {
         try {
-            const payload = {
-                titulo: document.getElementById("f-titulo").value.trim(),
-                descricao: document.getElementById("f-descricao").value.trim(),
-                column_id: Number(document.getElementById("f-coluna").value),
-                responsavel: document.getElementById("f-responsavel").value.trim(),
-                prazo: document.getElementById("f-prazo").value,
-                prioridade: document.getElementById("f-prioridade").value,
-            };
-            if (!payload.titulo) {
-                msg.textContent = "Informe o título da tarefa.";
-                return;
-            }
-
+            await api(`/api/planejamento/checklist/${item.id}`, { method: "DELETE" });
+            notify("Item removido.", "success");
+            await loadBoard();
             if (editingTaskId) {
-                await api(`/api/planejamento/cards/${editingTaskId}`, { method: "PATCH", body: JSON.stringify(payload) });
-            } else {
-                await api("/api/planejamento/cards", { method: "POST", body: JSON.stringify(payload) });
+                const found = findCard(editingTaskId);
+                if (found) {
+                    checklistDraft = (found.card.checklist || []).map(c => ({ ...c }));
+                    renderChecklist();
+                }
             }
-            closeTaskModal();
-            await loadBoard();
         } catch (err) {
-            msg.textContent = err.message || "Falha ao salvar tarefa.";
+            notify(err.message, "error");
         }
+        return;
     }
 
-    async function deleteTask() {
-        if (!editingTaskId) return;
-        if (!confirm("Deseja excluir esta tarefa?")) return;
+    checklistDraft.splice(idx, 1);
+    renderChecklist();
+}
+
+async function addChecklistItem() {
+    const inp = document.getElementById("checklist-new");
+    const texto = (inp.value || "").trim();
+    if (!texto) return;
+
+    if (editingTaskId) {
         try {
-            await api(`/api/planejamento/cards/${editingTaskId}`, { method: "DELETE" });
-            closeTaskModal();
+            await api(`/api/planejamento/cards/${editingTaskId}/checklist`, { method: "POST", body: JSON.stringify({ texto }) });
+            inp.value = "";
             await loadBoard();
+            const found = findCard(editingTaskId);
+            if (found) {
+                checklistDraft = (found.card.checklist || []).map(c => ({ ...c }));
+                renderChecklist();
+            }
         } catch (err) {
-            document.getElementById("task-msg").textContent = err.message || "Falha ao excluir tarefa.";
+            notify(err.message, "error");
         }
+        return;
     }
 
-    async function openColumnPrompt() {
-        const titulo = prompt("Nome da nova coluna:");
-        if (titulo == null) return;
-        const clean = titulo.trim();
-        if (!clean) return;
-        try {
-            await api("/api/planejamento/columns", {
-                method: "POST",
-                body: JSON.stringify({ titulo: clean }),
-            });
-            await loadBoard();
-        } catch (err) {
-            alert(err.message || "Falha ao criar coluna.");
+    checklistDraft.push({ texto, is_done: false });
+    inp.value = "";
+    renderChecklist();
+}
+
+function renderComments(items) {
+    const host = document.getElementById("comments-list");
+    if (!editingTaskId) {
+        host.innerHTML = '<div class="plan-empty">Comentários serão habilitados após salvar a tarefa.</div>';
+        return;
+    }
+    if (!items || !items.length) {
+        host.innerHTML = '<div class="plan-empty">Sem comentários.</div>';
+        return;
+    }
+    host.innerHTML = items.map(c => `
+        <article class="plan-comment">
+            <div class="plan-comment-meta">${esc(c.criado_por)} · ${esc(c.criado_em)}</div>
+            <div class="plan-comment-text">${esc(c.texto)}</div>
+        </article>
+    `).join("");
+}
+
+async function addComment() {
+    if (!editingTaskId) {
+        notify("Salve a tarefa antes de comentar.", "error");
+        return;
+    }
+    const inp = document.getElementById("comment-new");
+    const texto = (inp.value || "").trim();
+    if (!texto) return;
+    try {
+        await api(`/api/planejamento/cards/${editingTaskId}/comments`, { method: "POST", body: JSON.stringify({ texto }) });
+        inp.value = "";
+        await loadBoard();
+        const found = findCard(editingTaskId);
+        renderComments(found ? found.card.comments : []);
+    } catch (err) {
+        notify(err.message, "error");
+    }
+}
+
+function openTaskModal(columnId = null, cardId = null) {
+    editingTaskId = cardId || null;
+    document.getElementById("task-modal-wrap").style.display = "flex";
+    document.getElementById("task-msg").textContent = "";
+    document.getElementById("comment-new").value = "";
+    document.getElementById("btn-delete-task").style.display = cardId ? "inline-block" : "none";
+
+    if (!cardId) {
+        document.getElementById("task-modal-title").textContent = "Nova tarefa";
+        document.getElementById("f-titulo").value = "";
+        document.getElementById("f-descricao").value = "";
+        document.getElementById("f-prazo").value = "";
+        document.getElementById("f-prioridade").value = "Media";
+        document.getElementById("f-responsavel").value = "";
+        if (columnId) document.getElementById("f-coluna").value = String(columnId);
+        selectedLabelIds = [];
+        checklistDraft = [];
+        renderTaskLabelChoices();
+        renderChecklist();
+        renderComments([]);
+        return;
+    }
+
+    const found = findCard(cardId);
+    if (!found) {
+        notify("Tarefa não encontrada.", "error");
+        return;
+    }
+    const { col, card } = found;
+
+    document.getElementById("task-modal-title").textContent = "Editar tarefa";
+    document.getElementById("f-titulo").value = card.titulo || "";
+    document.getElementById("f-descricao").value = card.descricao || "";
+    document.getElementById("f-prazo").value = card.prazo || "";
+    document.getElementById("f-prioridade").value = card.prioridade || "Media";
+    document.getElementById("f-responsavel").value = card.responsavel || "";
+    document.getElementById("f-coluna").value = String(col.id);
+
+    selectedLabelIds = (card.label_ids || []).slice();
+    checklistDraft = (card.checklist || []).map(c => ({ ...c }));
+    renderTaskLabelChoices();
+    renderChecklist();
+    renderComments(card.comments || []);
+}
+
+function closeTaskModal() {
+    document.getElementById("task-modal-wrap").style.display = "none";
+    editingTaskId = null;
+}
+
+async function saveTask() {
+    const msg = document.getElementById("task-msg");
+    msg.textContent = "";
+    const payload = {
+        titulo: document.getElementById("f-titulo").value.trim(),
+        descricao: document.getElementById("f-descricao").value.trim(),
+        column_id: Number(document.getElementById("f-coluna").value),
+        responsavel: document.getElementById("f-responsavel").value,
+        prazo: document.getElementById("f-prazo").value,
+        prioridade: document.getElementById("f-prioridade").value,
+        label_ids: selectedLabelIds.slice(),
+    };
+
+    if (!payload.titulo) {
+        msg.textContent = "Informe o título da tarefa.";
+        return;
+    }
+
+    try {
+        if (editingTaskId) {
+            await api(`/api/planejamento/cards/${editingTaskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+            notify("Tarefa atualizada.", "success");
+        } else {
+            payload.checklist = checklistDraft.map(i => i.texto);
+            await api("/api/planejamento/cards", { method: "POST", body: JSON.stringify(payload) });
+            notify("Tarefa criada.", "success");
         }
+        closeTaskModal();
+        await loadBoard();
+    } catch (err) {
+        msg.textContent = err.message || "Falha ao salvar tarefa.";
+    }
+}
+
+async function confirmDeleteTask() {
+    if (!editingTaskId) return;
+    const ok = await askConfirm("Deseja excluir esta tarefa?");
+    if (!ok) return;
+    try {
+        await api(`/api/planejamento/cards/${editingTaskId}`, { method: "DELETE" });
+        closeTaskModal();
+        await loadBoard();
+        notify("Tarefa excluída.", "success");
+    } catch (err) {
+        notify(err.message, "error");
+    }
+}
+
+function openColumnModal(columnId = null) {
+    editingColumnId = columnId;
+    document.getElementById("column-modal-wrap").style.display = "flex";
+    document.getElementById("col-msg").textContent = "";
+    document.getElementById("btn-delete-col").style.display = columnId ? "inline-block" : "none";
+
+    if (!columnId) {
+        document.getElementById("column-modal-title").textContent = "Nova coluna";
+        document.getElementById("col-titulo").value = "";
+        document.getElementById("col-color").value = "#0f62c9";
+        document.getElementById("col-done").value = "false";
+        return;
     }
 
-    async function editColumn(columnId) {
-        const col = (board.columns || []).find((c) => c.id === columnId);
-        if (!col) return;
+    const col = (board.columns || []).find(c => c.id === columnId);
+    if (!col) return;
 
-        const novoTitulo = prompt("Editar nome da coluna:", col.titulo || "");
-        if (novoTitulo == null) return;
-        const titulo = novoTitulo.trim();
-        if (!titulo) return;
+    document.getElementById("column-modal-title").textContent = "Editar coluna";
+    document.getElementById("col-titulo").value = col.titulo || "";
+    document.getElementById("col-color").value = col.color || "#0f62c9";
+    document.getElementById("col-done").value = col.is_done ? "true" : "false";
+}
 
-        const concluirTxt = confirm("Esta coluna representa tarefas concluídas?");
+function closeColumnModal() {
+    document.getElementById("column-modal-wrap").style.display = "none";
+    editingColumnId = null;
+}
 
-        try {
-            await api(`/api/planejamento/columns/${columnId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ titulo, is_done: concluirTxt }),
-            });
-            await loadBoard();
-        } catch (err) {
-            alert(err.message || "Falha ao atualizar coluna.");
+async function saveColumn() {
+    const msg = document.getElementById("col-msg");
+    msg.textContent = "";
+    const payload = {
+        titulo: document.getElementById("col-titulo").value.trim(),
+        color: document.getElementById("col-color").value,
+        is_done: document.getElementById("col-done").value === "true",
+    };
+
+    if (!payload.titulo) {
+        msg.textContent = "Informe o nome da coluna.";
+        return;
+    }
+
+    try {
+        if (editingColumnId) {
+            await api(`/api/planejamento/columns/${editingColumnId}`, { method: "PATCH", body: JSON.stringify(payload) });
+            notify("Coluna atualizada.", "success");
+        } else {
+            await api("/api/planejamento/columns", { method: "POST", body: JSON.stringify(payload) });
+            notify("Coluna criada.", "success");
         }
+        closeColumnModal();
+        await loadBoard();
+    } catch (err) {
+        msg.textContent = err.message || "Falha ao salvar coluna.";
     }
+}
 
-    function onCardDragStart(event, cardId) {
-        draggingCardId = cardId;
-        event.currentTarget.classList.add("dragging");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", String(cardId));
+async function confirmDeleteColumn() {
+    if (!editingColumnId) return;
+    const ok = await askConfirm("Deseja excluir esta coluna? Ela precisa estar sem tarefas.");
+    if (!ok) return;
+    try {
+        await api(`/api/planejamento/columns/${editingColumnId}`, { method: "DELETE" });
+        closeColumnModal();
+        await loadBoard();
+        notify("Coluna excluída.", "success");
+    } catch (err) {
+        document.getElementById("col-msg").textContent = err.message;
     }
+}
 
-    function onCardDragEnd(event) {
-        event.currentTarget.classList.remove("dragging");
-        draggingCardId = null;
-        document.querySelectorAll(".plan-col").forEach((el) => el.classList.remove("drag-over"));
+function openLabelModal() {
+    document.getElementById("label-modal-wrap").style.display = "flex";
+    document.getElementById("label-msg").textContent = "";
+    renderLabelManager();
+}
+
+function closeLabelModal() {
+    document.getElementById("label-modal-wrap").style.display = "none";
+}
+
+function renderLabelManager() {
+    const host = document.getElementById("label-manager-list");
+    if (!host) return;
+    const labels = board && board.labels ? board.labels : [];
+    if (!labels.length) {
+        host.innerHTML = '<div class="plan-empty">Sem etiquetas cadastradas.</div>';
+        return;
     }
+    host.innerHTML = labels.map(l => `
+        <div class="plan-label-chip">
+            <span class="plan-label-dot" style="background:${esc(l.color)}"></span>
+            <span>${esc(l.nome)}</span>
+            <button class="plan-icon-btn" type="button" onclick="removeLabel(${l.id})" title="Excluir etiqueta"><i class="fas fa-trash"></i></button>
+        </div>
+    `).join("");
+}
 
-    function onColumnDragOver(event) {
-        event.preventDefault();
-        event.currentTarget.classList.add("drag-over");
+async function createLabel() {
+    const msg = document.getElementById("label-msg");
+    msg.textContent = "";
+    const nome = document.getElementById("label-new-name").value.trim();
+    const color = document.getElementById("label-new-color").value;
+    if (!nome) {
+        msg.textContent = "Informe o nome da etiqueta.";
+        return;
     }
-
-    function onColumnDragLeave(event) {
-        event.currentTarget.classList.remove("drag-over");
+    try {
+        await api("/api/planejamento/labels", { method: "POST", body: JSON.stringify({ nome, color }) });
+        document.getElementById("label-new-name").value = "";
+        notify("Etiqueta criada.", "success");
+        await loadBoard();
+        renderTaskLabelChoices();
+        renderLabelManager();
+    } catch (err) {
+        msg.textContent = err.message;
     }
+}
 
-    async function onColumnDrop(event, columnId) {
-        event.preventDefault();
-        event.currentTarget.classList.remove("drag-over");
-
-        const cardId = Number(event.dataTransfer.getData("text/plain") || draggingCardId || 0);
-        if (!cardId || !columnId) return;
-
-        const colEl = document.getElementById(`cards-col-${columnId}`);
-        const pos = colEl ? colEl.querySelectorAll(".plan-card").length : 0;
-
-        try {
-            await api(`/api/planejamento/cards/${cardId}/move`, {
-                method: "POST",
-                body: JSON.stringify({ to_column_id: columnId, position: pos }),
-            });
-            await loadBoard();
-        } catch (err) {
-            alert(err.message || "Falha ao mover card.");
-        }
+async function removeLabel(labelId) {
+    const ok = await askConfirm("Excluir esta etiqueta? Ela será removida dos cards vinculados.");
+    if (!ok) return;
+    try {
+        await api(`/api/planejamento/labels/${labelId}`, { method: "DELETE" });
+        selectedLabelIds = selectedLabelIds.filter(id => id !== labelId);
+        notify("Etiqueta excluída.", "success");
+        await loadBoard();
+        renderTaskLabelChoices();
+        renderLabelManager();
+    } catch (err) {
+        notify(err.message, "error");
     }
+}
 
-    loadBoard();
+function onCardDragStart(event, cardId) {
+    draggingCardId = cardId;
+    event.currentTarget.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(cardId));
+}
+
+function onCardDragEnd(event) {
+    event.currentTarget.classList.remove("dragging");
+    draggingCardId = null;
+    document.querySelectorAll(".plan-col").forEach(el => el.classList.remove("drag-over"));
+}
+
+function onColumnDragOver(event) {
+    event.preventDefault();
+    event.currentTarget.classList.add("drag-over");
+}
+
+function onColumnDragLeave(event) {
+    event.currentTarget.classList.remove("drag-over");
+}
+
+async function onColumnDrop(event, columnId) {
+    event.preventDefault();
+    event.currentTarget.classList.remove("drag-over");
+    const cardId = Number(event.dataTransfer.getData("text/plain") || draggingCardId || 0);
+    if (!cardId || !columnId) return;
+
+    const colEl = document.getElementById(`cards-col-${columnId}`);
+    const pos = colEl ? colEl.querySelectorAll(".plan-card").length : 0;
+
+    try {
+        await api(`/api/planejamento/cards/${cardId}/move`, {
+            method: "POST",
+            body: JSON.stringify({ to_column_id: columnId, position: pos }),
+        });
+        await loadBoard();
+    } catch (err) {
+        notify(err.message || "Falha ao mover card.", "error");
+    }
+}
+
+loadBoard();
 </script>
 {% endblock %}

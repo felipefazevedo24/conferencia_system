@@ -57,7 +57,7 @@
                     </div>
                 </div>
                 {% else %}
-                {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') or can_access('PAGE_COMPRAS_CPS') or can_access('PAGE_CADASTRO_WORKFLOW') or can_access('PAGE_PLANEJAMENTO_TAREFAS') %}
+                {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') or can_access('PAGE_COMPRAS_CPS') or can_access('PAGE_CADASTRO_WORKFLOW') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-compras" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-file-invoice-dollar"></i><span>Compras</span></span>
@@ -67,7 +67,6 @@
                         {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Documento de entrada</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras" class="list-group-item list-group-item-action"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
                         {% if can_access('PAGE_CADASTRO_WORKFLOW') %}<a href="/cadastros/" class="list-group-item list-group-item-action"><i class="fas fa-diagram-project"></i> Workflow de cadastros</a>{% endif %}
-                        {% if can_access('PAGE_PLANEJAMENTO_TAREFAS') %}<a href="/planejamento" class="list-group-item list-group-item-action"><i class="fas fa-table-columns"></i> Planejamento de tarefas</a>{% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -182,7 +181,7 @@
                 </div>
                 {% endif %}
 
-                {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_ATUALIZACOES') or can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_EMAILS_NFE') %}
+                {% if can_access('PAGE_ADMIN_DASHBOARD') or can_access('PAGE_ADMIN_ATUALIZACOES') or can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') or can_access('PAGE_ADMIN_USUARIOS') or can_access('PAGE_ADMIN_EMAILS_NFE') or can_access('PAGE_PLANEJAMENTO_TAREFAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-administracao" aria-expanded="false">
                         <span class="nav-group-title"><i class="fas fa-user-shield"></i><span>Administração</span></span>
@@ -193,6 +192,7 @@
                         {% if can_access('PAGE_ADMIN_ATUALIZACOES') %}<a href="/admin/atualizacoes" class="list-group-item list-group-item-action"><i class="fas fa-bullhorn"></i> Avisos de atualizações</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_ATUALIZACOES_CADASTRAIS') %}<a href="/admin/atualizacoes-cadastrais" class="list-group-item list-group-item-action"><i class="fas fa-address-card"></i> Atualizações cadastrais</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_USUARIOS') %}<a href="/admin/usuarios" class="list-group-item list-group-item-action"><i class="fas fa-users-cog"></i> Gestão de acessos</a>{% endif %}
+                        {% if can_access('PAGE_PLANEJAMENTO_TAREFAS') %}<a href="/planejamento" class="list-group-item list-group-item-action"><i class="fas fa-table-columns"></i> Planejamento de tarefas</a>{% endif %}
                         {% if session.get('role') == 'Admin' %}<a href="/expedicao/auditoria" class="list-group-item list-group-item-action"><i class="fas fa-magnifying-glass-chart"></i> Auditoria de Expedição</a>{% endif %}
                         {% if can_access('PAGE_ADMIN_EMAILS_NFE') %}<a href="/faturamento/emails-nfe" class="list-group-item list-group-item-action"><i class="fas fa-envelope-open-text"></i> E-mails de NF-e</a>{% endif %}
                     </div>
