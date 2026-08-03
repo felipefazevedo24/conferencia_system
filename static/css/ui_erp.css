@@ -173,7 +173,7 @@ body {
 #shell-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(6, 18, 31, 0.46);
+    background: rgba(230, 238, 248, 0.62);
     backdrop-filter: blur(4px);
     opacity: 0;
     pointer-events: none;
