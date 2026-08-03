@@ -274,7 +274,7 @@
 <div class="rom-actions-menu" id="rom-actions-menu"></div>
 
 <!-- Inputs ocultos de captura de foto (carregamento / comprovante FOB) -->
-<input type="file" id="rom-input-foto-carregamento" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="rom-input-foto-carregamento" accept="image/*" style="display:none">
 <input type="file" id="rom-input-comprovante-fob" accept="image/*" capture="environment" style="display:none">
 
 <!-- MODAL DE COMPROVANTES (CIF - um por NF) -->
@@ -456,13 +456,13 @@
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); solicitarExclusaoRomaneio(${r.id})"><i class="fas fa-trash"></i> Solicitar exclusão</button>`;
             }
         } else if (r.status === "Pronto") {
-            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Tirar foto de carregamento</button>`;
+            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Foto de carregamento</button>`;
             itens += `<button onclick="fecharMenuAcoesRomaneio(); expedirRomaneio(${r.id})"><i class="fas fa-truck"></i> Expedir</button>`;
             if (IS_ADMIN) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarFinalizacao(${r.id})" title="Voltar para Rascunho"><i class="fas fa-rotate-left"></i> Estornar finalização</button>`;
             }
         } else if (r.status === "Expedido") {
-            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Tirar foto de carregamento</button>`;
+            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Foto de carregamento</button>`;
             if (r.tem_pendencia_comprovante) {
                 if (r.tipo_frete === "CIF") {
                     itens += `<button onclick="fecharMenuAcoesRomaneio(); abrirModalComprovantesCif(${r.id})"><i class="fas fa-file-signature"></i> Anexar comprovantes por NF</button>`;
