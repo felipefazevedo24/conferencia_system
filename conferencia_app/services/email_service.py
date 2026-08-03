@@ -24,24 +24,24 @@ def _send_async(app, msg, smtp_server, smtp_port, sender, password):
 
 
 def enviar_email_registro(destinatario_email: str, username: str, role: str, url_login: str):
-  """Compatibilidade: envio antigo de boas-vindas sem token dedicado."""
-  return enviar_email_convite_acesso(
-    destinatario_email=destinatario_email,
-    username=username,
-    role=role,
-    invite_link=url_login,
-    expires_at_text="acesso imediato",
-  )
+    """Compatibilidade: envio antigo de boas-vindas sem token dedicado."""
+    return enviar_email_convite_acesso(
+        destinatario_email=destinatario_email,
+        username=username,
+        role=role,
+        invite_link=url_login,
+        expires_at_text="acesso imediato",
+    )
 
 
 def enviar_email_convite_acesso(
-  destinatario_email: str,
-  username: str,
-  role: str,
-  invite_link: str,
-  expires_at_text: str,
+    destinatario_email: str,
+    username: str,
+    role: str,
+    invite_link: str,
+    expires_at_text: str,
 ) -> bool:
-  """Envia convite de ativação de conta com link único e validade."""
+    """Envia convite de ativação de conta com link único e validade."""
     app = current_app._get_current_object()
     smtp_server = app.config.get("MAIL_SMTP_SERVER", "smtp.gmail.com")
     smtp_port = app.config.get("MAIL_SMTP_PORT", 587)
@@ -51,7 +51,7 @@ def enviar_email_convite_acesso(
 
     if not sender or not password:
         app.logger.warning("E-mail não configurado. Pulando envio.")
-      return False
+        return False
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Convite de acesso - Columbia Sync"
