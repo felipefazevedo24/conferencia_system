@@ -130,12 +130,22 @@ def get_base_role_permissions(role: str) -> dict:
     return {key: key in allowed for key in PERMISSION_CATALOG.keys()}
 
 
+def is_admin_role(role: str | None) -> bool:
+    """Avalia papel administrativo de forma tolerante a caixa/variações."""
+    role_txt = (role or "").strip().casefold()
+    return role_txt in {"admin", "administrador"}
+
+
+def is_admin_session() -> bool:
+    return is_admin_role(session.get("role"))
+
+
 def _resolve_permissions(username: str | None = None, role: str | None = None) -> dict:
     role = (role or session.get("role") or "").strip()
     username = (username or session.get("username") or "").strip()
 
     # Admin sempre tem acesso total para evitar lockout operacional.
-    if role == "Admin":
+    if is_admin_role(role):
         return {key: True for key in PERMISSION_CATALOG.keys()}
 
     effective = get_base_role_permissions(role)
@@ -178,7 +188,7 @@ def has_permission(permission_key: str, username: str | None = None, role: str |
 
 
 def _registrar_acesso_admin(path: str, method: str) -> None:
-    if session.get("role") != "Admin":
+    if not is_admin_session():
         return
     if not (path.startswith("/admin") or path.startswith("/api/admin")):
         return

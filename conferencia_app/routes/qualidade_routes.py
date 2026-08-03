@@ -19,9 +19,10 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-from ..auth import login_required, permission_required
+from ..auth import has_permission, is_admin_session, login_required, permission_required
 from ..extensions import db
 from ..models import QualidadeCertificado
+from ..services.qualidade_service import nota_elegivel_para_qualidade, notas_qualidade_visiveis_map
 
 
 qualidade_bp = Blueprint("qualidade", __name__)
@@ -43,11 +44,14 @@ STATUS_SLUG = {
 
 
 def _pode_aprovar() -> bool:
-    from ..auth import has_permission
     try:
-        return bool(has_permission(PERM_APROVAR)) or (session.get("role") == "Admin")
+        return bool(has_permission(PERM_APROVAR)) or is_admin_session()
     except Exception:
-        return session.get("role") == "Admin"
+        return is_admin_session()
+
+
+def _registro_visivel_por_cfop(registro: QualidadeCertificado) -> bool:
+    return nota_elegivel_para_qualidade(registro.numero_nota)
 
 
 def _upload_dir() -> str:
@@ -116,7 +120,7 @@ def qualidade_page():
         "qualidade.html",
         user=session["username"],
         user_role=session.get("role", ""),
-        is_admin=session.get("role") == "Admin",
+        is_admin=is_admin_session(),
         pode_aprovar=_pode_aprovar(),
     )
 
@@ -129,11 +133,19 @@ def api_listar_certificados():
     if status and status.lower() != "todos":
         query = query.filter_by(status=status)
     rows = query.order_by(QualidadeCertificado.criado_em.desc()).limit(500).all()
+    vis_map = notas_qualidade_visiveis_map([r.numero_nota for r in rows])
+    rows = [r for r in rows if vis_map.get(r.numero_nota, False)]
 
-    # Métricas por status (sobre toda a base, independente do filtro)
+    # Métricas por status considerando somente NFs elegíveis pela regra de CFOP.
     metricas = {"pendente": 0, "emitido": 0, "aprovado": 0}
-    for st, slug in STATUS_SLUG.items():
-        metricas[slug] = QualidadeCertificado.query.filter_by(status=st).count()
+    metrica_rows = db.session.query(QualidadeCertificado.numero_nota, QualidadeCertificado.status).all()
+    metrica_vis = notas_qualidade_visiveis_map([n for n, _ in metrica_rows])
+    for numero_nota, st in metrica_rows:
+        if not metrica_vis.get(numero_nota, False):
+            continue
+        slug = STATUS_SLUG.get(st)
+        if slug:
+            metricas[slug] += 1
 
     return jsonify({
         "rows": [_serialize(r) for r in rows],
@@ -146,6 +158,8 @@ def api_listar_certificados():
 @permission_required(PERM)
 def api_obter_certificado(id):
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     return jsonify(_serialize(registro))
 
 
@@ -153,6 +167,8 @@ def api_obter_certificado(id):
 @permission_required(PERM)
 def api_obter_foto(id):
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     if not registro.foto_path:
         return jsonify({"error": "Sem foto do certificado."}), 404
     caminho = os.path.join(_upload_dir(), registro.foto_path)
@@ -165,6 +181,8 @@ def api_obter_foto(id):
 @permission_required(PERM)
 def api_analisar_certificado(id):
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     user = session.get("username") or ""
 
     if registro.status not in (STATUS_PENDENTE, STATUS_EMITIDO):
@@ -239,6 +257,8 @@ def api_analisar_certificado(id):
 def api_excluir_laudo(id):
     """Exclui o laudo emitido e devolve a NF para a fila de Pendente de análise."""
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     if registro.status != STATUS_EMITIDO:
         return jsonify({"error": "Só é possível excluir laudos que estejam em 'Laudo emitido'."}), 409
 
@@ -264,6 +284,8 @@ def api_aprovar_laudo(id):
     if not _pode_aprovar():
         return jsonify({"error": "Apenas supervisor/gerente pode aprovar o laudo."}), 403
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     if registro.status != STATUS_EMITIDO:
         return jsonify({"error": "Só é possível aprovar laudos emitidos."}), 409
 
@@ -286,6 +308,8 @@ def api_laudo_pdf(id):
     from ..services.qualidade_laudo_pdf import gerar_laudo_pdf
 
     registro = QualidadeCertificado.query.get_or_404(id)
+    if not _registro_visivel_por_cfop(registro):
+        return jsonify({"error": "NF fora do escopo de CFOP do módulo Qualidade."}), 404
     if registro.status not in (STATUS_EMITIDO, STATUS_APROVADO):
         return jsonify({"error": "Emita o laudo antes de gerar o PDF."}), 400
 
