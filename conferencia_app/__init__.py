@@ -233,4 +233,14 @@ def create_app(test_config=None) -> Flask:
         except Exception:
             app.logger.exception("Falha ao iniciar scheduler Romaneio FOB")
 
+    # Automacao de Solicitacoes Logisticas por frete CIF: Coleta (OC CIF) e
+    # Entrega (Romaneio de saida CIF em Pronto/Expedido). Roda periodicamente
+    # sem intervencao do usuario.
+    if app.config.get("SOLICITACAO_CIF_AUTO_ENABLED") and not app.config.get("TESTING"):
+        try:
+            from .services.solicitacao_logistica_cif_scheduler import iniciar_scheduler as iniciar_solicitacao_cif
+            iniciar_solicitacao_cif(app)
+        except Exception:
+            app.logger.exception("Falha ao iniciar scheduler Solicitacoes CIF")
+
     return app

@@ -625,6 +625,56 @@ LIMIT  %(limite)s;
 """
 
 
+# -------------------------------------------------------------------
+# OCs em aberto (com SALDO a receber) + previsao de entrega, incluindo o
+# cabecalho COMPLETO da OC (to_jsonb) e o cadastro do fornecedor. Usada pela
+# automacao de Solicitacoes Logisticas CIF: como o nome da coluna "frete por
+# conta" no ERP nao e conhecido a priori, retornamos a linha inteira da OC como
+# JSON para o Python identificar a modalidade de frete e classificar CIF.
+# -------------------------------------------------------------------
+SQL_OC_CIF_RECENTES = """
+WITH itens AS (
+    SELECT cod_empresa, cod_ord_compra   AS cod_ordem_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0) AS saldo
+    FROM   public.tord_aux
+    UNION ALL
+    SELECT cod_empresa, cod_ordem_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_serv
+    UNION ALL
+    SELECT cod_empresa, cod_ord_compra, dt_prevista_entrega,
+           COALESCE(qtde, 0) - COALESCE(qtde_entregue, 0)
+    FROM   public.tord_aux_me
+),
+aberto AS (
+    SELECT cod_empresa, cod_ordem_compra,
+           MIN(dt_prevista_entrega) AS previsao
+    FROM   itens
+    WHERE  cod_empresa = %(cod_empresa)s
+      AND  saldo > 0.0001
+      AND  dt_prevista_entrega IS NOT NULL
+    GROUP  BY cod_empresa, cod_ordem_compra
+)
+SELECT
+    o.codigo::text                                  AS cod_ordem_compra,
+    a.previsao                                      AS previsao_entrega,
+    to_jsonb(o.*)                                   AS oc_json,
+    (SELECT to_jsonb(f.*)
+       FROM public.tfornece f
+      WHERE f.cod_empresa = o.cod_empresa
+        AND f.codigo = o.cod_fornecedor
+      LIMIT 1)                                      AS fornecedor_json
+FROM   aberto a
+JOIN   public.tord_com o
+       ON o.cod_empresa = a.cod_empresa
+      AND o.codigo      = a.cod_ordem_compra
+WHERE  COALESCE(o.cancelado, 0) = 0
+  AND  a.previsao >= (CURRENT_DATE - (%(janela_dias)s::int))
+ORDER  BY a.previsao ASC
+LIMIT  %(limite)s;
+"""
+
+
 SQL_VISIBILITY_HEADER = """
 WITH compras_ref AS (
     SELECT DISTINCT ON (c.cod_empresa, c.cod_ordem_compra)

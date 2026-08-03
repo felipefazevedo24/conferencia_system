@@ -320,6 +320,27 @@ def ordens_compra_entregas(
     return db.fetch_all(queries.SQL_OC_ENTREGAS, params)
 
 
+def ordens_compra_cif_recentes(
+    cod_empresa: Optional[int] = None,
+    janela_dias: int = 60,
+    limite: int = 2000,
+) -> list[dict]:
+    """OCs em aberto com previsao de entrega recente + cabecalho completo (JSON).
+
+    Retorna, por OC em aberto, a previsao de entrega, o cabecalho da OC
+    (oc_json) e o cadastro do fornecedor (fornecedor_json) para a automacao de
+    Solicitacoes Logisticas CIF classificar a modalidade de frete e herdar o
+    endereco de coleta.
+    """
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    params = {
+        "cod_empresa": empresa,
+        "janela_dias": max(0, int(janela_dias or 0)),
+        "limite": max(1, min(int(limite or 2000), 5000)),
+    }
+    return db.fetch_all(queries.SQL_OC_CIF_RECENTES, params)
+
+
 def visibility_compras(
     cod_empresa: Optional[int] = None,
     classificacao: Optional[str] = None,

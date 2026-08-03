@@ -44,6 +44,30 @@ def _parse_int(valor, default=0) -> int:
     return int(_parse_float(valor, default))
 
 
+def _gerar_solicitacao_entrega_cif(romaneio) -> None:
+    """Gatilho imediato da Regra 2: gera a Solicitacao de Entrega de um
+    romaneio CIF assim que ele fica Pronto ou Expedido. Best-effort: nunca
+    interrompe o fluxo do romaneio (o scheduler cobre eventuais falhas)."""
+    try:
+        if not current_app.config.get("SOLICITACAO_CIF_AUTO_ENABLED", True):
+            return
+        if not current_app.config.get("SOLICITACAO_CIF_ENTREGA_ENABLED", True):
+            return
+        if str(getattr(romaneio, "tipo_frete", "") or "").strip().upper() != "CIF":
+            return
+        from ..services.solicitacao_logistica_cif_service import (
+            gerar_solicitacao_entrega_para_romaneio,
+        )
+
+        solicitante = session.get("username", "sistema")
+        gerar_solicitacao_entrega_para_romaneio(romaneio, solicitante=solicitante, commit=True)
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao gerar Solicitacao de Entrega CIF para o romaneio %s.",
+            getattr(romaneio, "numero_romaneio", None),
+        )
+
+
 def _calcular_totais_nfs(nfs: list) -> tuple[float, int]:
     peso_total = sum(_parse_float(getattr(nf, "peso_bruto", 0) or 0) for nf in (nfs or []))
     volumes_total = sum(_parse_int(getattr(nf, "qtde_volumes", 0) or 0) for nf in (nfs or []))
@@ -732,7 +756,9 @@ def finalizar_romaneio(romaneio_id):
     romaneio.atualizado_por = session["username"]
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
-    
+
+    _gerar_solicitacao_entrega_cif(romaneio)
+
     return jsonify({"message": "Romaneio finalizado com sucesso."})
 
 
@@ -770,6 +796,8 @@ def expedir_romaneio(romaneio_id):
             usuario=session["username"],
         )
     db.session.commit()
+
+    _gerar_solicitacao_entrega_cif(romaneio)
 
     return jsonify({"message": "Romaneio expedido com sucesso."})
 

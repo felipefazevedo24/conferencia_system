@@ -106,6 +106,7 @@ def _origem_documento_label(origem: str | None) -> str:
         "Consyste": "Consyste",
         "ERPPostgres": "ERP/Postgres",
         "Manual": "Manual",
+        "AutoCIF": "Automático (CIF)",
     }
     return mapping.get(str(origem or "").strip(), str(origem or "").strip() or "---")
 
@@ -488,6 +489,35 @@ def consultar_nf_agendamento_endpoint(numero_nf: str):
         return jsonify({"error": "Acesso negado."}), 403
     resultado = consultar_nf_agendamento(numero_nf)
     return jsonify(resultado), (200 if resultado.get("encontrada") else 404)
+
+
+@agendamento_bp.route("/api/logistica/agendamento-veiculos/cif/reprocessar", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def reprocessar_solicitacoes_cif():
+    """Reprocessamento manual da automacao de Solicitacoes Logisticas CIF.
+
+    Executa as duas regras (Coleta a partir de OC CIF e Entrega a partir de
+    Romaneio CIF). Util quando o scheduler falhou ou para forcar a geracao.
+    Aceita opcional {"regra": "coleta"|"entrega"} para rodar apenas uma.
+    """
+    from ..services.solicitacao_logistica_cif_service import (
+        executar_ciclo,
+        gerar_solicitacoes_coleta_cif,
+        gerar_solicitacoes_entrega_cif,
+    )
+
+    regra = str((request.get_json(silent=True) or {}).get("regra") or "").strip().lower()
+    try:
+        if regra == "coleta":
+            resultado = {"coleta": gerar_solicitacoes_coleta_cif()}
+        elif regra == "entrega":
+            resultado = {"entrega": gerar_solicitacoes_entrega_cif()}
+        else:
+            resultado = executar_ciclo()
+    except Exception as exc:
+        current_app.logger.exception("Falha no reprocessamento manual de Solicitacoes CIF")
+        return jsonify({"error": f"Falha ao reprocessar: {exc}"}), 500
+    return jsonify({"sucesso": True, "resultado": resultado})
 
 
 def _registrar_historico(
