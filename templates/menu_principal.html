@@ -579,6 +579,86 @@
         display: block;
     }
 
+    /* ============================================================
+       Cor por area — cada secao recebe um acento proprio, usado
+       pelos icones, badges e botao "Abrir". Deixa o menu mais
+       facil de escanear e visualmente mais rico.
+       ============================================================ */
+    .home-section { --area: #0f62c9; --area-2: #0a4ea2; }
+    .home-section:nth-of-type(6n+1) { --area: #0f62c9; --area-2: #0a4ea2; }
+    .home-section:nth-of-type(6n+2) { --area: #7c3aed; --area-2: #6d28d9; }
+    .home-section:nth-of-type(6n+3) { --area: #0891b2; --area-2: #0e7490; }
+    .home-section:nth-of-type(6n+4) { --area: #d97706; --area-2: #b45309; }
+    .home-section:nth-of-type(6n+5) { --area: #059669; --area-2: #047857; }
+    .home-section:nth-of-type(6n+6) { --area: #e11d48; --area-2: #be123c; }
+
+    .section-shell {
+        position: relative;
+        overflow: hidden;
+        border-top: 3px solid var(--area);
+        transition: box-shadow 0.2s ease;
+    }
+
+    .section-icon {
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--area) 16%, #fff),
+            color-mix(in srgb, var(--area) 30%, #fff));
+        color: var(--area);
+    }
+
+    .section-count {
+        background: color-mix(in srgb, var(--area) 10%, #fff);
+        border-color: color-mix(in srgb, var(--area) 26%, #fff);
+        color: var(--area-2);
+    }
+
+    .module-card {
+        position: relative;
+    }
+
+    .module-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--area), transparent 85%);
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+
+    .module-card:hover::before {
+        opacity: 1;
+    }
+
+    .module-card:hover {
+        border-color: color-mix(in srgb, var(--area) 42%, #fff);
+        box-shadow: 0 14px 30px color-mix(in srgb, var(--area) 22%, transparent);
+    }
+
+    .module-icon {
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--area) 14%, #fff),
+            color-mix(in srgb, var(--area) 26%, #fff));
+        color: var(--area);
+    }
+
+    .module-kpi {
+        background: color-mix(in srgb, var(--area) 10%, #fff);
+        border-color: color-mix(in srgb, var(--area) 24%, #fff);
+        color: var(--area-2);
+    }
+
+    .module-open {
+        background: linear-gradient(145deg, var(--area) 0%, var(--area-2) 100%);
+        border-color: color-mix(in srgb, var(--area) 40%, #fff);
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .module-card:hover .module-open {
+        transform: translateX(2px);
+        box-shadow: 0 8px 18px color-mix(in srgb, var(--area) 34%, transparent);
+    }
+
     @media (max-width: 1260px) {
         .home-hero,
         .home-main {

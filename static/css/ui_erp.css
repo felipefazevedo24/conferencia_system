@@ -469,6 +469,69 @@ a:hover {
     max-height: 0;
 }
 
+/* ============================================================
+   Sidebar premium — tiles nos icones de topo, barra de acento
+   no item ativo/hover e destaque do "Menu principal".
+   ============================================================ */
+#sidebar-wrapper .list-group-item {
+    position: relative;
+}
+
+/* Barra de acento vertical no item ativo / em hover (topo). */
+#sidebar-wrapper .menu-item > .list-group-item::before,
+#sidebar-wrapper .sidebar-home-link::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    height: 0;
+    width: 3px;
+    border-radius: 3px;
+    background: #7ec4ff;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+#sidebar-wrapper .menu-item > .list-group-item:hover::before,
+#sidebar-wrapper .menu-item > .list-group-item[aria-expanded="true"]::before,
+#sidebar-wrapper .sidebar-home-link:hover::before,
+#sidebar-wrapper .sidebar-home-link.active::before {
+    height: 22px;
+    opacity: 1;
+}
+
+/* Icones de topo viram tiles com fundo sutil. */
+#sidebar-wrapper .menu-item > .list-group-item .nav-group-title i,
+#sidebar-wrapper .sidebar-home-link .nav-group-title i {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: inline-grid;
+    place-items: center;
+    background: rgba(126, 196, 255, 0.10);
+    color: #9fc6ff;
+    font-size: 14px;
+    box-shadow: inset 0 0 0 1px rgba(126, 196, 255, 0.12);
+    transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#sidebar-wrapper .menu-item > .list-group-item:hover .nav-group-title i,
+#sidebar-wrapper .menu-item > .list-group-item[aria-expanded="true"] .nav-group-title i,
+#sidebar-wrapper .sidebar-home-link:hover .nav-group-title i,
+#sidebar-wrapper .sidebar-home-link.active .nav-group-title i {
+    background: linear-gradient(135deg, #1c86f2, #0f62c9);
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(15, 98, 201, 0.4);
+}
+
+/* Destaque permanente do atalho "Menu principal". */
+#sidebar-wrapper .sidebar-home-link {
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
 /* Flyout do menu lateral: painel flutuante com os submodulos de um modulo.
    Os paineis sao reposicionados para o <body> via JS, por isso os seletores
    abaixo nao dependem de #sidebar-wrapper. */
@@ -691,8 +754,9 @@ a:hover {
 }
 
 #wrapper.toggled #sidebar-wrapper .nav-group-title i {
-    width: 20px;
-    font-size: 18px;
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
 }
 
 .sidebar-user {
