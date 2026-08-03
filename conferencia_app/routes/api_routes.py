@@ -282,8 +282,8 @@ def api_integracao_expedicao_coletas():
     - orcamento
     - os
     - foto_cliente_url
+    - comprovante_entrega_url
     - data_expedicao
-    - link_columbia
     """
     if not _token_integracao_expedicao_valido():
         return jsonify({"sucesso": False, "erro": "Token de integracao invalido."}), 401
@@ -311,7 +311,9 @@ def api_integracao_expedicao_coletas():
         if reg.foto_cliente_file_name:
             foto_cliente_url = f"{base}/api/expedicao/conferencia-simples/{reg.id}/foto-cliente"
 
-        link_columbia = f"{base}/expedicao/conferencia?q={reg.numero_nf or ''}"
+        comprovante_entrega_url = None
+        if reg.canhoto_file_name:
+            comprovante_entrega_url = f"{base}/api/expedicao/conferencia-simples/{reg.id}/canhoto"
 
         dados.append(
             {
@@ -319,8 +321,8 @@ def api_integracao_expedicao_coletas():
                 "orcamento": reg.orcamento or "",
                 "os": reg.numero_os or "",
                 "foto_cliente_url": foto_cliente_url,
+                "comprovante_entrega_url": comprovante_entrega_url,
                 "data_expedicao": reg.expedido_at.isoformat() if reg.expedido_at else None,
-                "link_columbia": link_columbia,
             }
         )
 
