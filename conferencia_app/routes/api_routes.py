@@ -568,6 +568,34 @@ def _quantidade_divergente_mas_tolerada(item: ItemNota, quantidade_convertida: f
     return 0.0001 < diferenca <= _get_tolerancia_quantidade(item)
 
 
+def _unidade_eh_chapa(unidade: str) -> bool:
+    """Material recebido em peso (chapa), identificado pela unidade de medida."""
+    return _normalize_unidade_medida(unidade) in {"KG", "T", "TO", "TON", "TONELADA", "TONELADAS"}
+
+
+def _peso_identico_ao_nf(item: ItemNota, quantidade_convertida: float) -> bool:
+    """Peso batendo exatamente com a NF é atípico para material pesado (chapa)."""
+    if not _unidade_eh_chapa(item.unidade_comercial):
+        return False
+    quantidade_esperada = float(item.qtd_real or 0)
+    return abs(quantidade_convertida - quantidade_esperada) <= 0.0001
+
+
+def _formatar_chapas(valor) -> str:
+    """Formata a quantidade de chapas (UND) informada para o log/resultado."""
+    if valor is None or str(valor).strip() == "":
+        return ""
+    try:
+        quantidade = float(str(valor).replace(",", "."))
+    except (TypeError, ValueError):
+        return ""
+    if quantidade <= 0:
+        return ""
+    if quantidade == int(quantidade):
+        quantidade = int(quantidade)
+    return f"Chapas: {quantidade} UND."
+
+
 def _summarize_divergencia_core(tentativas, descricao_por_id):
     """Resume divergências a partir de tentativas já carregadas (sem consultar o banco).
 
@@ -6313,6 +6341,7 @@ def validar():
     destinos_itens = dados.get("destinos_itens", {})
     evidencias_itens = dados.get("evidencias_itens", {})
     conversoes_itens = dados.get("conversoes_itens", {})
+    chapas_itens = dados.get("chapas_itens", {})
     checklist_payload = dados.get("checklist", {})
     forcar_pendencia = dados.get("forcar_pendencia") is True
 
@@ -6396,6 +6425,9 @@ def validar():
             if not _quantidade_esta_dentro_da_tolerancia(item, quantidade_convertida):
                 msg_erro = _compose_motivo_pendencia(item.id, motivos_itens, motivos_tipos, motivos_observacoes) or "Divergência"
                 msg_resultado = "Quantidade diferente da NF."
+                chapas_registro = _formatar_chapas(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
+                if chapas_registro:
+                    msg_resultado = f"{msg_resultado} {chapas_registro}"
                 motivo_tipo = str(motivos_tipos.get(str(item.id)) or "Não classificado")[:80]
                 destino_fisico = str(destinos_itens.get(str(item.id)) or "Aguardando decisão fiscal")[:80]
                 evidencia = str(evidencias_itens.get(str(item.id)) or "")[:300]
@@ -6436,11 +6468,16 @@ def validar():
                 )
             else:
                 divergencia_tolerada = _quantidade_divergente_mas_tolerada(item, quantidade_convertida)
-                msg_ok = (
-                    "Quantidade diferente da NF."
-                    if divergencia_tolerada
-                    else "Conferido."
-                )
+                peso_identico = _peso_identico_ao_nf(item, quantidade_convertida)
+                if peso_identico:
+                    msg_ok = "Peso idêntico ao da NF. Confira se o material foi realmente pesado."
+                elif divergencia_tolerada:
+                    msg_ok = "Quantidade diferente da NF."
+                else:
+                    msg_ok = "Conferido."
+                chapas_registro = _formatar_chapas(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
+                if chapas_registro:
+                    msg_ok = f"{msg_ok} {chapas_registro}"
                 _append_attempt_log(
                     numero_nota,
                     item,
@@ -6453,9 +6490,10 @@ def validar():
                     msg_ok,
                     user,
                 )
-                resultado_itens.append(
-                    {"id": item.id, "descricao": item.descricao, "status": "OK", "msg": msg_ok}
-                )
+                item_result = {"id": item.id, "descricao": item.descricao, "status": "OK", "msg": msg_ok}
+                if peso_identico:
+                    item_result["alerta"] = "peso_identico"
+                resultado_itens.append(item_result)
         except Exception:
             erros.append(item.descricao)
             divergencias_ids.append(str(item.id))

@@ -39,6 +39,7 @@ class ValidarSchema(Schema):
     destinos_itens = fields.Dict(required=False, load_default={})
     evidencias_itens = fields.Dict(required=False, load_default={})
     conversoes_itens = fields.Dict(required=False, load_default={})
+    chapas_itens = fields.Dict(required=False, load_default={})
     checklist = fields.Dict(required=False, load_default={})
     forcar_pendencia = fields.Bool(required=False, load_default=False)
 

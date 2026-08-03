@@ -371,6 +371,27 @@
         .item-alerta { margin-top: 4px; font-size: 10px; font-weight: 700; }
         .item-alerta.warning { color: #92400e; }
         .item-alerta.error { color: #b91c1c; }
+
+        /* === CHAPA: contagem de unidades (UND) para material recebido em peso === */
+        .chapa-wrap { margin-top: 8px; }
+        .chapa-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 10px; cursor: pointer;
+            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em;
+            background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
+            transition: all .18s ease;
+        }
+        .chapa-btn:hover { background: #e0e7ff; border-color: #a5b4fc; }
+        .chapa-btn.preenchido { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .chapa-btn.faltando { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+        .chapa-fields { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
+        .chapa-input {
+            width: 96px; padding: 8px; border: 2px solid #c7d2fe; border-radius: 10px;
+            text-align: center; font-family: monospace; font-weight: 800; font-size: 15px; color: #3730a3; background: #fff;
+        }
+        .chapa-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
+        .chapa-input.faltando { border-color: #ef4444; background: #fef2f2; }
         .confirm-box {
             display: flex;
             gap: 10px;
@@ -609,9 +630,6 @@
             </div>
             <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
                 <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" style="min-width:240px;" />
-                <button class="eui-btn eui-btn--primary" onclick="abrirConsultaOcorrencias()">
-                    <i class="fas fa-history"></i> Histórico / Ocorrências
-                </button>
             </div>
         </header>
 
@@ -970,6 +988,56 @@
         return unidadeNormalizada === 'KG' || unidadeNormalizada === 'MM';
     }
 
+    // Material recebido em peso (chapa): exige informar a quantidade de chapas em UND.
+    function unidadeEhChapa(unidade) {
+        const u = String(unidade || '').trim().toUpperCase();
+        return u === 'KG' || u === 'T' || u === 'TO' || u === 'TON' || u === 'TONELADA' || u === 'TONELADAS';
+    }
+
+    function toggleChapa(id) {
+        const bloco = document.getElementById(`chapa-fields-${id}`);
+        if (!bloco) return;
+        const visivel = bloco.style.display !== 'none';
+        bloco.style.display = visivel ? 'none' : 'flex';
+        if (!visivel) {
+            setTimeout(() => bloco.querySelector('.chapa-input')?.focus(), 50);
+        }
+    }
+
+    function atualizarChapa(id) {
+        const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
+        const btn = document.getElementById(`chapa-btn-${id}`);
+        if (!input || !btn) return;
+        const valor = Number(String(input.value || '').replace(',', '.'));
+        const preenchido = Number.isFinite(valor) && valor > 0;
+        input.classList.toggle('faltando', !preenchido);
+        btn.classList.toggle('preenchido', preenchido);
+        btn.classList.toggle('faltando', !preenchido);
+        btn.innerHTML = preenchido
+            ? `<i class="fas fa-layer-group"></i> Chapa: ${valor} UND`
+            : `<i class="fas fa-layer-group"></i> Chapa`;
+    }
+
+    function coletarChapas() {
+        const chapas = {};
+        document.querySelectorAll('.chapa-input').forEach((input) => {
+            chapas[input.dataset.id] = input.value;
+        });
+        return chapas;
+    }
+
+    // Retorna os ids das chapas sem a quantidade em UND informada.
+    function chapasPendentes() {
+        const pendentes = [];
+        document.querySelectorAll('.qtd-input[data-chapa="1"]').forEach((qtd) => {
+            const id = qtd.dataset.id;
+            const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
+            const valor = Number(String(input?.value || '').replace(',', '.'));
+            if (!Number.isFinite(valor) || valor <= 0) pendentes.push(id);
+        });
+        return pendentes;
+    }
+
     function formatarFaixaTolerancia(qtdEsperada, unidade) {
         if (!unidadeTemTolerancia(unidade)) return '';
         const esperada = Number(qtdEsperada || 0);
@@ -994,6 +1062,11 @@
 
         const margem = Math.abs(valorEsperado) * 0.02;
         if (diferenca <= 0.0001) {
+            // Peso batendo exatamente com a NF e estranho para material pesado;
+            // sinaliza para o conferente confirmar se pesou de verdade.
+            if (unidadeEhChapa(unidade)) {
+                return { tipo: 'warning', mensagem: 'Peso idêntico à NF. Confira se o material foi realmente pesado.' };
+            }
             return { tipo: 'ok', mensagem: '' };
         }
         if (diferenca <= Math.max(margem, 0.0001)) {
@@ -1296,22 +1369,36 @@
         const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || '---'}`);
         document.getElementById('n-atual').innerHTML = `CONFERÊNCIA NF: ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:700;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
         const itens = await res.json();
-        document.getElementById('itens-container').innerHTML = itens.map(i => `
+        document.getElementById('itens-container').innerHTML = itens.map(i => {
+            const unidadeItem = i.unidade || 'UN';
+            const ehChapa = unidadeEhChapa(unidadeItem);
+            const blocoChapa = ehChapa ? `
+                    <div class="chapa-wrap" data-id="${i.id}">
+                        <button type="button" class="chapa-btn faltando" id="chapa-btn-${i.id}" onclick="toggleChapa('${i.id}')">
+                            <i class="fas fa-layer-group"></i> Chapa
+                        </button>
+                        <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
+                            <label>Qtd. chapas (UND)</label>
+                            <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
+                        </div>
+                    </div>` : '';
+            return `
             <tr>
                 <td style="text-align:center"><span class="status-indicator"></span></td>
                 <td style="font-family:monospace; color:var(--sap-blue); font-weight:800">${i.codigo}</td>
                 <td style="font-weight:600">${i.descricao}</td>
-                <td style="text-align:center; font-weight:800; color:#475569;">${i.unidade || 'UN'}</td>
+                <td style="text-align:center; font-weight:800; color:#475569;">${unidadeItem}</td>
                 <td style="text-align: center;">
-                    <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${i.unidade || 'UN'}" oninput="atualizarStatusLinha(this)" step="0.001">
-                    <div class="item-alerta" data-id="${i.id}"></div>
+                    <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${unidadeItem}"${ehChapa ? ' data-chapa="1"' : ''} oninput="atualizarStatusLinha(this)" step="0.001">
+                    <div class="item-alerta" data-id="${i.id}"></div>${blocoChapa}
                 </td>
                 <td style="text-align:center;">
                     <input type="number" class="fator-input" data-id="${i.id}" value="1" oninput="atualizarStatusLinha(document.querySelector('.qtd-input[data-id=\'${i.id}\']'))" step="0.0001" style="width:55px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
-                    <input type="text" class="unidade-input" data-id="${i.id}" value="${i.unidade || 'UN'}" style="width:40px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
+                    <input type="text" class="unidade-input" data-id="${i.id}" value="${unidadeItem}" style="width:40px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         atualizarProgressoConferencia();
     }
@@ -1332,8 +1419,22 @@
     }
 
     async function validar() {
+        // Chapa: obriga informar a quantidade de chapas (UND) antes de validar.
+        const pendentesChapa = chapasPendentes();
+        if (pendentesChapa.length > 0) {
+            pendentesChapa.forEach((id) => {
+                const bloco = document.getElementById(`chapa-fields-${id}`);
+                if (bloco) bloco.style.display = 'flex';
+                atualizarChapa(id);
+            });
+            alert('Informe a quantidade de chapas (UND) no botão "Chapa" de cada item recebido em peso antes de validar.');
+            document.getElementById(`chapa-fields-${pendentesChapa[0]}`)?.querySelector('.chapa-input')?.focus();
+            return;
+        }
+
         const contagens = coletarContagens();
         const conversoes = coletarConversoes();
+        const chapas = coletarChapas();
         const btn = document.getElementById('btn-finalizar');
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
 
@@ -1342,7 +1443,7 @@
         const efetivarBtn = document.getElementById('btn-efetivar-ok');
 
         try {
-            const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes }) });
+            const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes, chapas_itens: chapas }) });
             let dados;
             try { dados = await res.json(); } catch (_) { dados = null; }
             ultimosDadosValidacao = dados;
@@ -1412,6 +1513,7 @@
                     nota: notaSel,
                     contagens: coletarContagens(),
                     conversoes_itens: coletarConversoes(),
+                    chapas_itens: coletarChapas(),
                     forcar_pendencia: true,
                     motivos_itens: {},
                 }),
