@@ -268,19 +268,19 @@
      um card aparentar maior/menor que o do outro). */
   .hero {
     border-radius: 18px;
-    padding: clamp(12px, 2vh, 24px);
+    padding: clamp(12px, 2vh, 22px) clamp(16px, 2.4vh, 30px);
     display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 16px;
     border: 1px solid var(--border);
     background: var(--card-2);
-    position: relative; overflow: visible; min-height: 0;
+    position: relative; overflow: hidden; min-height: 0;
   }
   .rec .hero { background: linear-gradient(120deg, rgba(61,165,244,.20), rgba(15,98,201,.05)); }
   .exp .hero { background: linear-gradient(120deg, rgba(251,191,36,.18), rgba(251,191,36,.04)); }
   .hero .label { font-size: clamp(13px, 1.7vh, 20px); color: var(--text); font-weight: 700; }
   .hero .num {
-    font-size: clamp(46px, 8vh, 110px); font-weight: 900; line-height: 1.05;
+    font-size: clamp(38px, 5.4vh, 76px); font-weight: 900; line-height: 1;
     font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
-    text-align: right; min-width: 1.2em; padding-block: .04em;
+    text-align: right; min-width: 1.2em;
   }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.3vh,16px); }
