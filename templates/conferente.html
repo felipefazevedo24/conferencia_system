@@ -551,6 +551,33 @@
         /* === LAYOUT ALINHADO À CONFERÊNCIA DE EXPEDIÇÃO (KPIs clicáveis + tabela com ID) === */
         .eui-stat.is-clickable { cursor: pointer; }
         .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+        /* KPIs do recebimento: layout mais denso, com o numero grande a direita
+           preenchendo o espaco vazio e uma faixa colorida por status. */
+        #dashboard-resumo { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; }
+        #dashboard-resumo .eui-stat {
+            align-items: center; gap: 14px; padding: 16px 18px;
+            border-top: 3px solid var(--eui-border); border-radius: 14px;
+            transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+        }
+        #dashboard-resumo .eui-stat:hover { transform: translateY(-2px); box-shadow: var(--eui-shadow-md); }
+        #dashboard-resumo .eui-stat:has(.eui-stat__icon--warning) { border-top-color: var(--eui-warning); }
+        #dashboard-resumo .eui-stat:has(.eui-stat__icon--info)    { border-top-color: var(--eui-info); }
+        #dashboard-resumo .eui-stat:has(.eui-stat__icon--danger)  { border-top-color: var(--eui-danger); }
+        #dashboard-resumo .eui-stat:has(.eui-stat__icon--success) { border-top-color: var(--eui-success); }
+        #dashboard-resumo .eui-stat__icon { width: 46px; height: 46px; font-size: 18px; border-radius: 12px; }
+        #dashboard-resumo .eui-stat__body {
+            flex: 1; display: grid; grid-template-columns: 1fr auto;
+            grid-template-areas: "label value" "hint value";
+            align-items: center; column-gap: 12px; row-gap: 2px; min-width: 0;
+        }
+        #dashboard-resumo .eui-stat__label { grid-area: label; align-self: end; }
+        #dashboard-resumo .eui-stat__hint  { grid-area: hint; align-self: start; }
+        #dashboard-resumo .eui-stat__value {
+            grid-area: value; margin-top: 0; font-size: 40px; line-height: 1;
+            justify-self: end; align-self: center;
+        }
+
         .rc-table-wrap { overflow-x: auto; }
         .rc-table { width: 100%; border-collapse: collapse; }
         .rc-table thead th { text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-muted, #64748b); padding: 10px 12px; border-bottom: 1px solid var(--eui-border, #e2e8f0); white-space: nowrap; }
@@ -577,7 +604,7 @@
         <header class="eui-page-header">
             <div>
                 <div class="eui-page-header__eyebrow">Recebimento</div>
-                <h1 class="eui-page-header__title"><i class="fas fa-barcode"></i> Conferência Cega</h1>
+                <h1 class="eui-page-header__title"><i class="fas fa-barcode"></i> Conferência de Recebimento</h1>
                 <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
             </div>
             <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
