@@ -206,6 +206,9 @@
         .priority-fill.p5 { background: #12314e; }
 
         /* Painel de Conferência */
+        .rc-conf-stack { display: grid; gap: 18px; }
+        .rc-conf-title { font-size: 18px; font-weight: 700; color: var(--eui-text, #0f172a); line-height: 1.3; }
+        .rc-conf-title i { color: var(--eui-primary, #0f62c9); margin-right: 8px; }
         .conf-panel { background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(246,250,254,0.98) 100%); border-radius: 28px; overflow: hidden; box-shadow: var(--card-shadow); border: 1px solid rgba(164, 182, 200, 0.28); }
         .conf-header { 
             background: linear-gradient(145deg, rgba(16, 38, 59, 0.98), rgba(23, 79, 120, 0.92)); color: white; padding: 22px 26px; 
@@ -213,9 +216,9 @@
         }
         .conf-header h3 { margin: 0; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 22px; text-transform: none; letter-spacing: -0.03em; font-weight: 800; }
         .conf-progress {
-            padding: 14px 26px 18px;
-            border-bottom: 1px solid #edf2f7;
-            background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+            padding: 0;
+            border-bottom: none;
+            background: transparent;
         }
         .conf-progress-head {
             display: flex;
@@ -532,24 +535,11 @@
             box-shadow: 0 6px 16px rgba(15,98,201,0.10) !important;
         }
         .nota-card strong { font-size: 17px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
-        /* Conf-panel & conf-header limpos */
-        .conf-panel {
-            border-radius: 12px !important;
-            background: #fff !important;
-            box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05) !important;
-            border: 1px solid #e2e8f0 !important;
-            overflow: hidden !important;
-        }
-        .conf-header {
-            background: #0f2742 !important;
-            color: #fff !important;
-            padding: 18px 24px !important;
-        }
-        .conf-header h3 { font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }
+        /* Barra de progresso limpa (dentro do eui-card) */
         .conf-progress {
-            background: #fafbfd !important;
-            padding: 14px 24px !important;
-            border-bottom: 1px solid #eef2f7 !important;
+            background: transparent !important;
+            padding: 0 !important;
+            border-bottom: none !important;
         }
         .conf-progress-fill { background: #0f62c9 !important; }
         .conf-progress-fill.done { background: #16a34a !important; }
@@ -577,7 +567,7 @@
         }
 
         /* Histórico / logs da nota (padrão da Conferência de Expedição) */
-        .rc-hist-card { margin-top: 18px; padding: 20px 24px; }
+        .rc-hist-card { margin-top: 0; padding: 20px 24px; }
         .rc-hist-head h3 { font-size: 15px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px; margin: 0; }
         .rc-hist-sub { display: block; color: #64748b; font-size: 12px; margin-top: 4px; font-weight: 600; }
         .rc-historico { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
@@ -652,7 +642,10 @@
                 <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
             </div>
             <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
-                <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" style="min-width:240px;" />
+                <div class="eui-input-group" style="position:relative; min-width:280px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" autocomplete="off" style="width:100%; padding-left:34px;" />
+                </div>
             </div>
         </header>
 
@@ -726,41 +719,54 @@
     </div>
 
     <div id="conf-view" class="hidden">
-        <div class="conf-panel">
-            <div class="conf-header">
-                <h3 id="n-atual">EXECUÇÃO DE CONFERÊNCIA FÍSICA</h3>
-            </div>
+      <div class="rc-conf-stack">
+        <div class="eui-toolbar" style="justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">
+            <div class="rc-conf-title" id="n-atual"><i class="fas fa-barcode"></i> Execução de conferência física</div>
+            <button class="eui-btn eui-btn--ghost" onclick="cancelarConferencia()"><i class="fas fa-arrow-left"></i> Voltar</button>
+        </div>
 
-            <div class="conf-progress">
-                <div class="conf-progress-head">
-                    <span>Progresso da contagem</span>
-                    <span class="conf-progress-count" id="conf-progress-count">0 / 0</span>
+        <div class="eui-card">
+            <div class="eui-card__body">
+                <div class="conf-progress">
+                    <div class="conf-progress-head">
+                        <span>Progresso da contagem</span>
+                        <span class="conf-progress-count" id="conf-progress-count">0 / 0</span>
+                    </div>
+                    <div class="conf-progress-track">
+                        <div class="conf-progress-fill" id="conf-progress-fill"></div>
+                    </div>
                 </div>
-                <div class="conf-progress-track">
-                    <div class="conf-progress-fill" id="conf-progress-fill"></div>
+            </div>
+        </div>
+
+        <div class="eui-card">
+            <div class="eui-card__head">
+                <div>
+                    <h2 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Itens da conferência</h2>
+                    <p class="eui-card__sub">Conferência cega — informe a contagem física de cada item.</p>
                 </div>
             </div>
-
-            <div style="overflow-x: auto;">
-                <table class="erp-table">
-                    <thead>
-                        <tr>
-                            <th width="50" style="text-align: center;">Status</th>
-                            <th width="160">Part Number</th>
-                            <th>Descrição do Material</th>
-                            <th width="100" style="text-align: center;">U.M</th>
-                            <th width="140" style="text-align: center;">Contagem Física</th>
-                            <th width="160" style="text-align: center;">Fator Conv.</th>
-                        </tr>
-                    </thead>
-                    <tbody id="itens-container"></tbody>
-                </table>
+            <div class="eui-card__body eui-card__body--tight">
+                <div class="rc-table-wrap">
+                    <table class="erp-table ce-table">
+                        <thead>
+                            <tr>
+                                <th width="50" style="text-align: center;">Status</th>
+                                <th width="160">Part Number</th>
+                                <th>Descrição do Material</th>
+                                <th width="100" style="text-align: center;">U.M</th>
+                                <th width="160" style="text-align: center;">Contagem Física</th>
+                                <th width="160" style="text-align: center;">Fator Conv.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itens-container"></tbody>
+                    </table>
+                </div>
             </div>
-
-            <div style="padding: 20px 25px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; background: #f8fafc; border-top: 1px solid #edf2f7;">
+            <div class="eui-card__foot" style="justify-content:flex-end; gap:12px;">
                 <div class="conf-menu" id="conf-menu">
-                    <button type="button" class="btn-sap conf-menu__btn" onclick="toggleConfMenu(event)" aria-haspopup="true" aria-expanded="false" title="Mais ações">
-                        <i class="fas fa-ellipsis-v"></i>
+                    <button type="button" class="eui-btn eui-btn--ghost conf-menu__btn" onclick="toggleConfMenu(event)" aria-haspopup="true" aria-expanded="false" title="Mais ações">
+                        <i class="fas fa-ellipsis-vertical"></i> Ações
                     </button>
                     <div class="conf-menu__list" id="conf-menu-list" role="menu">
                         <button type="button" class="conf-menu__item" role="menuitem" onclick="fecharConfMenu(); abrirModalDivergenciaProduto();">
@@ -774,20 +780,21 @@
                         </button>
                     </div>
                 </div>
-                <button class="btn-sap" style="background: #e2e8f0; color: #475569;" onclick="cancelarConferencia()">Sair sem salvar</button>
-                <button class="btn-sap btn-success" id="btn-finalizar" onclick="validar()" disabled style="padding: 12px 30px; font-size: 14px;">
+                <button class="eui-btn eui-btn--subtle" onclick="cancelarConferencia()">Sair sem salvar</button>
+                <button class="eui-btn eui-btn--success" id="btn-finalizar" onclick="validar()" disabled>
                     <i class="fas fa-check-double"></i> Validar Conferência
                 </button>
             </div>
         </div>
 
-        <div class="conf-panel rc-hist-card">
+        <div class="eui-card rc-hist-card">
             <div class="rc-hist-head">
                 <h3><i class="fas fa-clock-rotate-left"></i> Histórico da nota</h3>
                 <span class="rc-hist-sub">Trilha de eventos desta NF: importação, conferência, divergências, lançamento e ocorrências.</span>
             </div>
             <div id="rc-hist-lista" class="rc-historico"></div>
         </div>
+      </div>
     </div>
     </div>
 </div>
@@ -1395,7 +1402,7 @@
         carregarHistoricoNota(n);
         iniciarHeartbeat();
         const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || '---'}`);
-        document.getElementById('n-atual').innerHTML = `CONFERÊNCIA NF: ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:700;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
+        document.getElementById('n-atual').innerHTML = `<i class="fas fa-barcode"></i> Conferência NF ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:600;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
         const itens = await res.json();
         document.getElementById('itens-container').innerHTML = itens.map(i => {
             const unidadeItem = i.unidade || 'UN';
