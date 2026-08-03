@@ -84,32 +84,7 @@
     .plan-btn.primary { background: #0f62c9; border-color: #0f62c9; color: #fff; }
     .plan-btn.danger { border-color: #fecaca; color: #b91c1c; }
 
-    .plan-kpis { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; }
-
-    .plan-kpi {
-        border: 1px solid #d8e2ec;
-        border-radius: 12px;
-        background: #fff;
-        box-shadow: 0 2px 8px rgba(14, 34, 55, 0.05);
-        padding: 14px 14px 12px;
-    }
-
-    .plan-kpi .lbl {
-        color: #5a7290;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-    }
-
-    .plan-kpi .val {
-        margin-top: 5px;
-        color: #0a2340;
-        font-size: 37px;
-        line-height: 1;
-        letter-spacing: -0.035em;
-        font-weight: 800;
-    }
+    .plan-kpis-sync { margin-top: 2px; }
 
     .plan-board {
         display: flex;
@@ -361,10 +336,6 @@
 
     .plan-msg { color: #b91c1c; font-size: 12px; min-height: 17px; font-weight: 700; }
 
-    @media (max-width: 1120px) {
-        .plan-kpis { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
-    }
-
     @media (max-width: 780px) {
         .plan-grid-2 { grid-template-columns: 1fr; }
         .plan-col { min-width: 88vw; width: 88vw; }
@@ -388,12 +359,49 @@
         </div>
     </header>
 
-    <section class="plan-kpis">
-        <article class="plan-kpi"><div class="lbl">Tarefas abertas</div><div class="val" id="kpi-open">0</div></article>
-        <article class="plan-kpi"><div class="lbl">Concluídas</div><div class="val" id="kpi-done">0</div></article>
-        <article class="plan-kpi"><div class="lbl">Atrasadas</div><div class="val" id="kpi-overdue">0</div></article>
-        <article class="plan-kpi"><div class="lbl">Total de cards</div><div class="val" id="kpi-total">0</div></article>
-        <article class="plan-kpi"><div class="lbl">Total de colunas</div><div class="val" id="kpi-columns">0</div></article>
+    <section class="plan-kpis-sync">
+        <div class="eui-stats" id="planner-kpis">
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-list-check"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Tarefas abertas</span>
+                    <span class="eui-stat__value" id="kpi-open">0</span>
+                    <span class="eui-stat__hint">Backlog + execução</span>
+                </div>
+            </div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-check-circle"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Concluídas</span>
+                    <span class="eui-stat__value" id="kpi-done">0</span>
+                    <span class="eui-stat__hint">Cards finalizados</span>
+                </div>
+            </div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Atrasadas</span>
+                    <span class="eui-stat__value" id="kpi-overdue">0</span>
+                    <span class="eui-stat__hint">Prazo vencido</span>
+                </div>
+            </div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-clipboard-list"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Total de cards</span>
+                    <span class="eui-stat__value" id="kpi-total">0</span>
+                    <span class="eui-stat__hint">Volume total</span>
+                </div>
+            </div>
+            <div class="eui-stat">
+                <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-table-columns"></i></div>
+                <div class="eui-stat__body">
+                    <span class="eui-stat__label">Total de colunas</span>
+                    <span class="eui-stat__value" id="kpi-columns">0</span>
+                    <span class="eui-stat__hint">Etapas do fluxo</span>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section id="board" class="plan-board"></section>
