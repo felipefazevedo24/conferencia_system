@@ -25,6 +25,7 @@
     --ok: #34d399;
     --warn: #f87171;
     --frota: #22d3ee;
+    --plan: #a78bfa;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -150,6 +151,41 @@
   .oc-item.atraso .oc-dias b { color: #f87171; }
   .oc-item.semana .oc-dias b { color: #34d399; }
   .oc-item .oc-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+
+  /* ---------- Painel de planejamento de tarefas ---------- */
+  .plan .icon { background: rgba(167,139,250,.16); color: var(--plan); }
+  .plan .accent { color: var(--plan); }
+  .plan-cols {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(clamp(150px,14vw,220px), 1fr));
+    gap: 10px; margin-top: clamp(6px,1vh,12px);
+  }
+  .plan-col-card {
+    background: rgba(255,255,255,.035); border: 1px solid var(--border);
+    border-top: 4px solid var(--plan); border-radius: 12px;
+    padding: clamp(9px,1.2vh,14px) clamp(11px,1.4vh,16px);
+  }
+  .plan-col-card .pc-title {
+    display: flex; align-items: center; gap: 8px; font-size: clamp(12px,1.5vh,16px);
+    font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .plan-col-card .pc-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .plan-col-card .pc-num { font-size: clamp(22px,3.2vh,38px); font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .plan-col-card .pc-atr { font-size: clamp(9px,1.1vh,12px); color: #f87171; text-transform: uppercase; letter-spacing: .4px; }
+  .plan-col-card.is-done { border-top-color: var(--ok); }
+  .plan-col-card.is-done .pc-num { color: var(--ok); }
+
+  .plan-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: rgba(255,255,255,.035); border: 1px solid var(--border);
+    border-left: 4px solid #f87171; border-radius: 12px;
+    padding: clamp(7px,1vh,11px) clamp(10px,1.4vh,15px);
+  }
+  .plan-item .pi-main { min-width: 0; }
+  .plan-item .pi-main b { font-size: clamp(13px,1.7vh,19px); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .plan-item .pi-main span { display:block; color: var(--muted); font-size: clamp(10px,1.3vh,14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plan-item .pi-dias { text-align: right; white-space: nowrap; }
+  .plan-item .pi-dias b { font-size: clamp(14px,1.9vh,20px); font-weight: 800; color: #f87171; font-variant-numeric: tabular-nums; }
+  .plan-item .pi-dias span { display:block; font-size: clamp(9px,1.1vh,12px); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 
   .panel {
     background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
@@ -451,6 +487,28 @@
           <div class="stat"><div class="n" id="frota-sem">0</div><div class="t">Sem posição</div></div>
         </div>
         <div class="frota-map" id="frota-map"></div>
+      </section>
+    </section>
+    {% endif %}
+
+    <!-- SLIDE 4: PLANEJAMENTO DE TAREFAS -->
+    {% if show_planejamento|default(true) %}
+    <section class="slide slide-plan" data-slide="planejamento">
+      <section class="panel plan" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-table-columns"></i></div>
+          <h2>Planejamento de Tarefas</h2>
+          <div class="tag" id="plan-tag">—</div>
+        </div>
+        <div class="hero">
+          <div class="label">Tarefas em <span class="accent">andamento</span></div>
+          <div class="num accent" id="plan-andamento">0</div>
+        </div>
+        <div class="plan-cols" id="plan-cols"></div>
+        <div class="feed" style="margin-top:clamp(10px,1.6vh,20px);">
+          <div class="feed-title"><span>Tarefas atrasadas</span><span id="plan-atr-count"></span></div>
+          <div class="oc-grid" id="plan-atr-list"><div class="empty">Carregando…</div></div>
+        </div>
       </section>
     </section>
     {% endif %}
@@ -827,6 +885,7 @@
     if (SLIDES[slideIdx] === "operacao") { expIdx = 0; recIdx = 0; renderExpedicao(); renderRecebimento(); }
     if (SLIDES[slideIdx] === "compras") pollCompras();
     if (SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
+    if (SLIDES[slideIdx] === "planejamento") pollPlanejamento();
     resetSlideTiming();
   }
 
@@ -998,6 +1057,50 @@
     } catch (e) { /* silencioso - nao afeta o indicador "Ao vivo" do painel principal */ }
   }
 
+  let planAt = 0;
+  async function pollPlanejamento() {
+    if (Date.now() - planAt < 30000 && $("plan-cols")._sig) return;
+    planAt = Date.now();
+    try {
+      const r = await fetch("/api/painel/planejamento", { cache: "no-store" });
+      const d = await r.json();
+      const k = d.kpis || {};
+      setNum("plan-andamento", k.andamento || 0);
+      $("plan-tag").textContent = (k.total || 0) + " tarefas";
+      const cols = d.colunas || [];
+      const sig = JSON.stringify(cols);
+      if ($("plan-cols")._sig !== sig) {
+        $("plan-cols")._sig = sig;
+        $("plan-cols").innerHTML = cols.length
+          ? cols.map(buildPlanCol).join("")
+          : '<div class="empty">Sem colunas.</div>';
+      }
+      const atr = d.atrasadas || [];
+      $("plan-atr-count").textContent = atr.length ? atr.length + " atrasada(s)" : "";
+      renderList("plan-atr-list", atr, buildPlanItem, "Nenhuma tarefa atrasada");
+    } catch (e) {
+      $("plan-cols").innerHTML = '<div class="empty">Indisponível</div>';
+      renderList("plan-atr-list", [], buildPlanItem, "Indisponível");
+    }
+  }
+
+  function buildPlanCol(c) {
+    const atr = c.atrasadas ? '<div class="pc-atr">' + c.atrasadas + " atrasada(s)</div>" : "";
+    return '<div class="plan-col-card' + (c.is_done ? " is-done" : "") + '">' +
+      '<div class="pc-title"><span class="pc-dot" style="background:' + esc(c.color || "#a78bfa") + '"></span>' + esc(c.titulo) + "</div>" +
+      '<div class="pc-num">' + (c.total || 0) + "</div>" + atr + "</div>";
+  }
+
+  function buildPlanItem(it) {
+    const dias = it.dias || 0;
+    const diasTxt = dias === 1 ? "1 dia" : dias + " dias";
+    const resp = it.responsavel ? " · " + esc(it.responsavel) : "";
+    return '<div class="plan-item">' +
+      '<div class="pi-main"><b>' + esc(it.titulo) + "</b><span>" + esc(it.coluna || "—") + resp + "</span></div>" +
+      '<div class="pi-dias"><b>' + esc(it.prazo || "—") + "</b><span>há " + diasTxt + "</span></div>" +
+      "</div>";
+  }
+
   ["click", "touchstart", "keydown", "pointerdown"].forEach((evt) => {
     document.addEventListener(evt, tryUnlockAudio, { passive: true });
   });
@@ -1015,11 +1118,13 @@
   poll();
   pollCompras();
   pollFrota();
+  pollPlanejamento();
   setInterval(poll, POLL_MS);
   setInterval(autoScroll, 60);
   setInterval(carouselTick, 500);
   setInterval(pollCompras, 90000);
   setInterval(pollFrota, 8000);
+  setInterval(pollPlanejamento, 30000);
 })();
 </script>
 </body>

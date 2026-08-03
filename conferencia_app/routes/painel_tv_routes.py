@@ -15,7 +15,7 @@ from flask import Blueprint, current_app, jsonify, render_template
 from sqlalchemy import desc, func
 
 from ..extensions import db
-from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemST, ItemNota
+from ..models import ExpedicaoOrdemFat, ExpedicaoOrdemST, ItemNota, PlannerBoard
 
 painel_tv_bp = Blueprint("painel_tv", __name__)
 
@@ -229,29 +229,33 @@ def _coletar_indicadores() -> dict:
         )
 
     def _query_fat(status):
-        q = ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == status)
+        q = ExpedicaoOrdemFat.query.filter(
+            ExpedicaoOrdemFat.status == status,
+            ExpedicaoOrdemFat.excluido.is_(False),
+        )
         if status == STATUS_EXP_FATURADO_SEM_CONF:
             q = q.filter(ExpedicaoOrdemFat.cod_ordem_fat >= FAT_SEM_CONF_COD_MINIMO)
         return q
 
+    def _query_st(status):
+        return ExpedicaoOrdemST.query.filter(
+            ExpedicaoOrdemST.status == status,
+            ExpedicaoOrdemST.excluido.is_(False),
+        )
+
     def _cons_categoria(status, ts_attr, reverse, limite=120):
         fat_rows = _query_fat(status).limit(limite).all()
-        st_rows = (
-            ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).limit(limite).all()
-        )
+        st_rows = _query_st(status).limit(limite).all()
         itens = [_cons_fat(o, getattr(o, ts_attr, None)) for o in fat_rows]
         itens += [_cons_st(o, getattr(o, ts_attr, None)) for o in st_rows]
         itens.sort(key=lambda x: x["ts"] or "", reverse=reverse)
         return itens
 
     def _cons_total(status):
-        return (
-            _query_fat(status).count()
-            + ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == status).count()
-        )
+        return _query_fat(status).count() + _query_st(status).count()
 
-    exp_fat_pendente = ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.status == STATUS_EXP_PENDENTE).count()
-    exp_st_pendente = ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.status == STATUS_EXP_PENDENTE).count()
+    exp_fat_pendente = _query_fat(STATUS_EXP_PENDENTE).count()
+    exp_st_pendente = _query_st(STATUS_EXP_PENDENTE).count()
 
     # Pendentes e conferidos: mais antigos primeiro (destaca o que esta parado).
     cat_pendente = _cons_categoria(STATUS_EXP_PENDENTE, "created_at", False)
@@ -262,11 +266,17 @@ def _coletar_indicadores() -> dict:
 
     # Expedidos: consolidado apenas do dia (evita listas gigantes na TV).
     fat_exp_hoje = (
-        ExpedicaoOrdemFat.query.filter(func.date(ExpedicaoOrdemFat.expedido_at) == hoje)
+        ExpedicaoOrdemFat.query.filter(
+            func.date(ExpedicaoOrdemFat.expedido_at) == hoje,
+            ExpedicaoOrdemFat.excluido.is_(False),
+        )
         .order_by(ExpedicaoOrdemFat.expedido_at.desc()).limit(120).all()
     )
     st_exp_hoje = (
-        ExpedicaoOrdemST.query.filter(func.date(ExpedicaoOrdemST.expedido_at) == hoje)
+        ExpedicaoOrdemST.query.filter(
+            func.date(ExpedicaoOrdemST.expedido_at) == hoje,
+            ExpedicaoOrdemST.excluido.is_(False),
+        )
         .order_by(ExpedicaoOrdemST.expedido_at.desc()).limit(120).all()
     )
     cat_expedido = (
@@ -393,7 +403,8 @@ def _coletar_eventos() -> list[dict]:
 
     # Novo faturamento na expedicao (FAT)
     fats = (
-        ExpedicaoOrdemFat.query.order_by(desc(ExpedicaoOrdemFat.created_at)).limit(6).all()
+        ExpedicaoOrdemFat.query.filter(ExpedicaoOrdemFat.excluido.is_(False))
+        .order_by(desc(ExpedicaoOrdemFat.created_at)).limit(6).all()
     )
     for o in fats:
         eventos.append(
@@ -409,7 +420,8 @@ def _coletar_eventos() -> list[dict]:
 
     # Novo faturamento na expedicao (ST)
     sts = (
-        ExpedicaoOrdemST.query.order_by(desc(ExpedicaoOrdemST.created_at)).limit(6).all()
+        ExpedicaoOrdemST.query.filter(ExpedicaoOrdemST.excluido.is_(False))
+        .order_by(desc(ExpedicaoOrdemST.created_at)).limit(6).all()
     )
     for o in sts:
         eventos.append(
@@ -428,20 +440,91 @@ def _coletar_eventos() -> list[dict]:
     return eventos[:14]
 
 
+def _coletar_planejamento() -> dict:
+    """Resumo do quadro de Planejamento de Tarefas para o painel de TV."""
+    hoje = date.today()
+    board = PlannerBoard.query.order_by(PlannerBoard.id.asc()).first()
+    if not board:
+        return {
+            "kpis": {"total": 0, "andamento": 0, "concluidas": 0, "atrasadas": 0},
+            "colunas": [],
+            "atrasadas": [],
+        }
+
+    colunas_data = []
+    total = concluidas = andamento = atrasadas = 0
+    lista_atrasadas: list[dict] = []
+    colunas = sorted(board.colunas, key=lambda c: (c.order_index, c.id))
+    for col in colunas:
+        cards = sorted(col.cards, key=lambda c: (c.order_index, c.id))
+        n = len(cards)
+        total += n
+        col_atrasadas = 0
+        if col.is_done:
+            concluidas += n
+        else:
+            andamento += n
+            for c in cards:
+                if c.prazo and c.prazo < hoje:
+                    col_atrasadas += 1
+                    lista_atrasadas.append(
+                        {
+                            "titulo": c.titulo,
+                            "coluna": col.titulo,
+                            "responsavel": c.responsavel or "",
+                            "prioridade": c.prioridade or "",
+                            "prazo": c.prazo.strftime("%d/%m") if c.prazo else "",
+                            "dias": (hoje - c.prazo).days if c.prazo else 0,
+                        }
+                    )
+        atrasadas += col_atrasadas
+        colunas_data.append(
+            {
+                "titulo": col.titulo,
+                "color": col.color or "#0f62c9",
+                "is_done": bool(col.is_done),
+                "total": n,
+                "atrasadas": col_atrasadas,
+            }
+        )
+
+    lista_atrasadas.sort(key=lambda x: x["dias"], reverse=True)
+    return {
+        "kpis": {
+            "total": total,
+            "andamento": andamento,
+            "concluidas": concluidas,
+            "atrasadas": atrasadas,
+        },
+        "colunas": colunas_data,
+        "atrasadas": lista_atrasadas[:40],
+    }
+
+
 @painel_tv_bp.route("/painel")
 def painel_tv_page():
     return render_template("painel_tv.html", show_compras=True, show_frota=True)
-
-
 @painel_tv_bp.route("/painel/recebimento-expedicao")
 def painel_tv_rec_exp_page():
-    return render_template("painel_tv.html", show_compras=False, show_frota=False)
+    return render_template(
+        "painel_tv.html", show_compras=False, show_frota=False, show_planejamento=False
+    )
 
 
 @painel_tv_bp.route("/api/painel/indicadores")
 def painel_tv_indicadores():
     try:
         dados = _coletar_indicadores()
+    except Exception:
+        db.session.rollback()
+        raise
+    return jsonify(dados)
+
+
+@painel_tv_bp.route("/api/painel/planejamento")
+def painel_tv_planejamento():
+    try:
+        dados = _coletar_planejamento()
     except Exception:
         db.session.rollback()
         raise
