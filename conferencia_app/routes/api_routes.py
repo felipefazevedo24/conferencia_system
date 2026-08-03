@@ -277,6 +277,9 @@ def _consyste_token_configurado_corretamente() -> bool:
 def api_integracao_expedicao_coletas():
     """API externa para consumo de dados de expedicao por outro sistema.
 
+    Retorna apenas expedicoes dos ultimos 60 dias (o consumo e feito por
+    ordem/sequencia, sem necessidade de paginar historico mais antigo).
+
     Campos retornados por item:
     - nota_fiscal
     - orcamento
@@ -296,8 +299,10 @@ def api_integracao_expedicao_coletas():
         limite = 200
     limite = max(1, min(limite, 1000))
 
+    corte = datetime.now() - timedelta(days=60)
     query = ExpedicaoConferenciaSimples.query
     query = query.filter(ExpedicaoConferenciaSimples.expedido_at.isnot(None))
+    query = query.filter(ExpedicaoConferenciaSimples.expedido_at >= corte)
 
     if numero_nf:
         query = query.filter(ExpedicaoConferenciaSimples.numero_nf == numero_nf)
@@ -333,6 +338,7 @@ def api_integracao_expedicao_coletas():
             "filtros": {
                 "numero_nf": numero_nf or None,
                 "limite": limite,
+                "expedido_desde": corte.isoformat(),
             },
             "dados": dados,
         }
