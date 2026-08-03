@@ -1669,6 +1669,8 @@ def registrar():
         if role == "Logistica":
             role = "Logística"
 
+        ativo = bool(data.get("ativo", True))
+
         if Usuario.query.filter_by(username=username).first():
             return jsonify({"sucesso": False, "msg": "Usuário já existe"}), 400
         if Usuario.query.filter(func.lower(Usuario.email) == email).first():
@@ -1679,7 +1681,7 @@ def registrar():
             email=email,
             password=None,
             role=role,
-            ativo=True,
+            ativo=ativo,
             criado_em=datetime.now(),
             criado_por=session.get("username"),
             atualizado_em=datetime.now(),
