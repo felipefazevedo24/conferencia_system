@@ -12,6 +12,8 @@ from ..models import (
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
     ItemNota,
+    PlannerCard,
+    PlannerColumn,
     Usuario,
 )
 
@@ -75,6 +77,20 @@ HOME_MODULES = [
         "priority": 93,
         "keywords": ["cadastro", "workflow", "material", "cliente", "fornecedor", "transportadora"],
         "metric_key": "cadastro_workflow",
+    },
+    {
+        "id": "planejamento_tarefas",
+        "title": "Planejamento de Tarefas",
+        "subtitle": "Kanban operacional",
+        "description": "Organize tarefas em colunas, mova por drag-and-drop e acompanhe KPIs do fluxo em tempo real.",
+        "href": "/planejamento",
+        "icon": "fa-table-columns",
+        "permission": "PAGE_PLANEJAMENTO_TAREFAS",
+        "section": "Compras",
+        "tone": "teal",
+        "priority": 94,
+        "keywords": ["kanban", "trello", "tarefas", "backlog", "planejamento"],
+        "metric_key": "planner_abertas",
     },
     {
         "id": "conferencia",
@@ -413,6 +429,7 @@ def _build_home_metrics() -> dict:
         "notas_concluidas": 0,
         "notas_lancadas": 0,
         "auditoria_pendente": 0,
+        "planner_abertas": 0,
         "agendamento_ativo": 0,
         "expedicao_aberta": 0,
         "boletos_gerados": 0,
@@ -443,6 +460,13 @@ def _build_home_metrics() -> dict:
         metrics["auditoria_pendente"] = (
             db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
             .filter(ItemNota.auditor_decisao == "PendenteDecisao")
+            .scalar()
+            or 0
+        )
+        metrics["planner_abertas"] = (
+            db.session.query(func.count(PlannerCard.id))
+            .join(PlannerColumn, PlannerColumn.id == PlannerCard.column_id)
+            .filter(PlannerColumn.is_done.is_(False))
             .scalar()
             or 0
         )
@@ -516,6 +540,7 @@ def _metric_label_for_module(module_id: str, value: int | float) -> str:
     mapping = {
         "portaria": _fmt_metric(value, "NF pendente", "NFs pendentes"),
         "documento_entrada": _fmt_metric(value, "NF na fila", "NFs na fila"),
+        "planejamento_tarefas": _fmt_metric(value, "tarefa aberta", "tarefas abertas"),
         "conferencia": _fmt_metric(value, "nota aguardando", "notas aguardando"),
         "notas_liberadas": _fmt_metric(value, "NF lançada", "NFs lançadas"),
         "expedicao_conferencia": _fmt_metric(value, "operação aberta", "operações abertas"),

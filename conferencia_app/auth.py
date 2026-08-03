@@ -53,6 +53,7 @@ PERMISSION_CATALOG = {
     "PAGE_FACILITIES_GESTOR": "Facilities > Solicitar EPI (Gestor)",
     "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",
     "PAGE_QUALIDADE_APROVAR": "Qualidade > Aprovar laudo (supervisor/gerente)",
+    "PAGE_PLANEJAMENTO_TAREFAS": "Planejamento > Board de tarefas (Kanban)",
 }
 
 
@@ -67,6 +68,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_EXPEDICAO_CONFERENCIA",
         "PAGE_EXPEDICAO_CONF_CEGA",
         "PAGE_CADASTRO_WORKFLOW",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Financeiro": {
         "PAGE_FISCAL_LIBERADAS",
@@ -74,6 +76,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
         "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Controladoria": {
         "PAGE_FISCAL_LIBERADAS",
@@ -81,6 +84,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FINANCEIRO_CONTAS_RECEBER",
         "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
         "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Logística": {
         "PAGE_CONFERENCIA",
@@ -95,6 +99,7 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_VIAGEM",
         "PAGE_LOGISTICA_INVENTARIO",
         "PAGE_CADASTRO_WORKFLOW",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Portaria": {
         "PAGE_PORTARIA",
@@ -110,13 +115,16 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_FISCAL_LIBERADAS",
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Solicitante": {
         "PAGE_LOGISTICA_SOLICITACAO",
         "PAGE_CADASTRO_WORKFLOW",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
     "Qualidade": {
         "PAGE_QUALIDADE",
+        "PAGE_PLANEJAMENTO_TAREFAS",
     },
 }
 

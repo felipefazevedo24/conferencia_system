@@ -57,7 +57,7 @@
                     </div>
                 </div>
                 {% else %}
-                {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') or can_access('PAGE_COMPRAS_CPS') or can_access('PAGE_CADASTRO_WORKFLOW') %}
+                {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') or can_access('PAGE_COMPRAS_CPS') or can_access('PAGE_CADASTRO_WORKFLOW') or can_access('PAGE_PLANEJAMENTO_TAREFAS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-compras" aria-expanded="true">
                         <span class="nav-group-title"><i class="fas fa-file-invoice-dollar"></i><span>Compras</span></span>
@@ -67,6 +67,7 @@
                         {% if can_access('PAGE_UPLOAD') or can_access('PAGE_XML_AUDITOR') or can_access('PAGE_LANCAMENTO') %}<a href="/upload" class="list-group-item list-group-item-action"><i class="fas fa-file-invoice"></i> Documento de entrada</a>{% endif %}
                         {% if can_access('PAGE_COMPRAS_CPS') %}<a href="/compras" class="list-group-item list-group-item-action"><i class="fas fa-cart-shopping"></i> Compras CPS</a>{% endif %}
                         {% if can_access('PAGE_CADASTRO_WORKFLOW') %}<a href="/cadastros/" class="list-group-item list-group-item-action"><i class="fas fa-diagram-project"></i> Workflow de cadastros</a>{% endif %}
+                        {% if can_access('PAGE_PLANEJAMENTO_TAREFAS') %}<a href="/planejamento" class="list-group-item list-group-item-action"><i class="fas fa-table-columns"></i> Planejamento de tarefas</a>{% endif %}
                     </div>
                 </div>
                 {% endif %}

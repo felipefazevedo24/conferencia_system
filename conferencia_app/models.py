@@ -2130,3 +2130,59 @@ class ExpedicaoRomaneioExclusao(db.Model):
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class PlannerBoard(db.Model):
+    __tablename__ = "planner_board"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    colunas = db.relationship(
+        "PlannerColumn",
+        backref="board",
+        cascade="all, delete-orphan",
+        order_by="PlannerColumn.order_index.asc(), PlannerColumn.id.asc()",
+    )
+
+
+class PlannerColumn(db.Model):
+    __tablename__ = "planner_column"
+
+    id = db.Column(db.Integer, primary_key=True)
+    board_id = db.Column(db.Integer, db.ForeignKey("planner_board.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(80), nullable=False)
+    color = db.Column(db.String(20), nullable=False, default="#0f62c9")
+    is_done = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    cards = db.relationship(
+        "PlannerCard",
+        backref="column",
+        cascade="all, delete-orphan",
+        order_by="PlannerCard.order_index.asc(), PlannerCard.id.asc()",
+    )
+
+
+class PlannerCard(db.Model):
+    __tablename__ = "planner_card"
+
+    id = db.Column(db.Integer, primary_key=True)
+    column_id = db.Column(db.Integer, db.ForeignKey("planner_column.id"), nullable=False, index=True)
+    titulo = db.Column(db.String(180), nullable=False)
+    descricao = db.Column(db.Text)
+    prioridade = db.Column(db.String(20), nullable=False, default="Media", index=True)
+    responsavel = db.Column(db.String(100), index=True)
+    prazo = db.Column(db.Date, index=True)
+    order_index = db.Column(db.Integer, nullable=False, default=0, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    atualizado_por = db.Column(db.String(100))
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    concluido_em = db.Column(db.DateTime, index=True)
