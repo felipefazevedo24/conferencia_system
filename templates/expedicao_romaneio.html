@@ -58,6 +58,7 @@
     .rom-badge--fob { background: #e0e7ff; color: #4338ca; }
     .rom-badge--cif { background: #fce7f3; color: #a21caf; }
     .rom-badge--expedido { background: #dcfce7; color: #15803d; }
+    .rom-badge--pendente { background: #fee2e2; color: #991b1b; }
     
     /* MODAL */
     .rom-modal { display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
@@ -80,6 +81,11 @@
     .rom-nfs-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #e5e7eb; }
     .rom-nf-input-group { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
     .rom-nfs-list { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; background: #f9fafb; max-height: 280px; overflow-y: auto; }
+    .rom-nfs-disponiveis { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; background: #fff; max-height: 220px; overflow-y: auto; margin-bottom: 8px; }
+    .rom-nf-check-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-bottom: 1px solid #f1f5f9; font-size: 13px; cursor: pointer; }
+    .rom-nf-check-item:last-child { border-bottom: none; }
+    .rom-nf-check-item:hover { background: #f9fafb; }
+    .rom-nf-check-item input[type="checkbox"] { flex-shrink: 0; }
     .rom-nf-item { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 12px; align-items: center; padding: 12px; background: white; border-radius: 4px; margin-bottom: 8px; border: 1px solid #e5e7eb; }
     .rom-nf-item:last-child { margin-bottom: 0; }
     .rom-nf-info strong { display: block; font-weight: 700; }
@@ -182,9 +188,18 @@
                 </div>
                 <div class="rom-form-grid">
                     <div class="rom-form-group">
+                        <label class="rom-label">Tipo de Frete</label>
+                        <select id="rom-tipo-frete" class="rom-input">
+                            <option value="FOB">FOB - Frete por conta do destinatário</option>
+                            <option value="CIF">CIF - Frete por conta do remetente</option>
+                        </select>
+                    </div>
+                    <div class="rom-form-group">
                         <label class="rom-label">Orçamento</label>
                         <input type="text" id="rom-orcamento" class="rom-input" placeholder="Ex: 1234">
                     </div>
+                </div>
+                <div class="rom-form-grid">
                     <div class="rom-form-group">
                         <label class="rom-label">Cliente</label>
                         <input type="text" id="rom-cliente" class="rom-input" placeholder="Nome do cliente">
@@ -194,17 +209,18 @@
 
             <!-- ADICIONAR NFes -->
             <div class="rom-nfs-section">
-                <h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 700;">NOTAS FISCAIS</h4>
-                <div class="rom-nf-input-group">
-                    <select id="rom-nf-select" class="rom-input">
-                        <option value="">Selecione uma NF faturada…</option>
-                    </select>
-                    <button type="button" class="eui-btn eui-btn--primary" id="rom-btn-add-nf" style="white-space: nowrap;"><i class="fas fa-plus"></i> Adicionar</button>
+                <h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 700;">NOTAS FISCAIS FATURADAS DISPONÍVEIS</h4>
+                <div class="rom-nfs-disponiveis" id="rom-nfs-disponiveis-lista">
+                    <p style="text-align:center;color:#9ca3af;padding:10px;">Carregando…</p>
+                </div>
+                <div class="rom-nf-input-group" style="margin-top: 8px;">
+                    <button type="button" class="eui-btn eui-btn--primary" id="rom-btn-add-nf" style="white-space: nowrap;"><i class="fas fa-plus"></i> Adicionar selecionadas</button>
                 </div>
                 <div class="rom-nf-input-group" style="margin-top: 8px;">
                     <input type="text" id="rom-nf-manual" class="rom-input" placeholder="Ou digite o número de uma NF que não passou pela conferência…">
                     <button type="button" class="eui-btn eui-btn--ghost" id="rom-btn-add-nf-manual" style="white-space: nowrap;" title="Busca os dados da NF direto no ERP"><i class="fas fa-file-circle-plus"></i> Adicionar manualmente</button>
                 </div>
+                <h4 style="margin: 16px 0 12px; font-size: 14px; font-weight: 700;">NFs NESTE ROMANEIO</h4>
                 <div class="rom-nfs-list" id="rom-nfs-container"></div>
             </div>
 
@@ -256,6 +272,26 @@
 
 <!-- MENU DE AÇÕES (…) — compartilhado, posicionado dinamicamente -->
 <div class="rom-actions-menu" id="rom-actions-menu"></div>
+
+<!-- Inputs ocultos de captura de foto (carregamento / comprovante FOB) -->
+<input type="file" id="rom-input-foto-carregamento" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="rom-input-comprovante-fob" accept="image/*" capture="environment" style="display:none">
+
+<!-- MODAL DE COMPROVANTES (CIF - um por NF) -->
+<div class="rom-modal" id="rom-comprovantes-modal">
+    <div class="rom-modal__box">
+        <div class="rom-modal__header">
+            <h3 class="rom-modal__title">Comprovantes de Entrega por NF</h3>
+            <button class="rom-modal__close" id="rom-comprovantes-close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rom-modal__body">
+            <div id="rom-comprovantes-lista"></div>
+        </div>
+        <div class="rom-modal__footer">
+            <button type="button" class="eui-btn eui-btn--ghost" id="rom-comprovantes-fechar">Fechar</button>
+        </div>
+    </div>
+</div>
 
 <script>
     const $ = (id) => document.getElementById(id);
@@ -316,9 +352,25 @@
         }
     }
 
+    function preencherListaNfsDisponiveis(container, nfsDisponiveis, nfsJaAdicionadas) {
+        if (!container) return;
+        const jaAdicionadas = new Set((nfsJaAdicionadas || []).map((n) => n.numero_nf));
+        const opcoes = nfsDisponiveis.filter((o) => !jaAdicionadas.has(o.numero_nf));
+        if (!opcoes.length) {
+            container.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:10px;">Nenhuma NF faturada disponível.</p>';
+            return;
+        }
+        container.innerHTML = opcoes.map((o) => `
+            <label class="rom-nf-check-item">
+                <input type="checkbox" value="${escapeHtml(o.numero_nf)}">
+                <span><strong>NF ${escapeHtml(o.numero_nf)}</strong> — ${escapeHtml(o.cliente || "—")}${o.orcamento ? ` (Orç. ${escapeHtml(o.orcamento)})` : ""} <span style="color:#9ca3af;">[${escapeHtml(o.origem || "FAT")}]</span></span>
+            </label>
+        `).join("");
+    }
+
     async function atualizarSelectModal() {
         const nfs = await carregarNfsFaturadasDisponiveis();
-        preencherSelectNfs($("rom-nf-select"), nfs, nfsAtual);
+        preencherListaNfsDisponiveis($("rom-nfs-disponiveis-lista"), nfs, nfsAtual);
     }
 
     async function atualizarSelectsInline() {
@@ -381,7 +433,7 @@
             <td style="text-align: center;">${r.qtde_nfs}</td>
             <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
             <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span></td>
-            <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span></td>
+            <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span>${r.tem_pendencia_comprovante ? ' <span class="rom-badge rom-badge--pendente">Sem comprovante</span>' : ""}</td>
             <td style="text-align: right;"><button class="rom-actions-btn" onclick="toggleMenuAcoesRomaneio(event, ${r.id})" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>`;
 
@@ -404,11 +456,20 @@
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); solicitarExclusaoRomaneio(${r.id})"><i class="fas fa-trash"></i> Solicitar exclusão</button>`;
             }
         } else if (r.status === "Pronto") {
+            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Tirar foto de carregamento</button>`;
             itens += `<button onclick="fecharMenuAcoesRomaneio(); expedirRomaneio(${r.id})"><i class="fas fa-truck"></i> Expedir</button>`;
             if (IS_ADMIN) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarFinalizacao(${r.id})" title="Voltar para Rascunho"><i class="fas fa-rotate-left"></i> Estornar finalização</button>`;
             }
         } else if (r.status === "Expedido") {
+            itens += `<button onclick="fecharMenuAcoesRomaneio(); tirarFotoCarregamento(${r.id})"><i class="fas fa-camera"></i> Tirar foto de carregamento</button>`;
+            if (r.tem_pendencia_comprovante) {
+                if (r.tipo_frete === "CIF") {
+                    itens += `<button onclick="fecharMenuAcoesRomaneio(); abrirModalComprovantesCif(${r.id})"><i class="fas fa-file-signature"></i> Anexar comprovantes por NF</button>`;
+                } else {
+                    itens += `<button onclick="fecharMenuAcoesRomaneio(); anexarComprovanteFob(${r.id})"><i class="fas fa-file-signature"></i> Anexar comprovante de entrega</button>`;
+                }
+            }
             itens += `<button onclick="fecharMenuAcoesRomaneio(); irParaRegistroExpedicao(${r.id})"><i class="fas fa-clipboard-list"></i> Registro de expedição</button>`;
             if (IS_ADMIN) {
                 itens += `<hr><button class="is-danger" onclick="fecharMenuAcoesRomaneio(); estornarExpedicao(${r.id})" title="Voltar para Pronto"><i class="fas fa-rotate-left"></i> Estornar expedição</button>`;
@@ -611,6 +672,7 @@
             $("rom-modal-title").textContent = "Editar Romaneio #" + r.numero_romaneio;
             $("rom-numero").value = r.numero_romaneio;
             $("rom-data").value = r.data_romaneio;
+            $("rom-tipo-frete").value = r.tipo_frete || "FOB";
             $("rom-orcamento").value = r.orcamento || "";
             $("rom-cliente").value = r.cliente || "";
             $("rom-transportadora").value = r.transportadora_nome || "";
@@ -622,6 +684,7 @@
             // editaveis (o resto exige estornar a finalizacao primeiro).
             const somenteTransportador = r.status !== "Rascunho";
             $("rom-data").disabled = somenteTransportador;
+            $("rom-tipo-frete").disabled = somenteTransportador;
             $("rom-orcamento").disabled = somenteTransportador;
             $("rom-cliente").disabled = somenteTransportador;
 
@@ -680,10 +743,10 @@
         if (!confirm("Marcar como expedido?")) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/expedir`, { method: "POST" });
-            // O Registro de Expedição já nasce Finalizado no servidor (o romaneio
-            // faz as vezes de canhoto e as fotos do Faturado são reaproveitadas),
-            // então não é preciso reabrir a tela nem pedir "expedir" de novo.
-            toast("Romaneio expedido! Registro de expedição finalizado.");
+            // As fotos do Faturado sao reaproveitadas, mas o Registro de
+            // Expedicao so fica Finalizado depois que o comprovante de
+            // entrega for anexado (acao que aparece no menu quando pendente).
+            toast("Romaneio expedido! Anexe o comprovante de entrega para finalizar.");
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -765,6 +828,105 @@
         window.open(`/expedicao/conferencia?q=${encodeURIComponent(primeiraNf)}`, "_blank");
     }
 
+    // FOTO DE CARREGAMENTO — captura direto pelo menu de Ações (sem precisar
+    // abrir "Visualizar"). Reaproveita a mesma rota já usada la.
+    let romaneioIdFotoCarregamento = null;
+    function tirarFotoCarregamento(romaneioId) {
+        romaneioIdFotoCarregamento = romaneioId;
+        $("rom-input-foto-carregamento").click();
+    }
+    $("rom-input-foto-carregamento").addEventListener("change", async () => {
+        const input = $("rom-input-foto-carregamento");
+        const arquivo = input.files && input.files[0];
+        input.value = "";
+        if (!arquivo || !romaneioIdFotoCarregamento) return;
+        const leitor = new FileReader();
+        leitor.onload = async () => {
+            try {
+                await api(`/api/expedicao/romaneio-fat/${romaneioIdFotoCarregamento}/foto-carregamento`, {
+                    method: "POST",
+                    body: JSON.stringify({ imagem_base64: leitor.result }),
+                });
+                toast("Foto de carregamento salva!");
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        };
+        leitor.readAsDataURL(arquivo);
+    });
+
+    // COMPROVANTE DE ENTREGA (FOB) — uma foto unica finaliza todas as NFs do romaneio.
+    let romaneioIdComprovanteFob = null;
+    function anexarComprovanteFob(romaneioId) {
+        romaneioIdComprovanteFob = romaneioId;
+        $("rom-input-comprovante-fob").click();
+    }
+    $("rom-input-comprovante-fob").addEventListener("change", async () => {
+        const input = $("rom-input-comprovante-fob");
+        const arquivo = input.files && input.files[0];
+        input.value = "";
+        if (!arquivo || !romaneioIdComprovanteFob) return;
+        try {
+            const form = new FormData();
+            form.append("comprovante", arquivo);
+            const resp = await fetch(`/api/expedicao/romaneio-fat/${romaneioIdComprovanteFob}/comprovante-entrega`, {
+                method: "POST",
+                body: form,
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || "Falha ao salvar comprovante.");
+            toast("Comprovante salvo! NFs finalizadas.");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    });
+
+    // COMPROVANTES DE ENTREGA (CIF) — um por NF, reaproveita o endpoint de
+    // canhoto que ja existe por registro de conferencia.
+    function abrirModalComprovantesCif(romaneioId) {
+        const r = romaneiosCacheLista.find((x) => x.id === romaneioId);
+        if (!r) return;
+        const lista = $("rom-comprovantes-lista");
+        lista.innerHTML = (r.nfs || []).map((nf, idx) => `
+            <div class="rom-form-group" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #eee;">
+                <div>
+                    <strong>NF ${escapeHtml(nf.numero_nf)}</strong> — ${escapeHtml(nf.cliente || "—")}
+                    ${nf.canhoto_pendente === false ? '<span class="rom-badge rom-badge--expedido" style="margin-left:8px;">Anexado</span>' : '<span class="rom-badge rom-badge--pendente" style="margin-left:8px;">Sem comprovante</span>'}
+                </div>
+                <label class="eui-btn eui-btn--ghost eui-btn--sm" style="cursor:pointer; white-space:nowrap;">
+                    <i class="fas fa-camera"></i> ${nf.canhoto_pendente === false ? "Trocar" : "Anexar"}
+                    <input type="file" accept="image/*" capture="environment" style="display:none" data-registro-id="${nf.registro_id || ""}" onchange="salvarComprovanteCif(this, ${romaneioId})">
+                </label>
+            </div>
+        `).join("");
+        $("rom-comprovantes-modal").classList.add("open");
+    }
+
+    window.salvarComprovanteCif = async function (inputEl, romaneioId) {
+        const arquivo = inputEl.files && inputEl.files[0];
+        const registroId = inputEl.dataset.registroId;
+        if (!arquivo || !registroId) return;
+        try {
+            const form = new FormData();
+            form.append("canhoto", arquivo);
+            const resp = await fetch(`/api/expedicao/conferencia-simples/${registroId}/canhoto`, {
+                method: "POST",
+                body: form,
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || "Falha ao salvar comprovante.");
+            toast("Comprovante anexado!");
+            $("rom-comprovantes-modal").classList.remove("open");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    };
+
+    $("rom-comprovantes-close").addEventListener("click", () => $("rom-comprovantes-modal").classList.remove("open"));
+    $("rom-comprovantes-fechar").addEventListener("click", () => $("rom-comprovantes-modal").classList.remove("open"));
+
     // EVENTOS
     $("rom-btn-novo").addEventListener("click", async () => {
         try {
@@ -775,13 +937,15 @@
             $("rom-modal-title").textContent = "Novo Romaneio";
             $("rom-numero").value = r.numero_romaneio;
             $("rom-data").value = new Date().toISOString().split("T")[0];
+            $("rom-tipo-frete").value = "FOB";
+            $("rom-tipo-frete").disabled = false;
             $("rom-orcamento").value = "";
             $("rom-cliente").value = "";
             $("rom-transportadora").value = "";
             $("rom-placa").value = "";
             $("rom-motorista").value = "";
             $("rom-documento").value = "";
-            
+
             renderNFsList();
             $("rom-modal").classList.add("open");
             atualizarSelectModal();
@@ -791,25 +955,28 @@
     });
 
     $("rom-btn-add-nf").addEventListener("click", async () => {
-        const select = $("rom-nf-select");
-        const nf = select.value;
-        if (!nf) { toast("Selecione uma NF faturada", "error"); return; }
         if (!romaneioAtual || !romaneioAtual.id) { toast("Romaneio ainda não foi criado.", "error"); return; }
+        const marcados = Array.from($("rom-nfs-disponiveis-lista").querySelectorAll("input[type=checkbox]:checked")).map((el) => el.value);
+        if (!marcados.length) { toast("Selecione ao menos uma NF.", "error"); return; }
 
-        try {
-            await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf`, {
-                method: "POST",
-                body: JSON.stringify({ numero_nf: nf }),
-            });
-            const atualizado = await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`);
-            romaneioAtual = atualizado;
-            nfsAtual = atualizado.nfs || [];
-            renderNFsList();
-            await atualizarSelectModal();
-            toast("NF adicionada!");
-        } catch (e) {
-            toast(e.message, "error");
+        let sucesso = 0;
+        for (const nf of marcados) {
+            try {
+                await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}/nf`, {
+                    method: "POST",
+                    body: JSON.stringify({ numero_nf: nf }),
+                });
+                sucesso++;
+            } catch (e) {
+                toast(`NF ${nf}: ${e.message}`, "error");
+            }
         }
+        const atualizado = await api(`/api/expedicao/romaneio-fat/${romaneioAtual.id}`);
+        romaneioAtual = atualizado;
+        nfsAtual = atualizado.nfs || [];
+        renderNFsList();
+        await atualizarSelectModal();
+        if (sucesso) toast(`${sucesso} NF(s) adicionada(s)!`);
     });
 
     $("rom-btn-add-nf-manual").addEventListener("click", async () => {
@@ -849,6 +1016,7 @@
                     body: JSON.stringify({
                         orcamento: $("rom-orcamento").value,
                         cliente: $("rom-cliente").value,
+                        tipo_frete: $("rom-tipo-frete").value,
                         transportadora: $("rom-transportadora").value,
                         placa: $("rom-placa").value,
                         motorista: $("rom-motorista").value,

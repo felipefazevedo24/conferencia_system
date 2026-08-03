@@ -84,6 +84,7 @@ def _ordem_resumo(ordem: ExpedicaoOrdemST, total_itens: int | None = None) -> di
         "conferido_at": _iso(ordem.conferido_at),
         "faturado_at": _iso(ordem.faturado_at),
         "expedido_at": _iso(ordem.expedido_at),
+        "expedicao_registro_id": ordem.expedicao_registro_id,
     }
 
 
@@ -388,7 +389,12 @@ def listar_ordens_conf_st():
                     "id": rom.id,
                     "numero_romaneio": rom.numero_romaneio,
                     "status": rom.status,
+                    "tipo_frete": rom.tipo_frete,
                 }
+                if sl == "expedido" and ordem.expedicao_registro_id:
+                    registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+                    if registro is not None:
+                        romaneio_info["canhoto_pendente"] = not bool(registro.canhoto_file_name)
 
         # Busca por OS percorre TODOS os status; ignora a fila padrao e o
         # filtro de status enquanto houver termo de busca.

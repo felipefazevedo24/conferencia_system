@@ -20,7 +20,8 @@ from ..services import expedicao_st_service as st_svc
 from ..services import cadastro_workflow_service as cad_svc
 from ..services import danfe_service
 from ..services.erp_nfe_emitidas_service import buscar_nfe_emitida_erp
-from ..services.expedicao_photo_storage import using_drive, upload_bytes_to_drive
+from werkzeug.utils import secure_filename
+from ..services.expedicao_photo_storage import using_drive, upload_bytes_to_drive, upload_to_drive
 from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 from ..services.nfe_email_service import enviar_aviso_coleta_fob
 
@@ -85,10 +86,12 @@ def _dados_nf_do_bridge(numero_nf: str) -> dict | None:
 
 
 def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
-    """Ao expedir o romaneio, garante um Registro de Expedicao ja Finalizado
+    """Ao expedir o romaneio, garante um Registro de Expedicao em "Expedido"
     para a NF. Se ja existir um rascunho (fotos do material/cliente tiradas na
-    etapa Faturado), promove-o; senao cria um novo. O proprio romaneio faz as
-    vezes de canhoto, portanto NAO se exige foto de canhoto neste fluxo.
+    etapa Faturado), promove-o; senao cria um novo. So vira "Finalizado"
+    quando o comprovante de entrega (canhoto) for anexado - ver
+    salvar_comprovante_entrega_romaneio (FOB, um por romaneio) e o endpoint de
+    canhoto por registro em api_routes.py (CIF, um por NF).
     Retorna o registro (ou None se a NF for vazia)."""
     numero_nf = str(getattr(nf, "numero_nf", "") or "").strip()
     if not numero_nf:
@@ -133,7 +136,7 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
             transportadora=transportadora,
             placa=placa,
             motorista=motorista,
-            status="Finalizado",
+            status="Expedido",
         )
         db.session.add(registro)
     else:
@@ -148,20 +151,124 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
             registro.placa = placa
         if motorista:
             registro.motorista = motorista
-        registro.status = "Finalizado"
+        registro.status = "Expedido"
 
-    # Romaneio = canhoto: registro nasce finalizado, sem foto de canhoto.
+    # O registro fica em "Expedido" ate o comprovante de entrega (canhoto) ser
+    # anexado - FOB anexa um unico comprovante pro romaneio inteiro (ver
+    # salvar_comprovante_entrega_romaneio), CIF anexa um por NF reaproveitando
+    # o endpoint de canhoto ja existente.
     if not registro.expedido_at:
         registro.expedido_at = agora
         registro.expedido_by = usuario
-    registro.finalizado_at = agora
-    registro.finalizado_by = usuario
     registro.updated_at = agora
     db.session.flush()
 
     if ordem is not None:
         ordem.expedicao_registro_id = registro.id
     return registro
+
+
+def _registro_conferencia_da_nf(numero_nf: str) -> ExpedicaoConferenciaSimples | None:
+    """Localiza o Registro de Expedicao ja vinculado a uma NF (apos o romaneio
+    ter sido expedido) - via ExpedicaoOrdemFat/ST.expedicao_registro_id, com
+    fallback pela propria NF+origem Romaneio."""
+    numero_nf = str(numero_nf or "").strip()
+    if not numero_nf:
+        return None
+    ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
+    if ordem is None:
+        ordem = ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
+    if ordem is not None and ordem.expedicao_registro_id:
+        registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+        if registro is not None:
+            return registro
+    return (
+        ExpedicaoConferenciaSimples.query
+        .filter_by(numero_nf=numero_nf, origem="Romaneio")
+        .order_by(ExpedicaoConferenciaSimples.id.desc())
+        .first()
+    )
+
+
+def _info_comprovantes_romaneio(romaneio) -> tuple[dict, bool]:
+    """Para romaneios Expedidos, retorna {numero_nf: {registro_id, canhoto_pendente}}
+    e se ha qualquer NF ainda sem comprovante anexado. Para os demais status
+    nao faz nenhuma consulta extra."""
+    info: dict = {}
+    if romaneio.status != "Expedido":
+        return info, False
+    tem_pendencia = False
+    for nf in romaneio.nfs or []:
+        registro = _registro_conferencia_da_nf(nf.numero_nf)
+        if registro is None:
+            continue
+        canhoto_pendente = not bool(registro.canhoto_file_name)
+        info[nf.numero_nf] = {"registro_id": registro.id, "canhoto_pendente": canhoto_pendente}
+        if canhoto_pendente:
+            tem_pendencia = True
+    return info, tem_pendencia
+
+
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/comprovante-entrega", methods=["POST"])
+@roles_required(*ROLES)
+def salvar_comprovante_entrega_romaneio(romaneio_id):
+    """Comprovante de entrega unico para romaneios FOB: uma unica foto
+    finaliza de uma vez o Registro de Expedicao de todas as NFs do romaneio
+    (mesmo arquivo fisico referenciado em cada registro, reaproveitando os
+    campos de canhoto ja existentes)."""
+    romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
+    if not romaneio:
+        return jsonify({"error": "Romaneio não encontrado."}), 404
+
+    if romaneio.tipo_frete != "FOB":
+        return jsonify({"error": "Este romaneio e CIF - anexe o comprovante por NF."}), 400
+    if romaneio.status != "Expedido":
+        return jsonify({"error": "O romaneio precisa estar Expedido para anexar o comprovante."}), 400
+
+    comprovante = request.files.get("comprovante")
+    if not comprovante or not comprovante.filename:
+        return jsonify({"error": "Arquivo do comprovante é obrigatório."}), 400
+
+    fotos_dir = current_app.config.get("EXPEDICAO_CONFERENCIA_FOTOS_DIR", "")
+    if not fotos_dir:
+        fotos_dir = os.path.join(current_app.instance_path, "expedicao_conferencia_simples")
+    os.makedirs(fotos_dir, exist_ok=True)
+
+    ext = os.path.splitext(secure_filename(comprovante.filename))[1] or ".jpg"
+    nome_arquivo = f"canhoto_romaneio{romaneio_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+    if using_drive():
+        try:
+            stored = upload_to_drive(comprovante, nome_arquivo)
+            caminho = stored.file_path
+        except Exception as exc:
+            current_app.logger.exception("Falha ao enviar comprovante de entrega para o Drive")
+            return jsonify({"error": f"Falha ao enviar comprovante para o Drive: {exc}"}), 502
+    else:
+        caminho = os.path.join(fotos_dir, nome_arquivo)
+        comprovante.save(caminho)
+
+    agora = datetime.now()
+    usuario = session["username"]
+    total_finalizados = 0
+    for nf in romaneio.nfs or []:
+        registro = _registro_conferencia_da_nf(nf.numero_nf)
+        if not registro or registro.status != "Expedido":
+            continue
+        registro.canhoto_file_name = nome_arquivo
+        registro.canhoto_file_path = caminho
+        registro.canhoto_uploaded_at = agora
+        registro.canhoto_uploaded_by = usuario
+        registro.status = "Finalizado"
+        registro.finalizado_at = agora
+        registro.finalizado_by = usuario
+        registro.updated_at = agora
+        total_finalizados += 1
+    db.session.commit()
+
+    return jsonify({
+        "message": "Comprovante de entrega salvo com sucesso.",
+        "nfs_finalizadas": total_finalizados,
+    })
 
 
 @expedicao_romaneio_bp.route("/expedicao/romaneio")
@@ -231,6 +338,7 @@ def listar_romaneios():
     data = []
     for r in romaneios:
         peso_total, volumes_total = _calcular_totais_nfs(r.nfs or [])
+        comprovantes_info, tem_pendencia_comprovante = _info_comprovantes_romaneio(r)
         data.append({
             "id": r.id,
             "numero_romaneio": r.numero_romaneio,
@@ -242,6 +350,7 @@ def listar_romaneios():
             "peso_bruto_total": peso_total,
             "qtde_volumes_total": volumes_total,
             "qtde_nfs": len(r.nfs) if r.nfs else 0,
+            "tem_pendencia_comprovante": tem_pendencia_comprovante,
             "nfs": [
                 {
                     "id": nf.id,
@@ -250,6 +359,8 @@ def listar_romaneios():
                     "cliente": nf.cliente,
                     "peso_bruto": nf.peso_bruto,
                     "qtde_volumes": nf.qtde_volumes,
+                    "registro_id": comprovantes_info.get(nf.numero_nf, {}).get("registro_id"),
+                    "canhoto_pendente": comprovantes_info.get(nf.numero_nf, {}).get("canhoto_pendente"),
                 }
                 for nf in (r.nfs or [])
             ],
@@ -713,7 +824,8 @@ def estornar_expedicao_romaneio(romaneio_id):
         if numero_nf:
             registros = (
                 ExpedicaoConferenciaSimples.query
-                .filter_by(numero_nf=numero_nf, origem="Romaneio", status="Finalizado")
+                .filter_by(numero_nf=numero_nf, origem="Romaneio")
+                .filter(ExpedicaoConferenciaSimples.status.in_(["Expedido", "Finalizado"]))
                 .all()
             )
             for reg in registros:
@@ -722,6 +834,12 @@ def estornar_expedicao_romaneio(romaneio_id):
                 reg.expedido_by = None
                 reg.finalizado_at = None
                 reg.finalizado_by = None
+                # Zera o comprovante de entrega - ao re-expedir, precisa ser
+                # anexado de novo (FOB ou CIF).
+                reg.canhoto_file_name = None
+                reg.canhoto_file_path = None
+                reg.canhoto_uploaded_at = None
+                reg.canhoto_uploaded_by = None
                 reg.updated_at = datetime.now()
     db.session.commit()
 

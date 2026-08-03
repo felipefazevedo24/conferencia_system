@@ -818,7 +818,12 @@ function renderHistorico(data) {
 
         // Callout de canhoto
         let canhotoHtml = "";
-        if (expedido && !registro.canhoto_url) {
+        if (expedido && registro.origem === "Romaneio") {
+            canhotoHtml = `
+                <div class="eui-callout eui-callout--info">
+                    <i class="fas fa-truck"></i> O comprovante de entrega deste registro é anexado na tela do Romaneio (menu de Ações), não aqui.
+                </div>`;
+        } else if (expedido && !registro.canhoto_url) {
             canhotoHtml = `
                 <div class="eui-callout eui-callout--info" style="flex-direction:column;align-items:flex-start;gap:8px;">
                     <div><i class="fas fa-camera"></i> <strong>Foto do canhoto pendente.</strong> Tire uma foto do canhoto assinado pelo motorista para finalizar.</div>

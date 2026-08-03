@@ -198,7 +198,12 @@ def listar_ordens_conf_cega():
                     "id": rom.id,
                     "numero_romaneio": rom.numero_romaneio,
                     "status": rom.status,
+                    "tipo_frete": rom.tipo_frete,
                 }
+                if sl == "expedido" and ordem.expedicao_registro_id:
+                    registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+                    if registro is not None:
+                        romaneio_info["canhoto_pendente"] = not bool(registro.canhoto_file_name)
 
         # Busca por OS/orcamento percorre TODOS os status; ignora o filtro de
         # status enquanto houver termo de busca.
