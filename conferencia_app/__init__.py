@@ -174,7 +174,11 @@ def create_app(test_config=None) -> Flask:
             asset_version = str(int(time.time()))
         return {"asset_version": asset_version, "build_info": _BUILD_INFO}
 
-    initialize_database(app)
+    skip_bootstrap = str(os.environ.get("SKIP_APP_BOOTSTRAP", "")).strip().lower() in {"1", "true", "yes", "on"}
+    if not skip_bootstrap:
+        initialize_database(app)
+    else:
+        app.logger.warning("SKIP_APP_BOOTSTRAP ativo: inicializacao de bootstrap de banco foi ignorada.")
 
     # Config persistida da automacao de e-mails de NF-e (sobrepoe env vars se salvo)
     try:
