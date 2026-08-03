@@ -1310,24 +1310,69 @@
         const conversoes = coletarConversoes();
         const btn = document.getElementById('btn-finalizar');
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
-        const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes }) });
-        ultimosDadosValidacao = await res.json();
-        btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-double"></i> Validar Conferência';
-        document.getElementById('modal-resultado').style.display = 'flex';
-        const ok = ultimosDadosValidacao.sucesso;
-        document.getElementById('modal-conteudo').innerHTML = `
-            <div class="validation-summary ${ok ? 'ok' : 'warn'}">
-                <i class="fas ${ok ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i>
-                <div>
-                    <strong>${ok ? 'Conferência validada' : 'Divergência identificada'}</strong>
-                    <span>${ok ? 'As quantidades informadas estão compatíveis com a NF. Confirme para concluir o recebimento.' : 'Revise os itens abaixo ou registre a pendência com justificativa operacional.'}</span>
+
+        const recontarBtn = document.getElementById('btn-recontar');
+        const pendenciaBtn = document.getElementById('btn-gravar-pendencia');
+        const efetivarBtn = document.getElementById('btn-efetivar-ok');
+
+        try {
+            const res = await fetch('/validar', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nota: notaSel, contagens: contagens, conversoes_itens: conversoes }) });
+            let dados;
+            try { dados = await res.json(); } catch (_) { dados = null; }
+            ultimosDadosValidacao = dados;
+
+            document.getElementById('modal-resultado').style.display = 'flex';
+
+            // Resposta de erro (sem lista de itens): mostra a mensagem do
+            // servidor e mantem apenas o botao "Corrigir", em vez de quebrar
+            // a tela e sumir com os botoes de acao.
+            if (!res.ok || !dados || !Array.isArray(dados.itens)) {
+                const msgErro = (dados && (dados.msg || dados.error)) || 'Não foi possível validar a conferência. Tente novamente.';
+                const detalhes = dados && dados.details ? `<div style="margin-top:8px; font-size:12px; color:#64748b;">${typeof dados.details === 'string' ? dados.details : JSON.stringify(dados.details)}</div>` : '';
+                document.getElementById('modal-conteudo').innerHTML = `
+                    <div class="validation-summary warn">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <div>
+                            <strong>Não foi possível concluir</strong>
+                            <span>${msgErro}</span>
+                        </div>
+                    </div>${detalhes}`;
+                recontarBtn.style.display = 'none';
+                pendenciaBtn.style.display = 'none';
+                efetivarBtn.style.display = 'none';
+                return;
+            }
+
+            const ok = dados.sucesso;
+            document.getElementById('modal-conteudo').innerHTML = `
+                <div class="validation-summary ${ok ? 'ok' : 'warn'}">
+                    <i class="fas ${ok ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i>
+                    <div>
+                        <strong>${ok ? 'Conferência validada' : 'Divergência identificada'}</strong>
+                        <span>${ok ? 'As quantidades informadas estão compatíveis com a NF. Confirme para concluir o recebimento.' : 'Revise os itens abaixo ou registre a pendência com justificativa operacional.'}</span>
+                    </div>
                 </div>
-            </div>
-            <div style="margin:0 0 12px; color:#475569; font-weight:700;">Resumo: ${ultimosDadosValidacao?.resumo?.ok || 0} item(ns) sem divergência.</div>
-            <table class="erp-table">${ultimosDadosValidacao.itens.map(i => `<tr><td>${i.descricao}<div style="font-size:11px; color:#64748b; margin-top:4px;">${i.msg || ''}</div></td><td><span class="result-status ${i.status==='OK'?'ok':'warn'}"><i class="fas ${i.status==='OK'?'fa-check':'fa-triangle-exclamation'}"></i>${i.status}</span></td></tr>`).join('')}</table>`;
-        document.getElementById('btn-recontar').style.display = ok ? 'none' : 'inline-block';
-        document.getElementById('btn-gravar-pendencia').style.display = ok ? 'none' : 'inline-block';
-        document.getElementById('btn-efetivar-ok').style.display = ok ? 'inline-block' : 'none';
+                <div style="margin:0 0 12px; color:#475569; font-weight:700;">Resumo: ${dados?.resumo?.ok || 0} item(ns) sem divergência.</div>
+                <table class="erp-table">${dados.itens.map(i => `<tr><td>${i.descricao}<div style="font-size:11px; color:#64748b; margin-top:4px;">${i.msg || ''}</div></td><td><span class="result-status ${i.status==='OK'?'ok':'warn'}"><i class="fas ${i.status==='OK'?'fa-check':'fa-triangle-exclamation'}"></i>${i.status}</span></td></tr>`).join('')}</table>`;
+            recontarBtn.style.display = ok ? 'none' : 'inline-block';
+            pendenciaBtn.style.display = ok ? 'none' : 'inline-block';
+            efetivarBtn.style.display = ok ? 'inline-block' : 'none';
+        } catch (e) {
+            document.getElementById('modal-resultado').style.display = 'flex';
+            document.getElementById('modal-conteudo').innerHTML = `
+                <div class="validation-summary warn">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div>
+                        <strong>Erro de conexão</strong>
+                        <span>Não foi possível falar com o servidor. Verifique a conexão e tente novamente.</span>
+                    </div>
+                </div>`;
+            recontarBtn.style.display = 'none';
+            pendenciaBtn.style.display = 'none';
+            efetivarBtn.style.display = 'none';
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-double"></i> Validar Conferência';
+        }
     }
 
     async function efetivarGravacaoFinal() {
