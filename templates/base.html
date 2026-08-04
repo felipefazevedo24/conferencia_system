@@ -787,6 +787,9 @@ if ("serviceWorker" in navigator) {
     const API_PENDENCIAS = "/api/expedicao/assistente/pendencias";
     const API_PERGUNTAR = "/api/expedicao/assistente/perguntar";
 
+    const BIA_USER = {{ (current_user_display or user or '')|tojson }};
+    const BIA_USER_NOME = (BIA_USER || "").trim().split(/\s+/)[0] || "";
+
     let iniciada = false;
 
     const escapeHtml = (s) => String(s == null ? "" : s)
@@ -989,25 +992,68 @@ if ("serviceWorker" in navigator) {
     toast.addEventListener("click", abrirPainel);
     $("bia-toast-close").addEventListener("click", (e) => { e.stopPropagation(); esconderToast(); });
 
-    // Ao carregar qualquer página (onde a Bia atua), busca as pendências em
-    // segundo plano: atualiza o selo e avisa uma vez por sessão se houver algo.
+    // Ao carregar qualquer página: saúda o usuário de volta (uma vez por sessão)
+    // e, na Expedição, já avisa das pendências. Em outras páginas, só as boas-vindas.
+    (async function saudarEavisar() {
+        if (sessionStorage.getItem("bia_bemvindo")) {
+            // Mesmo já tendo saudado, mantém o selo atualizado na Expedição.
+            if (BIA_ATIVA) {
+                try {
+                    const r = await fetch(API_PENDENCIAS, { headers: { "Accept": "application/json" } });
+                    if (r.ok) { const d = await r.json(); atualizarBadge(d.urgentes, d.total_pendencias); }
+                } catch (e) { /* silencioso */ }
+            }
+            return;
+        }
+        sessionStorage.setItem("bia_bemvindo", "1");
+        const ola = BIA_USER_NOME ? `Bem-vindo(a) de volta, ${BIA_USER_NOME}! 👋` : "Bem-vindo(a) de volta! 👋";
+
+        if (!BIA_ATIVA) {
+            setTimeout(() => mostrarToast(`${ola} Precisando de algo, é só me chamar aqui embaixo. 💜`), 1300);
+            return;
+        }
+        try {
+            const r = await fetch(API_PENDENCIAS, { headers: { "Accept": "application/json" } });
+            const data = await r.json();
+            atualizarBadge(data.urgentes, data.total_pendencias);
+            const tot = data.total_pendencias || 0;
+            let msg = `${ola} `;
+            if (tot > 0) {
+                const urg = data.urgentes || 0;
+                msg += urg > 0
+                    ? `Você tem ${tot} pendência(s), sendo ${urg} urgente(s). Toca aqui pra ver. 👀`
+                    : `Você tem ${tot} pendência(s) de expedição. Toca aqui pra dar uma olhada. 🙂`;
+            } else {
+                msg += "Tá tudo em dia na expedição. 🎉";
+            }
+            setTimeout(() => mostrarToast(msg), 1400);
+        } catch (e) {
+            setTimeout(() => mostrarToast(`${ola} Precisando de algo, é só me chamar aqui. 💜`), 1400);
+        }
+    })();
+
+    // Lembretes ocasionais: a cada ~20 min, se houver pendências e o painel
+    // estiver fechado, a Bia dá um toque amigável (só na Expedição).
     if (BIA_ATIVA) {
-        (async function notificar() {
+        setInterval(async () => {
+            if (panel.classList.contains("open")) return;
             try {
                 const r = await fetch(API_PENDENCIAS, { headers: { "Accept": "application/json" } });
                 if (!r.ok) return;
                 const data = await r.json();
                 atualizarBadge(data.urgentes, data.total_pendencias);
-                if ((data.total_pendencias || 0) > 0 && !sessionStorage.getItem("bia_avisou")) {
-                    sessionStorage.setItem("bia_avisou", "1");
-                    const urg = data.urgentes || 0;
-                    const msg = urg > 0
-                        ? `Você tem ${data.total_pendencias} pendência(s), sendo ${urg} urgente(s). Toca aqui pra ver. 👀`
-                        : `Você tem ${data.total_pendencias} pendência(s) de expedição. Toca aqui pra dar uma olhada. 🙂`;
-                    setTimeout(() => mostrarToast(msg), 1400);
-                }
+                const tot = data.total_pendencias || 0;
+                if (tot <= 0) return;
+                const quem = BIA_USER_NOME || "você";
+                const lembretes = [
+                    `Ei, ${quem}! Ainda tem ${tot} pendência(s) de expedição por aqui. 👀`,
+                    `Passando pra lembrar: ${tot} item(ns) esperando na expedição. 🙂`,
+                    `Lembrete rápido: ${tot} pendência(s) ainda abertas. Bora resolver? 💪`,
+                    `Oi, ${quem}! Dá uma olhadinha — ${tot} pendência(s) na fila. 📦`,
+                ];
+                mostrarToast(lembretes[Math.floor(Math.random() * lembretes.length)]);
             } catch (e) { /* silencioso */ }
-        })();
+        }, 20 * 60 * 1000);
     }
 })();
 </script>
