@@ -87,13 +87,24 @@ def _normalizar(texto: str) -> str:
     return "".join(c for c in txt if not unicodedata.combining(c))
 
 
+def _fmt_data(dt) -> str:
+    if not dt:
+        return ""
+    try:
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
+        return ""
+
+
 def _item_fat(ordem: ExpedicaoOrdemFat) -> dict:
     return {
         "tipo": "fat",
+        "tipo_label": "Ordem de faturamento",
         "codigo": str(ordem.cod_ordem_fat or ""),
         "referencia": ordem.cliente or "—",
         "orcamento": ordem.orcamento or "",
         "numero_nf": ordem.numero_nf or "",
+        "previsao": _fmt_data(ordem.dt_previsao_entrega),
         "status": ordem.status,
     }
 
@@ -101,10 +112,12 @@ def _item_fat(ordem: ExpedicaoOrdemFat) -> dict:
 def _item_st(ordem: ExpedicaoOrdemST) -> dict:
     return {
         "tipo": "st",
+        "tipo_label": "Ordem de compra (ST)",
         "codigo": str(ordem.cod_ordem_compra or ""),
         "referencia": ordem.fornecedor or "—",
         "orcamento": "",
         "numero_nf": ordem.numero_nf or "",
+        "previsao": _fmt_data(ordem.dt_prevista_entrega),
         "status": ordem.status,
     }
 
@@ -144,15 +157,24 @@ def _coletar_insights() -> list[dict]:
     fat = _fat_visiveis()
     st = _st_visiveis()
 
+    # Classifica cada ordem pelo MESMO status_slug usado nos KPIs da tela, para
+    # que a contagem da Bia nunca divirja dos cartões de métrica (status_slug
+    # faz fallback para "pendente" em valores desconhecidos — igual à fila).
+    fat_slug = {}
+    for o in fat:
+        fat_slug.setdefault(fat_svc.status_slug(o.status), []).append(o)
+    st_slug = {}
+    for o in st:
+        st_slug.setdefault(st_svc.status_slug(o.status), []).append(o)
+
     insights: list[dict] = []
 
     # 1) Faturado sem conferência (bloqueia a expedição) — ALTA.
     fat_sem_conf = [
-        o for o in fat
-        if o.status == fat_svc.STATUS_FATURADO_SEM_CONF
-        and (o.cod_ordem_fat or 0) >= FAT_SEM_CONF_COD_MINIMO
+        o for o in fat_slug.get("faturado_sem_conf", [])
+        if (o.cod_ordem_fat or 0) >= FAT_SEM_CONF_COD_MINIMO
     ]
-    st_sem_conf = [o for o in st if o.status == st_svc.STATUS_FATURADO_SEM_CONF]
+    st_sem_conf = list(st_slug.get("faturado_sem_conf", []))
     if fat_sem_conf or st_sem_conf:
         itens = [_item_fat(o) for o in fat_sem_conf] + [_item_st(o) for o in st_sem_conf]
         insights.append({
@@ -170,8 +192,8 @@ def _coletar_insights() -> list[dict]:
         })
 
     # 2) Pendente de conferência com previsão de entrega vencida — ALTA.
-    fat_pend = [o for o in fat if o.status == fat_svc.STATUS_PENDENTE]
-    st_pend = [o for o in st if o.status == st_svc.STATUS_PENDENTE]
+    fat_pend = list(fat_slug.get("pendente", []))
+    st_pend = list(st_slug.get("pendente", []))
     fat_atrasada = [o for o in fat_pend if _vencida(o.dt_previsao_entrega)]
     st_atrasada = [o for o in st_pend if _vencida(o.dt_prevista_entrega)]
     if fat_atrasada or st_atrasada:
@@ -284,14 +306,14 @@ def _coletar_insights() -> list[dict]:
     # 6) Divergências registradas ainda não expedidas — MÉDIA.
     fat_div = [
         o for o in fat
-        if o.divergente and o.status not in (
-            fat_svc.STATUS_EXPEDIDO, fat_svc.STATUS_FINALIZADO_SEM_CONF,
+        if o.divergente and fat_svc.status_slug(o.status) not in (
+            "expedido", "finalizado_sem_conf",
         )
     ]
     st_div = [
         o for o in st
-        if o.divergente and o.status not in (
-            st_svc.STATUS_EXPEDIDO, st_svc.STATUS_FINALIZADO_SEM_CONF,
+        if o.divergente and st_svc.status_slug(o.status) not in (
+            "expedido", "finalizado_sem_conf",
         )
     ]
     if fat_div or st_div:
@@ -312,14 +334,12 @@ def _coletar_insights() -> list[dict]:
 
     # 7) Conferido aguardando faturamento há mais de DIAS_PARADO dias — MÉDIA.
     fat_parado = [
-        o for o in fat
-        if o.status == fat_svc.STATUS_CONFERIDO
-        and (_dias_desde(o.conferido_at) or 0) >= DIAS_PARADO
+        o for o in fat_slug.get("conferido", [])
+        if (_dias_desde(o.conferido_at) or 0) >= DIAS_PARADO
     ]
     st_parado = [
-        o for o in st
-        if o.status == st_svc.STATUS_CONFERIDO
-        and (_dias_desde(o.conferido_at) or 0) >= DIAS_PARADO
+        o for o in st_slug.get("conferido", [])
+        if (_dias_desde(o.conferido_at) or 0) >= DIAS_PARADO
     ]
     if fat_parado or st_parado:
         itens = [_item_fat(o) for o in fat_parado] + [_item_st(o) for o in st_parado]
@@ -338,8 +358,8 @@ def _coletar_insights() -> list[dict]:
         })
 
     # 8) Faturado aguardando romaneio/expedição — BAIXA.
-    fat_fat = [o for o in fat if o.status == fat_svc.STATUS_FATURADO]
-    st_fat = [o for o in st if o.status == st_svc.STATUS_FATURADO]
+    fat_fat = list(fat_slug.get("faturado", []))
+    st_fat = list(st_slug.get("faturado", []))
     if fat_fat or st_fat:
         itens = [_item_fat(o) for o in fat_fat] + [_item_st(o) for o in st_fat]
         insights.append({
@@ -410,16 +430,16 @@ def analisar(limite_itens: int = 8) -> dict:
         card.pop("itens", None)
 
     if total_pendencias == 0:
-        resumo = "Tudo em dia por aqui! Nenhuma pendência de expedição no momento."
+        resumo = "Tudo em dia por aqui! 🎉 Nenhuma pendência de expedição no momento."
     elif urgentes:
         resumo = (
             f"Você tem {total_pendencias} pendência(s) de expedição, sendo "
-            f"{urgentes} urgente(s). Comece pelas de prioridade alta."
+            f"{urgentes} urgente(s). Bora começar pelas de prioridade alta?"
         )
     else:
         resumo = (
             f"Você tem {total_pendencias} pendência(s) de expedição em "
-            "andamento. Nada urgente no momento."
+            "andamento. Nada urgente no momento — mas dê uma olhada. 👍"
         )
 
     return {
@@ -438,9 +458,24 @@ SUGESTOES = [
     "O que falta expedir hoje?",
     "O que está atrasado?",
     "Tem algo faturado sem conferência?",
-    "Quais romaneios estão sem canhoto?",
+    "Quais estão sem canhoto?",
     "Tem carta de correção pendente?",
 ]
+
+
+def _tag(it: dict) -> str:
+    return {"st": "OC", "romaneio": "Rom", "registro": "Reg"}.get(it.get("tipo"), "OF")
+
+
+def _detalhe_item(it: dict) -> str:
+    partes = [f"{_tag(it)} {it.get('codigo', '')}".strip()]
+    if it.get("referencia") and it["referencia"] != "—":
+        partes.append(it["referencia"])
+    if it.get("numero_nf"):
+        partes.append(f"NF {it['numero_nf']}")
+    if it.get("previsao"):
+        partes.append(f"prev. {it['previsao']}")
+    return "   • " + " · ".join(partes)
 
 
 def _resposta(texto: str, pendencias: list[dict] | None = None) -> dict:
@@ -461,7 +496,14 @@ def _texto_de_cards(cards: list[dict], vazio: str) -> str:
         return vazio
     partes = []
     for c in cards:
-        partes.append(f"• {c['titulo']}: {c['quantidade']}. {c['orientacao']}")
+        bloco = f"• {c['titulo']}: {c['quantidade']}.\n{c['orientacao']}"
+        amostra = c.get("itens_amostra") or []
+        if amostra:
+            linhas = "\n".join(_detalhe_item(it) for it in amostra[:4])
+            bloco += "\n" + linhas
+            if c.get("itens_ocultos"):
+                bloco += f"\n   … e mais {c['itens_ocultos']}."
+        partes.append(bloco)
     return "\n\n".join(partes)
 
 
@@ -487,6 +529,8 @@ def _buscar_ordem(numero: str) -> dict | None:
             return {
                 "tipo": "Ordem de compra (ST)",
                 "referencia": ordem_st.fornecedor or "—",
+                "numero_nf": ordem_st.numero_nf or "",
+                "previsao": _fmt_data(ordem_st.dt_prevista_entrega),
                 "status": ordem_st.status,
                 "orientacao": orientacao_por_status(ordem_st.status),
             }
@@ -494,6 +538,8 @@ def _buscar_ordem(numero: str) -> dict | None:
     return {
         "tipo": tipo,
         "referencia": ordem.cliente or "—",
+        "numero_nf": ordem.numero_nf or "",
+        "previsao": _fmt_data(ordem.dt_previsao_entrega),
         "status": ordem.status,
         "orientacao": orientacao_por_status(ordem.status),
     }
@@ -509,14 +555,33 @@ def responder(pergunta: str) -> dict:
         dados = analisar()
         return _resposta(dados["resumo"], dados["pendencias"])
 
-    # Ajuda / capacidades.
-    if any(t in q for t in ("ajuda", "o que voce faz", "como funciona", "help", "quem e voce")):
+    # Tokens (palavras inteiras) para evitar falsos positivos de substring
+    # (ex.: "oi" dentro de "foi").
+    tokens = set(q.replace("?", " ").replace("!", " ").replace(",", " ").split())
+
+    # Saudação.
+    if (tokens & {"oi", "ola", "opa", "eai", "hey", "ei"}) or any(
+        s in q for s in ("bom dia", "boa tarde", "boa noite", "e ai", "tudo bem")
+    ):
+        dados = analisar()
         return _resposta(
-            "Sou o assistente da Conferência de Expedição. Eu acompanho o que "
-            "está pendente e oriento o próximo passo. Pergunte, por exemplo: "
-            "\"o que falta expedir hoje?\", \"o que está atrasado?\", \"tem "
-            "algo faturado sem conferência?\", \"quais romaneios estão sem "
-            "canhoto?\" ou informe o número de uma ordem/NF para ver a situação."
+            "Oi! Eu sou a Bia 😊 Estou de olho na expedição pra te ajudar.\n\n"
+            + dados["resumo"] + "\n\nPode me perguntar o que quiser — tipo "
+            "\"o que falta expedir hoje?\" ou o número de uma ordem/NF.",
+            dados["pendencias"],
+        )
+
+    # Ajuda / capacidades.
+    if any(t in q for t in ("ajuda", "o que voce faz", "como funciona", "help", "quem e voce", "pode fazer")):
+        return _resposta(
+            "Eu sou a Bia, sua assistente da Conferência de Expedição 😊 Eu "
+            "fico de olho no que está pendente, te lembro do que é urgente e "
+            "oriento o próximo passo.\n\nExperimenta me perguntar:\n"
+            "• \"O que falta expedir hoje?\"\n"
+            "• \"O que está atrasado?\"\n"
+            "• \"Tem algo faturado sem conferência?\"\n"
+            "• \"Quais estão sem canhoto?\"\n"
+            "• Ou me manda o número de uma ordem/NF que eu te conto a situação."
         )
 
     # Número de ordem / NF (sequência de dígitos com 3+ caracteres).
@@ -525,13 +590,18 @@ def responder(pergunta: str) -> dict:
     if m:
         info = _buscar_ordem(m.group(1))
         if info:
+            extra = ""
+            if info.get("numero_nf"):
+                extra += f"\nNF: {info['numero_nf']}"
+            if info.get("previsao"):
+                extra += f"\nPrevisão de entrega: {info['previsao']}"
             return _resposta(
-                f"{info['tipo']} {m.group(1)} — {info['referencia']}\n\n"
-                f"Status: {info['status']}.\n\n{info['orientacao']}"
+                f"Achei! {info['tipo']} {m.group(1)} — {info['referencia']}\n\n"
+                f"Status atual: {info['status']}.{extra}\n\n{info['orientacao']}"
             )
         return _resposta(
-            f"Não encontrei nenhuma ordem ou NF com o número {m.group(1)} na "
-            "Conferência de Expedição."
+            f"Procurei por {m.group(1)} mas não achei nenhuma ordem ou NF com "
+            "esse número na Conferência de Expedição. Confere o número pra mim?"
         )
 
     # Atrasados / prazo vencido.
