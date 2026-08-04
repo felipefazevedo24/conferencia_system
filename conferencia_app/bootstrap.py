@@ -1390,8 +1390,13 @@ def _ensure_agendamento_veiculos() -> None:
         ]
         for col_name, ddl in extra_sol_cols:
             if col_name not in cols_solicitacao:
-                conn.execute(db.text(ddl))
-                conn.commit()
+                try:
+                    conn.execute(db.text(ddl))
+                    conn.commit()
+                except Exception:
+                    # Coluna ja existe (ex.: adicionada em um reload anterior) ou
+                    # inspecao retornou estado desatualizado: ignora com seguranca.
+                    conn.rollback()
     finally:
         conn.close()
 
