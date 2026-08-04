@@ -220,7 +220,7 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
         nfs_txt = ", ".join(str(d.get("numero_nf")) for d in (divergentes or []))
         partes.append(
             f"Corrigir a **modalidade de frete** da(s) NF **{nfs_txt or '—'}** por "
-            "**carta de correção (CC-e)**. A nota saiu diferente do romaneio."
+            "**carta de correção (CC-e)**."
         )
         partes.append(
             f"**Solicitado por:** {session.get('username', 'sistema')} · "
