@@ -20,10 +20,13 @@
     /* ===== Bia — assistente virtual (global) ===== */
     /* Launcher discreto: circulo pequeno e semitransparente, encostado no canto.
        Ao passar o mouse (ou focar) ele "acorda": fica opaco e revela o texto. */
-    .bia-launcher { position: fixed; right: 20px; bottom: 20px; z-index: 11001; display: flex; align-items: center; gap: 0; height: 44px; padding: 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; opacity: .45; box-shadow: 0 4px 14px rgba(67,56,202,.22); transition: opacity .2s ease, transform .18s ease, box-shadow .2s ease, padding .2s ease; }
-    .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { opacity: 1; padding: 0 10px 0 0; transform: translateY(-1px); box-shadow: 0 12px 30px rgba(67,56,202,.4); }
+    /* Launcher em "aba": grudado na borda direita, no meio da tela, com metade
+       escondida e bem apagado. Ao passar o mouse (ou focar) ele desliza pra
+       dentro, fica opaco e revela o texto. */
+    .bia-launcher { position: fixed; right: 0; top: 50%; transform: translate(46%, -50%); z-index: 11001; display: flex; align-items: center; gap: 0; height: 46px; padding: 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; opacity: .35; box-shadow: -4px 6px 18px rgba(67,56,202,.2); transition: opacity .22s ease, transform .24s cubic-bezier(.2,.9,.3,1), box-shadow .22s ease, padding .22s ease; }
+    .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { opacity: 1; padding: 0 8px 0 0; transform: translate(0, -50%); box-shadow: -8px 12px 30px rgba(67,56,202,.4); }
     .bia-launcher-label { max-width: 0; overflow: hidden; padding-left: 0; font-size: 13px; font-weight: 700; color: #4338ca; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; opacity: 0; transition: max-width .22s ease, padding-left .22s ease, opacity .2s ease; }
-    .bia-launcher:hover .bia-launcher-label, .bia-launcher:focus-visible .bia-launcher-label, .bia-launcher.bia-awake .bia-launcher-label { max-width: 160px; padding-left: 14px; opacity: 1; }
+    .bia-launcher:hover .bia-launcher-label, .bia-launcher:focus-visible .bia-launcher-label, .bia-launcher.bia-awake .bia-launcher-label { max-width: 160px; padding-left: 16px; opacity: 1; }
     .bia-ava { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: block; background: linear-gradient(135deg, #6d28d9, #4338ca); box-shadow: 0 2px 8px rgba(67,56,202,.35); transition: transform .15s ease; }
     .bia-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .bia-ava .bia-ava-fb { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; font-family: 'Space Grotesk', sans-serif; }
@@ -31,11 +34,15 @@
     .bia-ava.no-img .bia-ava-fb { display: flex; }
     .bia-launcher .bia-ava { width: 44px; height: 44px; }
     .bia-launcher:hover .bia-ava, .bia-launcher:focus-visible .bia-ava, .bia-launcher.bia-awake .bia-ava { transform: scale(1.04); }
-    /* Quando ha avisos/lembretes, o launcher fica visivel pra chamar atencao. */
-    .bia-launcher.bia-has-news { opacity: 1; box-shadow: 0 8px 22px rgba(220,38,38,.32); }
+    /* Quando ha avisos/lembretes, a aba fica opaca e aparece um pouco mais pra chamar atencao. */
+    .bia-launcher.bia-has-news { opacity: 1; transform: translate(28%, -50%); box-shadow: -6px 8px 22px rgba(220,38,38,.32); }
+    /* Mas o hover/foco sempre traz a aba pra dentro por completo. */
+    .bia-launcher.bia-has-news:hover, .bia-launcher.bia-has-news:focus-visible, .bia-launcher.bia-has-news.bia-awake { transform: translate(0, -50%); }
     .bia-toggle-status { position: absolute; bottom: 3px; right: 5px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid #fff; }
-    .bia-launcher .bia-toggle-status { bottom: 4px; right: 6px; }
+    .bia-launcher .bia-toggle-status { bottom: 4px; left: 6px; right: auto; }
     .bia-toggle-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; display: none; align-items: center; justify-content: center; border: 2px solid #fff; }
+    /* Na aba (borda direita), o lado direito fica escondido: joga o selo/status pra esquerda. */
+    .bia-launcher .bia-toggle-badge { left: -4px; right: auto; }
     .bia-toggle-badge.show { display: flex; }
 
     .bia-panel { position: fixed; bottom: 96px; right: 24px; z-index: 11000; width: min(402px, calc(100vw - 24px)); height: min(72vh, 660px); background: #f5f6fa; border: 1px solid #e5e7eb; border-radius: 18px; box-shadow: 0 24px 60px rgba(15,23,42,.3); display: none; flex-direction: column; overflow: hidden; }
@@ -116,7 +123,10 @@
     .bia-toast-close { background: transparent; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px; }
 
     @media (max-width: 640px) {
-        .bia-launcher { right: 14px; bottom: 14px; height: 46px; padding: 0; width: 46px; justify-content: center; opacity: .55; }
+        .bia-launcher { right: 0; top: auto; bottom: 84px; transform: translate(46%, 0); height: 46px; padding: 0; width: 46px; justify-content: center; opacity: .4; }
+        .bia-launcher.bia-has-news { transform: translate(28%, 0); }
+        .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake,
+        .bia-launcher.bia-has-news:hover, .bia-launcher.bia-has-news:focus-visible, .bia-launcher.bia-has-news.bia-awake { transform: translate(0, 0); }
         .bia-launcher-label { display: none; }
         .bia-launcher .bia-ava { width: 46px; height: 46px; }
         .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
