@@ -208,17 +208,27 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
     try:
         from ..services import teams_service
 
-        linhas = "; ".join(
-            f"NF {d['numero_nf']} (romaneio {d['frete_romaneio']} × nota {d['frete_nf_label']})"
-            for d in (divergentes or [])
+        partes = []
+        if getattr(romaneio, "orcamento", None):
+            partes.append(f"**Orçamento:** {romaneio.orcamento}")
+        partes.append(
+            f"**Aprovado por:** {session.get('username', 'sistema')} · "
+            f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"
         )
+        if getattr(romaneio, "transportadora_nome", None):
+            partes.append(f"**Transportadora:** {romaneio.transportadora_nome}")
+        partes.append("**NFs para corrigir:**")
+        for d in (divergentes or []):
+            partes.append(
+                f"• NF {d['numero_nf']} — romaneio {d['frete_romaneio']}, "
+                f"nota emitida {d['frete_nf_label']}"
+            )
+        subinfo = "\n\n".join(partes)
+
         teams_service.enviar_card(
-            "⚠️ Carta de correção de modalidade de frete",
-            f"Romaneio {romaneio.numero_romaneio} — {romaneio.cliente or 'Cliente não informado'}",
-            (
-                f"Divergência aprovada por {session.get('username', 'sistema')}. "
-                f"Emitir CC-e da modalidade de transporte: {linhas}"
-            ),
+            "📝 Solicitação de carta de correção (CC-e)",
+            f"Romaneio {romaneio.numero_romaneio} · {romaneio.cliente or 'Cliente não informado'}",
+            subinfo,
             mencionar_canal=True,
             env_var="TEAMS_WEBHOOK_EXPEDICAO_URL",
             config_key="webhook_expedicao",
