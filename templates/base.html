@@ -18,16 +18,21 @@
     <link rel="stylesheet" href="/static/css/erp-ui.css?v={{ asset_version }}">
     <style id="bia-styles">
     /* ===== Bia — assistente virtual (global) ===== */
-    .bia-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 11001; display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 8px 0 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; box-shadow: 0 10px 30px rgba(67,56,202,.35); transition: transform .16s ease, box-shadow .16s ease; }
-    .bia-launcher:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(67,56,202,.45); }
-    .bia-launcher-label { padding-left: 16px; font-size: 13.5px; font-weight: 700; color: #4338ca; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; }
+    /* Launcher discreto: circulo pequeno e semitransparente, encostado no canto.
+       Ao passar o mouse (ou focar) ele "acorda": fica opaco e revela o texto. */
+    .bia-launcher { position: fixed; right: 20px; bottom: 20px; z-index: 11001; display: flex; align-items: center; gap: 0; height: 44px; padding: 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; opacity: .45; box-shadow: 0 4px 14px rgba(67,56,202,.22); transition: opacity .2s ease, transform .18s ease, box-shadow .2s ease, padding .2s ease; }
+    .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { opacity: 1; padding: 0 10px 0 0; transform: translateY(-1px); box-shadow: 0 12px 30px rgba(67,56,202,.4); }
+    .bia-launcher-label { max-width: 0; overflow: hidden; padding-left: 0; font-size: 13px; font-weight: 700; color: #4338ca; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; opacity: 0; transition: max-width .22s ease, padding-left .22s ease, opacity .2s ease; }
+    .bia-launcher:hover .bia-launcher-label, .bia-launcher:focus-visible .bia-launcher-label, .bia-launcher.bia-awake .bia-launcher-label { max-width: 160px; padding-left: 14px; opacity: 1; }
     .bia-ava { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: block; background: linear-gradient(135deg, #6d28d9, #4338ca); box-shadow: 0 2px 8px rgba(67,56,202,.35); transition: transform .15s ease; }
     .bia-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .bia-ava .bia-ava-fb { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; font-family: 'Space Grotesk', sans-serif; }
     .bia-ava.no-img img { display: none; }
     .bia-ava.no-img .bia-ava-fb { display: flex; }
-    .bia-launcher .bia-ava { width: 48px; height: 48px; }
-    .bia-launcher:hover .bia-ava { transform: scale(1.05); }
+    .bia-launcher .bia-ava { width: 44px; height: 44px; }
+    .bia-launcher:hover .bia-ava, .bia-launcher:focus-visible .bia-ava, .bia-launcher.bia-awake .bia-ava { transform: scale(1.04); }
+    /* Quando ha avisos/lembretes, o launcher fica visivel pra chamar atencao. */
+    .bia-launcher.bia-has-news { opacity: 1; box-shadow: 0 8px 22px rgba(220,38,38,.32); }
     .bia-toggle-status { position: absolute; bottom: 3px; right: 5px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid #fff; }
     .bia-launcher .bia-toggle-status { bottom: 4px; right: 6px; }
     .bia-toggle-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; display: none; align-items: center; justify-content: center; border: 2px solid #fff; }
@@ -111,9 +116,9 @@
     .bia-toast-close { background: transparent; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px; }
 
     @media (max-width: 640px) {
-        .bia-launcher { right: 14px; bottom: 14px; height: 54px; }
+        .bia-launcher { right: 14px; bottom: 14px; height: 46px; padding: 0; width: 46px; justify-content: center; opacity: .55; }
         .bia-launcher-label { display: none; }
-        .bia-launcher { padding: 0; width: 54px; justify-content: center; }
+        .bia-launcher .bia-ava { width: 46px; height: 46px; }
         .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
         .bia-toast { bottom: 78px; right: 8px; left: 8px; width: auto; }
     }
@@ -907,6 +912,8 @@ if ("serviceWorker" in navigator) {
         if (n > 0) { badge.textContent = n; badge.style.background = "#dc2626"; badge.classList.add("show"); }
         else if (total > 0) { badge.textContent = total; badge.style.background = "#d97706"; badge.classList.add("show"); }
         else { badge.classList.remove("show"); }
+        // Quando ha pendencias, o launcher deixa de ficar "escondidinho" pra chamar atencao.
+        toggle.classList.toggle("bia-has-news", n > 0 || (total || 0) > 0);
     }
 
     async function iniciarConversa() {
@@ -1015,6 +1022,10 @@ if ("serviceWorker" in navigator) {
     function mostrarToast(texto) {
         toastMsg.textContent = texto;
         toast.classList.add("show");
+        // "Acorda" o launcher por alguns segundos pra chamar atenção junto com o toast.
+        toggle.classList.add("bia-awake");
+        clearTimeout(mostrarToast._wake);
+        mostrarToast._wake = setTimeout(() => toggle.classList.remove("bia-awake"), 6000);
         clearTimeout(mostrarToast._t);
         mostrarToast._t = setTimeout(esconderToast, 9000);
     }
