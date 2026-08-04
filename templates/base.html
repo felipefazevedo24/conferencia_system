@@ -938,6 +938,35 @@ if ("serviceWorker" in navigator) {
     async function enviarPergunta() {
         const q = (input.value || "").trim();
         if (!q || !BIA_ATIVA) return;
+
+        // Ensinar a Bia: "aprenda: ...", "ensina ...", "anota: ..." (só admin no backend).
+        const mLearn = q.match(/^(aprenda|aprender|ensina|ensinar|anota|anote)\s*[:,\-]?\s*(.+)/i);
+        if (mLearn && mLearn[2].trim().length > 2) {
+            const fato = mLearn[2].trim();
+            addUser(q);
+            input.value = "";
+            sendBtn.disabled = true;
+            const t = mostrarDigitando();
+            try {
+                const r = await fetch("/api/expedicao/assistente/aprender", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({ texto: fato }),
+                });
+                t.remove();
+                if (r.ok) addBot("Anotado! Vou lembrar disso a partir de agora. 📝✅");
+                else if (r.status === 403) addBot("Pra me ensinar coisas novas, só um administrador pode fazer isso 🙂. Mas pode perguntar à vontade!");
+                else addBot("Não consegui salvar isso agora. Tenta de novo daqui a pouco?");
+            } catch (e) {
+                t.remove();
+                addBot("Tive um probleminha pra anotar. Tenta de novo?");
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
+            }
+            return;
+        }
+
         addUser(q);
         input.value = "";
         sendBtn.disabled = true;

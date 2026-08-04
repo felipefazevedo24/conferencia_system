@@ -646,6 +646,81 @@ def _contexto_llm() -> str:
     return "\n".join(linhas)
 
 
+# --------------------------------------------------------------------------- #
+# Base de conhecimento da Bia.
+# - Versionada: conferencia_app/data/bia_conhecimento.md (mantida pelos devs).
+# - Aprendida: instance/bia_conhecimento_extra.md (cresce no dia a dia; NÃO
+#   versionada, persiste no servidor). A Bia junta as duas no contexto do LLM.
+# --------------------------------------------------------------------------- #
+from pathlib import Path as _Path
+
+_BASE_DIR = _Path(__file__).resolve().parent.parent.parent
+_KB_VERSIONADA = _BASE_DIR / "conferencia_app" / "data" / "bia_conhecimento.md"
+_KB_APRENDIDA = _BASE_DIR / "instance" / "bia_conhecimento_extra.md"
+_KB_LIMITE_CHARS = 24000  # protege o consumo de tokens
+
+_kb_cache: dict = {"texto": None, "mtimes": None}
+
+
+def _kb_mtimes() -> tuple:
+    def _m(p: _Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    return (_m(_KB_VERSIONADA), _m(_KB_APRENDIDA))
+
+
+def _carregar_conhecimento() -> str:
+    """Lê a base versionada + a aprendida (com cache por data de modificação)."""
+    mtimes = _kb_mtimes()
+    if _kb_cache["texto"] is not None and _kb_cache["mtimes"] == mtimes:
+        return _kb_cache["texto"]
+    partes = []
+    for path in (_KB_VERSIONADA, _KB_APRENDIDA):
+        try:
+            if path.exists():
+                partes.append(path.read_text(encoding="utf-8").strip())
+        except OSError:
+            pass
+    texto = "\n\n".join(p for p in partes if p)
+    if len(texto) > _KB_LIMITE_CHARS:
+        # mantém o começo (base) e o final (aprendizados mais recentes)
+        metade = _KB_LIMITE_CHARS // 2
+        texto = texto[:metade] + "\n\n[...]\n\n" + texto[-metade:]
+    _kb_cache["texto"] = texto
+    _kb_cache["mtimes"] = mtimes
+    return texto
+
+
+def registrar_aprendizado(texto: str, autor: str = "") -> bool:
+    """Ensina um fato novo à Bia, acrescentando-o à base aprendida.
+
+    Retorna True se salvou. Chamado por um endpoint restrito a administradores."""
+    fato = str(texto or "").strip()
+    if not fato:
+        return False
+    try:
+        _KB_APRENDIDA.parent.mkdir(parents=True, exist_ok=True)
+        novo = not _KB_APRENDIDA.exists()
+        with _KB_APRENDIDA.open("a", encoding="utf-8") as fh:
+            if novo:
+                fh.write("# Conhecimento aprendido pela Bia\n\n")
+                fh.write("> Fatos ensinados pela equipe durante o uso do sistema.\n\n")
+            carimbo = datetime.now().strftime("%d/%m/%Y %H:%M")
+            assinatura = f" (por {autor})" if autor else ""
+            fh.write(f"- [{carimbo}{assinatura}] {fato}\n")
+        _kb_cache["texto"] = None  # invalida o cache
+        return True
+    except OSError as exc:
+        try:
+            from flask import current_app
+            current_app.logger.warning("Bia: falha ao registrar aprendizado: %s", exc)
+        except Exception:
+            pass
+        return False
+
+
 def _llm_cfg():
     import os
     try:
@@ -667,10 +742,19 @@ def _responder_llm(pergunta: str) -> str | None:
         contexto = _contexto_llm()
     except Exception:
         contexto = "(sem dados no momento)"
+    conhecimento = ""
+    try:
+        conhecimento = _carregar_conhecimento()
+    except Exception:
+        conhecimento = ""
+    sistema = _LLM_SYSTEM
+    if conhecimento:
+        sistema += "\n\nBASE DE CONHECIMENTO DO SISTEMA:\n" + conhecimento
+    sistema += "\n\nDADOS ATUAIS DA EXPEDIÇÃO:\n" + contexto
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": _LLM_SYSTEM + "\n\nDADOS ATUAIS DA EXPEDIÇÃO:\n" + contexto},
+            {"role": "system", "content": sistema},
             {"role": "user", "content": pergunta},
         ],
         "temperature": 0.6,
