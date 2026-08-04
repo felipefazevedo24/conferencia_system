@@ -795,11 +795,18 @@ if ("serviceWorker" in navigator) {
     const BIA_ATIVA = window.location.pathname.replace(/\/+$/, "") === "/expedicao/conferencia-cega";
     const API_PENDENCIAS = "/api/expedicao/assistente/pendencias";
     const API_PERGUNTAR = "/api/expedicao/assistente/perguntar";
+    const API_COBRANCA_PROXIMA = "/api/expedicao/assistente/cobranca/proxima";
+    const API_COBRANCA_RESPONDER = "/api/expedicao/assistente/cobranca/responder";
+    const API_COBRANCA_ADIAR = "/api/expedicao/assistente/cobranca/adiar";
+    const API_COBRANCA_CCE = "/api/expedicao/assistente/cobranca/cce-feita";
 
     const BIA_USER = {{ (current_user_display or user or '')|tojson }};
     const BIA_USER_NOME = (BIA_USER || "").trim().split(/\s+/)[0] || "";
 
     let iniciada = false;
+    // Pendência que a Bia está cobrando agora: a próxima mensagem do operador
+    // vira o "motivo" dessa pendência (modo cobrança).
+    let cobrancaAtual = null;
 
     const escapeHtml = (s) => String(s == null ? "" : s)
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -940,10 +947,35 @@ if ("serviceWorker" in navigator) {
             addCards(data.pendencias);
             atualizarBadge(data.urgentes, data.total_pendencias);
             renderChips(["O que falta expedir hoje?", "O que está atrasado?", "Faturado sem conferência?", "Quem está sem canhoto?"]);
+            // Depois do panorama, a Bia cobra o motivo das pendências (Logística/Admin).
+            cobrarProxima();
         } catch (e) {
             t.remove();
             addBot("Ops, não consegui carregar as pendências agora. Tenta de novo daqui a pouco?");
         }
+    }
+
+    // ----- Cobrança / follow-up de pendências -----
+    function renderChipsCobranca() {
+        const chips = ["Já resolvi", "Ainda estou resolvendo", "Deixa pra depois"];
+        chipsEl.innerHTML = chips.map((s) => `<button type="button" class="bia-chip">${escapeHtml(s)}</button>`).join("");
+        chipsEl.querySelectorAll(".bia-chip").forEach((c) => {
+            c.addEventListener("click", () => { input.value = c.textContent; enviarPergunta(); });
+        });
+    }
+
+    async function cobrarProxima() {
+        if (!BIA_ATIVA) return;
+        try {
+            const r = await fetch(API_COBRANCA_PROXIMA, { headers: { "Accept": "application/json" } });
+            if (!r.ok) { cobrancaAtual = null; return; }
+            const d = await r.json();
+            const c = d.cobranca;
+            if (!c) { cobrancaAtual = null; return; }
+            cobrancaAtual = c;
+            await digitar(c.pergunta, 900);
+            renderChipsCobranca();
+        } catch (e) { cobrancaAtual = null; }
     }
 
     async function enviarPergunta() {
@@ -975,6 +1007,77 @@ if ("serviceWorker" in navigator) {
                 sendBtn.disabled = false;
                 input.focus();
             }
+            return;
+        }
+
+        // Marcar CC-e como emitida: "cce feita do romaneio 123", "carta de correção pronta 123".
+        const temCce = /cc-?e|carta de corre[çc][ãa]o/i.test(q);
+        const acaoFeita = /feita|emitida|pronta|conclu|marcar|marca|resolv|ok/i.test(q);
+        const numRom = (q.match(/\b(\d{3,})\b/) || [])[1];
+        if (temCce && acaoFeita && numRom) {
+            addUser(q);
+            input.value = "";
+            sendBtn.disabled = true;
+            const t = mostrarDigitando();
+            try {
+                const r = await fetch(API_COBRANCA_CCE, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({ numero_romaneio: numRom }),
+                });
+                const d = await r.json().catch(() => ({}));
+                t.remove();
+                if (r.ok && d.ok) addBot(d.mensagem || "CC-e marcada como emitida. ✅");
+                else if (r.status === 403) addBot("Só a Logística pode marcar a CC-e 🙂.");
+                else addBot(d.erro || "Não consegui marcar a CC-e agora. Confere o número do romaneio?");
+            } catch (e) {
+                t.remove();
+                addBot("Tive um probleminha pra marcar a CC-e. Tenta de novo?");
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
+            }
+            return;
+        }
+
+        // Modo cobrança: a resposta do operador vira o motivo da pendência.
+        if (cobrancaAtual) {
+            const c = cobrancaAtual;
+            const adiar = /^(depois|deixa pra depois|pular|pula|agora n|mais tarde|skip)/i.test(q);
+            addUser(q);
+            input.value = "";
+            sendBtn.disabled = true;
+            const t = mostrarDigitando();
+            try {
+                if (adiar) {
+                    await fetch(API_COBRANCA_ADIAR, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({ ref_tipo: c.ref_tipo, ref_id: c.ref_id }),
+                    });
+                    t.remove();
+                    addBot("Tranquilo, deixo pra depois. 👍");
+                } else {
+                    const r = await fetch(API_COBRANCA_RESPONDER, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({ ref_tipo: c.ref_tipo, ref_id: c.ref_id, texto: q }),
+                    });
+                    t.remove();
+                    if (r.ok) addBot("Anotado, obrigada! 📝 Vou acompanhar e te cobro de novo se continuar pendente.");
+                    else if (r.status === 403) addBot("Essa cobrança é só pra Logística 🙂.");
+                    else addBot("Não consegui registrar agora. Tenta de novo daqui a pouco?");
+                }
+            } catch (e) {
+                t.remove();
+                addBot("Tive um probleminha pra registrar. Tenta de novo?");
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
+            }
+            cobrancaAtual = null;
+            // Segue para a próxima pendência, se houver.
+            setTimeout(cobrarProxima, 700);
             return;
         }
 

@@ -66,3 +66,22 @@
 - Responde sobre o status de uma ordem ou NF específica (pelo número).
 - Lembra o operador do que está atrasado, sem canhoto, com CC-e etc.
 - Orienta o próximo passo de cada pendência.
+
+## Cobrança / follow-up de pendências
+- A Bia acompanha (cobra) cada pendência: quando algo está pendente ou atrasado,
+  ela pergunta o motivo e registra a resposta dentro do acompanhamento da ordem.
+- A cobrança é feita **1x por dia** enquanto a pendência continuar em aberto.
+  No follow-up seguinte, a Bia relembra o motivo anterior e pergunta se houve
+  novidade ou se já foi resolvido.
+- Só quem é da **Logística** (ou **Admin**) responde às cobranças. Para os demais
+  papéis a Bia não abre a cobrança.
+- O operador pode responder o motivo, dizer que "já resolvi" ou "deixa pra depois"
+  (adia para o próximo ciclo).
+- Quando a pendência sai da lista (foi resolvida), a Bia encerra a cobrança
+  automaticamente.
+- O motivo e o histórico de follow-up ficam visíveis também na tela da
+  Conferência de Expedição, dentro dos detalhes da ordem ("Follow-up da Bia").
+- **CC-e**: como o aviso vai para o Teams (mão única), a emissão da carta de
+  correção é confirmada dizendo à Bia, por exemplo, "CC-e feita do romaneio 123"
+  ou "carta de correção emitida 123" — ela marca a CC-e como resolvida.
+

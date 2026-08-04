@@ -27,6 +27,13 @@
     .ce-table-wrap { overflow-x: auto; }
     .ce-diverg { color: var(--eui-danger); font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; }
     .ce-posfat { color: var(--eui-warning, #b45309); font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; }
+    .ce-followup { display: flex; flex-direction: column; gap: 10px; }
+    .ce-followup-motivo { border: 1px solid var(--eui-border); border-left: 3px solid #7c3aed; border-radius: var(--eui-radius); padding: 10px 14px; background: rgba(124,58,237,.06); font-size: 13px; color: var(--eui-text); }
+    .ce-followup-motivo b { color: #6d28d9; }
+    .ce-followup-log { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .ce-followup-line { font-size: 12.5px; color: var(--eui-text-soft); display: flex; gap: 8px; flex-wrap: wrap; }
+    .ce-followup-line .who { font-weight: 700; color: var(--eui-text); }
+    .ce-followup-line.is-cobranca .who { color: #7c3aed; }
     .ce-historico { display: flex; flex-direction: column; gap: 12px; }
     .ce-hist-item { border: 1px solid var(--eui-border); border-left: 3px solid var(--eui-primary); border-radius: var(--eui-radius); padding: 10px 14px; background: var(--eui-surface-2, #f8fafc); }
     .ce-hist-item.is-edicao { border-left-color: var(--eui-warning, #b45309); }
@@ -400,6 +407,16 @@
                     </div>
                 </div>
                 <button class="eui-btn eui-btn--success" id="{{ prefix }}-btn-finalizar-conf"><i class="fas fa-check-double"></i> Finalizar conferência</button>
+            </div>
+        </div>
+
+        <div class="eui-card hidden" id="{{ prefix }}-card-followup">
+            <div class="eui-card__head">
+                <h2 class="eui-card__title"><i class="fas fa-comments"></i> Follow-up da Bia</h2>
+                <p class="eui-card__sub">Motivos registrados durante a cobrança das pendências desta ordem.</p>
+            </div>
+            <div class="eui-card__body">
+                <div id="{{ prefix }}-conf-followup" class="ce-followup"></div>
             </div>
         </div>
 
@@ -1320,6 +1337,40 @@
             }).join("");
         }
 
+        async function renderFollowup(cod) {
+            const card = el("card-followup");
+            const wrap = el("conf-followup");
+            if (!card || !wrap) return;
+            card.classList.add("hidden");
+            wrap.innerHTML = "";
+            const refTipo = cfg.refTipo;
+            if (!refTipo || !cod) return;
+            try {
+                const params = new URLSearchParams({ ref_tipo: refTipo, ref_id: String(cod) });
+                const r = await fetch("/api/expedicao/assistente/cobranca/historico?" + params.toString(), { headers: { "Accept": "application/json" } });
+                if (!r.ok) return;
+                const d = await r.json();
+                if (!d || !d.encontrada || (!d.motivo && !(d.logs || []).length)) return;
+                const partes = [];
+                if (d.motivo) {
+                    const quem = d.respondida_por ? ` — ${escapeHtml(d.respondida_por)}` : "";
+                    const quando = d.respondida_em ? ` · ${escapeHtml(d.respondida_em)}` : "";
+                    partes.push(`<div class="ce-followup-motivo"><b>Motivo atual:</b> ${escapeHtml(d.motivo)}<span style="opacity:.7;">${quem}${quando}</span></div>`);
+                }
+                const logs = (d.logs || []).filter((l) => l.tipo !== "sistema");
+                if (logs.length) {
+                    const linhas = logs.map((l) => {
+                        const isCob = l.tipo === "cobranca";
+                        const quem = isCob ? "Bia" : (l.autor || "Operador");
+                        return `<div class="ce-followup-line ${isCob ? "is-cobranca" : ""}"><span class="who">${escapeHtml(quem)}</span><span>${escapeHtml(l.texto)}</span><span style="opacity:.6;">${escapeHtml(l.em || "")}</span></div>`;
+                    }).join("");
+                    partes.push(`<div class="ce-followup-log">${linhas}</div>`);
+                }
+                wrap.innerHTML = partes.join("");
+                card.classList.remove("hidden");
+            } catch (e) { /* silencioso */ }
+        }
+
         async function abrirConferencia(cod) {
             try {
                 const o = await api(cfg.apiBase + "/ordens/" + encodeURIComponent(cod));
@@ -1341,6 +1392,7 @@
                 el("conf-qtd-itens").textContent = o.total_itens;
                 renderItens(o);
                 renderHistorico(o.historico);
+                renderFollowup(cod);
 
                 el("card-header-form").classList.toggle("hidden", !o.editavel);
                 el("h-peso-liq").value = o.peso_liquido || "";

@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request, session
 
 from ..auth import permission_required, is_admin_session
 from ..services import expedicao_assistente_service as svc
+from ..services import expedicao_cobranca_service as cobranca_svc
 
 
 expedicao_assistente_bp = Blueprint("expedicao_assistente", __name__)
@@ -46,3 +47,79 @@ def aprender():
     if svc.registrar_aprendizado(texto, autor=autor):
         return jsonify({"ok": True, "mensagem": "Aprendizado registrado."})
     return jsonify({"error": "Não foi possível salvar o aprendizado."}), 500
+
+
+def _autor_sessao() -> str:
+    return str(session.get("username") or session.get("role") or "").strip()
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/proxima", methods=["GET"])
+@permission_required(PERMISSION)
+def cobranca_proxima():
+    """Próxima pendência para a Bia cobrar o motivo (só Logística/Admin)."""
+    role = session.get("role")
+    if not cobranca_svc.pode_cobrar(role):
+        return jsonify({"cobranca": None})
+    dados = cobranca_svc.proxima_para_cobrar(role)
+    return jsonify({"cobranca": dados})
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/responder", methods=["POST"])
+@permission_required(PERMISSION)
+def cobranca_responder():
+    """Registra o motivo informado pelo operador para uma pendência."""
+    role = session.get("role")
+    if not cobranca_svc.pode_cobrar(role):
+        return jsonify({"error": "Apenas a Logística pode responder às cobranças."}), 403
+    payload = request.get_json(silent=True) or {}
+    ref_tipo = str(payload.get("ref_tipo") or "").strip()
+    ref_id = str(payload.get("ref_id") or "").strip()
+    texto = str(payload.get("texto") or "").strip()
+    if not ref_tipo or not ref_id:
+        return jsonify({"error": "Pendência inválida."}), 400
+    if not texto:
+        return jsonify({"error": "Informe o motivo."}), 400
+    if cobranca_svc.registrar_resposta(ref_tipo, ref_id, texto, autor=_autor_sessao()):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Não foi possível registrar a resposta."}), 500
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/adiar", methods=["POST"])
+@permission_required(PERMISSION)
+def cobranca_adiar():
+    """Adia (snooze) uma cobrança para o próximo ciclo."""
+    role = session.get("role")
+    if not cobranca_svc.pode_cobrar(role):
+        return jsonify({"error": "Apenas a Logística pode adiar as cobranças."}), 403
+    payload = request.get_json(silent=True) or {}
+    ref_tipo = str(payload.get("ref_tipo") or "").strip()
+    ref_id = str(payload.get("ref_id") or "").strip()
+    if not ref_tipo or not ref_id:
+        return jsonify({"error": "Pendência inválida."}), 400
+    cobranca_svc.adiar(ref_tipo, ref_id, autor=_autor_sessao())
+    return jsonify({"ok": True})
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/historico", methods=["GET"])
+@permission_required(PERMISSION)
+def cobranca_historico():
+    """Histórico/motivo de follow-up de uma pendência (tela da conferência)."""
+    ref_tipo = str(request.args.get("ref_tipo") or "").strip()
+    ref_id = str(request.args.get("ref_id") or "").strip()
+    if not ref_tipo or not ref_id:
+        return jsonify({"error": "Pendência inválida."}), 400
+    return jsonify(cobranca_svc.historico(ref_tipo, ref_id))
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/cce-feita", methods=["POST"])
+@permission_required(PERMISSION)
+def cobranca_cce_feita():
+    """Marca a CC-e de um romaneio como emitida e resolve a cobrança."""
+    role = session.get("role")
+    if not cobranca_svc.pode_cobrar(role):
+        return jsonify({"error": "Apenas a Logística pode marcar a CC-e."}), 403
+    payload = request.get_json(silent=True) or {}
+    numero = str(payload.get("numero_romaneio") or "").strip()
+    resultado = cobranca_svc.marcar_cce_feita(numero, autor=_autor_sessao())
+    status = 200 if resultado.get("ok") else 400
+    return jsonify(resultado), status

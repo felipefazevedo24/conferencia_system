@@ -2189,6 +2189,71 @@ class ExpedicaoRomaneioFotoCarregamento(db.Model):
     uploaded_by = db.Column(db.String(100))
 
 
+class ExpedicaoCobranca(db.Model):
+    """Follow-up (cobrança) da Bia sobre uma pendência de expedição. Uma linha
+    por pendência acompanhada, identificada por (ref_tipo, ref_id). A Bia
+    pergunta o motivo do atraso, registra a resposta e refaz o follow-up a cada
+    24h enquanto a pendência continuar em aberto."""
+
+    __tablename__ = "expedicao_cobranca"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Identidade da pendência (bate com os itens do insights do assistente).
+    ref_tipo = db.Column(db.String(20), nullable=False, index=True)   # fat/st/romaneio/registro
+    ref_id = db.Column(db.String(60), nullable=False, index=True)     # cod_ordem/numero/id
+
+    # Snapshot da pendência (atualizado a cada sincronização).
+    categoria = db.Column(db.String(40), nullable=False, default="")  # chave do card
+    titulo = db.Column(db.String(160), default="")
+    referencia = db.Column(db.String(200), default="")                # cliente/fornecedor
+    numero_nf = db.Column(db.String(40), default="")
+    severidade = db.Column(db.String(10), default="media")
+
+    # aberta (nunca respondida) | respondida | resolvida (saiu da lista)
+    status = db.Column(db.String(20), nullable=False, default="aberta", index=True)
+    motivo = db.Column(db.String(1000), default="")                   # último motivo informado
+
+    primeira_cobranca_em = db.Column(db.DateTime)
+    ultima_cobranca_em = db.Column(db.DateTime)
+    proxima_cobranca_em = db.Column(db.DateTime, index=True)          # None = perguntar já
+    respondida_por = db.Column(db.String(100))
+    respondida_em = db.Column(db.DateTime)
+
+    criada_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizada_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    resolvida_em = db.Column(db.DateTime)
+
+    __table_args__ = (
+        db.UniqueConstraint("ref_tipo", "ref_id", name="uq_expedicao_cobranca_ref"),
+    )
+
+    logs = db.relationship(
+        "ExpedicaoCobrancaLog",
+        backref="cobranca",
+        cascade="all, delete-orphan",
+        order_by="ExpedicaoCobrancaLog.criado_em",
+    )
+
+
+class ExpedicaoCobrancaLog(db.Model):
+    """Histórico de interações de uma cobrança (perguntas da Bia e respostas)."""
+
+    __tablename__ = "expedicao_cobranca_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cobranca_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_cobranca.id"),
+        nullable=False,
+        index=True,
+    )
+    # cobranca (Bia perguntou) | resposta (usuário respondeu) | sistema
+    tipo = db.Column(db.String(20), nullable=False, default="resposta")
+    texto = db.Column(db.String(1000), nullable=False, default="")
+    autor = db.Column(db.String(100), default="")
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class PlannerBoard(db.Model):
     __tablename__ = "planner_board"
 
