@@ -141,10 +141,10 @@ _MODFRETE_LABEL = {
     "9": "Sem frete",
 }
 
-# Rótulo amigável do grupo de frete, usado nas mensagens (CC-e, avisos).
+# Rótulo curto do grupo de frete, usado nas mensagens (CC-e, avisos).
 _FRETE_GRUPO_LABEL = {
-    "CIF": "CIF (frete por conta do emitente/remetente)",
-    "FOB": "FOB (frete por conta do destinatário)",
+    "CIF": "CIF",
+    "FOB": "FOB",
     "TERCEIROS": "Terceiros",
     "SEM_FRETE": "Sem frete",
 }
@@ -218,9 +218,9 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
 
         partes = []
         partes.append(
-            "É necessária uma **carta de correção (CC-e)** para acertar a "
-            "**modalidade de frete** das notas abaixo. A NF foi emitida com uma "
-            "modalidade diferente da combinada no romaneio e precisa ser corrigida."
+            "Corrigir a **modalidade de frete** das NFs abaixo por **carta de "
+            "correção (CC-e)**. A nota saiu diferente do romaneio (formato: **como "
+            "está → como deve ficar**)."
         )
         partes.append(
             f"**Solicitado por:** {session.get('username', 'sistema')} · "
@@ -230,21 +230,20 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
             partes.append(f"**Orçamento:** {romaneio.orcamento}")
         if getattr(romaneio, "transportadora_nome", None):
             partes.append(f"**Transportadora:** {romaneio.transportadora_nome}")
-        partes.append("**O que corrigir em cada NF:**")
+        partes.append("**Correções:**")
         for d in (divergentes or []):
-            atual = d.get("frete_nf_label") or d.get("frete_nf") or "?"
+            atual = _FRETE_GRUPO_LABEL.get(
+                d.get("frete_nf"), d.get("frete_nf_label") or "?"
+            )
             correto = _FRETE_GRUPO_LABEL.get(
                 d.get("frete_romaneio"), d.get("frete_romaneio") or "?"
             )
-            partes.append(
-                f"• **NF {d['numero_nf']}** — está como **{atual}**; "
-                f"corrigir para **{correto}**."
-            )
+            partes.append(f"• NF {d['numero_nf']}: **{atual} → {correto}**")
         subinfo = "\n\n".join(partes)
 
         teams_service.enviar_card(
             "📝 Solicitação de carta de correção (CC-e)",
-            f"Romaneio {romaneio.numero_romaneio} · {romaneio.cliente or 'Cliente não informado'}",
+            f"Romaneio {romaneio.numero_romaneio}",
             subinfo,
             mencionar_canal=True,
             env_var="TEAMS_WEBHOOK_EXPEDICAO_URL",
