@@ -220,8 +220,8 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
                 f"Emitir CC-e da modalidade de transporte: {linhas}"
             ),
             mencionar_canal=True,
-            env_var="TEAMS_WEBHOOK_FATURAMENTO_URL",
-            config_key="webhook_faturamento",
+            env_var="TEAMS_WEBHOOK_EXPEDICAO_URL",
+            config_key="webhook_expedicao",
         )
     except Exception:
         current_app.logger.exception(
