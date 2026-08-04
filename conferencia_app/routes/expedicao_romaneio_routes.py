@@ -217,10 +217,10 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
         from ..services import teams_service
 
         partes = []
+        nfs_txt = ", ".join(str(d.get("numero_nf")) for d in (divergentes or []))
         partes.append(
-            "Corrigir a **modalidade de frete** das NFs abaixo por **carta de "
-            "correção (CC-e)**. A nota saiu diferente do romaneio (formato: **como "
-            "está → como deve ficar**)."
+            f"Corrigir a **modalidade de frete** da(s) NF **{nfs_txt or '—'}** por "
+            "**carta de correção (CC-e)**. A nota saiu diferente do romaneio."
         )
         partes.append(
             f"**Solicitado por:** {session.get('username', 'sistema')} · "
@@ -230,15 +230,15 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
             partes.append(f"**Orçamento:** {romaneio.orcamento}")
         if getattr(romaneio, "transportadora_nome", None):
             partes.append(f"**Transportadora:** {romaneio.transportadora_nome}")
-        partes.append("**Correções:**")
+        partes.append("**Correções (texto da CC-e):**")
         for d in (divergentes or []):
-            atual = _FRETE_GRUPO_LABEL.get(
-                d.get("frete_nf"), d.get("frete_nf_label") or "?"
-            )
             correto = _FRETE_GRUPO_LABEL.get(
                 d.get("frete_romaneio"), d.get("frete_romaneio") or "?"
             )
-            partes.append(f"• NF {d['numero_nf']}: **{atual} → {correto}**")
+            partes.append(
+                f"• NF {d['numero_nf']}: "
+                f"**CONSIDERAR: MODALIDADE DO TRANSPORTE {correto}**"
+            )
         subinfo = "\n\n".join(partes)
 
         teams_service.enviar_card(
