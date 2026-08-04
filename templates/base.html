@@ -22,8 +22,8 @@
        Ao passar o mouse (ou focar) ele "acorda": fica opaco e revela o texto. */
     /* Launcher discreto no canto inferior direito: circulo pequeno e apagado.
        Ao passar o mouse (ou focar) ele fica opaco e revela o texto. */
-    .bia-launcher { position: fixed; right: 18px; bottom: 18px; top: auto; z-index: 11001; display: flex; align-items: center; gap: 0; height: 46px; padding: 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; opacity: .38; box-shadow: 0 4px 14px rgba(67,56,202,.22); transition: opacity .22s ease, transform .18s ease, box-shadow .22s ease, padding .22s ease; }
-    .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { opacity: 1; padding: 0 12px 0 4px; transform: translateY(-2px); box-shadow: 0 12px 30px rgba(67,56,202,.4); }
+    .bia-launcher { position: fixed; right: 18px; bottom: 18px; top: auto; z-index: 11001; display: flex; align-items: center; gap: 0; height: 52px; padding: 0 6px; border: none; border-radius: 999px; background: #fff; cursor: pointer; opacity: .38; box-shadow: 0 4px 14px rgba(67,56,202,.22); transition: opacity .22s ease, transform .18s ease, box-shadow .22s ease, padding .22s ease; }
+    .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { opacity: 1; padding: 0 14px 0 6px; transform: translateY(-2px); box-shadow: 0 12px 30px rgba(67,56,202,.4); }
     .bia-launcher-label { max-width: 0; overflow: hidden; padding-left: 0; font-size: 13px; font-weight: 700; color: #4338ca; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; opacity: 0; transition: max-width .22s ease, padding-left .22s ease, opacity .2s ease; }
     .bia-launcher:hover .bia-launcher-label, .bia-launcher:focus-visible .bia-launcher-label, .bia-launcher.bia-awake .bia-launcher-label { max-width: 220px; padding-left: 14px; opacity: 1; }
     .bia-ava { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: block; background: linear-gradient(135deg, #6d28d9, #4338ca); box-shadow: 0 2px 8px rgba(67,56,202,.35); transition: transform .15s ease; }
@@ -31,7 +31,7 @@
     .bia-ava .bia-ava-fb { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; font-family: 'Space Grotesk', sans-serif; }
     .bia-ava.no-img img { display: none; }
     .bia-ava.no-img .bia-ava-fb { display: flex; }
-    .bia-launcher .bia-ava { width: 44px; height: 44px; }
+    .bia-launcher .bia-ava { width: 40px; height: 40px; }
     .bia-launcher:hover .bia-ava, .bia-launcher:focus-visible .bia-ava, .bia-launcher.bia-awake .bia-ava { transform: scale(1.04); }
     /* Quando ha avisos/lembretes, o launcher fica opaco pra chamar atencao. */
     .bia-launcher.bia-has-news { opacity: 1; box-shadow: 0 8px 22px rgba(220,38,38,.32); }
@@ -119,10 +119,10 @@
     .bia-toast-close { background: transparent; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px; }
 
     @media (max-width: 640px) {
-        .bia-launcher { right: 14px; bottom: 14px; top: auto; transform: none; height: 46px; padding: 0; width: 46px; justify-content: center; opacity: .45; }
-        .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { transform: none; padding: 0; }
+        .bia-launcher { right: 14px; bottom: 14px; top: auto; transform: none; height: 52px; padding: 0 6px; width: 52px; justify-content: center; opacity: .45; }
+        .bia-launcher:hover, .bia-launcher:focus-visible, .bia-launcher.bia-awake { transform: none; padding: 0 6px; }
         .bia-launcher-label { display: none; }
-        .bia-launcher .bia-ava { width: 46px; height: 46px; }
+        .bia-launcher .bia-ava { width: 40px; height: 40px; }
         .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
         .bia-toast { bottom: 78px; right: 8px; left: 8px; width: auto; }
     }
