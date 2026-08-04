@@ -897,6 +897,29 @@ def _ensure_expedicao_romaneio_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_uploadado_em DATETIME"))
         if "foto_carregamento_uploadado_por" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_uploadado_por VARCHAR(100)"))
+        if "cce_modalidade_pendente" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN cce_modalidade_pendente BOOLEAN NOT NULL DEFAULT 0"))
+        if "cce_modalidade_aprovado_por" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN cce_modalidade_aprovado_por VARCHAR(100)"))
+        if "cce_modalidade_aprovado_em" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN cce_modalidade_aprovado_em DATETIME"))
+        if "cce_modalidade_detalhe" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN cce_modalidade_detalhe VARCHAR(1000)"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _ensure_expedicao_romaneio_nf_columns() -> None:
+    """Garante a coluna modfrete_nf (modalidade de frete declarada na NF-e)
+    na expedicao_romaneio_nf."""
+    if not _has_table("expedicao_romaneio_nf"):
+        return
+    cols = _get_column_names("expedicao_romaneio_nf")
+    conn = db.engine.connect()
+    try:
+        if "modfrete_nf" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN modfrete_nf VARCHAR(4)"))
         conn.commit()
     finally:
         conn.close()
@@ -1010,6 +1033,11 @@ def initialize_database(app: Flask) -> None:
 
         try:
             _ensure_expedicao_romaneio_columns()
+        except Exception:
+            pass
+
+        try:
+            _ensure_expedicao_romaneio_nf_columns()
         except Exception:
             pass
 

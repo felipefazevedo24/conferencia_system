@@ -2072,7 +2072,16 @@ class ExpedicaoRomaneio(db.Model):
 
     # Status: Rascunho (em construção), Pronto (finalizado), Expedido (já expedido)
     status = db.Column(db.String(30), nullable=False, default="Rascunho", index=True)
-    
+
+    # Carta de correção (CC-e) da modalidade de frete: marcado quando o
+    # operador finaliza o romaneio mesmo com NF cuja modalidade declarada
+    # diverge do tipo_frete do romaneio. Fica pendente até o Faturamento
+    # emitir a CC-e.
+    cce_modalidade_pendente = db.Column(db.Boolean, nullable=False, default=False)
+    cce_modalidade_aprovado_por = db.Column(db.String(100))
+    cce_modalidade_aprovado_em = db.Column(db.DateTime)
+    cce_modalidade_detalhe = db.Column(db.String(1000))
+
     # Auditoria
     criado_por = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
@@ -2115,7 +2124,13 @@ class ExpedicaoRomaneioNF(db.Model):
     
     # Relação de OSs desta NF (comma-separated ou JSON)
     numeros_os = db.Column(db.String(500))
-    
+
+    # Modalidade de frete declarada na própria NF-e (código modFrete do XML:
+    # 0/3 = remetente (CIF), 1/4 = destinatário (FOB), 2 = terceiros,
+    # 9 = sem frete). Preenchido na inclusão da NF e usado para detectar
+    # divergência com o tipo_frete do romaneio na finalização.
+    modfrete_nf = db.Column(db.String(4))
+
     # Auditoria
     adicionado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
     adicionado_por = db.Column(db.String(100), nullable=False)

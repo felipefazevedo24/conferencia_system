@@ -57,6 +57,7 @@
     .rom-badge--pronto { background: #dbeafe; color: #1e40af; }
     .rom-badge--fob { background: #e0e7ff; color: #4338ca; }
     .rom-badge--cif { background: #fce7f3; color: #a21caf; }
+    .rom-badge--cce { background: #fef3c7; color: #b45309; }
     .rom-badge--expedido { background: #dcfce7; color: #15803d; }
     .rom-badge--pendente { background: #fee2e2; color: #991b1b; }
     
@@ -293,6 +294,18 @@
     </div>
 </div>
 
+<!-- MODAL DE DIVERGENCIA DE MODALIDADE DE FRETE -->
+<div class="rom-modal" id="rom-frete-modal">
+    <div class="rom-modal__box" style="width:min(620px,95%)">
+        <div class="rom-modal__header">
+            <h3 class="rom-modal__title"><i class="fas fa-truck-fast" style="margin-right:8px;color:#b45309"></i> Modalidade de frete</h3>
+            <button class="rom-modal__close" id="rom-frete-close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rom-modal__body" id="rom-frete-body"></div>
+        <div class="rom-modal__footer" id="rom-frete-footer"></div>
+    </div>
+</div>
+
 <script>
     const $ = (id) => document.getElementById(id);
     const IS_ADMIN = $("rom-root")?.dataset.isAdmin === "true";
@@ -432,7 +445,7 @@
             <td>${clientesHtml}</td>
             <td style="text-align: center;">${r.qtde_nfs}</td>
             <td style="text-align: center;">${r.qtde_volumes_total || 0}</td>
-            <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span></td>
+            <td><span class="rom-badge ${freteClass}">${escapeHtml(r.tipo_frete || "FOB")}</span>${r.cce_modalidade_pendente ? ` <span class="rom-badge rom-badge--cce" title="${escapeHtml(r.cce_modalidade_detalhe || "Carta de correção da modalidade de frete solicitada ao Faturamento")}"><i class="fas fa-file-pen"></i> CC-e</span>` : ""}</td>
             <td><span class="rom-badge ${statusClass}"><i class="fas fa-circle"></i> ${r.status}</span>${r.tem_pendencia_comprovante ? ' <span class="rom-badge rom-badge--pendente">Sem comprovante</span>' : ""}</td>
             <td style="text-align: right;"><button class="rom-actions-btn" onclick="toggleMenuAcoesRomaneio(event, ${r.id})" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>`;
@@ -731,8 +744,93 @@
     async function finalizarRomaneio(id) {
         if (!confirm("Finalizar este romaneio?")) return;
         try {
-            await api(`/api/expedicao/romaneio-fat/${id}/finalizar`, { method: "POST" });
-            toast("Romaneio finalizado!");
+            const r = await api(`/api/expedicao/romaneio-fat/${id}/finalizar`, {
+                method: "POST",
+                body: JSON.stringify({}),
+            });
+            if (r && r.requer_confirmacao) {
+                mostrarModalFrete(id, r);
+                return;
+            }
+            toast(r.message || "Romaneio finalizado!");
+            carregarRomaneios();
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    function fecharModalFrete() {
+        $("rom-frete-modal").classList.remove("open");
+    }
+
+    function mostrarModalFrete(id, info) {
+        const divergentes = info.divergentes || [];
+        const naoValidadas = info.nao_validadas || [];
+        let html = "";
+
+        if (divergentes.length) {
+            html += `<p style="margin:0 0 10px;font-weight:700;color:#b45309">`
+                + `A modalidade de frete declarada em algumas notas nao confere com o `
+                + `romaneio (<strong>${escapeHtml(info.tipo_frete_romaneio || "")}</strong>):</p>`;
+            html += `<ul style="margin:0 0 14px;padding-left:18px">`;
+            divergentes.forEach((d) => {
+                html += `<li style="margin-bottom:6px">`
+                    + `<strong>NF ${escapeHtml(d.numero_nf)}</strong>: `
+                    + `romaneio <strong>${escapeHtml(d.frete_romaneio)}</strong> `
+                    + `&times; nota <strong>${escapeHtml(d.frete_nf_label)}</strong></li>`;
+            });
+            html += `</ul>`;
+        }
+
+        if (naoValidadas.length) {
+            html += `<p style="margin:${divergentes.length ? "12px" : "0"} 0 6px;font-weight:700;color:#64748b">`
+                + `Nao foi possivel validar a modalidade destas NFs (nota nao localizada no ERP):</p>`;
+            html += `<p style="margin:0 0 8px;color:#334155">`
+                + naoValidadas.map((n) => "NF " + escapeHtml(n)).join(", ") + `</p>`;
+        }
+
+        $("rom-frete-body").innerHTML = html;
+
+        const footer = $("rom-frete-footer");
+        footer.innerHTML = "";
+
+        const btnCorrigir = document.createElement("button");
+        btnCorrigir.type = "button";
+        btnCorrigir.className = "eui-btn eui-btn--ghost";
+        btnCorrigir.innerHTML = '<i class="fas fa-pen"></i> Corrigir romaneio';
+        btnCorrigir.onclick = () => { fecharModalFrete(); abrirRomaneio(id); };
+        footer.appendChild(btnCorrigir);
+
+        const btnAprovar = document.createElement("button");
+        btnAprovar.type = "button";
+        if (divergentes.length) {
+            btnAprovar.className = "eui-btn eui-btn--warning";
+            btnAprovar.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Aprovar romaneio';
+            btnAprovar.onclick = () => aprovarFinalizacaoFrete(id, true);
+        } else {
+            btnAprovar.className = "eui-btn eui-btn--primary";
+            btnAprovar.innerHTML = '<i class="fas fa-check"></i> Finalizar assim mesmo';
+            btnAprovar.onclick = () => aprovarFinalizacaoFrete(id, false);
+        }
+        footer.appendChild(btnAprovar);
+
+        $("rom-frete-modal").classList.add("open");
+    }
+
+    async function aprovarFinalizacaoFrete(id, exigeCarta) {
+        if (exigeCarta) {
+            if (!confirm(
+                "Ao aprovar, sera solicitada uma CARTA DE CORRECAO da modalidade de "
+                + "transporte ao Faturamento (aviso no Teams). Deseja continuar?"
+            )) return;
+        }
+        try {
+            const r = await api(`/api/expedicao/romaneio-fat/${id}/finalizar`, {
+                method: "POST",
+                body: JSON.stringify({ aprovar: true }),
+            });
+            fecharModalFrete();
+            toast(r.message || "Romaneio finalizado!");
             carregarRomaneios();
         } catch (e) {
             toast(e.message, "error");
@@ -940,6 +1038,7 @@
 
     $("rom-comprovantes-close").addEventListener("click", () => $("rom-comprovantes-modal").classList.remove("open"));
     $("rom-comprovantes-fechar").addEventListener("click", () => $("rom-comprovantes-modal").classList.remove("open"));
+    $("rom-frete-close").addEventListener("click", fecharModalFrete);
 
     // EVENTOS
     $("rom-btn-novo").addEventListener("click", async () => {

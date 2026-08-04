@@ -123,12 +123,111 @@ def _dados_nf_do_bridge(numero_nf: str) -> dict | None:
             "peso_bruto": _parse_float(vol_peso_raw) if vol_peso_raw else None,
             "qtde_volumes": _parse_int(vol_qtd_raw) if vol_qtd_raw else None,
             "especie_volumes": nfe.get("vol_esp") or "",
+            "modfrete": str(nfe.get("transp_modFrete") or "").strip(),
         }
     except Exception:
         current_app.logger.warning(
             "Falha ao buscar NF %s na bridge do ERP para inclusão manual no romaneio", numero_nf, exc_info=True
         )
         return None
+
+
+_MODFRETE_LABEL = {
+    "0": "Emitente (CIF)",
+    "1": "Destinatário (FOB)",
+    "2": "Terceiros",
+    "3": "Próprio/Remetente (CIF)",
+    "4": "Próprio/Destinatário (FOB)",
+    "9": "Sem frete",
+}
+
+
+def _modfrete_grupo(codigo) -> str:
+    """Converte o código modFrete da NF-e no grupo CIF/FOB/TERCEIROS/SEM_FRETE.
+    Retorna "" quando o código é desconhecido/ausente."""
+    c = str(codigo or "").strip()
+    if c in ("0", "3"):
+        return "CIF"
+    if c in ("1", "4"):
+        return "FOB"
+    if c == "2":
+        return "TERCEIROS"
+    if c == "9":
+        return "SEM_FRETE"
+    return ""
+
+
+def _modfrete_da_nf(nf) -> str:
+    """Retorna o código modFrete de uma NF do romaneio. Usa o valor já
+    armazenado (preenchido na inclusão) e, se ausente, tenta uma leitura ao
+    vivo na bridge do ERP — cacheando o resultado na própria linha."""
+    codigo = str(getattr(nf, "modfrete_nf", "") or "").strip()
+    if codigo:
+        return codigo
+    numero_nf = str(getattr(nf, "numero_nf", "") or "").strip()
+    if not numero_nf:
+        return ""
+    dados = _dados_nf_do_bridge(numero_nf) or {}
+    codigo = str(dados.get("modfrete") or "").strip()
+    if codigo:
+        try:
+            nf.modfrete_nf = codigo
+        except Exception:
+            pass
+    return codigo
+
+
+def _analisar_divergencia_frete(romaneio) -> dict:
+    """Compara a modalidade de frete de cada NF (modFrete da NF-e) com o
+    tipo_frete do romaneio. Retorna:
+      - divergentes: NFs cuja modalidade não bate com o romaneio (inclui
+        Terceiros/Sem frete, que não correspondem a CIF nem FOB);
+      - nao_validadas: NFs cuja modalidade não pôde ser lida no ERP."""
+    frete_rom = str(getattr(romaneio, "tipo_frete", "") or "").strip().upper()
+    divergentes = []
+    nao_validadas = []
+    for nf in romaneio.nfs or []:
+        codigo = _modfrete_da_nf(nf)
+        grupo = _modfrete_grupo(codigo)
+        if not grupo:
+            nao_validadas.append(nf.numero_nf)
+            continue
+        if grupo != frete_rom:
+            divergentes.append({
+                "numero_nf": nf.numero_nf,
+                "frete_romaneio": frete_rom,
+                "frete_nf": grupo,
+                "frete_nf_label": _MODFRETE_LABEL.get(codigo, grupo),
+            })
+    return {"divergentes": divergentes, "nao_validadas": nao_validadas}
+
+
+def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
+    """Avisa o Faturamento (canal do Teams) que é necessária uma carta de
+    correção da modalidade de frete. Best-effort: nunca interrompe o fluxo."""
+    try:
+        from ..services import teams_service
+
+        linhas = "; ".join(
+            f"NF {d['numero_nf']} (romaneio {d['frete_romaneio']} × nota {d['frete_nf_label']})"
+            for d in (divergentes or [])
+        )
+        teams_service.enviar_card(
+            "⚠️ Carta de correção de modalidade de frete",
+            f"Romaneio {romaneio.numero_romaneio} — {romaneio.cliente or 'Cliente não informado'}",
+            (
+                f"Divergência aprovada por {session.get('username', 'sistema')}. "
+                f"Emitir CC-e da modalidade de transporte: {linhas}"
+            ),
+            mencionar_canal=True,
+            env_var="TEAMS_WEBHOOK_FATURAMENTO_URL",
+            config_key="webhook_faturamento",
+        )
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao notificar o Faturamento sobre CC-e de modalidade do romaneio %s.",
+            getattr(romaneio, "numero_romaneio", None),
+        )
 
 
 def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
@@ -413,6 +512,8 @@ def listar_romaneios():
             "status": r.status,
             "criado_por": r.criado_por,
             "criado_em": r.criado_em.isoformat() if r.criado_em else None,
+            "cce_modalidade_pendente": bool(r.cce_modalidade_pendente),
+            "cce_modalidade_detalhe": r.cce_modalidade_detalhe,
             "exclusao_pendente": _exclusao_pendente_dict(r.id) if r.status == "Rascunho" else None,
         })
     
@@ -490,6 +591,8 @@ def obter_romaneio(romaneio_id):
         "status": romaneio.status,
         "criado_por": romaneio.criado_por,
         "criado_em": romaneio.criado_em.isoformat() if romaneio.criado_em else None,
+        "cce_modalidade_pendente": bool(romaneio.cce_modalidade_pendente),
+        "cce_modalidade_detalhe": romaneio.cce_modalidade_detalhe,
         "exclusao_pendente": _exclusao_pendente_dict(romaneio.id) if romaneio.status == "Rascunho" else None,
         "assinatura_conferente_url": (
             f"/api/expedicao/romaneio-fat/{romaneio.id}/assinatura/conferente"
@@ -680,7 +783,17 @@ def adicionar_nf_ao_romaneio(romaneio_id):
             qtde_volumes = _parse_int(payload.get("qtde_volumes"))
         especie_volumes = dados_bridge.get("especie_volumes") or payload.get("especie_volumes") or ""
         numeros_os = payload.get("numeros_os") or ""
-    
+
+    # Modalidade de frete declarada na propria NF-e (modFrete do XML) — usada
+    # para detectar divergencia com o tipo_frete do romaneio na finalizacao.
+    # Best-effort: se a bridge do ERP nao responder, fica vazia e sera lida ao
+    # vivo na finalizacao.
+    if ordem_fat or ordem_st:
+        _bridge_frete = _dados_nf_do_bridge(numero_nf) or {}
+        modfrete_codigo = str(_bridge_frete.get("modfrete") or "").strip() or None
+    else:
+        modfrete_codigo = str((dados_bridge or {}).get("modfrete") or "").strip() or None
+
     nf = ExpedicaoRomaneioNF(
         romaneio_id=romaneio_id,
         numero_nf=numero_nf,
@@ -690,6 +803,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         qtde_volumes=qtde_volumes,
         especie_volumes=especie_volumes,
         numeros_os=numeros_os,
+        modfrete_nf=modfrete_codigo,
         adicionado_por=session["username"],
     )
     
@@ -763,7 +877,14 @@ def remover_nf_do_romaneio(romaneio_id, nf_id):
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/finalizar", methods=["POST"])
 @roles_required(*ROLES)
 def finalizar_romaneio(romaneio_id):
-    """Finaliza o romaneio (muda status de Rascunho para Pronto)."""
+    """Finaliza o romaneio (muda status de Rascunho para Pronto).
+
+    Antes de finalizar, compara a modalidade de frete declarada em cada NF
+    (modFrete da NF-e) com o tipo_frete do romaneio. Se houver divergência ou
+    NFs cuja modalidade não pôde ser validada, NÃO finaliza e devolve
+    ``requer_confirmacao`` para o operador decidir. Com ``aprovar=true`` no
+    corpo, finaliza mesmo assim: divergências registram carta de correção
+    pendente e avisam o Faturamento no Teams."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
@@ -773,15 +894,58 @@ def finalizar_romaneio(romaneio_id):
     
     if not romaneio.nfs or len(romaneio.nfs) == 0:
         return jsonify({"error": "Adicione ao menos uma NF antes de finalizar o romaneio."}), 400
-    
+
+    payload = request.get_json(silent=True) or {}
+    aprovar = bool(payload.get("aprovar"))
+
+    analise = _analisar_divergencia_frete(romaneio)
+    divergentes = analise["divergentes"]
+    nao_validadas = analise["nao_validadas"]
+
+    # Cacheia eventuais modFretes lidos ao vivo durante a analise.
+    db.session.flush()
+
+    if not aprovar and (divergentes or nao_validadas):
+        db.session.commit()
+        return jsonify({
+            "requer_confirmacao": True,
+            "tipo_frete_romaneio": romaneio.tipo_frete,
+            "divergentes": divergentes,
+            "nao_validadas": nao_validadas,
+        })
+
+    if divergentes and aprovar:
+        detalhe = "; ".join(
+            f"NF {d['numero_nf']}: romaneio {d['frete_romaneio']} × nota {d['frete_nf_label']}"
+            for d in divergentes
+        )
+        romaneio.cce_modalidade_pendente = True
+        romaneio.cce_modalidade_aprovado_por = session["username"]
+        romaneio.cce_modalidade_aprovado_em = datetime.now()
+        romaneio.cce_modalidade_detalhe = detalhe[:1000]
+
     romaneio.status = "Pronto"
     romaneio.atualizado_por = session["username"]
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
 
+    if divergentes and aprovar:
+        _notificar_cce_modalidade_faturamento(romaneio, divergentes)
+
     _gerar_solicitacao_entrega_cif(romaneio)
 
-    return jsonify({"message": "Romaneio finalizado com sucesso."})
+    if divergentes and aprovar:
+        mensagem = (
+            "Romaneio finalizado. Solicitada carta de correção da modalidade "
+            "de transporte ao Faturamento."
+        )
+    else:
+        mensagem = "Romaneio finalizado com sucesso."
+
+    return jsonify({
+        "message": mensagem,
+        "cce_modalidade_pendente": bool(romaneio.cce_modalidade_pendente),
+    })
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/expedir", methods=["POST"])
