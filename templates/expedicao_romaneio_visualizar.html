@@ -155,14 +155,15 @@
         </div>
     </div>
 
-    <!-- DOCUMENTO -->
-    <div class="rom-viz-document" id="rom-root" data-romaneio-id="{{ romaneio.id }}">
+    <!-- DOCUMENTO (uma página por destinatário, mesmo número de romaneio) -->
+    {% for grupo in grupos %}
+    <div class="rom-viz-document"{% if loop.first %} id="rom-root" data-romaneio-id="{{ romaneio.id }}"{% endif %}>
         <!-- CABEÇALHO -->
         <div class="rom-doc-header">
             <img class="rom-doc-logo" src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync">
             <div class="rom-doc-header-text">
                 <div class="rom-doc-title">Romaneio de Expedição</div>
-                <div class="rom-doc-meta">Nº {{ romaneio.numero_romaneio }} &middot; {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}</div>
+                <div class="rom-doc-meta">Nº {{ romaneio.numero_romaneio }} &middot; {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}{% if grupos|length > 1 %} &middot; Destinatário {{ loop.index }} de {{ grupos|length }}{% endif %}</div>
             </div>
         </div>
 
@@ -181,11 +182,11 @@
             </div>
             <div class="rom-party-card">
                 <div class="rom-party-title">Destinatário</div>
-                <div class="rom-party-name">{{ destinatario.razao_social }}</div>
-                <div class="rom-party-line"><strong>CNPJ:</strong> {{ destinatario.documento or '—' }}{% if destinatario.inscricao_estadual %} &middot; <strong>IE:</strong> {{ destinatario.inscricao_estadual }}{% endif %}</div>
-                {% if destinatario.endereco %}<div class="rom-party-line">{{ destinatario.endereco }}</div>{% endif %}
-                {% if destinatario.municipio %}<div class="rom-party-line">{{ destinatario.municipio }}{% if destinatario.uf %} - {{ destinatario.uf }}{% endif %}{% if destinatario.cep %} &middot; CEP {{ destinatario.cep }}{% endif %}</div>{% endif %}
-                {% if destinatario.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ destinatario.telefone }}</div>{% endif %}
+                <div class="rom-party-name">{{ grupo.destinatario.razao_social }}</div>
+                <div class="rom-party-line"><strong>CNPJ:</strong> {{ grupo.destinatario.documento or '—' }}{% if grupo.destinatario.inscricao_estadual %} &middot; <strong>IE:</strong> {{ grupo.destinatario.inscricao_estadual }}{% endif %}</div>
+                {% if grupo.destinatario.endereco %}<div class="rom-party-line">{{ grupo.destinatario.endereco }}</div>{% endif %}
+                {% if grupo.destinatario.municipio %}<div class="rom-party-line">{{ grupo.destinatario.municipio }}{% if grupo.destinatario.uf %} - {{ grupo.destinatario.uf }}{% endif %}{% if grupo.destinatario.cep %} &middot; CEP {{ grupo.destinatario.cep }}{% endif %}</div>{% endif %}
+                {% if grupo.destinatario.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ grupo.destinatario.telefone }}</div>{% endif %}
                 <div class="rom-party-line"><strong>Orçamento:</strong> {{ romaneio.orcamento or '—' }}</div>
                 <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete or 'FOB' }}</div>
             </div>
@@ -205,8 +206,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% if romaneio.nfs and romaneio.nfs|length > 0 %}
-                        {% for nf in romaneio.nfs %}
+                    {% if grupo.nfs and grupo.nfs|length > 0 %}
+                        {% for nf in grupo.nfs %}
                         <tr>
                             <td><strong>{{ nf.numero_nf }}</strong></td>
                             <td>{{ nf.cliente or '—' }}</td>
@@ -229,11 +230,11 @@
         <div class="rom-totalizadores">
             <div class="rom-total-box">
                 <div class="rom-total-label">Peso Total</div>
-                <div class="rom-total-value">{{ "%.2f"|format(romaneio.peso_bruto_total or 0) }} <span style="font-size: 12px;">kg</span></div>
+                <div class="rom-total-value">{{ "%.2f"|format(grupo.peso_total or 0) }} <span style="font-size: 12px;">kg</span></div>
             </div>
             <div class="rom-total-box">
                 <div class="rom-total-label">Total de Volumes</div>
-                <div class="rom-total-value">{{ romaneio.qtde_volumes_total or 0 }}</div>
+                <div class="rom-total-value">{{ grupo.volumes_total or 0 }}</div>
             </div>
             <div class="rom-total-box">
                 <div class="rom-total-label">Tipo de Frete</div>
@@ -289,12 +290,14 @@
                     {% if romaneio.assinatura_conferente_file_name %}
                         <img class="rom-assinatura-img" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/assinatura/conferente?v={{ romaneio.assinatura_conferente_uploadado_em }}" alt="Assinatura conferente">
                         <div class="rom-assinatura-meta">Assinado por {{ romaneio.assinatura_conferente_uploadado_por }} em {{ romaneio.assinatura_conferente_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.assinatura_conferente_uploadado_em else '' }}</div>
-                    {% else %}
+                    {% elif grupos|length == 1 %}
                         <div class="rom-assinatura-canvas-wrap"><canvas class="rom-assinatura-canvas"></canvas></div>
                         <div class="rom-assinatura-actions">
                             <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="limparAssinatura('conferente')">Limpar</button>
                             <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="salvarAssinatura('conferente')">Salvar assinatura</button>
                         </div>
+                    {% else %}
+                        <div class="rom-assinatura-placeholder"></div>
                     {% endif %}
                     <div class="rom-assinatura-label">Conferente / Responsável</div>
                 </div>
@@ -302,12 +305,14 @@
                     {% if romaneio.assinatura_transportador_file_name %}
                         <img class="rom-assinatura-img" src="/api/expedicao/romaneio-fat/{{ romaneio.id }}/assinatura/transportador?v={{ romaneio.assinatura_uploadado_em }}" alt="Assinatura motorista">
                         <div class="rom-assinatura-meta">Assinado por {{ romaneio.assinatura_uploadado_por }} em {{ romaneio.assinatura_uploadado_em.strftime('%d/%m/%Y %H:%M') if romaneio.assinatura_uploadado_em else '' }}</div>
-                    {% else %}
+                    {% elif grupos|length == 1 %}
                         <div class="rom-assinatura-canvas-wrap"><canvas class="rom-assinatura-canvas"></canvas></div>
                         <div class="rom-assinatura-actions">
                             <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" onclick="limparAssinatura('transportador')">Limpar</button>
                             <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" onclick="salvarAssinatura('transportador')">Salvar assinatura</button>
                         </div>
+                    {% else %}
+                        <div class="rom-assinatura-placeholder"></div>
                     {% endif %}
                     <div class="rom-assinatura-label">Motorista / Transportador</div>
                 </div>
@@ -332,12 +337,14 @@
                 {% else %}
                     <div class="eui-caption" style="padding: 20px 0; text-align: center;">Nenhuma foto de carregamento ainda.</div>
                 {% endif %}
+                {% if grupos|length == 1 %}
                 <div class="rom-assinatura-actions" style="margin-top: 10px;">
                     <label class="eui-btn eui-btn--primary eui-btn--sm" style="cursor: pointer;">
                         <i class="fas fa-camera"></i> Adicionar fotos
                         <input type="file" accept="image/*" multiple id="rom-carregamento-input" style="display:none;">
                     </label>
                 </div>
+                {% endif %}
                 <div class="rom-assinatura-label">Carregamento</div>
             </div>
         </div>
@@ -351,6 +358,7 @@
             {% endif %}
         </div>
     </div>
+    {% endfor %}
 </div>
 
 <script>

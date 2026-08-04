@@ -256,19 +256,29 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     ordem = ExpedicaoOrdemFat.query.filter_by(numero_nf=numero_nf).first()
     if ordem is None:
         ordem = ExpedicaoOrdemST.query.filter_by(numero_nf=numero_nf).first()
+
+    def _nfs_do_registro(reg) -> list:
+        bruto = str(getattr(reg, "numero_nf", "") or "").replace(";", ",").replace("/", ",")
+        return [n.strip() for n in bruto.split(",") if n.strip()]
+
     registro = None
-    if ordem is not None and ordem.expedicao_registro_id:
-        registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
-    if registro is None:
-        # Rascunho vinculado pela NF (fotos tiradas no Faturado sem link direto).
-        registro = (
-            ExpedicaoConferenciaSimples.query
-            .filter_by(numero_nf=numero_nf, origem="Romaneio")
-            .filter(ExpedicaoConferenciaSimples.status.in_(
-                ["Pendente de expedição", "Pendente de expedicao"]))
-            .order_by(ExpedicaoConferenciaSimples.id.desc())
-            .first()
-        )
+    # 1) Rascunho ja dedicado a ESTA NF (fotos tiradas na etapa Faturado).
+    registro = (
+        ExpedicaoConferenciaSimples.query
+        .filter_by(numero_nf=numero_nf, origem="Romaneio")
+        .filter(ExpedicaoConferenciaSimples.status.in_(
+            ["Pendente de expedição", "Pendente de expedicao"]))
+        .order_by(ExpedicaoConferenciaSimples.id.desc())
+        .first()
+    )
+    # 2) Registro vinculado pela ordem — SO reutiliza se cobrir exatamente esta
+    #    unica NF. Registros compartilhados por varias NFs do mesmo orcamento
+    #    (conf. cega faturada em varias notas) NAO sao reaproveitados: cada NF
+    #    precisa do seu proprio Registro de Expedicao.
+    if registro is None and ordem is not None and ordem.expedicao_registro_id:
+        candidato = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
+        if candidato is not None and _nfs_do_registro(candidato) == [numero_nf]:
+            registro = candidato
 
     numero_os = str(getattr(nf, "numeros_os", "") or "").strip() or None
     orcamento = str(getattr(nf, "orcamento", "") or romaneio.orcamento or "").strip()
@@ -1247,17 +1257,19 @@ def _destinatario_padrao(romaneio) -> dict:
     }
 
 
-def _destinatario_completo(romaneio) -> dict:
-    """Dados do destinatário (cliente) para o documento do romaneio — busca
-    CNPJ/endereço direto na NF-e emitida (mesmo XML autorizado usado para
-    gerar o DANFE). Cai no fallback (só o nome do cliente) se a NF não for
-    encontrada no ERP ou não houver XML disponível."""
+def _destinatario_da_nf(nf, romaneio) -> dict:
+    """Dados do destinatário de UMA NF específica — busca CNPJ/endereço direto
+    na NF-e emitida (mesmo XML autorizado usado para gerar o DANFE). Cai no
+    fallback (nome do cliente) se a NF não for encontrada no ERP ou não houver
+    XML disponível."""
     dados = _destinatario_padrao(romaneio)
-    primeira_nf = romaneio.nfs[0] if romaneio.nfs else None
-    if not primeira_nf or not primeira_nf.numero_nf:
+    if nf is not None and str(getattr(nf, "cliente", "") or "").strip():
+        dados["razao_social"] = nf.cliente
+    numero_nf = str(getattr(nf, "numero_nf", "") or "").strip()
+    if not numero_nf:
         return dados
     try:
-        nota = buscar_nfe_emitida_erp(numero_nf=primeira_nf.numero_nf)
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
         xml_bytes = (nota or {}).get("xml_bytes")
         if not xml_bytes:
             return dados
@@ -1287,6 +1299,47 @@ def _destinatario_completo(romaneio) -> dict:
     return dados
 
 
+def _destinatario_completo(romaneio) -> dict:
+    """Destinatário do documento a partir da primeira NF (compatibilidade)."""
+    primeira_nf = romaneio.nfs[0] if romaneio.nfs else None
+    if not primeira_nf:
+        return _destinatario_padrao(romaneio)
+    return _destinatario_da_nf(primeira_nf, romaneio)
+
+
+def _grupos_destinatarios(romaneio) -> list:
+    """Agrupa as NFs do romaneio por destinatário distinto (CNPJ, ou nome
+    quando não há CNPJ), para gerar UMA página do documento por destinatário —
+    todas com o mesmo número de romaneio. Cada grupo traz o destinatário
+    completo, as NFs daquele destinatário e os totais do grupo."""
+    nfs = list(romaneio.nfs or [])
+    if not nfs:
+        return [{
+            "destinatario": _destinatario_padrao(romaneio),
+            "nfs": [],
+            "peso_total": 0.0,
+            "volumes_total": 0,
+        }]
+    grupos: list = []
+    indice: dict = {}
+    for nf in nfs:
+        dados = _destinatario_da_nf(nf, romaneio)
+        chave = (
+            str(dados.get("documento") or "").strip()
+            or str(dados.get("razao_social") or "").strip().upper()
+            or f"__nf_{nf.numero_nf}"
+        )
+        grupo = indice.get(chave)
+        if grupo is None:
+            grupo = {"destinatario": dados, "nfs": [], "peso_total": 0.0, "volumes_total": 0}
+            indice[chave] = grupo
+            grupos.append(grupo)
+        grupo["nfs"].append(nf)
+        grupo["peso_total"] += float(getattr(nf, "peso_bruto", 0) or 0)
+        grupo["volumes_total"] += int(getattr(nf, "qtde_volumes", 0) or 0)
+    return grupos
+
+
 @expedicao_romaneio_bp.route("/expedicao/romaneio/<int:romaneio_id>/visualizar")
 @permission_required(PERMISSION)
 def visualizar_romaneio(romaneio_id):
@@ -1299,7 +1352,7 @@ def visualizar_romaneio(romaneio_id):
         "expedicao_romaneio_visualizar.html",
         romaneio=romaneio,
         remetente=_remetente_completo(),
-        destinatario=_destinatario_completo(romaneio),
+        grupos=_grupos_destinatarios(romaneio),
         fotos_carregamento=_fotos_carregamento_payload(romaneio),
     )
 
