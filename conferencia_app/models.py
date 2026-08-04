@@ -1037,6 +1037,7 @@ class AgendamentoSolicitacao(db.Model):
     documento_numero = db.Column(db.String(60), nullable=False, index=True)
     numero_oc = db.Column(db.String(60), index=True)
     numero_nf = db.Column(db.String(60), index=True)
+    orcamento = db.Column(db.String(80), index=True)
     origem_documento = db.Column(db.String(20), nullable=False, default="Manual")
     parceiro_tipo = db.Column(db.String(20), nullable=False)  # Fornecedor | Cliente
     parceiro_codigo = db.Column(db.String(50), index=True)

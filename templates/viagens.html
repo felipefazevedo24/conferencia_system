@@ -855,7 +855,7 @@
     <section class="rt-panel rt-pad">
         <div class="rt-top">
             <div class="rt-filters">
-                <input id="boardSearch" class="form-control" placeholder="Buscar parceiro, documento ou cidade" style="max-width:260px">
+                <input id="boardSearch" class="form-control" placeholder="Buscar NF, OC, orçamento, parceiro ou cidade" style="max-width:300px">
                 <select id="boardTipo" class="form-select" style="max-width:150px"><option value="">Todos tipos</option><option value="COLETA">Coleta</option><option value="ENTREGA">Entrega</option><option value="AVULSA">Avulsa</option></select>
                 <select id="boardStatus" class="form-select" style="max-width:170px"><option value="">Todos status</option><option value="Pendente">Pendente</option><option value="Alocada">Alocada</option><option value="EmAndamento">Em andamento</option><option value="EmRota">Em rota</option><option value="Concluida">Concluída</option></select>
                 <select id="boardPrioridade" class="form-select" style="max-width:150px"><option value="">Prioridade</option><option value="Critica">Crítica</option><option value="Alta">Alta</option><option value="Media">Média</option><option value="Baixa">Baixa</option></select>
@@ -2113,7 +2113,7 @@ function renderTable(cards){
             <td data-label="Status"><span class="rt-badge ${st.cls}">${st.label}</span>${c.atrasada?'<span class="rt-badge b-red" style="margin-left:4px">Atraso</span>':''}</td>
             <td data-label="Prior."><span class="rt-badge ${rtBadge('priority',c.prioridade)}">${c.prioridade_label}</span></td>
             <td data-label="Parceiro" title="${c.parceiro_razao_social||''}">${c.parceiro_nome||'---'}</td>
-            <td data-label="Documento">${c.documento_tipo} ${c.documento_numero||'---'}</td>
+            <td data-label="Documento">${(()=>{const p=[];if(c.numero_oc)p.push('OC '+c.numero_oc);if(c.numero_nf)p.push('NF '+c.numero_nf);if(c.orcamento)p.push('Orç '+c.orcamento);return p.length?p.map(x=>`<div>${x}</div>`).join(''):((c.documento_tipo||'')+' '+(c.documento_numero||'---'));})()}</td>
             <td data-label="Cidade/UF">${c.endereco?.cidade||'---'}/${c.endereco?.uf||''}</td>
             <td data-label="Depto">${c.departamento_solicitante||'<span class="text-muted">---</span>'}</td>
             <td data-label="Motorista">${c.motorista?.nome||'<span class="text-muted">---</span>'}</td>
@@ -2247,7 +2247,7 @@ async function openDetalhe(id){
                 </div>
                 <div id="doc-preview" style="display:none;margin-top:8px;padding:8px 12px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-size:12px;color:#334155"></div>
             </div>`:''}
-            <p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p>${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
+            <p><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${s.endereco_formatado}</p><p><i class="fas fa-user" style="color:#94a3b8"></i> Solicitante: ${s.solicitante}</p>${s.orcamento?`<p><i class="fas fa-file-invoice-dollar" style="color:#94a3b8"></i> Orçamento: ${s.orcamento}</p>`:''}${s.data_desejada_label?`<p><i class="fas fa-calendar-day" style="color:#94a3b8"></i> Data desejada: ${s.data_desejada_label}</p>`:''}</div>
             <div class="rt-mini"><span><i class="fas fa-truck-fast"></i> Execução</span><strong>${s.veiculo?.nome||'Sem veículo'}${s.motorista?.nome?' &middot; '+s.motorista.nome:''}</strong>${s.departamento_solicitante?`<p><i class="fas fa-building" style="color:#94a3b8"></i> Depto: ${s.departamento_solicitante}</p>`:''}<p><i class="fas fa-clock" style="color:#94a3b8"></i> Saída: ${s.data_hora_saida_prevista_label||'---'}</p><p><i class="fas fa-road" style="color:#94a3b8"></i> ${s.km_estimado?`Estimativa: ${rtKm(s.km_estimado)}`:'Estimativa de km indisponível'}${s.km_estimado_retorno?' &middot; '+rtKm(s.km_estimado_retorno)+' ida e volta':''}</p>${s.google_maps_url?`<p><a href="${s.google_maps_url}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" style="margin-top:6px"><i class="fas fa-map-location-dot"></i> Abrir rota</a></p>`:''}</div>
         </div>
         ${s.cancelamento_pendente?`<div class="rt-mini mt-3" style="border-color:#9f2f2f;background:rgba(176,56,56,.04)"><span style="color:#9f2f2f"><i class="fas fa-triangle-exclamation"></i> Cancelamento solicitado por ${s.cancelamento_solicitado_por}</span><p>${s.cancelamento_motivo_pendente||'Sem motivo'}</p></div>`:''}

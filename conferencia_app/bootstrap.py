@@ -1286,6 +1286,45 @@ def _ensure_usuario_email_column() -> None:
                 conn.commit()
 
 
+def _backfill_orcamento_solicitacao_entrega() -> None:
+    """Preenche o orcamento das solicitacoes de ENTREGA geradas a partir de
+    romaneios (payload_origem tem romaneio_id), para permitir auditar/filtrar
+    por orcamento sem reprocessar as automacoes."""
+    import json
+
+    from .models import AgendamentoSolicitacao, ExpedicaoRomaneio
+
+    rows = (
+        AgendamentoSolicitacao.query
+        .filter(
+            AgendamentoSolicitacao.tipo == "ENTREGA",
+            AgendamentoSolicitacao.payload_origem.isnot(None),
+        )
+        .all()
+    )
+    romaneios: dict = {}
+    alterou = False
+    for row in rows:
+        if str(getattr(row, "orcamento", "") or "").strip():
+            continue
+        try:
+            payload = json.loads(row.payload_origem or "{}")
+        except Exception:
+            continue
+        rid = payload.get("romaneio_id")
+        if not rid:
+            continue
+        if rid not in romaneios:
+            romaneios[rid] = db.session.get(ExpedicaoRomaneio, rid)
+        romaneio = romaneios[rid]
+        orcamento = str(getattr(romaneio, "orcamento", "") or "").strip() if romaneio else ""
+        if orcamento:
+            row.orcamento = orcamento[:80]
+            alterou = True
+    if alterou:
+        db.session.commit()
+
+
 def _ensure_agendamento_veiculos() -> None:
     conn = db.engine.connect()
     try:
@@ -1340,12 +1379,14 @@ def _ensure_agendamento_veiculos() -> None:
             conn.commit()
 
         # Campos novos na solicitacao
+        orcamento_recem_criado = "orcamento" not in cols_solicitacao
         extra_sol_cols = [
             ("data_desejada", "ALTER TABLE agendamento_solicitacao ADD COLUMN data_desejada DATETIME"),
             ("cancelamento_pendente", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_pendente BOOLEAN NOT NULL DEFAULT 0"),
             ("cancelamento_solicitado_por", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_solicitado_por VARCHAR(100)"),
             ("cancelamento_motivo_pendente", "ALTER TABLE agendamento_solicitacao ADD COLUMN cancelamento_motivo_pendente VARCHAR(500)"),
             ("tempo_estimado_min", "ALTER TABLE agendamento_solicitacao ADD COLUMN tempo_estimado_min INTEGER"),
+            ("orcamento", "ALTER TABLE agendamento_solicitacao ADD COLUMN orcamento VARCHAR(80)"),
         ]
         for col_name, ddl in extra_sol_cols:
             if col_name not in cols_solicitacao:
@@ -1353,6 +1394,12 @@ def _ensure_agendamento_veiculos() -> None:
                 conn.commit()
     finally:
         conn.close()
+
+    if orcamento_recem_criado:
+        try:
+            _backfill_orcamento_solicitacao_entrega()
+        except Exception:
+            pass
 
     veiculos = [
         {

@@ -202,6 +202,7 @@ def _serializar_solicitacao(
         "documento_numero": str(registro.documento_numero or "").strip(),
         "numero_oc": str(registro.numero_oc or "").strip(),
         "numero_nf": str(registro.numero_nf or "").strip(),
+        "orcamento": str(getattr(registro, "orcamento", "") or "").strip(),
         "origem_documento": str(registro.origem_documento or "").strip(),
         "origem_documento_label": _origem_documento_label(registro.origem_documento),
         "parceiro_tipo": str(registro.parceiro_tipo or "").strip(),
@@ -309,7 +310,12 @@ def dashboard_agendamento_veiculos():
             or_(
                 AgendamentoSolicitacao.codigo.ilike(like),
                 AgendamentoSolicitacao.documento_numero.ilike(like),
+                AgendamentoSolicitacao.numero_oc.ilike(like),
+                AgendamentoSolicitacao.numero_nf.ilike(like),
+                AgendamentoSolicitacao.orcamento.ilike(like),
                 AgendamentoSolicitacao.parceiro_nome.ilike(like),
+                AgendamentoSolicitacao.parceiro_razao_social.ilike(like),
+                AgendamentoSolicitacao.parceiro_documento.ilike(like),
                 AgendamentoSolicitacao.solicitante.ilike(like),
                 AgendamentoSolicitacao.cidade.ilike(like),
             )
