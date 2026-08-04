@@ -2209,7 +2209,8 @@ class ExpedicaoCobranca(db.Model):
     numero_nf = db.Column(db.String(40), default="")
     severidade = db.Column(db.String(10), default="media")
 
-    # aberta (nunca respondida) | respondida | resolvida (saiu da lista)
+    # aberta (nunca respondida) | respondida | resolvida (saiu da lista) |
+    # ignorada (backlog anterior à ativação — acompanhada, mas nunca cobrada)
     status = db.Column(db.String(20), nullable=False, default="aberta", index=True)
     motivo = db.Column(db.String(1000), default="")                   # último motivo informado
 

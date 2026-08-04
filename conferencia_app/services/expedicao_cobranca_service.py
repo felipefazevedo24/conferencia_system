@@ -14,8 +14,11 @@ O motivo/histórico também fica visível na tela da conferência da ordem.
 """
 from __future__ import annotations
 
+import os
 import unicodedata
 from datetime import datetime, timedelta
+
+from flask import current_app
 
 from ..extensions import db
 from ..models import ExpedicaoCobranca, ExpedicaoCobrancaLog, ExpedicaoRomaneio
@@ -72,22 +75,88 @@ def _mapa_pendencias_atuais() -> dict:
     return mapa
 
 
+# --------------------------------------------------------------------------- #
+# Corte de ativação: a Bia só cobra pendências surgidas de hoje em diante.
+# --------------------------------------------------------------------------- #
+def _cutoff_file() -> str:
+    try:
+        base = current_app.instance_path
+    except Exception:
+        base = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "instance",
+        )
+    return os.path.join(base, "bia_cobranca_cutoff.txt")
+
+
+def _cutoff_registrado() -> bool:
+    try:
+        return os.path.exists(_cutoff_file())
+    except Exception:
+        return False
+
+
+def _registrar_cutoff(agora: datetime) -> None:
+    try:
+        caminho = _cutoff_file()
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with open(caminho, "w", encoding="utf-8") as fh:
+            fh.write(agora.isoformat())
+    except Exception:
+        pass
+
+
 def sincronizar() -> None:
     """Cria/atualiza cobranças a partir das pendências atuais e resolve as que
-    saíram da lista. Best-effort: nunca lança."""
+    saíram da lista. Best-effort: nunca lança.
+
+    Regra do usuário: a Bia ignora TODO o backlog atual e só cobra pendências
+    que surgirem de hoje em diante. Na primeira sincronização (ativação), todas
+    as pendências existentes são marcadas como ``ignorada`` (acompanhadas, mas
+    nunca cobradas). A partir daí, só pendências novas geram cobrança.
+    """
     try:
         mapa = _mapa_pendencias_atuais()
         agora = datetime.now()
+        seeded = _cutoff_registrado()
 
         existentes = {
             (c.ref_tipo, c.ref_id): c
             for c in ExpedicaoCobranca.query.all()
         }
 
-        # Cria/atualiza as pendências atuais.
+        if not seeded:
+            # Ativação: congela o backlog atual como "ignorada" (não cobra nada
+            # do que já está pendente hoje).
+            for (tipo, codigo), snap in mapa.items():
+                cob = existentes.get((tipo, codigo))
+                if cob is None:
+                    cob = ExpedicaoCobranca(
+                        ref_tipo=tipo, ref_id=codigo, criada_em=agora,
+                    )
+                    db.session.add(cob)
+                cob.status = "ignorada"
+                cob.proxima_cobranca_em = None
+                cob.categoria = snap["categoria"]
+                cob.titulo = snap["titulo"]
+                cob.referencia = snap["referencia"]
+                cob.numero_nf = snap["numero_nf"]
+                cob.severidade = snap["severidade"]
+                cob.atualizada_em = agora
+            # Rows pré-existentes (deploy anterior) também viram backlog.
+            for chave, cob in existentes.items():
+                if chave not in mapa and cob.status != "resolvida":
+                    cob.status = "ignorada"
+                    cob.atualizada_em = agora
+            db.session.commit()
+            _registrar_cutoff(agora)
+            return
+
+        # Operação normal: cria/atualiza as pendências atuais.
         for (tipo, codigo), snap in mapa.items():
             cob = existentes.get((tipo, codigo))
             if cob is None:
+                # Pendência NOVA (surgiu depois da ativação) -> cobra.
                 cob = ExpedicaoCobranca(
                     ref_tipo=tipo,
                     ref_id=codigo,
@@ -96,6 +165,9 @@ def sincronizar() -> None:
                     criada_em=agora,
                 )
                 db.session.add(cob)
+            elif cob.status == "ignorada":
+                # Backlog: continua ignorada, só atualiza o snapshot.
+                pass
             elif cob.status == "resolvida":
                 # Reabriu: voltou a ficar pendente.
                 cob.status = "aberta"
@@ -109,9 +181,9 @@ def sincronizar() -> None:
             cob.severidade = snap["severidade"]
             cob.atualizada_em = agora
 
-        # Resolve as que saíram da lista de pendências.
+        # Resolve as que saíram da lista (menos o backlog ignorado).
         for chave, cob in existentes.items():
-            if chave not in mapa and cob.status != "resolvida":
+            if chave not in mapa and cob.status not in ("resolvida", "ignorada"):
                 cob.status = "resolvida"
                 cob.resolvida_em = agora
                 cob.atualizada_em = agora
@@ -167,7 +239,7 @@ def proxima_para_cobrar(role: str | None, marcar: bool = True) -> dict | None:
 
     cob = (
         ExpedicaoCobranca.query
-        .filter(ExpedicaoCobranca.status != "resolvida")
+        .filter(ExpedicaoCobranca.status.in_(("aberta", "respondida")))
         .filter(
             db.or_(
                 ExpedicaoCobranca.proxima_cobranca_em.is_(None),

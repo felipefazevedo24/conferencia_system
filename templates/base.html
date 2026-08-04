@@ -1044,6 +1044,39 @@ if ("serviceWorker" in navigator) {
         if (cobrancaAtual) {
             const c = cobrancaAtual;
             const adiar = /^(depois|deixa pra depois|pular|pula|agora n|mais tarde|skip)/i.test(q);
+            // Se o operador faz uma PERGUNTA (em vez de dar o motivo), a Bia
+            // responde a dúvida e NÃO registra como motivo nem avança.
+            const ehPergunta = !adiar && (
+                /\?\s*$/.test(q) ||
+                /^(quem|qual|quais|quanto|quantos|quantas|quando|onde|cad[êe]|como|por\s*qu[êe]|porqu[êe]|o que|oq|que\b|pode|poderia|consegue|voc[êe]\s|sabe\b|me\s+(diz|explica|fala|ajuda|mostra|informa|conta)|tem como|qnt|d[úu]vida)/i.test(q)
+            );
+            if (ehPergunta) {
+                addUser(q);
+                input.value = "";
+                sendBtn.disabled = true;
+                const t = mostrarDigitando();
+                try {
+                    const r = await fetch(API_PERGUNTAR, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({ pergunta: q }),
+                    });
+                    const data = await r.json();
+                    t.remove();
+                    addBot(data.resposta || "Deixa eu pensar... pode reformular a pergunta?");
+                    if (data.pendencias && data.pendencias.length) addCards(data.pendencias);
+                } catch (e) {
+                    t.remove();
+                    addBot("Tive um probleminha pra responder agora. Tenta de novo?");
+                }
+                // Continua na mesma pendência: relembra e espera o motivo.
+                const alvo = `${c.titulo || "a pendência"} ${c.ref_id}${c.referencia ? " (" + c.referencia + ")" : ""}`;
+                await digitar(`Voltando ali: sobre ${alvo}, quando puder me diz o motivo do atraso que eu registro. 🙂`, 900);
+                renderChipsCobranca();
+                sendBtn.disabled = false;
+                input.focus();
+                return; // mantém cobrancaAtual
+            }
             addUser(q);
             input.value = "";
             sendBtn.disabled = true;
@@ -1064,7 +1097,7 @@ if ("serviceWorker" in navigator) {
                         body: JSON.stringify({ ref_tipo: c.ref_tipo, ref_id: c.ref_id, texto: q }),
                     });
                     t.remove();
-                    if (r.ok) addBot("Anotado, obrigada! 📝 Vou acompanhar e te cobro de novo se continuar pendente.");
+                    if (r.ok) addBot("Anotado, obrigada! 📝 Fica registrado no follow-up desta ordem (você vê na tela da conferência). Te cobro de novo se continuar pendente.");
                     else if (r.status === 403) addBot("Essa cobrança é só pra Logística 🙂.");
                     else addBot("Não consegui registrar agora. Tenta de novo daqui a pouco?");
                 }

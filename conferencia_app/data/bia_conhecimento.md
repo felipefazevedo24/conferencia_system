@@ -70,6 +70,15 @@
 ## Cobrança / follow-up de pendências
 - A Bia acompanha (cobra) cada pendência: quando algo está pendente ou atrasado,
   ela pergunta o motivo e registra a resposta dentro do acompanhamento da ordem.
+- A Bia só cobra pendências que surgirem **de hoje em diante** (a partir da
+  ativação do recurso). O backlog antigo é ignorado — ela não fica cobrando o
+  que já estava pendente antes.
+- Se, durante a cobrança, o operador fizer uma **pergunta** em vez de dar o
+  motivo, a Bia **responde a dúvida** primeiro e só depois volta a pedir o
+  motivo (ela não anota a pergunta como se fosse o motivo).
+- Onde ela anota: o motivo e o histórico ficam no **follow-up da ordem**,
+  visíveis na tela da Conferência de Expedição (card "Follow-up da Bia") e no
+  próprio chat.
 - A cobrança é feita **1x por dia** enquanto a pendência continuar em aberto.
   No follow-up seguinte, a Bia relembra o motivo anterior e pergunta se houve
   novidade ou se já foi resolvido.
