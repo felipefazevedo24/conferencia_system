@@ -141,6 +141,14 @@ _MODFRETE_LABEL = {
     "9": "Sem frete",
 }
 
+# Rótulo amigável do grupo de frete, usado nas mensagens (CC-e, avisos).
+_FRETE_GRUPO_LABEL = {
+    "CIF": "CIF (frete por conta do emitente/remetente)",
+    "FOB": "FOB (frete por conta do destinatário)",
+    "TERCEIROS": "Terceiros",
+    "SEM_FRETE": "Sem frete",
+}
+
 
 def _modfrete_grupo(codigo) -> str:
     """Converte o código modFrete da NF-e no grupo CIF/FOB/TERCEIROS/SEM_FRETE.
@@ -209,19 +217,28 @@ def _notificar_cce_modalidade_faturamento(romaneio, divergentes) -> None:
         from ..services import teams_service
 
         partes = []
-        if getattr(romaneio, "orcamento", None):
-            partes.append(f"**Orçamento:** {romaneio.orcamento}")
         partes.append(
-            f"**Aprovado por:** {session.get('username', 'sistema')} · "
+            "É necessária uma **carta de correção (CC-e)** para acertar a "
+            "**modalidade de frete** das notas abaixo. A NF foi emitida com uma "
+            "modalidade diferente da combinada no romaneio e precisa ser corrigida."
+        )
+        partes.append(
+            f"**Solicitado por:** {session.get('username', 'sistema')} · "
             f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"
         )
+        if getattr(romaneio, "orcamento", None):
+            partes.append(f"**Orçamento:** {romaneio.orcamento}")
         if getattr(romaneio, "transportadora_nome", None):
             partes.append(f"**Transportadora:** {romaneio.transportadora_nome}")
-        partes.append("**NFs para corrigir:**")
+        partes.append("**O que corrigir em cada NF:**")
         for d in (divergentes or []):
+            atual = d.get("frete_nf_label") or d.get("frete_nf") or "?"
+            correto = _FRETE_GRUPO_LABEL.get(
+                d.get("frete_romaneio"), d.get("frete_romaneio") or "?"
+            )
             partes.append(
-                f"• NF {d['numero_nf']} — romaneio {d['frete_romaneio']}, "
-                f"nota emitida {d['frete_nf_label']}"
+                f"• **NF {d['numero_nf']}** — está como **{atual}**; "
+                f"corrigir para **{correto}**."
             )
         subinfo = "\n\n".join(partes)
 
