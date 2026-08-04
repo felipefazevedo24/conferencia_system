@@ -13,6 +13,7 @@ Nenhum dado sai do servidor e não há custo por uso.
 """
 from __future__ import annotations
 
+import random
 import unicodedata
 from datetime import datetime
 
@@ -545,46 +546,156 @@ def _buscar_ordem(numero: str) -> dict | None:
     }
 
 
-def responder(pergunta: str) -> dict:
-    """Interpreta uma pergunta em linguagem natural e responde com dados reais.
+def _cards_relevantes(q: str):
+    """Se a pergunta for sobre um tópico concreto de pendências, devolve
+    (texto_pronto, cards). Senão devolve (None, None) — assim a Bia NÃO fica
+    despejando os cards em toda resposta."""
+    if any(t in q for t in ("atras", "vencid", "prazo", "atrasad")):
+        cards = _card_por_chave(("pendente_atrasada",))
+        return _texto_de_cards(cards, "Boa notícia: nada atrasado! Nenhuma conferência com previsão vencida. 🎉"), cards
+    if "sem conferenc" in q or "faturado sem" in q:
+        cards = _card_por_chave(("faturado_sem_conf",))
+        return _texto_de_cards(cards, "Nenhuma NF faturada sem conferência agora. Tudo certo por aí! 👍"), cards
+    if any(t in q for t in ("canhoto", "comprovante", "assinatur")):
+        cards = _card_por_chave(("sem_canhoto",))
+        return _texto_de_cards(cards, "Todos os materiais expedidos já têm canhoto anexado. 🙌"), cards
+    if any(t in q for t in ("cc-e", "cce", "carta de correc", "correcao")):
+        cards = _card_por_chave(("cce_pendente",))
+        return _texto_de_cards(cards, "Nenhuma carta de correção (CC-e) pendente no momento."), cards
+    if "diverg" in q:
+        cards = _card_por_chave(("divergente",))
+        return _texto_de_cards(cards, "Nenhuma divergência de conferência em aberto."), cards
+    if "romaneio" in q:
+        cards = _card_por_chave(("cce_pendente", "romaneio_rascunho"))
+        return _texto_de_cards(cards, "Nenhuma pendência de romaneio no momento."), cards
+    if any(t in q for t in ("conferir", "pendente de conferenc", "aguardando conferenc", "falta conferir", "pra conferir", "para conferir")):
+        cards = _card_por_chave(("pendente", "pendente_atrasada"))
+        return _texto_de_cards(cards, "Nada aguardando conferência agora. 👍"), cards
+    if any(t in q for t in (
+        "falta expedir", "expedir hoje", "resumo", "pendenc", "panorama",
+        "faltando", "visao geral", "como estamos", "como esta a expedic",
+        "o que tem", "situacao geral", "o que falta",
+    )):
+        dados = analisar()
+        return dados["resumo"], dados["pendencias"]
+    return None, None
 
-    100% offline: mapeia a intenção da pergunta para uma consulta ao estado do
-    módulo. Não usa nenhum modelo de linguagem externo."""
+
+# --------------------------------------------------------------------------- #
+# IA generativa OPCIONAL (deixa a Bia realmente "conversadeira").
+# Ativa automaticamente se houver um endpoint + chave configurados. Compatível
+# com a API estilo OpenAI (OpenAI, Groq, OpenRouter, Azure, Ollama local, ...).
+# Config via env ou app.config:
+#   ASSISTENTE_LLM_API_URL  (ex.: https://api.openai.com/v1/chat/completions)
+#   ASSISTENTE_LLM_API_KEY
+#   ASSISTENTE_LLM_MODEL    (ex.: gpt-4o-mini)  [opcional]
+# Sem essas variáveis, a Bia continua 100% offline (fallback determinístico).
+# --------------------------------------------------------------------------- #
+_LLM_SYSTEM = (
+    "Você é a Bia, a assistente virtual da Conferência de Expedição da Columbia. "
+    "Você é simpática, calorosa, direta e fala português do Brasil de um jeito "
+    "natural, como uma colega de trabalho — pode usar 1 ou 2 emojis, sem exagero. "
+    "Ajude o operador com as pendências da expedição, status de ordens e próximos "
+    "passos. Responda SEMPRE com base nos DADOS ATUAIS abaixo; se a informação não "
+    "estiver ali, diga com honestidade que não tem esse dado. Seja concisa (no "
+    "máximo uns 4 parágrafos curtos). Não invente números."
+)
+
+
+def _contexto_llm() -> str:
+    dados = analisar()
+    linhas = [
+        dados["resumo"],
+        f"Total de pendências: {dados['total_pendencias']} (urgentes: {dados['urgentes']}).",
+    ]
+    for c in dados["pendencias"]:
+        linhas.append(f"- {c['titulo']} [{c['severidade']}]: {c['quantidade']}. {c['orientacao']}")
+        for it in (c.get("itens_amostra") or [])[:5]:
+            linhas.append(
+                f"    {_tag(it)} {it.get('codigo', '')} · {it.get('referencia', '')}"
+                f" · NF {it.get('numero_nf') or '—'} · prev {it.get('previsao') or '—'}"
+                f" · status {it.get('status', '')}"
+            )
+    return "\n".join(linhas)
+
+
+def _llm_cfg():
+    import os
+    try:
+        from flask import current_app
+        cfg = current_app.config
+    except Exception:
+        cfg = {}
+    url = str(cfg.get("ASSISTENTE_LLM_API_URL") or os.environ.get("ASSISTENTE_LLM_API_URL") or "").strip()
+    key = str(cfg.get("ASSISTENTE_LLM_API_KEY") or os.environ.get("ASSISTENTE_LLM_API_KEY") or "").strip()
+    model = str(cfg.get("ASSISTENTE_LLM_MODEL") or os.environ.get("ASSISTENTE_LLM_MODEL") or "gpt-4o-mini").strip()
+    return url, key, model
+
+
+def _responder_llm(pergunta: str) -> str | None:
+    url, key, model = _llm_cfg()
+    if not (url and key):
+        return None
+    try:
+        contexto = _contexto_llm()
+    except Exception:
+        contexto = "(sem dados no momento)"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _LLM_SYSTEM + "\n\nDADOS ATUAIS DA EXPEDIÇÃO:\n" + contexto},
+            {"role": "user", "content": pergunta},
+        ],
+        "temperature": 0.6,
+        "max_tokens": 500,
+    }
+    try:
+        import requests
+        r = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=25,
+        )
+        r.raise_for_status()
+        data = r.json()
+        texto = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        return texto.strip() or None
+    except Exception as exc:  # noqa: BLE001 - qualquer falha cai no offline
+        try:
+            from flask import current_app
+            current_app.logger.warning("Bia LLM indisponível, usando modo offline: %s", exc)
+        except Exception:
+            pass
+        return None
+
+
+def responder(pergunta: str) -> dict:
+    """Responde a uma pergunta em linguagem natural.
+
+    Se houver um LLM configurado (ASSISTENTE_LLM_API_URL/KEY), usa ele para
+    conversar de forma livre e natural, sempre alimentado com os dados reais da
+    expedição. Sem LLM, cai no motor offline determinístico (mais tagarela)."""
+    llm = _responder_llm(pergunta)
+    if llm:
+        _, cards = _cards_relevantes(_normalizar(pergunta))
+        return {"resposta": llm, "pendencias": cards or [], "sugestoes": SUGESTOES}
+    return _responder_offline(pergunta)
+
+
+def _responder_offline(pergunta: str) -> dict:
+    """Motor offline por intenção — 100% local, sem custo. Bem mais
+    conversador: entende saudação, agradecimento, despedida, small talk e os
+    tópicos de expedição, e só mostra os cards quando fizer sentido."""
     q = _normalizar(pergunta)
     if not q:
         dados = analisar()
         return _resposta(dados["resumo"], dados["pendencias"])
 
-    # Tokens (palavras inteiras) para evitar falsos positivos de substring
-    # (ex.: "oi" dentro de "foi").
-    tokens = set(q.replace("?", " ").replace("!", " ").replace(",", " ").split())
+    # Tokens (palavras inteiras) evitam falso positivo de substring.
+    tokens = set(q.replace("?", " ").replace("!", " ").replace(",", " ").replace(".", " ").split())
 
-    # Saudação.
-    if (tokens & {"oi", "ola", "opa", "eai", "hey", "ei"}) or any(
-        s in q for s in ("bom dia", "boa tarde", "boa noite", "e ai", "tudo bem")
-    ):
-        dados = analisar()
-        return _resposta(
-            "Oi! Eu sou a Bia 😊 Estou de olho na expedição pra te ajudar.\n\n"
-            + dados["resumo"] + "\n\nPode me perguntar o que quiser — tipo "
-            "\"o que falta expedir hoje?\" ou o número de uma ordem/NF.",
-            dados["pendencias"],
-        )
-
-    # Ajuda / capacidades.
-    if any(t in q for t in ("ajuda", "o que voce faz", "como funciona", "help", "quem e voce", "pode fazer")):
-        return _resposta(
-            "Eu sou a Bia, sua assistente da Conferência de Expedição 😊 Eu "
-            "fico de olho no que está pendente, te lembro do que é urgente e "
-            "oriento o próximo passo.\n\nExperimenta me perguntar:\n"
-            "• \"O que falta expedir hoje?\"\n"
-            "• \"O que está atrasado?\"\n"
-            "• \"Tem algo faturado sem conferência?\"\n"
-            "• \"Quais estão sem canhoto?\"\n"
-            "• Ou me manda o número de uma ordem/NF que eu te conto a situação."
-        )
-
-    # Número de ordem / NF (sequência de dígitos com 3+ caracteres).
+    # Número de ordem / NF (prioridade — é uma consulta objetiva).
     import re
     m = re.search(r"\b(\d{3,})\b", q)
     if m:
@@ -600,78 +711,89 @@ def responder(pergunta: str) -> dict:
                 f"Status atual: {info['status']}.{extra}\n\n{info['orientacao']}"
             )
         return _resposta(
-            f"Procurei por {m.group(1)} mas não achei nenhuma ordem ou NF com "
-            "esse número na Conferência de Expedição. Confere o número pra mim?"
+            f"Procurei por {m.group(1)}, mas não achei nenhuma ordem ou NF com "
+            "esse número na Conferência de Expedição. Confere o número pra mim? 🙂"
         )
 
-    # Atrasados / prazo vencido.
-    if any(t in q for t in ("atras", "vencid", "prazo", "atrasad")):
-        cards = _card_por_chave(("pendente_atrasada",))
-        return _resposta(
-            _texto_de_cards(cards, "Nada atrasado: nenhuma conferência com previsão de entrega vencida."),
-            cards,
-        )
+    # Agradecimento.
+    if (tokens & {"obrigado", "obrigada", "obg", "vlw", "valeu", "brigado", "brigada", "grato", "grata"}):
+        return _resposta(random.choice([
+            "Imagina, tô aqui pra isso! 😊",
+            "De nada! Qualquer coisa é só me chamar. 🙌",
+            "Disponha! Bora manter a expedição em dia. 💪",
+            "Por nada! Precisando, é só falar comigo. 😉",
+        ]))
 
-    # Faturado sem conferência.
-    if "sem conferenc" in q or "faturado sem" in q:
-        cards = _card_por_chave(("faturado_sem_conf",))
-        return _resposta(
-            _texto_de_cards(cards, "Nenhuma NF faturada sem conferência no momento."),
-            cards,
-        )
+    # Despedida.
+    if (tokens & {"tchau", "falou", "flw", "adeus"}) or any(s in q for s in ("ate mais", "ate logo", "ate depois")):
+        return _resposta(random.choice([
+            "Até! 👋 Se precisar, é só me chamar.",
+            "Falou! Qualquer coisa tô por aqui. 😊",
+            "Até mais! Vou ficar de olho na expedição por você. 👀",
+        ]))
 
-    # Canhoto / comprovante.
-    if any(t in q for t in ("canhoto", "comprovante", "assinatur")):
-        cards = _card_por_chave(("sem_canhoto",))
-        return _resposta(
-            _texto_de_cards(cards, "Todos os materiais expedidos já têm canhoto anexado."),
-            cards,
-        )
+    # Como vai / tudo bem.
+    if any(s in q for s in ("tudo bem", "como vai", "como voce esta", "como esta voce", "de boa", "beleza", "tudo certo")):
+        return _resposta(random.choice([
+            "Tô ótima, obrigada por perguntar! 😄 E você? Quer dar uma olhada na expedição?",
+            "Tudo em ordem por aqui! 💜 Posso te ajudar com alguma pendência?",
+            "Tudo tranquilo! 😊 Se quiser, te mostro o que está pendente agora.",
+        ]))
 
-    # CC-e / carta de correção.
-    if any(t in q for t in ("cc-e", "cce", "carta de correc", "correcao", "correcao")):
-        cards = _card_por_chave(("cce_pendente",))
-        return _resposta(
-            _texto_de_cards(cards, "Nenhuma carta de correção (CC-e) pendente."),
-            cards,
-        )
-
-    # Divergências.
-    if "diverg" in q:
-        cards = _card_por_chave(("divergente",))
-        return _resposta(
-            _texto_de_cards(cards, "Nenhuma divergência de conferência em aberto."),
-            cards,
-        )
-
-    # Romaneios.
-    if "romaneio" in q:
-        cards = _card_por_chave(("cce_pendente", "romaneio_rascunho"))
-        return _resposta(
-            _texto_de_cards(cards, "Nenhuma pendência de romaneio no momento."),
-            cards,
-        )
-
-    # Pendente de conferência.
-    if any(t in q for t in ("conferir", "pendente de conferenc", "aguardando conferenc", "falta conferir")):
-        cards = _card_por_chave(("pendente", "pendente_atrasada"))
-        return _resposta(
-            _texto_de_cards(cards, "Nada aguardando conferência no momento."),
-            cards,
-        )
-
-    # Panorama geral ("o que falta expedir", "resumo", "pendencias", "hoje").
-    if any(t in q for t in (
-        "falta expedir", "expedir hoje", "resumo", "pendenc", "panorama",
-        "o que", "situacao", "status", "hoje", "faltando",
-    )):
+    # Saudação.
+    if (tokens & {"oi", "ola", "opa", "eai", "hey", "ei", "oie", "hi"}) or any(
+        s in q for s in ("bom dia", "boa tarde", "boa noite", "e ai")
+    ):
         dados = analisar()
-        return _resposta(dados["resumo"], dados["pendencias"])
+        abertura = random.choice([
+            "Oi! 😊",
+            "Oi, tudo bem? 💜",
+            "Olá! Que bom te ver por aqui.",
+            "Oiê! 👋",
+        ])
+        return _resposta(
+            f"{abertura} {dados['resumo']}\n\nPode me perguntar o que quiser sobre a "
+            "expedição — o que falta expedir, o que está atrasado, um número de ordem/NF...",
+            dados["pendencias"],
+        )
 
-    # Fallback: panorama geral com dica.
-    dados = analisar()
-    return _resposta(
-        dados["resumo"] + "\n\n(Não entendi exatamente a pergunta — te mostrei "
-        "o panorama geral. Toque em uma das sugestões abaixo.)",
-        dados["pendencias"],
-    )
+    # Nome / quem é.
+    if any(s in q for s in ("seu nome", "qual e seu nome", "como voce se chama", "quem e voce", "quem es tu", "voce e um robo", "voce e uma ia")):
+        return _resposta(random.choice([
+            "Eu sou a Bia, a assistente da Conferência de Expedição 😊 Fico de olho nas pendências e te ajudo no dia a dia.",
+            "Pode me chamar de Bia! 💜 Sou a assistente da expedição — tô aqui pra te lembrar e orientar no que precisar.",
+        ]))
+
+    # Small talk divertido.
+    if any(s in q for s in ("piada", "brincadeira", "me faz rir", "conta algo", "voce e engracad")):
+        return _resposta(random.choice([
+            "Por que a NF foi ao terapeuta? Estava com muitas pendências emocionais 😂 Agora, bora resolver as de verdade?",
+            "Dizem que sou boa de conferência… até de olhos fechados! 😉 (conferência cega, né). Posso te ajudar com algo?",
+        ]))
+
+    # Ajuda / capacidades.
+    if any(t in q for t in ("ajuda", "o que voce faz", "como funciona", "help", "pode fazer", "o que voce sabe", "o que consegue")):
+        return _resposta(
+            "Eu cuido da Conferência de Expedição com você 😊 Consigo te dizer:\n"
+            "• O que falta expedir e o que está atrasado\n"
+            "• O que está faturado sem conferência (isso trava a expedição!)\n"
+            "• O que está sem canhoto e se tem CC-e pendente\n"
+            "• A situação de uma ordem ou NF específica (é só mandar o número)\n\n"
+            "Manda a pergunta do seu jeito que eu entendo. 💜"
+        )
+
+    # Tópicos concretos de expedição (mostra cards).
+    texto, cards = _cards_relevantes(q)
+    if texto is not None:
+        return _resposta(texto, cards)
+
+    # Fallback conversacional — SEM despejar todos os cards.
+    return _resposta(random.choice([
+        "Hmm, essa eu ainda não sei responder direitinho 😅. Mas posso te ajudar "
+        "com o que está pendente, atrasado, faturado sem conferência, sem canhoto "
+        "ou CC-e. O que você quer saber?",
+        "Boa pergunta! Sobre isso eu ainda tô aprendendo 🙂. Que tal me perguntar o "
+        "que falta expedir hoje, ou o número de uma ordem/NF?",
+        "Não tenho certeza sobre isso 🤔. Mas se for da expedição — pendências, "
+        "atrasos, canhotos, romaneios — pode mandar que eu te ajudo!",
+    ]))

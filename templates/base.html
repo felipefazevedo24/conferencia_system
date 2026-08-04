@@ -18,20 +18,24 @@
     <link rel="stylesheet" href="/static/css/erp-ui.css?v={{ asset_version }}">
     <style id="bia-styles">
     /* ===== Bia — assistente virtual (global) ===== */
-    .bia-toggle { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: none; border-radius: 50%; background: transparent; cursor: pointer; margin-right: 6px; }
+    .bia-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 11001; display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 8px 0 0; border: none; border-radius: 999px; background: #fff; cursor: pointer; box-shadow: 0 10px 30px rgba(67,56,202,.35); transition: transform .16s ease, box-shadow .16s ease; }
+    .bia-launcher:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(67,56,202,.45); }
+    .bia-launcher-label { padding-left: 16px; font-size: 13.5px; font-weight: 700; color: #4338ca; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; }
     .bia-ava { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: block; background: linear-gradient(135deg, #6d28d9, #4338ca); box-shadow: 0 2px 8px rgba(67,56,202,.35); transition: transform .15s ease; }
     .bia-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .bia-ava .bia-ava-fb { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; font-family: 'Space Grotesk', sans-serif; }
     .bia-ava.no-img img { display: none; }
     .bia-ava.no-img .bia-ava-fb { display: flex; }
-    .bia-toggle:hover .bia-ava { transform: scale(1.06); }
-    .bia-toggle-status { position: absolute; bottom: 1px; right: 3px; width: 10px; height: 10px; border-radius: 50%; background: #22c55e; border: 2px solid #fff; }
-    .bia-toggle-badge { position: absolute; top: -3px; right: -3px; min-width: 19px; height: 19px; padding: 0 4px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; display: none; align-items: center; justify-content: center; border: 2px solid #fff; }
+    .bia-launcher .bia-ava { width: 48px; height: 48px; }
+    .bia-launcher:hover .bia-ava { transform: scale(1.05); }
+    .bia-toggle-status { position: absolute; bottom: 3px; right: 5px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid #fff; }
+    .bia-launcher .bia-toggle-status { bottom: 4px; right: 6px; }
+    .bia-toggle-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; display: none; align-items: center; justify-content: center; border: 2px solid #fff; }
     .bia-toggle-badge.show { display: flex; }
 
-    .bia-panel { position: fixed; top: 62px; right: 16px; z-index: 11000; width: min(402px, calc(100vw - 24px)); height: min(72vh, 660px); background: #f5f6fa; border: 1px solid #e5e7eb; border-radius: 18px; box-shadow: 0 24px 60px rgba(15,23,42,.3); display: none; flex-direction: column; overflow: hidden; }
+    .bia-panel { position: fixed; bottom: 96px; right: 24px; z-index: 11000; width: min(402px, calc(100vw - 24px)); height: min(72vh, 660px); background: #f5f6fa; border: 1px solid #e5e7eb; border-radius: 18px; box-shadow: 0 24px 60px rgba(15,23,42,.3); display: none; flex-direction: column; overflow: hidden; }
     .bia-panel.open { display: flex; animation: biaPop .2s cubic-bezier(.2,.9,.3,1); }
-    @keyframes biaPop { from { transform: translateY(-10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes biaPop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
 
     .bia-head { display: flex; align-items: center; gap: 11px; padding: 13px 15px; background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); color: #fff; flex: 0 0 auto; }
     .bia-head .bia-ava { width: 42px; height: 42px; box-shadow: none; }
@@ -83,9 +87,8 @@
     .bia-card-link:hover { text-decoration: underline; }
 
     .bia-foot { flex: 0 0 auto; border-top: 1px solid #e5e7eb; background: #fff; padding: 9px 11px 11px; }
-    .bia-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-    .bia-chips::-webkit-scrollbar { display: none; }
-    .bia-chip { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: #4338ca; background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 999px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+    .bia-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; }
+    .bia-chip { font-size: 11px; font-weight: 600; color: #4338ca; background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 999px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
     .bia-chip:hover { background: #e0e7ff; }
     .bia-input-wrap { display: flex; gap: 8px; align-items: center; }
     .bia-input-wrap input { flex: 1; height: 42px; border: 1px solid #d1d5db; border-radius: 21px; padding: 0 15px; font-size: 13px; background: #f8fafc; }
@@ -98,7 +101,7 @@
     .bia-maint i { font-size: 30px; color: #f59e0b; display: block; margin-bottom: 10px; }
 
     /* toast de notificação */
-    .bia-toast { position: fixed; top: 66px; right: 16px; z-index: 10900; width: min(340px, calc(100vw - 24px)); background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid #6d28d9; border-radius: 14px; box-shadow: 0 16px 40px rgba(15,23,42,.22); padding: 12px 13px; display: none; gap: 11px; align-items: flex-start; cursor: pointer; }
+    .bia-toast { position: fixed; bottom: 96px; right: 24px; z-index: 10900; width: min(340px, calc(100vw - 24px)); background: #fff; border: 1px solid #e5e7eb; border-left: 4px solid #6d28d9; border-radius: 14px; box-shadow: 0 16px 40px rgba(15,23,42,.22); padding: 12px 13px; display: none; gap: 11px; align-items: flex-start; cursor: pointer; }
     .bia-toast.show { display: flex; animation: biaSlide .28s ease; }
     @keyframes biaSlide { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
     .bia-toast .bia-ava { width: 38px; height: 38px; flex: 0 0 auto; }
@@ -108,8 +111,11 @@
     .bia-toast-close { background: transparent; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px; }
 
     @media (max-width: 640px) {
-        .bia-panel { top: 58px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
-        .bia-toast { top: 60px; right: 8px; left: 8px; width: auto; }
+        .bia-launcher { right: 14px; bottom: 14px; height: 54px; }
+        .bia-launcher-label { display: none; }
+        .bia-launcher { padding: 0; width: 54px; justify-content: center; }
+        .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
+        .bia-toast { bottom: 78px; right: 8px; left: 8px; width: auto; }
     }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -343,14 +349,6 @@
                         <span>Meu perfil e configurações</span>
                     </a>
                 </div>
-                <button id="bia-toggle" class="bia-toggle" type="button" title="Falar com a Bia" aria-label="Assistente Bia" aria-expanded="false">
-                    <span class="bia-ava">
-                        <img src="/static/img/bia.png?v=1" alt="Bia" onerror="this.closest('.bia-ava').classList.add('no-img')">
-                        <span class="bia-ava-fb">B</span>
-                    </span>
-                    <span class="bia-toggle-status" aria-hidden="true"></span>
-                    <span class="bia-toggle-badge" id="bia-badge">0</span>
-                </button>
                 <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
         </nav>
@@ -722,6 +720,16 @@ if ("serviceWorker" in navigator) {
 {% block extra_js %}{% endblock %}
 
 <!-- ===== Bia — assistente virtual (disponível em todas as páginas) ===== -->
+<button id="bia-toggle" class="bia-launcher" type="button" title="Falar com a Bia" aria-label="Assistente Bia" aria-expanded="false">
+    <span class="bia-launcher-label">Fale com a Bia</span>
+    <span class="bia-ava">
+        <img src="/static/img/bia.png?v=1" alt="Bia" onerror="this.closest('.bia-ava').classList.add('no-img')">
+        <span class="bia-ava-fb">B</span>
+    </span>
+    <span class="bia-toggle-status" aria-hidden="true"></span>
+    <span class="bia-toggle-badge" id="bia-badge">0</span>
+</button>
+
 <div class="bia-toast" id="bia-toast" role="button" tabindex="0" aria-label="Notificação da Bia">
     <span class="bia-ava">
         <img src="/static/img/bia.png?v=1" alt="Bia" onerror="this.closest('.bia-ava').classList.add('no-img')">
