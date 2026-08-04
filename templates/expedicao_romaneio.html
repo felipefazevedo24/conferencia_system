@@ -306,6 +306,24 @@
     </div>
 </div>
 
+<!-- MODAL DE CONFIRMACAO / PROMPT (substitui os popups do navegador) -->
+<div class="rom-modal" id="rom-confirm-modal">
+    <div class="rom-modal__box" style="width:min(460px,95%)">
+        <div class="rom-modal__header">
+            <h3 class="rom-modal__title" id="rom-confirm-title">Confirmar</h3>
+            <button class="rom-modal__close" id="rom-confirm-x"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rom-modal__body">
+            <p id="rom-confirm-msg" style="margin:0;color:#334155;white-space:pre-line;line-height:1.5"></p>
+            <input type="text" id="rom-confirm-input" class="rom-input" style="display:none;margin-top:12px">
+        </div>
+        <div class="rom-modal__footer">
+            <button type="button" class="eui-btn eui-btn--ghost" id="rom-confirm-cancel">Cancelar</button>
+            <button type="button" class="eui-btn eui-btn--primary" id="rom-confirm-ok">Confirmar</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const $ = (id) => document.getElementById(id);
     const IS_ADMIN = $("rom-root")?.dataset.isAdmin === "true";
@@ -326,6 +344,61 @@
         t.className = "rom-toast show " + (tipo === "error" ? "error" : "success");
         setTimeout(() => t.classList.remove("show"), 4000);
     }
+
+    // Confirmacao/prompt internos (substituem confirm()/prompt() do navegador).
+    let _romDialogResolve = null;
+    let _romDialogMode = "confirm";
+    function _romDialogClose(result) {
+        $("rom-confirm-modal").classList.remove("open");
+        const resolver = _romDialogResolve;
+        _romDialogResolve = null;
+        if (resolver) resolver(result);
+    }
+    function romConfirm(message, opts = {}) {
+        const { title = "Confirmar", okLabel = "Confirmar", danger = false } = opts;
+        return new Promise((resolve) => {
+            _romDialogResolve = resolve;
+            _romDialogMode = "confirm";
+            $("rom-confirm-title").textContent = title;
+            $("rom-confirm-msg").textContent = message;
+            $("rom-confirm-input").style.display = "none";
+            const ok = $("rom-confirm-ok");
+            ok.textContent = okLabel;
+            ok.className = "eui-btn " + (danger ? "eui-btn--danger" : "eui-btn--primary");
+            $("rom-confirm-modal").classList.add("open");
+            setTimeout(() => ok.focus(), 30);
+        });
+    }
+    function romPrompt(message, opts = {}) {
+        const { title = "Informe", okLabel = "Confirmar", placeholder = "" } = opts;
+        return new Promise((resolve) => {
+            _romDialogResolve = resolve;
+            _romDialogMode = "prompt";
+            $("rom-confirm-title").textContent = title;
+            $("rom-confirm-msg").textContent = message;
+            const input = $("rom-confirm-input");
+            input.style.display = "block";
+            input.value = "";
+            input.placeholder = placeholder;
+            const ok = $("rom-confirm-ok");
+            ok.textContent = okLabel;
+            ok.className = "eui-btn eui-btn--primary";
+            $("rom-confirm-modal").classList.add("open");
+            setTimeout(() => input.focus(), 30);
+        });
+    }
+    $("rom-confirm-ok").addEventListener("click", () => {
+        _romDialogClose(_romDialogMode === "prompt" ? $("rom-confirm-input").value : true);
+    });
+    $("rom-confirm-cancel").addEventListener("click", () => {
+        _romDialogClose(_romDialogMode === "prompt" ? null : false);
+    });
+    $("rom-confirm-x").addEventListener("click", () => {
+        _romDialogClose(_romDialogMode === "prompt" ? null : false);
+    });
+    $("rom-confirm-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); _romDialogClose($("rom-confirm-input").value); }
+    });
 
     async function api(url, opts) {
         const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
@@ -665,7 +738,7 @@
     }
 
     async function removerNfInline(romaneioId, nfId) {
-        if (!confirm("Remover esta NF do romaneio? A ordem volta para Faturado.")) return;
+        if (!(await romConfirm("Remover esta NF do romaneio? A ordem volta para Faturado.", { title: "Remover NF", okLabel: "Remover", danger: true }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${romaneioId}/nf/${nfId}`, { method: "DELETE" });
             toast("NF removida!");
@@ -742,7 +815,7 @@
     }
 
     async function finalizarRomaneio(id) {
-        if (!confirm("Finalizar este romaneio?")) return;
+        if (!(await romConfirm("Finalizar este romaneio?", { title: "Finalizar romaneio", okLabel: "Finalizar" }))) return;
         try {
             const r = await api(`/api/expedicao/romaneio-fat/${id}/finalizar`, {
                 method: "POST",
@@ -819,10 +892,11 @@
 
     async function aprovarFinalizacaoFrete(id, exigeCarta) {
         if (exigeCarta) {
-            if (!confirm(
+            if (!(await romConfirm(
                 "Ao aprovar, sera solicitada uma CARTA DE CORRECAO da modalidade de "
-                + "transporte ao Faturamento (aviso no Teams). Deseja continuar?"
-            )) return;
+                + "transporte ao Faturamento (aviso no Teams). Deseja continuar?",
+                { title: "Aprovar com divergência", okLabel: "Aprovar e solicitar CC-e" }
+            ))) return;
         }
         try {
             const r = await api(`/api/expedicao/romaneio-fat/${id}/finalizar`, {
@@ -838,7 +912,7 @@
     }
 
     async function expedirRomaneio(id) {
-        if (!confirm("Marcar como expedido?")) return;
+        if (!(await romConfirm("Marcar como expedido?", { title: "Expedir romaneio", okLabel: "Expedir" }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/expedir`, { method: "POST" });
             // As fotos do Faturado sao reaproveitadas, mas o Registro de
@@ -852,7 +926,7 @@
     }
 
     async function estornarFinalizacao(id) {
-        if (!confirm("Estornar a finalização deste romaneio? Ele volta para Rascunho.")) return;
+        if (!(await romConfirm("Estornar a finalização deste romaneio? Ele volta para Rascunho.", { title: "Estornar finalização", okLabel: "Estornar", danger: true }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/estornar-finalizacao`, { method: "POST" });
             toast("Finalização estornada!");
@@ -863,7 +937,7 @@
     }
 
     async function estornarExpedicao(id) {
-        if (!confirm("Estornar a expedição deste romaneio? As ordens associadas voltam para 'Em Romaneio'.")) return;
+        if (!(await romConfirm("Estornar a expedição deste romaneio? As ordens associadas voltam para 'Em Romaneio'.", { title: "Estornar expedição", okLabel: "Estornar", danger: true }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/estornar-expedicao`, { method: "POST" });
             toast("Expedição estornada!");
@@ -878,7 +952,7 @@
     }
 
     async function excluirRomaneioDireto(id) {
-        if (!confirm("Excluir este romaneio? Essa ação não pode ser desfeita e a(s) NF(s) voltam para 'Faturado'.")) return;
+        if (!(await romConfirm("Excluir este romaneio? Essa ação não pode ser desfeita e a(s) NF(s) voltam para 'Faturado'.", { title: "Excluir romaneio", okLabel: "Excluir", danger: true }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/${id}/deletar`, { method: "DELETE" });
             toast("Romaneio excluído!");
@@ -889,7 +963,7 @@
     }
 
     async function solicitarExclusaoRomaneio(id) {
-        const motivo = prompt("Motivo da solicitação de exclusão:");
+        const motivo = await romPrompt("Motivo da solicitação de exclusão:", { title: "Solicitar exclusão", placeholder: "Descreva o motivo…", okLabel: "Enviar solicitação" });
         if (motivo === null) return;
         if (!motivo.trim()) { toast("Informe o motivo.", "error"); return; }
         try {
@@ -906,7 +980,7 @@
 
     async function decidirExclusaoRomaneio(exclusaoId, acao) {
         const label = acao === "aprovar" ? "aprovar" : "rejeitar";
-        if (!confirm(`Confirma ${label} esta solicitação de exclusão?`)) return;
+        if (!(await romConfirm(`Confirma ${label} esta solicitação de exclusão?`, { title: "Decisão de exclusão", okLabel: label === "aprovar" ? "Aprovar" : "Rejeitar", danger: label === "rejeitar" }))) return;
         try {
             await api(`/api/expedicao/romaneio-fat/exclusao/${exclusaoId}/${acao}`, {
                 method: "POST",
