@@ -899,14 +899,21 @@ if ("serviceWorker" in navigator) {
 
     function itemHtml(it) {
         const tag = { st: "OC", romaneio: "ROM", registro: "REG" }[it.tipo] || "OF";
+        const ehRegistro = it.tipo === "registro";
         const sub = [];
-        if (it.numero_nf) sub.push(`NF ${escapeHtml(it.numero_nf)}`);
+        // Para Registro de Expedição o id interno não diz nada — o cabeçalho já
+        // mostra a NF, então aqui só complementamos (romaneio/prev/status).
+        if (it.numero_nf && !ehRegistro) sub.push(`NF ${escapeHtml(it.numero_nf)}`);
+        if (it.romaneio) sub.push(`Romaneio ${escapeHtml(it.romaneio)}`);
         if (it.orcamento) sub.push(`Orç ${escapeHtml(it.orcamento)}`);
         if (it.previsao) sub.push(`prev. ${escapeHtml(it.previsao)}`);
         if (it.status) sub.push(escapeHtml(it.status));
         const subHtml = sub.length ? `<div class="bia-ii-sub">${sub.map((s) => `<span>${s}</span>`).join("")}</div>` : "";
+        const topo = (ehRegistro && it.numero_nf)
+            ? `<span class="bia-ii-tag">NF</span> ${escapeHtml(it.numero_nf)} · ${escapeHtml(it.referencia)}`
+            : `<span class="bia-ii-tag">${tag}</span> ${escapeHtml(it.codigo)} · ${escapeHtml(it.referencia)}`;
         return `<li class="bia-card-item">
-            <div class="bia-ii-top"><span class="bia-ii-tag">${tag}</span> ${escapeHtml(it.codigo)} · ${escapeHtml(it.referencia)}</div>
+            <div class="bia-ii-top">${topo}</div>
             ${subHtml}
         </li>`;
     }
@@ -990,10 +997,34 @@ if ("serviceWorker" in navigator) {
             renderChips(["O que falta expedir hoje?", "O que está atrasado?", "Faturado sem conferência?", "Quem está sem canhoto?"]);
             // Depois do panorama, a Bia cobra o motivo das pendências (Logística/Admin).
             cobrarProxima();
+            // Avisa o Admin se há estornos de romaneio aguardando aprovação.
+            avisarAprovacoesEstorno();
         } catch (e) {
             t.remove();
             addBot("Ops, não consegui carregar as pendências agora. Tenta de novo daqui a pouco?");
         }
+    }
+
+    // Avisa o Admin (ao abrir a Bia) sobre estornos de romaneio pendentes de
+    // aprovação. Para quem não é Admin, o endpoint devolve lista vazia.
+    async function avisarAprovacoesEstorno() {
+        if (!BIA_ATIVA) return;
+        try {
+            const r = await fetch("/api/expedicao/assistente/aprovacoes", { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!d.total) return;
+            const linhas = (d.pendentes || []).slice(0, 6).map(
+                (p) => `• #${p.id} — Romaneio ${p.romaneio} (${p.status_romaneio}), pedido por ${p.solicitante}`
+            );
+            const plural = d.total === 1 ? "estorno" : "estornos";
+            await digitar(
+                `Você tem ${d.total} ${plural} de romaneio aguardando aprovação:\n` +
+                linhas.join("\n") +
+                `\nDiga "aprovar estorno <número>" ou "rejeitar estorno <número>".`,
+                900
+            );
+        } catch (e) { /* silencioso */ }
     }
 
     // ----- Cobrança / follow-up de pendências -----

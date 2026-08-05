@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, request, session
 from ..auth import permission_required, is_admin_session
 from ..services import expedicao_assistente_service as svc
 from ..services import expedicao_cobranca_service as cobranca_svc
+from ..services import expedicao_romaneio_bia_service as romaneio_bia_svc
 
 
 expedicao_assistente_bp = Blueprint("expedicao_assistente", __name__)
@@ -30,6 +31,19 @@ def perguntar():
     pergunta = str(payload.get("pergunta") or "").strip()
     if not pergunta:
         return jsonify({"error": "Informe uma pergunta."}), 400
+    # Comandos de AÇÃO sobre romaneios (editar/estornar/aprovar) são tratados
+    # aqui, com a sessão/permissão à mão. Se não for um comando, cai no chat.
+    ctx = {
+        "username": str(session.get("username") or "").strip(),
+        "role": session.get("role"),
+        "is_admin": is_admin_session(),
+    }
+    try:
+        acao = romaneio_bia_svc.interpretar(pergunta, ctx)
+    except Exception:
+        acao = None
+    if acao is not None:
+        return jsonify(acao)
     historico = payload.get("historico")
     return jsonify(svc.responder(pergunta, historico))
 
@@ -124,3 +138,14 @@ def cobranca_cce_feita():
     resultado = cobranca_svc.marcar_cce_feita(numero, autor=_autor_sessao())
     status = 200 if resultado.get("ok") else 400
     return jsonify(resultado), status
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/aprovacoes", methods=["GET"])
+@permission_required(PERMISSION)
+def aprovacoes():
+    """Estornos de romaneio aguardando aprovação (só faz sentido para Admin).
+    A Bia usa isto para avisar o Admin ao abrir o chat."""
+    if not is_admin_session():
+        return jsonify({"pendentes": [], "total": 0})
+    pend = romaneio_bia_svc.estornos_pendentes()
+    return jsonify({"pendentes": pend, "total": len(pend)})

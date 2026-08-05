@@ -470,6 +470,10 @@ def _coletar_insights() -> list[dict]:
                     "referencia": r.nome_cliente or "—",
                     "orcamento": r.orcamento or "",
                     "numero_nf": r.numero_nf or "",
+                    "romaneio": (
+                        (_romaneio_da_nf(r.numero_nf) or {}).get("romaneio", "")
+                        if r.numero_nf else ""
+                    ),
                     "status": r.status,
                 }
                 for r in sem_canhoto
@@ -659,12 +663,24 @@ def _tag(it: dict) -> str:
     return {"st": "OC", "romaneio": "Rom", "registro": "Reg"}.get(it.get("tipo"), "OF")
 
 
+def _cabecalho_item(it: dict) -> str:
+    """Rótulo humano de um item. Para 'registro' (Registro de Expedição), o id
+    interno não diz nada ao operador — usamos a NF (e o romaneio, se houver)."""
+    if it.get("tipo") == "registro":
+        if it.get("numero_nf"):
+            return f"NF {it['numero_nf']}"
+        return f"Reg {it.get('codigo', '')}".strip()
+    return f"{_tag(it)} {it.get('codigo', '')}".strip()
+
+
 def _detalhe_item(it: dict) -> str:
-    partes = [f"{_tag(it)} {it.get('codigo', '')}".strip()]
+    partes = [_cabecalho_item(it)]
     if it.get("referencia") and it["referencia"] != "—":
         partes.append(it["referencia"])
-    if it.get("numero_nf"):
+    if it.get("tipo") != "registro" and it.get("numero_nf"):
         partes.append(f"NF {it['numero_nf']}")
+    if it.get("romaneio"):
+        partes.append(f"Romaneio {it['romaneio']}")
     if it.get("previsao"):
         partes.append(f"prev. {it['previsao']}")
     return "   • " + " · ".join(partes)
@@ -673,6 +689,12 @@ def _detalhe_item(it: dict) -> str:
 def _linha_ordem(it: dict) -> str:
     """Linha compacta de uma ordem para o contexto do LLM (código, cliente, NF,
     previsão e status)."""
+    if it.get("tipo") == "registro":
+        rom = f" · Romaneio {it['romaneio']}" if it.get("romaneio") else ""
+        return (
+            f"    {_cabecalho_item(it)} · {it.get('referencia', '')}{rom}"
+            f" · prev {it.get('previsao') or '—'} · {it.get('status', '')}"
+        )
     return (
         f"    {_tag(it)} {it.get('codigo', '')} · {it.get('referencia', '')}"
         f" · NF {it.get('numero_nf') or '—'} · prev {it.get('previsao') or '—'}"

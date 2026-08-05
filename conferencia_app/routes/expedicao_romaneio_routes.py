@@ -793,24 +793,47 @@ def adicionar_nf_ao_romaneio(romaneio_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
-    
+
     if romaneio.status != "Rascunho":
         return jsonify({"error": "Apenas romaneios em Rascunho podem receber NFes."}), 400
-    
+
     payload = request.get_json(silent=True) or {}
     numero_nf = (payload.get("numero_nf") or "").strip()
-    
+
     if not numero_nf:
         return jsonify({"error": "Número da NF é obrigatório."}), 400
-    
+
+    nf, erro = incluir_nf_no_romaneio(romaneio, numero_nf, session["username"], payload)
+    if erro:
+        return jsonify({"error": erro}), 400
+
+    return jsonify({
+        "id": nf.id,
+        "numero_nf": nf.numero_nf,
+        "message": "NF adicionada com sucesso.",
+    }), 201
+
+
+def incluir_nf_no_romaneio(romaneio, numero_nf, autor, payload=None):
+    """Núcleo reutilizável de inclusão de NF em um romaneio (usado pela rota
+    HTTP e pela Bia). Retorna (nf, None) em sucesso ou (None, mensagem_erro).
+    Só opera em romaneios em Rascunho."""
+    payload = payload or {}
+    numero_nf = str(numero_nf or "").strip()
+    if not numero_nf:
+        return None, "Número da NF é obrigatório."
+    if romaneio.status != "Rascunho":
+        return None, "Apenas romaneios em Rascunho podem receber NFes."
+    romaneio_id = romaneio.id
+
     # Verifica se NF já foi adicionada
     existe = ExpedicaoRomaneioNF.query.filter_by(
         romaneio_id=romaneio_id,
         numero_nf=numero_nf,
     ).first()
     if existe:
-        return jsonify({"error": f"NF {numero_nf} já foi adicionada a este romaneio."}), 400
-    
+        return None, f"NF {numero_nf} já foi adicionada a este romaneio."
+
     # Busca os dados reais da NF na ordem de faturamento (preenchidos pelo
     # conferente na Conferência de Expedição) — peso/volume devem ser
     # identicos ao que consta na NF, nao digitados de novo aqui. So cai no
@@ -853,9 +876,10 @@ def adicionar_nf_ao_romaneio(romaneio_id):
                 registro_conferencia = registro_com_foto
                 ordem_com_conferencia.expedicao_registro_id = registro_com_foto.id
         if not registro_conferencia or not registro_conferencia.foto_cliente_file_name:
-            return jsonify({
-                "error": "É necessário anexar a foto do cliente antes de incluir esta NF no romaneio."
-            }), 400
+            return None, (
+                "É necessário anexar a foto do cliente antes de incluir esta "
+                "NF no romaneio."
+            )
 
     if ordem_fat:
         orcamento = ordem_fat.orcamento or payload.get("orcamento") or romaneio.orcamento
@@ -926,35 +950,31 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         especie_volumes=especie_volumes,
         numeros_os=numeros_os,
         modfrete_nf=modfrete_codigo,
-        adicionado_por=session["username"],
+        adicionado_por=autor,
     )
-    
+
     db.session.add(nf)
-    
+
     # Atualiza totais sempre pela lista real de NFs, sem duplicar a NF recém-adicionada.
     _recalcular_totais_romaneio(romaneio)
-    
+
     # Se for a primeira NF, usa seus dados como padrão
     if len(romaneio.nfs or []) == 1:
         if not romaneio.orcamento:
             romaneio.orcamento = orcamento
         if not romaneio.cliente:
             romaneio.cliente = cliente
-    
+
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
-    
+
     # Fluxo progressivo: a ordem (FAT ou ST — o numero_nf so existe em uma
     # delas) cuja NF entrou no romaneio sai da etapa "Faturado" e passa para
     # "Em Romaneio".
     fat_svc.marcar_em_romaneio_por_nf(numero_nf)
     st_svc.marcar_em_romaneio_por_nf(numero_nf)
-    
-    return jsonify({
-        "id": nf.id,
-        "numero_nf": nf.numero_nf,
-        "message": "NF adicionada com sucesso.",
-    }), 201
+
+    return nf, None
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/nf/<int:nf_id>", methods=["DELETE"])
@@ -964,7 +984,7 @@ def remover_nf_do_romaneio(romaneio_id, nf_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
-    
+
     if romaneio.status != "Rascunho":
         dica = (
             "Realize primeiro o estorno da Expedição e depois da Finalização."
@@ -972,28 +992,43 @@ def remover_nf_do_romaneio(romaneio_id, nf_id):
             else "Realize primeiro o estorno da Finalização (Pronto → Rascunho)."
         )
         return jsonify({"error": f"Apenas romaneios em Rascunho podem ter NFes removidas. {dica}"}), 400
-    
+
     nf = ExpedicaoRomaneioNF.query.get(nf_id)
     if not nf or nf.romaneio_id != romaneio_id:
         return jsonify({"error": "NF não encontrada neste romaneio."}), 404
-    
+
+    ok, erro = remover_nf_core(romaneio, nf)
+    if erro:
+        return jsonify({"error": erro}), 400
+    return jsonify({"message": "NF removida com sucesso."})
+
+
+def remover_nf_core(romaneio, nf):
+    """Núcleo reutilizável de remoção de NF do romaneio (rota HTTP e Bia).
+    Retorna (True, None) em sucesso ou (False, mensagem_erro). Só opera em
+    romaneios em Rascunho."""
+    if romaneio.status != "Rascunho":
+        return False, "Apenas romaneios em Rascunho podem ter NFes removidas."
+    if nf is None or nf.romaneio_id != romaneio.id:
+        return False, "NF não encontrada neste romaneio."
+
     numero_nf_removido = nf.numero_nf
-    
+
     db.session.delete(nf)
     db.session.flush()
-    
+
     # Atualiza totais pela lista remanescente para manter consistência.
     _recalcular_totais_romaneio(romaneio)
     romaneio.atualizado_em = datetime.now()
-    
+
     db.session.commit()
-    
+
     # Estorno da etapa atual: a ordem (FAT ou ST) volta de "Em Romaneio" para
     # "Faturado".
     fat_svc.reverter_romaneio_por_nf(numero_nf_removido)
     st_svc.reverter_romaneio_por_nf(numero_nf_removido)
-    
-    return jsonify({"message": "NF removida com sucesso."})
+
+    return True, None
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/finalizar", methods=["POST"])
@@ -1119,20 +1154,25 @@ def estornar_finalizacao_romaneio(romaneio_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
-    
+
     if romaneio.status != "Pronto":
         return jsonify({"error": "Apenas romaneios em Pronto podem ter a finalização estornada."}), 400
-    
+
+    estornar_finalizacao_core(romaneio, session["username"])
+    return jsonify({"message": "Finalização estornada. Romaneio voltou para Rascunho."})
+
+
+def estornar_finalizacao_core(romaneio, autor):
+    """Núcleo do estorno de finalização (Pronto -> Rascunho). Reutilizado pela
+    rota HTTP e pela Bia."""
     romaneio.status = "Rascunho"
-    romaneio.atualizado_por = session["username"]
+    romaneio.atualizado_por = autor
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
 
     _cancelar_solicitacao_entrega_cif(
         romaneio, motivo=f"Finalizacao do romaneio {romaneio.numero_romaneio} estornada (voltou para Rascunho)."
     )
-
-    return jsonify({"message": "Finalização estornada. Romaneio voltou para Rascunho."})
 
 
 @expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/<int:romaneio_id>/estornar-expedicao", methods=["POST"])
@@ -1144,17 +1184,24 @@ def estornar_expedicao_romaneio(romaneio_id):
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return jsonify({"error": "Romaneio não encontrado."}), 404
-    
+
     if romaneio.status != "Expedido":
         return jsonify({"error": "Apenas romaneios Expedidos podem ter a expedição estornada."}), 400
-    
+
+    estornar_expedicao_core(romaneio, session["username"])
+    return jsonify({"message": "Expedição estornada. Romaneio voltou para Pronto."})
+
+
+def estornar_expedicao_core(romaneio, autor):
+    """Núcleo do estorno de expedição (Expedido -> Pronto). Reutilizado pela
+    rota HTTP e pela Bia."""
     romaneio.status = "Pronto"
     romaneio.expedido_por = None
     romaneio.expedido_em = None
-    romaneio.atualizado_por = session["username"]
+    romaneio.atualizado_por = autor
     romaneio.atualizado_em = datetime.now()
     db.session.commit()
-    
+
     for nf in romaneio.nfs or []:
         fat_svc.reverter_expedicao_por_nf(nf.numero_nf)
         st_svc.reverter_expedicao_por_nf(nf.numero_nf)
@@ -1183,7 +1230,70 @@ def estornar_expedicao_romaneio(romaneio_id):
                 reg.updated_at = datetime.now()
     db.session.commit()
 
-    return jsonify({"message": "Expedição estornada. Romaneio voltou para Pronto."})
+
+def estornar_para_rascunho(romaneio, autor):
+    """Leva o romaneio até Rascunho a partir do estado atual (Expedido -> Pronto
+    -> Rascunho, ou Pronto -> Rascunho). Usado pela Bia após aprovação. Retorna
+    (True, None) se chegou em Rascunho, ou (False, mensagem) se não era possível."""
+    if romaneio.status == "Rascunho":
+        return True, None
+    if romaneio.status == "Expedido":
+        estornar_expedicao_core(romaneio, autor)
+    if romaneio.status == "Pronto":
+        estornar_finalizacao_core(romaneio, autor)
+    if romaneio.status == "Rascunho":
+        return True, None
+    return False, f"Não é possível estornar um romaneio no estado '{romaneio.status}'."
+
+
+def editar_romaneio_campos(romaneio, alteracoes, autor):
+    """Aplica o subconjunto de campos editáveis pela Bia (transportadora, placa,
+    motorista, motorista_documento, tipo_frete). Só opera em Rascunho. Retorna
+    (True, None) em sucesso ou (False, mensagem_erro)."""
+    if romaneio.status != "Rascunho":
+        return False, "Só é possível editar romaneios em Rascunho."
+    if not alteracoes:
+        return False, "Nada para alterar."
+
+    disparar_aviso_fob = False
+    if "transportadora" in alteracoes:
+        romaneio.transportadora = str(alteracoes["transportadora"] or "").strip()
+    if "placa" in alteracoes:
+        romaneio.placa = str(alteracoes["placa"] or "").strip()
+    if "motorista" in alteracoes:
+        romaneio.motorista = str(alteracoes["motorista"] or "").strip()
+    if "motorista_documento" in alteracoes:
+        romaneio.motorista_documento = str(alteracoes["motorista_documento"] or "").strip()
+    if "tipo_frete" in alteracoes:
+        frete = str(alteracoes["tipo_frete"] or "").strip().upper()
+        if frete not in ("FOB", "CIF"):
+            return False, "Tipo de frete deve ser FOB ou CIF."
+        disparar_aviso_fob = (frete == "FOB")
+        romaneio.tipo_frete = frete
+
+    romaneio.atualizado_por = autor
+    romaneio.atualizado_em = datetime.now()
+    db.session.commit()
+
+    if disparar_aviso_fob and (romaneio.nfs or []):
+        for nf in romaneio.nfs:
+            try:
+                enviar_aviso_coleta_fob(
+                    numero_nf=nf.numero_nf,
+                    nome_cliente=nf.cliente or romaneio.cliente or "",
+                    qtde_volumes=int(nf.qtde_volumes or 0),
+                    peso=float(nf.peso_bruto or 0),
+                    disparado_por=autor,
+                    origem="RomaneioFOB",
+                    envio_assincrono=True,
+                )
+            except Exception:
+                current_app.logger.exception(
+                    "Falha ao disparar aviso FOB para NF %s (romaneio %s).",
+                    nf.numero_nf,
+                    romaneio.numero_romaneio,
+                )
+    return True, None
 
 
 def _excluir_romaneio(romaneio: ExpedicaoRomaneio) -> None:
