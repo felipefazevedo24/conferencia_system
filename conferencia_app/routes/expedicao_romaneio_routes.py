@@ -813,6 +813,32 @@ def adicionar_nf_ao_romaneio(romaneio_id):
             registro_conferencia = ExpedicaoConferenciaSimples.query.get(
                 ordem_com_conferencia.expedicao_registro_id
             )
+        # Fallback: a foto do cliente pode ter sido anexada por outro fluxo
+        # (ex.: Conferencia de Expedicao manual, origem "Manual"), gerando um
+        # registro com foto_cliente que nunca foi vinculado em
+        # expedicao_registro_id. Nesse caso a ordem aponta para None (ou para
+        # um registro sem foto), mas a foto EXISTE para a mesma NF. Procura um
+        # registro da NF que ja tenha a foto e vincula a ordem a ele,
+        # auto-corrigindo o elo para os proximos passos do romaneio. Prefere um
+        # registro ainda "Pendente de expedicao" (rascunho) para nao repropor
+        # um registro ja Finalizado; caindo nele so se nao houver pendente.
+        if not registro_conferencia or not registro_conferencia.foto_cliente_file_name:
+            base_foto = (
+                ExpedicaoConferenciaSimples.query
+                .filter_by(numero_nf=numero_nf)
+                .filter(ExpedicaoConferenciaSimples.foto_cliente_file_name.isnot(None))
+            )
+            registro_com_foto = (
+                base_foto
+                .filter(ExpedicaoConferenciaSimples.status.in_(
+                    ["Pendente de expedição", "Pendente de expedicao"]))
+                .order_by(ExpedicaoConferenciaSimples.id.desc())
+                .first()
+                or base_foto.order_by(ExpedicaoConferenciaSimples.id.desc()).first()
+            )
+            if registro_com_foto is not None:
+                registro_conferencia = registro_com_foto
+                ordem_com_conferencia.expedicao_registro_id = registro_com_foto.id
         if not registro_conferencia or not registro_conferencia.foto_cliente_file_name:
             return jsonify({
                 "error": "É necessário anexar a foto do cliente antes de incluir esta NF no romaneio."
