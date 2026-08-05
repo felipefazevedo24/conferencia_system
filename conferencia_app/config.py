@@ -78,6 +78,14 @@ class Config:
         else {
             "pool_pre_ping": True,
             "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "280")),
+            # Limita o total de conexoes por processo para nao estourar o
+            # max_user_connections do MySQL (ex.: 22 no PythonAnywhere).
+            # pool_size + max_overflow = maximo de conexoes simultaneas.
+            "pool_size": int(os.environ.get("DB_POOL_SIZE", "3")),
+            "max_overflow": int(os.environ.get("DB_POOL_MAX_OVERFLOW", "2")),
+            "pool_timeout": int(os.environ.get("DB_POOL_TIMEOUT_SECONDS", "20")),
+            # LIFO mantem menos conexoes "quentes" abertas em baixa carga.
+            "pool_use_lifo": True,
         }
     )
 
