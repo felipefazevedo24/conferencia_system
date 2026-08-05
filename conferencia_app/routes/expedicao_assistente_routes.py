@@ -30,7 +30,8 @@ def perguntar():
     pergunta = str(payload.get("pergunta") or "").strip()
     if not pergunta:
         return jsonify({"error": "Informe uma pergunta."}), 400
-    return jsonify(svc.responder(pergunta))
+    historico = payload.get("historico")
+    return jsonify(svc.responder(pergunta, historico))
 
 
 @expedicao_assistente_bp.route("/api/expedicao/assistente/aprender", methods=["POST"])

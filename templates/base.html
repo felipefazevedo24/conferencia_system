@@ -834,6 +834,18 @@ if ("serviceWorker" in navigator) {
     // Pendência que a Bia está cobrando agora: a próxima mensagem do operador
     // vira o "motivo" dessa pendência (modo cobrança).
     let cobrancaAtual = null;
+    // Memória da conversa: guarda as trocas (operador/Bia) para dar continuidade
+    // ao assunto. Enviamos as últimas trocas junto de cada pergunta.
+    const biaHistorico = [];
+    function pushHist(role, texto) {
+        const t = String(texto == null ? "" : texto).trim();
+        if (!t) return;
+        biaHistorico.push({ role: role, content: t });
+        if (biaHistorico.length > 40) biaHistorico.splice(0, biaHistorico.length - 40);
+    }
+    // Últimas trocas para enviar ao backend, excluindo a última msg (a pergunta
+    // atual, que vai no campo "pergunta").
+    const histParaEnvio = () => biaHistorico.slice(-13, -1);
 
     const escapeHtml = (s) => String(s == null ? "" : s)
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -850,6 +862,7 @@ if ("serviceWorker" in navigator) {
         row.innerHTML = `<div class="bia-bubble"></div>`;
         row.querySelector(".bia-bubble").textContent = texto;
         chatEl.appendChild(row);
+        pushHist("user", texto);
         scrollFim();
     }
 
@@ -859,6 +872,7 @@ if ("serviceWorker" in navigator) {
         row.innerHTML = `${avatarHtml()}<div class="bia-bubble"></div>`;
         row.querySelector(".bia-bubble").textContent = texto;
         chatEl.appendChild(row);
+        pushHist("assistant", texto);
         scrollFim();
         return row;
     }
@@ -1096,7 +1110,7 @@ if ("serviceWorker" in navigator) {
                     const r = await fetch(API_PERGUNTAR, {
                         method: "POST",
                         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                        body: JSON.stringify({ pergunta: q }),
+                        body: JSON.stringify({ pergunta: q, historico: histParaEnvio() }),
                     });
                     const data = await r.json();
                     t.remove();
@@ -1159,7 +1173,7 @@ if ("serviceWorker" in navigator) {
             const r = await fetch(API_PERGUNTAR, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                body: JSON.stringify({ pergunta: q }),
+                body: JSON.stringify({ pergunta: q, historico: histParaEnvio() }),
             });
             const data = await r.json();
             t.remove();

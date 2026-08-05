@@ -176,6 +176,40 @@ def _movimentos_hoje() -> dict:
     }
 
 
+def _romaneios_pendentes_comprovante() -> list[dict]:
+    """Romaneios Expedidos com NF(s) ainda SEM canhoto/comprovante, agrupados
+    por romaneio (cada um com a lista das NFs pendentes). Usa a mesma regra da
+    tela (_info_comprovantes_romaneio: só pende enquanto o registro está
+    Expedido)."""
+    try:
+        from ..routes.expedicao_romaneio_routes import _info_comprovantes_romaneio
+    except Exception:
+        return []
+    try:
+        romaneios = ExpedicaoRomaneio.query.filter_by(status="Expedido").all()
+    except Exception:
+        return []
+    saida: list[dict] = []
+    for r in romaneios:
+        try:
+            info, tem_pend = _info_comprovantes_romaneio(r)
+        except Exception:
+            continue
+        if not tem_pend:
+            continue
+        nfs_pend = [str(nf) for nf, d in info.items() if d.get("canhoto_pendente")]
+        if not nfs_pend:
+            continue
+        saida.append({
+            "romaneio": r.numero_romaneio or str(r.id),
+            "cliente": r.cliente or "—",
+            "tipo_frete": r.tipo_frete or "—",
+            "nfs_pendentes": nfs_pend,
+        })
+    return saida
+
+
+
 
 # --------------------------------------------------------------------------- #
 # Núcleo: análise de pendências.
@@ -595,7 +629,19 @@ def _cards_relevantes(q: str):
         cards = _card_por_chave(("faturado_sem_conf",))
         return _texto_de_cards(cards, "Nenhuma NF faturada sem conferência agora. Tudo certo por aí! 👍"), cards
     if any(t in q for t in ("canhoto", "comprovante", "assinatur")):
+        rom = _romaneios_pendentes_comprovante()
         cards = _card_por_chave(("sem_canhoto",))
+        if rom:
+            total_nf = sum(len(r["nfs_pendentes"]) for r in rom)
+            linhas = [f"Temos {len(rom)} romaneio(s) pendente(s) de comprovante ({total_nf} NF sem canhoto):"]
+            for r in rom[:15]:
+                linhas.append(
+                    f"   • Romaneio {r['romaneio']} ({r['tipo_frete']}) — {r['cliente']}"
+                    f" — NF(s): {', '.join(r['nfs_pendentes'])}"
+                )
+            if len(rom) > 15:
+                linhas.append(f"   … e mais {len(rom) - 15} romaneio(s).")
+            return "\n".join(linhas), cards
         return _texto_de_cards(cards, "Todos os materiais expedidos já têm canhoto anexado. 🙌"), cards
     if any(t in q for t in ("cc-e", "cce", "carta de correc", "correcao")):
         cards = _card_por_chave(("cce_pendente",))
@@ -732,6 +778,25 @@ def _contexto_llm() -> str:
     _bloco("CONFERIDO HOJE", mov["conferido"])
     _bloco("EXPEDIDO HOJE", mov["expedido"])
 
+    # Romaneios ainda sem comprovante de entrega, com as NFs de cada um.
+    rom_pend = _romaneios_pendentes_comprovante()
+    linhas.append("")
+    if rom_pend:
+        total_nf = sum(len(r["nfs_pendentes"]) for r in rom_pend)
+        linhas.append(
+            f"ROMANEIOS PENDENTES DE COMPROVANTE — {len(rom_pend)} romaneio(s), "
+            f"{total_nf} NF(s) sem canhoto:"
+        )
+        for r in rom_pend[:25]:
+            linhas.append(
+                f"    Romaneio {r['romaneio']} ({r['tipo_frete']}) · {r['cliente']}"
+                f" · NF(s) sem canhoto: {', '.join(r['nfs_pendentes'])}"
+            )
+        if len(rom_pend) > 25:
+            linhas.append(f"    … e mais {len(rom_pend) - 25} romaneio(s).")
+    else:
+        linhas.append("ROMANEIOS PENDENTES DE COMPROVANTE: nenhum.")
+
     linhas.append("")
     linhas.append("PENDÊNCIAS PRIORIZADAS (o que lembrar / cobrar):")
     for c in dados["pendencias"]:
@@ -830,7 +895,31 @@ def _llm_cfg():
     return url, key, model
 
 
-def _responder_llm(pergunta: str) -> str | None:
+def _historico_llm(historico) -> list[dict]:
+    """Normaliza o histórico de conversa recebido do front para o formato do
+    LLM (role user/assistant). Mantém só as últimas trocas e limita o tamanho
+    de cada mensagem para não estourar tokens."""
+    if not isinstance(historico, list):
+        return []
+    msgs: list[dict] = []
+    for item in historico[-12:]:
+        if not isinstance(item, dict):
+            continue
+        papel = str(item.get("role") or item.get("autor") or "").strip().lower()
+        if papel in ("bia", "bot", "assistente", "assistant"):
+            role = "assistant"
+        elif papel in ("user", "usuario", "operador", "eu", ""):
+            role = "user"
+        else:
+            continue
+        texto = str(item.get("content") or item.get("texto") or "").strip()
+        if not texto:
+            continue
+        msgs.append({"role": role, "content": texto[:1500]})
+    return msgs
+
+
+def _responder_llm(pergunta: str, historico=None) -> str | None:
     url, key, model = _llm_cfg()
     if not (url and key):
         return None
@@ -847,12 +936,12 @@ def _responder_llm(pergunta: str) -> str | None:
     if conhecimento:
         sistema += "\n\nBASE DE CONHECIMENTO DO SISTEMA:\n" + conhecimento
     sistema += "\n\nDADOS ATUAIS DA EXPEDIÇÃO:\n" + contexto
+    mensagens = [{"role": "system", "content": sistema}]
+    mensagens.extend(_historico_llm(historico))
+    mensagens.append({"role": "user", "content": pergunta})
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": sistema},
-            {"role": "user", "content": pergunta},
-        ],
+        "messages": mensagens,
         "temperature": 0.6,
         "max_tokens": 500,
     }
@@ -877,13 +966,14 @@ def _responder_llm(pergunta: str) -> str | None:
         return None
 
 
-def responder(pergunta: str) -> dict:
+def responder(pergunta: str, historico=None) -> dict:
     """Responde a uma pergunta em linguagem natural.
 
     Se houver um LLM configurado (ASSISTENTE_LLM_API_URL/KEY), usa ele para
     conversar de forma livre e natural, sempre alimentado com os dados reais da
-    expedição. Sem LLM, cai no motor offline determinístico (mais tagarela)."""
-    llm = _responder_llm(pergunta)
+    expedição E com o histórico da conversa (para dar continuidade ao assunto).
+    Sem LLM, cai no motor offline determinístico (mais tagarela)."""
+    llm = _responder_llm(pergunta, historico)
     if llm:
         _, cards = _cards_relevantes(_normalizar(pergunta))
         return {"resposta": llm, "pendencias": cards or [], "sugestoes": SUGESTOES}
