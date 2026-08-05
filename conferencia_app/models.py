@@ -2121,6 +2121,10 @@ class ExpedicaoRomaneioNF(db.Model):
     # Informações da NF
     numero_nf = db.Column(db.String(160), nullable=False, index=True)
     orcamento = db.Column(db.String(80), index=True)
+    # Ordem de compra (fluxo ST/Serviço de Terceiro). Orçamento e OC são
+    # mutuamente exclusivos por NF: FAT preenche orcamento, ST preenche
+    # ordem_compra. Um romaneio pode misturar NFs dos dois tipos.
+    ordem_compra = db.Column(db.String(80), index=True)
     cliente = db.Column(db.String(160))
     
     # Dados da expedição

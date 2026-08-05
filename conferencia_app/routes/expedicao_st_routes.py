@@ -156,10 +156,10 @@ def _obter_ou_criar_registro_rascunho(ordem: ExpedicaoOrdemST, usuario):
         )
     if registro is None:
         registro = ExpedicaoConferenciaSimples(
-            orcamento=ordem.cod_ordem_compra or "",
+            orcamento="",
             ordem_compra=ordem.cod_ordem_compra or "",
             numero_os=ordem.n_os or "",
-            tipo_referencia="Orcamento",
+            tipo_referencia="OrdemCompra",
             conferente=usuario,
             numero_nf=ordem.numero_nf or "",
             nome_cliente=ordem.fornecedor or "",

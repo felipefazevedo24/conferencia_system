@@ -298,7 +298,14 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
             registro = candidato
 
     numero_os = str(getattr(nf, "numeros_os", "") or "").strip() or None
-    orcamento = str(getattr(nf, "orcamento", "") or romaneio.orcamento or "").strip()
+    ordem_compra = str(getattr(nf, "ordem_compra", "") or "").strip()
+    if ordem_compra:
+        # NF de Servico de Terceiro (ST): referencia e Ordem de Compra.
+        orcamento = ""
+        tipo_referencia = "OrdemCompra"
+    else:
+        orcamento = str(getattr(nf, "orcamento", "") or romaneio.orcamento or "").strip()
+        tipo_referencia = "Orcamento"
     cliente = str(getattr(nf, "cliente", "") or romaneio.cliente or "").strip()
     transportadora = str(getattr(romaneio, "transportadora", "") or "").strip() or None
     placa = str(getattr(romaneio, "placa", "") or "").strip() or None
@@ -307,7 +314,8 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
     if registro is None:
         registro = ExpedicaoConferenciaSimples(
             orcamento=orcamento,
-            tipo_referencia="Orcamento",
+            ordem_compra=ordem_compra or None,
+            tipo_referencia=tipo_referencia,
             numero_os=numero_os,
             conferente=usuario,
             numero_nf=numero_nf,
@@ -325,6 +333,9 @@ def _finalizar_registro_expedicao_para_nf(nf, romaneio, usuario):
         registro.origem = "Romaneio"
         if not registro.numero_os and numero_os:
             registro.numero_os = numero_os
+        if ordem_compra and not registro.ordem_compra:
+            registro.ordem_compra = ordem_compra
+            registro.tipo_referencia = "OrdemCompra"
         if not registro.nome_cliente and cliente:
             registro.nome_cliente = cliente
         if transportadora:
@@ -563,6 +574,7 @@ def listar_romaneios():
                     "id": nf.id,
                     "numero_nf": nf.numero_nf,
                     "orcamento": nf.orcamento,
+                    "ordem_compra": nf.ordem_compra,
                     "cliente": nf.cliente,
                     "peso_bruto": nf.peso_bruto,
                     "qtde_volumes": nf.qtde_volumes,
@@ -671,6 +683,7 @@ def obter_romaneio(romaneio_id):
                 "id": nf.id,
                 "numero_nf": nf.numero_nf,
                 "orcamento": nf.orcamento,
+                "ordem_compra": nf.ordem_compra,
                 "cliente": nf.cliente,
                 "peso_bruto": nf.peso_bruto,
                 "qtde_volumes": nf.qtde_volumes,
@@ -846,6 +859,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
 
     if ordem_fat:
         orcamento = ordem_fat.orcamento or payload.get("orcamento") or romaneio.orcamento
+        ordem_compra = ""
         cliente = ordem_fat.cliente or payload.get("cliente") or romaneio.cliente
         peso_bruto = _parse_float(ordem_fat.peso_bruto, _parse_float(payload.get("peso_bruto")))
         qtde_volumes = _parse_int(ordem_fat.qtde_volumes, _parse_int(payload.get("qtde_volumes")))
@@ -863,9 +877,11 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         oss_unicas = [str(v[0]).strip() for v in oss_itens if v[0] and str(v[0]).strip()]
         numeros_os = ", ".join(oss_unicas) if oss_unicas else (payload.get("numeros_os") or "")
     elif ordem_st:
-        # Ordem de Servico de Terceiro (ST): mesma logica do FAT, usando o
-        # fornecedor no lugar do cliente (o fluxo ST nao tem orcamento).
-        orcamento = payload.get("orcamento") or romaneio.orcamento
+        # Ordem de Servico de Terceiro (ST): o documento de referencia e a
+        # Ordem de Compra (nao ha orcamento). Grava a OC em ordem_compra para
+        # o romaneio/registro exibirem "OC" em vez de "Orcamento".
+        orcamento = ""
+        ordem_compra = ordem_st.cod_ordem_compra or payload.get("ordem_compra") or ""
         cliente = ordem_st.fornecedor or payload.get("cliente") or romaneio.cliente
         peso_bruto = _parse_float(ordem_st.peso_bruto, _parse_float(payload.get("peso_bruto")))
         qtde_volumes = _parse_int(ordem_st.qtde_volumes, _parse_int(payload.get("qtde_volumes")))
@@ -878,6 +894,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         dados_bridge = _dados_nf_do_bridge(numero_nf)
         dados_bridge = dados_bridge or {}
         orcamento = payload.get("orcamento") or romaneio.orcamento
+        ordem_compra = payload.get("ordem_compra") or ""
         cliente = dados_bridge.get("cliente") or payload.get("cliente") or romaneio.cliente
         peso_bruto = dados_bridge.get("peso_bruto")
         if peso_bruto is None:
@@ -902,6 +919,7 @@ def adicionar_nf_ao_romaneio(romaneio_id):
         romaneio_id=romaneio_id,
         numero_nf=numero_nf,
         orcamento=orcamento,
+        ordem_compra=ordem_compra,
         cliente=cliente,
         peso_bruto=peso_bruto,
         qtde_volumes=qtde_volumes,

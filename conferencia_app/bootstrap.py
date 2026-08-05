@@ -915,8 +915,8 @@ def _ensure_expedicao_romaneio_columns() -> None:
 
 
 def _ensure_expedicao_romaneio_nf_columns() -> None:
-    """Garante a coluna modfrete_nf (modalidade de frete declarada na NF-e)
-    na expedicao_romaneio_nf."""
+    """Garante colunas adicionais na expedicao_romaneio_nf: modfrete_nf
+    (modalidade de frete declarada na NF-e) e ordem_compra (fluxo ST)."""
     if not _has_table("expedicao_romaneio_nf"):
         return
     cols = _get_column_names("expedicao_romaneio_nf")
@@ -924,6 +924,8 @@ def _ensure_expedicao_romaneio_nf_columns() -> None:
     try:
         if "modfrete_nf" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN modfrete_nf VARCHAR(4)"))
+        if "ordem_compra" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN ordem_compra VARCHAR(80)"))
         conn.commit()
     finally:
         conn.close()
