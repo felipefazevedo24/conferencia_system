@@ -126,6 +126,20 @@
         .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
         .bia-toast { bottom: 78px; right: 8px; left: 8px; width: auto; }
     }
+
+    /* ===== Impressão global =====
+       O shell do app usa tela cheia (height:100vh + overflow:hidden). Sem
+       liberar isso na impressão, o navegador corta o conteúdo na primeira
+       página — por isso romaneios com várias folhas imprimiam só a primeira. */
+    @media print {
+        html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+        #wrapper, #page-content-wrapper, .content-body {
+            height: auto !important; min-height: 0 !important; max-height: none !important;
+            overflow: visible !important; display: block !important;
+        }
+        #sidebar-wrapper, .top-nav, .app-footer, #shell-backdrop { display: none !important; }
+        #bia-toggle, #bia-panel, #bia-toast { display: none !important; }
+    }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_head %}{% endblock %}
