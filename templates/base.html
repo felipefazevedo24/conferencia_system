@@ -364,7 +364,7 @@
 
         <main class="content-body">{% block content %}{% endblock %}</main>
         <footer class="app-footer">
-            <span><strong>Columbia SYNC © 2026</strong></span>
+            <span><strong>© 2026</strong></span>
             <span style="opacity:.5; font-size:11px; margin-left:10px;" title="Commit em execução neste servidor agora">build {{ build_info }}</span>
         </footer>
     </div>
@@ -1023,10 +1023,20 @@ if ("serviceWorker" in navigator) {
             return;
         }
 
-        // Marcar CC-e como emitida: "cce feita do romaneio 123", "carta de correção pronta 123".
+        // Marcar CC-e como emitida: "cce feita do romaneio ROM-2026-0043", "carta de correção pronta 43".
         const temCce = /cc-?e|carta de corre[çc][ãa]o/i.test(q);
         const acaoFeita = /feita|emitida|pronta|conclu|marcar|marca|resolv|ok/i.test(q);
-        const numRom = (q.match(/\b(\d{3,})\b/) || [])[1];
+        // Prioriza o código completo (ROM-2026-0043). Se o operador digitar só
+        // números soltos, cai no último número de 2+ dígitos (o sufixo do romaneio).
+        const mRomFull = q.match(/rom[-\s]?\d{4}[-\s]?\d{2,}/i);
+        let numRom = null;
+        if (mRomFull) {
+            const partes = mRomFull[0].match(/\d+/g);
+            numRom = `ROM-${partes[0]}-${partes[1]}`;
+        } else {
+            const nums = q.match(/\d{2,}/g);
+            numRom = nums ? nums[nums.length - 1] : null;
+        }
         if (temCce && acaoFeita && numRom) {
             addUser(q);
             input.value = "";

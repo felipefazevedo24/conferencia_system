@@ -385,6 +385,15 @@ def marcar_cce_feita(numero_romaneio: str, autor: str = "") -> dict:
     try:
         rom = ExpedicaoRomaneio.query.filter_by(numero_romaneio=numero).first()
         if rom is None:
+            # Busca tolerante: operador pode digitar só o final ("43", "0043")
+            # ou o código com espaços; tenta casar pelo sufixo do número.
+            like = ExpedicaoRomaneio.query.filter(
+                ExpedicaoRomaneio.numero_romaneio.ilike(f"%{numero}")
+            ).all()
+            if len(like) == 1:
+                rom = like[0]
+                numero = rom.numero_romaneio
+        if rom is None:
             return {"ok": False, "erro": f"Romaneio {numero} não encontrado."}
         if not rom.cce_modalidade_pendente:
             return {"ok": False, "erro": f"O romaneio {numero} não tem CC-e pendente."}
