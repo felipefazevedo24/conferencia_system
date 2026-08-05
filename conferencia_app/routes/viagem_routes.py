@@ -89,6 +89,24 @@ def _save_upload(key: str):
     return os.path.join(UPLOAD_SUB, final).replace("\\", "/")
 
 
+def _integrar_comprovante_entrega(parada) -> None:
+    """Ao concluir uma parada de ENTREGA com foto do canhoto, anexa essa foto
+    automaticamente como comprovante de entrega no romaneio CIF vinculado
+    (Registro de Expedicao). Best-effort: nunca interrompe o fluxo da viagem."""
+    try:
+        from ..services.comprovante_entrega_motorista_service import (
+            anexar_comprovante_da_parada,
+        )
+
+        anexar_comprovante_da_parada(parada)
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao integrar comprovante de entrega da parada %s ao romaneio.",
+            getattr(parada, "id", None),
+        )
+
+
+
 def _proximo_codigo() -> str:
     ano = datetime.now().year
     prefix = f"VG-{ano}-"
@@ -1298,6 +1316,7 @@ def parada_concluir(pid: int):
                 descricao=parada.observacao, parada_id=pid,
                 latitude=lat, longitude=lng, foto_path=foto, severidade="success")
     db.session.commit()
+    _integrar_comprovante_entrega(parada)
     return jsonify({"sucesso": True, "parada": _parada_dict(parada)})
 
 
@@ -2363,5 +2382,6 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
         severidade="warning" if nao_realizada else "success",
     )
     db.session.commit()
+    _integrar_comprovante_entrega(p)
     return jsonify({"sucesso": True, "parada_id": p.id, "status": p.status})
 

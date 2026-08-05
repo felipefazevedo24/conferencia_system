@@ -453,6 +453,27 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
     })
 
 
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/sincronizar-comprovantes-motorista", methods=["POST"])
+@roles_required("Admin", "Logística")
+def sincronizar_comprovantes_motorista():
+    """Backfill: puxa os canhotos que os motoristas ja tiraram no app (paradas
+    de entrega concluidas) e anexa como comprovante de entrega nos romaneios CIF
+    Expedidos que ainda estao pendentes, finalizando o Registro de Expedicao."""
+    from ..services.comprovante_entrega_motorista_service import (
+        sincronizar_comprovantes_pendentes,
+    )
+
+    resumo = sincronizar_comprovantes_pendentes()
+    if resumo["romaneios_atualizados"]:
+        mensagem = (
+            f"{resumo['romaneios_atualizados']} romaneio(s) e "
+            f"{resumo['nfs_finalizadas']} NF(s) finalizados com o canhoto do motorista."
+        )
+    else:
+        mensagem = "Nenhum comprovante novo encontrado nas entregas do app do motorista."
+    return jsonify({"message": mensagem, **resumo})
+
+
 @expedicao_romaneio_bp.route("/expedicao/romaneio")
 @permission_required(PERMISSION)
 def lista_romaneios():
