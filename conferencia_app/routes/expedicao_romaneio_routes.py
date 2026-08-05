@@ -1,6 +1,7 @@
 """Rotas do Romaneio de Expedição."""
 
 import base64
+import json
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, session, current_app
@@ -619,6 +620,8 @@ def obter_romaneio(romaneio_id):
         "placa": romaneio.placa,
         "motorista_nome": romaneio.motorista,
         "motorista_documento": romaneio.motorista_documento,
+        "transportadora_documento": romaneio.transportadora_documento,
+        "transportadora_dados": _transportadora_snapshot(romaneio),
         "peso_bruto_total": peso_total,
         "qtde_volumes_total": volumes_total,
         "observacao_1": romaneio.observacao_1,
@@ -694,6 +697,20 @@ def atualizar_romaneio(romaneio_id):
         romaneio.motorista = str(payload["motorista"]).strip()
     if "motorista_documento" in payload:
         romaneio.motorista_documento = str(payload["motorista_documento"]).strip()
+    # Transportadora do frete FOB: CNPJ + snapshot do cartao CNPJ (BrasilAPI).
+    if "transportadora_documento" in payload:
+        doc = cad_svc.normalizar_documento(str(payload.get("transportadora_documento") or ""))
+        romaneio.transportadora_documento = cad_svc.formatar_cnpj(doc) if doc else ""
+    if "transportadora_dados" in payload:
+        dados = payload.get("transportadora_dados")
+        if isinstance(dados, dict) and dados:
+            romaneio.transportadora_dados_json = json.dumps(dados, ensure_ascii=False)
+            # Mantem o nome exibido em "Dados Transportador" sincronizado.
+            razao = str(dados.get("razao_social") or "").strip()
+            if razao:
+                romaneio.transportadora = razao
+        elif dados in (None, "", {}):
+            romaneio.transportadora_dados_json = None
     if not somente_dados_transportador:
         if "observacao_1" in payload:
             romaneio.observacao_1 = str(payload["observacao_1"]).strip()
@@ -1356,10 +1373,69 @@ def _grupos_destinatarios(romaneio) -> list:
     return grupos
 
 
+def _transportadora_snapshot(romaneio) -> dict:
+    """Snapshot do cartao CNPJ da transportadora (frete FOB), gravado no
+    momento da digitacao. Retorna {} se nao houver."""
+    bruto = getattr(romaneio, "transportadora_dados_json", None)
+    if not bruto:
+        return {}
+    try:
+        dados = json.loads(bruto)
+        return dados if isinstance(dados, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _transportadora_card(romaneio) -> dict:
+    """Dados da transportadora para o card do documento (frete FOB)."""
+    snap = _transportadora_snapshot(romaneio)
+    return {
+        "razao_social": snap.get("razao_social") or romaneio.transportadora or "—",
+        "nome_fantasia": snap.get("nome_fantasia") or "",
+        "documento": snap.get("documento") or romaneio.transportadora_documento or "",
+        "inscricao_estadual": snap.get("inscricao_estadual") or "",
+        "endereco": snap.get("endereco") or "",
+        "municipio": snap.get("municipio") or "",
+        "uf": snap.get("uf") or "",
+        "cep": snap.get("cep") or "",
+        "telefone": snap.get("telefone") or "",
+    }
+
+
+def _consolidado_romaneio(romaneio) -> list:
+    """Um unico documento com TODAS as NFs do romaneio (sem separar por
+    destinatario). Usado tanto para CIF quanto para FOB."""
+    nfs = list(romaneio.nfs or [])
+    peso_total = sum(float(getattr(nf, "peso_bruto", 0) or 0) for nf in nfs)
+    volumes_total = sum(int(getattr(nf, "qtde_volumes", 0) or 0) for nf in nfs)
+    return [{
+        "nfs": nfs,
+        "peso_total": peso_total,
+        "volumes_total": volumes_total,
+    }]
+
+
+@expedicao_romaneio_bp.route("/api/expedicao/romaneio-fat/consultar-cnpj", methods=["POST"])
+@roles_required(*ROLES)
+def consultar_cnpj_transportadora():
+    """Consulta o cartao CNPJ (BrasilAPI) da transportadora para o frete FOB."""
+    payload = request.get_json(silent=True) or {}
+    cnpj = str(payload.get("cnpj") or "").strip()
+    try:
+        dados = cad_svc.consultar_cartao_cnpj(cnpj)
+    except ValueError as exc:
+        return jsonify({"ok": False, "erro": str(exc)}), 400
+    except Exception:  # noqa: BLE001
+        return jsonify({"ok": False, "erro": "Não foi possível consultar o CNPJ agora. Tente novamente em instantes."}), 502
+    return jsonify({"ok": True, "dados": dados})
+
+
 @expedicao_romaneio_bp.route("/expedicao/romaneio/<int:romaneio_id>/visualizar")
 @permission_required(PERMISSION)
 def visualizar_romaneio(romaneio_id):
-    """Visualiza/imprime o romaneio conforme modelo Excel."""
+    """Visualiza/imprime o romaneio: um unico documento com todas as NFs.
+    CIF mostra so o remetente (centralizado); FOB mostra remetente +
+    transportadora (dados puxados do cartao CNPJ)."""
     romaneio = ExpedicaoRomaneio.query.get(romaneio_id)
     if not romaneio:
         return "Romaneio não encontrado.", 404
@@ -1368,7 +1444,8 @@ def visualizar_romaneio(romaneio_id):
         "expedicao_romaneio_visualizar.html",
         romaneio=romaneio,
         remetente=_remetente_completo(),
-        grupos=_grupos_destinatarios(romaneio),
+        transportadora=_transportadora_card(romaneio),
+        grupos=_consolidado_romaneio(romaneio),
         fotos_carregamento=_fotos_carregamento_payload(romaneio),
     )
 

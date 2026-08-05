@@ -889,6 +889,10 @@ def _ensure_expedicao_romaneio_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista VARCHAR(160)"))
         if "motorista_documento" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista_documento VARCHAR(40)"))
+        if "transportadora_documento" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN transportadora_documento VARCHAR(40)"))
+        if "transportadora_dados_json" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN transportadora_dados_json TEXT"))
         if "foto_carregamento_file_name" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_file_name VARCHAR(260)"))
         if "foto_carregamento_file_path" not in cols:

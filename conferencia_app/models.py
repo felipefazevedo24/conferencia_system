@@ -2043,6 +2043,11 @@ class ExpedicaoRomaneio(db.Model):
     motorista = db.Column(db.String(160))
     motorista_documento = db.Column(db.String(40))
 
+    # Transportadora do frete FOB: a logistica digita apenas o CNPJ e o Sync
+    # puxa os dados pelo cartao CNPJ (BrasilAPI), gravando um snapshot aqui.
+    transportadora_documento = db.Column(db.String(40))
+    transportadora_dados_json = db.Column(db.Text)
+
     # Dados consolidados das NFes
     peso_bruto_total = db.Column(db.Float, nullable=False, default=0)
     qtde_volumes_total = db.Column(db.Integer, nullable=False, default=0)
