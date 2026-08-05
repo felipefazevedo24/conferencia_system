@@ -780,6 +780,19 @@ if ("serviceWorker" in navigator) {
     const panel = $("bia-panel");
     if (!toggle || !panel) return;
 
+    // Se esta página está embutida em um iframe (ex.: Romaneios/Compras/Viagens
+    // dentro de outra tela), a Bia já aparece na página de cima. Remove esta
+    // instância para não duplicar o widget.
+    let emIframe = false;
+    try { emIframe = window.self !== window.top; } catch (e) { emIframe = true; }
+    if (emIframe) {
+        toggle.remove();
+        panel.remove();
+        const t = $("bia-toast");
+        if (t) t.remove();
+        return;
+    }
+
     const badge = $("bia-badge");
     const chatEl = $("bia-chat");
     const chipsEl = $("bia-chips");
