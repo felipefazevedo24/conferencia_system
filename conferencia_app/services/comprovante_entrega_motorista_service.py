@@ -88,19 +88,31 @@ def anexar_comprovante_da_parada(
     entrega do romaneio CIF vinculado, finalizando o Registro de Expedicao de
     cada NF ainda pendente. Best-effort: nunca levanta excecao."""
     resultado = {"vinculado": False, "nfs_finalizadas": 0, "romaneio": None}
+    pid = getattr(parada, "id", None)
     try:
         if not parada or parada.tipo != "ENTREGA":
+            current_app.logger.info("[canhoto->exp] parada %s ignorada: nao e ENTREGA (tipo=%s).", pid, getattr(parada, "tipo", None))
             return resultado
         res = str(parada.resultado or "").strip().lower()
         if res not in _RESULTADOS_ENTREGUE:
+            current_app.logger.info("[canhoto->exp] parada %s ignorada: resultado '%s' nao e entrega concluida.", pid, parada.resultado)
             return resultado
 
         romaneio, numero_nf = _romaneio_e_nf_da_parada(parada)
-        if not romaneio or romaneio.status != "Expedido":
+        if not romaneio:
+            current_app.logger.warning(
+                "[canhoto->exp] parada %s SEM vinculo a romaneio (solicitacao_id=%s). "
+                "Provavel parada manual sem a Solicitacao de Entrega AutoCIF -> foto nao sobe p/ expedicao.",
+                pid, getattr(parada, "solicitacao_id", None),
+            )
+            return resultado
+        if romaneio.status != "Expedido":
+            current_app.logger.info("[canhoto->exp] parada %s: romaneio %s em status '%s' (aguardando Expedido).", pid, romaneio.numero_romaneio, romaneio.status)
             return resultado
 
         nome_arquivo, caminho = _ultima_foto_abs(parada)
         if not caminho:
+            current_app.logger.warning("[canhoto->exp] parada %s (romaneio %s): sem foto valida em foto_paths (arquivo inexistente no disco?).", pid, romaneio.numero_romaneio)
             return resultado
 
         # Import tardio para evitar import circular (routes -> services -> routes).
@@ -120,7 +132,11 @@ def anexar_comprovante_da_parada(
         for nf in nfs_alvo:
             registro = _registro_conferencia_da_nf(nf.numero_nf)
             # So finaliza registros que ainda estao aguardando o comprovante.
-            if not registro or registro.status != "Expedido" or registro.canhoto_file_name:
+            if not registro:
+                current_app.logger.info("[canhoto->exp] parada %s (romaneio %s NF %s): registro de expedicao nao encontrado.", pid, romaneio.numero_romaneio, nf.numero_nf)
+                continue
+            if registro.status != "Expedido" or registro.canhoto_file_name:
+                current_app.logger.info("[canhoto->exp] parada %s (romaneio %s NF %s): registro status='%s', canhoto_ja=%s -> pulado.", pid, romaneio.numero_romaneio, nf.numero_nf, registro.status, bool(registro.canhoto_file_name))
                 continue
             registro.canhoto_file_name = nome_arquivo
             registro.canhoto_file_path = caminho
@@ -135,6 +151,8 @@ def anexar_comprovante_da_parada(
         if total and commit:
             db.session.commit()
 
+        if total:
+            current_app.logger.info("[canhoto->exp] parada %s: %s NF(s) do romaneio %s finalizadas com o canhoto do motorista.", pid, total, romaneio.numero_romaneio)
         resultado.update({
             "vinculado": True,
             "nfs_finalizadas": total,
