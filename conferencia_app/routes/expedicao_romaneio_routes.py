@@ -384,7 +384,9 @@ def _info_comprovantes_romaneio(romaneio) -> tuple[dict, bool]:
         registro = _registro_conferencia_da_nf(nf.numero_nf)
         if registro is None:
             continue
-        canhoto_pendente = not bool(registro.canhoto_file_name)
+        # So e pendente enquanto o registro segue Expedido sem canhoto. Registros
+        # ja Finalizados (inclusive os dispensados por serem antigos) nao pendem.
+        canhoto_pendente = registro.status == "Expedido" and not bool(registro.canhoto_file_name)
         info[nf.numero_nf] = {"registro_id": registro.id, "canhoto_pendente": canhoto_pendente}
         if canhoto_pendente:
             tem_pendencia = True
