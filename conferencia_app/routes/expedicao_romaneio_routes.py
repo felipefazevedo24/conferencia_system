@@ -423,8 +423,18 @@ def salvar_comprovante_entrega_romaneio(romaneio_id):
             stored = upload_to_drive(comprovante, nome_arquivo)
             caminho = stored.file_path
         except Exception as exc:
-            current_app.logger.exception("Falha ao enviar comprovante de entrega para o Drive")
-            return jsonify({"error": f"Falha ao enviar comprovante para o Drive: {exc}"}), 502
+            # Nunca bloqueia o anexo do comprovante por falha do Drive: cai para
+            # o disco local (servido depois por _resolver_foto_expedicao).
+            current_app.logger.warning(
+                "Falha ao enviar comprovante de entrega para o Drive (%s); salvando localmente.",
+                exc,
+            )
+            try:
+                comprovante.stream.seek(0)
+            except Exception:
+                pass
+            caminho = os.path.join(fotos_dir, nome_arquivo)
+            comprovante.save(caminho)
     else:
         caminho = os.path.join(fotos_dir, nome_arquivo)
         comprovante.save(caminho)

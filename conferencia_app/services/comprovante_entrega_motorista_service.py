@@ -32,25 +32,31 @@ ORIGEM_MOTORISTA = "app do motorista"
 _RESULTADOS_ENTREGUE = {"entregue", "concluida", "concluída", ""}
 
 
-def _romaneio_da_parada(parada: ViagemParada) -> ExpedicaoRomaneio | None:
-    """Resolve o romaneio CIF vinculado a uma parada de entrega, via a
-    solicitacao de entrega gerada automaticamente (payload_origem.romaneio_id)."""
+def _romaneio_e_nf_da_parada(parada: ViagemParada) -> tuple[ExpedicaoRomaneio | None, str | None]:
+    """Resolve (romaneio CIF, numero_nf) de uma parada de entrega, via a
+    solicitacao de entrega gerada automaticamente (payload_origem). Cada parada
+    corresponde a UMA NF (payload.numero_nf); payloads antigos sem numero_nf
+    devolvem numero_nf=None (fallback: finaliza todas as NFs do romaneio)."""
     if not parada or not parada.solicitacao_id:
-        return None
+        return None, None
     sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
     if not sol or not sol.payload_origem:
-        return None
+        return None, None
     try:
         payload = json.loads(sol.payload_origem)
     except (ValueError, TypeError):
-        return None
-    romaneio_id = payload.get("romaneio_id") if isinstance(payload, dict) else None
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    romaneio_id = payload.get("romaneio_id")
+    numero_nf = str(payload.get("numero_nf") or "").strip() or None
     if not romaneio_id:
-        return None
+        return None, None
     try:
-        return db.session.get(ExpedicaoRomaneio, int(romaneio_id))
+        romaneio = db.session.get(ExpedicaoRomaneio, int(romaneio_id))
     except (ValueError, TypeError):
-        return None
+        return None, None
+    return romaneio, numero_nf
 
 
 def _ultima_foto_abs(parada: ViagemParada) -> tuple[str | None, str | None]:
@@ -89,7 +95,7 @@ def anexar_comprovante_da_parada(
         if res not in _RESULTADOS_ENTREGUE:
             return resultado
 
-        romaneio = _romaneio_da_parada(parada)
+        romaneio, numero_nf = _romaneio_e_nf_da_parada(parada)
         if not romaneio or romaneio.status != "Expedido":
             return resultado
 
@@ -102,7 +108,16 @@ def anexar_comprovante_da_parada(
 
         agora = datetime.now()
         total = 0
-        for nf in romaneio.nfs or []:
+        # Cada parada corresponde a UMA NF (payload.numero_nf) -> finaliza so o
+        # registro daquela NF. Payload antigo (sem numero_nf) finaliza todas.
+        if numero_nf:
+            nfs_alvo = [
+                nf for nf in (romaneio.nfs or [])
+                if str(nf.numero_nf or "").strip() == numero_nf
+            ]
+        else:
+            nfs_alvo = list(romaneio.nfs or [])
+        for nf in nfs_alvo:
             registro = _registro_conferencia_da_nf(nf.numero_nf)
             # So finaliza registros que ainda estao aguardando o comprovante.
             if not registro or registro.status != "Expedido" or registro.canhoto_file_name:
@@ -137,11 +152,11 @@ def anexar_comprovante_da_parada(
 
 
 def sincronizar_comprovantes_pendentes() -> dict:
-    """Backfill: percorre os romaneios CIF Expedidos que ainda tem comprovante
-    de entrega pendente e, quando ha uma parada de entrega concluida com foto do
-    canhoto, anexa-a automaticamente. Retorna um resumo agregado."""
+    """Backfill: percorre os romaneios CIF Expedidos e, para cada NF ainda sem
+    comprovante, procura a parada de entrega concluida (com foto do canhoto) da
+    solicitacao daquela NF e anexa a foto. Retorna um resumo agregado."""
     from ..routes.expedicao_romaneio_routes import _info_comprovantes_romaneio
-    from .solicitacao_logistica_cif_service import _buscar_entrega_existente
+    from .solicitacao_logistica_cif_service import _buscar_entrega_de_nf
 
     romaneios = (
         ExpedicaoRomaneio.query
@@ -156,29 +171,35 @@ def sincronizar_comprovantes_pendentes() -> dict:
     nfs_finalizadas = 0
     detalhes: list[str] = []
     for romaneio in romaneios:
-        _, tem_pendencia = _info_comprovantes_romaneio(romaneio)
+        info, tem_pendencia = _info_comprovantes_romaneio(romaneio)
         if not tem_pendencia:
             continue
-        solicitacao = _buscar_entrega_existente(romaneio.id)
-        if not solicitacao:
-            continue
-        parada = (
-            ViagemParada.query
-            .filter(
-                ViagemParada.solicitacao_id == solicitacao.id,
-                ViagemParada.tipo == "ENTREGA",
-                ViagemParada.foto_paths.isnot(None),
+        total_rom = 0
+        for numero_nf, dados in info.items():
+            if not dados.get("canhoto_pendente"):
+                continue
+            solicitacao = _buscar_entrega_de_nf(romaneio.id, numero_nf)
+            if not solicitacao:
+                continue
+            parada = (
+                ViagemParada.query
+                .filter(
+                    ViagemParada.solicitacao_id == solicitacao.id,
+                    ViagemParada.tipo == "ENTREGA",
+                    ViagemParada.foto_paths.isnot(None),
+                )
+                .order_by(ViagemParada.id.desc())
+                .first()
             )
-            .order_by(ViagemParada.id.desc())
-            .first()
-        )
-        if not parada:
-            continue
-        res = anexar_comprovante_da_parada(parada, usuario="sincronização (canhoto do app)")
-        if res.get("vinculado") and res.get("nfs_finalizadas"):
+            if not parada:
+                continue
+            res = anexar_comprovante_da_parada(parada, usuario="sincronização (canhoto do app)")
+            if res.get("vinculado") and res.get("nfs_finalizadas"):
+                total_rom += res["nfs_finalizadas"]
+        if total_rom:
             romaneios_atualizados += 1
-            nfs_finalizadas += res["nfs_finalizadas"]
-            detalhes.append(f"{romaneio.numero_romaneio}: {res['nfs_finalizadas']} NF(s)")
+            nfs_finalizadas += total_rom
+            detalhes.append(f"{romaneio.numero_romaneio}: {total_rom} NF(s)")
 
     return {
         "romaneios_atualizados": romaneios_atualizados,

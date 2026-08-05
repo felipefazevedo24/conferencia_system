@@ -222,7 +222,9 @@ def _criar_solicitacao(
 # ---------------------------------------------------------------------------
 # Regra 2 - Entrega a partir de Romaneio CIF
 # ---------------------------------------------------------------------------
-def _buscar_entrega_existente(romaneio_id: int) -> AgendamentoSolicitacao | None:
+def _buscar_entregas_do_romaneio(romaneio_id: int) -> list[AgendamentoSolicitacao]:
+    """Todas as solicitacoes de entrega automaticas (AutoCIF) de um romaneio -
+    como agora ha uma por NF, um romaneio pode ter varias."""
     marcador = f'"romaneio_id": {int(romaneio_id)}'
     return (
         AgendamentoSolicitacao.query
@@ -231,12 +233,34 @@ def _buscar_entrega_existente(romaneio_id: int) -> AgendamentoSolicitacao | None
             AgendamentoSolicitacao.origem_documento == ORIGEM_AUTO_CIF,
             AgendamentoSolicitacao.payload_origem.like(f"%{marcador}%"),
         )
+        .all()
+    )
+
+
+def _buscar_entrega_de_nf(romaneio_id: int, numero_nf: str) -> AgendamentoSolicitacao | None:
+    """Solicitacao de entrega de UMA NF especifica do romaneio. Casa tanto com
+    o novo formato (uma solicitacao por NF, payload numero_nf) quanto com o
+    formato antigo (uma solicitacao com todas as NFs na lista payload.nfs),
+    evitando duplicar entregas na transicao."""
+    numero_nf = str(numero_nf or "").strip()
+    if not numero_nf:
+        return None
+    marcador_rom = f'"romaneio_id": {int(romaneio_id)}'
+    marcador_nf = f'"{numero_nf}"'
+    return (
+        AgendamentoSolicitacao.query
+        .filter(
+            AgendamentoSolicitacao.tipo == "ENTREGA",
+            AgendamentoSolicitacao.origem_documento == ORIGEM_AUTO_CIF,
+            AgendamentoSolicitacao.payload_origem.like(f"%{marcador_rom}%"),
+            AgendamentoSolicitacao.payload_origem.like(f"%{marcador_nf}%"),
+        )
         .first()
     )
 
 
-def _parceiro_cliente_romaneio(romaneio: ExpedicaoRomaneio, nfs: list) -> dict:
-    nome = _first(romaneio.cliente, *[nf.cliente for nf in nfs])
+def _parceiro_cliente_nf(romaneio: ExpedicaoRomaneio, nf) -> dict:
+    nome = _first(getattr(nf, "cliente", ""), romaneio.cliente)
     try:
         from ..services.agendamento_service import localizar_cadastro, serializar_cadastro
 
@@ -251,31 +275,17 @@ def _parceiro_cliente_romaneio(romaneio: ExpedicaoRomaneio, nfs: list) -> dict:
     return {"nome": nome}
 
 
-def _itens_do_romaneio(romaneio: ExpedicaoRomaneio, nfs: list) -> list[dict]:
-    itens = []
-    for nf in nfs:
-        volumes = int(nf.qtde_volumes or 0)
-        descricao = f"NF {nf.numero_nf} — {nf.cliente or romaneio.cliente or ''}".strip(" —")
-        itens.append(
-            {
-                "codigo_item": str(nf.numero_nf or "").strip(),
-                "descricao": descricao or f"NF {nf.numero_nf}",
-                "quantidade": volumes or 1,
-                "unidade": "VOL",
-                "volumes": volumes,
-                "observacoes": str(nf.especie_volumes or "").strip(),
-            }
-        )
-    if not itens:
-        itens = [
-            {
-                "descricao": f"Entrega do romaneio {romaneio.numero_romaneio}",
-                "quantidade": 1,
-                "unidade": "UN",
-                "volumes": int(romaneio.qtde_volumes_total or 0),
-            }
-        ]
-    return itens
+def _item_da_nf(romaneio: ExpedicaoRomaneio, nf) -> dict:
+    volumes = int(getattr(nf, "qtde_volumes", 0) or 0)
+    descricao = f"NF {nf.numero_nf} — {nf.cliente or romaneio.cliente or ''}".strip(" —")
+    return {
+        "codigo_item": str(nf.numero_nf or "").strip(),
+        "descricao": descricao or f"NF {nf.numero_nf}",
+        "quantidade": volumes or 1,
+        "unidade": "VOL",
+        "volumes": volumes,
+        "observacoes": str(getattr(nf, "especie_volumes", "") or "").strip(),
+    }
 
 
 def gerar_solicitacao_entrega_para_romaneio(
@@ -283,69 +293,81 @@ def gerar_solicitacao_entrega_para_romaneio(
     *,
     solicitante: str = "sistema",
     commit: bool = True,
-) -> tuple[bool, AgendamentoSolicitacao | None, str]:
-    """Gera (ou reaproveita) a Solicitacao de Entrega de um romaneio CIF."""
+) -> tuple[bool, list[AgendamentoSolicitacao], str]:
+    """Gera (ou reaproveita) UMA Solicitacao de Entrega por NF do romaneio CIF.
+
+    Um romaneio pode reunir varias entregas (uma por NF/cliente), portanto cada
+    NF vira uma entrega/parada propria - obrigatoriamente, mesmo que a NF em si
+    seja FOB (o romaneio e CIF; eventual divergencia e tratada por CC-e)."""
     if not romaneio:
-        return False, None, "Romaneio inexistente."
+        return False, [], "Romaneio inexistente."
     if str(romaneio.tipo_frete or "").strip().upper() != "CIF":
-        return False, None, "Romaneio nao e CIF."
+        return False, [], "Romaneio nao e CIF."
     status = str(romaneio.status or "").strip()
     if status not in ("Pronto", "Expedido"):
-        return False, None, f"Romaneio em status '{status}' (aguardando Pronto/Expedido)."
-
-    existente = _buscar_entrega_existente(romaneio.id)
-    if existente:
-        return False, existente, "Solicitacao de entrega ja existe para este romaneio."
+        return False, [], f"Romaneio em status '{status}' (aguardando Pronto/Expedido)."
 
     nfs = list(romaneio.nfs or [])
-    numeros_nf = [str(nf.numero_nf or "").strip() for nf in nfs if str(nf.numero_nf or "").strip()]
-    doc_nf = " / ".join(numeros_nf) if numeros_nf else str(romaneio.numero_romaneio or "")
+    if not nfs:
+        return False, [], "Romaneio sem NFs."
 
-    parceiro = _parceiro_cliente_romaneio(romaneio, nfs)
-    parceiro, incompleto = _garantir_parceiro_minimo(
-        parceiro,
-        _first(romaneio.cliente),
-        "Endereco de entrega a confirmar",
-    )
-    itens = _itens_do_romaneio(romaneio, nfs)
-    peso = float(romaneio.peso_bruto_total or 0)
-    volumes = int(romaneio.qtde_volumes_total or 0)
-    payload = {
-        "origem": "RomaneioCIF",
-        "romaneio_id": romaneio.id,
-        "romaneio_numero": romaneio.numero_romaneio,
-        "nfs": numeros_nf,
-        "peso_bruto_total": peso,
-        "qtde_volumes_total": volumes,
-        "responsavel_emissao": romaneio.criado_por,
-        "data_romaneio": romaneio.data_romaneio.isoformat() if romaneio.data_romaneio else None,
-    }
-    obs_log = (
-        f"Romaneio {romaneio.numero_romaneio} (CIF). NF(s): {doc_nf}. "
-        f"Peso bruto {peso:g} kg, {volumes} volume(s). "
-        f"Responsavel pela emissao: {romaneio.criado_por or '---'}."
-    )
+    criadas: list[AgendamentoSolicitacao] = []
+    for nf in nfs:
+        numero_nf = str(nf.numero_nf or "").strip()
+        if not numero_nf:
+            continue
+        if _buscar_entrega_de_nf(romaneio.id, numero_nf):
+            continue  # ja existe entrega para esta NF
 
-    row = _criar_solicitacao(
-        tipo="ENTREGA",
-        documento_tipo="NF",
-        documento_numero=doc_nf,
-        numero_nf=doc_nf,
-        orcamento=_first(romaneio.orcamento),
-        parceiro=parceiro,
-        itens=itens,
-        observacoes_logistica=obs_log,
-        payload_origem=payload,
-        solicitante=solicitante,
-        evento_detalhe=f"Entrega gerada automaticamente (frete CIF) a partir do romaneio {romaneio.numero_romaneio}.",
-    )
-    if not row:
-        if commit:
-            db.session.rollback()
-        return False, None, "Falha ao montar a solicitacao de entrega."
+        parceiro = _parceiro_cliente_nf(romaneio, nf)
+        parceiro, _incompleto = _garantir_parceiro_minimo(
+            parceiro,
+            _first(getattr(nf, "cliente", ""), romaneio.cliente),
+            "Endereco de entrega a confirmar",
+        )
+        peso = float(getattr(nf, "peso_bruto", 0) or 0)
+        volumes = int(getattr(nf, "qtde_volumes", 0) or 0)
+        payload = {
+            "origem": "RomaneioCIF",
+            "romaneio_id": romaneio.id,
+            "romaneio_numero": romaneio.numero_romaneio,
+            "numero_nf": numero_nf,
+            "nfs": [numero_nf],
+            "peso_bruto_total": peso,
+            "qtde_volumes_total": volumes,
+            "responsavel_emissao": romaneio.criado_por,
+            "data_romaneio": romaneio.data_romaneio.isoformat() if romaneio.data_romaneio else None,
+        }
+        obs_log = (
+            f"Romaneio {romaneio.numero_romaneio} (CIF) - NF {numero_nf}. "
+            f"Cliente: {_first(getattr(nf, 'cliente', ''), romaneio.cliente) or '---'}. "
+            f"Peso bruto {peso:g} kg, {volumes} volume(s). "
+            f"Responsavel pela emissao: {romaneio.criado_por or '---'}."
+        )
+        row = _criar_solicitacao(
+            tipo="ENTREGA",
+            documento_tipo="NF",
+            documento_numero=numero_nf,
+            numero_nf=numero_nf,
+            orcamento=_first(getattr(nf, "orcamento", ""), romaneio.orcamento),
+            parceiro=parceiro,
+            itens=[_item_da_nf(romaneio, nf)],
+            observacoes_logistica=obs_log,
+            payload_origem=payload,
+            solicitante=solicitante,
+            evento_detalhe=(
+                f"Entrega gerada automaticamente (frete CIF) da NF {numero_nf} "
+                f"do romaneio {romaneio.numero_romaneio}."
+            ),
+        )
+        if row:
+            criadas.append(row)
+
+    if not criadas:
+        return False, [], "Nenhuma nova entrega a gerar (todas as NFs ja possuem entrega)."
     if commit:
         db.session.commit()
-    return True, row, "Solicitacao de entrega criada."
+    return True, criadas, f"{len(criadas)} entrega(s) de NF gerada(s)."
 
 
 def gerar_solicitacoes_entrega_cif(app=None) -> dict:
@@ -396,44 +418,46 @@ def cancelar_solicitacao_entrega_para_romaneio(
     motivo: str = "",
     commit: bool = True,
 ) -> tuple[bool, AgendamentoSolicitacao | None, str]:
-    """Cancela (estorna) a Solicitacao de Entrega gerada automaticamente para um
-    romaneio CIF. Usada quando o romaneio e estornado/excluido. Nao cancela
-    solicitacoes que ja foram concluidas nem as ja canceladas."""
+    """Cancela (estorna) as Solicitacoes de Entrega geradas automaticamente para
+    um romaneio CIF (uma por NF). Usada quando o romaneio e estornado/excluido.
+    Nao cancela solicitacoes que ja foram concluidas nem as ja canceladas."""
     if not romaneio:
         return False, None, "Romaneio inexistente."
 
-    row = _buscar_entrega_existente(getattr(romaneio, "id", 0) or 0)
-    if not row:
-        return False, None, "Nenhuma solicitacao automatica de entrega para este romaneio."
-    if row.status in ("Cancelada", "Concluida"):
-        return False, row, f"Solicitacao ja esta '{row.status}'."
+    rows = [
+        r for r in _buscar_entregas_do_romaneio(getattr(romaneio, "id", 0) or 0)
+        if r.status not in ("Cancelada", "Concluida")
+    ]
+    if not rows:
+        return False, None, "Nenhuma solicitacao automatica de entrega ativa para este romaneio."
 
     agora = datetime.now()
-    status_anterior = row.status
-    row.status = "Cancelada"
-    row.cancelado_por = usuario or "sistema"
-    row.cancelado_em = agora
-    row.motivo_cancelamento = (motivo or "Romaneio estornado/excluido.")[:500]
-    row.cancelamento_pendente = False
-    row.atualizado_em = agora
+    for row in rows:
+        status_anterior = row.status
+        row.status = "Cancelada"
+        row.cancelado_por = usuario or "sistema"
+        row.cancelado_em = agora
+        row.motivo_cancelamento = (motivo or "Romaneio estornado/excluido.")[:500]
+        row.cancelamento_pendente = False
+        row.atualizado_em = agora
 
-    try:
-        from ..routes.agendamento_routes import _registrar_historico
+        try:
+            from ..routes.agendamento_routes import _registrar_historico
 
-        _registrar_historico(
-            row.id,
-            evento="CANCELADA_AUTO_CIF",
-            usuario=usuario or "sistema",
-            status_anterior=status_anterior,
-            status_novo="Cancelada",
-            detalhe=row.motivo_cancelamento,
-        )
-    except Exception:
-        current_app.logger.debug("CIF auto entrega: falha ao registrar historico de cancelamento", exc_info=True)
+            _registrar_historico(
+                row.id,
+                evento="CANCELADA_AUTO_CIF",
+                usuario=usuario or "sistema",
+                status_anterior=status_anterior,
+                status_novo="Cancelada",
+                detalhe=row.motivo_cancelamento,
+            )
+        except Exception:
+            current_app.logger.debug("CIF auto entrega: falha ao registrar historico de cancelamento", exc_info=True)
 
     if commit:
         db.session.commit()
-    return True, row, "Solicitacao de entrega cancelada."
+    return True, rows[0], f"{len(rows)} solicitacao(oes) de entrega cancelada(s)."
 
 
 # ---------------------------------------------------------------------------

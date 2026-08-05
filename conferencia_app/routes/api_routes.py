@@ -9658,20 +9658,18 @@ def upload_canhoto_conferencia_simples(registro_id):
             stored = upload_to_drive(canhoto, nome_arquivo)
             caminho = stored.file_path
         except Exception as exc:
-            if _is_drive_quota_service_account_error(exc):
-                current_app.logger.warning(
-                    "Drive sem cota para service account; salvando canhoto de expedicao localmente: %s",
-                    exc,
-                )
-                try:
-                    canhoto.stream.seek(0)
-                except Exception:
-                    pass
-                caminho = os.path.join(fotos_dir, nome_arquivo)
-                canhoto.save(caminho)
-            else:
-                current_app.logger.exception("Falha ao enviar canhoto de expedicao para Drive")
-                return jsonify({"error": f"Falha ao enviar canhoto para o Drive: {exc}"}), 502
+            # Nunca bloqueia o anexo do canhoto por falha do Drive (cota, credencial,
+            # rede etc.): cai para o disco local, servido depois normalmente.
+            current_app.logger.warning(
+                "Falha ao enviar canhoto de expedicao para o Drive (%s); salvando localmente.",
+                exc,
+            )
+            try:
+                canhoto.stream.seek(0)
+            except Exception:
+                pass
+            caminho = os.path.join(fotos_dir, nome_arquivo)
+            canhoto.save(caminho)
     else:
         caminho = os.path.join(fotos_dir, nome_arquivo)
         canhoto.save(caminho)
