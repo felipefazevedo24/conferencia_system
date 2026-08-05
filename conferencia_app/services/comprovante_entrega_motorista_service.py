@@ -37,25 +37,36 @@ def _romaneio_e_nf_da_parada(parada: ViagemParada) -> tuple[ExpedicaoRomaneio | 
     solicitacao de entrega gerada automaticamente (payload_origem). Cada parada
     corresponde a UMA NF (payload.numero_nf); payloads antigos sem numero_nf
     devolvem numero_nf=None (fallback: finaliza todas as NFs do romaneio)."""
+    pid = getattr(parada, "id", None)
     if not parada or not parada.solicitacao_id:
+        current_app.logger.info("[canhoto->exp] parada %s: sem solicitacao_id (parada manual?).", pid)
         return None, None
     sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
     if not sol or not sol.payload_origem:
+        current_app.logger.info("[canhoto->exp] parada %s: solicitacao %s sem payload_origem.", pid, parada.solicitacao_id)
         return None, None
     try:
         payload = json.loads(sol.payload_origem)
     except (ValueError, TypeError):
+        current_app.logger.info("[canhoto->exp] parada %s: payload_origem da solicitacao %s nao e JSON valido.", pid, parada.solicitacao_id)
         return None, None
     if not isinstance(payload, dict):
         return None, None
     romaneio_id = payload.get("romaneio_id")
     numero_nf = str(payload.get("numero_nf") or "").strip() or None
     if not romaneio_id:
+        current_app.logger.warning(
+            "[canhoto->exp] parada %s: solicitacao %s (origem=%s) NAO aponta para romaneio "
+            "(sem romaneio_id no payload). Nao e uma Solicitacao de Entrega AutoCIF -> foto nao sobe.",
+            pid, parada.solicitacao_id, getattr(sol, "origem_documento", None),
+        )
         return None, None
     try:
         romaneio = db.session.get(ExpedicaoRomaneio, int(romaneio_id))
     except (ValueError, TypeError):
         return None, None
+    if romaneio is None:
+        current_app.logger.warning("[canhoto->exp] parada %s: romaneio_id=%s do payload nao existe mais.", pid, romaneio_id)
     return romaneio, numero_nf
 
 
