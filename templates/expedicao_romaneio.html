@@ -137,7 +137,6 @@
                 <option value="Expedido">Expedido</option>
             </select>
         </div>
-        <button class="eui-btn eui-btn--ghost" id="rom-btn-sync-comprovantes" title="Puxar os canhotos já tirados pelos motoristas no app para os romaneios CIF pendentes"><i class="fas fa-truck-ramp-box"></i> Puxar canhotos do motorista</button>
         <button class="eui-btn eui-btn--primary" id="rom-btn-novo"><i class="fas fa-plus"></i> Novo Romaneio</button>
     </div>
 
@@ -1265,23 +1264,6 @@
     $("rom-btn-cnpj-transp").addEventListener("click", consultarCnpjTransportadora);
     $("rom-transportadora-cnpj").addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") { ev.preventDefault(); consultarCnpjTransportadora(); }
-    });
-
-    $("rom-btn-sync-comprovantes").addEventListener("click", async () => {
-        const btn = $("rom-btn-sync-comprovantes");
-        const original = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Puxando…';
-        try {
-            const r = await api("/api/expedicao/romaneio-fat/sincronizar-comprovantes-motorista", { method: "POST" });
-            toast(r.message || "Sincronização concluída.", "success");
-            carregarRomaneios();
-        } catch (e) {
-            toast(e.message, "error");
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = original;
-        }
     });
 
     $("rom-filtro-status").addEventListener("change", () => carregarRomaneios());

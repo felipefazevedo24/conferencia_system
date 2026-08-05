@@ -185,3 +185,29 @@ def sincronizar_comprovantes_pendentes() -> dict:
         "nfs_finalizadas": nfs_finalizadas,
         "detalhes": detalhes,
     }
+
+
+# Throttle em memoria para a sincronizacao automatica: evita rodar o backfill a
+# cada request de listagem de romaneios (roda no maximo 1x a cada _INTERVALO_AUTO).
+_INTERVALO_AUTO_SEG = 60.0
+_ultima_sync_auto = 0.0
+
+
+def sincronizar_automatico() -> dict | None:
+    """Roda a sincronizacao dos canhotos do motorista de forma automatica e
+    best-effort (chamada ao carregar a tela de romaneios). Nunca levanta
+    excecao e respeita um intervalo minimo para nao pesar a listagem."""
+    global _ultima_sync_auto
+    try:
+        import time
+
+        agora = time.monotonic()
+        if agora - _ultima_sync_auto < _INTERVALO_AUTO_SEG:
+            return None
+        _ultima_sync_auto = agora
+        return sincronizar_comprovantes_pendentes()
+    except Exception:
+        current_app.logger.exception(
+            "Falha na sincronizacao automatica dos canhotos do motorista."
+        )
+        return None
