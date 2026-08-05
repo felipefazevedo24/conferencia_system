@@ -59,6 +59,11 @@
 - **CC-e pendente**: quando a modalidade de frete da NF diverge do romaneio,
   fica pendente uma carta de correção que precisa ser aprovada.
 - **Sem canhoto**: material expedido sem comprovante de entrega anexado.
+  - Regra do comprovante antigo: registros **expedidos antes de ontem** que
+    ficaram **sem canhoto** foram **dispensados** (viraram "Finalizado" sem
+    comprovante) — a Bia **não cobra** mais o comprovante deles. Quem já tinha
+    canhoto continua com ele. **De ontem em diante**, todo material expedido
+    **continua exigindo** o comprovante normalmente.
 - **Conferido parado**: conferido há muito tempo sem seguir para o próximo passo.
 
 ## Como a Bia ajuda
