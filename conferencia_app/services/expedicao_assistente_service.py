@@ -98,6 +98,15 @@ def _fmt_data(dt) -> str:
         return ""
 
 
+def _fmt_datahora(dt) -> str:
+    if not dt:
+        return ""
+    try:
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return ""
+
+
 def _item_fat(ordem: ExpedicaoOrdemFat) -> dict:
     return {
         "tipo": "fat",
@@ -239,6 +248,95 @@ def _romaneio_da_nf(numero_nf: str) -> dict | None:
             "status": r.status or "—",
         }
     return None
+
+
+def _detalhe_romaneio(numero) -> dict | None:
+    """Ficha completa de um romaneio a partir do seu NÚMERO: quando/quem criou,
+    quem/quando expediu, transportadora, cliente, frete, NFs, status. É isto que
+    permite a Bia 'relacionar as coisas' e responder detalhes reais."""
+    num = str(numero or "").strip()
+    if not num:
+        return None
+    r = None
+    try:
+        r = ExpedicaoRomaneio.query.filter_by(numero_romaneio=num).first()
+        if r is None:
+            r = (
+                ExpedicaoRomaneio.query
+                .filter(ExpedicaoRomaneio.numero_romaneio.like(f"%{num}%"))
+                .order_by(ExpedicaoRomaneio.id.desc())
+                .first()
+            )
+    except Exception:
+        return None
+    if r is None:
+        return None
+    try:
+        nfs = [str(nf.numero_nf) for nf in (r.nfs or []) if nf.numero_nf]
+    except Exception:
+        nfs = []
+    return {
+        "numero": r.numero_romaneio or str(r.id),
+        "status": r.status or "—",
+        "cliente": r.cliente or "—",
+        "tipo_frete": r.tipo_frete or "—",
+        "criado_por": r.criado_por or "—",
+        "criado_em": _fmt_datahora(r.criado_em),
+        "atualizado_por": r.atualizado_por or "",
+        "atualizado_em": _fmt_datahora(r.atualizado_em),
+        "expedido_por": r.expedido_por or "",
+        "expedido_em": _fmt_datahora(r.expedido_em),
+        "transportadora": r.transportadora or "",
+        "motorista": r.motorista or "",
+        "placa": r.placa or "",
+        "peso": r.peso_bruto_total or 0,
+        "volumes": r.qtde_volumes_total or 0,
+        "nfs": nfs,
+    }
+
+
+def _ficha_romaneio(det: dict) -> str:
+    """Formata a ficha do romaneio para exibir ao operador."""
+    linhas = [f"📋 Romaneio {det['numero']} — {det['status']}"]
+    linhas.append(f"Cliente: {det['cliente']} · Frete: {det['tipo_frete']}")
+    if det["criado_em"] or det["criado_por"] not in ("", "—"):
+        linhas.append(f"Criado em {det['criado_em'] or '—'} por {det['criado_por']}")
+    if det["expedido_em"]:
+        linhas.append(f"Expedido em {det['expedido_em']} por {det['expedido_por'] or '—'}")
+    transp = " · ".join(
+        p for p in [
+            det["transportadora"],
+            f"motorista {det['motorista']}" if det["motorista"] else "",
+            f"placa {det['placa']}" if det["placa"] else "",
+        ] if p
+    )
+    if transp:
+        linhas.append(transp)
+    if det["nfs"]:
+        linhas.append(f"NFs ({len(det['nfs'])}): {', '.join(det['nfs'])}")
+    return "\n".join(linhas)
+
+
+def _fichario_romaneios(limite: int = 40) -> list[dict]:
+    """Últimos romaneios (para o contexto do LLM 'relacionar as coisas')."""
+    try:
+        romaneios = (
+            ExpedicaoRomaneio.query
+            .order_by(ExpedicaoRomaneio.criado_em.desc())
+            .limit(limite)
+            .all()
+        )
+    except Exception:
+        return []
+    saida = []
+    for r in romaneios:
+        try:
+            det = _detalhe_romaneio(r.numero_romaneio or str(r.id))
+        except Exception:
+            det = None
+        if det:
+            saida.append(det)
+    return saida
 
 
 
@@ -726,6 +824,16 @@ _LLM_SYSTEM = (
     "expedir?', 'o que está atrasado?', 'como está a expedição agora?' — cite os "
     "códigos, clientes e quantidades REAIS que aparecem nos dados. Se a seção "
     "correspondente estiver vazia ('nenhum hoje'), diga que não houve movimento.\n\n"
+    "FICHÁRIO DE ROMANEIOS: os dados trazem um FICHÁRIO DE ROMANEIOS com cada "
+    "romaneio recente e seus detalhes reais — número do romaneio, status, cliente, "
+    "tipo de frete, QUEM e QUANDO criou, quem e quando expediu, transportadora/"
+    "motorista/placa e as NFs que ele contém. Use SEMPRE esse fichário para "
+    "responder perguntas como 'quando o romaneio X foi criado?', 'quem fez o "
+    "romaneio?', 'quem expediu?', 'qual a transportadora?', 'quais NFs tem nesse "
+    "romaneio?'. Se o operador se referir a um romaneio citado ANTES na conversa "
+    "(no histórico), pegue o número desse romaneio no histórico e procure a ficha "
+    "dele no fichário para responder. NUNCA confunda o número do romaneio com o id "
+    "do registro de conferência.\n\n"
     "SOBRE A EMPRESA E O SISTEMA:\n"
     "- Você trabalha na Columbia Machine Brasil, parte da Columbia Machine — "
     "fabricante de equipamentos e máquinas para a produção de blocos, pavers e "
@@ -830,6 +938,34 @@ def _contexto_llm() -> str:
             linhas.append(f"    … e mais {len(rom_pend) - 25} romaneio(s).")
     else:
         linhas.append("ROMANEIOS PENDENTES DE COMPROVANTE: nenhum.")
+
+    # Fichário dos romaneios recentes: permite a Bia responder QUEM/QUANDO criou,
+    # quem expediu, transportadora, NFs de cada romaneio (inclusive relacionando
+    # com um romaneio citado antes na conversa).
+    fichario = _fichario_romaneios(40)
+    linhas.append("")
+    if fichario:
+        linhas.append("FICHÁRIO DE ROMANEIOS (mais recentes — use para responder quem/quando criou, quem expediu, transportadora, NFs):")
+        for d in fichario:
+            partes = [
+                f"Romaneio {d['numero']}",
+                d["status"],
+                d["cliente"],
+                f"frete {d['tipo_frete']}",
+                f"criado {d['criado_em'] or '—'} por {d['criado_por']}",
+            ]
+            if d["expedido_em"]:
+                partes.append(f"expedido {d['expedido_em']} por {d['expedido_por'] or '—'}")
+            if d["transportadora"] or d["motorista"] or d["placa"]:
+                partes.append(
+                    "transp "
+                    + "/".join(p for p in [d["transportadora"], d["motorista"], d["placa"]] if p)
+                )
+            if d["nfs"]:
+                partes.append("NFs: " + ", ".join(d["nfs"]))
+            linhas.append("    " + " · ".join(partes))
+    else:
+        linhas.append("FICHÁRIO DE ROMANEIOS: nenhum romaneio cadastrado.")
 
     linhas.append("")
     linhas.append("PENDÊNCIAS PRIORIZADAS (o que lembrar / cobrar):")
@@ -1012,6 +1148,11 @@ def responder(pergunta: str, historico=None) -> dict:
     direta = _resposta_direta_romaneio_da_nf(pergunta)
     if direta:
         return {"resposta": direta, "pendencias": [], "sugestoes": SUGESTOES}
+    # Ficha de um romaneio (quem/quando criou, quem expediu, transportadora...)
+    # quando o operador cita o NÚMERO do romaneio explicitamente.
+    ficha = _resposta_direta_ficha_romaneio(pergunta)
+    if ficha:
+        return {"resposta": ficha, "pendencias": [], "sugestoes": SUGESTOES}
     llm = _responder_llm(pergunta, historico)
     if llm:
         _, cards = _cards_relevantes(_normalizar(pergunta))
@@ -1037,6 +1178,34 @@ def _resposta_direta_romaneio_da_nf(pergunta: str) -> str | None:
                 f"({rom['tipo_frete']}) — {rom['cliente']}.\n"
                 f"Situação do romaneio: {rom['status']}."
             )
+    return None
+
+
+def _resposta_direta_ficha_romaneio(pergunta: str) -> str | None:
+    """Se o operador cita o NÚMERO de um romaneio e pergunta detalhes (quem/quando
+    criou, quem expediu, transportadora, NFs), responde a ficha real do romaneio.
+    Só dispara com correspondência EXATA do número do romaneio (evita confundir
+    com número de NF)."""
+    import re
+    q = _normalizar(pergunta)
+    if "romaneio" not in q:
+        return None
+    gatilhos = (
+        "criad", "criou", "fez", "quando", "expedi", "expediu", "transportadora",
+        "motorista", "placa", "detalhe", "ficha", "quem", "info", "dados", "peso",
+        "volume", "cliente", "frete",
+    )
+    if not any(g in q for g in gatilhos):
+        return None
+    for num in re.findall(r"\d{2,}", q):
+        try:
+            existe = ExpedicaoRomaneio.query.filter_by(numero_romaneio=num).first()
+        except Exception:
+            existe = None
+        if existe is not None:
+            det = _detalhe_romaneio(num)
+            if det:
+                return _ficha_romaneio(det)
     return None
 
 
