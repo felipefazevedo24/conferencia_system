@@ -150,6 +150,33 @@ def _dias_desde(dt) -> int | None:
         return None
 
 
+def _hoje(dt) -> bool:
+    """True se a data/hora cai no dia de hoje."""
+    if not dt:
+        return False
+    try:
+        return dt.date() == datetime.now().date()
+    except Exception:
+        return False
+
+
+def _movimentos_hoje() -> dict:
+    """Ordens (FAT + ST) que se movimentaram HOJE: liberadas para conferir
+    (entraram na fila hoje), conferidas hoje e expedidas hoje. Usado tanto no
+    contexto do LLM quanto no chat offline."""
+    fat = _fat_visiveis()
+    st = _st_visiveis()
+    return {
+        "liberado": [_item_fat(o) for o in fat if _hoje(o.created_at)]
+        + [_item_st(o) for o in st if _hoje(o.created_at)],
+        "conferido": [_item_fat(o) for o in fat if _hoje(o.conferido_at)]
+        + [_item_st(o) for o in st if _hoje(o.conferido_at)],
+        "expedido": [_item_fat(o) for o in fat if _hoje(o.expedido_at)]
+        + [_item_st(o) for o in st if _hoje(o.expedido_at)],
+    }
+
+
+
 # --------------------------------------------------------------------------- #
 # Núcleo: análise de pendências.
 # --------------------------------------------------------------------------- #
@@ -479,6 +506,17 @@ def _detalhe_item(it: dict) -> str:
     return "   • " + " · ".join(partes)
 
 
+def _linha_ordem(it: dict) -> str:
+    """Linha compacta de uma ordem para o contexto do LLM (código, cliente, NF,
+    previsão e status)."""
+    return (
+        f"    {_tag(it)} {it.get('codigo', '')} · {it.get('referencia', '')}"
+        f" · NF {it.get('numero_nf') or '—'} · prev {it.get('previsao') or '—'}"
+        f" · {it.get('status', '')}"
+    )
+
+
+
 def _resposta(texto: str, pendencias: list[dict] | None = None) -> dict:
     return {
         "resposta": texto,
@@ -599,6 +637,15 @@ _LLM_SYSTEM = (
     "passos. Responda SEMPRE com base nos DADOS ATUAIS abaixo; se a informação não "
     "estiver ali, diga com honestidade que não tem esse dado. Seja concisa (no "
     "máximo uns 4 parágrafos curtos). Não invente números.\n\n"
+    "COMO USAR OS DADOS ATUAIS: eles trazem a data/hora de agora, um PANORAMA POR "
+    "STATUS (quantas ordens estão aguardando conferência, conferidas, faturadas, "
+    "expedidas etc.), os MOVIMENTOS DE HOJE (o que foi LIBERADO PARA CONFERIR HOJE, "
+    "CONFERIDO HOJE e EXPEDIDO HOJE) e as PENDÊNCIAS PRIORIZADAS, cada item com o "
+    "código da ordem (OF/OC), cliente, NF e previsão. Use esses dados para responder "
+    "perguntas objetivas como 'o que foi liberado para conferir hoje?', 'o que falta "
+    "expedir?', 'o que está atrasado?', 'como está a expedição agora?' — cite os "
+    "códigos, clientes e quantidades REAIS que aparecem nos dados. Se a seção "
+    "correspondente estiver vazia ('nenhum hoje'), diga que não houve movimento.\n\n"
     "SOBRE A EMPRESA E O SISTEMA:\n"
     "- Você trabalha na Columbia Machine Brasil, parte da Columbia Machine — "
     "fabricante de equipamentos e máquinas para a produção de blocos, pavers e "
@@ -630,20 +677,69 @@ _LLM_SYSTEM = (
 
 
 def _contexto_llm() -> str:
+    from collections import Counter
+
+    agora = datetime.now()
     dados = analisar()
+    fat = _fat_visiveis()
+    st = _st_visiveis()
+
+    # Panorama por status (mesmos slugs dos KPIs da tela).
+    contagem: Counter = Counter()
+    for o in fat:
+        contagem[fat_svc.status_slug(o.status)] += 1
+    for o in st:
+        contagem[st_svc.status_slug(o.status)] += 1
+    rotulos = [
+        ("pendente", "Aguardando conferência"),
+        ("conferido", "Conferido (aguardando faturamento)"),
+        ("faturado_sem_conf", "Faturado SEM conferência"),
+        ("faturado", "Faturado (aguardando expedição)"),
+        ("expedido", "Expedido"),
+        ("finalizado_sem_conf", "Finalizado sem conferência"),
+    ]
+
+    mov = _movimentos_hoje()
+
     linhas = [
+        f"AGORA: {agora:%d/%m/%Y %H:%M} (hoje é {agora:%d/%m/%Y}).",
         dados["resumo"],
         f"Total de pendências: {dados['total_pendencias']} (urgentes: {dados['urgentes']}).",
+        "",
+        "PANORAMA POR STATUS (ordens FAT + ST ativas):",
     ]
+    vistos = set()
+    for slug, rotulo in rotulos:
+        if contagem.get(slug):
+            linhas.append(f"- {rotulo}: {contagem[slug]}")
+            vistos.add(slug)
+    for slug, qtd in contagem.items():
+        if slug not in vistos and qtd:
+            linhas.append(f"- {slug}: {qtd}")
+
+    def _bloco(titulo: str, itens: list[dict]) -> None:
+        linhas.append("")
+        if not itens:
+            linhas.append(f"{titulo}: nenhum hoje.")
+            return
+        linhas.append(f"{titulo} — {len(itens)}:")
+        for it in itens[:20]:
+            linhas.append(_linha_ordem(it))
+        if len(itens) > 20:
+            linhas.append(f"    … e mais {len(itens) - 20}.")
+
+    _bloco("LIBERADO PARA CONFERIR HOJE (ordens que entraram na fila hoje)", mov["liberado"])
+    _bloco("CONFERIDO HOJE", mov["conferido"])
+    _bloco("EXPEDIDO HOJE", mov["expedido"])
+
+    linhas.append("")
+    linhas.append("PENDÊNCIAS PRIORIZADAS (o que lembrar / cobrar):")
     for c in dados["pendencias"]:
         linhas.append(f"- {c['titulo']} [{c['severidade']}]: {c['quantidade']}. {c['orientacao']}")
-        for it in (c.get("itens_amostra") or [])[:5]:
-            linhas.append(
-                f"    {_tag(it)} {it.get('codigo', '')} · {it.get('referencia', '')}"
-                f" · NF {it.get('numero_nf') or '—'} · prev {it.get('previsao') or '—'}"
-                f" · status {it.get('status', '')}"
-            )
+        for it in (c.get("itens_amostra") or [])[:10]:
+            linhas.append(_linha_ordem(it))
     return "\n".join(linhas)
+
 
 
 # --------------------------------------------------------------------------- #
@@ -899,6 +995,24 @@ def _responder_offline(pergunta: str) -> dict:
             "• A situação de uma ordem ou NF específica (é só mandar o número)\n\n"
             "Manda a pergunta do seu jeito que eu entendo. 💜"
         )
+
+    # Movimentos de hoje: liberado para conferir / conferido / expedido hoje.
+    if "hoje" in tokens or "hoje" in q:
+        alvo = None
+        if "expedid" in q:  # "o que foi expedido hoje"
+            alvo = ("expedido", "expedido(s) hoje")
+        elif "conferid" in q or "conferiu" in q:  # "o que foi conferido hoje"
+            alvo = ("conferido", "conferido(s) hoje")
+        elif any(t in q for t in ("liberad", "liberou", "conferir", "entrou", "chegou", "novo", "novos")):
+            alvo = ("liberado", "liberado(s) para conferir hoje")
+        if alvo:
+            chave, rotulo = alvo
+            itens = _movimentos_hoje()[chave]
+            if itens:
+                corpo = "\n".join(_detalhe_item(it) for it in itens[:15])
+                extra = f"\n   … e mais {len(itens) - 15}." if len(itens) > 15 else ""
+                return _resposta(f"Hoje temos {len(itens)} item(ns) {rotulo}:\n{corpo}{extra}")
+            return _resposta(f"Não encontrei nada {rotulo} até agora. 👍")
 
     # Tópicos concretos de expedição (mostra cards).
     texto, cards = _cards_relevantes(q)
