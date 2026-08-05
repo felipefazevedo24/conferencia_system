@@ -23,6 +23,7 @@ from ..models import (
     ExpedicaoOrdemFat,
     ExpedicaoOrdemST,
     ExpedicaoRomaneio,
+    ExpedicaoRomaneioNF,
 )
 from . import expedicao_fat_service as fat_svc
 from . import expedicao_st_service as st_svc
@@ -207,6 +208,37 @@ def _romaneios_pendentes_comprovante() -> list[dict]:
             "nfs_pendentes": nfs_pend,
         })
     return saida
+
+
+def _romaneio_da_nf(numero_nf: str) -> dict | None:
+    """Descobre em qual romaneio uma NF foi expedida. Devolve o NÚMERO INTEIRO
+    do romaneio (numero_romaneio), não o id interno. Se a NF estiver em mais de
+    um romaneio, devolve o mais recente."""
+    num = str(numero_nf or "").strip()
+    if not num:
+        return None
+    try:
+        linhas = (
+            ExpedicaoRomaneioNF.query.filter_by(numero_nf=num)
+            .order_by(ExpedicaoRomaneioNF.id.desc())
+            .all()
+        )
+    except Exception:
+        return None
+    for ln in linhas:
+        r = getattr(ln, "romaneio", None)
+        if r is None:
+            continue
+        if (r.status or "").strip().lower().startswith("cancel"):
+            continue
+        return {
+            "numero_nf": num,
+            "romaneio": r.numero_romaneio or str(r.id),
+            "cliente": r.cliente or ln.cliente or "—",
+            "tipo_frete": r.tipo_frete or "—",
+            "status": r.status or "—",
+        }
+    return None
 
 
 
@@ -606,6 +638,7 @@ def _buscar_ordem(numero: str) -> dict | None:
                 "previsao": _fmt_data(ordem_st.dt_prevista_entrega),
                 "status": ordem_st.status,
                 "orientacao": orientacao_por_status(ordem_st.status),
+                "romaneio": (_romaneio_da_nf(ordem_st.numero_nf) or {}).get("romaneio", ""),
             }
         return None
     return {
@@ -615,6 +648,7 @@ def _buscar_ordem(numero: str) -> dict | None:
         "previsao": _fmt_data(ordem.dt_previsao_entrega),
         "status": ordem.status,
         "orientacao": orientacao_por_status(ordem.status),
+        "romaneio": (_romaneio_da_nf(ordem.numero_nf) or {}).get("romaneio", ""),
     }
 
 
@@ -973,11 +1007,37 @@ def responder(pergunta: str, historico=None) -> dict:
     conversar de forma livre e natural, sempre alimentado com os dados reais da
     expedição E com o histórico da conversa (para dar continuidade ao assunto).
     Sem LLM, cai no motor offline determinístico (mais tagarela)."""
+    # Consultas objetivas "de qual romaneio é a NF X" são respondidas de forma
+    # DETERMINÍSTICA (o LLM tende a inventar/confundir com o id do registro).
+    direta = _resposta_direta_romaneio_da_nf(pergunta)
+    if direta:
+        return {"resposta": direta, "pendencias": [], "sugestoes": SUGESTOES}
     llm = _responder_llm(pergunta, historico)
     if llm:
         _, cards = _cards_relevantes(_normalizar(pergunta))
         return {"resposta": llm, "pendencias": cards or [], "sugestoes": SUGESTOES}
     return _responder_offline(pergunta)
+
+
+def _resposta_direta_romaneio_da_nf(pergunta: str) -> str | None:
+    """Se a pergunta for do tipo 'de qual romaneio é a NF X / qual romaneio da
+    nota X', responde direto com o número inteiro do romaneio (dado real),
+    evitando alucinação do LLM."""
+    import re
+    q = _normalizar(pergunta)
+    if "romaneio" not in q:
+        return None
+    if not any(t in q for t in ("nf", "nota", "qual", "onde")):
+        return None
+    for num in re.findall(r"\d{3,}", q):
+        rom = _romaneio_da_nf(num)
+        if rom:
+            return (
+                f"A NF {rom['numero_nf']} está no Romaneio {rom['romaneio']} "
+                f"({rom['tipo_frete']}) — {rom['cliente']}.\n"
+                f"Situação do romaneio: {rom['status']}."
+            )
+    return None
 
 
 def _responder_offline(pergunta: str) -> dict:
@@ -1001,11 +1061,20 @@ def _responder_offline(pergunta: str) -> dict:
             extra = ""
             if info.get("numero_nf"):
                 extra += f"\nNF: {info['numero_nf']}"
+            if info.get("romaneio"):
+                extra += f"\nRomaneio: {info['romaneio']}"
             if info.get("previsao"):
                 extra += f"\nPrevisão de entrega: {info['previsao']}"
             return _resposta(
                 f"Achei! {info['tipo']} {m.group(1)} — {info['referencia']}\n\n"
                 f"Status atual: {info['status']}.{extra}\n\n{info['orientacao']}"
+            )
+        rom = _romaneio_da_nf(m.group(1))
+        if rom:
+            return _resposta(
+                f"A NF {rom['numero_nf']} está no Romaneio {rom['romaneio']} "
+                f"({rom['tipo_frete']}) — {rom['cliente']}.\n"
+                f"Situação do romaneio: {rom['status']}."
             )
         return _resposta(
             f"Procurei por {m.group(1)}, mas não achei nenhuma ordem ou NF com "
