@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Columbia Sync{% endblock %}
+
+{% block extra_head %}
+<style>
+    .content-body:has(.dash) { padding: 0 !important; }
+
+    .dash {
+        --dash-bg: #070c14;
+        --dash-surface: #0f1a28;
+        --dash-surface-2: #12203180;
+        --dash-border: rgba(125, 196, 255, 0.14);
+        --dash-border-strong: rgba(125, 196, 255, 0.28);
+        --dash-ink: #eaf3fc;
+        --dash-muted: rgba(200, 219, 238, 0.62);
+        --dash-blue: #1c86f2;
+        --dash-blue-soft: #7ec4ff;
+        min-height: 100%;
+        padding: 26px 26px 40px;
+        background:
+            radial-gradient(1100px 460px at 88% -8%, rgba(28, 134, 242, 0.16), transparent 60%),
+            radial-gradient(900px 420px at 6% 4%, rgba(15, 98, 201, 0.12), transparent 55%),
+            var(--dash-bg);
+        color: var(--dash-ink);
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    /* ---- Cabeçalho ---- */
+    .dash-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 26px;
+    }
+    .dash-head h1 {
+        margin: 0;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(26px, 3vw, 34px);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: #ffffff;
+    }
+    .dash-head p {
+        margin: 6px 0 0;
+        font-size: 13.5px;
+        color: var(--dash-muted);
+    }
+    .dash-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .dash-updated {
+        font-size: 11.5px;
+        color: var(--dash-muted);
+    }
+    .dash-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid var(--dash-border-strong);
+        background: rgba(28, 134, 242, 0.14);
+        color: #e8f3ff;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.18s ease, transform 0.18s ease;
+    }
+    .dash-refresh:hover { background: rgba(28, 134, 242, 0.26); transform: translateY(-1px); }
+
+    /* ---- Seções ---- */
+    .dash-section { margin-bottom: 30px; }
+    .dash-section-head {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-bottom: 14px;
+    }
+    .dash-section-ico {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: rgba(28, 134, 242, 0.16);
+        border: 1px solid var(--dash-border);
+        color: var(--dash-blue-soft);
+        font-size: 14px;
+    }
+    .dash-section-head strong {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #f3f9ff;
+    }
+    .dash-section-line {
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--dash-border), transparent);
+    }
+
+    /* ---- Cards KPI ---- */
+    .dash-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .dash-card {
+        position: relative;
+        display: block;
+        padding: 18px 18px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--dash-border);
+        background: linear-gradient(160deg, var(--dash-surface) 0%, #0b1521 100%);
+        text-decoration: none;
+        color: inherit;
+        overflow: hidden;
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .dash-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        background: var(--card-accent, var(--dash-blue));
+        opacity: 0.9;
+    }
+    .dash-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--dash-border-strong);
+        box-shadow: 0 18px 40px rgba(3, 12, 24, 0.55);
+        color: inherit;
+    }
+    .dash-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+    }
+    .dash-card-ico {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        font-size: 17px;
+        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 20%, transparent);
+        color: var(--card-accent, var(--dash-blue-soft));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-accent, var(--dash-blue)) 32%, transparent);
+    }
+    .dash-card-open {
+        font-size: 11px;
+        color: var(--dash-muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+    .dash-card:hover .dash-card-open { opacity: 1; transform: none; }
+    .dash-card-value {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 38px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: #ffffff;
+    }
+    .dash-card-label {
+        margin-top: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #e6f0fb;
+    }
+    .dash-card-caption {
+        margin-top: 4px;
+        font-size: 11.5px;
+        line-height: 1.5;
+        color: var(--dash-muted);
+    }
+
+    /* tons dos cards */
+    .tone-amber { --card-accent: #f59e0b; }
+    .tone-blue { --card-accent: #1c86f2; }
+    .tone-violet { --card-accent: #8b5cf6; }
+    .tone-emerald { --card-accent: #10b981; }
+    .tone-sky { --card-accent: #38bdf8; }
+    .tone-teal { --card-accent: #14b8a6; }
+
+    /* ---- Gráficos ---- */
+    .dash-charts {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+        gap: 16px;
+    }
+    .dash-chart {
+        border-radius: 18px;
+        border: 1px solid var(--dash-border);
+        background: linear-gradient(160deg, var(--dash-surface) 0%, #0b1521 100%);
+        padding: 18px 18px 14px;
+        display: flex;
+        flex-direction: column;
+        min-height: 300px;
+    }
+    .dash-chart-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+    .dash-chart-head strong {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        color: #f3f9ff;
+    }
+    .dash-chart-head span {
+        font-size: 11.5px;
+        color: var(--dash-muted);
+    }
+    .dash-chart-body {
+        position: relative;
+        flex: 1;
+        min-height: 220px;
+    }
+    .dash-range {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: rgba(255, 255, 255, 0.03);
+    }
+    .dash-range button {
+        border: none;
+        background: transparent;
+        color: var(--dash-muted);
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.16s ease, color 0.16s ease;
+    }
+    .dash-range button.active {
+        background: rgba(28, 134, 242, 0.28);
+        color: #eaf3fc;
+    }
+
+    /* ---- Estado vazio ---- */
+    .dash-empty {
+        border: 1px dashed var(--dash-border-strong);
+        border-radius: 18px;
+        padding: 46px 20px;
+        text-align: center;
+        color: var(--dash-muted);
+        background: var(--dash-surface-2);
+    }
+    .dash-empty i { font-size: 30px; color: var(--dash-blue-soft); display: block; margin-bottom: 12px; }
+    .dash-empty strong { display: block; color: #f0f7ff; font-size: 15px; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
+
+    @media (max-width: 900px) {
+        .dash-charts { grid-template-columns: 1fr; }
+        .dash { padding: 20px 16px 32px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dash">
+    <header class="dash-head">
+        <div>
+            <h1>Dashboard</h1>
+            <p>Olá, {{ (current_user_display or user)|title }} — panorama da sua operação em tempo real.</p>
+        </div>
+        <div class="dash-head-actions">
+            <span class="dash-updated" id="dashUpdated"></span>
+            <button type="button" class="dash-refresh" onclick="window.location.reload()">
+                <i class="fas fa-rotate"></i> Atualizar
+            </button>
+        </div>
+    </header>
+
+    {% if not dashboard_sections %}
+    <div class="dash-empty">
+        <i class="fas fa-compass"></i>
+        <strong>Seu painel está pronto</strong>
+        Use o menu lateral para navegar pelos módulos. Assim que houver indicadores no seu perfil, eles aparecem aqui.
+    </div>
+    {% else %}
+
+    {% for section in dashboard_sections %}
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div class="dash-section-ico"><i class="fas {{ section.icon }}"></i></div>
+            <strong>{{ section.name }}</strong>
+            <div class="dash-section-line"></div>
+        </div>
+        <div class="dash-grid">
+            {% for card in section.cards %}
+            <a href="{{ card.href }}" class="dash-card tone-{{ card.tone }}">
+                <div class="dash-card-top">
+                    <div class="dash-card-ico"><i class="fas {{ card.icon }}"></i></div>
+                    <span class="dash-card-open">Abrir <i class="fas fa-arrow-right"></i></span>
+                </div>
+                <div class="dash-card-value">{{ card.value }}</div>
+                <div class="dash-card-label">{{ card.label }}</div>
+                <div class="dash-card-caption">{{ card.caption }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {% if dashboard_charts.entradas or dashboard_charts.status_notas or dashboard_charts.expedicao %}
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
+            <strong>Tendências</strong>
+            <div class="dash-section-line"></div>
+        </div>
+        <div class="dash-charts">
+            {% if dashboard_charts.entradas %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Entradas por dia</strong>
+                    <div class="dash-range" id="dashRange">
+                        <button type="button" data-dias="7">7 dias</button>
+                        <button type="button" data-dias="14" class="active">14 dias</button>
+                    </div>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartEntradas"></canvas></div>
+            </div>
+            {% endif %}
+            {% if dashboard_charts.status_notas %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Notas por status</strong>
+                    <span>Situação atual</span>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartStatus"></canvas></div>
+            </div>
+            {% endif %}
+            {% if dashboard_charts.expedicao %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Expedição por status</strong>
+                    <span>Situação atual</span>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartExpedicao"></canvas></div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const DASH = {{ dashboard_charts|tojson }};
+
+        const upd = document.getElementById("dashUpdated");
+        if (upd) {
+            const agora = new Date();
+            upd.textContent = "Atualizado às " + agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        if (typeof Chart === "undefined") return;
+
+        Chart.defaults.color = "rgba(200, 219, 238, 0.72)";
+        Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+        const GRID = "rgba(125, 196, 255, 0.10)";
+        const AZUL = "#1c86f2";
+
+        // ----- Entradas por dia (barras) -----
+        let chartEntradas = null;
+        const elEntradas = document.getElementById("chartEntradas");
+        if (elEntradas && DASH.entradas) {
+            const render = (dias) => {
+                const labels = DASH.entradas.labels.slice(-dias);
+                const valores = DASH.entradas.valores.slice(-dias);
+                const ctx = elEntradas.getContext("2d");
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
+                grad.addColorStop(0, "rgba(28, 134, 242, 0.85)");
+                grad.addColorStop(1, "rgba(28, 134, 242, 0.18)");
+                if (chartEntradas) chartEntradas.destroy();
+                chartEntradas = new Chart(ctx, {
+                    type: "bar",
+                    data: { labels: labels, datasets: [{ label: "Notas", data: valores, backgroundColor: grad, borderRadius: 6, maxBarThickness: 30 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                            y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }
+                        }
+                    }
+                });
+            };
+            render(14);
+            const range = document.getElementById("dashRange");
+            if (range) {
+                range.querySelectorAll("button").forEach((b) => {
+                    b.addEventListener("click", () => {
+                        range.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+                        b.classList.add("active");
+                        render(parseInt(b.dataset.dias, 10));
+                    });
+                });
+            }
+        }
+
+        // ----- Doughnut helper -----
+        const PALETA = ["#f59e0b", "#1c86f2", "#10b981", "#8b5cf6", "#38bdf8", "#f472b6", "#14b8a6"];
+        function doughnut(elId, obj) {
+            const el = document.getElementById(elId);
+            if (!el || !obj) return;
+            const labels = Object.keys(obj);
+            const valores = labels.map((k) => obj[k]);
+            if (!valores.some((v) => v > 0)) {
+                const ctx = el.getContext("2d");
+                ctx.font = "13px 'IBM Plex Sans'";
+                ctx.fillStyle = "rgba(200,219,238,0.55)";
+                ctx.textAlign = "center";
+                ctx.fillText("Sem dados no período", el.width / 2, el.height / 2);
+                return;
+            }
+            new Chart(el.getContext("2d"), {
+                type: "doughnut",
+                data: { labels: labels, datasets: [{ data: valores, backgroundColor: PALETA, borderColor: "#0b1521", borderWidth: 2 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: "62%",
+                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 14 } } }
+                }
+            });
+        }
+        doughnut("chartStatus", DASH.status_notas);
+        doughnut("chartExpedicao", DASH.expedicao);
+    })();
+</script>
+{% endblock %}
