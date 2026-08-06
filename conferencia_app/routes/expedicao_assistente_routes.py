@@ -5,6 +5,8 @@ Expedição: panorama de pendências priorizadas e chat por intenção (offline)
 """
 from flask import Blueprint, jsonify, request, session
 
+from datetime import datetime
+
 from ..auth import permission_required, is_admin_session, login_required, has_permission
 from ..services import expedicao_assistente_service as svc
 from ..services import expedicao_cobranca_service as cobranca_svc
@@ -154,3 +156,41 @@ def aprovacoes():
         return jsonify({"pendentes": [], "total": 0})
     pend = romaneio_bia_svc.estornos_pendentes()
     return jsonify({"pendentes": pend, "total": len(pend)})
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/novidades", methods=["GET"])
+@login_required
+def novidades():
+    """O que CHEGOU desde o último check do cliente (faturamento, NF de
+    recebimento e solicitação de viagem). A Bia usa isto para avisar sozinha.
+
+    Roteamento: usuário comum recebe só os módulos aos quais tem acesso; Admin
+    recebe uma visão macro (os números de todos os módulos). O cliente envia
+    `desde` (ISO) com o último instante checado; sem ele, só devolvemos o
+    marcador de tempo (não despeja o histórico antigo)."""
+    desde_raw = str(request.args.get("desde") or "").strip()
+    desde = None
+    if desde_raw:
+        try:
+            desde = datetime.fromisoformat(desde_raw)
+        except Exception:
+            desde = None
+    dados = svc.novidades(
+        desde,
+        is_admin=is_admin_session(),
+        mod_receb=(
+            has_permission("PAGE_CONFERENCIA")
+            or has_permission("PAGE_PORTARIA")
+            or has_permission("PAGE_FISCAL_LIBERADAS")
+        ),
+        mod_exped=(
+            has_permission("PAGE_EXPEDICAO_CONF_CEGA")
+            or has_permission("PAGE_EXPEDICAO_CONFERENCIA")
+        ),
+        mod_viagem=(
+            has_permission("PAGE_LOGISTICA_SOLICITACAO")
+            or has_permission("PAGE_LOGISTICA_VIAGEM")
+            or has_permission("PAGE_LOGISTICA_AGENDAMENTO")
+        ),
+    )
+    return jsonify(dados)

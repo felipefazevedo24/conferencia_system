@@ -19,6 +19,7 @@ from datetime import datetime
 
 from ..extensions import db
 from ..models import (
+    AgendamentoSolicitacao,
     ExpedicaoConferenciaSimples,
     ExpedicaoOrdemFat,
     ExpedicaoOrdemST,
@@ -961,6 +962,147 @@ def _recebimento_contexto() -> list[str]:
     except Exception:
         return []
     return linhas
+
+
+# --------------------------------------------------------------------------- #
+# Novidades proativas: "o que CHEGOU" desde o último check do usuário.
+# A Bia usa isto para avisar sozinha (toast) quando entra algo novo:
+#   * Faturamento (nova ordem FAT/ST na fila + NF emitida);
+#   * Nota fiscal de recebimento (ItemNota importada);
+#   * Solicitação de viagem (AgendamentoSolicitacao).
+# Usuário comum só recebe os módulos que acessa; Admin recebe uma visão macro
+# (os números de tudo). Tudo best-effort: falha em uma fonte não derruba as outras.
+# --------------------------------------------------------------------------- #
+def _novas_notas_recebimento(desde: datetime) -> int:
+    """Notas fiscais DISTINTAS importadas depois de `desde`."""
+    from sqlalchemy import func
+    try:
+        return int(
+            db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
+            .filter(ItemNota.data_importacao > desde)
+            .scalar()
+            or 0
+        )
+    except Exception:
+        return 0
+
+
+def _novo_faturamento(desde: datetime) -> tuple[int, int]:
+    """(novas ordens FAT+ST na fila, NFs emitidas) criadas/faturadas após `desde`."""
+    novas = 0
+    nfs = 0
+    try:
+        novas += ExpedicaoOrdemFat.query.filter(
+            ExpedicaoOrdemFat.excluido.is_(False),
+            ExpedicaoOrdemFat.created_at > desde,
+        ).count()
+        novas += ExpedicaoOrdemST.query.filter(
+            ExpedicaoOrdemST.excluido.is_(False),
+            ExpedicaoOrdemST.created_at > desde,
+        ).count()
+    except Exception:
+        pass
+    try:
+        nfs += ExpedicaoOrdemFat.query.filter(
+            ExpedicaoOrdemFat.excluido.is_(False),
+            ExpedicaoOrdemFat.faturado_at.isnot(None),
+            ExpedicaoOrdemFat.faturado_at > desde,
+        ).count()
+        nfs += ExpedicaoOrdemST.query.filter(
+            ExpedicaoOrdemST.excluido.is_(False),
+            ExpedicaoOrdemST.faturado_at.isnot(None),
+            ExpedicaoOrdemST.faturado_at > desde,
+        ).count()
+    except Exception:
+        pass
+    return novas, nfs
+
+
+def _novas_solicitacoes_viagem(desde: datetime) -> int:
+    """Solicitações de coleta/entrega (viagem) criadas após `desde`."""
+    try:
+        return AgendamentoSolicitacao.query.filter(
+            AgendamentoSolicitacao.criado_em > desde
+        ).count()
+    except Exception:
+        return 0
+
+
+def novidades(
+    desde: datetime | None,
+    *,
+    is_admin: bool = False,
+    mod_receb: bool = False,
+    mod_exped: bool = False,
+    mod_viagem: bool = False,
+) -> dict:
+    """O que CHEGOU desde `desde`, filtrado pelo que interessa ao usuário.
+
+    Usuário comum: só os módulos que ele acessa. Admin: visão macro (todos os
+    módulos, só os números). Na PRIMEIRA checagem (`desde` vazio) não despeja o
+    backlog: apenas devolve o marcador de tempo para o cliente guardar.
+    """
+    agora = datetime.now()
+    if desde is None:
+        return {
+            "tem_novidades": False,
+            "itens": [],
+            "total": 0,
+            "macro": bool(is_admin),
+            "agora": agora.isoformat(),
+        }
+
+    ver_receb = is_admin or mod_receb
+    ver_exped = is_admin or mod_exped
+    ver_viagem = is_admin or mod_viagem
+
+    itens: list[dict] = []
+
+    if ver_receb:
+        n = _novas_notas_recebimento(desde)
+        if n:
+            plural = "notas fiscais" if n > 1 else "nota fiscal"
+            itens.append({
+                "modulo": "recebimento",
+                "qtd": n,
+                "texto": f"{n} {plural} no recebimento",
+            })
+
+    if ver_exped:
+        novas_ordens, nfs_emitidas = _novo_faturamento(desde)
+        if novas_ordens:
+            plural = "ordens de faturamento" if novas_ordens > 1 else "ordem de faturamento"
+            itens.append({
+                "modulo": "faturamento",
+                "qtd": novas_ordens,
+                "texto": f"{novas_ordens} {plural} para conferir",
+            })
+        if nfs_emitidas:
+            plural = "notas fiscais emitidas" if nfs_emitidas > 1 else "nota fiscal emitida"
+            itens.append({
+                "modulo": "faturamento_nf",
+                "qtd": nfs_emitidas,
+                "texto": f"{nfs_emitidas} {plural} na expedição",
+            })
+
+    if ver_viagem:
+        nv = _novas_solicitacoes_viagem(desde)
+        if nv:
+            plural = "solicitações de viagem" if nv > 1 else "solicitação de viagem"
+            itens.append({
+                "modulo": "viagem",
+                "qtd": nv,
+                "texto": f"{nv} {plural}",
+            })
+
+    total = sum(it["qtd"] for it in itens)
+    return {
+        "tem_novidades": bool(itens),
+        "itens": itens,
+        "total": total,
+        "macro": bool(is_admin),
+        "agora": agora.isoformat(),
+    }
 
 
 def _contexto_llm() -> str:

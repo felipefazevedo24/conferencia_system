@@ -829,6 +829,8 @@ if ("serviceWorker" in navigator) {
     const API_COBRANCA_RESPONDER = "/api/expedicao/assistente/cobranca/responder";
     const API_COBRANCA_ADIAR = "/api/expedicao/assistente/cobranca/adiar";
     const API_COBRANCA_CCE = "/api/expedicao/assistente/cobranca/cce-feita";
+    const API_NOVIDADES = "/api/expedicao/assistente/novidades";
+    const LS_NOVIDADES = "bia_novidades_desde";
 
     const BIA_USER = {{ (current_user_display or user or '')|tojson }};
     const BIA_USER_NOME = (BIA_USER || "").trim().split(/\s+/)[0] || "";
@@ -1321,7 +1323,37 @@ if ("serviceWorker" in navigator) {
             } catch (e) { /* silencioso */ }
         }, 20 * 60 * 1000);
     }
+
+    // ----- Avisos proativos de "chegou algo novo" (todas as páginas) -----
+    // A Bia checa o que ENTROU desde a última verificação e, se houver novidade,
+    // dá um toque (toast). Cada usuário recebe só os módulos a que tem acesso;
+    // Admin recebe uma visão macro (os números de tudo). No primeiro acesso o
+    // servidor só devolve o marcador de tempo — não despeja o histórico antigo.
+    async function checarNovidades() {
+        try {
+            const desde = localStorage.getItem(LS_NOVIDADES);
+            const url = desde ? `${API_NOVIDADES}?desde=${encodeURIComponent(desde)}` : API_NOVIDADES;
+            const r = await fetch(url, { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            // Avança o marcador para o "agora" do servidor (evita repetir avisos).
+            if (d.agora) localStorage.setItem(LS_NOVIDADES, d.agora);
+            if (!d.tem_novidades || !(d.itens && d.itens.length)) return;
+            // Não interrompe se o painel já estiver aberto.
+            if (panel.classList.contains("open")) return;
+            const linhas = d.itens.map((i) => i.texto);
+            const msg = d.macro
+                ? `Chegou agora: ${linhas.join("; ")}.`
+                : `Chegou pra você: ${linhas.join(" · ")}. 📬`;
+            mostrarToast(msg);
+        } catch (e) { /* silencioso */ }
+    }
+    // Primeira checagem pouco depois de carregar (deixa a saudação aparecer antes),
+    // e depois a cada ~2 min enquanto a página estiver aberta.
+    setTimeout(checarNovidades, 8000);
+    setInterval(checarNovidades, 2 * 60 * 1000);
 })();
 </script>
 </body>
 </html>
+
