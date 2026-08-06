@@ -2119,6 +2119,37 @@
             return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th><th>Local de estoque</th><th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
 
+        function renderOfBox(o) {
+            const info = o.ordem_faturamento_info;
+            if (o.ordem_faturamento) {
+                const detalhe = (info && info.encontrada)
+                    ? `<div class="avl-nf-info">
+                        <div><span class="k">Ordem de faturamento</span><span class="v">#${o.ordem_faturamento}</span></div>
+                        ${info.cliente ? `<div><span class="k">Cliente</span><span class="v">${escapeHtml(info.cliente)}</span></div>` : ""}
+                        ${info.status ? `<div><span class="k">Status da OF</span><span class="v">${escapeHtml(info.status)}</span></div>` : ""}
+                        <div><span class="k">NF da OF</span><span class="v">${info.numero_nf ? escapeHtml(info.numero_nf) : "aguardando faturamento da OF…"}</span></div>
+                       </div>`
+                    : `<div class="avl-nf-info"><div><span class="k">Ordem de faturamento</span><span class="v">#${o.ordem_faturamento} (não localizada na base)</span></div></div>`;
+                return `<div class="avl-section-title"><i class="fas fa-link"></i> Ordem de faturamento vinculada</div>
+                    ${detalhe}
+                    <p class="eui-caption" style="margin-top:6px;"><i class="fas fa-circle-info"></i> Quando a OF for faturada, a solicitação avança automaticamente.</p>
+                    <div class="avl-nf-row" style="margin-top:8px;">
+                        <input type="number" class="eui-input avl-of" placeholder="Trocar nº da OF" value="${o.ordem_faturamento}">
+                    </div>
+                    <div class="avl-detail-actions">
+                        <button type="button" class="eui-btn eui-btn--subtle" data-action="vincular-of"><i class="fas fa-link"></i> Atualizar vínculo</button>
+                    </div>`;
+            }
+            return `<div class="avl-section-title"><i class="fas fa-link"></i> Vincular ordem de faturamento</div>
+                <p class="eui-caption"><i class="fas fa-circle-info"></i> Vincule a OF do ERP correspondente a esta expedição. Quando ela for faturada, a solicitação avança sozinha para o status final.</p>
+                <div class="avl-nf-row">
+                    <input type="number" class="eui-input avl-of" placeholder="Número da ordem de faturamento">
+                </div>
+                <div class="avl-detail-actions">
+                    <button type="button" class="eui-btn eui-btn--subtle" data-action="vincular-of"><i class="fas fa-link"></i> Vincular OF</button>
+                </div>`;
+        }
+
         function renderDetalhe(o) {
             const steps = renderSteps(o);
             const emSeparacao = o.status_slug === "em_separacao";
@@ -2148,7 +2179,8 @@
                     ? `<p class="eui-caption" style="margin-top:8px;"><i class="fas fa-circle-info"></i> Ao informar a NF, o destinatário e o endereço serão puxados automaticamente da nota.</p>`
                     : "";
                 return `${steps}${vendaInfo}${itensBloco}
-                    <div class="avl-section-title"><i class="fas fa-file-invoice-dollar"></i> Faturamento</div>
+                    ${renderOfBox(o)}
+                    <div class="avl-section-title"><i class="fas fa-file-invoice-dollar"></i> Faturamento manual</div>
                     <div class="avl-nf-row">
                         <input type="text" class="eui-input avl-nf" placeholder="Número da NF">
                         <textarea class="avl-obs" placeholder="Observações do faturamento (opcional)" style="margin-top:0;"></textarea>
@@ -2197,6 +2229,7 @@
                                 <span><i class="far fa-user"></i>${escapeHtml(o.solicitante_nome)}</span>
                                 <span><i class="far fa-clock"></i>${fmtDataHora(o.created_at)}</span>
                                 <span><i class="fas fa-boxes"></i>${o.itens.length} ${o.itens.length === 1 ? "item" : "itens"}</span>
+                                ${o.ordem_faturamento ? `<span><i class="fas fa-link"></i>OF #${o.ordem_faturamento}</span>` : ""}
                                 ${nfMeta}
                             </div>
                         </div>
@@ -2268,6 +2301,12 @@
                 if (!numeroNf.trim()) { toast("Informe o número da NF.", "error"); return; }
                 const observacao = row.querySelector(".avl-obs").value;
                 executarAcao(id, "faturar", { numero_nf: numeroNf, observacao }, "Faturamento confirmado com sucesso.");
+                return;
+            }
+            if (e.target.closest('[data-action="vincular-of"]')) {
+                const codOf = row.querySelector(".avl-of").value;
+                if (!String(codOf).trim()) { toast("Informe o número da ordem de faturamento.", "error"); return; }
+                executarAcao(id, "vincular-of", { cod_ordem_fat: codOf }, "Ordem de faturamento vinculada.");
                 return;
             }
             if (e.target.closest('[data-action="retorno"]')) {

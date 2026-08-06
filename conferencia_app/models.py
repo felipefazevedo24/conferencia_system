@@ -897,6 +897,11 @@ class SolicitacaoNF(db.Model):
     nf_parceiro_nome = db.Column(db.String(200))
     nf_parceiro_endereco = db.Column(db.String(400))
 
+    # Ordem de faturamento (cod_ordem_fat) do ERP vinculada a esta expedicao
+    # sem NF. Quando a OF for faturada (numero_nf preenchido), a solicitacao
+    # avanca automaticamente para o status final conforme o tipo.
+    ordem_faturamento = db.Column(db.Integer, index=True)
+
     ip_solicitante = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)

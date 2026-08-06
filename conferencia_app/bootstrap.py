@@ -868,6 +868,8 @@ def _ensure_solicitacao_nf_columns() -> None:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_nome VARCHAR(200)"))
         if "nf_parceiro_endereco" not in cols:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_endereco VARCHAR(400)"))
+        if "ordem_faturamento" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN ordem_faturamento INTEGER"))
         conn.commit()
     finally:
         conn.close()

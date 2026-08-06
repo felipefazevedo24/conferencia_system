@@ -21,7 +21,7 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import SolicitacaoNF, SolicitacaoNFItem, SolicitacaoNFLog
+from ..models import ExpedicaoOrdemFat, SolicitacaoNF, SolicitacaoNFItem, SolicitacaoNFLog
 from .erp_lancamento_service import _conectar, _resolver_config
 from .facilities_grv_service import FacilitiesGRVService, normalizar_nome
 from . import teams_service
@@ -53,6 +53,8 @@ STATUS_ESTOQUE_RETORNADO = "Estoque retornado"
 STATUS_PENDENTES_RETORNO = (STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA)
 # Status a partir dos quais e possivel faturar (informar a NF).
 STATUS_PODE_FATURAR = (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT)
+# Status a partir dos quais e possivel vincular uma ordem de faturamento (OF).
+STATUS_PODE_VINCULAR_OF = (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT)
 
 STATUS_SLUGS = {
     STATUS_SOLICITADO: "em_separacao",
@@ -469,6 +471,81 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
     return solicitacao
 
 
+def _buscar_ordem_fat(cod_ordem_fat) -> ExpedicaoOrdemFat | None:
+    """Localiza a ordem de faturamento (cod_ordem_fat) sincronizada do ERP."""
+    try:
+        cod = int(str(cod_ordem_fat).strip())
+    except (TypeError, ValueError):
+        return None
+    return ExpedicaoOrdemFat.query.filter_by(cod_ordem_fat=cod, excluido=False).first()
+
+
+def vincular_ordem_faturamento(solicitacao_id: int, usuario: str, cod_ordem_fat) -> SolicitacaoNF:
+    """Vincula uma ordem de faturamento (OF do ERP) a uma expedicao sem NF.
+    Se a OF ja estiver faturada (numero_nf preenchido), a solicitacao avanca
+    imediatamente para o status final conforme o tipo. Caso contrario, o
+    vinculo fica registrado e a solicitacao avanca automaticamente quando a
+    OF for faturada (ver reconciliacao em listar_ordens_avulso)."""
+    solicitacao = SolicitacaoNF.query.get(solicitacao_id)
+    if not solicitacao:
+        raise SolicitacaoNFError("Solicitação não encontrada.")
+    if solicitacao.status not in STATUS_PODE_VINCULAR_OF:
+        raise SolicitacaoNFError("Só é possível vincular ordem de faturamento em expedições sem NF.")
+
+    try:
+        cod = int(str(cod_ordem_fat or "").strip())
+    except (TypeError, ValueError):
+        raise SolicitacaoNFError("Informe um número de ordem de faturamento válido.")
+
+    ordem = _buscar_ordem_fat(cod)
+    if not ordem:
+        raise SolicitacaoNFError(f"Ordem de faturamento {cod} não encontrada.")
+
+    status_anterior = solicitacao.status
+    solicitacao.ordem_faturamento = cod
+    solicitacao.updated_at = datetime.now()
+    db.session.add(SolicitacaoNFLog(
+        solicitacao_id=solicitacao.id,
+        acao="vinculo_of",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=status_anterior,
+        detalhes=json.dumps({"cod_ordem_fat": cod, "numero_nf": ordem.numero_nf}, ensure_ascii=False),
+    ))
+    db.session.commit()
+
+    # OF ja faturada: avanca a solicitacao imediatamente com a NF da OF.
+    numero_nf = str(ordem.numero_nf or "").strip()
+    if numero_nf:
+        return marcar_faturada(
+            solicitacao_id, usuario, numero_nf,
+            f"Faturado pela ordem de faturamento #{cod}",
+        )
+    return solicitacao
+
+
+def _reconciliar_of_vinculadas() -> None:
+    """Avanca automaticamente as solicitacoes vinculadas a uma OF que ja foi
+    faturada no ERP (numero_nf preenchido). Chamada ao listar o painel."""
+    pendentes = (
+        SolicitacaoNF.query
+        .filter(SolicitacaoNF.ordem_faturamento.isnot(None))
+        .filter(SolicitacaoNF.status.in_(STATUS_PODE_VINCULAR_OF))
+        .all()
+    )
+    for sol in pendentes:
+        ordem = _buscar_ordem_fat(sol.ordem_faturamento)
+        numero_nf = str(ordem.numero_nf or "").strip() if ordem else ""
+        if numero_nf:
+            try:
+                marcar_faturada(
+                    sol.id, "Sistema (OF)", numero_nf,
+                    f"Faturado automaticamente pela ordem de faturamento #{sol.ordem_faturamento}",
+                )
+            except SolicitacaoNFError:
+                continue
+
+
 def registrar_retorno(solicitacao_id: int, usuario: str, numero_nf_retorno: str, observacao: str | None) -> SolicitacaoNF:
     solicitacao = SolicitacaoNF.query.get(solicitacao_id)
     if not solicitacao:
@@ -521,6 +598,7 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.separado_por = None
         solicitacao.separado_at = None
         solicitacao.observacoes_separacao = None
+        solicitacao.ordem_faturamento = None
         for item in solicitacao.itens:
             item.separado = False
     elif status_atual in (STATUS_NF_EMITIDA, STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA):
@@ -536,6 +614,8 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         solicitacao.observacoes_faturamento = None
         solicitacao.nf_parceiro_nome = None
         solicitacao.nf_parceiro_endereco = None
+        # Desfaz o vinculo com a OF para nao refaturar automaticamente ao listar.
+        solicitacao.ordem_faturamento = None
     elif status_atual == STATUS_ESTOQUE_RETORNADO:
         novo_status = (
             STATUS_ESTOQUE_ASSISTENCIA
@@ -653,13 +733,33 @@ def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
         "observacoes_retorno": s.observacoes_retorno,
         "nf_parceiro_nome": s.nf_parceiro_nome,
         "nf_parceiro_endereco": s.nf_parceiro_endereco,
+        "ordem_faturamento": s.ordem_faturamento,
+        "ordem_faturamento_info": _info_ordem_fat(s.ordem_faturamento),
         "created_at": _iso(s.created_at),
         "itens": [_serializar_item(i) for i in s.itens],
     }
 
 
+def _info_ordem_fat(cod_ordem_fat) -> dict[str, Any] | None:
+    """Snapshot leve da OF vinculada (cliente/status/NF) para exibir no painel."""
+    if not cod_ordem_fat:
+        return None
+    ordem = _buscar_ordem_fat(cod_ordem_fat)
+    if not ordem:
+        return {"cod_ordem_fat": cod_ordem_fat, "encontrada": False}
+    return {
+        "cod_ordem_fat": ordem.cod_ordem_fat,
+        "encontrada": True,
+        "cliente": ordem.cliente,
+        "status": ordem.status,
+        "numero_nf": ordem.numero_nf,
+        "orcamento": ordem.orcamento,
+    }
+
+
 def listar_ordens_avulso() -> dict[str, Any]:
     """Lista + KPIs da aba "Faturamento avulso" (Conferencia de Expedicao)."""
+    _reconciliar_of_vinculadas()
     solicitacoes = SolicitacaoNF.query.order_by(SolicitacaoNF.created_at.desc()).all()
     resumo = {
         "em_separacao": 0,
