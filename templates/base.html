@@ -829,6 +829,7 @@ if ("serviceWorker" in navigator) {
     const API_COBRANCA_RESPONDER = "/api/expedicao/assistente/cobranca/responder";
     const API_COBRANCA_ADIAR = "/api/expedicao/assistente/cobranca/adiar";
     const API_COBRANCA_CCE = "/api/expedicao/assistente/cobranca/cce-feita";
+    const API_COBRANCA_ENCAMINHAR = "/api/expedicao/assistente/cobranca/encaminhar";
     const API_NOVIDADES = "/api/expedicao/assistente/novidades";
     const LS_NOVIDADES = "bia_novidades_desde";
     const API_MENSAGENS = "/api/expedicao/assistente/mensagens";
@@ -1044,10 +1045,18 @@ if ("serviceWorker" in navigator) {
 
     // ----- Cobrança / follow-up de pendências -----
     function renderChipsCobranca() {
-        const chips = ["Já resolvi", "Ainda estou resolvendo", "Deixa pra depois"];
+        const chips = ["Já resolvi", "Ainda estou resolvendo", "Deixa pra depois", "Repassar pra alguém"];
         chipsEl.innerHTML = chips.map((s) => `<button type="button" class="bia-chip">${escapeHtml(s)}</button>`).join("");
         chipsEl.querySelectorAll(".bia-chip").forEach((c) => {
-            c.addEventListener("click", () => { input.value = c.textContent; enviarPergunta(); });
+            c.addEventListener("click", () => {
+                if (c.textContent === "Repassar pra alguém") {
+                    input.value = "repassar essa cobrança para ";
+                    input.focus();
+                    return;
+                }
+                input.value = c.textContent;
+                enviarPergunta();
+            });
         });
     }
 
@@ -1140,6 +1149,53 @@ if ("serviceWorker" in navigator) {
         // Modo cobrança: a resposta do operador vira o motivo da pendência.
         if (cobrancaAtual) {
             const c = cobrancaAtual;
+            // Repassar a cobrança para alguém (vira um aviso da Bia).
+            const mFwd = q.match(/^\s*(repassa\w*|repasse|encaminh\w*|delega\w*)\b(.*)$/i);
+            if (mFwd) {
+                const resto = mFwd[2] || "";
+                const mAlvo = resto.match(/\b(?:para|pra|pro|ao|aos)\s+(.+)$/i);
+                const alvo = (mAlvo ? mAlvo[1] : "").trim();
+                addUser(q);
+                input.value = "";
+                if (!alvo) {
+                    addBot("Pra quem eu repasso essa cobrança? Ex.: \"repassar para o joão\", \"repassar para o cargo logística\" ou \"repassar para todos\".");
+                    renderChipsCobranca();
+                    input.focus();
+                    return; // mantém cobrancaAtual
+                }
+                sendBtn.disabled = true;
+                const t = mostrarDigitando();
+                try {
+                    const r = await fetch(API_COBRANCA_ENCAMINHAR, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({
+                            ref_tipo: c.ref_tipo,
+                            ref_id: c.ref_id,
+                            alvo: alvo,
+                            titulo: c.titulo || "",
+                            referencia: c.referencia || "",
+                            numero_nf: c.numero_nf || "",
+                        }),
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    t.remove();
+                    if (r.ok) addBot(d.resposta || "Repassado! ✅");
+                    else if (r.status === 403) addBot("Só a Logística ou um admin podem repassar cobranças 🙂.");
+                    else addBot(d.error || "Não consegui repassar agora. Tenta de novo?");
+                } catch (e) {
+                    t.remove();
+                    addBot("Tive um probleminha pra repassar. Tenta de novo?");
+                } finally {
+                    sendBtn.disabled = false;
+                    input.focus();
+                }
+                // Segue cobrando: volta a lembrar a mesma pendência.
+                const alvoRef = `${c.titulo || "a pendência"} ${c.ref_id}${c.referencia ? " (" + c.referencia + ")" : ""}`;
+                await digitar(`Repassei. Sobre ${alvoRef}, quando puder me diz o motivo do atraso que eu registro. 🙂`, 900);
+                renderChipsCobranca();
+                return; // mantém cobrancaAtual
+            }
             const adiar = /^(depois|deixa pra depois|pular|pula|agora n|mais tarde|skip)/i.test(q);
             // Se o operador faz uma PERGUNTA (em vez de dar o motivo), a Bia
             // responde a dúvida e NÃO registra como motivo nem avança.

@@ -168,43 +168,36 @@ def _enviar_broadcast(ctx: dict, texto: str) -> dict:
     return _resposta(f"Enviei seu aviso para todo mundo ({n} {plural}). 📢")
 
 
-def interpretar_envio(pergunta: str, ctx: dict) -> dict | None:
-    """Interpreta um comando de ENVIO de aviso do Admin. Devolve a resposta da
-    Bia (dict) ou None quando a frase não é um comando de envio (para o fluxo
-    seguir para o chat normal)."""
-    if not ctx.get("is_admin"):
-        return None
-    original = str(pergunta or "").strip()
-    if not original or not _RE_VERBO.match(original):
-        return None
+def _eh_comando_envio(original: str) -> bool:
+    """True se a frase parece um comando de aviso. Verbos explícitos de aviso
+    (avisar/comunicar/notificar) contam sozinhos; verbos genéricos (mandar/
+    enviar) só contam quando há ":" delimitando alvo:mensagem — assim frases
+    como "manda ver as pendências" não são confundidas com um envio."""
+    m = _RE_VERBO.match(original)
+    if not m:
+        return False
+    verbo = _normalizar(m.group(1))
+    aviso_explicito = verbo.startswith(("avis", "comunic", "notific"))
+    return aviso_explicito or (":" in original)
 
-    if ":" not in original:
-        return _resposta(
-            "Para enviar um aviso, use: \"avisar <alvo>: <mensagem>\".\n"
-            "Ex.: \"avisar todos: reunião às 15h\", \"avisar cargo Logística: ...\", "
-            "\"avisar joao: ...\"."
-        )
 
-    cabec, texto = original.split(":", 1)
-    texto = texto.strip()
-    if not texto:
-        return _resposta(
-            "Faltou a mensagem depois dos dois-pontos. Ex.: \"avisar todos: <mensagem>\"."
-        )
-
-    alvo = _normalizar(cabec)
-    # Remove o verbo e conectores iniciais para isolar o alvo.
+def _preparar_alvo(cabec_norm: str) -> str:
+    """Isola o alvo removendo verbo e conectores iniciais."""
     alvo = re.sub(
         r"^(avisar|avise|aviso|comunicar|comunique|comunicado|notificar|notifique|"
         r"mandar|manda|enviar|envie)\s+",
         "",
-        alvo,
+        cabec_norm,
     )
     alvo = re.sub(r"^(um|uma)\s+", "", alvo)
     alvo = re.sub(r"^(recado|mensagem|aviso|comunicado)\s+", "", alvo)
     alvo = re.sub(r"^(para|pra|pro|ao|aos|a|o|as|os)\s+", "", alvo)
-    alvo = alvo.strip()
+    return alvo.strip()
 
+
+def _despachar(ctx: dict, alvo: str, texto: str) -> dict:
+    """Roteia o texto para broadcast / cargo / usuário conforme o alvo já
+    normalizado e limpo."""
     # Broadcast.
     if (
         not alvo
@@ -232,6 +225,63 @@ def interpretar_envio(pergunta: str, ctx: dict) -> dict | None:
 
     # Nome "solto" -> tratado como usuário.
     return _enviar_usuario(ctx, alvo, texto)
+
+
+def enviar_para(ctx: dict, alvo: str, texto: str) -> dict:
+    """Envia um texto já pronto para um alvo em linguagem natural (usuário,
+    cargo ou todos). Usado pelo repasse de cobrança."""
+    return _despachar(ctx, _preparar_alvo(_normalizar(alvo)), texto)
+
+
+def interpretar_envio(pergunta: str, ctx: dict) -> dict | None:
+    """Interpreta um comando de ENVIO de aviso. Devolve a resposta da Bia
+    (dict) ou None quando a frase não é um comando de envio (para o fluxo seguir
+    para o chat normal). O envio em si é restrito a Admin: se um não-admin
+    escrever um comando de aviso, avisamos claramente (em vez de deixar o chat
+    responder como se tivesse enviado)."""
+    original = str(pergunta or "").strip()
+    if not original or not _eh_comando_envio(original):
+        return None
+
+    if not ctx.get("is_admin"):
+        return _resposta(
+            "Só administradores podem enviar avisos pela Bia 🙂. "
+            "Se precisar avisar alguém, peça a um administrador."
+        )
+
+    if ":" not in original:
+        return _resposta(
+            "Para enviar um aviso, use: \"avisar <alvo>: <mensagem>\".\n"
+            "Ex.: \"avisar todos: reunião às 15h\", \"avisar cargo Logística: ...\", "
+            "\"avisar joao: ...\"."
+        )
+
+    cabec, texto = original.split(":", 1)
+    texto = texto.strip()
+    if not texto:
+        return _resposta(
+            "Faltou a mensagem depois dos dois-pontos. Ex.: \"avisar todos: <mensagem>\"."
+        )
+
+    return _despachar(ctx, _preparar_alvo(_normalizar(cabec)), texto)
+
+
+def encaminhar_cobranca(ctx: dict, alvo: str, detalhe: dict) -> dict:
+    """Repassa uma cobrança/pendência para alguém como aviso da Bia. Quem
+    encaminha (Logística/Admin) vira o remetente. ``detalhe`` é o snapshot da
+    pendência (título, referência, NF)."""
+    titulo = (detalhe.get("titulo") or "Pendência de expedição").strip()
+    ref_id = str(detalhe.get("ref_id") or "").strip()
+    referencia = (detalhe.get("referencia") or "").strip()
+    nf = str(detalhe.get("numero_nf") or "").strip()
+
+    ident = ref_id
+    if nf:
+        ident = f"{ident} · NF {nf}".strip(" ·")
+    partes = [p for p in (titulo, ident, referencia) if p]
+    corpo = " — ".join(partes)
+    texto = f"📌 Repasse de pendência: {corpo}. Pode dar uma olhada nessa quando puder?"
+    return enviar_para(ctx, alvo, texto)
 
 
 # --------------------------------------------------------------------------- #

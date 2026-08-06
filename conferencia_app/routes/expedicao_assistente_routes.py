@@ -44,15 +44,16 @@ def perguntar():
         "role": session.get("role"),
         "is_admin": is_admin_session(),
     }
-    # Envio de AVISOS (Admin -> usuário/cargo/todos) pelo chat da Bia. Só Admin;
-    # se a frase não for um comando de envio, segue o fluxo normal.
-    if is_admin_session():
-        try:
-            envio = bia_mensagem_svc.interpretar_envio(pergunta, ctx)
-        except Exception:
-            envio = None
-        if envio is not None:
-            return jsonify(envio)
+    # Envio de AVISOS pelo chat da Bia. Interpretamos para QUALQUER usuário
+    # logado (o serviço decide a permissão e responde de forma clara a quem não
+    # é Admin), evitando que o chat responda como se tivesse enviado. Só devolve
+    # aqui quando a frase é realmente um comando de aviso.
+    try:
+        envio = bia_mensagem_svc.interpretar_envio(pergunta, ctx)
+    except Exception:
+        envio = None
+    if envio is not None:
+        return jsonify(envio)
     # Ações que ESCREVEM em romaneios só para quem opera a expedição (ou Admin).
     if is_admin_session() or has_permission(PERMISSION):
         try:
@@ -216,3 +217,34 @@ def mensagens():
     role = session.get("role")
     msgs = bia_mensagem_svc.mensagens_nao_lidas(username, role, marcar=True)
     return jsonify({"mensagens": msgs, "total": len(msgs)})
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/cobranca/encaminhar", methods=["POST"])
+@permission_required(PERMISSION)
+def cobranca_encaminhar():
+    """Repassa uma cobrança/pendência para alguém (usuário, cargo ou todos) como
+    aviso da Bia. Liberado a quem opera as cobranças (Logística ou Admin)."""
+    role = session.get("role")
+    if not cobranca_svc.pode_cobrar(role):
+        return jsonify({"error": "Sem permissão para repassar cobranças."}), 403
+    payload = request.get_json(silent=True) or {}
+    ref_tipo = str(payload.get("ref_tipo") or "").strip()
+    ref_id = str(payload.get("ref_id") or "").strip()
+    alvo = str(payload.get("alvo") or "").strip()
+    if not ref_tipo or not ref_id:
+        return jsonify({"error": "Pendência não informada."}), 400
+    if not alvo:
+        return jsonify({"error": "Informe para quem repassar."}), 400
+    det = cobranca_svc.detalhe(ref_tipo, ref_id) or {
+        "ref_tipo": ref_tipo,
+        "ref_id": ref_id,
+        "titulo": str(payload.get("titulo") or "Pendência de expedição").strip(),
+        "referencia": str(payload.get("referencia") or "").strip(),
+        "numero_nf": str(payload.get("numero_nf") or "").strip(),
+    }
+    ctx = {
+        "username": str(session.get("username") or "").strip(),
+        "role": role,
+        "is_admin": is_admin_session(),
+    }
+    return jsonify(bia_mensagem_svc.encaminhar_cobranca(ctx, alvo, det))

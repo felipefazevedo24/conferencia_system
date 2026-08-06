@@ -46,6 +46,29 @@ def pode_cobrar(role: str | None) -> bool:
     return "admin" in r or r == "logistica"
 
 
+def detalhe(ref_tipo: str, ref_id: str) -> dict | None:
+    """Snapshot de uma cobrança (para repasse/exibição). None se não existir."""
+    try:
+        c = ExpedicaoCobranca.query.filter_by(
+            ref_tipo=str(ref_tipo or "").strip(), ref_id=str(ref_id or "").strip()
+        ).first()
+    except Exception:
+        return None
+    if not c:
+        return None
+    return {
+        "ref_tipo": c.ref_tipo,
+        "ref_id": c.ref_id,
+        "categoria": c.categoria,
+        "titulo": c.titulo,
+        "referencia": c.referencia,
+        "numero_nf": c.numero_nf,
+        "severidade": c.severidade,
+        "status": c.status,
+        "motivo": c.motivo,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Sincronização das pendências atuais -> tabela de acompanhamento.
 # --------------------------------------------------------------------------- #
