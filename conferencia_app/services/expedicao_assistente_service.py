@@ -24,6 +24,7 @@ from ..models import (
     ExpedicaoOrdemST,
     ExpedicaoRomaneio,
     ExpedicaoRomaneioNF,
+    ItemNota,
 )
 from . import expedicao_fat_service as fat_svc
 from . import expedicao_st_service as st_svc
@@ -846,7 +847,12 @@ _LLM_SYSTEM = (
     "STATUS (quantas ordens estão aguardando conferência, conferidas, faturadas, "
     "expedidas etc.), os MOVIMENTOS DE HOJE (o que foi LIBERADO PARA CONFERIR HOJE, "
     "CONFERIDO HOJE e EXPEDIDO HOJE) e as PENDÊNCIAS PRIORIZADAS, cada item com o "
-    "código da ordem (OF/OC), cliente, NF e previsão. Use esses dados para responder "
+    "código da ordem (OF/OC), cliente, NF e previsão. Há também um bloco "
+    "RECEBIMENTO — ENTRADA DE NOTAS (quantas notas CHEGARAM/foram importadas hoje, "
+    "conferidas hoje, lançadas hoje e os totais pendentes), com a lista das notas "
+    "que chegaram hoje. Use ESSE bloco para responder sobre RECEBIMENTO de notas "
+    "(ex.: 'recebemos notas hoje?', 'quantas chegaram?') — NUNCA diga que não houve "
+    "recebimento sem antes olhar esse bloco. Use esses dados para responder "
     "perguntas objetivas como 'o que foi liberado para conferir hoje?', 'o que falta "
     "expedir?', 'o que está atrasado?', 'como está a expedição agora?' — cite os "
     "códigos, clientes e quantidades REAIS que aparecem nos dados. Se a seção "
@@ -890,6 +896,71 @@ _LLM_SYSTEM = (
     "responsável.\n"
     "6. Nunca ajude a burlar processos, fraudar conferências ou omitir divergências."
 )
+
+
+def _recebimento_contexto() -> list[str]:
+    """Bloco de contexto AO VIVO do RECEBIMENTO (entrada de notas fiscais).
+
+    A Bia atende o sistema inteiro, não só a expedição. Este bloco dá a ela a
+    visão do que chegou / foi conferido / lançado hoje e do que está pendente,
+    para NÃO dizer que 'não houve recebimento' quando na verdade houve.
+    É best-effort: qualquer falha devolve lista vazia e a Bia segue com o resto.
+    """
+    from sqlalchemy import func
+
+    hoje = datetime.now().date()
+    linhas: list[str] = []
+    try:
+        def _distinct_notas(*filtros) -> int:
+            q = db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
+            for f in filtros:
+                q = q.filter(f)
+            return int(q.scalar() or 0)
+
+        importadas_hoje = _distinct_notas(func.date(ItemNota.data_importacao) == hoje)
+        conferidas_hoje = _distinct_notas(
+            ItemNota.fim_conferencia.isnot(None),
+            func.date(ItemNota.fim_conferencia) == hoje,
+        )
+        lancadas_hoje = _distinct_notas(
+            ItemNota.status == "Lançado",
+            func.date(ItemNota.data_lancamento) == hoje,
+        )
+        pend_conf = _distinct_notas(ItemNota.status == "Pendente")
+        pend_lanc = _distinct_notas(ItemNota.status == "Concluído")
+
+        linhas.append("")
+        linhas.append(
+            "RECEBIMENTO — ENTRADA DE NOTAS (módulo Conferência de Recebimento; "
+            "cada NF passa por: chegou/importada → conferida → lançada):"
+        )
+        linhas.append(f"- Notas que CHEGARAM/foram importadas HOJE: {importadas_hoje}.")
+        linhas.append(f"- Notas CONFERIDAS hoje: {conferidas_hoje}.")
+        linhas.append(f"- Notas LANÇADAS hoje: {lancadas_hoje}.")
+        linhas.append(f"- Pendentes de conferência (total, todas as datas): {pend_conf}.")
+        linhas.append(f"- Pendentes de lançamento (conferidas, total): {pend_lanc}.")
+
+        amostra = (
+            db.session.query(
+                ItemNota.numero_nota,
+                func.max(ItemNota.fornecedor).label("fornecedor"),
+            )
+            .filter(func.date(ItemNota.data_importacao) == hoje)
+            .group_by(ItemNota.numero_nota)
+            .order_by(ItemNota.numero_nota)
+            .limit(30)
+            .all()
+        )
+        if amostra:
+            linhas.append(
+                "- Notas que chegaram hoje: "
+                + ", ".join(
+                    f"NF {n} ({(forn or '—').strip()})" for n, forn in amostra
+                )
+            )
+    except Exception:
+        return []
+    return linhas
 
 
 def _contexto_llm() -> str:
@@ -1001,6 +1072,9 @@ def _contexto_llm() -> str:
         linhas.append(f"- {c['titulo']} [{c['severidade']}]: {c['quantidade']}. {c['orientacao']}")
         for it in (c.get("itens_amostra") or [])[:10]:
             linhas.append(_linha_ordem(it))
+
+    # Recebimento (entrada de notas) — a Bia atende o sistema inteiro.
+    linhas.extend(_recebimento_contexto())
     return "\n".join(linhas)
 
 
@@ -1133,7 +1207,7 @@ def _responder_llm(pergunta: str, historico=None) -> str | None:
     sistema = _LLM_SYSTEM
     if conhecimento:
         sistema += "\n\nBASE DE CONHECIMENTO DO SISTEMA:\n" + conhecimento
-    sistema += "\n\nDADOS ATUAIS DA EXPEDIÇÃO:\n" + contexto
+    sistema += "\n\nDADOS ATUAIS DO SISTEMA (expedição + recebimento):\n" + contexto
     mensagens = [{"role": "system", "content": sistema}]
     mensagens.extend(_historico_llm(historico))
     mensagens.append({"role": "user", "content": pergunta})
