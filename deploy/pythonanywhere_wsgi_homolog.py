@@ -1,8 +1,10 @@
 """
 WSGI de HOMOLOGAÇÃO (staging) para o PythonAnywhere.
 
-Copie este conteúdo para o arquivo WSGI do web app de HOMOLOGAÇÃO
-(conta/licença separada, ex.: felipefazevedohml).
+Copie este conteúdo para o arquivo WSGI do SEGUNDO web app (homologação)
+da MESMA conta `felipefazevedo`. A separação de produção é feita por
+PASTA (`conferencia_system_hml`), BANCO (`felipefazevedo$sync_hml`) e
+DOMÍNIO próprio (ex.: homolog.suaempresa.com.br).
 
 >>> NÃO use este arquivo na produção. <<<
 
@@ -27,10 +29,11 @@ import sys
 
 
 # ---------------------------------------------------------------------------
-# 1) Caminho do projeto (clone do repositório na conta de homologação)
+# 1) Caminho do projeto (clone do repositório em PASTA SEPARADA da produção)
 # ---------------------------------------------------------------------------
-PA_USERNAME = "felipefazevedohml"  # <<< TROCAR: usuário da conta de homologação
-PA_PROJECT_DIR = f"/home/{PA_USERNAME}/conferencia_system"
+PA_USERNAME = "felipefazevedo"  # mesma conta da produção
+# ATENÇÃO: pasta diferente da produção (que é ~/conferencia_system)
+PA_PROJECT_DIR = f"/home/{PA_USERNAME}/conferencia_system_hml"
 
 if PA_PROJECT_DIR not in sys.path:
     sys.path.insert(0, PA_PROJECT_DIR)
@@ -38,13 +41,13 @@ if PA_PROJECT_DIR not in sys.path:
 
 # ---------------------------------------------------------------------------
 # 2) Banco de dados da HOMOLOGAÇÃO (separado da produção!)
-#    Crie um MySQL novo na aba Databases da conta de homologação, ex.:
-#    felipefazevedohml$sync_hml
+#    Na MESMA aba Databases, crie um banco novo:
+#    felipefazevedo$sync_hml  (o servidor MySQL é o mesmo; só muda o nome)
 # ---------------------------------------------------------------------------
 os.environ.setdefault(
     "DATABASE_URL",
-    # <<< TROCAR: usuário, senha e nome do banco de homologação
-    "mysql://felipefazevedohml:SENHA_DO_BANCO@felipefazevedohml.mysql.pythonanywhere-services.com/felipefazevedohml$sync_hml",
+    # <<< TROCAR apenas a SENHA do banco
+    "mysql://felipefazevedo:SENHA_DO_BANCO@felipefazevedo.mysql.pythonanywhere-services.com/felipefazevedo$sync_hml",
 )
 
 os.environ.setdefault("FLASK_ENV", "production")
@@ -79,8 +82,9 @@ os.environ.setdefault("TEAMS_WEBHOOK_EXPEDICAO_ST_URL", "")
 
 # Portal do cliente / links: aponte para o domínio da homologação para não
 # gerar links de produção em telas de teste.
-os.environ.setdefault("PORTAL_CLIENTE_BASE_URL", f"https://{PA_USERNAME}.pythonanywhere.com")
-os.environ.setdefault("PUBLIC_BASE_URL", f"https://{PA_USERNAME}.pythonanywhere.com")
+HOMOLOG_BASE_URL = "https://homolog.suaempresa.com.br"  # <<< TROCAR pelo seu domínio
+os.environ.setdefault("PORTAL_CLIENTE_BASE_URL", HOMOLOG_BASE_URL)
+os.environ.setdefault("PUBLIC_BASE_URL", HOMOLOG_BASE_URL)
 
 
 # ---------------------------------------------------------------------------
