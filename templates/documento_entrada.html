@@ -248,6 +248,68 @@
     .ce-vol-table tbody tr:last-child td { border-bottom: none; }
     .ce-vol-table tbody td:first-child { font-weight: 700; color: #0f172a; white-space: nowrap; }
     .ce-vol-table tbody td:last-child { width: 40px; text-align: right; }
+
+    /* ==========================================================================
+       TEMA ESCURO — sobrescreve superficies/textos hardcoded deste modulo
+       ========================================================================== */
+    [data-theme="escuro"] .box { background: var(--rec-surface); border-color: var(--rec-border); }
+    [data-theme="escuro"] .po-compare-table th { background: var(--rec-surface-alt); color: var(--rec-ink-500); }
+    [data-theme="escuro"] .vinculacao-card { background: var(--rec-surface); border-color: var(--rec-border); box-shadow: none; }
+    [data-theme="escuro"] .vinculacao-card.divergencia { background: rgba(239,68,68,.10); }
+    [data-theme="escuro"] .vinculacao-card.ok { background: rgba(34,197,94,.10); }
+    [data-theme="escuro"] .vinculacao-linha-xml { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .vinculacao-linha-xml-dados { color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
+    [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
+    [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
+    [data-theme="escuro"] .msg.ok { background: rgba(34,197,94,.12); color: #86efac; border-color: rgba(34,197,94,.30); }
+    [data-theme="escuro"] .msg.err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.30); }
+    [data-theme="escuro"] .modal-card,
+    [data-theme="escuro"] .vinculacao-overlay-card,
+    [data-theme="escuro"] .pendencia-card { background: var(--rec-surface); color: var(--rec-ink-900); }
+    [data-theme="escuro"] .pendencia-card h4 { color: #fcd34d; }
+    [data-theme="escuro"] .pendencia-card p { color: var(--rec-ink-500); }
+
+    [data-theme="escuro"] .rec-card { background: var(--rec-surface) !important; border-color: var(--rec-border) !important; box-shadow: var(--rec-shadow-1) !important; }
+    [data-theme="escuro"] .rec-card__head { background: var(--rec-surface-alt) !important; border-bottom-color: var(--rec-border) !important; }
+    [data-theme="escuro"] .rec-card__title { color: var(--rec-ink-900) !important; }
+    [data-theme="escuro"] .rec-card__sub { color: var(--rec-ink-500) !important; }
+    [data-theme="escuro"] .rec-btn { background: var(--rec-surface-alt) !important; border-color: var(--rec-border) !important; color: var(--rec-ink-900) !important; }
+    [data-theme="escuro"] .rec-btn:hover { background: var(--rec-surface) !important; border-color: var(--rec-border-strong) !important; }
+    [data-theme="escuro"] .rec-btn--danger { background: var(--rec-surface-alt) !important; color: #fca5a5 !important; }
+    [data-theme="escuro"] .rec-btn--danger:hover { background: rgba(239,68,68,.12) !important; }
+    [data-theme="escuro"] .rec-input,
+    [data-theme="escuro"] .rec-textarea,
+    [data-theme="escuro"] .rec-select { background: var(--rec-surface) !important; border-color: var(--rec-border) !important; color: var(--rec-ink-900) !important; }
+
+    [data-theme="escuro"] .doc-btn-secondary { background: var(--rec-surface-alt); color: var(--rec-ink-900); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-feedback { background: var(--rec-surface); }
+    [data-theme="escuro"] .doc-card { background: var(--rec-surface); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-summary-item { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-step { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-step.pending { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-pendency-item,
+    [data-theme="escuro"] .doc-timeline-item { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-modal { background: var(--rec-surface); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-modal-foot { background: var(--rec-surface-alt); border-top-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-item-code-card { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.30); }
+    [data-theme="escuro"] .doc-item-code-title { color: #fcd34d; }
+    [data-theme="escuro"] .doc-item-code-sub { color: #f0c674; }
+    [data-theme="escuro"] .doc-form-help { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .doc-input,
+    [data-theme="escuro"] .doc-select,
+    [data-theme="escuro"] .doc-textarea { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
+
+    [data-theme="escuro"] .de-header-strip { background: var(--rec-surface); border-color: var(--rec-border); }
+    [data-theme="escuro"] .de-header-strip__id { color: var(--rec-ink-900); }
+    [data-theme="escuro"] .de-header-strip__sub { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .de-import-col__title { color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
+    [data-theme="escuro"] .file-msg { color: var(--rec-ink-500); }
+    [data-theme="escuro"] .ce-vol-table thead th { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
+    [data-theme="escuro"] .ce-vol-table tbody td { color: var(--rec-ink-700); border-bottom-color: var(--rec-border); }
+    [data-theme="escuro"] .ce-vol-table tbody td:first-child { color: var(--rec-ink-900); }
 </style>
 {% endblock %}
 

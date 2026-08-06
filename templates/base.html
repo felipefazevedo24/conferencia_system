@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br" data-theme="{{ current_user_tema or 'claro' }}">
+<html lang="pt-br" data-theme="escuro">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -162,9 +162,40 @@
             <a href="/" class="sidebar-brand">
                 <div class="brand-logo-mask"></div>
             </a>
+            <button id="menu-toggle" type="button" class="sidebar-collapse-btn" aria-label="Recolher menu" title="Recolher menu">
+                <i class="fas fa-bars"></i>
+            </button>
         </div>
 
         <div class="sidebar-scroll">
+            <div class="sidebar-search">
+                <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
+                    <i class="fas fa-search"></i>
+                    <span>Pesquisar módulo</span>
+                </button>
+            </div>
+            <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
+                <div class="shell-search-input-wrap">
+                    <i class="fas fa-search"></i>
+                    <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
+                </div>
+                <section class="shell-search-group">
+                    <header>
+                        <strong>Favoritos</strong>
+                    </header>
+                    <div id="shell-search-favorites" class="shell-search-list">
+                        <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
+                    </div>
+                </section>
+                <section class="shell-search-group">
+                    <header>
+                        <strong>Resultados</strong>
+                    </header>
+                    <div id="shell-search-results" class="shell-search-list">
+                        <div class="shell-search-empty">Digite para buscar módulos.</div>
+                    </div>
+                </section>
+            </div>
             <div class="list-group list-group-flush" id="accordionSidebar">
                 <a href="/" class="list-group-item list-group-item-action sidebar-home-link">
                     <span class="nav-group-title"><i class="fas fa-house"></i><span>Menu principal</span></span>
@@ -355,42 +386,6 @@
     </aside>
 
     <div id="page-content-wrapper">
-        <nav class="top-nav">
-            <div class="nav-left">
-                <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
-            </div>
-            <div class="nav-right">
-                <div class="top-nav-center">
-                    <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
-                        <i class="fas fa-search"></i>
-                        <span>Pesquisar</span>
-                    </button>
-                    <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
-                        <div class="shell-search-input-wrap">
-                            <i class="fas fa-search"></i>
-                            <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
-                        </div>
-                        <section class="shell-search-group">
-                            <header>
-                                <strong>Favoritos</strong>
-                            </header>
-                            <div id="shell-search-favorites" class="shell-search-list">
-                                <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
-                            </div>
-                        </section>
-                        <section class="shell-search-group">
-                            <header>
-                                <strong>Resultados</strong>
-                            </header>
-                            <div id="shell-search-results" class="shell-search-list">
-                                <div class="shell-search-empty">Digite para buscar módulos.</div>
-                            </div>
-                        </section>
-                    </div>
-                </div>
-            </div>
-        </nav>
-
         <main class="content-body">{% block content %}{% endblock %}</main>
         <footer class="app-footer">
             <span><strong>© 2026</strong></span>
