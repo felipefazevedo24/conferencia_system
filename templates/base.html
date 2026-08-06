@@ -414,6 +414,37 @@
     </section>
 </div>
 
+<div class="sync-confirm-overlay" id="logoutConfirmOverlay" aria-hidden="true">
+    <div class="sync-confirm" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle">
+        <div class="sync-confirm-mark"><i class="fas fa-right-from-bracket"></i></div>
+        <h3 id="logoutConfirmTitle">Encerrar sessão?</h3>
+        <p>Você vai sair do Columbia Sync e precisará entrar novamente para continuar.</p>
+        <div class="sync-confirm-actions">
+            <button type="button" class="sync-confirm-btn cancel" id="logoutConfirmCancel">Continuar conectado</button>
+            <button type="button" class="sync-confirm-btn danger" id="logoutConfirmOk"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.sync-confirm-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(5,9,16,.62);backdrop-filter:blur(8px);z-index:2400}
+.sync-confirm-overlay.show{display:flex;animation:syncConfirmFade .18s ease}
+@keyframes syncConfirmFade{from{opacity:0}to{opacity:1}}
+.sync-confirm{width:min(420px,100%);text-align:center;background:linear-gradient(165deg,#0f1a28 0%,#0a121d 100%);border:1px solid rgba(125,196,255,.18);border-radius:20px;box-shadow:0 30px 70px rgba(2,10,20,.6);padding:28px 26px 24px;color:#eaf3fc;animation:syncConfirmPop .2s cubic-bezier(.2,.9,.3,1)}
+@keyframes syncConfirmPop{from{transform:translateY(10px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.sync-confirm-mark{width:56px;height:56px;margin:0 auto 16px;border-radius:16px;display:grid;place-items:center;font-size:22px;color:#ffb4b4;background:rgba(220,38,38,.16);border:1px solid rgba(248,113,113,.3)}
+.sync-confirm h3{margin:0 0 8px;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#fff}
+.sync-confirm p{margin:0 0 22px;font-size:13.5px;line-height:1.55;color:rgba(200,219,238,.7)}
+.sync-confirm-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.sync-confirm-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 20px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.sync-confirm-btn:hover{transform:translateY(-1px)}
+.sync-confirm-btn.cancel{background:rgba(255,255,255,.05);border-color:rgba(125,196,255,.22);color:#dbe9f7}
+.sync-confirm-btn.cancel:hover{background:rgba(28,134,242,.16)}
+.sync-confirm-btn.danger{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;box-shadow:0 8px 22px rgba(220,38,38,.32)}
+.sync-confirm-btn.danger:hover{background:linear-gradient(135deg,#e23b3b,#c81f1f)}
+@media print{.sync-confirm-overlay{display:none !important}}
+</style>
+
 <style>
 .updates-notice-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.55);backdrop-filter:blur(8px);z-index:2100}
 .updates-notice-overlay.show{display:flex}
@@ -445,10 +476,32 @@ function setShellCollapsed(collapsed) {
 }
 
 function confirmarLogout() {
-    if (confirm("Deseja encerrar a sessao no Columbia Sync?")) {
-        window.location.href = "/logout";
-    }
+    const overlay = document.getElementById("logoutConfirmOverlay");
+    if (!overlay) { window.location.href = "/logout"; return; }
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+    const ok = document.getElementById("logoutConfirmOk");
+    if (ok) ok.focus();
 }
+
+(function () {
+    const overlay = document.getElementById("logoutConfirmOverlay");
+    if (!overlay) return;
+    const fechar = () => {
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+    };
+    document.getElementById("logoutConfirmCancel")?.addEventListener("click", fechar);
+    document.getElementById("logoutConfirmOk")?.addEventListener("click", function () {
+        window.location.href = "/logout";
+    });
+    overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) fechar();
+    });
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && overlay.classList.contains("show")) fechar();
+    });
+})();
 
 function renderShellFavorites() {
     const favoritesHost = document.getElementById("shell-search-favorites");
