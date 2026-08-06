@@ -819,7 +819,10 @@ if ("serviceWorker" in navigator) {
 
     // A Bia só opera de verdade na Conferência de Expedição. Nas demais páginas
     // ela aparece, mas em modo "manutenção".
-    const BIA_ATIVA = window.location.pathname.replace(/\/+$/, "") === "/expedicao/conferencia-cega";
+    // A Bia agora conversa em TODO o sistema. BIA_EXPEDICAO liga só os extras da
+    // Conferência de Expedição (panorama de pendências, cobrança, aprovações,
+    // filtros da fila e lembretes periódicos). O chat/LLM funciona em qualquer página.
+    const BIA_EXPEDICAO = window.location.pathname.replace(/\/+$/, "") === "/expedicao/conferencia-cega";
     const API_PENDENCIAS = "/api/expedicao/assistente/pendencias";
     const API_PERGUNTAR = "/api/expedicao/assistente/perguntar";
     const API_COBRANCA_PROXIMA = "/api/expedicao/assistente/cobranca/proxima";
@@ -921,7 +924,7 @@ if ("serviceWorker" in navigator) {
     function cardHtml(c) {
         const itens = (c.itens_amostra || []).map(itemHtml).join("");
         const mais = c.itens_ocultos > 0 ? `<div class="bia-card-mais">+${c.itens_ocultos} não exibido(s)</div>` : "";
-        const link = c.acao_filtro && BIA_ATIVA
+        const link = c.acao_filtro && BIA_EXPEDICAO
             ? `<button type="button" class="bia-card-link" data-filtro="${escapeHtml(c.acao_filtro)}"><i class="fas fa-arrow-right"></i> Ver na fila</button>` : "";
         return `<div class="bia-card sev-${escapeHtml(c.severidade)}">
             <div class="bia-card-head">
@@ -978,11 +981,12 @@ if ("serviceWorker" in navigator) {
     async function iniciarConversa() {
         if (iniciada) return;
         iniciada = true;
-        if (!BIA_ATIVA) {
-            statusEl.textContent = "Em manutenção";
+        if (!BIA_EXPEDICAO) {
+            statusEl.textContent = "Assistente do sistema";
+            footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
-            await digitar("Nesta área eu ainda estou em manutenção 🛠️. Por enquanto só consigo te ajudar de verdade na Conferência de Expedição.", 900);
-            footEl.style.display = "none";
+            await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema — recebimento, conferência, compras, expedição, romaneios, notas fiscais, contas a receber e mais. O que você precisa?", 900);
+            renderChips(["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"]);
             return;
         }
         await digitar("Oi! Eu sou a Bia 😊 Tô de olho na expedição pra te ajudar.", 600);
@@ -1008,7 +1012,7 @@ if ("serviceWorker" in navigator) {
     // Avisa o Admin (ao abrir a Bia) sobre estornos de romaneio pendentes de
     // aprovação. Para quem não é Admin, o endpoint devolve lista vazia.
     async function avisarAprovacoesEstorno() {
-        if (!BIA_ATIVA) return;
+        if (!BIA_EXPEDICAO) return;
         try {
             const r = await fetch("/api/expedicao/assistente/aprovacoes", { headers: { "Accept": "application/json" } });
             if (!r.ok) return;
@@ -1037,7 +1041,7 @@ if ("serviceWorker" in navigator) {
     }
 
     async function cobrarProxima() {
-        if (!BIA_ATIVA) return;
+        if (!BIA_EXPEDICAO) return;
         try {
             const r = await fetch(API_COBRANCA_PROXIMA, { headers: { "Accept": "application/json" } });
             if (!r.ok) { cobrancaAtual = null; return; }
@@ -1052,7 +1056,7 @@ if ("serviceWorker" in navigator) {
 
     async function enviarPergunta() {
         const q = (input.value || "").trim();
-        if (!q || !BIA_ATIVA) return;
+        if (!q) return;
 
         // Ensinar a Bia: "aprenda: ...", "ensina ...", "anota: ..." (só admin no backend).
         const mLearn = q.match(/^(aprenda|aprender|ensina|ensinar|anota|anote)\s*[:,\-]?\s*(.+)/i);
@@ -1225,7 +1229,7 @@ if ("serviceWorker" in navigator) {
         toggle.setAttribute("aria-expanded", "true");
         esconderToast();
         iniciarConversa();
-        if (BIA_ATIVA) setTimeout(() => input.focus(), 150);
+        setTimeout(() => input.focus(), 150);
     }
     function fecharPainel() {
         panel.classList.remove("open");
@@ -1259,7 +1263,7 @@ if ("serviceWorker" in navigator) {
     (async function saudarEavisar() {
         if (sessionStorage.getItem("bia_bemvindo")) {
             // Mesmo já tendo saudado, mantém o selo atualizado na Expedição.
-            if (BIA_ATIVA) {
+            if (BIA_EXPEDICAO) {
                 try {
                     const r = await fetch(API_PENDENCIAS, { headers: { "Accept": "application/json" } });
                     if (r.ok) { const d = await r.json(); atualizarBadge(d.urgentes, d.total_pendencias); }
@@ -1270,7 +1274,7 @@ if ("serviceWorker" in navigator) {
         sessionStorage.setItem("bia_bemvindo", "1");
         const ola = BIA_USER_NOME ? `Bem-vindo(a) de volta, ${BIA_USER_NOME}! 👋` : "Bem-vindo(a) de volta! 👋";
 
-        if (!BIA_ATIVA) {
+        if (!BIA_EXPEDICAO) {
             setTimeout(() => mostrarToast(`${ola} Precisando de algo, é só me chamar aqui embaixo. 💜`), 1300);
             return;
         }
@@ -1296,7 +1300,7 @@ if ("serviceWorker" in navigator) {
 
     // Lembretes ocasionais: a cada ~20 min, se houver pendências e o painel
     // estiver fechado, a Bia dá um toque amigável (só na Expedição).
-    if (BIA_ATIVA) {
+    if (BIA_EXPEDICAO) {
         setInterval(async () => {
             if (panel.classList.contains("open")) return;
             try {

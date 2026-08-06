@@ -5,7 +5,7 @@ Expedição: panorama de pendências priorizadas e chat por intenção (offline)
 """
 from flask import Blueprint, jsonify, request, session
 
-from ..auth import permission_required, is_admin_session
+from ..auth import permission_required, is_admin_session, login_required, has_permission
 from ..services import expedicao_assistente_service as svc
 from ..services import expedicao_cobranca_service as cobranca_svc
 from ..services import expedicao_romaneio_bia_service as romaneio_bia_svc
@@ -24,26 +24,31 @@ def pendencias():
 
 
 @expedicao_assistente_bp.route("/api/expedicao/assistente/perguntar", methods=["POST"])
-@permission_required(PERMISSION)
+@login_required
 def perguntar():
-    """Responde a uma pergunta em linguagem natural (offline, por intenção)."""
+    """Responde a uma pergunta em linguagem natural.
+
+    O CHAT (leitura/LLM) é liberado para qualquer usuário logado — a Bia atende
+    o sistema inteiro. Já os COMANDOS DE AÇÃO sobre romaneios (editar/estornar/
+    aprovar) só são interpretados para quem tem acesso à expedição (ou Admin),
+    pois esse fluxo altera dados operacionais."""
     payload = request.get_json(silent=True) or {}
     pergunta = str(payload.get("pergunta") or "").strip()
     if not pergunta:
         return jsonify({"error": "Informe uma pergunta."}), 400
-    # Comandos de AÇÃO sobre romaneios (editar/estornar/aprovar) são tratados
-    # aqui, com a sessão/permissão à mão. Se não for um comando, cai no chat.
     ctx = {
         "username": str(session.get("username") or "").strip(),
         "role": session.get("role"),
         "is_admin": is_admin_session(),
     }
-    try:
-        acao = romaneio_bia_svc.interpretar(pergunta, ctx)
-    except Exception:
-        acao = None
-    if acao is not None:
-        return jsonify(acao)
+    # Ações que ESCREVEM em romaneios só para quem opera a expedição (ou Admin).
+    if is_admin_session() or has_permission(PERMISSION):
+        try:
+            acao = romaneio_bia_svc.interpretar(pergunta, ctx)
+        except Exception:
+            acao = None
+        if acao is not None:
+            return jsonify(acao)
     historico = payload.get("historico")
     return jsonify(svc.responder(pergunta, historico))
 
