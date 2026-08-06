@@ -398,6 +398,7 @@ def _fmt_metric(value: int | float, singular: str, plural: str | None = None) ->
 def _build_home_metrics() -> dict:
     today = datetime.now().date()
     metrics = {
+        "pendencias_nfe_total": 0,
         "recebimento_pendente": 0,
         "notas_concluidas": 0,
         "notas_lancadas": 0,
@@ -478,6 +479,13 @@ def _build_home_metrics() -> dict:
         )
     except Exception:
         db.session.rollback()
+
+    metrics["pendencias_nfe_total"] = int(
+        metrics.get("recebimento_pendente", 0)
+        + metrics.get("notas_concluidas", 0)
+        + metrics.get("auditoria_pendente", 0)
+        + metrics.get("expedicao_aberta", 0)
+    )
 
     return metrics
 
@@ -664,6 +672,57 @@ def _serie_entradas_por_dia(dias: int = 14) -> dict:
     return {"labels": labels, "valores": valores}
 
 
+def _serie_fluxo_notas_por_dia(dias: int = 14) -> dict:
+    """Série diária com entrada de NFs e lançamentos concluídos no ERP."""
+    today = datetime.now().date()
+    inicio = today - timedelta(days=dias - 1)
+    importadas: dict[str, int] = {}
+    lancadas: dict[str, int] = {}
+
+    try:
+        rows_import = (
+            db.session.query(
+                func.date(ItemNota.data_importacao),
+                func.count(func.distinct(ItemNota.numero_nota)),
+            )
+            .filter(func.date(ItemNota.data_importacao) >= inicio)
+            .group_by(func.date(ItemNota.data_importacao))
+            .all()
+        )
+        for dia, qtd in rows_import:
+            importadas[str(dia)] = int(qtd or 0)
+
+        rows_lanc = (
+            db.session.query(
+                func.date(ItemNota.data_lancamento),
+                func.count(func.distinct(ItemNota.numero_nota)),
+            )
+            .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) >= inicio)
+            .group_by(func.date(ItemNota.data_lancamento))
+            .all()
+        )
+        for dia, qtd in rows_lanc:
+            lancadas[str(dia)] = int(qtd or 0)
+    except Exception:
+        db.session.rollback()
+
+    labels = []
+    serie_importadas = []
+    serie_lancadas = []
+    for i in range(dias):
+        d = inicio + timedelta(days=i)
+        chave = str(d)
+        labels.append(d.strftime("%d/%m"))
+        serie_importadas.append(importadas.get(chave, 0))
+        serie_lancadas.append(lancadas.get(chave, 0))
+
+    return {
+        "labels": labels,
+        "importadas": serie_importadas,
+        "lancadas": serie_lancadas,
+    }
+
+
 def _dist_expedicao_status() -> dict:
     """Distribuição de expedições por status."""
     dados: dict[str, int] = {}
@@ -688,46 +747,65 @@ def _build_dashboard(metrics: dict) -> list[dict]:
 
     raw_sections = [
         {
-            "name": "Recebimento & Fiscal",
-            "icon": "fa-box-open",
+            "name": "Operação agora",
+            "icon": "fa-bolt",
             "cards": [
-                {"perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"), "label": "Aguardando recebimento", "value": metrics["recebimento_pendente"], "caption": "Notas na fila de entrada ainda não conferidas.", "icon": "fa-inbox", "href": "/conferencia", "tone": "amber"},
-                {"perms": ("PAGE_CONFERENCIA", "PAGE_LANCAMENTO"), "label": "Prontas para documento", "value": metrics["notas_concluidas"], "caption": "Conferidas, aguardando lançamento.", "icon": "fa-clipboard-check", "href": "/upload", "tone": "blue"},
-                {"perms": _PERM_COMPRAS, "label": "Aguardando decisão fiscal", "value": metrics["auditoria_pendente"], "caption": "Notas em auditoria fiscal.", "icon": "fa-scale-balanced", "href": "/upload", "tone": "violet"},
-                {"perms": ("PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS"), "label": "Notas lançadas", "value": metrics["notas_lancadas"], "caption": "Já lançadas no ERP.", "icon": "fa-boxes-stacked", "href": "/fiscal/liberadas", "tone": "emerald"},
-                {"perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_UPLOAD"), "label": "Importadas hoje", "value": metrics["importadas_hoje"], "caption": "Documentos que entraram hoje.", "icon": "fa-file-arrow-down", "href": "/fiscal/liberadas", "tone": "sky"},
+                {
+                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_UPLOAD", "PAGE_LANCAMENTO", "PAGE_XML_AUDITOR", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_CONFERENCIA"),
+                    "label": "Pendências de NF no fluxo",
+                    "value": metrics["pendencias_nfe_total"],
+                    "caption": "Total em recebimento, documento, auditoria e expedição.",
+                    "icon": "fa-bell",
+                    "href": "/upload",
+                    "tone": "emerald",
+                },
+                {
+                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"),
+                    "label": "NF pendentes de recebimento",
+                    "value": metrics["recebimento_pendente"],
+                    "caption": "Fila que precisa de conferência de recebimento.",
+                    "icon": "fa-inbox",
+                    "href": "/conferencia",
+                    "tone": "amber",
+                },
+                {
+                    "perms": ("PAGE_UPLOAD", "PAGE_LANCAMENTO", "PAGE_XML_AUDITOR"),
+                    "label": "NF pendentes no Documento de Entrada",
+                    "value": metrics["notas_concluidas"],
+                    "caption": "Conferidas e aguardando lançamento no ERP.",
+                    "icon": "fa-file-circle-check",
+                    "href": "/upload",
+                    "tone": "blue",
+                },
+                {
+                    "perms": _PERM_COMPRAS,
+                    "label": "NF aguardando decisão fiscal",
+                    "value": metrics["auditoria_pendente"],
+                    "caption": "Auditoria fiscal pendente de ação.",
+                    "icon": "fa-scale-balanced",
+                    "href": "/upload",
+                    "tone": "violet",
+                },
+                {
+                    "perms": _PERM_EXPEDICAO,
+                    "label": "NF pendentes de expedição",
+                    "value": metrics["expedicao_aberta"],
+                    "caption": "Saídas que ainda não foram finalizadas.",
+                    "icon": "fa-boxes-packing",
+                    "href": "/expedicao/conferencia-cega",
+                    "tone": "amber",
+                },
+                {
+                    "perms": _PERM_LOGISTICA,
+                    "label": "Viagens ativas agora",
+                    "value": metrics["agendamento_ativo"],
+                    "caption": "Coletas e entregas em andamento neste momento.",
+                    "icon": "fa-truck-fast",
+                    "href": "/logistica/viagens",
+                    "tone": "teal",
+                },
             ],
-        },
-        {
-            "name": "Expedição & Logística",
-            "icon": "fa-truck-fast",
-            "cards": [
-                {"perms": _PERM_EXPEDICAO, "label": "Expedições em aberto", "value": metrics["expedicao_aberta"], "caption": "Ordens aguardando saída.", "icon": "fa-boxes-packing", "href": "/expedicao/conferencia-cega", "tone": "amber"},
-                {"perms": _PERM_LOGISTICA, "label": "Transportes ativos", "value": metrics["agendamento_ativo"], "caption": "Coletas e entregas em andamento.", "icon": "fa-truck-fast", "href": "/logistica/viagens", "tone": "blue"},
-            ],
-        },
-        {
-            "name": "Cadastros",
-            "icon": "fa-diagram-project",
-            "cards": [
-                {"perms": ("PAGE_CADASTRO_WORKFLOW",), "label": "Cadastros em andamento", "value": metrics["cadastro_pendente"], "caption": "Solicitações abertas no workflow.", "icon": "fa-diagram-project", "href": "/cadastros/", "tone": "teal"},
-            ],
-        },
-        {
-            "name": "Controladoria",
-            "icon": "fa-coins",
-            "cards": [
-                {"perms": _PERM_CONTROLADORIA, "label": "Boletos gerados", "value": metrics["boletos_gerados"], "caption": "Títulos aguardando baixa.", "icon": "fa-wallet", "href": "/financeiro/contas-receber", "tone": "emerald"},
-            ],
-        },
-        {
-            "name": "Administração",
-            "icon": "fa-user-shield",
-            "cards": [
-                {"perms": ("PAGE_ADMIN_DASHBOARD", "PAGE_ADMIN_USUARIOS"), "label": "Sessões ativas agora", "value": metrics["sessoes_ativas"], "caption": "Usuários conectados neste momento.", "icon": "fa-users", "href": "/admin", "tone": "sky"},
-                {"perms": ("PAGE_PLANEJAMENTO_TAREFAS",), "label": "Tarefas abertas", "value": metrics["planner_abertas"], "caption": "Cards ainda não concluídos.", "icon": "fa-table-columns", "href": "/planejamento", "tone": "violet"},
-            ],
-        },
+        }
     ]
 
     sections = []
@@ -746,11 +824,16 @@ def _build_dashboard_charts(metrics: dict) -> dict:
 
     charts: dict = {}
     if ok(_PERM_RECEBIMENTO + _PERM_COMPRAS):
-        charts["entradas"] = _serie_entradas_por_dia()
-        charts["status_notas"] = {
-            "Pendente": int(metrics["recebimento_pendente"]),
-            "Concluído": int(metrics["notas_concluidas"]),
-            "Lançado": int(metrics["notas_lancadas"]),
+        charts["fluxo_notas"] = _serie_fluxo_notas_por_dia()
+        charts["pendencias_operacao"] = {
+            "Recebimento pendente": int(metrics["recebimento_pendente"]),
+            "Documento pendente": int(metrics["notas_concluidas"]),
+            "Auditoria fiscal": int(metrics["auditoria_pendente"]),
+        }
+    if ok(_PERM_EXPEDICAO + _PERM_LOGISTICA):
+        charts["operacao_logistica"] = {
+            "Expedição pendente": int(metrics["expedicao_aberta"]),
+            "Viagens ativas": int(metrics["agendamento_ativo"]),
         }
     if ok(_PERM_EXPEDICAO):
         charts["expedicao"] = _dist_expedicao_status()

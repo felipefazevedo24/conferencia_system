@@ -342,7 +342,7 @@
     <section class="dash-section">
         <div class="dash-section-head">
             <div class="dash-section-ico"><i class="fas fa-gauge-high"></i></div>
-            <strong>Indicadores</strong>
+            <strong>Prioridades operacionais</strong>
             <div class="dash-section-line"></div>
         </div>
         <div class="dash-kpis">
@@ -362,39 +362,48 @@
         </div>
     </section>
 
-    {% if dashboard_charts.entradas or dashboard_charts.status_notas or dashboard_charts.expedicao %}
+    {% if dashboard_charts.fluxo_notas or dashboard_charts.pendencias_operacao or dashboard_charts.operacao_logistica or dashboard_charts.expedicao %}
     <section class="dash-section">
         <div class="dash-section-head">
             <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
-            <strong>Tendências</strong>
+            <strong>Visão de fila e andamento</strong>
             <div class="dash-section-line"></div>
         </div>
         <div class="dash-charts">
-            {% if dashboard_charts.entradas %}
+            {% if dashboard_charts.fluxo_notas %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Entradas por dia</strong>
+                    <strong>Fluxo diário: entradas x lançamentos</strong>
                     <div class="dash-range" id="dashRange">
                         <button type="button" data-dias="7">7 dias</button>
                         <button type="button" data-dias="14" class="active">14 dias</button>
                     </div>
                 </div>
-                <div class="dash-chart-body"><canvas id="chartEntradas"></canvas></div>
+                <div class="dash-chart-body"><canvas id="chartFluxo"></canvas></div>
             </div>
             {% endif %}
-            {% if dashboard_charts.status_notas %}
+            {% if dashboard_charts.pendencias_operacao %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Notas por status</strong>
-                    <span>Situação atual</span>
+                    <strong>Fila atual do recebimento/fiscal</strong>
+                    <span>Onde está o gargalo agora</span>
                 </div>
-                <div class="dash-chart-body"><canvas id="chartStatus"></canvas></div>
+                <div class="dash-chart-body"><canvas id="chartFila"></canvas></div>
+            </div>
+            {% endif %}
+            {% if dashboard_charts.operacao_logistica %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Logística em andamento</strong>
+                    <span>Expedição pendente e viagens ativas</span>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartLogistica"></canvas></div>
             </div>
             {% endif %}
             {% if dashboard_charts.expedicao %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Expedição por status</strong>
+                    <strong>Status detalhado da expedição</strong>
                     <span>Situação atual</span>
                 </div>
                 <div class="dash-chart-body"><canvas id="chartExpedicao"></canvas></div>
@@ -421,29 +430,60 @@
 
         if (typeof Chart === "undefined") return;
 
-        Chart.defaults.color = "rgba(200, 219, 238, 0.72)";
-        Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
-        const GRID = "rgba(125, 196, 255, 0.10)";
-        const AZUL = "#1c86f2";
+        const dashEl = document.querySelector(".dash");
+        const cssVar = (name, fallback) => {
+            if (!dashEl) return fallback;
+            const value = getComputedStyle(dashEl).getPropertyValue(name).trim();
+            return value || fallback;
+        };
 
-        // ----- Entradas por dia (barras) -----
-        let chartEntradas = null;
-        const elEntradas = document.getElementById("chartEntradas");
-        if (elEntradas && DASH.entradas) {
+        Chart.defaults.color = cssVar("--dash-muted", "rgba(96, 117, 141, 0.9)");
+        Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+        const GRID = cssVar("--dash-border", "rgba(15, 50, 77, 0.15)");
+        const AZUL = "#1c86f2";
+        const VERDE = "#10b981";
+
+        // ----- Fluxo diário de notas (entrada x lançamento) -----
+        let chartFluxo = null;
+        const elFluxo = document.getElementById("chartFluxo");
+        if (elFluxo && DASH.fluxo_notas) {
             const render = (dias) => {
-                const labels = DASH.entradas.labels.slice(-dias);
-                const valores = DASH.entradas.valores.slice(-dias);
-                const ctx = elEntradas.getContext("2d");
+                const labels = DASH.fluxo_notas.labels.slice(-dias);
+                const importadas = DASH.fluxo_notas.importadas.slice(-dias);
+                const lancadas = DASH.fluxo_notas.lancadas.slice(-dias);
+                const ctx = elFluxo.getContext("2d");
                 const grad = ctx.createLinearGradient(0, 0, 0, 260);
-                grad.addColorStop(0, "rgba(28, 134, 242, 0.85)");
-                grad.addColorStop(1, "rgba(28, 134, 242, 0.18)");
-                if (chartEntradas) chartEntradas.destroy();
-                chartEntradas = new Chart(ctx, {
-                    type: "bar",
-                    data: { labels: labels, datasets: [{ label: "Notas", data: valores, backgroundColor: grad, borderRadius: 6, maxBarThickness: 30 }] },
+                grad.addColorStop(0, "rgba(28, 134, 242, 0.82)");
+                grad.addColorStop(1, "rgba(28, 134, 242, 0.20)");
+                if (chartFluxo) chartFluxo.destroy();
+                chartFluxo = new Chart(ctx, {
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                type: "bar",
+                                label: "Importadas",
+                                data: importadas,
+                                backgroundColor: grad,
+                                borderRadius: 6,
+                                maxBarThickness: 24,
+                            },
+                            {
+                                type: "line",
+                                label: "Lançadas",
+                                data: lancadas,
+                                borderColor: VERDE,
+                                backgroundColor: "rgba(16, 185, 129, 0.2)",
+                                tension: 0.32,
+                                pointRadius: 3,
+                                pointHoverRadius: 4,
+                                pointBackgroundColor: VERDE,
+                            },
+                        ],
+                    },
                     options: {
                         responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
+                        plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12, padding: 12 } } },
                         scales: {
                             x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
                             y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }
@@ -481,14 +521,15 @@
             }
             new Chart(el.getContext("2d"), {
                 type: "doughnut",
-                data: { labels: labels, datasets: [{ data: valores, backgroundColor: PALETA, borderColor: "#0b1521", borderWidth: 2 }] },
+                data: { labels: labels, datasets: [{ data: valores, backgroundColor: PALETA, borderColor: cssVar("--dash-surface", "#ffffff"), borderWidth: 2 }] },
                 options: {
                     responsive: true, maintainAspectRatio: false, cutout: "62%",
                     plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 14 } } }
                 }
             });
         }
-        doughnut("chartStatus", DASH.status_notas);
+        doughnut("chartFila", DASH.pendencias_operacao);
+        doughnut("chartLogistica", DASH.operacao_logistica);
         doughnut("chartExpedicao", DASH.expedicao);
     })();
 </script>
