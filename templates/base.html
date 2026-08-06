@@ -323,6 +323,35 @@
                 {% endif %}
             </div>
         </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-profile" id="sidebar-profile">
+                <button id="sidebar-profile-toggle" class="sidebar-profile-btn" type="button" aria-expanded="false" aria-controls="sidebar-profile-menu">
+                    <span class="sidebar-avatar">
+                        {{ (current_user_display or user or 'U')|trim|first|upper }}
+                        <span class="sidebar-avatar-dot"></span>
+                    </span>
+                    <span class="sidebar-profile-info">
+                        <strong>{{ current_user_display or user }}</strong>
+                        <span>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</span>
+                    </span>
+                    <i class="fas fa-chevron-up sidebar-profile-chev"></i>
+                </button>
+                <div id="sidebar-profile-menu" class="sidebar-profile-menu" role="menu" aria-hidden="true">
+                    <div class="sidebar-profile-menu-head">
+                        <span class="sidebar-profile-menu-label">Nível de acesso</span>
+                        <strong>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
+                    </div>
+                    <a href="/perfil" class="sidebar-profile-menu-item" role="menuitem">
+                        <i class="fas fa-gear"></i>
+                        <span>Meu perfil e configurações</span>
+                    </a>
+                    <button type="button" class="sidebar-profile-menu-item danger" role="menuitem" onclick="confirmarLogout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sair</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </aside>
 
     <div id="page-content-wrapper">
@@ -359,20 +388,6 @@
                         </section>
                     </div>
                 </div>
-                <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
-                    <i class="fas fa-user-circle"></i>
-                    <span>{{ (current_user_display or user)|upper }}</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div id="user-profile-panel" class="user-profile-panel" aria-hidden="true">
-                    <div class="user-profile-panel-label">Nível de acesso</div>
-                    <strong class="user-profile-panel-role">{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
-                    <a href="/perfil" class="user-profile-config-btn">
-                        <i class="fas fa-gear"></i>
-                        <span>Meu perfil e configurações</span>
-                    </a>
-                </div>
-                <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
         </nav>
 
@@ -520,8 +535,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const searchToggle = document.getElementById("shell-search-toggle");
     const searchPanel = document.getElementById("shell-search-panel");
     const searchInput = document.getElementById("shell-nav-search");
-    const userProfileToggle = document.getElementById("user-profile-toggle");
-    const userProfilePanel = document.getElementById("user-profile-panel");
+    const userProfileToggle = document.getElementById("sidebar-profile-toggle");
+    const userProfilePanel = document.getElementById("sidebar-profile-menu");
 
     if (window.innerWidth < 992) setShellCollapsed(true);
 
