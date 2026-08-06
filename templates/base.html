@@ -831,9 +831,11 @@ if ("serviceWorker" in navigator) {
     const API_COBRANCA_CCE = "/api/expedicao/assistente/cobranca/cce-feita";
     const API_NOVIDADES = "/api/expedicao/assistente/novidades";
     const LS_NOVIDADES = "bia_novidades_desde";
+    const API_MENSAGENS = "/api/expedicao/assistente/mensagens";
 
     const BIA_USER = {{ (current_user_display or user or '')|tojson }};
     const BIA_USER_NOME = (BIA_USER || "").trim().split(/\s+/)[0] || "";
+    const BIA_IS_ADMIN = {{ (bia_is_admin or false)|tojson }};
 
     let iniciada = false;
     // Pendência que a Bia está cobrando agora: a próxima mensagem do operador
@@ -988,7 +990,13 @@ if ("serviceWorker" in navigator) {
             footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
             await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema — recebimento, conferência, compras, expedição, romaneios, notas fiscais, contas a receber e mais. O que você precisa?", 900);
-            renderChips(["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"]);
+            if (BIA_IS_ADMIN) {
+                await digitar("Como você é Admin, também dá pra mandar avisos: escreva algo como \"avisar todos: <mensagem>\", \"avisar cargo Logística: <mensagem>\" ou \"avisar joao: <mensagem>\".", 900);
+            }
+            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"];
+            if (BIA_IS_ADMIN) chips.unshift("avisar todos: ");
+            renderChips(chips);
+            flushAvisos();
             return;
         }
         await digitar("Oi! Eu sou a Bia 😊 Tô de olho na expedição pra te ajudar.", 600);
@@ -1009,6 +1017,7 @@ if ("serviceWorker" in navigator) {
             t.remove();
             addBot("Ops, não consegui carregar as pendências agora. Tenta de novo daqui a pouco?");
         }
+        flushAvisos();
     }
 
     // Avisa o Admin (ao abrir a Bia) sobre estornos de romaneio pendentes de
@@ -1352,6 +1361,36 @@ if ("serviceWorker" in navigator) {
     // e depois a cada ~2 min enquanto a página estiver aberta.
     setTimeout(checarNovidades, 8000);
     setInterval(checarNovidades, 2 * 60 * 1000);
+
+    // ----- Avisos/recados enviados por um Admin (mensageria da Bia) -----
+    // Fila para exibir no painel na ordem certa quando o chat ainda não abriu.
+    let avisosFila = [];
+    function flushAvisos() {
+        if (!avisosFila.length) return;
+        avisosFila.forEach((t) => addBot(t));
+        avisosFila = [];
+    }
+    function entregarAviso(m) {
+        const quando = m.quando ? ` · ${m.quando}` : "";
+        const texto = `📢 Aviso de ${m.de}${quando}:\n${m.texto}`;
+        if (iniciada) addBot(texto);
+        else avisosFila.push(texto);
+        if (!panel.classList.contains("open")) {
+            const curto = m.texto.length > 90 ? m.texto.slice(0, 90) + "…" : m.texto;
+            mostrarToast(`📢 ${m.de}: ${curto}`);
+        }
+    }
+    async function checarMensagens() {
+        try {
+            const r = await fetch(API_MENSAGENS, { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!d.mensagens || !d.mensagens.length) return;
+            d.mensagens.forEach(entregarAviso);
+        } catch (e) { /* silencioso */ }
+    }
+    setTimeout(checarMensagens, 4000);
+    setInterval(checarMensagens, 2 * 60 * 1000);
 })();
 </script>
 </body>

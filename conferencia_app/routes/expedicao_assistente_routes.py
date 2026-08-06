@@ -11,6 +11,7 @@ from ..auth import permission_required, is_admin_session, login_required, has_pe
 from ..services import expedicao_assistente_service as svc
 from ..services import expedicao_cobranca_service as cobranca_svc
 from ..services import expedicao_romaneio_bia_service as romaneio_bia_svc
+from ..services import bia_mensagem_service as bia_mensagem_svc
 
 
 expedicao_assistente_bp = Blueprint("expedicao_assistente", __name__)
@@ -43,6 +44,15 @@ def perguntar():
         "role": session.get("role"),
         "is_admin": is_admin_session(),
     }
+    # Envio de AVISOS (Admin -> usuário/cargo/todos) pelo chat da Bia. Só Admin;
+    # se a frase não for um comando de envio, segue o fluxo normal.
+    if is_admin_session():
+        try:
+            envio = bia_mensagem_svc.interpretar_envio(pergunta, ctx)
+        except Exception:
+            envio = None
+        if envio is not None:
+            return jsonify(envio)
     # Ações que ESCREVEM em romaneios só para quem opera a expedição (ou Admin).
     if is_admin_session() or has_permission(PERMISSION):
         try:
@@ -194,3 +204,15 @@ def novidades():
         ),
     )
     return jsonify(dados)
+
+
+@expedicao_assistente_bp.route("/api/expedicao/assistente/mensagens", methods=["GET"])
+@login_required
+def mensagens():
+    """Avisos (Admin -> usuário) ainda não entregues a quem está logado. A Bia
+    usa isto para mostrar o recado (toast + painel). Marca como lido ao entregar,
+    para não repetir."""
+    username = str(session.get("username") or "").strip()
+    role = session.get("role")
+    msgs = bia_mensagem_svc.mensagens_nao_lidas(username, role, marcar=True)
+    return jsonify({"mensagens": msgs, "total": len(msgs)})

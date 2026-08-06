@@ -2221,6 +2221,46 @@ class ExpedicaoRomaneioEstorno(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+class BiaMensagem(db.Model):
+    """Aviso/recado enviado por um Admin (via chat da Bia) para um usuario
+    especifico, um cargo inteiro ou todos (broadcast). A Bia entrega in-app:
+    toast + registro no painel. A leitura por usuario fica em BiaMensagemLeitura
+    (uma mensagem de cargo/broadcast atinge varias pessoas)."""
+
+    __tablename__ = "bia_mensagem"
+
+    id = db.Column(db.Integer, primary_key=True)
+    remetente = db.Column(db.String(100), nullable=False, index=True)
+    remetente_nome = db.Column(db.String(160))
+    # usuario | cargo | broadcast
+    destino_tipo = db.Column(db.String(20), nullable=False, index=True)
+    # username (usuario) | role (cargo) | "" (broadcast)
+    destino_valor = db.Column(db.String(120), nullable=False, default="", index=True)
+    texto = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class BiaMensagemLeitura(db.Model):
+    """Marca que um usuario ja recebeu/leu uma BiaMensagem (para nao reentregar).
+    Uma linha por (mensagem, usuario)."""
+
+    __tablename__ = "bia_mensagem_leitura"
+
+    id = db.Column(db.Integer, primary_key=True)
+    mensagem_id = db.Column(
+        db.Integer,
+        db.ForeignKey("bia_mensagem.id"),
+        nullable=False,
+        index=True,
+    )
+    username = db.Column(db.String(100), nullable=False, index=True)
+    lida_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("mensagem_id", "username", name="ux_bia_mensagem_leitura"),
+    )
+
+
 class ExpedicaoRomaneioFotoCarregamento(db.Model):
     """Fotos do carregamento do romaneio (multiplas, tiradas durante o
     carregamento do caminhao). Complementa as colunas legadas
