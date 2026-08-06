@@ -602,6 +602,17 @@ def _formatar_chapas(valor) -> str:
     return f"Chapas: {quantidade} UND."
 
 
+def _parse_chapas_und(valor) -> float | None:
+    """Converte a quantidade de chapas (UND) informada para número, ou None."""
+    if valor is None or str(valor).strip() == "":
+        return None
+    try:
+        quantidade = float(str(valor).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return quantidade if quantidade > 0 else None
+
+
 def _summarize_divergencia_core(tentativas, descricao_por_id):
     """Resume divergências a partir de tentativas já carregadas (sem consultar o banco).
 
@@ -6203,6 +6214,7 @@ def buscar_itens(nota):
                 "qtd_esperada": item.qtd_real,
                 "unidade": item.unidade_comercial or "UN",
                 "pedido_compra": item.pedido_compra or "",
+                "qtd_chapas_und": item.qtd_chapas_und,
             }
             for item in itens
         ]
@@ -6384,6 +6396,15 @@ def validar():
         checklist.data = datetime.now()
 
     for item in itens_db:
+        # Persiste a quantidade de chapas (UND) informada pelo conferente para
+        # material recebido em peso. Fica auditável e é enviada no aviso de
+        # entrada de chapa. Só grava quando um valor é informado (nunca limpa),
+        # para sobreviver às múltiplas chamadas de /validar do fluxo.
+        if _unidade_eh_chapa(item.unidade_comercial):
+            chapa_und = _parse_chapas_und(chapas_itens.get(str(item.id)) if isinstance(chapas_itens, dict) else None)
+            if chapa_und is not None:
+                item.qtd_chapas_und = chapa_und
+
         valor_bruto = contagens.get(str(item.id))
         if valor_bruto is None or str(valor_bruto).strip() == "":
             erros.append(item.descricao)
@@ -7832,6 +7853,7 @@ def _timeline_eventos(nota):
         # Detalhe da contagem física: cada tentativa que o conferente registrou,
         # com quantidade esperada x contada, para evidenciar erros e repetições.
         descricoes_itens = {i.id: (i.descricao or f"Item #{i.id}") for i in itens}
+        chapas_por_item = {i.id: i.qtd_chapas_und for i in itens if i.qtd_chapas_und}
         tentativas = (
             LogTentativaConferencia.query.filter_by(numero_nota=nota)
             .order_by(LogTentativaConferencia.tentativa_numero.asc(), LogTentativaConferencia.id.asc())
@@ -7849,6 +7871,9 @@ def _timeline_eventos(nota):
             if t.qtd_convertida is not None and t.qtd_digitada is not None and abs((t.qtd_convertida or 0) - (t.qtd_digitada or 0)) > 0.0001:
                 partes[0] += f" (= {convertida})"
             partes.append(f"esperado {esperada}")
+            chapa_und = chapas_por_item.get(t.item_id)
+            if chapa_und:
+                partes.append(f"chapas {_fmt_qtd(chapa_und)} UND")
             divergente = str(t.status_item or "").upper() != "OK"
             if divergente and t.motivo:
                 partes.append(f"motivo: {t.motivo}")

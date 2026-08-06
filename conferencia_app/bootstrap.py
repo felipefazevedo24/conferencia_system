@@ -256,6 +256,9 @@ def _ensure_item_nota_columns() -> None:
         if "data_emissao" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN data_emissao DATETIME"))
             conn.commit()
+        if "qtd_chapas_und" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN qtd_chapas_und FLOAT"))
+            conn.commit()
 
         cols_log_div = _get_column_names("log_divergencia")
         if "motivo_tipo" not in cols_log_div:

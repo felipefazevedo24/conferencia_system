@@ -214,6 +214,9 @@ class ItemNota(db.Model):
     # Data de emissao da NF (dhEmi do XML). Usada para integracao com ERP
     # (matching n_nf + dt_nf na tabela tcompras do Postgres).
     data_emissao = db.Column(db.DateTime, nullable=True, index=True)
+    # Quantidade de chapas em UND informada pelo conferente para material
+    # recebido em peso (KG). Auditavel e enviada no aviso de entrada de chapa.
+    qtd_chapas_und = db.Column(db.Float, nullable=True)
 
 
 class ConferenciaRecebimento(db.Model):

@@ -205,16 +205,57 @@ def _texto(valor: Any) -> str:
     )
 
 
+def _und_chapas_por_codigo(numero_nota: str) -> dict[str, float]:
+    """Quantidade de chapas (UND) informada pelo conferente, indexada por código.
+
+    O valor é auditado na conferência de recebimento (ItemNota.qtd_chapas_und)
+    e usado para complementar o aviso — a NF vem em KG, mas a UND é o que
+    interessa para a etiquetagem/lote.
+    """
+    mapa: dict[str, float] = {}
+    try:
+        rows = (
+            ItemNota.query
+            .filter(ItemNota.numero_nota == str(numero_nota))
+            .filter(ItemNota.qtd_chapas_und.isnot(None))
+            .all()
+        )
+    except Exception:
+        return mapa
+    for r in rows:
+        codigo = str(r.codigo or "").strip()
+        if codigo and r.qtd_chapas_und:
+            mapa[codigo] = float(r.qtd_chapas_und)
+    return mapa
+
+
+def _fmt_und(valor: Any) -> str:
+    """Formata a quantidade de chapas em UND (inteiro quando possível)."""
+    if valor is None:
+        return "-"
+    try:
+        num = float(valor)
+    except (TypeError, ValueError):
+        return "-"
+    if num <= 0:
+        return "-"
+    if num == int(num):
+        return str(int(num))
+    return f"{num:.3f}".rstrip("0").rstrip(".")
+
+
 def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]) -> str:
     linhas = []
     for item in itens:
         lote = item.get("lote") or entrada.get("numero_ar") or "Nao informado"
         natureza = item.get("natureza_operacao") or item.get("cfop") or "-"
+        und_chapas = _fmt_und(item.get("qtd_chapas_und"))
         linhas.append(
             "<tr style=\"background:#ffffff;color:#1f2937\">"
             f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(item.get('cod_interno') or '-')}</td>"
             f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(item.get('descricao') or '-')}</td>"
             f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_fmt_qtd(item.get('quantidade'))} {_texto(item.get('unidade') or '')}</td>"
+            f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#0f172a;font-weight:800;text-align:center\">{und_chapas}</td>"
             f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#1f2937\">{_texto(natureza)}</td>"
             f"<td style=\"padding:10px;border:1px solid #dbe3ef;background:#ffffff;color:#0f172a;font-weight:700\">{_texto(lote)}</td>"
             "</tr>"
@@ -245,6 +286,7 @@ def _html(entrada: dict[str, Any], itens: list[dict[str, Any]], cfops: list[str]
             <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">C&oacute;digo</th>
             <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Descri&ccedil;&atilde;o</th>
             <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Quantidade</th>
+            <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff;text-align:center">Qtd. chapas (UND)</th>
             <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">Natureza da opera&ccedil;&atilde;o</th>
             <th style="padding:10px;border:1px solid #173a5e;background:#173a5e;color:#ffffff">AR/Lote</th>
           </tr>
@@ -272,6 +314,15 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
     existente = EmailEntradaChapa.query.filter_by(numero_nota=numero_nota, numero_ar=numero_ar_log).first()
     if existente and existente.status == "Enviado":
         return {"sucesso": True, "ignorado": True, "log_id": existente.id}
+
+    # Complementa cada item com a quantidade de chapas (UND) informada e
+    # auditada na conferência de recebimento (a NF vem em KG).
+    und_por_codigo = _und_chapas_por_codigo(numero_nota)
+    if und_por_codigo:
+        for item in itens:
+            codigo = str(item.get("cod_interno") or "").strip()
+            if codigo and codigo in und_por_codigo:
+                item["qtd_chapas_und"] = und_por_codigo[codigo]
 
     assunto = f"CONTROLE DE LOTE - NF {numero_nota} - AR {numero_ar or 'Nao informado'}"
     log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=datetime.now())

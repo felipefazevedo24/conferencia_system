@@ -1448,6 +1448,23 @@
         `;
         }).join('');
 
+        // Reabre a conferencia ja mostrando a quantidade de chapas (UND) que o
+        // conferente informou antes (auditavel).
+        itens.forEach((i) => {
+            const v = Number(i.qtd_chapas_und);
+            if (!Number.isFinite(v) || v <= 0) return;
+            const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
+            const btn = document.getElementById(`chapa-btn-${i.id}`);
+            const bloco = document.getElementById(`chapa-fields-${i.id}`);
+            const wrap = document.querySelector(`.chapa-wrap[data-id="${i.id}"]`);
+            if (!input || !btn || !bloco) return;
+            input.value = (v === Math.trunc(v)) ? String(Math.trunc(v)) : String(v);
+            btn.dataset.ativo = '1';
+            bloco.style.display = 'flex';
+            wrap?.classList.add('aberto');
+            atualizarChapa(i.id);
+        });
+
         atualizarProgressoConferencia();
     }
 
@@ -1645,6 +1662,7 @@
                 nota: notaSel,
                 contagens: coletarContagens(),
                 conversoes_itens: coletarConversoes(),
+                chapas_itens: coletarChapas(),
                 forcar_pendencia: true,
                 motivos_itens: motivosItens,
                 motivos_tipos: motivosTipos,
