@@ -108,16 +108,18 @@
     }
 
     /* ---- Cards KPI ---- */
-    .dash-grid {
+    .dash-kpis {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px;
+        margin-bottom: 30px;
     }
     .dash-card {
         position: relative;
-        display: block;
-        padding: 18px 18px 16px;
-        border-radius: 18px;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 16px 15px;
+        border-radius: 16px;
         border: 1px solid var(--dash-border);
         background: linear-gradient(160deg, var(--dash-surface) 0%, #0b1521 100%);
         text-decoration: none;
@@ -143,33 +145,36 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 14px;
+        gap: 10px;
+        margin-bottom: 12px;
     }
     .dash-card-ico {
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
         display: grid;
         place-items: center;
-        font-size: 17px;
+        font-size: 15px;
+        flex-shrink: 0;
         background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 20%, transparent);
         color: var(--card-accent, var(--dash-blue-soft));
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-accent, var(--dash-blue)) 32%, transparent);
     }
-    .dash-card-open {
-        font-size: 11px;
-        color: var(--dash-muted);
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        opacity: 0;
-        transform: translateX(-4px);
-        transition: opacity 0.18s ease, transform 0.18s ease;
+    .dash-card-tag {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        padding: 4px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+        color: color-mix(in srgb, var(--card-accent, var(--dash-blue-soft)) 78%, #ffffff);
+        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--card-accent, var(--dash-blue)) 26%, transparent);
     }
-    .dash-card:hover .dash-card-open { opacity: 1; transform: none; }
     .dash-card-value {
         font-family: 'Space Grotesk', sans-serif;
-        font-size: 38px;
+        font-size: 32px;
         font-weight: 800;
         line-height: 1;
         letter-spacing: -0.04em;
@@ -177,14 +182,14 @@
     }
     .dash-card-label {
         margin-top: 8px;
-        font-size: 13px;
+        font-size: 12.5px;
         font-weight: 700;
         color: #e6f0fb;
     }
     .dash-card-caption {
         margin-top: 4px;
-        font-size: 11.5px;
-        line-height: 1.5;
+        font-size: 11px;
+        line-height: 1.45;
         color: var(--dash-muted);
     }
 
@@ -199,8 +204,8 @@
     /* ---- Gráficos ---- */
     .dash-charts {
         display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
     }
     .dash-chart {
         border-radius: 18px;
@@ -299,28 +304,28 @@
     </div>
     {% else %}
 
-    {% for section in dashboard_sections %}
     <section class="dash-section">
         <div class="dash-section-head">
-            <div class="dash-section-ico"><i class="fas {{ section.icon }}"></i></div>
-            <strong>{{ section.name }}</strong>
+            <div class="dash-section-ico"><i class="fas fa-gauge-high"></i></div>
+            <strong>Indicadores</strong>
             <div class="dash-section-line"></div>
         </div>
-        <div class="dash-grid">
+        <div class="dash-kpis">
+            {% for section in dashboard_sections %}
             {% for card in section.cards %}
             <a href="{{ card.href }}" class="dash-card tone-{{ card.tone }}">
                 <div class="dash-card-top">
                     <div class="dash-card-ico"><i class="fas {{ card.icon }}"></i></div>
-                    <span class="dash-card-open">Abrir <i class="fas fa-arrow-right"></i></span>
+                    <span class="dash-card-tag">{{ section.name }}</span>
                 </div>
                 <div class="dash-card-value">{{ card.value }}</div>
                 <div class="dash-card-label">{{ card.label }}</div>
                 <div class="dash-card-caption">{{ card.caption }}</div>
             </a>
             {% endfor %}
+            {% endfor %}
         </div>
     </section>
-    {% endfor %}
 
     {% if dashboard_charts.entradas or dashboard_charts.status_notas or dashboard_charts.expedicao %}
     <section class="dash-section">
