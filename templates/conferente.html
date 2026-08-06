@@ -398,26 +398,26 @@
         .item-alerta.warning { color: #92400e; }
         .item-alerta.error { color: #b91c1c; }
 
-        /* === CHAPA: contagem de unidades (UND) para material recebido em peso === */
-        .chapa-wrap { margin-top: 8px; }
+        /* === CHAPA: marcacao opcional (o conferente decide) para material recebido em peso === */
+        .chapa-wrap { margin-top: 6px; }
         .chapa-btn {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 12px; border-radius: 10px; cursor: pointer;
-            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em;
-            background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
-            transition: all .18s ease;
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 999px; cursor: pointer;
+            font-size: 10px; font-weight: 700; letter-spacing: .02em;
+            background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1;
+            transition: all .15s ease;
         }
-        .chapa-btn:hover { background: #e0e7ff; border-color: #a5b4fc; }
-        .chapa-btn.preenchido { background: #dcfce7; color: #166534; border-color: #86efac; }
-        .chapa-btn.faltando { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-        .chapa-fields { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
+        .chapa-btn:hover { background: #f1f5f9; border-color: #94a3b8; color: #475569; }
+        .chapa-btn.preenchido { background: #dcfce7; color: #166534; border-color: #86efac; border-style: solid; }
+        .chapa-btn.faltando { background: #fff7ed; color: #c2410c; border-color: #fdba74; border-style: solid; }
+        .chapa-fields { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .chapa-fields label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
         .chapa-input {
-            width: 96px; padding: 8px; border: 2px solid #c7d2fe; border-radius: 10px;
+            width: 90px; padding: 7px; border: 2px solid #c7d2fe; border-radius: 10px;
             text-align: center; font-family: monospace; font-weight: 800; font-size: 15px; color: #3730a3; background: #fff;
         }
         .chapa-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
-        .chapa-input.faltando { border-color: #ef4444; background: #fef2f2; }
+        .chapa-input.faltando { border-color: #f97316; background: #fff7ed; }
         .confirm-box {
             display: flex;
             gap: 10px;
@@ -1003,12 +1003,24 @@
         return u === 'KG' || u === 'T' || u === 'TO' || u === 'TON' || u === 'TONELADA' || u === 'TONELADAS';
     }
 
+    // O conferente decide se o item recebido em peso e chapa. So quando ele
+    // marca (botao ativo) e que exigimos a quantidade em UND.
     function toggleChapa(id) {
+        const btn = document.getElementById(`chapa-btn-${id}`);
         const bloco = document.getElementById(`chapa-fields-${id}`);
-        if (!bloco) return;
-        const visivel = bloco.style.display !== 'none';
-        bloco.style.display = visivel ? 'none' : 'flex';
-        if (!visivel) {
+        if (!btn || !bloco) return;
+        const ativo = btn.dataset.ativo === '1';
+        if (ativo) {
+            // Desmarcar chapa: limpa e volta ao estado neutro (nao cobra UND).
+            btn.dataset.ativo = '0';
+            bloco.style.display = 'none';
+            const input = bloco.querySelector('.chapa-input');
+            if (input) input.value = '';
+            atualizarChapa(id);
+        } else {
+            btn.dataset.ativo = '1';
+            bloco.style.display = 'flex';
+            atualizarChapa(id);
             setTimeout(() => bloco.querySelector('.chapa-input')?.focus(), 50);
         }
     }
@@ -1017,6 +1029,13 @@
         const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
         const btn = document.getElementById(`chapa-btn-${id}`);
         if (!input || !btn) return;
+        if (btn.dataset.ativo !== '1') {
+            // Nao marcado como chapa: botao neutro, sem cobranca.
+            input.classList.remove('faltando');
+            btn.classList.remove('preenchido', 'faltando');
+            btn.innerHTML = `<i class="fas fa-layer-group"></i> É chapa?`;
+            return;
+        }
         const valor = Number(String(input.value || '').replace(',', '.'));
         const preenchido = Number.isFinite(valor) && valor > 0;
         input.classList.toggle('faltando', !preenchido);
@@ -1024,22 +1043,26 @@
         btn.classList.toggle('faltando', !preenchido);
         btn.innerHTML = preenchido
             ? `<i class="fas fa-layer-group"></i> Chapa: ${valor} UND`
-            : `<i class="fas fa-layer-group"></i> Chapa`;
+            : `<i class="fas fa-layer-group"></i> Chapa — informe UND`;
     }
 
     function coletarChapas() {
         const chapas = {};
         document.querySelectorAll('.chapa-input').forEach((input) => {
-            chapas[input.dataset.id] = input.value;
+            const btn = document.getElementById(`chapa-btn-${input.dataset.id}`);
+            if (btn && btn.dataset.ativo === '1' && String(input.value || '').trim() !== '') {
+                chapas[input.dataset.id] = input.value;
+            }
         });
         return chapas;
     }
 
-    // Retorna os ids das chapas sem a quantidade em UND informada.
+    // Retorna os ids marcados como chapa que ainda estao sem a quantidade em UND.
     function chapasPendentes() {
         const pendentes = [];
-        document.querySelectorAll('.qtd-input[data-chapa="1"]').forEach((qtd) => {
-            const id = qtd.dataset.id;
+        document.querySelectorAll('.chapa-btn').forEach((btn) => {
+            if (btn.dataset.ativo !== '1') return;
+            const id = btn.dataset.id;
             const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
             const valor = Number(String(input?.value || '').replace(',', '.'));
             if (!Number.isFinite(valor) || valor <= 0) pendentes.push(id);
@@ -1383,8 +1406,8 @@
             const ehChapa = unidadeEhChapa(unidadeItem);
             const blocoChapa = ehChapa ? `
                     <div class="chapa-wrap" data-id="${i.id}">
-                        <button type="button" class="chapa-btn faltando" id="chapa-btn-${i.id}" onclick="toggleChapa('${i.id}')">
-                            <i class="fas fa-layer-group"></i> Chapa
+                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="toggleChapa('${i.id}')">
+                            <i class="fas fa-layer-group"></i> É chapa?
                         </button>
                         <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
                             <label>Qtd. chapas (UND)</label>
@@ -1428,7 +1451,7 @@
     }
 
     async function validar() {
-        // Chapa: obriga informar a quantidade de chapas (UND) antes de validar.
+        // Chapa: so cobra a quantidade em UND dos itens que o conferente marcou como chapa.
         const pendentesChapa = chapasPendentes();
         if (pendentesChapa.length > 0) {
             pendentesChapa.forEach((id) => {
@@ -1436,7 +1459,7 @@
                 if (bloco) bloco.style.display = 'flex';
                 atualizarChapa(id);
             });
-            alert('Informe a quantidade de chapas (UND) no botão "Chapa" de cada item recebido em peso antes de validar.');
+            alert('Você marcou item(ns) como chapa. Informe a quantidade de chapas (UND) ou desmarque o botão "É chapa?" antes de validar.');
             document.getElementById(`chapa-fields-${pendentesChapa[0]}`)?.querySelector('.chapa-input')?.focus();
             return;
         }
