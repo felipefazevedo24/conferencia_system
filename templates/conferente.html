@@ -399,25 +399,39 @@
         .item-alerta.error { color: #b91c1c; }
 
         /* === CHAPA: marcacao opcional (o conferente decide) para material recebido em peso === */
-        .chapa-wrap { margin-top: 6px; }
-        .chapa-btn {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 4px 10px; border-radius: 999px; cursor: pointer;
-            font-size: 10px; font-weight: 700; letter-spacing: .02em;
-            background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1;
-            transition: all .15s ease;
+        .chapa-wrap {
+            margin-top: 8px;
+            display: inline-flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 0; border-radius: 14px;
+            transition: background .16s ease, border-color .16s ease, padding .16s ease;
         }
-        .chapa-btn:hover { background: #f1f5f9; border-color: #94a3b8; color: #475569; }
-        .chapa-btn.preenchido { background: #dcfce7; color: #166534; border-color: #86efac; border-style: solid; }
-        .chapa-btn.faltando { background: #fff7ed; color: #c2410c; border-color: #fdba74; border-style: solid; }
-        .chapa-fields { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .chapa-fields label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
+        .chapa-wrap.aberto {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            box-shadow: inset 0 1px 0 #fff;
+        }
+        .chapa-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 13px; border-radius: 999px; cursor: pointer;
+            font-size: 10.5px; font-weight: 800; letter-spacing: .02em; white-space: nowrap;
+            background: #fff; color: #64748b; border: 1.5px dashed #cbd5e1;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+            transition: all .16s ease;
+        }
+        .chapa-btn i { font-size: 11px; }
+        .chapa-btn:hover { border-color: #94a3b8; color: #475569; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(15,23,42,0.10); }
+        .chapa-btn.preenchido { background: #ecfdf5; color: #15803d; border: 1.5px solid #86efac; }
+        .chapa-btn.faltando { background: #fff7ed; color: #c2410c; border: 1.5px solid #fdba74; }
+        .chapa-fields { display: flex; align-items: center; gap: 8px; }
+        .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
         .chapa-input {
-            width: 90px; padding: 7px; border: 2px solid #c7d2fe; border-radius: 10px;
+            width: 76px; padding: 7px 8px; border: 2px solid #c7d2fe; border-radius: 10px;
             text-align: center; font-family: monospace; font-weight: 800; font-size: 15px; color: #3730a3; background: #fff;
         }
         .chapa-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
         .chapa-input.faltando { border-color: #f97316; background: #fff7ed; }
+        .chapa-suffix { font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: .04em; }
         .confirm-box {
             display: flex;
             gap: 10px;
@@ -1003,23 +1017,24 @@
         return u === 'KG' || u === 'T' || u === 'TO' || u === 'TON' || u === 'TONELADA' || u === 'TONELADAS';
     }
 
-    // O conferente decide se o item recebido em peso e chapa. So quando ele
-    // marca (botao ativo) e que exigimos a quantidade em UND.
     function toggleChapa(id) {
         const btn = document.getElementById(`chapa-btn-${id}`);
         const bloco = document.getElementById(`chapa-fields-${id}`);
+        const wrap = document.querySelector(`.chapa-wrap[data-id="${id}"]`);
         if (!btn || !bloco) return;
         const ativo = btn.dataset.ativo === '1';
         if (ativo) {
             // Desmarcar chapa: limpa e volta ao estado neutro (nao cobra UND).
             btn.dataset.ativo = '0';
             bloco.style.display = 'none';
+            wrap?.classList.remove('aberto');
             const input = bloco.querySelector('.chapa-input');
             if (input) input.value = '';
             atualizarChapa(id);
         } else {
             btn.dataset.ativo = '1';
             bloco.style.display = 'flex';
+            wrap?.classList.add('aberto');
             atualizarChapa(id);
             setTimeout(() => bloco.querySelector('.chapa-input')?.focus(), 50);
         }
@@ -1042,8 +1057,8 @@
         btn.classList.toggle('preenchido', preenchido);
         btn.classList.toggle('faltando', !preenchido);
         btn.innerHTML = preenchido
-            ? `<i class="fas fa-layer-group"></i> Chapa: ${valor} UND`
-            : `<i class="fas fa-layer-group"></i> Chapa — informe UND`;
+            ? `<i class="fas fa-check"></i> Chapa: ${valor} UND`
+            : `<i class="fas fa-layer-group"></i> Chapa`;
     }
 
     function coletarChapas() {
@@ -1410,8 +1425,9 @@
                             <i class="fas fa-layer-group"></i> É chapa?
                         </button>
                         <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
-                            <label>Qtd. chapas (UND)</label>
+                            <label>Qtd.</label>
                             <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
+                            <span class="chapa-suffix">UND</span>
                         </div>
                     </div>` : '';
             return `
