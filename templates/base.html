@@ -4,6 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f62c9">
+    <script>
+    (function () {
+        function normalizeTheme(value) {
+            return value === "escuro" ? "escuro" : "claro";
+        }
+        function applyTheme(theme) {
+            var t = normalizeTheme(theme);
+            document.documentElement.setAttribute("data-theme", t);
+            return t;
+        }
+
+        var initial = "escuro";
+        try {
+            initial = normalizeTheme(localStorage.getItem("sync_theme"));
+        } catch (_) {
+            initial = "escuro";
+        }
+        applyTheme(initial);
+
+        window.syncGetTheme = function () {
+            return normalizeTheme(document.documentElement.getAttribute("data-theme"));
+        };
+
+        window.syncSetTheme = function (theme) {
+            var applied = applyTheme(theme);
+            try { localStorage.setItem("sync_theme", applied); } catch (_) {}
+            document.dispatchEvent(new CustomEvent("sync-theme-change", { detail: { theme: applied } }));
+            return applied;
+        };
+    })();
+    </script>
     <title>{% block title %}Columbia Sync{% endblock %}</title>
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
     <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">

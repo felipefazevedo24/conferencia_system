@@ -120,6 +120,22 @@
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
 }
 
+[data-theme="escuro"] .table tbody tr:hover td,
+[data-theme="escuro"] .erp-table tbody tr:hover td {
+    background: rgba(59, 147, 245, 0.14);
+}
+
+[data-theme="escuro"] .erp-table td,
+[data-theme="escuro"] .erp-table th {
+    border-bottom-color: var(--color-border);
+}
+
+[data-theme="escuro"] .status-badge {
+    border-color: rgba(51, 71, 95, 0.95);
+    background: #1b2736;
+    color: var(--color-text);
+}
+
 html,
 body {
     min-height: 100%;

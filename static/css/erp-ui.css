@@ -148,6 +148,10 @@
 .eui-page-header__title { font-family: var(--eui-font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--eui-text); margin: 0; }
 .eui-page-header__sub { font-size: 13px; color: var(--eui-muted); margin: 4px 0 0; }
 .eui-page-header__eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--eui-primary); margin-bottom: 4px; }
+.eui-page-header + .eui-stats { margin-top: var(--eui-space-4); }
+.eui-stats + .eui-toolbar,
+.eui-stats + .cwf-filters,
+.eui-stats + form { margin-top: var(--eui-space-4); }
 
 /* ----------------------------------------------------------------------------
  * Card

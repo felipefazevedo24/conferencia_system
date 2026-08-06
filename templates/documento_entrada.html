@@ -103,6 +103,25 @@
     .msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
     .msg.err { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 
+    #consyste-status {
+        display: none;
+        margin-top: 10px;
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+    #consyste-status.status-info { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
+    #consyste-status.status-success { color: #166534; background: #ecfdf5; border-color: #a7f3d0; }
+    #consyste-status.status-error { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+
+    .vinculacao-auto-hint { margin-top: 8px; font-size: 11px; color: #166534; font-weight: 700; }
+    .vinc-conversao-wrap { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .vinc-conversao-label { font-size: 11px; color: #334155; font-weight: 700; }
+    .conversao-select { min-width: 170px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 6px; font-size: 12px; font-weight: 700; background: #fff; color: #0f172a; }
+
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); z-index: 3000; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
     .modal-card { background: #fff; border-radius: 16px; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18); padding: 32px 36px; max-width: 420px; width: 90%; text-align: center; animation: modalIn 0.18s ease-out; }
@@ -258,7 +277,11 @@
     [data-theme="escuro"] .vinculacao-card.divergencia { background: rgba(239,68,68,.10); }
     [data-theme="escuro"] .vinculacao-card.ok { background: rgba(34,197,94,.10); }
     [data-theme="escuro"] .vinculacao-linha-xml { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .vinculacao-linha-xml span { color: var(--rec-ink-500) !important; }
     [data-theme="escuro"] .vinculacao-linha-xml-dados { color: var(--rec-ink-900); }
+    [data-theme="escuro"] .vinc-conversao-label { color: var(--rec-ink-700); }
+    [data-theme="escuro"] .conversao-select { background: var(--rec-surface); color: var(--rec-ink-900); border-color: var(--rec-border); }
+    [data-theme="escuro"] .vinculacao-auto-hint { color: #86efac; }
     [data-theme="escuro"] .vinculacao-select { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-900); }
     [data-theme="escuro"] .vinculacao-select:disabled { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-color: var(--rec-border); }
     [data-theme="escuro"] .vinc-edit-btn { background: var(--rec-surface); border-color: var(--rec-border); color: var(--rec-ink-700); }
@@ -266,6 +289,9 @@
     [data-theme="escuro"] .btn:hover { background: var(--rec-surface-alt); border-color: var(--rec-border-strong); }
     [data-theme="escuro"] .msg.ok { background: rgba(34,197,94,.12); color: #86efac; border-color: rgba(34,197,94,.30); }
     [data-theme="escuro"] .msg.err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.30); }
+    [data-theme="escuro"] #consyste-status.status-info { color: var(--rec-ink-700); background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] #consyste-status.status-success { color: #bbf7d0; background: rgba(34,197,94,.16); border-color: rgba(34,197,94,.32); }
+    [data-theme="escuro"] #consyste-status.status-error { color: #fecaca; background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.32); }
     [data-theme="escuro"] .modal-card,
     [data-theme="escuro"] .vinculacao-overlay-card,
     [data-theme="escuro"] .pendencia-card { background: var(--rec-surface); color: var(--rec-ink-900); }
@@ -310,6 +336,20 @@
     [data-theme="escuro"] .ce-vol-table thead th { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
     [data-theme="escuro"] .ce-vol-table tbody td { color: var(--rec-ink-700); border-bottom-color: var(--rec-border); }
     [data-theme="escuro"] .ce-vol-table tbody td:first-child { color: var(--rec-ink-900); }
+
+    [data-theme="escuro"] #decisaoInconsistenciaBox {
+        border-color: rgba(239, 68, 68, .30) !important;
+        background: rgba(239, 68, 68, .12) !important;
+    }
+    [data-theme="escuro"] #diagList {
+        border-color: rgba(239, 68, 68, .30) !important;
+        background: rgba(239, 68, 68, .12) !important;
+    }
+    [data-theme="escuro"] .doc-detail-bar,
+    [data-theme="escuro"] #detail-body {
+        background: var(--rec-surface) !important;
+        border-color: var(--rec-border) !important;
+    }
 </style>
 {% endblock %}
 
@@ -416,7 +456,7 @@
                         <button id="btn-envio" class="eui-btn eui-btn--success de-import-processar" type="button" onclick="fazerUpload()"><i class="fas fa-play"></i> Processar lote</button>
                     </div>
                 </div>
-                <div id="consyste-status" style="margin-top:10px;"></div>
+                <div id="consyste-status"></div>
                 <div id="status" style="margin-top:10px;"></div>
             </div>
         </div>
@@ -970,7 +1010,7 @@
         const box = document.getElementById('consyste-status');
         box.style.display = 'block';
         box.innerText = msg;
-        box.style.color = type === 'error' ? '#991b1b' : (type === 'success' ? '#166534' : '#475569');
+        box.className = 'status-' + (type === 'error' ? 'error' : (type === 'success' ? 'success' : 'info'));
     }
 
     async function parseResponseSafe(res) {
@@ -1019,7 +1059,7 @@
     function renderSelecaoDocumentos(lista) {
         const box = document.getElementById('consyste-status');
         box.style.display = 'block';
-        box.style.color = '#475569';
+        box.className = 'status-info';
         box.innerHTML = `
             <div style="margin-bottom:8px; font-weight:700;">Múltiplos documentos encontrados (${lista.length}). Selecione qual importar:</div>
             <div style="display:grid; gap:6px;">
@@ -1478,7 +1518,7 @@
                 ? '<div class="vinc-status ok"><i class="fas fa-check-circle"></i> Verde: quantidade e valor batem</div>'
                 : '<div class="vinc-status err"><i class="fas fa-times-circle"></i> Vermelho: quantidade e/ou valor divergem</div>';
             const detalheVinculoAuto = (poIndexValido && linhasPo[poSelecionada !== null ? poSelecionada : p.po_index])
-                ? `<div style="margin-top:8px; font-size:11px; color:#166534; font-weight:700;">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
+                ? `<div class="vinculacao-auto-hint">Vínculo automático sugerido: Linha ${p.po_index + 1}</div>` : '';
             const selectDisabled = matchPerfeito ? 'disabled' : '';
             const editBtn = matchPerfeito ? `<button type="button" class="vinc-edit-btn" onclick="habilitarEdicaoVinculo(${idx})"><i class="fas fa-pen"></i> Editar vínculo</button>` : '';
             const badgeVinculo = p.vinculo_manual ? '<span style="font-size:11px;color:#1d4ed8;font-weight:700;">Vínculo manual ativo</span>' : '';
@@ -1492,9 +1532,9 @@
                             <div><span style="color:#64748b;">Quantidade:</span> <strong>${Number(p.nf_qtd || 0).toLocaleString('pt-BR', {maximumFractionDigits:2})}</strong></div>
                             <div><span style="color:#64748b;">Valor Unit:</span> <strong>R$ ${Number(p.nf_valor_unit || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4})}</strong></div>
                         </div>
-                        <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <label style="font-size:11px; color:#334155; font-weight:700;">Conversão da quantidade:</label>
-                            <select class="conversao-select" data-item-id="${p.item_id}" style="min-width:170px; border:1px solid #cbd5e1; border-radius:6px; padding:4px 6px; font-size:12px; font-weight:700;">
+                        <div class="vinc-conversao-wrap">
+                            <label class="vinc-conversao-label">Conversão da quantidade:</label>
+                            <select class="conversao-select" data-item-id="${p.item_id}">
                                 ${buildConversaoOptionsHtml(p.conversao_fator, p.conversao_unidade)}
                             </select>
                             <button type="button" class="vinc-edit-btn" onclick="consultarPedidoExcel()"><i class="fas fa-arrows-rotate"></i> Aplicar conversão</button>

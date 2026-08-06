@@ -616,6 +616,101 @@
         .rc-modal-hist__head h3 { margin: 0; font-size: 16px; font-weight: 800; color: #14324d; }
         .rc-modal-hist__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #6b7280; }
         .rc-modal-hist__body { padding: 16px 20px; overflow-y: auto; }
+
+        [data-theme="escuro"] .module-shell {
+            background: var(--eui-surface) !important;
+            border: 1px solid var(--eui-border) !important;
+            box-shadow: var(--eui-shadow-sm) !important;
+        }
+        [data-theme="escuro"] .eui-page-header__sub { color: var(--eui-text-soft); }
+        [data-theme="escuro"] #dashboard-resumo { margin-top: 14px !important; margin-bottom: 22px !important; }
+
+        [data-theme="escuro"] .rc-table thead th {
+            background: var(--eui-surface-2);
+            color: var(--eui-text-soft);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-table tbody td {
+            color: var(--eui-text);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-table tbody tr:hover { background: rgba(59, 147, 245, 0.12); }
+        [data-theme="escuro"] .rc-table .rc-nf { color: #cfe3ff; }
+
+        [data-theme="escuro"] .erp-table th {
+            background: var(--eui-surface-2);
+            color: var(--eui-text-soft);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .erp-table td {
+            color: var(--eui-text);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .erp-table tr:hover td { background: rgba(59, 147, 245, 0.12); }
+
+        [data-theme="escuro"] .qtd-input {
+            background: var(--eui-surface-2) !important;
+            color: var(--eui-text) !important;
+            border-color: var(--eui-border) !important;
+        }
+        [data-theme="escuro"] .qtd-input:focus {
+            background: var(--eui-surface) !important;
+            border-color: var(--eui-primary) !important;
+            box-shadow: 0 0 0 3px rgba(59, 147, 245, 0.28) !important;
+        }
+        [data-theme="escuro"] .qtd-input.input-ok { background: rgba(34, 197, 94, 0.20) !important; color: #c9f7db !important; }
+        [data-theme="escuro"] .qtd-input.input-warning { background: rgba(245, 158, 11, 0.20) !important; color: #fde68a !important; }
+        [data-theme="escuro"] .qtd-input.input-error { background: rgba(239, 68, 68, 0.20) !important; color: #fecaca !important; }
+
+        [data-theme="escuro"] .conf-menu__btn,
+        [data-theme="escuro"] .conf-menu__list,
+        [data-theme="escuro"] .pendencia-item {
+            background: var(--eui-surface) !important;
+            border-color: var(--eui-border) !important;
+            color: var(--eui-text) !important;
+        }
+        [data-theme="escuro"] .conf-menu__btn:hover,
+        [data-theme="escuro"] .conf-menu__item:hover { background: var(--eui-surface-3) !important; }
+        [data-theme="escuro"] .modal-foot { background: var(--eui-surface-2) !important; border-top-color: var(--eui-border) !important; }
+
+        [data-theme="escuro"] .validation-summary {
+            background: var(--eui-surface-2);
+            border-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .validation-summary.ok {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.30);
+        }
+        [data-theme="escuro"] .validation-summary.warn {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(245, 158, 11, 0.30);
+        }
+        [data-theme="escuro"] .validation-summary i { background: var(--eui-surface); }
+        [data-theme="escuro"] .validation-summary strong,
+        [data-theme="escuro"] .validation-summary span { color: var(--eui-text); }
+
+        [data-theme="escuro"] .rc-hist-head h3,
+        [data-theme="escuro"] .rc-hist-desc,
+        [data-theme="escuro"] .rc-modal-hist__head h3 {
+            color: var(--eui-text);
+        }
+        [data-theme="escuro"] .rc-hist-sub,
+        [data-theme="escuro"] .rc-hist-data,
+        [data-theme="escuro"] .rc-modal-hist__close { color: var(--eui-muted); }
+        [data-theme="escuro"] .rc-hist-item,
+        [data-theme="escuro"] .rc-modal-hist__box {
+            background: var(--eui-surface-2);
+            border-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-modal-hist__head { border-bottom-color: var(--eui-border); }
+
+        [data-theme="escuro"] .empty-conferencia,
+        [data-theme="escuro"] .empty-conferencia h3,
+        [data-theme="escuro"] .empty-conferencia p {
+            background: var(--eui-surface-2);
+            color: var(--eui-text);
+            border-color: var(--eui-border);
+        }
     </style>
 {% endblock %}
 
