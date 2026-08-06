@@ -864,9 +864,23 @@ def _ensure_solicitacao_nf_columns() -> None:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN retorno_at DATETIME"))
         if "observacoes_retorno" not in cols:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN observacoes_retorno VARCHAR(500)"))
+        if "nf_parceiro_nome" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_nome VARCHAR(200)"))
+        if "nf_parceiro_endereco" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_endereco VARCHAR(400)"))
         conn.commit()
     finally:
         conn.close()
+
+    if _has_table("solicitacao_nf_item"):
+        item_cols = _get_column_names("solicitacao_nf_item")
+        conn = db.engine.connect()
+        try:
+            if "material_local" not in item_cols:
+                conn.execute(db.text("ALTER TABLE solicitacao_nf_item ADD COLUMN material_local VARCHAR(160)"))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def _ensure_expedicao_romaneio_columns() -> None:

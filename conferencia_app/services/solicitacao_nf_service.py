@@ -26,21 +26,38 @@ from .erp_lancamento_service import _conectar, _resolver_config
 from .facilities_grv_service import FacilitiesGRVService, normalizar_nome
 from . import teams_service
 
-TIPOS_OPERACAO = ("Garantia", "Bonificação", "Teste", "Materiais para atendimento técnico no cliente")
-TIPOS_SEM_RETORNO = ("Garantia", "Bonificação")
+TIPOS_OPERACAO = (
+    "Garantia",
+    "Bonificação",
+    "Remessa para Teste",
+    "Materiais para atendimento técnico no cliente",
+    "Remessa para Conserto",
+    "Remessa de retorno de demonstração",
+)
+# Faturar => Notas fiscais emitidas (sem controle de retorno)
+TIPOS_SEM_RETORNO = ("Garantia", "Bonificação", "Remessa de retorno de demonstração")
+# Apos a separacao vao para "Aguardando faturamento" (a NF sai antes do material,
+# ao contrario dos demais tipos que sao expedidos sem NF).
+TIPOS_AGUARDA_FATURAMENTO = ("Remessa para Conserto", "Remessa de retorno de demonstração")
+# Ao faturar, puxa os dados do destinatario da NF na bridge do ERP.
+TIPOS_PUXA_NF_BRIDGE = ("Remessa para Conserto",)
 
 STATUS_SOLICITADO = "Solicitado"
 STATUS_EXPEDIDO_SEM_NF = "Expedido sem nota fiscal"
+STATUS_AGUARDANDO_FAT = "Aguardando faturamento"
 STATUS_NF_EMITIDA = "Notas fiscais emitidas"
 STATUS_ESTOQUE_TERCEIROS = "Estoque em poder de terceiros"
 STATUS_ESTOQUE_ASSISTENCIA = "Estoque em poder da Assistência técnica"
 STATUS_ESTOQUE_RETORNADO = "Estoque retornado"
 
 STATUS_PENDENTES_RETORNO = (STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA)
+# Status a partir dos quais e possivel faturar (informar a NF).
+STATUS_PODE_FATURAR = (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT)
 
 STATUS_SLUGS = {
     STATUS_SOLICITADO: "em_separacao",
     STATUS_EXPEDIDO_SEM_NF: "expedido_sem_nf",
+    STATUS_AGUARDANDO_FAT: "aguardando_faturamento",
     STATUS_NF_EMITIDA: "nf_emitida",
     STATUS_ESTOQUE_TERCEIROS: "estoque_terceiros",
     STATUS_ESTOQUE_ASSISTENCIA: "estoque_assistencia",
@@ -50,6 +67,7 @@ STATUS_SLUGS = {
 STATUS_BADGE = {
     STATUS_SOLICITADO: "eui-badge--warning",
     STATUS_EXPEDIDO_SEM_NF: "eui-badge--info",
+    STATUS_AGUARDANDO_FAT: "eui-badge--warning",
     STATUS_NF_EMITIDA: "eui-badge--violet",
     STATUS_ESTOQUE_TERCEIROS: "eui-badge--primary",
     STATUS_ESTOQUE_ASSISTENCIA: "eui-badge--danger",
@@ -160,7 +178,8 @@ SQL_CLIENTE_BUSCAR = (
 SQL_CLIENTE_POR_CODIGO = _CLIENTE_SELECT + " where to_jsonb(c)->>'codigo' = %(codigo)s limit 1"
 
 SQL_MATERIAL_BUSCAR = """
-    select codigo_interno, nome, estoque_disponivel_uso
+    select codigo_interno, nome, estoque_disponivel_uso,
+           coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
     from public.tproduto
     where cod_empresa = %(empresa)s
       and (codigo_interno ilike %(termo)s or nome ilike %(termo)s)
@@ -169,7 +188,8 @@ SQL_MATERIAL_BUSCAR = """
 """
 
 SQL_MATERIAL_POR_CODIGO = """
-    select codigo_interno, nome, estoque_disponivel_uso
+    select codigo_interno, nome, estoque_disponivel_uso,
+           coalesce(nullif(localizacao_estoque, ''), '') as localizacao_estoque
     from public.tproduto
     where cod_empresa = %(empresa)s
       and lower(trim(codigo_interno)) = lower(trim(%(codigo)s))
@@ -213,6 +233,45 @@ def _buscar_material_por_codigo(codigo: str) -> dict[str, Any] | None:
         return None
     rows = _executar(SQL_MATERIAL_POR_CODIGO, {"empresa": _empresa(), "codigo": codigo})
     return rows[0] if rows else None
+
+
+def _dados_parceiro_nf(numero_nf: str) -> dict[str, str] | None:
+    """Puxa o destinatario (nome + endereco) de uma NF emitida na bridge do
+    ERP para a Remessa para Conserto. Best-effort: qualquer falha retorna None
+    e nao bloqueia o faturamento."""
+    numero_nf = str(numero_nf or "").strip()
+    if not numero_nf:
+        return None
+    try:
+        from .erp_nfe_emitidas_service import buscar_nfe_emitida_erp
+        from . import danfe_service
+
+        nota = buscar_nfe_emitida_erp(numero_nf=numero_nf)
+        if not nota:
+            return None
+        xml_bytes = nota.get("xml_bytes")
+        if not xml_bytes:
+            return None
+        dados = danfe_service.parse_nfe_xml(xml_bytes)
+        if not dados:
+            return None
+        nome = str(dados.get("dest_nome") or "").strip()
+        partes = [
+            str(dados.get("dest_logr") or "").strip(),
+            str(dados.get("dest_nro") or "").strip(),
+            str(dados.get("dest_bairro") or "").strip(),
+            str(dados.get("dest_mun") or "").strip(),
+            str(dados.get("dest_uf") or "").strip(),
+        ]
+        endereco = ", ".join(p for p in partes if p)
+        if not nome and not endereco:
+            return None
+        return {"nome": nome, "endereco": endereco}
+    except Exception:
+        current_app.logger.warning(
+            "solicitacao_nf: falha ao puxar destinatario da NF %s na bridge", numero_nf, exc_info=True
+        )
+        return None
 
 
 def listar_funcionarios_para_solicitacao() -> list[dict[str, Any]]:
@@ -260,6 +319,7 @@ def _validar_itens(itens_payload: list) -> list[dict[str, Any]]:
         itens.append({
             "material_codigo": material["codigo_interno"],
             "material_nome": material["nome"],
+            "material_local": str(material.get("localizacao_estoque") or "").strip() or None,
             "quantidade": quantidade,
         })
     return itens
@@ -329,7 +389,12 @@ def marcar_separada(solicitacao_id: int, usuario: str, itens_separados: list, ob
         item.separado = item.id in ids_separados
 
     status_anterior = solicitacao.status
-    solicitacao.status = STATUS_EXPEDIDO_SEM_NF
+    # Conserto / retorno de demonstracao: a NF sai antes do material, entao
+    # ficam "Aguardando faturamento". Os demais sao expedidos sem NF.
+    if solicitacao.tipo_operacao in TIPOS_AGUARDA_FATURAMENTO:
+        solicitacao.status = STATUS_AGUARDANDO_FAT
+    else:
+        solicitacao.status = STATUS_EXPEDIDO_SEM_NF
     solicitacao.separado_por = usuario
     solicitacao.separado_at = datetime.now()
     solicitacao.observacoes_separacao = (observacao or "")[:500]
@@ -357,7 +422,7 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
     solicitacao = SolicitacaoNF.query.get(solicitacao_id)
     if not solicitacao:
         raise SolicitacaoNFError("Solicitação não encontrada.")
-    if solicitacao.status != STATUS_EXPEDIDO_SEM_NF:
+    if solicitacao.status not in STATUS_PODE_FATURAR:
         raise SolicitacaoNFError("Solicitação ainda não foi separada.")
     numero_nf = str(numero_nf or "").strip()
     if not numero_nf:
@@ -365,10 +430,10 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
 
     if solicitacao.tipo_operacao in TIPOS_SEM_RETORNO:
         novo_status = STATUS_NF_EMITIDA
-    elif solicitacao.tipo_operacao == "Teste":
-        novo_status = STATUS_ESTOQUE_TERCEIROS
-    else:  # Materiais para atendimento técnico no cliente
+    elif solicitacao.tipo_operacao == "Materiais para atendimento técnico no cliente":
         novo_status = STATUS_ESTOQUE_ASSISTENCIA
+    else:  # Remessa para Teste | Remessa para Conserto
+        novo_status = STATUS_ESTOQUE_TERCEIROS
 
     status_anterior = solicitacao.status
     solicitacao.status = novo_status
@@ -376,6 +441,14 @@ def marcar_faturada(solicitacao_id: int, usuario: str, numero_nf: str, observaca
     solicitacao.faturado_at = datetime.now()
     solicitacao.numero_nf = numero_nf
     solicitacao.observacoes_faturamento = (observacao or "")[:500]
+
+    # Remessa para Conserto: puxa o destinatario/endereco da NF na bridge do ERP.
+    if solicitacao.tipo_operacao in TIPOS_PUXA_NF_BRIDGE:
+        parceiro = _dados_parceiro_nf(numero_nf)
+        if parceiro:
+            solicitacao.nf_parceiro_nome = (parceiro.get("nome") or "")[:200] or None
+            solicitacao.nf_parceiro_endereco = (parceiro.get("endereco") or "")[:400] or None
+
     solicitacao.updated_at = datetime.now()
 
     db.session.add(SolicitacaoNFLog(
@@ -443,7 +516,7 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
     if status_atual == STATUS_SOLICITADO:
         raise SolicitacaoNFError("Esta solicitação já está na primeira etapa.")
 
-    if status_atual == STATUS_EXPEDIDO_SEM_NF:
+    if status_atual in (STATUS_EXPEDIDO_SEM_NF, STATUS_AGUARDANDO_FAT):
         novo_status = STATUS_SOLICITADO
         solicitacao.separado_por = None
         solicitacao.separado_at = None
@@ -451,13 +524,24 @@ def estornar_solicitacao(solicitacao_id: int, usuario: str, motivo: str | None) 
         for item in solicitacao.itens:
             item.separado = False
     elif status_atual in (STATUS_NF_EMITIDA, STATUS_ESTOQUE_TERCEIROS, STATUS_ESTOQUE_ASSISTENCIA):
-        novo_status = STATUS_EXPEDIDO_SEM_NF
+        # Volta para a etapa anterior ao faturamento (depende do tipo).
+        novo_status = (
+            STATUS_AGUARDANDO_FAT
+            if solicitacao.tipo_operacao in TIPOS_AGUARDA_FATURAMENTO
+            else STATUS_EXPEDIDO_SEM_NF
+        )
         solicitacao.faturado_por = None
         solicitacao.faturado_at = None
         solicitacao.numero_nf = None
         solicitacao.observacoes_faturamento = None
+        solicitacao.nf_parceiro_nome = None
+        solicitacao.nf_parceiro_endereco = None
     elif status_atual == STATUS_ESTOQUE_RETORNADO:
-        novo_status = STATUS_ESTOQUE_TERCEIROS if solicitacao.tipo_operacao == "Teste" else STATUS_ESTOQUE_ASSISTENCIA
+        novo_status = (
+            STATUS_ESTOQUE_ASSISTENCIA
+            if solicitacao.tipo_operacao == "Materiais para atendimento técnico no cliente"
+            else STATUS_ESTOQUE_TERCEIROS
+        )
         solicitacao.numero_nf_retorno = None
         solicitacao.retorno_por = None
         solicitacao.retorno_at = None
@@ -537,6 +621,7 @@ def _serializar_item(item: SolicitacaoNFItem) -> dict[str, Any]:
         "id": item.id,
         "material_codigo": item.material_codigo,
         "material_nome": item.material_nome,
+        "material_local": item.material_local,
         "quantidade": item.quantidade,
         "separado": item.separado,
     }
@@ -566,6 +651,8 @@ def _serializar(s: SolicitacaoNF) -> dict[str, Any]:
         "retorno_por": s.retorno_por,
         "retorno_at": _iso(s.retorno_at),
         "observacoes_retorno": s.observacoes_retorno,
+        "nf_parceiro_nome": s.nf_parceiro_nome,
+        "nf_parceiro_endereco": s.nf_parceiro_endereco,
         "created_at": _iso(s.created_at),
         "itens": [_serializar_item(i) for i in s.itens],
     }
@@ -577,6 +664,7 @@ def listar_ordens_avulso() -> dict[str, Any]:
     resumo = {
         "em_separacao": 0,
         "expedido_sem_nf": 0,
+        "aguardando_faturamento": 0,
         "nf_emitida": 0,
         "estoque_terceiros": 0,
         "estoque_assistencia": 0,

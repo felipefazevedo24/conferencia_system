@@ -139,6 +139,61 @@
     .avl-detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .avl-admin-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--eui-border); }
 
+    /* Cartao da solicitacao (visual repaginado) */
+    .avl-card { border: 1px solid var(--eui-border, #e3e8ef); border-radius: 14px; background: var(--eui-surface, #fff); overflow: hidden; transition: box-shadow .16s, border-color .16s; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .avl-card + .avl-card { margin-top: 12px; }
+    .avl-card:hover { box-shadow: 0 10px 28px rgba(15,23,42,.10); border-color: #cdd7e5; }
+    .avl-card.is-open { border-color: var(--eui-primary, #0f62c9); box-shadow: 0 12px 34px rgba(15,98,201,.14); }
+    .avl-card__head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
+    .avl-card__accent { width: 4px; align-self: stretch; border-radius: 4px; background: var(--eui-border, #e3e8ef); }
+    .avl-card.acc-warning .avl-card__accent { background: #f59e0b; }
+    .avl-card.acc-info .avl-card__accent { background: #3b82f6; }
+    .avl-card.acc-violet .avl-card__accent { background: #8b5cf6; }
+    .avl-card.acc-primary .avl-card__accent { background: #0f62c9; }
+    .avl-card.acc-danger .avl-card__accent { background: #ef4444; }
+    .avl-card.acc-success .avl-card__accent { background: #16a34a; }
+    .avl-card__id { min-width: 0; }
+    .avl-card__title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--eui-text, #0f172a); }
+    .avl-card__title b { font-family: var(--eui-font-display, inherit); letter-spacing: .2px; }
+    .avl-card__title .avl-cliente { font-weight: 600; }
+    .avl-card__title .sep { color: var(--eui-text-muted, #94a3b8); }
+    .avl-chip-tipo { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #eef2ff; color: #4338ca; white-space: nowrap; }
+    .avl-card__meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; font-size: 12px; color: var(--eui-text-muted, #64748b); }
+    .avl-card__meta i { margin-right: 4px; opacity: .8; }
+    .avl-card__toggle { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--eui-border, #e3e8ef); background: var(--eui-surface-2, #f5f8fd); color: var(--eui-text, #334155); cursor: pointer; display: grid; place-items: center; transition: transform .2s, background .15s; flex-shrink: 0; }
+    .avl-card__toggle:hover { background: #eaf1fb; }
+    .avl-card.is-open .avl-card__toggle { transform: rotate(180deg); background: #eaf1fb; color: var(--eui-primary, #0f62c9); }
+    .avl-card__detail { display: none; padding: 0 16px 16px; border-top: 1px solid var(--eui-border, #eef0f3); }
+    .avl-card.is-open .avl-card__detail { display: block; }
+
+    /* Barra de etapas (progresso do fluxo) */
+    .avl-steps { display: flex; align-items: center; gap: 0; margin: 14px 0 4px; overflow-x: auto; padding-bottom: 4px; }
+    .avl-step { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; color: var(--eui-text-muted, #94a3b8); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+    .avl-step__dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--eui-surface-3, #eef1f6); color: #94a3b8; font-size: 10px; border: 2px solid transparent; }
+    .avl-step.is-done .avl-step__dot { background: #16a34a; color: #fff; }
+    .avl-step.is-current .avl-step__dot { background: var(--eui-primary, #0f62c9); color: #fff; box-shadow: 0 0 0 4px rgba(15,98,201,.14); }
+    .avl-step.is-current { color: var(--eui-primary, #0f62c9); }
+    .avl-step.is-done { color: #15803d; }
+    .avl-step__bar { width: 26px; height: 2px; background: var(--eui-border, #e3e8ef); margin: 0 4px; flex: 0 0 auto; }
+    .avl-step__bar.is-done { background: #16a34a; }
+
+    /* Tabela de itens (codigo / descricao / local / qtde) */
+    .avl-section-title { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-text-muted, #64748b); margin: 16px 0 8px; display: flex; align-items: center; gap: 7px; }
+    .avl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .avl-table thead th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--eui-text-muted, #94a3b8); padding: 6px 10px; border-bottom: 1px solid var(--eui-border, #e3e8ef); }
+    .avl-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--eui-border, #eef0f3); vertical-align: middle; }
+    .avl-table tbody tr:last-child td { border-bottom: none; }
+    .avl-table tbody tr.is-nao-separado { background: #fef2f2; }
+    .avl-table .avl-td-cod { font-weight: 700; color: var(--eui-text, #0f172a); white-space: nowrap; }
+    .avl-table .avl-td-qtde { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .avl-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    .avl-local { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 11.5px; font-weight: 600; }
+    .avl-local.is-empty { background: var(--eui-surface-3, #f1f5f9); color: #94a3b8; font-weight: 500; }
+    .avl-local i { font-size: 10px; }
+    .avl-nf-info { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 12px; border-radius: 10px; background: #f0f9ff; border: 1px solid #cfe6fb; margin-top: 12px; }
+    .avl-nf-info .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #0369a1; display: block; }
+    .avl-nf-info .v { font-size: 13px; color: var(--eui-text, #0f172a); }
+
     /* View "Romaneios" — embute a tela de romaneios (mesmo layout/UI) sem
        sair da Conferência de Expedição. */
     .ce-romaneio-iframe { width: 100%; min-height: 78vh; border: none; display: block; background: var(--eui-surface-2, #f1f6fb); border-radius: var(--eui-radius); }
@@ -551,6 +606,14 @@
                             <span class="eui-stat__hint">Aguardando faturamento</span>
                         </div>
                     </div>
+                    <div class="eui-stat is-clickable" data-filter="aguardando_faturamento">
+                        <div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-hourglass-half"></i></div>
+                        <div class="eui-stat__body">
+                            <span class="eui-stat__label">Aguardando faturamento</span>
+                            <span class="eui-stat__value" id="avulso-m-aguardando_faturamento">0</span>
+                            <span class="eui-stat__hint">Conserto / retorno demonstração</span>
+                        </div>
+                    </div>
                     <div class="eui-stat is-clickable" data-filter="nf_emitida">
                         <div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div>
                         <div class="eui-stat__body">
@@ -597,7 +660,7 @@
                     <div class="eui-card__head">
                         <div>
                             <h2 class="eui-card__title"><i class="fas fa-file-invoice"></i> Solicitações de NF avulsa</h2>
-                            <p class="eui-card__sub" id="avulso-subtitulo">Garantia, bonificação, teste e atendimento técnico — abertas pelo formulário público.</p>
+                            <p class="eui-card__sub" id="avulso-subtitulo">Garantia, bonificação, remessa para teste/conserto, retorno de demonstração e atendimento técnico — abertas pelo formulário público.</p>
                         </div>
                         <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="avulso-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
                     </div>
@@ -1999,42 +2062,105 @@
                 </div>`;
         }
 
-        function renderDetalhe(o) {
-            const itensHtml = `<div class="avl-item-list">${o.itens.map((it) => {
-                if (o.status_slug === "em_separacao") {
-                    return `<div class="avl-item"><label><input type="checkbox" class="avl-chk-item" value="${it.id}" checked> ${escapeHtml(it.material_codigo)} - ${escapeHtml(it.material_nome)} (Qtde: ${it.quantidade})</label></div>`;
-                }
-                const naoSeparado = !it.separado;
-                return `<div class="avl-item${naoSeparado ? " is-nao-separado" : ""}">${escapeHtml(it.material_codigo)} - ${escapeHtml(it.material_nome)} (Qtde: ${it.quantidade})${naoSeparado ? " — não separado" : ""}</div>`;
-            }).join("")}</div>`;
+        const STEP_LABEL = {
+            em_separacao: "Separação",
+            expedido_sem_nf: "Expedido s/ NF",
+            aguardando_faturamento: "Aguard. faturamento",
+            nf_emitida: "NF emitida",
+            estoque_terceiros: "Poder de terceiros",
+            estoque_assistencia: "Assistência",
+            estoque_retornado: "Retornado",
+        };
+        const ACCENT = {
+            em_separacao: "acc-warning", expedido_sem_nf: "acc-info", aguardando_faturamento: "acc-warning",
+            nf_emitida: "acc-violet", estoque_terceiros: "acc-primary", estoque_assistencia: "acc-danger", estoque_retornado: "acc-success",
+        };
+        const TIPOS_AGUARDA = ["Remessa para Conserto", "Remessa de retorno de demonstração"];
+        const TIPOS_RETORNO = ["Remessa para Teste", "Materiais para atendimento técnico no cliente", "Remessa para Conserto"];
 
+        function fluxoSlugs(o) {
+            const aguarda = o.status_slug === "aguardando_faturamento" || TIPOS_AGUARDA.includes(o.tipo_operacao);
+            const comRetorno = ["estoque_terceiros", "estoque_assistencia", "estoque_retornado"].includes(o.status_slug)
+                || TIPOS_RETORNO.includes(o.tipo_operacao);
+            const seg2 = aguarda ? "aguardando_faturamento" : "expedido_sem_nf";
+            if (!comRetorno) return ["em_separacao", seg2, "nf_emitida"];
+            const finalStock = o.tipo_operacao === "Materiais para atendimento técnico no cliente" ? "estoque_assistencia" : "estoque_terceiros";
+            return ["em_separacao", seg2, finalStock, "estoque_retornado"];
+        }
+
+        function renderSteps(o) {
+            const slugs = fluxoSlugs(o);
+            let cur = slugs.indexOf(o.status_slug);
+            if (cur < 0) cur = 0;
+            return `<div class="avl-steps">` + slugs.map((sl, i) => {
+                const cls = i < cur ? "is-done" : (i === cur ? "is-current" : "");
+                const bar = i > 0 ? `<span class="avl-step__bar ${i <= cur ? "is-done" : ""}"></span>` : "";
+                const dot = i < cur ? '<i class="fas fa-check"></i>' : (i + 1);
+                return `${bar}<div class="avl-step ${cls}"><span class="avl-step__dot">${dot}</span>${STEP_LABEL[sl] || sl}</div>`;
+            }).join("") + `</div>`;
+        }
+
+        function renderItens(o, comCheckbox) {
+            const rows = o.itens.map((it) => {
+                const local = it.material_local
+                    ? `<span class="avl-local"><i class="fas fa-location-dot"></i>${escapeHtml(it.material_local)}</span>`
+                    : `<span class="avl-local is-empty"><i class="fas fa-location-dot"></i>sem local</span>`;
+                const naoSep = (o.status_slug !== "em_separacao") && !it.separado;
+                const chk = comCheckbox ? `<td><input type="checkbox" class="avl-chk-item" value="${it.id}" checked></td>` : "";
+                return `<tr class="${naoSep ? "is-nao-separado" : ""}">
+                    ${chk}
+                    <td class="avl-td-cod">${escapeHtml(it.material_codigo)}</td>
+                    <td>${escapeHtml(it.material_nome || "")}${naoSep ? ' <span style="color:var(--eui-danger);font-size:11px;">(não separado)</span>' : ""}</td>
+                    <td>${local}</td>
+                    <td class="avl-td-qtde">${it.quantidade}</td>
+                </tr>`;
+            }).join("");
+            const thChk = comCheckbox ? '<th style="width:34px;"></th>' : "";
+            return `<table class="avl-table"><thead><tr>${thChk}<th>Código</th><th>Descrição</th><th>Local de estoque</th><th style="text-align:right;">Qtde</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }
+
+        function renderDetalhe(o) {
+            const steps = renderSteps(o);
+            const emSeparacao = o.status_slug === "em_separacao";
+            const itensBloco = `<div class="avl-section-title"><i class="fas fa-boxes-stacked"></i> Materiais</div>${renderItens(o, emSeparacao)}`;
             const vendaInfo = o.venda_posterior
-                ? `<div class="eui-callout eui-callout--warning" style="margin-bottom:10px;"><i class="fas fa-triangle-exclamation"></i> Solicitante indicou venda posterior — acompanhar orçamento manualmente.</div>`
+                ? `<div class="eui-callout eui-callout--warning" style="margin-top:12px;"><i class="fas fa-triangle-exclamation"></i> Solicitante indicou venda posterior — acompanhar orçamento manualmente.</div>`
+                : "";
+            const parceiroBox = (o.nf_parceiro_nome || o.nf_parceiro_endereco)
+                ? `<div class="avl-nf-info">
+                    ${o.nf_parceiro_nome ? `<div><span class="k">Destinatário (NF)</span><span class="v">${escapeHtml(o.nf_parceiro_nome)}</span></div>` : ""}
+                    ${o.nf_parceiro_endereco ? `<div><span class="k">Endereço</span><span class="v">${escapeHtml(o.nf_parceiro_endereco)}</span></div>` : ""}
+                   </div>` : "";
+            const nfEmitidaLinha = o.numero_nf
+                ? `<div class="eui-caption" style="margin-top:12px;"><i class="fas fa-file-invoice"></i> NF ${escapeHtml(o.numero_nf)} emitida por ${escapeHtml(o.faturado_por || "—")} em ${fmtDataHora(o.faturado_at)}</div>`
                 : "";
 
-            if (o.status_slug === "em_separacao") {
-                return `${vendaInfo}${itensHtml}
+            if (emSeparacao) {
+                return `${steps}${vendaInfo}${itensBloco}
                     <textarea class="avl-obs" placeholder="Observações da separação (opcional)"></textarea>
                     <div class="avl-detail-actions">
                         <button type="button" class="eui-btn eui-btn--primary" data-action="separar"><i class="fas fa-check"></i> Confirmar separação</button>
                     </div>
                     ${renderAcoesAdmin(o)}`;
             }
-            if (o.status_slug === "expedido_sem_nf") {
-                return `${vendaInfo}${itensHtml}
+            if (o.status_slug === "expedido_sem_nf" || o.status_slug === "aguardando_faturamento") {
+                const dica = o.tipo_operacao === "Remessa para Conserto"
+                    ? `<p class="eui-caption" style="margin-top:8px;"><i class="fas fa-circle-info"></i> Ao informar a NF, o destinatário e o endereço serão puxados automaticamente da nota.</p>`
+                    : "";
+                return `${steps}${vendaInfo}${itensBloco}
+                    <div class="avl-section-title"><i class="fas fa-file-invoice-dollar"></i> Faturamento</div>
                     <div class="avl-nf-row">
                         <input type="text" class="eui-input avl-nf" placeholder="Número da NF">
                         <textarea class="avl-obs" placeholder="Observações do faturamento (opcional)" style="margin-top:0;"></textarea>
-                    </div>
+                    </div>${dica}
                     <div class="avl-detail-actions">
                         <button type="button" class="eui-btn eui-btn--primary" data-action="faturar"><i class="fas fa-check"></i> Confirmar faturamento</button>
                     </div>
                     ${renderAcoesAdmin(o)}`;
             }
             if (o.status_slug === "estoque_terceiros" || o.status_slug === "estoque_assistencia") {
-                return `${vendaInfo}
-                    <div class="eui-caption" style="margin-bottom:8px;">NF ${escapeHtml(o.numero_nf || "—")} emitida por ${escapeHtml(o.faturado_por || "—")} em ${fmtDataHora(o.faturado_at)}</div>
-                    ${itensHtml}
+                return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${itensBloco}
+                    <div class="avl-section-title"><i class="fas fa-rotate-left"></i> Retorno do material</div>
                     <div class="avl-nf-row">
                         <input type="text" class="eui-input avl-nf-retorno" placeholder="Número da NF de retorno">
                         <textarea class="avl-obs" placeholder="Observações do retorno (opcional)" style="margin-top:0;"></textarea>
@@ -2047,32 +2173,36 @@
             // nf_emitida | estoque_retornado — somente leitura
             let extra = "";
             if (o.status_slug === "estoque_retornado") {
-                extra = `<div class="eui-caption" style="margin-top:8px;">Retorno: NF ${escapeHtml(o.numero_nf_retorno || "—")} registrado por ${escapeHtml(o.retorno_por || "—")} em ${fmtDataHora(o.retorno_at)}</div>`;
+                extra = `<div class="eui-caption" style="margin-top:8px;"><i class="fas fa-rotate-left"></i> Retorno: NF ${escapeHtml(o.numero_nf_retorno || "—")} registrado por ${escapeHtml(o.retorno_por || "—")} em ${fmtDataHora(o.retorno_at)}</div>`;
             }
-            return `${vendaInfo}
-                <div class="eui-caption" style="margin-bottom:8px;">NF ${escapeHtml(o.numero_nf || "—")} emitida por ${escapeHtml(o.faturado_por || "—")} em ${fmtDataHora(o.faturado_at)}</div>
-                ${itensHtml}${extra}
+            return `${steps}${vendaInfo}${nfEmitidaLinha}${parceiroBox}${extra}${itensBloco}
                 ${renderAcoesAdmin(o)}`;
         }
 
         function renderCard(o) {
+            const acc = ACCENT[o.status_slug] || "";
+            const nfMeta = o.numero_nf ? `<span><i class="fas fa-file-invoice"></i>NF ${escapeHtml(o.numero_nf)}</span>` : "";
             return `
-                <article class="eui-row" data-id="${o.id}">
-                    <div class="eui-row__head">
-                        <span class="eui-badge ${o.status_badge}"><span class="eui-badge__dot"></span>${escapeHtml(o.status)}</span>
-                        <div class="eui-row__id">
-                            <div class="eui-row__title"><b>${escapeHtml(o.protocolo)}</b><span class="sep">·</span>${escapeHtml(o.cliente_nome)}<span class="sep">·</span><span class="eui-badge eui-badge--neutral">${escapeHtml(o.tipo_operacao)}</span></div>
-                            <div class="eui-row__meta">
-                                <span><i class="far fa-user"></i> ${escapeHtml(o.solicitante_nome)}</span>
-                                <span><i class="far fa-clock"></i> ${fmtDataHora(o.created_at)}</span>
-                                <span><i class="fas fa-boxes"></i> ${o.itens.length} ${o.itens.length === 1 ? "item" : "itens"}</span>
+                <article class="avl-card ${acc}" data-id="${o.id}">
+                    <div class="avl-card__head" data-action="toggle-detail">
+                        <div class="avl-card__accent"></div>
+                        <div class="avl-card__id">
+                            <div class="avl-card__title">
+                                <b>${escapeHtml(o.protocolo)}</b><span class="sep">·</span>
+                                <span class="avl-cliente">${escapeHtml(o.cliente_nome)}</span>
+                                <span class="avl-chip-tipo">${escapeHtml(o.tipo_operacao)}</span>
+                                <span class="eui-badge ${o.status_badge}"><span class="eui-badge__dot"></span>${escapeHtml(o.status)}</span>
+                            </div>
+                            <div class="avl-card__meta">
+                                <span><i class="far fa-user"></i>${escapeHtml(o.solicitante_nome)}</span>
+                                <span><i class="far fa-clock"></i>${fmtDataHora(o.created_at)}</span>
+                                <span><i class="fas fa-boxes"></i>${o.itens.length} ${o.itens.length === 1 ? "item" : "itens"}</span>
+                                ${nfMeta}
                             </div>
                         </div>
-                        <div class="eui-row__actions">
-                            <button type="button" class="eui-btn eui-btn--ghost eui-btn--icon" data-action="toggle-detail" title="Detalhes"><i class="fas fa-chevron-down"></i></button>
-                        </div>
+                        <button type="button" class="avl-card__toggle" title="Detalhes"><i class="fas fa-chevron-down"></i></button>
                     </div>
-                    <div class="eui-row__detail">${renderDetalhe(o)}</div>
+                    <div class="avl-card__detail">${renderDetalhe(o)}</div>
                 </article>`;
         }
 
@@ -2121,9 +2251,9 @@
 
         $("avulso-lista").addEventListener("click", (e) => {
             const toggle = e.target.closest('[data-action="toggle-detail"]');
-            if (toggle) { toggle.closest(".eui-row").classList.toggle("is-open"); return; }
+            if (toggle) { toggle.closest(".avl-card").classList.toggle("is-open"); return; }
 
-            const row = e.target.closest(".eui-row");
+            const row = e.target.closest(".avl-card");
             if (!row) return;
             const id = row.dataset.id;
 

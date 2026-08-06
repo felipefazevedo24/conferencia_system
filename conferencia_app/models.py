@@ -892,6 +892,11 @@ class SolicitacaoNF(db.Model):
     retorno_at = db.Column(db.DateTime)
     observacoes_retorno = db.Column(db.String(500))
 
+    # Dados do parceiro puxados da NF na bridge (Remessa para Conserto):
+    # para quem o material foi enviado (destinatario) e o endereco.
+    nf_parceiro_nome = db.Column(db.String(200))
+    nf_parceiro_endereco = db.Column(db.String(400))
+
     ip_solicitante = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
@@ -917,6 +922,9 @@ class SolicitacaoNFItem(db.Model):
     linha = db.Column(db.Integer, nullable=False, default=0)
     material_codigo = db.Column(db.String(80), index=True)
     material_nome = db.Column(db.String(200))
+    # Local de estoque (endereco) do material no ERP (tproduto.localizacao_estoque),
+    # congelado no momento em que a solicitacao e criada.
+    material_local = db.Column(db.String(160))
     quantidade = db.Column(db.Float, nullable=False, default=0)
     separado = db.Column(db.Boolean, nullable=False, default=False)
 
