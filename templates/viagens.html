@@ -469,125 +469,90 @@
     /* === Hub Solicitações: badge de origem automática === */
     .rt-badge.b-cif{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(13,148,136,.08));color:#0f766e;border:1px solid rgba(13,148,136,.25)}
 
-    /* === Redesign da aba Solicitações (padrão Sync) === */
-    #pane-solicitacoes .rt-shell { max-width: 1640px; gap: 18px; }
+    /* === Solicitações no padrão Sync === */
+    #pane-solicitacoes .rt-shell { max-width: 1600px; gap: 16px; padding: 10px 20px; }
+    #pane-solicitacoes .sol-header { margin-bottom: 2px; }
+    #pane-solicitacoes .sol-header .eui-page-header__title i { color: #0f62c9; }
     #pane-solicitacoes .rt-panel {
-        border: 1px solid #dbe5ef;
-        border-radius: 18px;
-        background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-        box-shadow: 0 2px 8px rgba(15, 23, 42, .04), 0 14px 34px rgba(15, 23, 42, .05);
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05);
     }
-    #pane-solicitacoes .rt-pad { padding: 20px 22px; }
-    #pane-solicitacoes .rt-hero {
-        background:
-            radial-gradient(circle at 12% 18%, rgba(14, 116, 144, .22), transparent 46%),
-            radial-gradient(circle at 85% 8%, rgba(8, 145, 178, .18), transparent 40%),
-            linear-gradient(120deg, #0f2940 0%, #144464 54%, #155f87 100%);
-        border: 1px solid rgba(125, 211, 252, .26);
-        border-bottom: 3px solid #67e8f9;
-        color: #e6f7ff;
-        border-radius: 20px;
-        box-shadow: 0 16px 38px rgba(15, 41, 64, .34);
-        padding: 24px 26px;
-    }
-    #pane-solicitacoes .rt-hero .rt-title { color: #e8f6ff; }
-    #pane-solicitacoes .rt-hero .rt-title i { color: #67e8f9 !important; }
-    #pane-solicitacoes .rt-hero .rt-copy { color: rgba(224, 242, 254, .94); max-width: 760px; }
-    #pane-solicitacoes .rt-hero .btn {
-        border-radius: 10px;
-        border: 1px solid rgba(186, 230, 253, .4);
-        background: rgba(15, 60, 88, .52);
-        color: #e8f6ff;
-    }
-    #pane-solicitacoes .rt-hero .btn:hover { background: rgba(15, 60, 88, .75); }
-    #pane-solicitacoes .rt-hero .btn-primary {
-        background: linear-gradient(135deg, #22d3ee, #0891b2);
-        color: #052033;
-        border-color: transparent;
-        font-weight: 800;
-        box-shadow: 0 6px 16px rgba(34, 211, 238, .3);
-    }
+    #pane-solicitacoes .rt-pad { padding: 16px; }
     #pane-solicitacoes .rt-metrics { gap: 12px; }
     #pane-solicitacoes .rt-metric {
-        border-color: #dce9f4;
-        border-radius: 16px;
-        background: #ffffff;
-        padding: 14px 16px;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+        padding: 14px;
+        box-shadow: none;
     }
-    #pane-solicitacoes .rt-metric strong { font-size: 28px; }
-    #pane-solicitacoes .rt-metric span { font-size: 10px; letter-spacing: .07em; }
+    #pane-solicitacoes .rt-metric:hover { transform: none; box-shadow: 0 4px 12px rgba(15,23,42,.06); }
+    #pane-solicitacoes .rt-metric strong { font-size: 30px; }
 
     #pane-solicitacoes .rt-filters {
         width: 100%;
-        gap: 10px;
-        padding: 10px;
-        border: 1px solid #dce9f4;
-        border-radius: 14px;
-        background: #f7fbff;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fcfcfd;
     }
     #pane-solicitacoes .rt-filters .form-control,
     #pane-solicitacoes .rt-filters .form-select {
-        border: 1px solid #c7d7e6;
-        border-radius: 10px;
-        min-height: 38px;
-        font-size: 12.5px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        min-height: 36px;
+        font-size: 13px;
         color: #0f172a;
-        background: #ffffff;
-    }
-    #pane-solicitacoes .rt-filters .form-control:focus,
-    #pane-solicitacoes .rt-filters .form-select:focus {
-        border-color: #0891b2;
-        box-shadow: 0 0 0 3px rgba(8, 145, 178, .15);
+        background: #fff;
     }
 
     #pane-solicitacoes .rt-tabs {
-        margin-top: 12px;
-        padding: 5px;
-        border: 1px solid #dce9f4;
-        border-radius: 12px;
-        background: #f4f9ff;
+        margin-top: 10px;
+        padding: 6px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
     }
-    #pane-solicitacoes .rt-tab { font-weight: 700; color: #4b5f75; }
-    #pane-solicitacoes .rt-tab:hover { background: #ffffff; color: #12324a; }
+    #pane-solicitacoes .rt-tab { border-radius: 8px; font-weight: 700; }
     #pane-solicitacoes .rt-tab.active {
-        color: #0e7490;
-        border-bottom-color: #06b6d4;
-        background: #ffffff;
-        box-shadow: 0 4px 10px rgba(15, 23, 42, .06);
+        color: #0f62c9;
+        border-bottom-color: #0f62c9;
+        background: #fff;
+        box-shadow: 0 3px 8px rgba(15, 98, 201, .12);
     }
     #pane-solicitacoes .rt-tab.active .tab-count {
-        background: linear-gradient(135deg, #06b6d4, #0891b2);
-        box-shadow: 0 2px 6px rgba(6, 182, 212, .3);
+        background: linear-gradient(135deg, #155eef, #0f62c9);
+        color: #fff;
     }
 
     #pane-solicitacoes .erp-table {
-        border: 1px solid #dce9f4;
-        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
         box-shadow: none;
+        background: #fff;
     }
     #pane-solicitacoes .erp-table thead th {
-        background: linear-gradient(180deg, #f1f7fd, #e8f2fb);
-        border-bottom-color: #cfe0f0;
-        color: #26435b;
+        background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+        color: #334155;
+        border-bottom-color: #e2e8f0;
     }
     #pane-solicitacoes .erp-table tbody tr:hover {
-        background: linear-gradient(90deg, #f5fbff, #ffffff);
-        box-shadow: inset 4px 0 0 #06b6d4;
+        background: linear-gradient(90deg, #f8fafc, #fff);
+        box-shadow: inset 4px 0 0 #155eef;
     }
 
     #pane-solicitacoes .rt-state {
-        background: #f8fcff;
-        border-color: #d4e6f5;
-        color: #53708a;
-        border-radius: 14px;
+        background: #f8fafc;
+        border: 2px dashed #d5deea;
+        border-radius: 12px;
+        color: #64748b;
     }
     #pane-solicitacoes .rt-grid { gap: 16px; }
     #pane-solicitacoes .rt-agenda-item,
-    #pane-solicitacoes .rt-driver {
-        border-color: #dce9f4;
-        border-radius: 14px;
-    }
+    #pane-solicitacoes .rt-driver { border-radius: 12px; border-color: #e2e8f0; }
 
     /* Contraste das abas superiores no tema escuro */
     [data-theme="escuro"] .main-page-tabs {
@@ -615,6 +580,11 @@
         border-color: #2f4258 !important;
         box-shadow: 0 10px 28px rgba(0, 0, 0, .28) !important;
     }
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__title,
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__sub,
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__eyebrow {
+        color: #d9e6f4 !important;
+    }
     [data-theme="escuro"] #pane-solicitacoes .rt-top h2,
     [data-theme="escuro"] #pane-solicitacoes .rt-metric strong,
     [data-theme="escuro"] #pane-solicitacoes .erp-table tbody td,
@@ -628,10 +598,7 @@
     [data-theme="escuro"] #pane-solicitacoes .rt-driver-info p {
         color: #a8bfd6 !important;
     }
-    [data-theme="escuro"] #pane-solicitacoes .rt-filters {
-        background: #0f1b2a !important;
-        border-color: #324a63 !important;
-    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters { background: #0f1b2a !important; border-color: #324a63 !important; }
     [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-control,
     [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-select {
         background: #162738 !important;
@@ -1127,19 +1094,18 @@
 
 <div id="pane-solicitacoes" style="display:none">
 <div class="rt-shell">
-    <section class="rt-hero">
-        <div class="rt-top">
-            <div>
-                <h1 class="rt-title"><i class="fas fa-clipboard-list" style="margin-right:12px;color:var(--frota-amber)"></i>Solicitações de Transporte</h1>
-                <p class="rt-copy">Gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas.</p>
-            </div>
-            <div class="rt-actions">
-                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<button class="btn btn-primary" type="button" onclick="openNovaSolicitacao()"><i class="fas fa-plus"></i> Nova solicitação</button>{% endif %}
-                <a class="btn" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
-                <button class="btn btn-outline-secondary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
-            </div>
+    <header class="eui-page-header sol-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Gestão de Solicitações</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-list"></i> Solicitações de Transporte</h1>
+            <p class="eui-page-header__sub">Gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas.</p>
         </div>
-    </section>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<button class="eui-btn eui-btn--primary" type="button" onclick="openNovaSolicitacao()"><i class="fas fa-plus"></i> Nova solicitação</button>{% endif %}
+            <a class="eui-btn eui-btn--ghost" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
+            <button class="eui-btn eui-btn--ghost" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
+        </div>
+    </header>
     <section class="rt-panel rt-pad" style="margin-top:-10px;position:relative;z-index:1">
         <div id="metricGrid" class="rt-metrics"></div>
     </section>
