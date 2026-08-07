@@ -167,10 +167,16 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
     except Exception:
         valor = 0.0
 
-    duplicado = (
-        ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFSE").first()
-        or (ItemNota.query.filter_by(documento_externo_id=id_externo, tipo_documento="NFSE").first() if id_externo else None)
-    )
+    duplicado = None
+    if id_externo:
+        duplicado = ItemNota.query.filter_by(documento_externo_id=id_externo, tipo_documento="NFSE").first()
+    if not duplicado and numero_nota:
+        # NFS-e pode repetir numeracao entre prestadores diferentes; por isso
+        # amarra a duplicidade ao CNPJ emitente quando disponivel.
+        query = ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFSE")
+        if cnpj_emitente:
+            query = query.filter_by(cnpj_emitente=cnpj_emitente)
+        duplicado = query.first()
     if duplicado:
         return 0
 
@@ -262,7 +268,17 @@ def process_xml_and_store(xml_bytes: bytes, user: str, status_inicial: str = "Pe
             except Exception:
                 vencimento_pagamento_xml = None
 
-        if ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFE").first():
+        # Chave de acesso identifica uma NF-e de forma unica no pais.
+        if chave and ItemNota.query.filter_by(chave_acesso=chave, tipo_documento="NFE").first():
+            return 0
+
+        # Numero da nota pode se repetir entre fornecedores distintos.
+        # Quando houver CNPJ emitente no XML, considera a combinacao
+        # numero_nota + cnpj_emitente para detectar duplicidade.
+        query_duplicada = ItemNota.query.filter_by(numero_nota=numero_nota, tipo_documento="NFE")
+        if cnpj_emitente:
+            query_duplicada = query_duplicada.filter_by(cnpj_emitente=cnpj_emitente)
+        if query_duplicada.first():
             return 0
 
         itens_xml = []
