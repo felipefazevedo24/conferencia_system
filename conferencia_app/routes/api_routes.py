@@ -101,6 +101,11 @@ from ..services.classificacao_contabil_service import (
     resumo_classificacoes,
 )
 from ..services.email_service import enviar_email_convite_acesso
+from ..services.maintenance_mode_service import (
+    deactivate_non_admin_sessions,
+    get_maintenance_state,
+    set_maintenance_state,
+)
 
 
 def _parse_aviso_datetime(value):
@@ -126,6 +131,38 @@ def _serializar_aviso_atualizacao(aviso):
         "atualizado_por": aviso.atualizado_por,
         "atualizado_em": aviso.atualizado_em.isoformat() if aviso.atualizado_em else None,
     }
+
+
+@api_bp.route("/api/admin/maintenance")
+@roles_required("Admin")
+def obter_modo_manutencao_admin():
+    return jsonify({"sucesso": True, "maintenance": get_maintenance_state()})
+
+
+@api_bp.route("/api/admin/maintenance", methods=["POST"])
+@roles_required("Admin")
+def alterar_modo_manutencao_admin():
+    payload = request.get_json(silent=True) or {}
+    enabled = bool(payload.get("enabled", False))
+    message = str(payload.get("message") or "").strip()
+    if enabled and not message:
+        message = "O Columbia Sync está em manutenção no momento. Tente novamente em alguns minutos."
+
+    maintenance = set_maintenance_state(
+        enabled=enabled,
+        updated_by=str(session.get("username") or "admin"),
+        message=message,
+    )
+
+    sessoes_encerradas = 0
+    if enabled:
+        sessoes_encerradas = deactivate_non_admin_sessions(except_session_id=session.get("session_id"))
+
+    return jsonify({
+        "sucesso": True,
+        "maintenance": maintenance,
+        "sessions_deactivated": sessoes_encerradas,
+    })
 
 
 def _aviso_atualizacao_ativo():

@@ -264,6 +264,13 @@ def logout():
     return redirect(url_for("auth.login_page", msg="Sessão encerrada com sucesso.", type="info"))
 
 
+@auth_bp.route("/manutencao")
+def maintenance_page():
+    from ..services.maintenance_mode_service import get_maintenance_state
+
+    return render_template("maintenance.html", maintenance=get_maintenance_state()), 503
+
+
 # Teste de logo estática
 @auth_bp.route('/test-logo')
 def test_logo():

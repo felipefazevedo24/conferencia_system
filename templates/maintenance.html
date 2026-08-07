@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Columbia Sync em manutenção</title>
+    <style>
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'IBM Plex Sans', Arial, sans-serif;
+            background: radial-gradient(circle at 15% 20%, #1f3352 0%, #0a121d 55%, #070c14 100%);
+            color: #e8f0fb;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+        .maintenance-card {
+            width: min(760px, 100%);
+            background: rgba(18, 29, 46, 0.92);
+            border: 1px solid #2f4668;
+            border-radius: 22px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+            padding: 34px 30px;
+        }
+        .kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 180, 0, .14);
+            color: #ffd277;
+            border: 1px solid rgba(255, 203, 101, .45);
+            border-radius: 999px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 16px 0 8px;
+            font-size: clamp(28px, 5vw, 40px);
+            line-height: 1.08;
+            font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+            letter-spacing: -.03em;
+        }
+        p {
+            margin: 0;
+            color: #b5c5db;
+            font-size: 16px;
+            line-height: 1.55;
+        }
+        .meta {
+            margin-top: 22px;
+            padding-top: 16px;
+            border-top: 1px dashed #375179;
+            color: #8ea3c0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <main class="maintenance-card">
+        <span class="kicker">Sistema em manutenção</span>
+        <h1>Voltamos em instantes.</h1>
+        <p>{{ (maintenance.message if maintenance else '') or 'O Columbia Sync está em manutenção no momento. Tente novamente em alguns minutos.' }}</p>
+        <div class="meta">
+            {% if maintenance and maintenance.updated_by %}
+            Atualizado por {{ maintenance.updated_by }}
+            {% endif %}
+            {% if maintenance and maintenance.updated_at %}
+            em {{ maintenance.updated_at }}
+            {% endif %}
+        </div>
+    </main>
+</body>
+</html>

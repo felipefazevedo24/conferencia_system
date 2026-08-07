@@ -419,6 +419,12 @@
                         <i class="fas fa-gear"></i>
                         <span>Meu perfil e configurações</span>
                     </a>
+                    {% if session.get('role') == 'Admin' %}
+                    <button type="button" class="sidebar-profile-menu-item" role="menuitem" id="maintenanceToggleBtn">
+                        <i class="fas fa-screwdriver-wrench"></i>
+                        <span>Modo manutenção</span>
+                    </button>
+                    {% endif %}
                     <button type="button" class="sidebar-profile-menu-item danger" role="menuitem" onclick="confirmarLogout()">
                         <i class="fas fa-sign-out-alt"></i>
                         <span>Sair</span>
@@ -539,6 +545,62 @@ function confirmarLogout() {
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && overlay.classList.contains("show")) fechar();
     });
+})();
+
+(function () {
+    const btn = document.getElementById("maintenanceToggleBtn");
+    if (!btn) return;
+
+    async function carregarEstado() {
+        try {
+            const r = await fetch("/api/admin/maintenance", { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const data = await r.json();
+            const enabled = !!(data.maintenance && data.maintenance.enabled);
+            btn.dataset.enabled = enabled ? "1" : "0";
+            btn.querySelector("span").textContent = enabled ? "Desativar manutenção" : "Ativar manutenção";
+            btn.classList.toggle("danger", enabled);
+        } catch (_) {}
+    }
+
+    btn.addEventListener("click", async function () {
+        const enabled = btn.dataset.enabled === "1";
+        const action = enabled ? "desativar" : "ativar";
+        const msg = enabled
+            ? "Desativar modo manutenção e liberar acesso para todos os usuários?"
+            : "Ativar modo manutenção agora? Isso vai derrubar imediatamente todos os usuários não-admin.";
+        if (!confirm(msg)) return;
+
+        btn.disabled = true;
+        const oldText = btn.querySelector("span").textContent;
+        btn.querySelector("span").textContent = enabled ? "Desativando..." : "Ativando...";
+        try {
+            const r = await fetch("/api/admin/maintenance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                body: JSON.stringify({ enabled: !enabled }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.sucesso) {
+                alert((data && data.error) || "Não foi possível alterar o modo manutenção.");
+            } else {
+                const encerradas = Number(data.sessions_deactivated || 0);
+                if (!enabled) {
+                    alert(`Modo manutenção ativado. ${encerradas} sessão(ões) de usuário não-admin foram encerradas.`);
+                } else {
+                    alert("Modo manutenção desativado. Acesso liberado.");
+                }
+            }
+            await carregarEstado();
+        } catch (_) {
+            alert("Falha ao comunicar com o servidor.");
+            btn.querySelector("span").textContent = oldText;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    carregarEstado();
 })();
 
 function renderShellFavorites() {
