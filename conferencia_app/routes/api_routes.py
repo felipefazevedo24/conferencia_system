@@ -2149,11 +2149,13 @@ def documento_entrada_kpis_v2():
     sub_notas = (
         db.session.query(
             ItemNota.numero_nota.label("numero_nota"),
+            ItemNota.cnpj_emitente.label("cnpj_emitente"),
+            ItemNota.fornecedor.label("fornecedor"),
             func.max(case((ItemNota.status != "AguardandoLiberacao", 1), else_=0)).label("tem_status_fora_auditoria"),
             func.max(case((ItemNota.status.in_(["Pendente", "Concluído", "Concluido"]), 1), else_=0)).label("tem_status_lancamento"),
             func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)).label("tem_status_lancado"),
         )
-        .group_by(ItemNota.numero_nota)
+        .group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
         .subquery()
     )
 
@@ -2179,11 +2181,17 @@ def documento_entrada_kpis_v2():
         .scalar()
     ) or 0
 
-    importados_hoje = (
-        db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
+    importados_hoje_sub = (
+        db.session.query(
+            ItemNota.numero_nota,
+            ItemNota.cnpj_emitente,
+            ItemNota.fornecedor,
+        )
         .filter(func.date(ItemNota.data_importacao) == hoje)
-        .scalar()
-    ) or 0
+        .group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+        .subquery()
+    )
+    importados_hoje = db.session.query(func.count()).select_from(importados_hoje_sub).scalar() or 0
 
     return jsonify({
         "importados_hoje": int(importados_hoje),
@@ -2212,6 +2220,8 @@ def documento_entrada_lista():
 
     base_query = db.session.query(
         ItemNota.numero_nota,
+        ItemNota.cnpj_emitente,
+        ItemNota.fornecedor,
         func.max(ItemNota.data_importacao).label("data_importacao_max"),
     )
 
@@ -2223,7 +2233,7 @@ def documento_entrada_lista():
         termo = f"%{busca}%"
         base_query = base_query.filter(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
 
-    base_query = base_query.group_by(ItemNota.numero_nota)
+    base_query = base_query.group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
 
     if etapa == "auditoria":
         # Auditoria deve conter apenas notas totalmente em AguardandoLiberacao.
@@ -2248,20 +2258,27 @@ def documento_entrada_lista():
         .limit(page_size)
         .all()
     )
-    numeros_pagina = [r[0] for r in pagina]
+    chaves_pagina = [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip()) for r in pagina]
+    numeros_pagina = sorted({k[0] for k in chaves_pagina if k[0]})
 
     itens_por_nota = {}
     if numeros_pagina:
         for item in ItemNota.query.filter(ItemNota.numero_nota.in_(numeros_pagina)).all():
-            itens_por_nota.setdefault(item.numero_nota, []).append(item)
+            chave_item = (
+                str(item.numero_nota or "").strip(),
+                str(item.cnpj_emitente or "").strip(),
+                str(item.fornecedor or "").strip(),
+            )
+            itens_por_nota.setdefault(chave_item, []).append(item)
 
     divergencias = _summarize_divergencias_lote(numeros_pagina)
     estornos = _bulk_ultimo_por_nota(LogEstornoLancamento, numeros_pagina, LogEstornoLancamento.data_estorno)
     manifestacoes = _bulk_ultimo_por_nota(LogManifestacaoDestinatario, numeros_pagina, LogManifestacaoDestinatario.data)
 
     notas = []
-    for numero in numeros_pagina:
-        itens_nota = itens_por_nota.get(numero, [])
+    for chave in chaves_pagina:
+        numero = chave[0]
+        itens_nota = itens_por_nota.get(chave, [])
         if not itens_nota:
             continue
         status_real = _etapa_atual_por_itens(itens_nota)
@@ -2276,6 +2293,7 @@ def documento_entrada_lista():
         linha = {
             "numero": numero,
             "fornecedor": fornecedor,
+            "cnpj_emitente": str(itens_nota[0].cnpj_emitente or "").strip(),
             "status": status_real,
             "pedido_compra": pedido_compra,
             "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M") if data_importacao else "---",
