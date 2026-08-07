@@ -63,12 +63,12 @@
     .doc-kpi-card:nth-child(3) { border-top-color: #16a34a; }
     .doc-kpi-card:nth-child(4) { border-top-color: #ef4444; }
     .doc-kpi-card:nth-child(5) { border-top-color: #64748b; }
-    .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
-    .doc-kpi-emoji { font-size: 18px; line-height: 1; }
-    .doc-kpi-icon.primary { background: linear-gradient(135deg, #059669, #065f46); }
-    .doc-kpi-icon.info { background: linear-gradient(135deg, #155eef, #0b2a6b); }
-    .doc-kpi-icon.warn { background: linear-gradient(135deg, #f59e0b, #b45309); }
-    .doc-kpi-icon.slate { background: linear-gradient(135deg, #64748b, #334155); }
+    .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 1px solid transparent; }
+    .doc-kpi-icon i { font-size: 16px; }
+    .doc-kpi-icon.primary { color: #16a34a; background: rgba(22, 163, 74, .14); border-color: rgba(22, 163, 74, .28); }
+    .doc-kpi-icon.info { color: #2563eb; background: rgba(37, 99, 235, .14); border-color: rgba(37, 99, 235, .28); }
+    .doc-kpi-icon.warn { color: #d97706; background: rgba(217, 119, 6, .14); border-color: rgba(217, 119, 6, .28); }
+    .doc-kpi-icon.slate { color: #475569; background: rgba(100, 116, 139, .14); border-color: rgba(100, 116, 139, .30); }
     .doc-kpi-label { font-size: 10.5px; font-weight: 700; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; }
     .doc-kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
     .doc-kpi-foot { font-size: 11px; color: var(--doc-muted); margin-top: 2px; }
@@ -363,10 +363,10 @@
         padding: 14px 16px !important;
     }
     .doc-kpi-icon { border-radius: 10px !important; box-shadow: none !important; }
-    .doc-kpi-icon.primary { background: #16a34a !important; }
-    .doc-kpi-icon.info { background: #0f62c9 !important; }
-    .doc-kpi-icon.warn { background: #f59e0b !important; }
-    .doc-kpi-icon.slate { background: #64748b !important; }
+    .doc-kpi-icon.primary { color: #16a34a !important; background: rgba(22, 163, 74, .14) !important; border-color: rgba(22, 163, 74, .28) !important; }
+    .doc-kpi-icon.info { color: #2563eb !important; background: rgba(37, 99, 235, .14) !important; border-color: rgba(37, 99, 235, .28) !important; }
+    .doc-kpi-icon.warn { color: #d97706 !important; background: rgba(217, 119, 6, .14) !important; border-color: rgba(217, 119, 6, .28) !important; }
+    .doc-kpi-icon.slate { color: #475569 !important; background: rgba(100, 116, 139, .14) !important; border-color: rgba(100, 116, 139, .30) !important; }
     .doc-btn { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; font-size: 13px !important; padding: 8px 14px !important; }
     .doc-btn:hover { transform: none !important; filter: brightness(0.95) !important; }
     .doc-btn-primary { background: #0f62c9 !important; }
@@ -1113,11 +1113,11 @@ async function carregarKPIs() {
     const d = await apiGet('/api/viagem/dashboard');
     const k = d.kpis;
     document.getElementById('kpi-grid').innerHTML = `
-    <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><span class="doc-kpi-emoji" aria-hidden="true">🚚</span></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
-    <div class="doc-kpi-card"><div class="doc-kpi-icon info"><span class="doc-kpi-emoji" aria-hidden="true">📅</span></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
-    <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><span class="doc-kpi-emoji" aria-hidden="true">🏁</span></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
-    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><span class="doc-kpi-emoji" aria-hidden="true">📤</span></div><div><div class="doc-kpi-label">Pendentes de liberação</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
-    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><span class="doc-kpi-emoji" aria-hidden="true">🛣️</span></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
+    <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><i class="fa-solid fa-truck-moving"></i></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon info"><i class="fa-solid fa-calendar-day"></i></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-paper-plane"></i></div><div><div class="doc-kpi-label">Pendentes de liberação</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
 }
 
 async function torreControleRemovida() {
