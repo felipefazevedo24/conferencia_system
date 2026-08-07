@@ -362,7 +362,7 @@
         </div>
     </section>
 
-    {% if dashboard_charts.fluxo_notas or dashboard_charts.pendencias_operacao or dashboard_charts.operacao_logistica or dashboard_charts.expedicao %}
+    {% if dashboard_charts.fluxo_notas or dashboard_charts.recebido_vs_expedido or dashboard_charts.pendencias_chave %}
     <section class="dash-section">
         <div class="dash-section-head">
             <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
@@ -382,31 +382,22 @@
                 <div class="dash-chart-body"><canvas id="chartFluxo"></canvas></div>
             </div>
             {% endif %}
-            {% if dashboard_charts.pendencias_operacao %}
+            {% if dashboard_charts.recebido_vs_expedido %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Fila atual do recebimento/fiscal</strong>
-                    <span>Onde está o gargalo agora</span>
+                    <strong>Materiais recebidos x expedidos</strong>
+                    <span>Comparativo acumulado do fluxo</span>
                 </div>
-                <div class="dash-chart-body"><canvas id="chartFila"></canvas></div>
+                <div class="dash-chart-body"><canvas id="chartRecebidoExpedido"></canvas></div>
             </div>
             {% endif %}
-            {% if dashboard_charts.operacao_logistica %}
+            {% if dashboard_charts.pendencias_chave %}
             <div class="dash-chart">
                 <div class="dash-chart-head">
-                    <strong>Logística em andamento</strong>
-                    <span>Expedição pendente e viagens ativas</span>
+                    <strong>Pendências que exigem ação</strong>
+                    <span>Recebimento, expedição e validação cadastral</span>
                 </div>
-                <div class="dash-chart-body"><canvas id="chartLogistica"></canvas></div>
-            </div>
-            {% endif %}
-            {% if dashboard_charts.expedicao %}
-            <div class="dash-chart">
-                <div class="dash-chart-head">
-                    <strong>Status detalhado da expedição</strong>
-                    <span>Situação atual</span>
-                </div>
-                <div class="dash-chart-body"><canvas id="chartExpedicao"></canvas></div>
+                <div class="dash-chart-body"><canvas id="chartPendencias"></canvas></div>
             </div>
             {% endif %}
         </div>
@@ -528,9 +519,8 @@
                 }
             });
         }
-        doughnut("chartFila", DASH.pendencias_operacao);
-        doughnut("chartLogistica", DASH.operacao_logistica);
-        doughnut("chartExpedicao", DASH.expedicao);
+        doughnut("chartRecebidoExpedido", DASH.recebido_vs_expedido);
+        doughnut("chartPendencias", DASH.pendencias_chave);
     })();
 </script>
 {% endblock %}

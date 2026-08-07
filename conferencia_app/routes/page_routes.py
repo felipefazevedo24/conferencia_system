@@ -16,6 +16,7 @@ from ..models import (
     PlannerCard,
     PlannerColumn,
     Usuario,
+    Viagem,
 )
 
 
@@ -398,7 +399,8 @@ def _fmt_metric(value: int | float, singular: str, plural: str | None = None) ->
 def _build_home_metrics() -> dict:
     today = datetime.now().date()
     metrics = {
-        "pendencias_nfe_total": 0,
+        "materiais_expedidos": 0,
+        "materiais_recebidos": 0,
         "recebimento_pendente": 0,
         "notas_concluidas": 0,
         "notas_lancadas": 0,
@@ -411,6 +413,7 @@ def _build_home_metrics() -> dict:
         "importadas_hoje": 0,
         "lancadas_hoje": 0,
         "cadastro_pendente": 0,
+        "viagens_em_andamento": 0,
     }
     try:
         metrics["recebimento_pendente"] = (
@@ -431,6 +434,17 @@ def _build_home_metrics() -> dict:
             .scalar()
             or 0
         )
+        metrics["materiais_recebidos"] = int(metrics["notas_lancadas"])
+        metrics["materiais_expedidos"] = (
+            db.session.query(func.count(func.distinct(ExpedicaoConferenciaSimples.numero_nf)))
+            .filter(
+                ExpedicaoConferenciaSimples.status.in_(["Expedido", "Finalizado"]),
+                ExpedicaoConferenciaSimples.numero_nf.isnot(None),
+                ExpedicaoConferenciaSimples.numero_nf != "",
+            )
+            .scalar()
+            or 0
+        )
         metrics["auditoria_pendente"] = (
             db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
             .filter(ItemNota.auditor_decisao == "PendenteDecisao")
@@ -447,6 +461,11 @@ def _build_home_metrics() -> dict:
         metrics["agendamento_ativo"] = (
             AgendamentoSolicitacao.query
             .filter(AgendamentoSolicitacao.status.notin_(["Concluida", "Cancelada"]))
+            .count()
+        )
+        metrics["viagens_em_andamento"] = (
+            Viagem.query
+            .filter(Viagem.status == "EmAndamento")
             .count()
         )
         metrics["expedicao_aberta"] = (
@@ -479,13 +498,6 @@ def _build_home_metrics() -> dict:
         )
     except Exception:
         db.session.rollback()
-
-    metrics["pendencias_nfe_total"] = int(
-        metrics.get("recebimento_pendente", 0)
-        + metrics.get("notas_concluidas", 0)
-        + metrics.get("auditoria_pendente", 0)
-        + metrics.get("expedicao_aberta", 0)
-    )
 
     return metrics
 
@@ -751,58 +763,58 @@ def _build_dashboard(metrics: dict) -> list[dict]:
             "icon": "fa-bolt",
             "cards": [
                 {
-                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_UPLOAD", "PAGE_LANCAMENTO", "PAGE_XML_AUDITOR", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_CONFERENCIA"),
-                    "label": "Pendências de NF no fluxo",
-                    "value": metrics["pendencias_nfe_total"],
-                    "caption": "Total em recebimento, documento, auditoria e expedição.",
-                    "icon": "fa-bell",
-                    "href": "/upload",
+                    "perms": _PERM_EXPEDICAO,
+                    "label": "Materiais expedidos",
+                    "value": metrics["materiais_expedidos"],
+                    "caption": "Notas fiscais com status finalizado no Registro de Expedição.",
+                    "icon": "fa-box-open",
+                    "href": "/expedicao/conferencia",
                     "tone": "emerald",
                 },
                 {
-                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"),
-                    "label": "NF pendentes de recebimento",
-                    "value": metrics["recebimento_pendente"],
-                    "caption": "Fila que precisa de conferência de recebimento.",
-                    "icon": "fa-inbox",
-                    "href": "/conferencia",
-                    "tone": "amber",
-                },
-                {
-                    "perms": ("PAGE_UPLOAD", "PAGE_LANCAMENTO", "PAGE_XML_AUDITOR"),
-                    "label": "NF pendentes no Documento de Entrada",
-                    "value": metrics["notas_concluidas"],
-                    "caption": "Conferidas e aguardando lançamento no ERP.",
+                    "perms": ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS"),
+                    "label": "Materiais recebidos",
+                    "value": metrics["materiais_recebidos"],
+                    "caption": "Notas fiscais com status lançado no Documento de Entrada.",
                     "icon": "fa-file-circle-check",
                     "href": "/upload",
                     "tone": "blue",
                 },
                 {
-                    "perms": _PERM_COMPRAS,
-                    "label": "NF aguardando decisão fiscal",
-                    "value": metrics["auditoria_pendente"],
-                    "caption": "Auditoria fiscal pendente de ação.",
-                    "icon": "fa-scale-balanced",
-                    "href": "/upload",
-                    "tone": "violet",
-                },
-                {
                     "perms": _PERM_EXPEDICAO,
-                    "label": "NF pendentes de expedição",
+                    "label": "Materiais com pendência de expedição",
                     "value": metrics["expedicao_aberta"],
-                    "caption": "Saídas que ainda não foram finalizadas.",
+                    "caption": "Pendentes na conferência de expedição.",
                     "icon": "fa-boxes-packing",
                     "href": "/expedicao/conferencia-cega",
                     "tone": "amber",
                 },
                 {
+                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"),
+                    "label": "Materiais com pendência de recebimento",
+                    "value": metrics["recebimento_pendente"],
+                    "caption": "Pendentes na conferência de recebimento.",
+                    "icon": "fa-inbox",
+                    "href": "/conferencia",
+                    "tone": "violet",
+                },
+                {
                     "perms": _PERM_LOGISTICA,
-                    "label": "Viagens ativas agora",
-                    "value": metrics["agendamento_ativo"],
-                    "caption": "Coletas e entregas em andamento neste momento.",
+                    "label": "Viagens sendo realizadas",
+                    "value": metrics["viagens_em_andamento"],
+                    "caption": "Viagens com status EmAndamento.",
                     "icon": "fa-truck-fast",
                     "href": "/logistica/viagens",
                     "tone": "teal",
+                },
+                {
+                    "perms": ("PAGE_CADASTRO_WORKFLOW",),
+                    "label": "Cadastros aguardando validação",
+                    "value": metrics["cadastro_pendente"],
+                    "caption": "Cadastros com status diferente de concluído.",
+                    "icon": "fa-diagram-project",
+                    "href": "/cadastros/",
+                    "tone": "sky",
                 },
             ],
         }
@@ -825,18 +837,16 @@ def _build_dashboard_charts(metrics: dict) -> dict:
     charts: dict = {}
     if ok(_PERM_RECEBIMENTO + _PERM_COMPRAS):
         charts["fluxo_notas"] = _serie_fluxo_notas_por_dia()
-        charts["pendencias_operacao"] = {
-            "Recebimento pendente": int(metrics["recebimento_pendente"]),
-            "Documento pendente": int(metrics["notas_concluidas"]),
-            "Auditoria fiscal": int(metrics["auditoria_pendente"]),
+        charts["recebido_vs_expedido"] = {
+            "Materiais recebidos": int(metrics["materiais_recebidos"]),
+            "Materiais expedidos": int(metrics["materiais_expedidos"]),
         }
-    if ok(_PERM_EXPEDICAO + _PERM_LOGISTICA):
-        charts["operacao_logistica"] = {
-            "Expedição pendente": int(metrics["expedicao_aberta"]),
-            "Viagens ativas": int(metrics["agendamento_ativo"]),
+    if ok(_PERM_RECEBIMENTO + _PERM_EXPEDICAO + ("PAGE_CADASTRO_WORKFLOW",)):
+        charts["pendencias_chave"] = {
+            "Pendência recebimento": int(metrics["recebimento_pendente"]),
+            "Pendência expedição": int(metrics["expedicao_aberta"]),
+            "Cadastros aguardando validação": int(metrics["cadastro_pendente"]),
         }
-    if ok(_PERM_EXPEDICAO):
-        charts["expedicao"] = _dist_expedicao_status()
     return charts
 
 
