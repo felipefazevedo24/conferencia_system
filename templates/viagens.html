@@ -64,6 +64,7 @@
     .doc-kpi-card:nth-child(4) { border-top-color: #ef4444; }
     .doc-kpi-card:nth-child(5) { border-top-color: #64748b; }
     .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+    .doc-kpi-emoji { font-size: 18px; line-height: 1; }
     .doc-kpi-icon.primary { background: linear-gradient(135deg, #059669, #065f46); }
     .doc-kpi-icon.info { background: linear-gradient(135deg, #155eef, #0b2a6b); }
     .doc-kpi-icon.warn { background: linear-gradient(135deg, #f59e0b, #b45309); }
@@ -1112,11 +1113,11 @@ async function carregarKPIs() {
     const d = await apiGet('/api/viagem/dashboard');
     const k = d.kpis;
     document.getElementById('kpi-grid').innerHTML = `
-        <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><i class="fa-solid fa-truck-moving"></i></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon info"><i class="fa-solid fa-calendar-day"></i></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-paper-plane"></i></div><div><div class="doc-kpi-label">Pendentes de liberaÃ§Ã£o</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
+    <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><span class="doc-kpi-emoji" aria-hidden="true">🚚</span></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon info"><span class="doc-kpi-emoji" aria-hidden="true">📅</span></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><span class="doc-kpi-emoji" aria-hidden="true">🏁</span></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><span class="doc-kpi-emoji" aria-hidden="true">📤</span></div><div><div class="doc-kpi-label">Pendentes de liberação</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><span class="doc-kpi-emoji" aria-hidden="true">🛣️</span></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
 }
 
 async function torreControleRemovida() {
