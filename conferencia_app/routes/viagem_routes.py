@@ -10,7 +10,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
 
 from ..auth import permission_required, permission_required_any
@@ -898,6 +898,7 @@ def agenda_viagens():
 @permission_required(PERM)
 def listar():
     q = Viagem.query
+    termo = str(request.args.get("q") or "").strip()
     status = request.args.get("status")
     if status:
         q = q.filter_by(status=status)
@@ -905,12 +906,43 @@ def listar():
         q = q.filter_by(veiculo_id=_parse_int(request.args.get("veiculo_id")))
     if request.args.get("motorista_id"):
         q = q.filter_by(motorista_id=_parse_int(request.args.get("motorista_id")))
-    de = _parse_dt(request.args.get("de"))
-    ate = _parse_dt(request.args.get("ate"))
+    de_raw = request.args.get("de")
+    ate_raw = request.args.get("ate")
+    de = _parse_dt(de_raw)
+    ate = _parse_dt(ate_raw)
+    if ate and ate_raw and len(str(ate_raw).strip()) == 10:
+        ate = ate + timedelta(days=1) - timedelta(seconds=1)
+    data_base = func.coalesce(Viagem.saida_prevista, Viagem.criado_em)
     if de:
-        q = q.filter(Viagem.criado_em >= de)
+        q = q.filter(data_base >= de)
     if ate:
-        q = q.filter(Viagem.criado_em <= ate)
+        q = q.filter(data_base <= ate)
+    if termo:
+        like = f"%{termo}%"
+        viagem_ids_doc = (
+            db.session.query(ViagemParada.viagem_id)
+            .join(AgendamentoSolicitacao, AgendamentoSolicitacao.id == ViagemParada.solicitacao_id)
+            .filter(
+                or_(
+                    AgendamentoSolicitacao.numero_oc.ilike(like),
+                    AgendamentoSolicitacao.numero_nf.ilike(like),
+                    AgendamentoSolicitacao.orcamento.ilike(like),
+                    AgendamentoSolicitacao.documento_numero.ilike(like),
+                    AgendamentoSolicitacao.codigo.ilike(like),
+                    AgendamentoSolicitacao.parceiro_nome.ilike(like),
+                )
+            )
+        )
+        q = q.filter(
+            or_(
+                Viagem.codigo.ilike(like),
+                Viagem.titulo.ilike(like),
+                Viagem.observacao.ilike(like),
+                Viagem.motorista_nome.ilike(like),
+                Viagem.origem_label.ilike(like),
+                Viagem.id.in_(viagem_ids_doc),
+            )
+        )
     regs = q.order_by(Viagem.criado_em.desc()).limit(300).all()
     return jsonify([_viagem_dict(v) for v in regs])
 
