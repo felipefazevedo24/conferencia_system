@@ -501,6 +501,11 @@
     #pane-solicitacoes .rt-metric strong { font-size: 30px; }
     #pane-solicitacoes .rt-metric span { color: #64748b; }
     #pane-solicitacoes .rt-metric strong { color: #0f172a; }
+    #pane-solicitacoes .rt-metric i {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+    }
 
     #pane-solicitacoes .rt-filters {
         width: 100%;
@@ -564,6 +569,7 @@
     #pane-solicitacoes .rt-grid { gap: 16px; }
     #pane-solicitacoes .rt-agenda-item,
     #pane-solicitacoes .rt-driver { border-radius: 12px; border-color: #e2e8f0; }
+    #pane-solicitacoes h2 { color: #0f172a; font-size: 18px; font-weight: 800; margin: 0; }
 
     /* Contraste das abas superiores no tema escuro */
     [data-theme="escuro"] .main-page-tabs {
@@ -679,6 +685,87 @@
     }
     [data-theme="escuro"] #pane-solicitacoes .erp-table tbody tr:hover {
         background: #17293b !important;
+    }
+
+    /* Modais de solicitacoes no tema escuro */
+    [data-theme="escuro"] #detalheModal .modal-content,
+    [data-theme="escuro"] #alocarModal .modal-content,
+    [data-theme="escuro"] #cancelarModal .modal-content,
+    [data-theme="escuro"] #motoristaModal .modal-content,
+    [data-theme="escuro"] #mvModal .modal-content {
+        background: #142130 !important;
+        color: #dbe9f6 !important;
+        border: 1px solid #33475f !important;
+        box-shadow: 0 20px 44px rgba(0,0,0,.34) !important;
+    }
+    [data-theme="escuro"] #detalheModal .modal-header,
+    [data-theme="escuro"] #detalheModal .modal-footer,
+    [data-theme="escuro"] #alocarModal .modal-header,
+    [data-theme="escuro"] #alocarModal .modal-footer,
+    [data-theme="escuro"] #cancelarModal .modal-header,
+    [data-theme="escuro"] #cancelarModal .modal-footer,
+    [data-theme="escuro"] #motoristaModal .modal-header,
+    [data-theme="escuro"] #motoristaModal .modal-footer,
+    [data-theme="escuro"] #mvModal .modal-header,
+    [data-theme="escuro"] #mvModal .modal-footer {
+        background: #101b28 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] #detalheModal .modal-title,
+    [data-theme="escuro"] #alocarModal .modal-title,
+    [data-theme="escuro"] #cancelarModal .modal-title,
+    [data-theme="escuro"] #motoristaModal .modal-title,
+    [data-theme="escuro"] #mvModal .modal-title,
+    [data-theme="escuro"] #detalheModal .form-label,
+    [data-theme="escuro"] #alocarModal .form-label,
+    [data-theme="escuro"] #cancelarModal .form-label,
+    [data-theme="escuro"] #motoristaModal .form-label,
+    [data-theme="escuro"] #mvModal .form-label,
+    [data-theme="escuro"] #detalheModal p,
+    [data-theme="escuro"] #alocarModal p,
+    [data-theme="escuro"] #cancelarModal p,
+    [data-theme="escuro"] #motoristaModal p,
+    [data-theme="escuro"] #mvModal p,
+    [data-theme="escuro"] #detalheModal strong,
+    [data-theme="escuro"] #mvModal strong {
+        color: #dbe9f6 !important;
+    }
+    [data-theme="escuro"] #detalheModal .text-muted,
+    [data-theme="escuro"] #alocarModal .text-muted,
+    [data-theme="escuro"] #cancelarModal .text-muted,
+    [data-theme="escuro"] #motoristaModal .text-muted,
+    [data-theme="escuro"] #mvModal .text-muted {
+        color: #9fb3c8 !important;
+    }
+    [data-theme="escuro"] #detalheModal .form-control,
+    [data-theme="escuro"] #detalheModal .form-select,
+    [data-theme="escuro"] #alocarModal .form-control,
+    [data-theme="escuro"] #alocarModal .form-select,
+    [data-theme="escuro"] #cancelarModal .form-control,
+    [data-theme="escuro"] #cancelarModal .form-select,
+    [data-theme="escuro"] #motoristaModal .form-control,
+    [data-theme="escuro"] #motoristaModal .form-select,
+    [data-theme="escuro"] #mvModal .form-control,
+    [data-theme="escuro"] #mvModal .form-select {
+        background: #162738 !important;
+        color: #e6eff8 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #detalheModal .btn-outline-secondary,
+    [data-theme="escuro"] #alocarModal .btn-outline-secondary,
+    [data-theme="escuro"] #cancelarModal .btn-outline-secondary,
+    [data-theme="escuro"] #motoristaModal .btn-outline-secondary,
+    [data-theme="escuro"] #mvModal .btn-outline-secondary {
+        background: #1a2d40 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #detalheModal .btn-close,
+    [data-theme="escuro"] #alocarModal .btn-close,
+    [data-theme="escuro"] #cancelarModal .btn-close,
+    [data-theme="escuro"] #motoristaModal .btn-close,
+    [data-theme="escuro"] #mvModal .btn-close {
+        filter: invert(1) grayscale(1) brightness(1.4);
     }
 
     /* Modal de Nova Solicitação no tema escuro */
