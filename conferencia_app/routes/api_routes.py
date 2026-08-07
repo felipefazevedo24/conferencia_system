@@ -2145,12 +2145,40 @@ def documento_entrada_kpis_v2():
     """KPIs reais da página unificada de Documento de Entrada (4 estágios)."""
     hoje = datetime.now().date()
 
-    contagem_status = dict(
-        db.session.query(ItemNota.status, func.count(func.distinct(ItemNota.numero_nota)))
-        .filter(ItemNota.status.in_(["AguardandoLiberacao", "Pendente", "Concluído", "Lançado"]))
-        .group_by(ItemNota.status)
-        .all()
+    status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
+    sub_notas = (
+        db.session.query(
+            ItemNota.numero_nota.label("numero_nota"),
+            func.max(case((ItemNota.status != "AguardandoLiberacao", 1), else_=0)).label("tem_status_fora_auditoria"),
+            func.max(case((ItemNota.status.in_(["Pendente", "Concluído", "Concluido"]), 1), else_=0)).label("tem_status_lancamento"),
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)).label("tem_status_lancado"),
+        )
+        .group_by(ItemNota.numero_nota)
+        .subquery()
     )
+
+    em_auditoria = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_fora_auditoria == 0)
+        .scalar()
+    ) or 0
+
+    em_lancamento = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_lancado == 0)
+        .filter(sub_notas.c.tem_status_lancamento == 1)
+        .scalar()
+    ) or 0
+
+    lancamento_finalizado = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_lancado == 1)
+        .scalar()
+    ) or 0
+
     importados_hoje = (
         db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
         .filter(func.date(ItemNota.data_importacao) == hoje)
@@ -2159,9 +2187,9 @@ def documento_entrada_kpis_v2():
 
     return jsonify({
         "importados_hoje": int(importados_hoje),
-        "em_auditoria": int(contagem_status.get("AguardandoLiberacao", 0)),
-        "em_lancamento": int(contagem_status.get("Pendente", 0)) + int(contagem_status.get("Concluído", 0)),
-        "lancamento_finalizado": int(contagem_status.get("Lançado", 0)),
+        "em_auditoria": int(em_auditoria),
+        "em_lancamento": int(em_lancamento),
+        "lancamento_finalizado": int(lancamento_finalizado),
     })
 
 
@@ -2237,8 +2265,6 @@ def documento_entrada_lista():
         if not itens_nota:
             continue
         status_real = _etapa_atual_por_itens(itens_nota)
-        if etapa != "importados_hoje" and status_real not in _ETAPA_STATUS_MAP[etapa]:
-            continue
         pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
         fornecedor = next((i.fornecedor for i in itens_nota if i.fornecedor), "---")
         data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
