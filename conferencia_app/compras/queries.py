@@ -1068,24 +1068,25 @@ LIMIT %(limite)s;
 # estrangeiro (tord_aux_me, o mais provavel para processos de importacao).
 # -------------------------------------------------------------------
 SQL_COMEX_OC_ITENS = """
-WITH itens AS (
-    SELECT to_jsonb(t.*) AS item_json, t.cod_produto, 'material' AS origem
-    FROM   public.tord_aux t
-    WHERE  t.cod_empresa = %(cod_empresa)s AND t.cod_ord_compra = %(cod_ordem_compra)s
-    UNION ALL
-    SELECT to_jsonb(t.*) AS item_json, t.cod_produto, 'material_estrangeiro' AS origem
-    FROM   public.tord_aux_me t
-    WHERE  t.cod_empresa = %(cod_empresa)s AND t.cod_ord_compra = %(cod_ordem_compra)s
-)
-SELECT
-    i.origem,
-    i.item_json,
-    to_jsonb(p.*) AS produto_json
-FROM   itens i
-LEFT   JOIN public.tproduto p
-       ON p.cod_empresa = %(cod_empresa)s
-      AND p.codigo      = i.cod_produto
-ORDER  BY i.origem;
+SELECT to_jsonb(t.*) AS item_json
+FROM   public.tord_aux t
+WHERE  t.cod_empresa = %(cod_empresa)s AND t.cod_ord_compra = %(cod_ordem_compra)s
+ORDER  BY t.numero_item;
+"""
+# Colunas confirmadas em tord_aux (inspecionadas via SQL_COMEX_DIAG_TORD_AUX
+# em 2026-08-07) que ja cobrem tudo que a PO precisa, sem precisar de join
+# com tproduto: cod_interno (CODE), descricao (DESCRIPTION),
+# codigo_na_fabrica (PN), classificacao_fiscal (NCM), qtde (Quantity),
+# preco_unitario (UNIT US$), total (Line Total).
+#
+# tord_aux_me (material estrangeiro) tem schema diferente - nao tem
+# cod_produto e provavelmente outras colunas tambem diferem - fica de fora
+# por enquanto ate confirmarmos suas colunas reais (ver
+# SQL_COMEX_DIAG_TORD_AUX_ME abaixo, mesma ideia da diagnostica de tord_aux).
+SQL_COMEX_DIAG_TORD_AUX_ME = """
+SELECT * FROM public.tord_aux_me
+WHERE cod_empresa = %(cod_empresa)s AND cod_ord_compra = %(cod_ordem_compra)s
+LIMIT 5;
 """
 
 

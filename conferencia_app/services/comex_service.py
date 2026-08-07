@@ -213,45 +213,41 @@ def buscar_ocs_para_importar(termo: str = "", cod_empresa: int | None = None, li
 
 
 # Nomes de campo candidatos por dado que precisamos, tentados em ordem
-# (case-insensitive) contra o item_json e o produto_json crus vindos do ERP
-# (SQL_COMEX_OC_ITENS usa to_jsonb(*), entao os nomes exatos das colunas
-# dependem do schema real - ainda nao confirmado neste ambiente). O que nao
-# for encontrado fica None e o operador preenche manualmente na tela (os
-# campos da PO sao editaveis).
+# (case-insensitive) contra o item_json cru vindo do ERP (tord_aux via
+# to_jsonb). A primeira opcao de cada lista foi confirmada inspecionando o
+# schema real em 2026-08-07 (ver SQL_COMEX_DIAG_TORD_AUX); as demais ficam
+# como fallback caso o schema mude. O que nao for encontrado fica None e o
+# operador preenche manualmente na tela (os campos da PO sao editaveis).
 _CAMPOS_CANDIDATOS = {
-    # codigo_interno primeiro: e o formato "legivel" (ex.: "20-03-01937")
-    # usado no modelo de PO. cod_produto (ID numerico interno do ERP) so
-    # entra como ultimo recurso, se nao houver codigo_interno cadastrado.
-    "codigo": ("codigo_interno", "codigo", "cod_produto"),
-    "descricao": ("nome", "descricao", "material", "produto"),
-    "ncm": ("ncm", "cod_ncm", "ncm_code", "codigo_ncm"),
-    "pn": ("pn", "part_number", "codigo_fabricante", "referencia_fabricante", "cod_fabricante"),
+    "codigo": ("cod_interno", "codigo_interno", "codigo", "cod_produto"),
+    "descricao": ("descricao", "nome", "material", "produto"),
+    "ncm": ("classificacao_fiscal", "ncm", "cod_ncm", "ncm_code", "codigo_ncm"),
+    "pn": ("codigo_na_fabrica", "pn", "part_number", "cod_fabricante", "referencia_fabricante"),
     "quantidade": ("qtde", "quantidade", "qtd"),
     "valor_unitario": ("preco_unitario", "valor_unitario", "vl_unitario", "preco", "valor"),
-    "valor_total": ("valor_total", "vl_total", "total"),
+    "valor_total": ("total", "valor_total", "vl_total"),
 }
 
 
-def _primeiro_valor(*dicionarios, chaves: tuple[str, ...]):
-    """Procura, nos dicionarios informados (na ordem), a primeira chave que
-    bater (case-insensitive) com alguma das `chaves` candidatas e tiver um
-    valor nao vazio."""
-    for dic in dicionarios:
-        if not dic:
-            continue
-        mapa_lower = {str(k).lower(): v for k, v in dic.items()}
-        for chave in chaves:
-            valor = mapa_lower.get(chave.lower())
-            if valor not in (None, ""):
-                return valor
+def _primeiro_valor(dicionario: dict, chaves: tuple[str, ...]):
+    """Procura, no dicionario informado, a primeira chave que bater
+    (case-insensitive) com alguma das `chaves` candidatas e tiver um valor
+    nao vazio."""
+    if not dicionario:
+        return None
+    mapa_lower = {str(k).lower(): v for k, v in dicionario.items()}
+    for chave in chaves:
+        valor = mapa_lower.get(chave.lower())
+        if valor not in (None, ""):
+            return valor
     return None
 
 
 def buscar_itens_oc_no_erp(processo: ComexProcesso) -> list[dict]:
-    """Busca no ERP os itens (material + material estrangeiro) da OC do
-    processo, ja tentando mapear codigo/NCM/PN/descricao/quantidade/valores
-    a partir do que a consulta trouxer. So retorna sugestoes - o operador
-    revisa e ajusta na tela antes de salvar (ver `salvar_itens_po`)."""
+    """Busca no ERP os itens (material) da OC do processo, ja tentando
+    mapear codigo/NCM/PN/descricao/quantidade/valores a partir do que a
+    consulta trouxer (tord_aux). So retorna sugestoes - o operador revisa e
+    ajusta na tela antes de salvar (ver `salvar_itens_po`)."""
     if not processo.cod_ordem_compra:
         return []
     linhas = compras_service.itens_ordem_compra(
@@ -260,10 +256,9 @@ def buscar_itens_oc_no_erp(processo: ComexProcesso) -> list[dict]:
     itens = []
     for linha in linhas:
         item_json = linha.get("item_json") or {}
-        produto_json = linha.get("produto_json") or {}
-        quantidade = _primeiro_valor(item_json, chaves=_CAMPOS_CANDIDATOS["quantidade"])
-        valor_unitario = _primeiro_valor(item_json, produto_json, chaves=_CAMPOS_CANDIDATOS["valor_unitario"])
-        valor_total = _primeiro_valor(item_json, chaves=_CAMPOS_CANDIDATOS["valor_total"])
+        quantidade = _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["quantidade"])
+        valor_unitario = _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["valor_unitario"])
+        valor_total = _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["valor_total"])
         try:
             quantidade = float(quantidade) if quantidade is not None else None
             valor_unitario = float(valor_unitario) if valor_unitario is not None else None
@@ -273,10 +268,10 @@ def buscar_itens_oc_no_erp(processo: ComexProcesso) -> list[dict]:
         if valor_total is None and quantidade is not None and valor_unitario is not None:
             valor_total = round(quantidade * valor_unitario, 2)
         itens.append({
-            "codigo": _primeiro_valor(produto_json, item_json, chaves=_CAMPOS_CANDIDATOS["codigo"]),
-            "descricao": _primeiro_valor(produto_json, item_json, chaves=_CAMPOS_CANDIDATOS["descricao"]),
-            "ncm": _primeiro_valor(produto_json, item_json, chaves=_CAMPOS_CANDIDATOS["ncm"]),
-            "pn": _primeiro_valor(produto_json, item_json, chaves=_CAMPOS_CANDIDATOS["pn"]),
+            "codigo": _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["codigo"]),
+            "descricao": _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["descricao"]),
+            "ncm": _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["ncm"]),
+            "pn": _primeiro_valor(item_json, _CAMPOS_CANDIDATOS["pn"]),
             "quantidade": quantidade,
             "valor_unitario": valor_unitario,
             "valor_total": valor_total,
