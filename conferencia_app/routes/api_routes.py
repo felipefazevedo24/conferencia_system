@@ -2180,21 +2180,39 @@ def documento_entrada_lista():
     if etapa != "importados_hoje" and etapa not in _ETAPA_STATUS_MAP:
         return jsonify({"error": "Parâmetro 'etapa' inválido."}), 400
 
-    filtros = []
+    status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
+
+    base_query = db.session.query(
+        ItemNota.numero_nota,
+        func.max(ItemNota.data_importacao).label("data_importacao_max"),
+    )
+
     if etapa == "importados_hoje":
         hoje = datetime.now().date()
-        filtros.append(func.date(ItemNota.data_importacao) == hoje)
-    else:
-        filtros.append(ItemNota.status.in_(_ETAPA_STATUS_MAP[etapa]))
+        base_query = base_query.filter(func.date(ItemNota.data_importacao) == hoje)
+
     if busca:
         termo = f"%{busca}%"
-        filtros.append(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
+        base_query = base_query.filter(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
 
-    base_query = (
-        db.session.query(ItemNota.numero_nota, func.max(ItemNota.data_importacao))
-        .filter(*filtros)
-        .group_by(ItemNota.numero_nota)
-    )
+    base_query = base_query.group_by(ItemNota.numero_nota)
+
+    if etapa == "auditoria":
+        # Auditoria deve conter apenas notas totalmente em AguardandoLiberacao.
+        base_query = base_query.having(
+            func.max(case((ItemNota.status != "AguardandoLiberacao", 1), else_=0)) == 0
+        )
+    elif etapa == "lancamento":
+        base_query = base_query.having(
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)) == 0
+        ).having(
+            func.max(case((ItemNota.status.in_(["Pendente", "Concluído"]), 1), else_=0)) == 1
+        )
+    elif etapa == "finalizado":
+        base_query = base_query.having(
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)) == 1
+        )
+
     total = base_query.count()
     pagina = (
         base_query.order_by(func.max(ItemNota.data_importacao).desc())
@@ -2219,6 +2237,8 @@ def documento_entrada_lista():
         if not itens_nota:
             continue
         status_real = _etapa_atual_por_itens(itens_nota)
+        if etapa != "importados_hoje" and status_real not in _ETAPA_STATUS_MAP[etapa]:
+            continue
         pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
         fornecedor = next((i.fornecedor for i in itens_nota if i.fornecedor), "---")
         data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
