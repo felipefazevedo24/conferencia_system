@@ -199,10 +199,10 @@
     /* ══════════════════════════════════════════════════════════════════════
        Tab switcher — Viagens vs Solicitações de Transporte
        ══════════════════════════════════════════════════════════════════════ */
-    .main-page-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--doc-border); margin-bottom: 16px; }
-    .main-page-tab { padding: 11px 22px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; background: transparent; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: 8px; transition: all .2s; }
-    .main-page-tab:hover { color: #0f172a; }
-    .main-page-tab.active { color: var(--doc-emerald); border-bottom-color: var(--doc-emerald); }
+    .main-page-tabs { display: flex; gap: 6px; border-bottom: 2px solid var(--doc-border); margin-bottom: 16px; padding: 4px; border-radius: 12px; background: #f8fafc; }
+    .main-page-tab { padding: 11px 18px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid transparent; background: transparent; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: 8px; transition: all .2s; border-radius: 10px; }
+    .main-page-tab:hover { color: #0f172a; background: #ffffff; border-color: #dbe5ef; }
+    .main-page-tab.active { color: var(--doc-emerald); border-color: #bbf7d0; background: #ffffff; border-bottom-color: var(--doc-emerald); }
 
     /* ══════════════════════════════════════════════════════════════════════
        rt-* CSS — Gestão de Rotas (embedded in Viagens page)
@@ -468,6 +468,210 @@
 
     /* === Hub Solicitações: badge de origem automática === */
     .rt-badge.b-cif{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(13,148,136,.08));color:#0f766e;border:1px solid rgba(13,148,136,.25)}
+
+    /* === Redesign da aba Solicitações (padrão Sync) === */
+    #pane-solicitacoes .rt-shell { max-width: 1640px; gap: 18px; }
+    #pane-solicitacoes .rt-panel {
+        border: 1px solid #dbe5ef;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04), 0 14px 34px rgba(15, 23, 42, .05);
+    }
+    #pane-solicitacoes .rt-pad { padding: 20px 22px; }
+    #pane-solicitacoes .rt-hero {
+        background:
+            radial-gradient(circle at 12% 18%, rgba(14, 116, 144, .22), transparent 46%),
+            radial-gradient(circle at 85% 8%, rgba(8, 145, 178, .18), transparent 40%),
+            linear-gradient(120deg, #0f2940 0%, #144464 54%, #155f87 100%);
+        border: 1px solid rgba(125, 211, 252, .26);
+        border-bottom: 3px solid #67e8f9;
+        color: #e6f7ff;
+        border-radius: 20px;
+        box-shadow: 0 16px 38px rgba(15, 41, 64, .34);
+        padding: 24px 26px;
+    }
+    #pane-solicitacoes .rt-hero .rt-title { color: #e8f6ff; }
+    #pane-solicitacoes .rt-hero .rt-title i { color: #67e8f9 !important; }
+    #pane-solicitacoes .rt-hero .rt-copy { color: rgba(224, 242, 254, .94); max-width: 760px; }
+    #pane-solicitacoes .rt-hero .btn {
+        border-radius: 10px;
+        border: 1px solid rgba(186, 230, 253, .4);
+        background: rgba(15, 60, 88, .52);
+        color: #e8f6ff;
+    }
+    #pane-solicitacoes .rt-hero .btn:hover { background: rgba(15, 60, 88, .75); }
+    #pane-solicitacoes .rt-hero .btn-primary {
+        background: linear-gradient(135deg, #22d3ee, #0891b2);
+        color: #052033;
+        border-color: transparent;
+        font-weight: 800;
+        box-shadow: 0 6px 16px rgba(34, 211, 238, .3);
+    }
+    #pane-solicitacoes .rt-metrics { gap: 12px; }
+    #pane-solicitacoes .rt-metric {
+        border-color: #dce9f4;
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 14px 16px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+    #pane-solicitacoes .rt-metric strong { font-size: 28px; }
+    #pane-solicitacoes .rt-metric span { font-size: 10px; letter-spacing: .07em; }
+
+    #pane-solicitacoes .rt-filters {
+        width: 100%;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid #dce9f4;
+        border-radius: 14px;
+        background: #f7fbff;
+    }
+    #pane-solicitacoes .rt-filters .form-control,
+    #pane-solicitacoes .rt-filters .form-select {
+        border: 1px solid #c7d7e6;
+        border-radius: 10px;
+        min-height: 38px;
+        font-size: 12.5px;
+        color: #0f172a;
+        background: #ffffff;
+    }
+    #pane-solicitacoes .rt-filters .form-control:focus,
+    #pane-solicitacoes .rt-filters .form-select:focus {
+        border-color: #0891b2;
+        box-shadow: 0 0 0 3px rgba(8, 145, 178, .15);
+    }
+
+    #pane-solicitacoes .rt-tabs {
+        margin-top: 12px;
+        padding: 5px;
+        border: 1px solid #dce9f4;
+        border-radius: 12px;
+        background: #f4f9ff;
+    }
+    #pane-solicitacoes .rt-tab { font-weight: 700; color: #4b5f75; }
+    #pane-solicitacoes .rt-tab:hover { background: #ffffff; color: #12324a; }
+    #pane-solicitacoes .rt-tab.active {
+        color: #0e7490;
+        border-bottom-color: #06b6d4;
+        background: #ffffff;
+        box-shadow: 0 4px 10px rgba(15, 23, 42, .06);
+    }
+    #pane-solicitacoes .rt-tab.active .tab-count {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        box-shadow: 0 2px 6px rgba(6, 182, 212, .3);
+    }
+
+    #pane-solicitacoes .erp-table {
+        border: 1px solid #dce9f4;
+        border-radius: 14px;
+        box-shadow: none;
+    }
+    #pane-solicitacoes .erp-table thead th {
+        background: linear-gradient(180deg, #f1f7fd, #e8f2fb);
+        border-bottom-color: #cfe0f0;
+        color: #26435b;
+    }
+    #pane-solicitacoes .erp-table tbody tr:hover {
+        background: linear-gradient(90deg, #f5fbff, #ffffff);
+        box-shadow: inset 4px 0 0 #06b6d4;
+    }
+
+    #pane-solicitacoes .rt-state {
+        background: #f8fcff;
+        border-color: #d4e6f5;
+        color: #53708a;
+        border-radius: 14px;
+    }
+    #pane-solicitacoes .rt-grid { gap: 16px; }
+    #pane-solicitacoes .rt-agenda-item,
+    #pane-solicitacoes .rt-driver {
+        border-color: #dce9f4;
+        border-radius: 14px;
+    }
+
+    /* Contraste das abas superiores no tema escuro */
+    [data-theme="escuro"] .main-page-tabs {
+        background: #111c2a !important;
+        border-color: #2c3d52 !important;
+    }
+    [data-theme="escuro"] .main-page-tab {
+        color: #9eb2c7 !important;
+    }
+    [data-theme="escuro"] .main-page-tab:hover {
+        color: #e8f1fb !important;
+        background: #1b2b3d !important;
+        border-color: #39526b !important;
+    }
+    [data-theme="escuro"] .main-page-tab.active {
+        color: #6ee7b7 !important;
+        background: #162534 !important;
+        border-color: #2f4f66 !important;
+        border-bottom-color: #34d399 !important;
+    }
+
+    /* Tema escuro da aba Solicitações */
+    [data-theme="escuro"] #pane-solicitacoes .rt-panel {
+        background: linear-gradient(180deg, #142130 0%, #101a26 100%) !important;
+        border-color: #2f4258 !important;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .28) !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-top h2,
+    [data-theme="escuro"] #pane-solicitacoes .rt-metric strong,
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody td,
+    [data-theme="escuro"] #pane-solicitacoes .rt-agenda-item strong,
+    [data-theme="escuro"] #pane-solicitacoes .rt-driver-info strong {
+        color: #e6eef8 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-copy,
+    [data-theme="escuro"] #pane-solicitacoes .rt-state,
+    [data-theme="escuro"] #pane-solicitacoes .rt-agenda-item p,
+    [data-theme="escuro"] #pane-solicitacoes .rt-driver-info p {
+        color: #a8bfd6 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters {
+        background: #0f1b2a !important;
+        border-color: #324a63 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-control,
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-select {
+        background: #162738 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tabs {
+        background: #121f2e !important;
+        border-color: #324a63 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab {
+        color: #9eb2c7 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab:hover {
+        background: #1a2d40 !important;
+        color: #e5f2ff !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab.active {
+        background: #183246 !important;
+        color: #67e8f9 !important;
+        border-bottom-color: #22d3ee !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table {
+        background: #101b28 !important;
+        border-color: #2f4258 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table thead th {
+        background: linear-gradient(180deg, #1d3044, #1a2a3c) !important;
+        border-bottom-color: #38526d !important;
+        color: #b8cce0 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody td {
+        border-bottom-color: #24374b !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody tr {
+        background: #111f2e !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody tr:hover {
+        background: #17293b !important;
+    }
 
     /* === Tabela de solicitações responsiva (vira cards no celular/tablet) === */
     @media (max-width: 860px){
