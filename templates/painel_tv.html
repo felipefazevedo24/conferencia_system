@@ -208,7 +208,7 @@
   .plan-task .pt-chip.prio-Alta, .plan-task .pt-chip.prio-Critica { color: #fbbf24; border-color: rgba(251,191,36,.5); }
   .plan-klist .empty, .plan-board .empty { color: var(--muted); font-size: clamp(11px,1.3vh,14px); padding: 10px; text-align: center; }
 
-  /* ---------- Kanban operacional (Recebimento + Compras) ---------- */
+  /* ---------- Painel operacional (Recebimento + Compras) ---------- */
   .flow::before { color: var(--recebimento); }
   .flow .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
   .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; }
@@ -464,12 +464,12 @@
   </header>
 
   <main>
-    <!-- SLIDE 1: KANBAN RECEBIMENTO -->
+    <!-- SLIDE 1: RECEBIMENTO -->
     <section class="slide slide-rec is-active" data-slide="recebimento">
       <section class="panel flow" style="flex:1 1 auto;">
         <div class="panel-head">
           <div class="icon"><i class="fas fa-table-columns"></i></div>
-          <h2>Kanban Recebimento</h2>
+          <h2>Recebimento</h2>
           <div class="tag" id="rec-tag">—</div>
         </div>
         <div class="tv-kb-wrap cols-2">
@@ -485,12 +485,12 @@
       </section>
     </section>
 
-    <!-- SLIDE 2: KANBAN EXPEDIÇÃO -->
+    <!-- SLIDE 2: EXPEDIÇÃO -->
     <section class="slide slide-exp" data-slide="expedicao">
       <section class="panel flow" style="flex:1 1 auto;">
         <div class="panel-head">
           <div class="icon"><i class="fas fa-truck-fast"></i></div>
-          <h2>Kanban Expedição</h2>
+          <h2>Expedição</h2>
           <div class="tag" id="exp-tag">—</div>
         </div>
         <div class="tv-kb-wrap cols-1">
