@@ -1,0 +1,759 @@
+{% extends "base.html" %}
+
+{% block title %}Comex{% endblock %}
+{% block shell_title %}Comex — Importação/Exportação{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cx-wrap { display: grid; gap: 18px; }
+    .cx-table-wrap { overflow-x: auto; }
+    .cx-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    /* Menu de ações (kebab) - mesmo padrao da Conferencia de Expedicao. */
+    .cx-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .cx-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .cx-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 210px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .cx-actions-menu.open { display: flex; }
+    .cx-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
+    .cx-actions-menu button:hover { background: #f3f4f6; }
+    .cx-actions-menu button.is-danger { color: #dc2626; }
+    .cx-actions-menu hr { border: none; border-top: 1px solid #eef0f3; margin: 4px 0; }
+
+    /* Modais */
+    .cx-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); padding: 20px; }
+    .cx-modal.open { display: flex; }
+    .cx-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(680px, 100%); max-height: 90vh; overflow-y: auto; }
+    .cx-modal__box.is-wide { width: min(880px, 100%); }
+    .cx-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--eui-border); }
+    .cx-modal__title { font-size: 16px; font-weight: 800; color: var(--eui-text); margin: 0; }
+    .cx-modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: var(--eui-muted); }
+    .cx-modal__body { padding: 18px 22px; display: grid; gap: 14px; }
+    .cx-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--eui-border); flex-wrap: wrap; }
+    .cx-field { display: grid; gap: 6px; }
+    .cx-field label { font-size: 12.5px; font-weight: 700; color: var(--eui-text); }
+    .cx-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .cx-grid-2 { grid-template-columns: 1fr; } }
+
+    .cx-oc-result { border: 1px solid var(--eui-border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .cx-oc-result strong { font-size: 14px; color: var(--eui-text); }
+    .cx-oc-result small { display: block; color: var(--eui-muted); }
+    .cx-oc-result.is-importada { opacity: .55; }
+
+    .cx-checklist { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; border: 1px solid var(--eui-border); border-radius: 10px; padding: 10px 12px; }
+    .cx-checklist label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+    .cx-checklist .cx-empty-mini { color: var(--eui-muted); font-size: 12.5px; }
+
+    .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .cx-toast.error { border-left-color: var(--eui-danger); }
+    .cx-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cx-wrap">
+    <div class="eui-stats" id="cx-metrics">
+        <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="cx-m-todos">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="OC"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OC</span><span class="eui-stat__value" id="cx-m-oc">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="PO"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-signature"></i></div><div class="eui-stat__body"><span class="eui-stat__label">PO</span><span class="eui-stat__value" id="cx-m-po">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Cotacao"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-ship"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Cotação</span><span class="eui-stat__value" id="cx-m-cotacao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Instrucao"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-file-lines"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Instrução</span><span class="eui-stat__value" id="cx-m-instrucao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Coleta"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coleta</span><span class="eui-stat__value" id="cx-m-coleta">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="EmTransito"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-truck-fast"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em Trânsito</span><span class="eui-stat__value" id="cx-m-em_transito">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Desembarque"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-anchor"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Desembarque</span><span class="eui-stat__value" id="cx-m-desembarque">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Desembaraco"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-stamp"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Desembaraço</span><span class="eui-stat__value" id="cx-m-desembaraco">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Transporte"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-truck"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Transporte</span><span class="eui-stat__value" id="cx-m-transporte">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="NFCambio"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">NF/Câmbio</span><span class="eui-stat__value" id="cx-m-nf_cambio">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div>
+                <h2 class="eui-card__title"><i class="fas fa-ship"></i> Processos de Importação/Exportação</h2>
+                <p class="eui-card__sub" id="cx-subtitulo">Fila de processos Comex.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cx-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <button class="eui-btn eui-btn--primary" id="cx-btn-importar-oc"><i class="fas fa-cloud-arrow-down"></i> Importar OC</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="cx-busca" class="eui-input" autocomplete="off" placeholder="Buscar por ID OP, fornecedor ou PO…" style="width:100%; padding-left:34px;">
+                </div>
+            </div>
+            <div class="cx-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>ID OP</th>
+                            <th>Fornecedor</th>
+                            <th>Tipo</th>
+                            <th>OC</th>
+                            <th>PO</th>
+                            <th>Pagador Frete</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cx-tbody">
+                        <tr><td colspan="8" class="cx-empty">Carregando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Importar OC -->
+<div class="cx-modal" id="cx-modal-importar-oc">
+    <div class="cx-modal__box is-wide">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-cloud-arrow-down"></i> Importar OC</h3>
+            <button class="cx-modal__close" id="cx-fechar-importar-oc"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <p style="font-size:12.5px; color:var(--eui-muted); margin:0;">
+                Busque a Ordem de Compra no ERP por número de OS, número da OC ou fornecedor.
+                Só as OCs que você escolher importar aqui entram no Comex — as demais compras
+                locais do ERP não são trazidas automaticamente.
+            </p>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="cx-oc-busca-termo" class="eui-input" placeholder="Ex.: 12345, nome do fornecedor, OS…" style="flex:1;">
+                <button class="eui-btn eui-btn--primary" id="cx-oc-busca-btn"><i class="fas fa-magnifying-glass"></i> Buscar</button>
+            </div>
+            <div id="cx-oc-resultados"></div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-importar-oc-2">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Editar OC -->
+<div class="cx-modal" id="cx-modal-oc">
+    <div class="cx-modal__box">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-pen-to-square"></i> Editar OC — <span id="cx-oc-id-op">—</span></h3>
+            <button class="cx-modal__close" id="cx-fechar-oc"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Fornecedor</label><input type="text" id="cx-oc-fornecedor" class="eui-input"></div>
+                <div class="cx-field"><label>Comprador/Solicitante</label><input type="text" id="cx-oc-comprador" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Cód. compra</label><input type="text" id="cx-oc-cod-compra" class="eui-input"></div>
+                <div class="cx-field"><label>Número OS</label><input type="text" id="cx-oc-numero-os" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Valor produtos</label><input type="number" step="0.01" id="cx-oc-total-produtos" class="eui-input"></div>
+                <div class="cx-field"><label>Valor total</label><input type="number" step="0.01" id="cx-oc-total" class="eui-input"></div>
+            </div>
+            <div class="cx-field"><label>Situação</label><input type="text" id="cx-oc-situacao" class="eui-input"></div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-oc-2">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="cx-oc-btn-salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: PO -->
+<div class="cx-modal" id="cx-modal-po">
+    <div class="cx-modal__box is-wide">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-file-signature"></i> Purchase Order (PO) — <span id="cx-po-id-op">—</span></h3>
+            <button class="cx-modal__close" id="cx-fechar-po"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Fornecedor</label><input type="text" id="cx-po-fornecedor" class="eui-input" disabled></div>
+                <div class="cx-field"><label>OC principal</label><input type="text" id="cx-po-oc" class="eui-input" disabled></div>
+            </div>
+            <div class="cx-field">
+                <label>Outras OCs do mesmo fornecedor (opcional)</label>
+                <div class="cx-checklist" id="cx-po-outras-ocs"><span class="cx-empty-mini">Carregando…</span></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>Tipo de operação <span style="color:var(--eui-danger);">*</span></label>
+                    <select id="cx-po-tipo-operacao" class="eui-select">
+                        <option value="">Selecione…</option>
+                        <option value="IM">Marítima (IM)</option>
+                        <option value="IA">Aérea (IA)</option>
+                    </select>
+                </div>
+                <div class="cx-field">
+                    <label>Pagador do frete <span style="color:var(--eui-danger);">*</span></label>
+                    <select id="cx-po-pagador-frete" class="eui-select">
+                        <option value="">Selecione…</option>
+                        <option value="Columbia">Columbia</option>
+                        <option value="Cliente-Fornecedor">Cliente/Fornecedor</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cx-field">
+                <label>Itens da PO
+                    <small style="font-weight:400; color:var(--eui-muted);"> — preenchido manualmente por enquanto (código, NCM, PN, descrição, quantidade e valores)</small>
+                </label>
+                <div class="cx-table-wrap">
+                    <table class="erp-table" id="cx-po-itens-table">
+                        <thead>
+                            <tr>
+                                <th style="width:90px;">Código</th>
+                                <th style="width:80px;">NCM/HS</th>
+                                <th style="width:90px;">PN</th>
+                                <th>Descrição</th>
+                                <th style="width:70px;">Qtde</th>
+                                <th style="width:100px;">Unit. US$</th>
+                                <th style="width:100px;">Total US$</th>
+                                <th style="width:36px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cx-po-itens-tbody"></tbody>
+                    </table>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-po-item-add"><i class="fas fa-plus"></i> Adicionar item</button>
+                        <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-po-item-puxar-erp"><i class="fas fa-cloud-arrow-down"></i> Puxar itens da OC no ERP</button>
+                    </div>
+                    <strong id="cx-po-itens-subtotal">Subtotal: US$ 0,00</strong>
+                </div>
+            </div>
+            <div class="cx-field hidden" id="cx-po-status-wrap">
+                <label>Status da PO</label>
+                <div id="cx-po-status-info" style="font-size:13px; color:var(--eui-text);"></div>
+            </div>
+            <div class="cx-field hidden" id="cx-po-email-wrap">
+                <label>Enviar para (e-mails separados por ";")</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="cx-po-email-destinatarios" class="eui-input" placeholder="fornecedor@exemplo.com; outro@exemplo.com" style="flex:1;">
+                    <button class="eui-btn eui-btn--primary" id="cx-po-btn-enviar-email"><i class="fas fa-paper-plane"></i> Enviar</button>
+                </div>
+                <small style="color:var(--eui-muted);">Cópia automática para laroli@colmac.com e filoli@colmac.com.</small>
+            </div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--danger" id="cx-po-btn-apagar"><i class="fas fa-trash"></i> Apagar</button>
+            <a class="eui-btn eui-btn--ghost hidden" id="cx-po-btn-pdf" target="_blank"><i class="fas fa-file-pdf"></i> Ver PDF</a>
+            <button class="eui-btn eui-btn--ghost" id="cx-po-btn-salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>
+            <button class="eui-btn eui-btn--primary" id="cx-po-btn-finalizar"><i class="fas fa-check"></i> Finalizar sem enviar e-mail</button>
+        </div>
+    </div>
+</div>
+
+<div class="cx-actions-menu" id="cx-acoes-menu"></div>
+<div class="cx-toast" id="cx-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    function toast(msg, tipo) {
+        const el = $("cx-toast");
+        el.textContent = msg;
+        el.className = "cx-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4200);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    let processosCache = [];
+    let filtroAtual = "";
+    let processoPoAtual = null;
+
+    async function carregar() {
+        try {
+            const params = new URLSearchParams();
+            if (filtroAtual) params.set("status", filtroAtual);
+            const busca = $("cx-busca").value.trim();
+            if (busca) params.set("q", busca);
+            const data = await api("/api/comex/processos?" + params.toString());
+            processosCache = data.processos || [];
+            renderMetricas(data.metricas || {});
+            renderTabela(processosCache);
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    }
+
+    function renderMetricas(m) {
+        const total = Object.values(m).reduce((a, b) => a + b, 0);
+        $("cx-m-todos").textContent = total;
+        $("cx-m-oc").textContent = m.oc || 0;
+        $("cx-m-po").textContent = m.po || 0;
+        $("cx-m-cotacao").textContent = m.cotacao || 0;
+        $("cx-m-instrucao").textContent = m.instrucao || 0;
+        $("cx-m-coleta").textContent = m.coleta || 0;
+        $("cx-m-em_transito").textContent = m.em_transito || 0;
+        $("cx-m-desembarque").textContent = m.desembarque || 0;
+        $("cx-m-desembaraco").textContent = m.desembaraco || 0;
+        $("cx-m-transporte").textContent = m.transporte || 0;
+        $("cx-m-nf_cambio").textContent = m.nf_cambio || 0;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function badgeStatus(p) {
+        const cores = {
+            oc: "#b45309", po: "#7c3aed", cotacao: "#0369a1", instrucao: "#0369a1",
+            coleta: "#b45309", em_transito: "#0369a1", desembarque: "#0369a1",
+            desembaraco: "#b45309", transporte: "#b45309", nf_cambio: "#15803d",
+        };
+        const cor = cores[p.status_slug] || "#475569";
+        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(p.status_modulo)}</span>`;
+    }
+
+    function renderTabela(processos) {
+        const tb = $("cx-tbody");
+        if (!processos.length) {
+            tb.innerHTML = '<tr><td colspan="8" class="cx-empty">Nenhum processo encontrado</td></tr>';
+            return;
+        }
+        tb.innerHTML = processos.map((p) => `
+            <tr>
+                <td><strong>${escapeHtml(p.id_op)}</strong></td>
+                <td>${escapeHtml(p.fornecedor || "—")}</td>
+                <td>${p.tipo_operacao === "IA" ? "Aérea" : "Marítima"}</td>
+                <td>${escapeHtml(p.cod_ordem_compra || "—")}</td>
+                <td>${escapeHtml(p.po_numero || "—")}</td>
+                <td>${escapeHtml(p.pagador_frete || "—")}</td>
+                <td>${badgeStatus(p)}</td>
+                <td style="text-align:right;"><button class="cx-actions-btn" data-kebab="${p.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
+            </tr>
+        `).join("");
+    }
+
+    function processoPorId(id) {
+        return processosCache.find((p) => String(p.id) === String(id));
+    }
+
+    // ── Menu de ações (kebab) ──────────────────────────────────────────
+    function montarAcoes(p) {
+        const it = (act, icon, label, danger) =>
+            `<button data-act="${act}" data-id="${p.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+        let itens = "";
+        if (p.status_modulo === "OC") {
+            itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
+            itens += it("criar-po", "fa-file-signature", "Criar PO");
+            itens += "<hr>" + it("apagar-oc", "fa-trash", "Apagar OC", true);
+        } else if (p.status_modulo === "PO") {
+            itens += it("editar-po", "fa-pen-to-square", "Ver / Editar PO");
+            if (p.po_pdf_disponivel !== false && p.po_numero) {
+                itens += it("ver-pdf", "fa-file-pdf", "Ver PDF");
+            }
+            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
+        } else {
+            itens += it("ver", "fa-eye", "Detalhes");
+            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
+        }
+        return itens;
+    }
+
+    function acoesMenuEl() { return $("cx-acoes-menu"); }
+
+    function toggleMenuAcoes(btnEl, id) {
+        const menu = acoesMenuEl();
+        const jaAberto = menu.classList.contains("open") && menu.dataset.id === String(id);
+        fecharMenuAcoes();
+        if (jaAberto) return;
+        const p = processoPorId(id);
+        if (!p) return;
+        menu.innerHTML = montarAcoes(p);
+        menu.dataset.id = String(id);
+        const rect = btnEl.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = "auto";
+        menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.classList.add("open");
+    }
+    function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+
+    document.addEventListener("click", (e) => {
+        const kebabBtn = e.target.closest("[data-kebab]");
+        if (kebabBtn) { toggleMenuAcoes(kebabBtn, kebabBtn.dataset.kebab); return; }
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    });
+
+    acoesMenuEl().addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn) return;
+        const act = btn.dataset.act;
+        const id = btn.dataset.id;
+        fecharMenuAcoes();
+        const p = processoPorId(id);
+        if (!p) return;
+        if (act === "criar-po" || act === "editar-po" || act === "ver") {
+            abrirModalPo(p);
+        } else if (act === "editar-oc") {
+            abrirModalOc(p);
+        } else if (act === "apagar-oc") {
+            if (!confirm(`Apagar a OC ${p.cod_ordem_compra} (${p.id_op})? Ela ficará disponível para importar de novo.`)) return;
+            try {
+                await api(`/api/comex/processos/${id}/oc`, { method: "DELETE" });
+                toast("OC apagada.");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        } else if (act === "ver-pdf") {
+            window.open(`/api/comex/processos/${id}/po.pdf`, "_blank");
+        } else if (act === "estornar") {
+            if (!confirm("Estornar este processo para o módulo anterior?")) return;
+            try {
+                await api(`/api/comex/processos/${id}/estornar`, { method: "POST" });
+                toast("Processo estornado.");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        }
+    });
+
+    // ── Filtro pelos cards de status ───────────────────────────────────
+    $("cx-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        filtroAtual = card.dataset.filter;
+        $("cx-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        $("cx-btn-limpar-filtro").classList.toggle("hidden", !filtroAtual);
+        carregar();
+    });
+    $("cx-btn-limpar-filtro").addEventListener("click", () => {
+        filtroAtual = "";
+        $("cx-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("cx-btn-limpar-filtro").classList.add("hidden");
+        carregar();
+    });
+    let buscaTimer = null;
+    $("cx-busca").addEventListener("input", () => {
+        clearTimeout(buscaTimer);
+        buscaTimer = setTimeout(carregar, 300);
+    });
+
+    // ── MODAL: Importar OC ─────────────────────────────────────────────
+    $("cx-btn-importar-oc").addEventListener("click", () => {
+        $("cx-oc-busca-termo").value = "";
+        $("cx-oc-resultados").innerHTML = "";
+        $("cx-modal-importar-oc").classList.add("open");
+    });
+    function fecharModalOc() { $("cx-modal-importar-oc").classList.remove("open"); }
+    $("cx-fechar-importar-oc").addEventListener("click", fecharModalOc);
+    $("cx-fechar-importar-oc-2").addEventListener("click", fecharModalOc);
+
+    async function buscarOcs() {
+        const termo = $("cx-oc-busca-termo").value.trim();
+        const box = $("cx-oc-resultados");
+        box.innerHTML = '<p style="color:var(--eui-muted); font-size:13px;">Buscando…</p>';
+        try {
+            const data = await api("/api/comex/oc/buscar?termo=" + encodeURIComponent(termo));
+            const ocs = data.ocs || [];
+            if (!ocs.length) {
+                box.innerHTML = '<p style="color:var(--eui-muted); font-size:13px;">Nenhuma OC aberta encontrada.</p>';
+                return;
+            }
+            box.innerHTML = ocs.map((oc, idx) => `
+                <div class="cx-oc-result${oc.ja_importada ? " is-importada" : ""}">
+                    <div>
+                        <strong>OC ${escapeHtml(oc.cod_ordem_compra)}</strong> — ${escapeHtml(oc.fornecedor || "—")}
+                        <small>Situação: ${escapeHtml(oc.situacao_oc || "—")} · Total: ${oc.total != null ? Number(oc.total).toLocaleString("pt-BR", { style: "currency", currency: "USD" }) : "—"}</small>
+                    </div>
+                    ${oc.ja_importada
+                        ? '<span class="eui-badge eui-badge--success">Já importada</span>'
+                        : `<button class="eui-btn eui-btn--primary eui-btn--sm" data-importar="${idx}"><i class="fas fa-download"></i> Importar</button>`
+                    }
+                </div>
+            `).join("");
+            box.querySelectorAll("[data-importar]").forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                    const idx = btn.dataset.importar;
+                    btn.disabled = true;
+                    try {
+                        const resp = await api("/api/comex/oc/importar", {
+                            method: "POST",
+                            body: JSON.stringify({ oc: ocs[idx] }),
+                        });
+                        toast(`OC importada como ${resp.processo.id_op}! Selecione o tipo de operação ao criar a PO.`, "success");
+                        fecharModalOc();
+                        carregar();
+                    } catch (err) {
+                        toast(err.message, "error");
+                        btn.disabled = false;
+                    }
+                });
+            });
+        } catch (err) {
+            box.innerHTML = `<p style="color:var(--eui-danger); font-size:13px;">${escapeHtml(err.message)}</p>`;
+        }
+    }
+    $("cx-oc-busca-btn").addEventListener("click", buscarOcs);
+    $("cx-oc-busca-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscarOcs(); });
+
+    // ── MODAL: Editar OC (Módulo 1 — Salvar/Editar) ───────────────────
+    let processoOcAtual = null;
+    function abrirModalOc(p) {
+        processoOcAtual = p;
+        $("cx-oc-id-op").textContent = p.id_op;
+        $("cx-oc-fornecedor").value = p.fornecedor || "";
+        $("cx-oc-comprador").value = p.comprador || "";
+        $("cx-oc-cod-compra").value = p.cod_compra || "";
+        $("cx-oc-numero-os").value = p.numero_os || "";
+        $("cx-oc-total-produtos").value = p.total_produtos_oc != null ? p.total_produtos_oc : "";
+        $("cx-oc-total").value = p.total_oc != null ? p.total_oc : "";
+        $("cx-oc-situacao").value = p.situacao_oc || "";
+        $("cx-modal-oc").classList.add("open");
+    }
+    function fecharModalEditarOc() { $("cx-modal-oc").classList.remove("open"); processoOcAtual = null; }
+    $("cx-fechar-oc").addEventListener("click", fecharModalEditarOc);
+    $("cx-fechar-oc-2").addEventListener("click", fecharModalEditarOc);
+
+    $("cx-oc-btn-salvar").addEventListener("click", async () => {
+        if (!processoOcAtual) return;
+        try {
+            await api(`/api/comex/processos/${processoOcAtual.id}/oc`, {
+                method: "POST",
+                body: JSON.stringify({
+                    fornecedor: $("cx-oc-fornecedor").value.trim(),
+                    comprador: $("cx-oc-comprador").value.trim(),
+                    cod_compra: $("cx-oc-cod-compra").value.trim(),
+                    numero_os: $("cx-oc-numero-os").value.trim(),
+                    total_produtos_oc: $("cx-oc-total-produtos").value || null,
+                    total_oc: $("cx-oc-total").value || null,
+                    situacao_oc: $("cx-oc-situacao").value.trim(),
+                }),
+            });
+            toast("OC atualizada!", "success");
+            fecharModalEditarOc();
+            carregar();
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    // ── Itens da PO (código/NCM/PN/descrição/quantidade/valores) ───────
+    let itensPoAtual = [];
+
+    function _fmtMoeda(v) {
+        const n = Number(v);
+        return "US$ " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    }
+
+    function renderItensPo() {
+        const tbody = $("cx-po-itens-tbody");
+        if (!itensPoAtual.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="cx-empty" style="padding:14px;">Nenhum item adicionado ainda.</td></tr>';
+        } else {
+            tbody.innerHTML = itensPoAtual.map((it, idx) => `
+                <tr>
+                    <td><input type="text" class="eui-input" data-idx="${idx}" data-field="codigo" value="${escapeHtml(it.codigo || "")}"></td>
+                    <td><input type="text" class="eui-input" data-idx="${idx}" data-field="ncm" value="${escapeHtml(it.ncm || "")}"></td>
+                    <td><input type="text" class="eui-input" data-idx="${idx}" data-field="pn" value="${escapeHtml(it.pn || "")}"></td>
+                    <td><input type="text" class="eui-input" data-idx="${idx}" data-field="descricao" value="${escapeHtml(it.descricao || "")}"></td>
+                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="quantidade" value="${it.quantidade != null ? it.quantidade : ""}"></td>
+                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="valor_unitario" value="${it.valor_unitario != null ? it.valor_unitario : ""}"></td>
+                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="valor_total" value="${it.valor_total != null ? it.valor_total : ""}"></td>
+                    <td style="text-align:center;"><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-remover-item="${idx}" title="Remover"><i class="fas fa-trash" style="color:var(--eui-danger);"></i></button></td>
+                </tr>
+            `).join("");
+        }
+        const subtotal = itensPoAtual.reduce((soma, it) => soma + (Number(it.valor_total) || 0), 0);
+        $("cx-po-itens-subtotal").textContent = "Subtotal: " + _fmtMoeda(subtotal);
+    }
+
+    $("cx-po-itens-tbody").addEventListener("input", (e) => {
+        const input = e.target.closest("input[data-idx]");
+        if (!input) return;
+        const idx = parseInt(input.dataset.idx, 10);
+        const campo = input.dataset.field;
+        const item = itensPoAtual[idx];
+        if (!item) return;
+        item[campo] = input.type === "number" ? (input.value === "" ? null : parseFloat(input.value)) : input.value;
+        if ((campo === "quantidade" || campo === "valor_unitario") && item.quantidade != null && item.valor_unitario != null) {
+            item.valor_total = Math.round(item.quantidade * item.valor_unitario * 100) / 100;
+            renderItensPo();
+        } else if (campo === "valor_total") {
+            const subtotal = itensPoAtual.reduce((soma, it) => soma + (Number(it.valor_total) || 0), 0);
+            $("cx-po-itens-subtotal").textContent = "Subtotal: " + _fmtMoeda(subtotal);
+        }
+    });
+    $("cx-po-itens-tbody").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-remover-item]");
+        if (!btn) return;
+        itensPoAtual.splice(parseInt(btn.dataset.removerItem, 10), 1);
+        renderItensPo();
+    });
+    $("cx-po-item-add").addEventListener("click", () => {
+        itensPoAtual.push({ codigo: "", ncm: "", pn: "", descricao: "", quantidade: null, valor_unitario: null, valor_total: null });
+        renderItensPo();
+    });
+
+    $("cx-po-item-puxar-erp").addEventListener("click", async () => {
+        if (!processoPoAtual) return;
+        const btn = $("cx-po-item-puxar-erp");
+        btn.disabled = true;
+        try {
+            const data = await api(`/api/comex/processos/${processoPoAtual.id}/oc-itens-erp`);
+            const itens = data.itens || [];
+            if (!itens.length) {
+                toast("Nenhum item encontrado para essa OC no ERP — preencha manualmente.", "error");
+            } else {
+                itensPoAtual = itensPoAtual.concat(itens);
+                renderItensPo();
+                toast(`${itens.length} item(ns) trazido(s) do ERP — revise os campos vazios antes de salvar.`, "success");
+            }
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── MODAL: PO ───────────────────────────────────────────────────────
+    async function abrirModalPo(p) {
+        processoPoAtual = p;
+        $("cx-po-id-op").textContent = p.id_op;
+        $("cx-po-fornecedor").value = p.fornecedor || "";
+        $("cx-po-oc").value = p.cod_ordem_compra || "";
+        // So pre-preenche o tipo de operacao se ja foi escolhido numa PO
+        // anterior (po_numero existe) - na primeira vez o operador precisa
+        // escolher explicitamente, nao herdar o "IM" provisorio do import.
+        $("cx-po-tipo-operacao").value = p.po_numero ? (p.tipo_operacao || "") : "";
+        $("cx-po-pagador-frete").value = p.pagador_frete || "";
+        $("cx-po-outras-ocs").innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
+        itensPoAtual = [];
+        renderItensPo();
+
+        const temPo = !!p.po_numero;
+        $("cx-po-status-wrap").classList.toggle("hidden", !temPo);
+        if (temPo) {
+            $("cx-po-status-info").innerHTML =
+                `PO <strong>${escapeHtml(p.po_numero)}</strong> — ${escapeHtml(p.po_status || "Rascunho")}` +
+                (p.po_enviada_em ? `<br>Enviada em ${p.po_enviada_em} por ${escapeHtml(p.po_enviada_por || "")}` : "");
+        }
+        $("cx-po-email-wrap").classList.toggle("hidden", !temPo);
+        $("cx-po-btn-pdf").classList.toggle("hidden", !temPo);
+        if (temPo) $("cx-po-btn-pdf").href = `/api/comex/processos/${p.id}/po.pdf`;
+
+        $("cx-modal-po").classList.add("open");
+
+        try {
+            const data = await api(`/api/comex/processos/${p.id}/ocs-mesmo-fornecedor`);
+            const outras = data.processos || [];
+            $("cx-po-outras-ocs").innerHTML = outras.length
+                ? outras.map((o) => `<label><input type="checkbox" value="${o.id}"> OC ${escapeHtml(o.cod_ordem_compra)} — ${escapeHtml(o.id_op)}</label>`).join("")
+                : '<span class="cx-empty-mini">Nenhuma outra OC deste fornecedor pendente.</span>';
+        } catch (err) {
+            $("cx-po-outras-ocs").innerHTML = `<span class="cx-empty-mini">${escapeHtml(err.message)}</span>`;
+        }
+
+        try {
+            const dataItens = await api(`/api/comex/processos/${p.id}/po/itens`);
+            itensPoAtual = (dataItens.itens || []).map((it) => ({ ...it }));
+        } catch (err) {
+            toast(err.message, "error");
+        }
+        renderItensPo();
+
+        // Se a PO ainda nao tem itens salvos, tenta trazer automaticamente
+        // do ERP (mesma consulta do botao "Puxar itens da OC no ERP") -
+        // falha silenciosamente se a bridge ainda nao tiver a consulta
+        // nova; o operador sempre pode clicar no botao pra tentar de novo
+        // ou preencher manualmente.
+        if (!itensPoAtual.length) {
+            try {
+                const dataErp = await api(`/api/comex/processos/${p.id}/oc-itens-erp`);
+                const itensErp = dataErp.itens || [];
+                if (itensErp.length) {
+                    itensPoAtual = itensErp;
+                    renderItensPo();
+                    toast(`${itensErp.length} item(ns) trazido(s) automaticamente do ERP — revise antes de salvar.`, "success");
+                }
+            } catch (err) {
+                // Silencioso: bridge pode ainda nao ter a consulta nova.
+            }
+        }
+    }
+    function fecharModalPo() { $("cx-modal-po").classList.remove("open"); processoPoAtual = null; itensPoAtual = []; }
+    $("cx-fechar-po").addEventListener("click", fecharModalPo);
+
+    function _ocsSelecionadas() {
+        return Array.from($("cx-po-outras-ocs").querySelectorAll("input[type=checkbox]:checked")).map((c) => parseInt(c.value, 10));
+    }
+
+    async function salvarPo(finalizar) {
+        if (!processoPoAtual) return;
+        const tipoOperacao = $("cx-po-tipo-operacao").value;
+        if (!tipoOperacao) { toast("Selecione o tipo de operação (Marítima ou Aérea).", "error"); return; }
+        const pagador = $("cx-po-pagador-frete").value;
+        if (!pagador) { toast("Selecione o pagador do frete.", "error"); return; }
+        try {
+            const resp = await api(`/api/comex/processos/${processoPoAtual.id}/po`, {
+                method: "POST",
+                body: JSON.stringify({
+                    tipo_operacao: tipoOperacao,
+                    pagador_frete: pagador,
+                    ocs_vinculadas_ids: _ocsSelecionadas(),
+                    finalizar: !!finalizar,
+                }),
+            });
+            await api(`/api/comex/processos/${processoPoAtual.id}/po/itens`, {
+                method: "POST",
+                body: JSON.stringify({ itens: itensPoAtual }),
+            });
+            toast(finalizar ? "PO finalizada!" : "PO salva!", "success");
+            fecharModalPo();
+            carregar();
+        } catch (err) { toast(err.message, "error"); }
+    }
+    $("cx-po-btn-salvar").addEventListener("click", () => salvarPo(false));
+    $("cx-po-btn-finalizar").addEventListener("click", () => salvarPo(true));
+
+    $("cx-po-btn-apagar").addEventListener("click", async () => {
+        if (!processoPoAtual) return;
+        if (!confirm("Apagar esta PO? O processo volta para o estágio OC.")) return;
+        try {
+            await api(`/api/comex/processos/${processoPoAtual.id}/po`, { method: "DELETE" });
+            toast("PO apagada.");
+            fecharModalPo();
+            carregar();
+        } catch (err) { toast(err.message, "error"); }
+    });
+
+    $("cx-po-btn-enviar-email").addEventListener("click", async () => {
+        if (!processoPoAtual) return;
+        const destinatarios = $("cx-po-email-destinatarios").value.trim();
+        if (!destinatarios) { toast("Informe ao menos um e-mail.", "error"); return; }
+        const btn = $("cx-po-btn-enviar-email");
+        btn.disabled = true;
+        try {
+            await api(`/api/comex/processos/${processoPoAtual.id}/po/enviar-email`, {
+                method: "POST",
+                body: JSON.stringify({ destinatarios }),
+            });
+            toast("E-mail enviado!", "success");
+            fecharModalPo();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    carregar();
+})();
+</script>
+{% endblock %}

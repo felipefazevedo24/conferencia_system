@@ -341,6 +341,16 @@ def ordens_compra_cif_recentes(
     return db.fetch_all(queries.SQL_OC_CIF_RECENTES, params)
 
 
+def itens_ordem_compra(cod_ordem_compra: int, cod_empresa: Optional[int] = None) -> list[dict]:
+    """Itens (material nacional + material estrangeiro) de UMA ordem de
+    compra especifica, com o cabecalho completo de cada item e do produto
+    em JSON (ver SQL_COMEX_OC_ITENS - usado pelo Comex para pre-preencher a
+    PO com codigo/NCM/PN/descricao/quantidade/valores)."""
+    empresa = cod_empresa if cod_empresa is not None else get_settings().PG_COD_EMPRESA
+    params = {"cod_empresa": empresa, "cod_ordem_compra": cod_ordem_compra}
+    return db.fetch_all(queries.SQL_COMEX_OC_ITENS, params)
+
+
 def visibility_compras(
     cod_empresa: Optional[int] = None,
     classificacao: Optional[str] = None,

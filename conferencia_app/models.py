@@ -2384,3 +2384,366 @@ class PlannerChecklistItem(db.Model):
     criado_por = db.Column(db.String(100), nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMEX — Gestao de processos de importacao/exportacao
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Workflow: OC -> PO -> Cotacao -> Instrucao e Documentacao -> Coleta ->
+# Em Transito -> Desembarque -> Desembaraco -> Transporte -> NF/Cambio.
+#
+# ComexProcesso e uma tabela larga unica que atravessa todo o workflow: cada
+# etapa so preenche suas proprias colunas na mesma linha (identificada pela
+# Ref FF), evitando "colcha de retalhos" de varias tabelas por modulo. Ver
+# COMEX_ESPECIFICACAO.md na raiz do repo para a especificacao completa.
+#
+# Tabelas satelite existem so onde a relacao e genuinamente 1:N: cotacoes
+# recebidas (todas, nao so a vencedora - auditoria), follow-up (historico de
+# comentarios reutilizado por varios modulos, mesmo molde de
+# ExpedicaoCobranca/ExpedicaoCobrancaLog), lembretes automaticos e fotos de
+# divergencia na entrega (mesmo molde de ExpedicaoRomaneioFotoCarregamento).
+
+
+class ComexProcesso(db.Model):
+    """Processo de importacao/exportacao - tabela central que atravessa todo
+    o workflow (OC -> PO -> Cotacao -> ... -> NF/Cambio). O ID OP (`id_op`)
+    e o identificador unico gerado pelo sistema, usado em todos os modulos.
+    `ref_ff` e um campo separado, preenchido manualmente mais adiante (a
+    partir do Modulo 3/Cotacao) com a referencia que o proprio freight
+    forward atribui ao processo - nao e gerado pelo sistema. Nesta primeira
+    leva apenas os modulos OC e PO sao operados pela UI; os campos dos
+    demais modulos ja existem no schema para as proximas levas."""
+
+    __tablename__ = "comex_processo"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # ── Identificacao ────────────────────────────────────────────────────
+    id_op = db.Column(db.String(30), nullable=False, unique=True, index=True)
+    # Referencia freight forward - atribuida pelo freight forward (Modulo 3
+    # em diante), nao gerada pelo sistema. Fica em branco ate la.
+    ref_ff = db.Column(db.String(80), index=True)
+    tipo_operacao = db.Column(db.String(2), nullable=False, default="IM")  # IM | IA
+    status_modulo = db.Column(db.String(40), nullable=False, default="OC", index=True)
+    status_slug = db.Column(db.String(40), nullable=False, default="oc", index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_por = db.Column(db.String(100), nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+
+    # ── Modulo 1: OC (espelha SQL_HIST_OC_HEADER do bridge GRV/Compras) ───
+    cod_empresa = db.Column(db.Integer, index=True)
+    cod_ordem_compra = db.Column(db.Integer, index=True)
+    cod_compra = db.Column(db.String(40))
+    numero_os = db.Column(db.String(200))
+    fornecedor = db.Column(db.String(200), index=True)
+    comprador = db.Column(db.String(100))
+    dt_lancamento_oc = db.Column(db.DateTime)
+    dt_recebimento_oc = db.Column(db.DateTime)
+    total_produtos_oc = db.Column(db.Float)
+    total_oc = db.Column(db.Float)
+    qtd_linhas_oc = db.Column(db.Integer)
+    qtd_produtos_oc = db.Column(db.Integer)
+    situacao_oc = db.Column(db.String(20))
+    oc_origem_payload = db.Column(db.Text)  # JSON bruto da consulta ao ERP, para auditoria
+
+    # ── Modulo 2: PO ────────────────────────────────────────────────────
+    po_numero = db.Column(db.String(40), index=True)
+    po_ocs_vinculadas = db.Column(db.Text)  # JSON: lista de cod_ordem_compra (mesmo fornecedor)
+    pagador_frete = db.Column(db.String(20))  # Columbia | Cliente-Fornecedor
+    po_status = db.Column(db.String(20), default="Rascunho")  # Rascunho | Finalizada
+    po_pdf_file_name = db.Column(db.String(260))
+    po_pdf_file_path = db.Column(db.String(500))
+    po_enviada_em = db.Column(db.DateTime)
+    po_enviada_por = db.Column(db.String(100))
+    po_destinatarios_email = db.Column(db.String(500))  # separados por ";"
+    po_finalizada_sem_envio = db.Column(db.Boolean, default=False)
+
+    # ── Modulo 3: Cotacao (resumo; detalhe/historico em ComexCotacao) ──────
+    frete_aplicavel = db.Column(db.Boolean)  # deriva de pagador_frete == "Columbia"
+    cotacao_vencedora_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"))
+    cotacao_justificativa = db.Column(db.Text)
+
+    # ── Modulos 4-7: datas/flags rapidos (detalhe no Follow-up) ───────────
+    coleta_data = db.Column(db.DateTime)
+    em_transito_eta = db.Column(db.Date)
+    desembarque_data = db.Column(db.DateTime)
+    numero_duimp = db.Column(db.String(60))
+    data_duimp = db.Column(db.Date)
+
+    # ── Modulo 8: Transporte/Entrega ────────────────────────────────────
+    entrega_recebida = db.Column(db.Boolean, default=False)
+    entrega_recebida_em = db.Column(db.DateTime)
+    entrega_comentario = db.Column(db.Text)
+    entrega_divergencias = db.Column(db.Text)
+
+    # ── Modulo 9: NF/Cambio ─────────────────────────────────────────────
+    nf_numero = db.Column(db.String(40))
+    nf_data_emissao = db.Column(db.Date)
+    cambio_valor_final = db.Column(db.Float)
+    documento_consolidado_file_name = db.Column(db.String(260))
+    documento_consolidado_file_path = db.Column(db.String(500))
+    processo_concluido_em = db.Column(db.DateTime)
+
+    # ── Colunas de reserva para variaveis futuras (tipadas, nao um blob) ──
+    extra_texto_01 = db.Column(db.String(255))
+    extra_texto_02 = db.Column(db.String(255))
+    extra_texto_03 = db.Column(db.String(255))
+    extra_texto_04 = db.Column(db.String(255))
+    extra_texto_05 = db.Column(db.String(255))
+    extra_texto_06 = db.Column(db.String(255))
+    extra_texto_07 = db.Column(db.String(255))
+    extra_texto_08 = db.Column(db.String(255))
+    extra_texto_09 = db.Column(db.String(255))
+    extra_texto_10 = db.Column(db.String(255))
+    extra_texto_11 = db.Column(db.String(255))
+    extra_texto_12 = db.Column(db.String(255))
+    extra_texto_13 = db.Column(db.String(255))
+    extra_texto_14 = db.Column(db.String(255))
+    extra_texto_15 = db.Column(db.String(255))
+    extra_texto_16 = db.Column(db.String(255))
+    extra_texto_17 = db.Column(db.String(255))
+    extra_texto_18 = db.Column(db.String(255))
+    extra_texto_19 = db.Column(db.String(255))
+    extra_texto_20 = db.Column(db.String(255))
+    extra_texto_21 = db.Column(db.String(255))
+    extra_texto_22 = db.Column(db.String(255))
+    extra_texto_23 = db.Column(db.String(255))
+    extra_texto_24 = db.Column(db.String(255))
+    extra_texto_25 = db.Column(db.String(255))
+    extra_texto_26 = db.Column(db.String(255))
+    extra_texto_27 = db.Column(db.String(255))
+    extra_texto_28 = db.Column(db.String(255))
+    extra_texto_29 = db.Column(db.String(255))
+    extra_texto_30 = db.Column(db.String(255))
+    extra_texto_31 = db.Column(db.String(255))
+    extra_texto_32 = db.Column(db.String(255))
+    extra_texto_33 = db.Column(db.String(255))
+    extra_texto_34 = db.Column(db.String(255))
+    extra_texto_35 = db.Column(db.String(255))
+    extra_texto_36 = db.Column(db.String(255))
+    extra_texto_37 = db.Column(db.String(255))
+    extra_texto_38 = db.Column(db.String(255))
+    extra_texto_39 = db.Column(db.String(255))
+    extra_texto_40 = db.Column(db.String(255))
+    extra_texto_41 = db.Column(db.String(255))
+    extra_texto_42 = db.Column(db.String(255))
+    extra_texto_43 = db.Column(db.String(255))
+    extra_texto_44 = db.Column(db.String(255))
+    extra_texto_45 = db.Column(db.String(255))
+    extra_texto_46 = db.Column(db.String(255))
+    extra_texto_47 = db.Column(db.String(255))
+    extra_texto_48 = db.Column(db.String(255))
+    extra_texto_49 = db.Column(db.String(255))
+    extra_texto_50 = db.Column(db.String(255))
+    extra_numero_01 = db.Column(db.Float)
+    extra_numero_02 = db.Column(db.Float)
+    extra_numero_03 = db.Column(db.Float)
+    extra_numero_04 = db.Column(db.Float)
+    extra_numero_05 = db.Column(db.Float)
+    extra_numero_06 = db.Column(db.Float)
+    extra_numero_07 = db.Column(db.Float)
+    extra_numero_08 = db.Column(db.Float)
+    extra_numero_09 = db.Column(db.Float)
+    extra_numero_10 = db.Column(db.Float)
+    extra_numero_11 = db.Column(db.Float)
+    extra_numero_12 = db.Column(db.Float)
+    extra_numero_13 = db.Column(db.Float)
+    extra_numero_14 = db.Column(db.Float)
+    extra_numero_15 = db.Column(db.Float)
+    extra_numero_16 = db.Column(db.Float)
+    extra_numero_17 = db.Column(db.Float)
+    extra_numero_18 = db.Column(db.Float)
+    extra_numero_19 = db.Column(db.Float)
+    extra_numero_20 = db.Column(db.Float)
+    extra_data_01 = db.Column(db.DateTime)
+    extra_data_02 = db.Column(db.DateTime)
+    extra_data_03 = db.Column(db.DateTime)
+    extra_data_04 = db.Column(db.DateTime)
+    extra_data_05 = db.Column(db.DateTime)
+    extra_data_06 = db.Column(db.DateTime)
+    extra_data_07 = db.Column(db.DateTime)
+    extra_data_08 = db.Column(db.DateTime)
+    extra_data_09 = db.Column(db.DateTime)
+    extra_data_10 = db.Column(db.DateTime)
+    extra_data_11 = db.Column(db.DateTime)
+    extra_data_12 = db.Column(db.DateTime)
+    extra_data_13 = db.Column(db.DateTime)
+    extra_data_14 = db.Column(db.DateTime)
+    extra_data_15 = db.Column(db.DateTime)
+    extra_data_16 = db.Column(db.DateTime)
+    extra_data_17 = db.Column(db.DateTime)
+    extra_data_18 = db.Column(db.DateTime)
+    extra_data_19 = db.Column(db.DateTime)
+    extra_data_20 = db.Column(db.DateTime)
+    extra_flag_01 = db.Column(db.Boolean)
+    extra_flag_02 = db.Column(db.Boolean)
+    extra_flag_03 = db.Column(db.Boolean)
+    extra_flag_04 = db.Column(db.Boolean)
+    extra_flag_05 = db.Column(db.Boolean)
+    extra_flag_06 = db.Column(db.Boolean)
+    extra_flag_07 = db.Column(db.Boolean)
+    extra_flag_08 = db.Column(db.Boolean)
+    extra_flag_09 = db.Column(db.Boolean)
+    extra_flag_10 = db.Column(db.Boolean)
+
+    po_itens = db.relationship(
+        "ComexPoItem",
+        backref="processo",
+        cascade="all, delete-orphan",
+        order_by="ComexPoItem.order_index",
+    )
+    cotacoes = db.relationship(
+        "ComexCotacao",
+        backref="processo",
+        cascade="all, delete-orphan",
+        order_by="ComexCotacao.recebida_em",
+        foreign_keys="ComexCotacao.processo_id",
+    )
+    follow_ups = db.relationship(
+        "ComexFollowUp",
+        backref="processo",
+        cascade="all, delete-orphan",
+    )
+    fotos_entrega = db.relationship(
+        "ComexEntregaFoto",
+        backref="processo",
+        cascade="all, delete-orphan",
+        order_by="ComexEntregaFoto.id",
+    )
+
+
+class ComexPoItem(db.Model):
+    """Item de linha da PO (Modulo 2) - codigo, NCM/HS code, part number,
+    descricao, quantidade e valores, no formato do modelo de PO usado hoje
+    (Purchase Order em PDF). Preenchido manualmente pelo operador enquanto
+    o ERP nao expoe preco unitario/NCM por item via bridge; a ideia e que
+    no futuro esses campos venham pre-preenchidos da OC."""
+
+    __tablename__ = "comex_po_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    codigo = db.Column(db.String(60))            # CODE (codigo interno do produto)
+    ncm = db.Column(db.String(20))                # NCM / HS CODE
+    pn = db.Column(db.String(80))                 # PN (part number)
+    descricao = db.Column(db.String(500))          # DESCRIPTION
+    quantidade = db.Column(db.Float)
+    valor_unitario = db.Column(db.Float)           # UNIT US$
+    valor_total = db.Column(db.Float)               # Line Total USD
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ComexCotacao(db.Model):
+    """Uma cotacao de frete recebida para um processo (Modulo 3). Todas as
+    cotacoes recebidas ficam registradas aqui, nao so a vencedora - histórico
+    completo para auditoria. `is_escolhida` marca a selecionada pelo
+    operador (pode ou nao ser a `is_sugerida_pelo_sistema`)."""
+
+    __tablename__ = "comex_cotacao"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+
+    fornecedor_frete = db.Column(db.String(200), nullable=False)
+    modal = db.Column(db.String(40))
+    origem = db.Column(db.String(120))
+    destino = db.Column(db.String(120))
+    prazo_estimado = db.Column(db.String(60))
+    valor_frete = db.Column(db.Float)
+    seguro = db.Column(db.Float)
+    taxas_adicionais = db.Column(db.Float)
+    custo_total = db.Column(db.Float)
+
+    is_sugerida_pelo_sistema = db.Column(db.Boolean, default=False)
+    is_escolhida = db.Column(db.Boolean, default=False)
+
+    # Link publico e temporario para o fornecedor preencher a cotacao sem
+    # login completo (Modulo 3 - leva futura). O token em si nunca e
+    # persistido em claro, so o hash (mesmo padrao do convite de usuario em
+    # Usuario.convite_token_hash).
+    token_publico_hash = db.Column(db.String(128))
+    token_publico_expira_em = db.Column(db.DateTime)
+    email_instrucao_embarque = db.Column(db.String(255))  # e-mail informado p/ receber a instrução
+
+    recebida_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_por = db.Column(db.String(100))
+
+
+class ComexFollowUp(db.Model):
+    """Follow-up de acompanhamento reutilizado pelos modulos 3
+    (Instrucao/Documentacao), 4 (Coleta), 5 (Em Transito), 6 (Desembarque) e
+    7 (Desembaraco) - mesmo molde de ExpedicaoCobranca/ExpedicaoCobrancaLog:
+    uma linha de status por (processo, modulo) + historico append-only de
+    comentarios em ComexFollowUpLog."""
+
+    __tablename__ = "comex_follow_up"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    # instrucao | coleta | em_transito | desembarque | desembaraco
+    modulo = db.Column(db.String(30), nullable=False, index=True)
+    status_ok = db.Column(db.Boolean, nullable=False, default=False)
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("processo_id", "modulo", name="uq_comex_follow_up_processo_modulo"),
+    )
+
+    logs = db.relationship(
+        "ComexFollowUpLog",
+        backref="follow_up",
+        cascade="all, delete-orphan",
+        order_by="ComexFollowUpLog.criado_em",
+    )
+
+
+class ComexFollowUpLog(db.Model):
+    """Historico append-only de comentarios/anexos de um ComexFollowUp -
+    nunca sobrescreve, cada acao do operador vira uma linha nova."""
+
+    __tablename__ = "comex_follow_up_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    follow_up_id = db.Column(db.Integer, db.ForeignKey("comex_follow_up.id"), nullable=False, index=True)
+    texto = db.Column(db.Text, default="")
+    documento_file_name = db.Column(db.String(260))
+    documento_file_path = db.Column(db.String(500))
+    autor = db.Column(db.String(100), default="")
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class ComexLembrete(db.Model):
+    """Lembrete automatico disparado ao concluir uma etapa (ex.: Desembarque
+    concluido dispara lembrete de inicio de desembaraco; Desembaraco
+    concluido dispara lembrete de entrega)."""
+
+    __tablename__ = "comex_lembrete"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(40), nullable=False)  # inicio_desembaraco | entrega
+    destinatario = db.Column(db.String(255))
+    enviado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ComexEntregaFoto(db.Model):
+    """Fotos de divergencia registradas no Modulo 8 (Transporte/Entrega) -
+    mesmo molde de ExpedicaoRomaneioFotoCarregamento (multiplas fotos por
+    processo)."""
+
+    __tablename__ = "comex_entrega_foto"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    file_name = db.Column(db.String(260), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_by = db.Column(db.String(100))

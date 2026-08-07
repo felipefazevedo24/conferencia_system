@@ -66,6 +66,7 @@ from .routes.frota_routes import frota_bp
 from .routes.solicitacao_nf_routes import solicitacao_nf_bp
 from .routes.logistica_inventario_routes import logistica_inventario_bp
 from .routes.viagem_routes import viagem_bp, motorista_bp
+from .routes.comex_routes import comex_bp
 
 
 def create_app(test_config=None) -> Flask:
@@ -95,6 +96,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_romaneio_bp)
     app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(expedicao_assistente_bp)
+    app.register_blueprint(comex_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(rastreamento_bp)

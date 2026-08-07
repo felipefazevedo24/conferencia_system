@@ -9,6 +9,7 @@ from ..models import (
     ActiveSession,
     AgendamentoSolicitacao,
     BoletoContaReceber,
+    ComexProcesso,
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
     ItemNota,
@@ -193,6 +194,20 @@ HOME_MODULES = [
         "metric_key": "agendamento_ativo",
     },
     {
+        "id": "comex_processos",
+        "title": "Processos de Importação/Exportação",
+        "subtitle": "OC, PO e acompanhamento",
+        "description": "Gestão de processos de comércio exterior: da Ordem de Compra à PO, cotação de frete e acompanhamento até a entrega.",
+        "href": "/comex",
+        "icon": "fa-ship",
+        "permission": "PAGE_COMEX",
+        "section": "Comex",
+        "tone": "navy",
+        "priority": 80,
+        "keywords": ["comex", "importacao", "exportacao", "oc", "po", "duimp", "desembaraco", "frete"],
+        "metric_key": "comex_ativo",
+    },
+    {
         "id": "expedicao_conferencia",
         "title": "Registro de Expedição",
         "subtitle": "Saída",
@@ -375,6 +390,11 @@ SECTION_META = {
         "icon": "fa-warehouse",
         "tone": "orange",
     },
+    "Comex": {
+        "description": "Importação e exportação: OC, PO, cotação de frete, desembaraço e transporte.",
+        "icon": "fa-ship",
+        "tone": "navy",
+    },
     "Controladoria": {
         "description": "Contas a receber, faturamento, boletos e classificação contábil.",
         "icon": "fa-coins",
@@ -408,6 +428,7 @@ def _build_home_metrics() -> dict:
         "sessoes_ativas": 0,
         "importadas_hoje": 0,
         "lancadas_hoje": 0,
+        "comex_ativo": 0,
     }
 
     try:
@@ -458,6 +479,9 @@ def _build_home_metrics() -> dict:
         )
         metrics["boletos_gerados"] = BoletoContaReceber.query.filter_by(status="Gerado").count()
         metrics["sessoes_ativas"] = ActiveSession.query.filter_by(is_active=True).count()
+        metrics["comex_ativo"] = (
+            ComexProcesso.query.filter(ComexProcesso.processo_concluido_em.is_(None)).count()
+        )
         metrics["importadas_hoje"] = (
             db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
             .filter(func.date(ItemNota.data_importacao) == today)

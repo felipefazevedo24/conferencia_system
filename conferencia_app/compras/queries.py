@@ -1055,3 +1055,53 @@ WHERE tc.cod_empresa = %(cod_empresa)s
 ORDER BY data_entrada DESC NULLS LAST, numero_nf DESC NULLS LAST
 LIMIT %(limite)s;
 """
+
+
+# -------------------------------------------------------------------
+# Itens de uma OC especifica, para o Comex pre-preencher a PO (codigo, NCM,
+# PN, descricao, quantidade, valores). Usa to_jsonb(*) em vez de listar
+# colunas explicitas porque nao temos confirmacao das colunas exatas de
+# preco unitario/NCM em tord_aux/tord_aux_me/tproduto neste ambiente - o
+# Python do lado de ca (comex_service._extrair_itens_erp) tenta varios
+# nomes de campo prováveis dentro do JSON e deixa em branco (editavel na
+# tela) o que nao encontrar. Cobre material nacional (tord_aux) e material
+# estrangeiro (tord_aux_me, o mais provavel para processos de importacao).
+# -------------------------------------------------------------------
+SQL_COMEX_OC_ITENS = """
+WITH itens AS (
+    SELECT to_jsonb(t.*) AS item_json, t.cod_produto, 'material' AS origem
+    FROM   public.tord_aux t
+    WHERE  t.cod_empresa = %(cod_empresa)s AND t.cod_ord_compra = %(cod_ordem_compra)s
+    UNION ALL
+    SELECT to_jsonb(t.*) AS item_json, t.cod_produto, 'material_estrangeiro' AS origem
+    FROM   public.tord_aux_me t
+    WHERE  t.cod_empresa = %(cod_empresa)s AND t.cod_ord_compra = %(cod_ordem_compra)s
+)
+SELECT
+    i.origem,
+    i.item_json,
+    to_jsonb(p.*) AS produto_json
+FROM   itens i
+LEFT   JOIN public.tproduto p
+       ON p.cod_empresa = %(cod_empresa)s
+      AND p.codigo      = i.cod_produto
+ORDER  BY i.origem;
+"""
+
+
+# -------------------------------------------------------------------
+# DIAGNOSTICO TEMPORARIO - inspeciona colunas cruas de tord_aux/tproduto
+# via bridge, caso SQL_COMEX_OC_ITENS acima nao encontre preco/NCM e seja
+# preciso investigar manualmente os nomes reais das colunas.
+# -------------------------------------------------------------------
+SQL_COMEX_DIAG_TORD_AUX = """
+SELECT * FROM public.tord_aux
+WHERE cod_empresa = %(cod_empresa)s AND cod_ord_compra = %(cod_ordem_compra)s
+LIMIT 5;
+"""
+
+SQL_COMEX_DIAG_TPRODUTO = """
+SELECT * FROM public.tproduto
+WHERE cod_empresa = %(cod_empresa)s AND codigo = %(cod_produto)s
+LIMIT 1;
+"""

@@ -260,6 +260,18 @@
 
                 {% endif %}
 
+                {% if can_access('PAGE_COMEX') %}
+                <div class="menu-item">
+                    <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-comex" aria-expanded="false">
+                        <span class="nav-group-title"><i class="fas fa-ship"></i><span>Comex</span></span>
+                        <i class="fas fa-chevron-right nav-chevron"></i>
+                    </button>
+                    <div class="submenu-panel" id="menu-comex">
+                        <a href="/comex" class="list-group-item list-group-item-action"><i class="fas fa-ship"></i> Processos de Importação/Exportação</a>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if can_access('PAGE_FINANCEIRO_FATURAMENTO') or can_access('PAGE_FINANCEIRO_CONTAS_RECEBER') or can_access('PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL') or can_access('PAGE_FINANCEIRO_RELATORIO_CUSTOS') %}
                 <div class="menu-item">
                     <button class="list-group-item list-group-item-action menu-toggle" type="button" data-shell-target="menu-controladoria" aria-expanded="false">
