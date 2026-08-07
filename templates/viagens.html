@@ -681,6 +681,59 @@
         background: #17293b !important;
     }
 
+    /* Modal de Nova Solicitação no tema escuro */
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-content {
+        background: #142130 !important;
+        border: 1px solid #33475f !important;
+        color: #d9e7f5 !important;
+        box-shadow: 0 20px 44px rgba(0,0,0,.34) !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-header,
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-footer {
+        background: #101b28 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-title,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-label,
+    [data-theme="escuro"] #novaSolicitacaoModal .text-muted,
+    [data-theme="escuro"] #novaSolicitacaoModal #nsState {
+        color: #b7c9dc !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-close {
+        filter: invert(1) grayscale(1) brightness(1.4);
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea {
+        background: #162738 !important;
+        color: #e6eff8 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control::placeholder,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea::placeholder {
+        color: #8ea7bf !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select option {
+        background: #162738;
+        color: #e6eff8;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control:focus,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select:focus,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea:focus {
+        border-color: #4f83b3 !important;
+        box-shadow: 0 0 0 3px rgba(79, 131, 179, .2) !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-outline-secondary {
+        background: #1a2d40 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-primary {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+        border-color: #1e40af !important;
+        color: #eaf2ff !important;
+    }
+
     @media (max-width: 860px){
         [data-theme="escuro"] #erpTable tr{
             background:#152333 !important;
