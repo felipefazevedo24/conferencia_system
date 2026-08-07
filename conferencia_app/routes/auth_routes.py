@@ -12,6 +12,7 @@ from sqlalchemy import func
 
 from ..models import Usuario
 from ..schemas.api_schemas import LoginSchema
+from ..services.maintenance_mode_service import get_maintenance_state
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -106,6 +107,15 @@ def login_page():
             }), 403
 
         if _password_matches_and_upgrade(user, password):
+            maintenance = get_maintenance_state()
+            is_admin = "admin" in str(getattr(user, "role", "") or "").strip().casefold()
+            if maintenance.get("enabled") and not is_admin:
+                return jsonify({
+                    "sucesso": False,
+                    "code": "MAINTENANCE_MODE",
+                    "msg": str(maintenance.get("message") or "Sistema em manutenção."),
+                }), 503
+
             ultimo_acesso = (
                 ActiveSession.query
                 .filter(ActiveSession.username == user.username)
@@ -261,14 +271,27 @@ def logout():
             sessao.is_active = False
             db.session.commit()
     session.clear()
+    if (request.args.get("next") or "").strip().lower() == "manutencao":
+        return redirect(url_for("auth.maintenance_page"))
     return redirect(url_for("auth.login_page", msg="Sessão encerrada com sucesso.", type="info"))
 
 
 @auth_bp.route("/manutencao")
 def maintenance_page():
-    from ..services.maintenance_mode_service import get_maintenance_state
-
     return render_template("maintenance.html", maintenance=get_maintenance_state()), 503
+
+
+@auth_bp.route("/api/maintenance/state")
+def maintenance_state():
+    maintenance = get_maintenance_state()
+    role = str(session.get("role") or "").strip().casefold()
+    is_admin = "admin" in role
+    return jsonify({
+        "enabled": bool(maintenance.get("enabled")),
+        "message": str(maintenance.get("message") or ""),
+        "is_admin": is_admin,
+        "logged_in": bool(session.get("username")),
+    })
 
 
 # Teste de logo estática

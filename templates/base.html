@@ -695,6 +695,24 @@ function confirmarLogout() {
     carregarEstado();
 })();
 
+(function () {
+    const logged = {{ 'true' if session.get('username') else 'false' }};
+    if (!logged) return;
+
+    async function verificarManutencao() {
+        try {
+            const r = await fetch("/api/maintenance/state", { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data && data.enabled && !data.is_admin) {
+                window.location.href = "/logout?next=manutencao";
+            }
+        } catch (_) {}
+    }
+
+    setInterval(verificarManutencao, 2500);
+})();
+
 function renderShellFavorites() {
     const favoritesHost = document.getElementById("shell-search-favorites");
     if (!favoritesHost) return;

@@ -129,6 +129,7 @@ def create_app(test_config=None) -> Flask:
                     "/login",
                     "/cadastrar-senha",
                     "/api/convite/validar",
+                    "/api/maintenance/state",
                     "/manutencao",
                 }
                 allowed_prefixes = (
