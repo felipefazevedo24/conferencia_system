@@ -7264,25 +7264,24 @@ def confirmar_lancamento():
         ]
         if mesmo_lancamento:
             manifestacao_result = None
+            manifestacao_pendente = False
+            msg_manifestacao = ""
             if manifestar_destinatario:
                 manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
                 if not manifestacao_result.get("sucesso"):
-                    return (
-                        jsonify(
-                            {
-                                "sucesso": False,
-                                "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
-                                "manifestacao": manifestacao_result,
-                            }
-                        ),
-                        manifestacao_result.get("status_code") or 502,
-                    )
+                    manifestacao_pendente = True
+                    msg_manifestacao = manifestacao_result.get("msg") or "Falha ao manifestar destinatário."
             return jsonify(
                 {
                     "sucesso": True,
                     "idempotente": True,
                     "manifestacao": manifestacao_result,
-                    "msg": "NF já lançada com este código.",
+                    "manifestacao_pendente": manifestacao_pendente,
+                    "msg": (
+                        f"NF já lançada com este código, mas a manifestação ficou pendente: {msg_manifestacao}"
+                        if manifestacao_pendente
+                        else "NF já lançada com este código."
+                    ),
                 }
             )
         return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
@@ -7347,28 +7346,13 @@ def confirmar_lancamento():
         current_app.logger.exception("Falha ao classificar contabilmente a NF %s: %s", numero_nota, exc)
 
     manifestacao_result = None
+    manifestacao_pendente = False
+    msg_manifestacao = ""
     if manifestar_destinatario:
         manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
         if not manifestacao_result.get("sucesso"):
-            ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
-                {
-                    "status": "Concluído",
-                    "usuario_lancamento": None,
-                    "data_lancamento": None,
-                    "numero_lancamento": None,
-                }
-            )
-            db.session.commit()
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
-                        "manifestacao": manifestacao_result,
-                    }
-                ),
-                manifestacao_result.get("status_code") or 502,
-            )
+            manifestacao_pendente = True
+            msg_manifestacao = manifestacao_result.get("msg") or "Falha ao manifestar destinatário."
 
     aviso_chapa = None
     try:
@@ -7388,6 +7372,12 @@ def confirmar_lancamento():
         {
             "sucesso": True,
             "manifestacao": manifestacao_result,
+            "manifestacao_pendente": manifestacao_pendente,
+            "msg": (
+                f"Lançamento gravado, mas a manifestação ficou pendente: {msg_manifestacao}"
+                if manifestacao_pendente
+                else "Lançamento gravado com sucesso."
+            ),
             "aviso_chapa": aviso_chapa,
         }
     )
