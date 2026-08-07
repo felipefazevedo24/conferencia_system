@@ -207,7 +207,7 @@
   /* ---------- Kanban operacional (Recebimento + Compras) ---------- */
   .flow::before { color: var(--recebimento); }
   .flow .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
-  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
+  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; }
   .tv-kb-group { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
   .tv-kb-title { font-size: clamp(12px, 1.4vh, 16px); font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
   .tv-kb-board { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
@@ -223,6 +223,7 @@
     min-height: 0;
   }
   .tv-kb-col.is-alert { border-top-color: #f87171; }
+  .tv-kb-col.is-info { border-top-color: #3da5f4; }
   .tv-kb-col.is-warn { border-top-color: #fbbf24; }
   .tv-kb-col.is-ok { border-top-color: #34d399; }
   .tv-kb-head {
@@ -244,7 +245,9 @@
     padding: 7px 9px;
   }
   .tv-kb-card.is-alert { border-left-color: #f87171; }
+  .tv-kb-card.is-info { border-left-color: #3da5f4; }
   .tv-kb-card.is-warn { border-left-color: #fbbf24; }
+  .tv-kb-card.is-ok { border-left-color: #34d399; }
   .tv-kb-card b { display: block; font-size: clamp(12px, 1.45vh, 16px); font-weight: 800; }
   .tv-kb-card span { display: block; color: var(--muted); font-size: clamp(10px, 1.15vh, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tv-kb-card .meta { margin-top: 4px; display: flex; justify-content: space-between; gap: 8px; }
@@ -465,6 +468,10 @@
           <div class="tv-kb-group">
             <div class="tv-kb-title">Recebimento</div>
             <div class="tv-kb-board" id="rec-kb-board"><div class="empty">Carregando…</div></div>
+          </div>
+          <div class="tv-kb-group">
+            <div class="tv-kb-title">Expedição</div>
+            <div class="tv-kb-board" id="exp-kb-board"><div class="empty">Carregando…</div></div>
           </div>
           <div class="tv-kb-group">
             <div class="tv-kb-title">Compras</div>
@@ -774,12 +781,16 @@
   function renderRecebimentoKanban() {
     if (!lastData) return;
     const rec = lastData.recebimento || {};
+    const exp = lastData.expedicao || {};
+    const expCats = exp.categorias || {};
+    const ge = (k) => expCats[k] || { total: 0, lista: [] };
     const cats = rec.categorias || {};
     const g = (k) => cats[k] || { total: 0, lista: [] };
     const pend = g("pendente_conf").total;
     const lanc = g("pendente_lanc").total;
+    const expPend = ge("pendente").total;
     const flowTag = $("flow-tag");
-    if (flowTag) flowTag.textContent = pend + " pend. conferência · " + lanc + " pend. lançamento";
+    if (flowTag) flowTag.textContent = "Rec " + pend + " pend. conf. · Exp " + expPend + " pend. conf.";
 
     const cols = [
       {
@@ -796,12 +807,12 @@
       {
         label: "Conferidas hoje",
         total: g("conferidas").total,
-        colClass: "is-ok",
+        colClass: "is-info",
         items: (g("conferidas").lista || []).slice(0, 24).map((it) => ({
           title: "NF " + (it.codigo || "—"),
           subtitle: it.parceiro || "—",
           meta: relTime(it.ts || it.desde),
-          tone: "",
+          tone: "is-info",
         })),
       },
       {
@@ -823,11 +834,70 @@
           title: "NF " + (it.codigo || "—"),
           subtitle: (it.parceiro || "—") + (it.extra ? " · " + it.extra : ""),
           meta: relTime(it.ts || it.desde),
-          tone: "",
+          tone: "is-ok",
         })),
       },
     ];
     renderKbBoard("rec-kb-board", cols);
+
+    const expCols = [
+      {
+        label: "Pend. conferência",
+        total: ge("pendente").total,
+        colClass: "is-alert",
+        items: (ge("pendente").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
+          meta: relTime(it.ts || it.desde),
+          tone: it.atrasado ? "is-alert" : "",
+        })),
+      },
+      {
+        label: "Conferido/Ag. Fat",
+        total: ge("conferido").total,
+        colClass: "is-info",
+        items: (ge("conferido").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-info",
+        })),
+      },
+      {
+        label: "Fat. sem conferência",
+        total: ge("faturado_sem_conf").total,
+        colClass: "is-warn",
+        items: (ge("faturado_sem_conf").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-warn",
+        })),
+      },
+      {
+        label: "Faturado a expedir",
+        total: ge("faturado").total,
+        colClass: "is-warn",
+        items: (ge("faturado").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-warn",
+        })),
+      },
+      {
+        label: "Expedidos hoje",
+        total: ge("expedido").total,
+        colClass: "is-ok",
+        items: (ge("expedido").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
+          meta: relTime(it.ts || it.desde),
+          tone: "is-ok",
+        })),
+      },
+    ];
+    renderKbBoard("exp-kb-board", expCols);
   }
 
   function renderComprasKanban() {
