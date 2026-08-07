@@ -14,7 +14,7 @@ from ..models import ItemNota, QualidadeCertificado
 # Palavras-chave (normalizadas, sem acento e minúsculas) que identificam os
 # fornecedores que exigem análise de qualidade no recebimento.
 FORNECEDORES_QUALIDADE = ("brasimet", "metal paulista", "friese")
-CFOPS_QUALIDADE_PERMITIDOS = {"1124", "2124"}
+CFOPS_QUALIDADE_PERMITIDOS = {"1124", "2124", "5124", "6124"}
 CFOPS_QUALIDADE_OCULTAR = {"5902", "5903"}
 
 
