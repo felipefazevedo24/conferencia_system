@@ -270,6 +270,32 @@
         background: var(--eui-surface-2);
     }
 
+    /* Corrige contraste da grade "Ordens de faturamento" no tema escuro. */
+    [data-theme="escuro"] .ce-table-wrap {
+        background: var(--eui-surface);
+        border: 1px solid var(--eui-border);
+        border-radius: var(--eui-radius);
+    }
+    [data-theme="escuro"] .ce-table {
+        background: var(--eui-surface);
+    }
+    [data-theme="escuro"] .ce-table thead th {
+        background: var(--eui-surface-2) !important;
+        color: var(--eui-text-soft) !important;
+        border-bottom-color: var(--eui-border) !important;
+    }
+    [data-theme="escuro"] .ce-table tbody td {
+        background: transparent;
+        color: var(--eui-text) !important;
+        border-bottom-color: var(--eui-border) !important;
+    }
+    [data-theme="escuro"] .ce-table tbody tr:hover td {
+        background: rgba(59, 147, 245, 0.12);
+    }
+    [data-theme="escuro"] .ce-empty {
+        color: var(--eui-muted);
+    }
+
     [data-theme="escuro"] .ce-modal__err[style*="background"] {
         background: rgba(239, 68, 68, 0.16) !important;
         color: #fca5a5 !important;
