@@ -4546,7 +4546,15 @@ def listar_notas_xml_auditor():
 @api_bp.route("/api/xml_auditor/nota/<numero_nota>", methods=["GET"])
 @permission_required("PAGE_XML_AUDITOR")
 def detalhe_nota_xml_auditor(numero_nota):
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    cnpj_emitente = re.sub(r"\D", "", str(request.args.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(request.args.get("fornecedor") or "").strip()
+
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.order_by(ItemNota.id.asc()).all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4595,12 +4603,19 @@ def detalhe_nota_xml_auditor(numero_nota):
 @api_bp.route("/api/xml_auditor/analisar", methods=["POST"])
 @permission_required("PAGE_XML_AUDITOR")
 def analisar_nota_xml_auditor():
-    payload = nota_schema.load(request.json or {})
+    payload = request.get_json() or {}
     numero_nota = str(payload.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(payload.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(payload.get("fornecedor") or "").strip()
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4640,13 +4655,20 @@ def analisar_nota_xml_auditor():
 def registrar_decisao_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     autorizado = bool(data.get("autorizado", False))
     justificativa = str(data.get("justificativa") or "").strip()
 
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4676,6 +4698,8 @@ def registrar_decisao_xml_auditor():
 def retirar_nota_da_fila_auditor_xml():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor_payload = str(data.get("fornecedor") or "").strip()
     motivo = str(data.get("motivo") or "").strip()
 
     if not numero_nota:
@@ -4683,7 +4707,12 @@ def retirar_nota_da_fila_auditor_xml():
     if len(motivo) < 5:
         return jsonify({"sucesso": False, "msg": "Informe o motivo com no mínimo 5 caracteres."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao")
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor_payload:
+        query = query.filter(ItemNota.fornecedor == fornecedor_payload)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada em Aguardando Liberação."}), 404
 
@@ -4699,11 +4728,16 @@ def retirar_nota_da_fila_auditor_xml():
         )
     )
 
-    ItemNota.query.filter_by(numero_nota=numero_nota).delete()
-    LogDivergencia.query.filter_by(numero_nota=numero_nota).delete()
-    LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).delete()
-    LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).delete()
-    _release_lock(numero_nota)
+    ids_alvo = [int(i.id) for i in itens]
+    if ids_alvo:
+        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
+
+    # Só limpa logs/lock globais da NF quando não existem mais itens com esse número.
+    if not ItemNota.query.filter_by(numero_nota=numero_nota).first():
+        LogDivergencia.query.filter_by(numero_nota=numero_nota).delete()
+        LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).delete()
+        LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).delete()
+        _release_lock(numero_nota)
 
     db.session.add(
         LogAcessoAdministrativo(
@@ -4716,7 +4750,13 @@ def retirar_nota_da_fila_auditor_xml():
     return jsonify({"sucesso": True, "msg": "NF removida do sistema pelo Auditor XML. Para processar novamente, importe o XML outra vez."})
 
 
-def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str, resultado_comparacao: dict | None = None):
+def _sincronizar_codigo_interno_por_pedido(
+    numero_nota: str,
+    numero_pedido: str,
+    resultado_comparacao: dict | None = None,
+    cnpj_emitente: str | None = None,
+    fornecedor: str | None = None,
+):
     """
     Sincroniza vínculo de linha PO e código interno (coluna D) no item_nota.
     Garante que etapas seguintes sempre leiam o código interno já vinculado.
@@ -4726,7 +4766,15 @@ def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str,
     if not numero_nota or not numero_pedido:
         return {"atualizou": False}
 
-    itens_nf = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    cnpj_emitente = re.sub(r"\D", "", str(cnpj_emitente or ""))[:14]
+    fornecedor = str(fornecedor or "").strip()
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+
+    itens_nf = query.order_by(ItemNota.id.asc()).all()
     if not itens_nf:
         return {"atualizou": False}
 
@@ -4803,6 +4851,8 @@ def _coletar_pedidos_nota(itens) -> str:
 def vincular_pedido_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     pedido_compra = str(data.get("pedido_compra") or "").strip()
     material_cliente = bool(data.get("material_cliente", False))
     remessa = bool(data.get("remessa", False))
@@ -4812,7 +4862,12 @@ def vincular_pedido_xml_auditor():
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4834,7 +4889,12 @@ def vincular_pedido_xml_auditor():
     # Tenta vincular automaticamente as linhas XML x PO imediatamente após informar a OC.
     if not material_cliente and not remessa and pedido_compra:
         try:
-            _sincronizar_codigo_interno_por_pedido(numero_nota, pedido_compra)
+            _sincronizar_codigo_interno_por_pedido(
+                numero_nota,
+                pedido_compra,
+                cnpj_emitente=cnpj_emitente,
+                fornecedor=fornecedor,
+            )
         except Exception:
             # Não bloqueia o fluxo de salvar vínculo caso haja indisponibilidade do Sheets.
             db.session.rollback()
@@ -4860,6 +4920,8 @@ def vincular_pedido_xml_auditor():
 def consultar_pedido_excel():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     numero_pedido = str(data.get("pedido") or "").strip()
     conversoes_itens = data.get("conversoes_itens") or {}
 
@@ -4868,7 +4930,12 @@ def consultar_pedido_excel():
 
     itens_nf = []
     if numero_nota:
-        itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+        query = ItemNota.query.filter_by(numero_nota=numero_nota)
+        if cnpj_emitente:
+            query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+        elif fornecedor:
+            query = query.filter(ItemNota.fornecedor == fornecedor)
+        itens_db = query.order_by(ItemNota.id.asc()).all()
         mapa_conversoes = conversoes_itens if isinstance(conversoes_itens, dict) else {}
 
         def _resolver_conversao_item(item: ItemNota):
@@ -4923,7 +4990,13 @@ def consultar_pedido_excel():
 
     # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
     if numero_nota and itens_nf:
-        _sincronizar_codigo_interno_por_pedido(numero_nota, numero_pedido, resultado)
+        _sincronizar_codigo_interno_por_pedido(
+            numero_nota,
+            numero_pedido,
+            resultado,
+            cnpj_emitente=cnpj_emitente,
+            fornecedor=fornecedor,
+        )
 
     return jsonify({"sucesso": True, **resultado})
 
@@ -4964,13 +5037,20 @@ def sugestoes_vinculacao():
     """
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     numero_pedido = str(data.get("pedido") or "").strip()
 
     if not numero_nota or not numero_pedido:
         return jsonify({"sucesso": False, "msg": "NF e Pedido obrigatórios."}), 400
 
     # Recupera items da NF
-    itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens_db = query.order_by(ItemNota.id.asc()).all()
     
     itens_nf = [
         {
@@ -5105,10 +5185,17 @@ def vincular_linha_po():
 def liberar_nota_via_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -5174,23 +5261,33 @@ def liberar_nota_via_xml_auditor():
     # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
     if not material_cliente and not remessa and pedidos_nota:
         try:
-            _sincronizar_codigo_interno_por_pedido(numero_nota, pedidos_nota)
+            _sincronizar_codigo_interno_por_pedido(
+                numero_nota,
+                pedidos_nota,
+                cnpj_emitente=cnpj_emitente,
+                fornecedor=fornecedor,
+            )
         except Exception as exc:
             return jsonify({"sucesso": False, "msg": f"Não foi possível sincronizar código interno da OC: {exc}"}), 409
 
     if sem_conferencia_logistica:
         now = datetime.now()
-        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update(
-            {
-                "status": "Concluído",
-                "usuario_conferencia": session.get("username", "sistema"),
-                "inicio_conferencia": now,
-                "fim_conferencia": now,
-            }
-        )
+        ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
+        if ids_alvo:
+            ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update(
+                {
+                    "status": "Concluído",
+                    "usuario_conferencia": session.get("username", "sistema"),
+                    "inicio_conferencia": now,
+                    "fim_conferencia": now,
+                },
+                synchronize_session=False,
+            )
         msg_liberacao = "NF liberada sem conferência logística. Documento enviado direto para Entrada (Concluído)."
     else:
-        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update({"status": "Pendente"})
+        ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
+        if ids_alvo:
+            ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update({"status": "Pendente"}, synchronize_session=False)
         msg_liberacao = "NF liberada para conferência pelo Auditor XML."
     db.session.add(
         LogAcessoAdministrativo(
