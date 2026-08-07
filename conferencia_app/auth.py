@@ -160,14 +160,17 @@ def _resolve_permissions(username: str | None = None, role: str | None = None) -
     role = (role or session.get("role") or "").strip()
     username = (username or session.get("username") or "").strip()
 
-    # Recupera role do banco quando a sessão vier sem role (ou corrompida).
-    if not role and username:
+    # Sincroniza role com o banco para evitar sessão stale (ex.: usuário foi
+    # promovido a Admin, mas ainda está com role antiga na sessão atual).
+    if username:
         try:
             from .models import Usuario
 
             user = Usuario.query.filter_by(username=username).first()
             if user and user.role:
-                role = str(user.role).strip()
+                role_db = str(user.role).strip()
+                if not role or _normalize_role_key(role) != _normalize_role_key(role_db):
+                    role = role_db
         except Exception:
             role = role or ""
 
