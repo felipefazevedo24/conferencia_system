@@ -19,6 +19,7 @@
 
     --eui-primary: #0f62c9;
     --eui-primary-hover: #0a4ea3;
+    --eui-primary-contrast: #ffffff;
     --eui-primary-soft: #e6efff;
     --eui-primary-soft-text: #0a4ea3;
 
@@ -91,6 +92,7 @@
 
     --eui-primary: #3b93f5;
     --eui-primary-hover: #5aa6f7;
+    --eui-primary-contrast: #05203d;
     --eui-primary-soft: rgba(28, 134, 242, 0.18);
     --eui-primary-soft-text: #9ecbff;
 
@@ -190,7 +192,7 @@
 .eui-btn:focus-visible { outline: none; box-shadow: var(--eui-focus-ring); }
 .eui-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.eui-btn--primary   { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
+.eui-btn--primary   { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast); }
 .eui-btn--primary:hover:not(:disabled)   { background: var(--eui-primary-hover); border-color: var(--eui-primary-hover); }
 
 .eui-btn--ghost     { background: var(--eui-surface); border-color: var(--eui-border-strong); color: var(--eui-text); }
@@ -240,6 +242,14 @@
 .eui-input:focus, .eui-select:focus, .eui-textarea:focus { outline: none; border-color: var(--eui-primary); box-shadow: var(--eui-focus-ring); }
 .eui-input[readonly] { background: var(--eui-surface-2); color: var(--eui-muted); }
 .eui-textarea { min-height: 84px; resize: vertical; line-height: 1.4; }
+
+/* Dropdown nativo no tema escuro: evita popup branco em selects do workflow. */
+[data-theme="escuro"] .eui-select,
+[data-theme="escuro"] .eui-select option,
+[data-theme="escuro"] .eui-select optgroup {
+    background: var(--eui-surface);
+    color: var(--eui-text);
+}
 
 /* ----------------------------------------------------------------------------
  * Toolbar (filtros)
