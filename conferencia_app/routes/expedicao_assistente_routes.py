@@ -12,11 +12,13 @@ from ..services import expedicao_assistente_service as svc
 from ..services import expedicao_cobranca_service as cobranca_svc
 from ..services import expedicao_romaneio_bia_service as romaneio_bia_svc
 from ..services import bia_mensagem_service as bia_mensagem_svc
+from ..services import bia_cadastro_service as bia_cadastro_svc
 
 
 expedicao_assistente_bp = Blueprint("expedicao_assistente", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
+CADASTRO_FLOW_SESSION_KEY = "bia_cadastro_flow"
 
 
 @expedicao_assistente_bp.route("/api/expedicao/assistente/pendencias", methods=["GET"])
@@ -44,6 +46,29 @@ def perguntar():
         "role": session.get("role"),
         "is_admin": is_admin_session(),
     }
+    # Fluxo conversacional de solicitacao de cadastro (coleta guiada e
+    # abertura no workflow). Mantem estado curto na sessao do usuario.
+    try:
+        estado_cadastro = session.get(CADASTRO_FLOW_SESSION_KEY) or {}
+        cadastro = bia_cadastro_svc.interpretar(pergunta, ctx, estado_cadastro)
+    except Exception:
+        cadastro = None
+    if cadastro is not None and cadastro.get("consumiu"):
+        if cadastro.get("limpar_estado"):
+            session.pop(CADASTRO_FLOW_SESSION_KEY, None)
+        elif cadastro.get("estado") is not None:
+            session[CADASTRO_FLOW_SESSION_KEY] = cadastro.get("estado")
+        return jsonify({
+            "resposta": str(cadastro.get("resposta") or ""),
+            "pendencias": [],
+            "sugestoes": [
+                "Solicitar cadastro de material",
+                "Solicitar cadastro de cliente",
+                "Solicitar cadastro de fornecedor",
+                "Solicitar cadastro de transportadora",
+            ],
+        })
+
     # Envio de AVISOS pelo chat da Bia. Interpretamos para QUALQUER usuário
     # logado (o serviço decide a permissão e responde de forma clara a quem não
     # é Admin), evitando que o chat responda como se tivesse enviado. Só devolve
