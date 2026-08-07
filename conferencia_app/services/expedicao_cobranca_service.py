@@ -46,6 +46,29 @@ def pode_cobrar(role: str | None) -> bool:
     return "admin" in r or r == "logistica"
 
 
+def detalhe(ref_tipo: str, ref_id: str) -> dict | None:
+    """Snapshot de uma cobrança (para repasse/exibição). None se não existir."""
+    try:
+        c = ExpedicaoCobranca.query.filter_by(
+            ref_tipo=str(ref_tipo or "").strip(), ref_id=str(ref_id or "").strip()
+        ).first()
+    except Exception:
+        return None
+    if not c:
+        return None
+    return {
+        "ref_tipo": c.ref_tipo,
+        "ref_id": c.ref_id,
+        "categoria": c.categoria,
+        "titulo": c.titulo,
+        "referencia": c.referencia,
+        "numero_nf": c.numero_nf,
+        "severidade": c.severidade,
+        "status": c.status,
+        "motivo": c.motivo,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Sincronização das pendências atuais -> tabela de acompanhamento.
 # --------------------------------------------------------------------------- #
@@ -384,6 +407,15 @@ def marcar_cce_feita(numero_romaneio: str, autor: str = "") -> dict:
         return {"ok": False, "erro": "Informe o número do romaneio."}
     try:
         rom = ExpedicaoRomaneio.query.filter_by(numero_romaneio=numero).first()
+        if rom is None:
+            # Busca tolerante: operador pode digitar só o final ("43", "0043")
+            # ou o código com espaços; tenta casar pelo sufixo do número.
+            like = ExpedicaoRomaneio.query.filter(
+                ExpedicaoRomaneio.numero_romaneio.ilike(f"%{numero}")
+            ).all()
+            if len(like) == 1:
+                rom = like[0]
+                numero = rom.numero_romaneio
         if rom is None:
             return {"ok": False, "erro": f"Romaneio {numero} não encontrado."}
         if not rom.cce_modalidade_pendente:

@@ -87,7 +87,7 @@
     .rom-nf-check-item:last-child { border-bottom: none; }
     .rom-nf-check-item:hover { background: #f9fafb; }
     .rom-nf-check-item input[type="checkbox"] { flex-shrink: 0; }
-    .rom-nf-item { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 12px; align-items: center; padding: 12px; background: white; border-radius: 4px; margin-bottom: 8px; border: 1px solid #e5e7eb; }
+    .rom-nf-item { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr auto; gap: 12px; align-items: center; padding: 12px; background: white; border-radius: 4px; margin-bottom: 8px; border: 1px solid #e5e7eb; }
     .rom-nf-item:last-child { margin-bottom: 0; }
     .rom-nf-info strong { display: block; font-weight: 700; }
     .rom-nf-info small { color: #64748b; font-size: 12px; }
@@ -196,8 +196,9 @@
                         </select>
                     </div>
                     <div class="rom-form-group">
-                        <label class="rom-label">Orçamento</label>
+                        <label class="rom-label">Orçamento (Faturamento)</label>
                         <input type="text" id="rom-orcamento" class="rom-input" placeholder="Ex: 1234">
+                        <small style="color:#9ca3af;">NFs de Serviço de Terceiro (ST) usam Ordem de Compra, exibida por NF na lista abaixo.</small>
                     </div>
                 </div>
                 <div class="rom-form-grid">
@@ -230,8 +231,16 @@
                 <h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 700;">DADOS DO TRANSPORTADOR</h4>
                 <div class="rom-form-grid">
                     <div class="rom-form-group">
+                        <label class="rom-label">CNPJ da Transportadora (frete FOB)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="rom-transportadora-cnpj" class="rom-input" placeholder="Somente o CNPJ" style="flex: 1;">
+                            <button type="button" class="eui-btn eui-btn--ghost" id="rom-btn-cnpj-transp" title="Puxar dados pelo cartao CNPJ"><i class="fas fa-search"></i></button>
+                        </div>
+                        <small id="rom-transp-status" style="display:block; margin-top:4px; color:#6b7280; min-height:14px;"></small>
+                    </div>
+                    <div class="rom-form-group">
                         <label class="rom-label">Transportadora</label>
-                        <input type="text" id="rom-transportadora" class="rom-input" placeholder="Nome da transportadora">
+                        <input type="text" id="rom-transportadora" class="rom-input" placeholder="Preenchido pelo CNPJ" readonly>
                     </div>
                     <div class="rom-form-group">
                         <label class="rom-label">Placa do Veículo</label>
@@ -329,6 +338,7 @@
     const IS_ADMIN = $("rom-root")?.dataset.isAdmin === "true";
     let romaneioAtual = null;
     let nfsAtual = [];
+    let romTransportadoraDados = null;
 
     function escapeHtml(str) {
         return String(str == null ? "" : str)
@@ -598,6 +608,25 @@
         fecharMenuAcoesRomaneio();
     });
 
+    // Rotulo do documento de referencia de uma NF: ST usa Ordem de Compra,
+    // FAT usa Orcamento. Um romaneio pode misturar os dois tipos.
+    function refDocLabel(nf) {
+        if (nf && nf.ordem_compra) return "OC " + nf.ordem_compra;
+        if (nf && nf.orcamento) return "Orç. " + nf.orcamento;
+        return "—";
+    }
+
+    // Lista consolidada das referencias do romaneio (orcamentos e OCs),
+    // exibida no cabecalho quando ha os dois tipos juntos.
+    function refsConsolidado(nfs) {
+        const orcs = [...new Set((nfs || []).map(nf => (nf.orcamento || "").trim()).filter(Boolean))];
+        const ocs = [...new Set((nfs || []).map(nf => (nf.ordem_compra || "").trim()).filter(Boolean))];
+        const partes = [];
+        if (orcs.length) partes.push("Orç. " + orcs.join(", "));
+        if (ocs.length) partes.push("OC " + ocs.join(", "));
+        return partes.join(" · ") || "—";
+    }
+
     function renderDetalheRomaneio(r) {
         const editavel = r.status === "Rascunho";
         const nfs = r.nfs || [];
@@ -606,7 +635,7 @@
             ? nfs.map(nf => `
                 <tr>
                     <td><strong>${escapeHtml(nf.numero_nf)}</strong></td>
-                    <td>${escapeHtml(nf.orcamento || "—")}</td>
+                    <td>${escapeHtml(refDocLabel(nf))}</td>
                     <td>${escapeHtml(nf.cliente || "—")}</td>
                     <td>${nf.peso_bruto || 0} kg</td>
                     <td>${nf.qtde_volumes || 0}</td>
@@ -648,6 +677,10 @@
                         <label>Total de Volumes</label>
                         <div style="padding-top:6px; font-weight:700;">${r.qtde_volumes_total || 0}</div>
                     </div>
+                    <div class="rom-detail-field">
+                        <label>Orçamento / OC</label>
+                        <div style="padding-top:6px; font-weight:700;">${escapeHtml(refsConsolidado(nfs))}</div>
+                    </div>
                 </div>
 
                 <div class="rom-nf-detail-scroll">
@@ -655,7 +688,7 @@
                         <thead>
                             <tr>
                                 <th>NF</th>
-                                <th>Orçamento</th>
+                                <th>Orç./OC</th>
                                 <th>Cliente</th>
                                 <th>Peso</th>
                                 <th>Volumes</th>
@@ -762,6 +795,9 @@
             $("rom-orcamento").value = r.orcamento || "";
             $("rom-cliente").value = r.cliente || "";
             $("rom-transportadora").value = r.transportadora_nome || "";
+            $("rom-transportadora-cnpj").value = r.transportadora_documento || "";
+            romTransportadoraDados = (r.transportadora_dados && Object.keys(r.transportadora_dados).length) ? r.transportadora_dados : null;
+            $("rom-transp-status").textContent = romTransportadoraDados ? "Dados da transportadora carregados." : "";
             $("rom-placa").value = r.placa || "";
             $("rom-motorista").value = r.motorista_nome || "";
             $("rom-documento").value = r.motorista_documento || "";
@@ -793,6 +829,7 @@
         container.innerHTML = nfsAtual.map(nf => `
             <div class="rom-nf-item">
                 <div class="rom-nf-info"><strong>${nf.numero_nf}</strong></div>
+                <div class="rom-nf-info">${escapeHtml(refDocLabel(nf))}</div>
                 <div class="rom-nf-info"><strong>${nf.cliente || "—"}</strong></div>
                 <div class="rom-nf-info"><strong>${nf.peso_bruto || 0} kg</strong></div>
                 <div class="rom-nf-info"><strong>${nf.qtde_volumes || 0} vol</strong></div>
@@ -1129,6 +1166,9 @@
             $("rom-orcamento").value = "";
             $("rom-cliente").value = "";
             $("rom-transportadora").value = "";
+            $("rom-transportadora-cnpj").value = "";
+            romTransportadoraDados = null;
+            $("rom-transp-status").textContent = "";
             $("rom-placa").value = "";
             $("rom-motorista").value = "";
             $("rom-documento").value = "";
@@ -1205,6 +1245,8 @@
                         cliente: $("rom-cliente").value,
                         tipo_frete: $("rom-tipo-frete").value,
                         transportadora: $("rom-transportadora").value,
+                        transportadora_documento: $("rom-transportadora-cnpj").value,
+                        transportadora_dados: romTransportadoraDados,
                         placa: $("rom-placa").value,
                         motorista: $("rom-motorista").value,
                         motorista_documento: $("rom-documento").value,
@@ -1217,6 +1259,36 @@
         } catch (e) {
             toast(e.message, "error");
         }
+    });
+
+    async function consultarCnpjTransportadora() {
+        const cnpj = ($("rom-transportadora-cnpj").value || "").trim();
+        if (!cnpj) { toast("Informe o CNPJ da transportadora.", "error"); return; }
+        const status = $("rom-transp-status");
+        status.style.color = "#6b7280";
+        status.textContent = "Consultando cartão CNPJ...";
+        try {
+            const resp = await api("/api/expedicao/romaneio-fat/consultar-cnpj", {
+                method: "POST",
+                body: JSON.stringify({ cnpj }),
+            });
+            const dados = resp.dados || {};
+            romTransportadoraDados = dados;
+            $("rom-transportadora").value = dados.razao_social || "";
+            if (dados.documento) $("rom-transportadora-cnpj").value = dados.documento;
+            status.style.color = "#059669";
+            status.textContent = "Dados carregados: " + (dados.razao_social || "—");
+        } catch (e) {
+            romTransportadoraDados = null;
+            $("rom-transportadora").value = "";
+            status.style.color = "#dc2626";
+            status.textContent = e.message || "Não foi possível consultar o CNPJ.";
+        }
+    }
+
+    $("rom-btn-cnpj-transp").addEventListener("click", consultarCnpjTransportadora);
+    $("rom-transportadora-cnpj").addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); consultarCnpjTransportadora(); }
     });
 
     $("rom-filtro-status").addEventListener("change", () => carregarRomaneios());

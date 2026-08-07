@@ -118,156 +118,6 @@
         </div>
     </header>
 
-    <section class="exp-grid" style="display:grid; grid-template-columns:1fr; gap:24px; align-items:start;">
-        <section class="exp-card" style="background:linear-gradient(135deg,#fff 0%,#f8fafc 100%); border:1px solid #e2e8f0; border-radius:20px; box-shadow:0 10px 40px rgba(0,0,0,0.08); overflow:hidden;">
-            <div class="exp-head" style="padding:24px 28px 20px; border-bottom:1px solid #f1f5f9;">
-                <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#3b82f6;">Nova conferência</span>
-                <h2 style="margin:0; font-size:20px; color:#1e293b; font-weight:800;">Inclusão manual</h2>
-                <p style="margin:0; font-size:13px; color:#64748b; font-weight:500;">O conferente e a data são registrados automaticamente pelo sistema.</p>
-            </div>
-            <div class="exp-body" style="padding:24px 28px;">
-                <div class="exp-meta" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; margin-bottom:20px;">
-                    <div class="exp-pill" style="padding:16px 18px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);">
-                        <span style="display:block; font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#64748b;">Conferente logado</span>
-                        <strong style="display:block; margin-top:8px; font-size:15px; color:#1e293b; font-weight:700;">{{ user }}</strong>
-                    </div>
-                    <div class="exp-pill" style="padding:16px 18px; border-radius:16px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#fff 0%,#f8fafc 100%);">
-                        <span style="display:block; font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:#64748b;">Status inicial</span>
-                        <strong style="display:block; margin-top:8px; font-size:15px; color:#1e293b; font-weight:700;">Pendente de expedição</strong>
-                    </div>
-                </div>
-
-                <form id="expedicao-form">
-                    <div class="exp-form-grid">
-                        <div class="exp-field">
-                            <label for="tipo_referencia">Tipo de referência *</label>
-                            <select id="tipo_referencia" name="tipo_referencia" style="min-height:50px;border-radius:16px;border:1px solid rgba(191,205,219,0.96);padding:0 16px;background:#fff;font-size:14px;">
-                                <option value="Orcamento" selected>Orçamento</option>
-                                <option value="OrdemCompra">Ordem de Compra</option>
-                            </select>
-                        </div>
-
-                        <div class="exp-field" id="orcamento-wrapper">
-                            <label for="orcamento">Nº Orçamento *</label>
-                            <input id="orcamento" name="orcamento" type="text" placeholder="Informe o número do orçamento" required>
-                        </div>
-
-                        <div class="exp-field hidden" id="ordem-compra-wrapper">
-                            <label for="ordem_compra">Nº Ordem de Compra *</label>
-                            <input id="ordem_compra" name="ordem_compra" type="text" placeholder="Informe o número da OC">
-                        </div>
-
-                        <div class="exp-field">
-                            <label for="numero_os">Nº OS</label>
-                            <input id="numero_os" name="numero_os" type="text" placeholder="Informe o número da OS">
-                        </div>
-
-                        <div class="exp-field">
-                            <label for="numero_nf">Nº nota fiscal</label>
-                            <div class="exp-inline">
-                                <input id="numero_nf" name="numero_nf" type="text" placeholder="Ex: 1234, 1235, 1236 (separadas por vírgula)">
-                                <button class="exp-btn-secondary" type="button" id="btn-consultar-nf">Consultar NF</button>
-                            </div>
-                            <div id="nf-feedback" class="exp-subtle"></div>
-                        </div>
-
-                        <div class="exp-field full hidden" id="nome-cliente-wrapper">
-                            <label for="nome_cliente">Nome do cliente</label>
-                            <input id="nome_cliente" name="nome_cliente" type="text" placeholder="Preencha manualmente se a NF ainda não estiver disponível">
-                        </div>
-
-                        <div class="exp-field">
-                            <label for="transportadora">Transportadora</label>
-                            <input id="transportadora" name="transportadora" type="text" placeholder="Opcional">
-                        </div>
-
-                        <div class="exp-field">
-                            <label for="placa">Placa</label>
-                            <input id="placa" name="placa" type="text" placeholder="Opcional">
-                        </div>
-
-                        <div class="exp-field">
-                            <label for="motorista">Motorista</label>
-                            <input id="motorista" name="motorista" type="text" placeholder="Opcional">
-                        </div>
-
-                        <div class="exp-field full">
-                            <label>Tipo de expedição</label>
-                            <div class="exp-inline" style="flex-wrap:wrap;">
-                                <button class="exp-btn-secondary" type="button" id="btn-sem-conferencia" aria-pressed="false" style="flex:0 0 auto;">
-                                    <i class="fas fa-triangle-exclamation"></i>&nbsp; Sem conferência de expedição
-                                </button>
-                                <span id="sem-conferencia-hint" class="exp-subtle" style="align-self:center;flex:1;min-width:180px;">Expedição avulsa: registra a saída sem conferência. A foto passa a ser opcional.</span>
-                            </div>
-                            <input type="hidden" name="sem_conferencia" id="sem_conferencia" value="0">
-                        </div>
-
-                        <div class="exp-field full hidden" id="sem-conf-detalhes">
-                            <label for="sem_conferencia_motivo">Motivo da expedição sem conferência *</label>
-                            <select id="sem_conferencia_motivo" name="sem_conferencia_motivo" style="min-height:50px;border-radius:16px;border:1px solid rgba(191,205,219,0.96);padding:0 16px;background:#fff;font-size:14px;">
-                                <option value="">Selecione o motivo…</option>
-                                <option value="Expedido sem validação da logística">Expedido sem validação da logística</option>
-                                <option value="Expedido sem nota fiscal">Expedido sem nota fiscal</option>
-                                <option value="Expedido em contraturno da logística">Expedido em contraturno da logística</option>
-                            </select>
-                        </div>
-
-                        <div class="exp-field full hidden" id="retirada-wrapper">
-                            <label for="retirado_por">Quem retirou? *</label>
-                            <input id="retirado_por" name="retirado_por" type="text" placeholder="Nome de quem retirou o material">
-                        </div>
-
-                        <div class="exp-field full hidden" id="retirada-justificativa-wrapper">
-                            <label for="retirada_justificativa">Por quê retirou sem validação da logística?</label>
-                            <textarea id="retirada_justificativa" name="retirada_justificativa" rows="2" placeholder="Opcional" style="border-radius:14px;border:1px solid var(--erp-border);padding:12px 16px;background:#fff;color:var(--erp-text);font-size:14px;font-weight:600;font-family:inherit;resize:vertical;"></textarea>
-                        </div>
-
-                        <div class="exp-field full" id="foto-field">
-                            <label for="fotos" id="foto-label">Foto da conferência *</label>
-                            <div class="exp-upload">
-                                <div>
-                                    <strong>Tire a foto na hora ou escolha da galeria</strong>
-                                    <p style="margin:8px 0 14px;">No celular, o botão de câmera abre a câmera. No desktop, você ainda pode escolher imagens do computador.</p>
-                                    <div class="exp-upload-actions">
-                                        <button class="exp-btn" type="button" id="btn-abrir-camera">Tirar foto agora</button>
-                                        <button class="exp-btn-secondary" type="button" id="btn-escolher-fotos">Escolher fotos</button>
-                                    </div>
-                                    <input id="fotos-camera" class="exp-file-input-hidden" type="file" accept="image/*" capture="environment">
-                                    <input id="fotos-galeria" class="exp-file-input-hidden" type="file" accept="image/*" multiple>
-                                </div>
-                            </div>
-                            <div id="fotos-feedback" class="exp-subtle">Nenhuma foto selecionada ainda.</div>
-                            <div id="fotos-preview" class="exp-preview-grid"></div>
-                        </div>
-
-                        <div class="exp-field full" id="foto-cliente-field">
-                            <label id="foto-cliente-label">Foto para o cliente *</label>
-                            <div class="exp-upload">
-                                <div>
-                                    <strong>Foto que será enviada ao cliente</strong>
-                                    <p style="margin:8px 0 14px;">Tire uma foto separada para mandar ao cliente (ex.: material embalado/etiquetado). É guardada à parte das fotos da conferência.</p>
-                                    <div class="exp-upload-actions">
-                                        <button class="exp-btn" type="button" id="btn-foto-cliente">Tirar foto do cliente</button>
-                                        <button class="exp-btn-secondary" type="button" id="btn-foto-cliente-galeria">Escolher da galeria</button>
-                                    </div>
-                                    <input id="foto-cliente-camera" class="exp-file-input-hidden" type="file" accept="image/*" capture="environment">
-                                    <input id="foto-cliente-galeria" class="exp-file-input-hidden" type="file" accept="image/*">
-                                </div>
-                            </div>
-                            <div id="foto-cliente-feedback" class="exp-subtle">Nenhuma foto do cliente selecionada ainda.</div>
-                            <div id="foto-cliente-preview" class="exp-preview-grid"></div>
-                        </div>
-                    </div>
-
-                    <div class="exp-actions">
-                        <button class="exp-btn-secondary" type="reset" id="btn-limpar-form">Limpar</button>
-                        <button class="exp-btn" type="submit" id="btn-salvar-conferencia">Salvar conferência</button>
-                    </div>
-                </form>
-            </div>
-        </section>
-    </section>
-
     <section class="eui-card eui-card--flush">
         <div class="eui-card__head">
             <div>
@@ -424,7 +274,7 @@ function toggleRetiradaFields() {
         retiradaJustInput.value = "";
     }
 }
-motivoSelect.addEventListener("change", toggleRetiradaFields);
+motivoSelect?.addEventListener("change", toggleRetiradaFields);
 
 function setSemConferencia(ativo) {
     semConferencia = !!ativo;
@@ -452,7 +302,7 @@ function setSemConferencia(ativo) {
         toggleRetiradaFields();
     }
 }
-btnSemConferencia.addEventListener("click", () => setSemConferencia(!semConferencia));
+btnSemConferencia?.addEventListener("click", () => setSemConferencia(!semConferencia));
 
 // Fotos rascunho: [{rascunho_id, url, nome}] — persistidas no sessionStorage
 const SESSION_FOTOS_KEY = "exp_fotos_rascunho";
@@ -516,7 +366,7 @@ function updateFotoClientePreview() {
         `<button type="button" title="Remover foto" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,0.9);color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;" data-remover-foto-cliente>×</button>`;
     fotoClientePreview.appendChild(card);
 }
-fotoClientePreview.addEventListener("click", e => {
+fotoClientePreview?.addEventListener("click", e => {
     if (!e.target.closest("[data-remover-foto-cliente]")) return;
     limparFotoClienteSession();
     updateFotoClientePreview();
@@ -538,10 +388,10 @@ async function definirFotoCliente(file) {
         btnSalvar.disabled = false;
     }
 }
-btnFotoCliente.addEventListener("click", () => fotoClienteCameraInput.click());
-btnFotoClienteGaleria.addEventListener("click", () => fotoClienteGaleriaInput.click());
-fotoClienteCameraInput.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
-fotoClienteGaleriaInput.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
+btnFotoCliente?.addEventListener("click", () => fotoClienteCameraInput.click());
+btnFotoClienteGaleria?.addEventListener("click", () => fotoClienteGaleriaInput.click());
+fotoClienteCameraInput?.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
+fotoClienteGaleriaInput?.addEventListener("change", ev => { definirFotoCliente(ev.target.files[0]); ev.target.value = ""; });
 
 async function compartilharFotoCliente(url, titulo) {
     if (!url) return;
@@ -599,7 +449,7 @@ function toggleTipoReferencia() {
         fotoClienteField.classList.toggle("hidden", tipo === "OrdemCompra");
     }
 }
-tipoReferenciaSelect.addEventListener("change", toggleTipoReferencia);
+tipoReferenciaSelect?.addEventListener("change", toggleTipoReferencia);
 
 function debounce(fn, wait = 250) {
     let timer = null;
@@ -640,7 +490,7 @@ function updateFotoPreview() {
     });
 }
 
-fotosPreview.addEventListener("click", e => {
+fotosPreview?.addEventListener("click", e => {
     const btn = e.target.closest("[data-remover-idx]");
     if (!btn) return;
     const idx = parseInt(btn.dataset.removerIdx, 10);
@@ -1014,7 +864,7 @@ async function excluirCanhotoRegistro(registroId) {
     }
 }
 
-form.addEventListener("submit", async event => {
+form?.addEventListener("submit", async event => {
     event.preventDefault();
     await filaUploadFotos.catch(() => {});
     if (!fotosRascunho.length && !semConferencia) {
@@ -1067,7 +917,7 @@ form.addEventListener("submit", async event => {
     }
 });
 
-document.getElementById("btn-limpar-form").addEventListener("click", () => {
+document.getElementById("btn-limpar-form")?.addEventListener("click", () => {
     resetNfState();
     setSemConferencia(false);
     limparFotosSession();
@@ -1077,15 +927,15 @@ document.getElementById("btn-limpar-form").addEventListener("click", () => {
     limparFotoClienteSession();
     updateFotoClientePreview();
 });
-btnConsultarNf.addEventListener("click", consultarNf);
-nfInput.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
-btnAbrirCamera.addEventListener("click", () => fotosCameraInput.click());
-btnEscolherFotos.addEventListener("click", () => fotosGaleriaInput.click());
-fotosCameraInput.addEventListener("change", event => {
+btnConsultarNf?.addEventListener("click", consultarNf);
+nfInput?.addEventListener("blur", () => { if (!nfInput.value.trim()) resetNfState(); });
+btnAbrirCamera?.addEventListener("click", () => fotosCameraInput.click());
+btnEscolherFotos?.addEventListener("click", () => fotosGaleriaInput.click());
+fotosCameraInput?.addEventListener("change", event => {
     enfileirarFotos(event.target.files);
     event.target.value = "";
 });
-fotosGaleriaInput.addEventListener("change", event => {
+fotosGaleriaInput?.addEventListener("change", event => {
     enfileirarFotos(event.target.files);
     event.target.value = "";
 });
@@ -1634,11 +1484,6 @@ async function prefillFromRomaneio(romaneioId) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    restaurarFotosSession();
-    updateFotoPreview();
-    restaurarFotoClienteSession();
-    updateFotoClientePreview();
-    prefillFromQuery();
     // Link direto com busca pre-preenchida (ex.: "Registro de expedição" a
     // partir de um romaneio) — ?q=<numero_nf>.
     const buscaUrl = new URLSearchParams(window.location.search).get("q");

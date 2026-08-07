@@ -27,6 +27,7 @@
     }
     body { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; }
     .doc-entry-shell { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    .doc-entry-shell .eui-page-header { margin-bottom: 14px; }
     .doc-entry-hero {
         background: radial-gradient(circle at 20% 20%, rgba(5,150,105,.14), transparent 45%),
                     linear-gradient(135deg, #ffffff 0%, #ecfdf5 100%);
@@ -56,12 +57,18 @@
     .doc-btn-ghost:hover { color: var(--doc-primary); background: var(--doc-primary-soft); }
 
     .doc-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
-    .doc-kpi-card { padding: 16px; border-radius: 14px; background: linear-gradient(135deg, #fff, #f8fafc); border: 1px solid var(--doc-border); box-shadow: var(--doc-shadow); display: flex; align-items: center; gap: 14px; }
-    .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
-    .doc-kpi-icon.primary { background: linear-gradient(135deg, #059669, #065f46); }
-    .doc-kpi-icon.info { background: linear-gradient(135deg, #155eef, #0b2a6b); }
-    .doc-kpi-icon.warn { background: linear-gradient(135deg, #f59e0b, #b45309); }
-    .doc-kpi-icon.slate { background: linear-gradient(135deg, #64748b, #334155); }
+    .doc-kpi-card { padding: 16px; border-radius: 14px; background: linear-gradient(135deg, #fff, #f8fafc); border: 1px solid var(--doc-border); border-top: 3px solid transparent; box-shadow: var(--doc-shadow); display: flex; align-items: center; gap: 14px; }
+    .doc-kpi-card:nth-child(1) { border-top-color: #f59e0b; }
+    .doc-kpi-card:nth-child(2) { border-top-color: #0f62c9; }
+    .doc-kpi-card:nth-child(3) { border-top-color: #16a34a; }
+    .doc-kpi-card:nth-child(4) { border-top-color: #ef4444; }
+    .doc-kpi-card:nth-child(5) { border-top-color: #64748b; }
+    .doc-kpi-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 1px solid transparent; }
+    .doc-kpi-icon i { font-size: 16px; }
+    .doc-kpi-icon.primary { color: #16a34a; background: rgba(22, 163, 74, .14); border-color: rgba(22, 163, 74, .28); }
+    .doc-kpi-icon.info { color: #2563eb; background: rgba(37, 99, 235, .14); border-color: rgba(37, 99, 235, .28); }
+    .doc-kpi-icon.warn { color: #d97706; background: rgba(217, 119, 6, .14); border-color: rgba(217, 119, 6, .28); }
+    .doc-kpi-icon.slate { color: #475569; background: rgba(100, 116, 139, .14); border-color: rgba(100, 116, 139, .30); }
     .doc-kpi-label { font-size: 10.5px; font-weight: 700; color: var(--doc-muted); text-transform: uppercase; letter-spacing: .5px; }
     .doc-kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.15; }
     .doc-kpi-foot { font-size: 11px; color: var(--doc-muted); margin-top: 2px; }
@@ -76,6 +83,8 @@
 
     .doc-filters { padding: 12px 16px; border-bottom: 1px solid var(--doc-border); display: flex; gap: 8px; flex-wrap: wrap; background: #fcfcfd; }
     .doc-filters select, .doc-filters input { padding: 7px 10px; border: 1.5px solid var(--doc-border); border-radius: 7px; font-size: 12px; flex: 1; min-width: 120px; }
+    .doc-filters .f-busca { flex: 2 1 280px; }
+    .doc-filters .f-data { flex: 0 1 145px; min-width: 130px; }
 
     .viagem-list { max-height: 76vh; overflow-y: auto; display: flex; flex-direction: column; }
     .viagem-card { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .15s; display: block; }
@@ -132,7 +141,9 @@
     .parada-titulo { font-size: 13.5px; font-weight: 700; color: #0f172a; }
     .parada-ender { font-size: 12px; color: var(--doc-muted); margin-top: 2px; }
     .parada-meta { margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--doc-muted); }
-    .parada-acoes { display: flex; gap: 6px; flex-direction: column; }
+    .parada-acoes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+    .parada-acoes .doc-btn { min-width: 106px; justify-content: center; }
+    .parada-acoes .doc-btn-ghost { min-width: 78px; }
 
     /* Timeline */
     .timeline { padding: 12px 16px; max-height: 420px; overflow-y: auto; }
@@ -188,10 +199,10 @@
     /* ══════════════════════════════════════════════════════════════════════
        Tab switcher — Viagens vs Solicitações de Transporte
        ══════════════════════════════════════════════════════════════════════ */
-    .main-page-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--doc-border); margin-bottom: 16px; }
-    .main-page-tab { padding: 11px 22px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; background: transparent; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: 8px; transition: all .2s; }
-    .main-page-tab:hover { color: #0f172a; }
-    .main-page-tab.active { color: var(--doc-emerald); border-bottom-color: var(--doc-emerald); }
+    .main-page-tabs { display: flex; gap: 6px; border-bottom: 2px solid var(--doc-border); margin-bottom: 16px; padding: 4px; border-radius: 12px; background: #f8fafc; }
+    .main-page-tab { padding: 11px 18px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid transparent; background: transparent; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: 8px; transition: all .2s; border-radius: 10px; }
+    .main-page-tab:hover { color: #0f172a; background: #ffffff; border-color: #dbe5ef; }
+    .main-page-tab.active { color: var(--doc-emerald); border-color: #bbf7d0; background: #ffffff; border-bottom-color: var(--doc-emerald); }
 
     /* ══════════════════════════════════════════════════════════════════════
        rt-* CSS — Gestão de Rotas (embedded in Viagens page)
@@ -352,10 +363,10 @@
         padding: 14px 16px !important;
     }
     .doc-kpi-icon { border-radius: 10px !important; box-shadow: none !important; }
-    .doc-kpi-icon.primary { background: #16a34a !important; }
-    .doc-kpi-icon.info { background: #0f62c9 !important; }
-    .doc-kpi-icon.warn { background: #f59e0b !important; }
-    .doc-kpi-icon.slate { background: #64748b !important; }
+    .doc-kpi-icon.primary { color: #16a34a !important; background: rgba(22, 163, 74, .14) !important; border-color: rgba(22, 163, 74, .28) !important; }
+    .doc-kpi-icon.info { color: #2563eb !important; background: rgba(37, 99, 235, .14) !important; border-color: rgba(37, 99, 235, .28) !important; }
+    .doc-kpi-icon.warn { color: #d97706 !important; background: rgba(217, 119, 6, .14) !important; border-color: rgba(217, 119, 6, .28) !important; }
+    .doc-kpi-icon.slate { color: #475569 !important; background: rgba(100, 116, 139, .14) !important; border-color: rgba(100, 116, 139, .30) !important; }
     .doc-btn { border-radius: 8px !important; box-shadow: none !important; font-weight: 600 !important; font-size: 13px !important; padding: 8px 14px !important; }
     .doc-btn:hover { transform: none !important; filter: brightness(0.95) !important; }
     .doc-btn-primary { background: #0f62c9 !important; }
@@ -382,8 +393,444 @@
     .doc-modal { border-radius: 12px !important; box-shadow: 0 20px 50px rgba(15,23,42,0.18) !important; }
     .doc-modal-head { background: #fff !important; border-bottom: 1px solid #eef2f7 !important; color: #0f172a !important; }
 
+    /* === Tema escuro da gestão de viagens === */
+    [data-theme="escuro"] .doc-kpi-card {
+        background: linear-gradient(180deg, #182432 0%, #141d28 100%) !important;
+        border-color: #2c3d52 !important;
+        box-shadow: 0 6px 18px rgba(0,0,0,.28) !important;
+    }
+    [data-theme="escuro"] .doc-kpi-value,
+    [data-theme="escuro"] .doc-panel-title,
+    [data-theme="escuro"] .vc-titulo,
+    [data-theme="escuro"] .parada-titulo,
+    [data-theme="escuro"] .tl-titulo,
+    [data-theme="escuro"] .detalhe-item value,
+    [data-theme="escuro"] .detalhe-item .v,
+    [data-theme="escuro"] .relatorio-stat value,
+    [data-theme="escuro"] .relatorio-stat .v {
+        color: #e8eef6 !important;
+    }
+    [data-theme="escuro"] .doc-panel,
+    [data-theme="escuro"] .doc-panel-head,
+    [data-theme="escuro"] .doc-filters,
+    [data-theme="escuro"] .ops-alerts,
+    [data-theme="escuro"] .release-check,
+    [data-theme="escuro"] .relatorio-stats,
+    [data-theme="escuro"] .relatorio-stat,
+    [data-theme="escuro"] .viagem-card,
+    [data-theme="escuro"] .parada-row,
+    [data-theme="escuro"] .doc-empty,
+    [data-theme="escuro"] .doc-modal,
+    [data-theme="escuro"] .doc-modal-head,
+    [data-theme="escuro"] .doc-modal-foot {
+        background: #141d28 !important;
+        border-color: #2c3d52 !important;
+        color: #cdd9e6 !important;
+    }
+    [data-theme="escuro"] .viagem-card:hover,
+    [data-theme="escuro"] .parada-row.dragging {
+        background: #1a2737 !important;
+    }
+    [data-theme="escuro"] .viagem-card.selected {
+        background: rgba(5, 150, 105, .18) !important;
+        border-left-color: #10b981 !important;
+    }
+    [data-theme="escuro"] .doc-filters select,
+    [data-theme="escuro"] .doc-filters input,
+    [data-theme="escuro"] .doc-input,
+    [data-theme="escuro"] .doc-select,
+    [data-theme="escuro"] .doc-textarea {
+        background: #0f1a27 !important;
+        color: #e8eef6 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] .doc-select option {
+        background: #0f1a27;
+        color: #e8eef6;
+    }
+    [data-theme="escuro"] .doc-filters input[type="date"],
+    [data-theme="escuro"] .doc-input[type="date"],
+    [data-theme="escuro"] .doc-input[type="datetime-local"] {
+        color-scheme: dark;
+    }
+    [data-theme="escuro"] .doc-btn-outline,
+    [data-theme="escuro"] .doc-btn-secondary,
+    [data-theme="escuro"] .doc-btn-ghost {
+        background: #1a2737 !important;
+        color: #cdd9e6 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] .doc-btn-danger {
+        background: rgba(220,38,38,.16) !important;
+        color: #fca5a5 !important;
+        border-color: rgba(239,68,68,.55) !important;
+    }
+
     /* === Hub Solicitações: badge de origem automática === */
     .rt-badge.b-cif{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(13,148,136,.08));color:#0f766e;border:1px solid rgba(13,148,136,.25)}
+
+    /* === Solicitações no padrão Sync === */
+    #pane-solicitacoes .rt-shell { max-width: 1600px; gap: 16px; padding: 10px 20px; }
+    #pane-solicitacoes .sol-header { margin-bottom: 2px; }
+    #pane-solicitacoes .sol-header .eui-page-header__title i { color: #0f62c9; }
+    #pane-solicitacoes .rt-panel {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05);
+    }
+    #pane-solicitacoes .rt-pad { padding: 16px; }
+    #pane-solicitacoes .rt-metrics { gap: 12px; }
+    #pane-solicitacoes .rt-metric {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-top: 3px solid transparent;
+        padding: 14px;
+        box-shadow: none;
+    }
+    #pane-solicitacoes .rt-metric:nth-child(1) { border-top-color: #64748b; }
+    #pane-solicitacoes .rt-metric:nth-child(2) { border-top-color: #d97706; }
+    #pane-solicitacoes .rt-metric:nth-child(3) { border-top-color: #2563eb; }
+    #pane-solicitacoes .rt-metric:nth-child(4) { border-top-color: #16a34a; }
+    #pane-solicitacoes .rt-metric:nth-child(5) { border-top-color: #ef4444; }
+    #pane-solicitacoes .rt-metric:nth-child(6) { border-top-color: #16a34a; }
+    #pane-solicitacoes .rt-metric:nth-child(7) { border-top-color: #ef4444; }
+    #pane-solicitacoes .rt-metric:nth-child(8) { border-top-color: #2563eb; }
+    #pane-solicitacoes .rt-metric:hover { transform: none; box-shadow: 0 4px 12px rgba(15,23,42,.06); }
+    #pane-solicitacoes .rt-metric strong { font-size: 30px; }
+    #pane-solicitacoes .rt-metric span { color: #64748b; }
+    #pane-solicitacoes .rt-metric strong { color: #0f172a; }
+    #pane-solicitacoes .rt-metric i {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+    }
+
+    #pane-solicitacoes .rt-filters {
+        width: 100%;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fcfcfd;
+    }
+    #pane-solicitacoes .rt-filters .form-control,
+    #pane-solicitacoes .rt-filters .form-select {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        min-height: 36px;
+        font-size: 13px;
+        color: #0f172a;
+        background: #fff;
+    }
+
+    #pane-solicitacoes .rt-tabs {
+        margin-top: 10px;
+        padding: 6px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
+    }
+    #pane-solicitacoes .rt-tab { border-radius: 8px; font-weight: 700; }
+    #pane-solicitacoes .rt-tab.active {
+        color: #0f62c9;
+        border-bottom-color: #0f62c9;
+        background: #fff;
+        box-shadow: 0 3px 8px rgba(15, 98, 201, .12);
+    }
+    #pane-solicitacoes .rt-tab.active .tab-count {
+        background: linear-gradient(135deg, #155eef, #0f62c9);
+        color: #fff;
+    }
+
+    #pane-solicitacoes .erp-table {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: none;
+        background: #fff;
+    }
+    #pane-solicitacoes .erp-table thead th {
+        background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+        color: #334155;
+        border-bottom-color: #e2e8f0;
+    }
+    #pane-solicitacoes .erp-table tbody tr:hover {
+        background: linear-gradient(90deg, #f8fafc, #fff);
+        box-shadow: inset 4px 0 0 #155eef;
+    }
+
+    #pane-solicitacoes .rt-state {
+        background: #f8fafc;
+        border: 2px dashed #d5deea;
+        border-radius: 12px;
+        color: #64748b;
+    }
+    #pane-solicitacoes .rt-grid { gap: 16px; }
+    #pane-solicitacoes .rt-agenda-item,
+    #pane-solicitacoes .rt-driver { border-radius: 12px; border-color: #e2e8f0; }
+    #pane-solicitacoes h2 { color: #0f172a; font-size: 18px; font-weight: 800; margin: 0; }
+
+    /* Contraste das abas superiores no tema escuro */
+    [data-theme="escuro"] .main-page-tabs {
+        background: #111c2a !important;
+        border-color: #2c3d52 !important;
+    }
+    [data-theme="escuro"] .main-page-tab {
+        color: #9eb2c7 !important;
+    }
+    [data-theme="escuro"] .main-page-tab:hover {
+        color: #e8f1fb !important;
+        background: #1b2b3d !important;
+        border-color: #39526b !important;
+    }
+    [data-theme="escuro"] .main-page-tab.active {
+        color: #6ee7b7 !important;
+        background: #162534 !important;
+        border-color: #2f4f66 !important;
+        border-bottom-color: #34d399 !important;
+    }
+
+    /* Tema escuro da aba Solicitações */
+    [data-theme="escuro"] #pane-solicitacoes .rt-panel {
+        background: linear-gradient(180deg, #142130 0%, #101a26 100%) !important;
+        border-color: #2f4258 !important;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .28) !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-metric {
+        background: linear-gradient(180deg, #1a2737 0%, #141f2d 100%) !important;
+        border-color: #33475f !important;
+        box-shadow: 0 6px 16px rgba(0,0,0,.18) !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-metric span {
+        color: #9eb2c7 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-metric strong {
+        color: #e8eef6 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__title,
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__sub,
+    [data-theme="escuro"] #pane-solicitacoes .sol-header .eui-page-header__eyebrow {
+        color: #d9e6f4 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-top h2,
+    [data-theme="escuro"] #pane-solicitacoes .rt-metric strong,
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody td,
+    [data-theme="escuro"] #pane-solicitacoes .rt-agenda-item strong,
+    [data-theme="escuro"] #pane-solicitacoes .rt-driver-info strong {
+        color: #e6eef8 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-copy,
+    [data-theme="escuro"] #pane-solicitacoes .rt-state,
+    [data-theme="escuro"] #pane-solicitacoes .rt-agenda-item p,
+    [data-theme="escuro"] #pane-solicitacoes .rt-driver-info p {
+        color: #a8bfd6 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-state {
+        background: #142130 !important;
+        border-color: #38526d !important;
+        color: #b7c9dc !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-agenda-item,
+    [data-theme="escuro"] #pane-solicitacoes .rt-driver,
+    [data-theme="escuro"] #pane-solicitacoes .rt-mini,
+    [data-theme="escuro"] #pane-solicitacoes .rt-card {
+        background: #152333 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-empty {
+        color: #8fa7bf !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters { background: #0f1b2a !important; border-color: #324a63 !important; }
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-control,
+    [data-theme="escuro"] #pane-solicitacoes .rt-filters .form-select {
+        background: #162738 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tabs {
+        background: #121f2e !important;
+        border-color: #324a63 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab {
+        color: #9eb2c7 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab .tab-count {
+        background: rgba(158, 178, 199, .18) !important;
+        color: #c8d7e7 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab:hover {
+        background: #1a2d40 !important;
+        color: #e5f2ff !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .rt-tab.active {
+        background: #183246 !important;
+        color: #67e8f9 !important;
+        border-bottom-color: #22d3ee !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table {
+        background: #101b28 !important;
+        border-color: #2f4258 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table thead th {
+        background: linear-gradient(180deg, #1d3044, #1a2a3c) !important;
+        border-bottom-color: #38526d !important;
+        color: #b8cce0 !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody td {
+        border-bottom-color: #24374b !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody tr {
+        background: #111f2e !important;
+    }
+    [data-theme="escuro"] #pane-solicitacoes .erp-table tbody tr:hover {
+        background: #17293b !important;
+    }
+
+    /* Modais de solicitacoes no tema escuro */
+    [data-theme="escuro"] #detalheModal .modal-content,
+    [data-theme="escuro"] #alocarModal .modal-content,
+    [data-theme="escuro"] #cancelarModal .modal-content,
+    [data-theme="escuro"] #motoristaModal .modal-content,
+    [data-theme="escuro"] #mvModal .modal-content {
+        background: #142130 !important;
+        color: #dbe9f6 !important;
+        border: 1px solid #33475f !important;
+        box-shadow: 0 20px 44px rgba(0,0,0,.34) !important;
+    }
+    [data-theme="escuro"] #detalheModal .modal-header,
+    [data-theme="escuro"] #detalheModal .modal-footer,
+    [data-theme="escuro"] #alocarModal .modal-header,
+    [data-theme="escuro"] #alocarModal .modal-footer,
+    [data-theme="escuro"] #cancelarModal .modal-header,
+    [data-theme="escuro"] #cancelarModal .modal-footer,
+    [data-theme="escuro"] #motoristaModal .modal-header,
+    [data-theme="escuro"] #motoristaModal .modal-footer,
+    [data-theme="escuro"] #mvModal .modal-header,
+    [data-theme="escuro"] #mvModal .modal-footer {
+        background: #101b28 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] #detalheModal .modal-title,
+    [data-theme="escuro"] #alocarModal .modal-title,
+    [data-theme="escuro"] #cancelarModal .modal-title,
+    [data-theme="escuro"] #motoristaModal .modal-title,
+    [data-theme="escuro"] #mvModal .modal-title,
+    [data-theme="escuro"] #detalheModal .form-label,
+    [data-theme="escuro"] #alocarModal .form-label,
+    [data-theme="escuro"] #cancelarModal .form-label,
+    [data-theme="escuro"] #motoristaModal .form-label,
+    [data-theme="escuro"] #mvModal .form-label,
+    [data-theme="escuro"] #detalheModal p,
+    [data-theme="escuro"] #alocarModal p,
+    [data-theme="escuro"] #cancelarModal p,
+    [data-theme="escuro"] #motoristaModal p,
+    [data-theme="escuro"] #mvModal p,
+    [data-theme="escuro"] #detalheModal strong,
+    [data-theme="escuro"] #mvModal strong {
+        color: #dbe9f6 !important;
+    }
+    [data-theme="escuro"] #detalheModal .text-muted,
+    [data-theme="escuro"] #alocarModal .text-muted,
+    [data-theme="escuro"] #cancelarModal .text-muted,
+    [data-theme="escuro"] #motoristaModal .text-muted,
+    [data-theme="escuro"] #mvModal .text-muted {
+        color: #9fb3c8 !important;
+    }
+    [data-theme="escuro"] #detalheModal .form-control,
+    [data-theme="escuro"] #detalheModal .form-select,
+    [data-theme="escuro"] #alocarModal .form-control,
+    [data-theme="escuro"] #alocarModal .form-select,
+    [data-theme="escuro"] #cancelarModal .form-control,
+    [data-theme="escuro"] #cancelarModal .form-select,
+    [data-theme="escuro"] #motoristaModal .form-control,
+    [data-theme="escuro"] #motoristaModal .form-select,
+    [data-theme="escuro"] #mvModal .form-control,
+    [data-theme="escuro"] #mvModal .form-select {
+        background: #162738 !important;
+        color: #e6eff8 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #detalheModal .btn-outline-secondary,
+    [data-theme="escuro"] #alocarModal .btn-outline-secondary,
+    [data-theme="escuro"] #cancelarModal .btn-outline-secondary,
+    [data-theme="escuro"] #motoristaModal .btn-outline-secondary,
+    [data-theme="escuro"] #mvModal .btn-outline-secondary {
+        background: #1a2d40 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #detalheModal .btn-close,
+    [data-theme="escuro"] #alocarModal .btn-close,
+    [data-theme="escuro"] #cancelarModal .btn-close,
+    [data-theme="escuro"] #motoristaModal .btn-close,
+    [data-theme="escuro"] #mvModal .btn-close {
+        filter: invert(1) grayscale(1) brightness(1.4);
+    }
+
+    /* Modal de Nova Solicitação no tema escuro */
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-content {
+        background: #142130 !important;
+        border: 1px solid #33475f !important;
+        color: #d9e7f5 !important;
+        box-shadow: 0 20px 44px rgba(0,0,0,.34) !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-header,
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-footer {
+        background: #101b28 !important;
+        border-color: #33475f !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .modal-title,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-label,
+    [data-theme="escuro"] #novaSolicitacaoModal .text-muted,
+    [data-theme="escuro"] #novaSolicitacaoModal #nsState {
+        color: #b7c9dc !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-close {
+        filter: invert(1) grayscale(1) brightness(1.4);
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea {
+        background: #162738 !important;
+        color: #e6eff8 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control::placeholder,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea::placeholder {
+        color: #8ea7bf !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select option {
+        background: #162738;
+        color: #e6eff8;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .form-control:focus,
+    [data-theme="escuro"] #novaSolicitacaoModal .form-select:focus,
+    [data-theme="escuro"] #novaSolicitacaoModal textarea:focus {
+        border-color: #4f83b3 !important;
+        box-shadow: 0 0 0 3px rgba(79, 131, 179, .2) !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-outline-secondary {
+        background: #1a2d40 !important;
+        color: #d9e7f5 !important;
+        border-color: #3b5672 !important;
+    }
+    [data-theme="escuro"] #novaSolicitacaoModal .btn-primary {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+        border-color: #1e40af !important;
+        color: #eaf2ff !important;
+    }
+
+    @media (max-width: 860px){
+        [data-theme="escuro"] #erpTable tr{
+            background:#152333 !important;
+            border-color:#33475f !important;
+            box-shadow:0 6px 16px rgba(0,0,0,.18) !important;
+        }
+        [data-theme="escuro"] #erpTable td::before{
+            color:#9eb2c7 !important;
+        }
+    }
 
     /* === Tabela de solicitações responsiva (vira cards no celular/tablet) === */
     @media (max-width: 860px){
@@ -441,6 +888,9 @@
                     <option value="Cancelada">Cancelada</option>
                 </select>
                 <select id="f-veiculo"><option value="">Todos veículos</option></select>
+                <input id="f-busca" class="f-busca" type="text" placeholder="Buscar OC, orçamento, NF, parceiro, código...">
+                <input id="f-data-de" class="f-data" type="date" title="Data inicial">
+                <input id="f-data-ate" class="f-data" type="date" title="Data final">
             </div>
             <div class="viagem-list" id="viagem-list"></div>
         </div>
@@ -836,19 +1286,18 @@
 
 <div id="pane-solicitacoes" style="display:none">
 <div class="rt-shell">
-    <section class="rt-hero">
-        <div class="rt-top">
-            <div>
-                <h1 class="rt-title"><i class="fas fa-clipboard-list" style="margin-right:12px;color:var(--frota-amber)"></i>Solicitações de Transporte</h1>
-                <p class="rt-copy">Gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas.</p>
-            </div>
-            <div class="rt-actions">
-                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<button class="btn btn-primary" type="button" onclick="openNovaSolicitacao()"><i class="fas fa-plus"></i> Nova solicitação</button>{% endif %}
-                <a class="btn" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
-                <button class="btn btn-outline-secondary" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
-            </div>
+    <header class="eui-page-header sol-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Logística · Gestão de Solicitações</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-clipboard-list"></i> Solicitações de Transporte</h1>
+            <p class="eui-page-header__sub">Gerencie solicitações, acompanhe a agenda de veículos e monitore sua equipe de motoristas.</p>
         </div>
-    </section>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<button class="eui-btn eui-btn--primary" type="button" onclick="openNovaSolicitacao()"><i class="fas fa-plus"></i> Nova solicitação</button>{% endif %}
+            <a class="eui-btn eui-btn--ghost" href="/logistica/solicitar-transporte"><i class="fas fa-file-circle-plus"></i> Página do solicitante</a>
+            <button class="eui-btn eui-btn--ghost" type="button" onclick="refreshAll()"><i class="fas fa-rotate"></i> Atualizar tudo</button>
+        </div>
+    </header>
     <section class="rt-panel rt-pad" style="margin-top:-10px;position:relative;z-index:1">
         <div id="metricGrid" class="rt-metrics"></div>
     </section>
@@ -1026,11 +1475,11 @@ async function carregarKPIs() {
     const d = await apiGet('/api/viagem/dashboard');
     const k = d.kpis;
     document.getElementById('kpi-grid').innerHTML = `
-        <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><i class="fa-solid fa-truck-moving"></i></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon info"><i class="fa-solid fa-calendar-day"></i></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-paper-plane"></i></div><div><div class="doc-kpi-label">Pendentes de liberaÃ§Ã£o</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
-        <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
+    <div class="doc-kpi-card"><div class="doc-kpi-icon warn"><i class="fa-solid fa-truck-moving"></i></div><div><div class="doc-kpi-label">Em andamento</div><div class="doc-kpi-value">${k.em_andamento}</div><div class="doc-kpi-foot">viagens rodando agora</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon info"><i class="fa-solid fa-calendar-day"></i></div><div><div class="doc-kpi-label">Planejadas hoje</div><div class="doc-kpi-value">${k.planejadas_hoje}</div><div class="doc-kpi-foot">aguardando início</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon primary"><i class="fa-solid fa-flag-checkered"></i></div><div><div class="doc-kpi-label">Concluídas hoje</div><div class="doc-kpi-value">${k.concluidas_hoje}</div><div class="doc-kpi-foot">finalizadas</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-paper-plane"></i></div><div><div class="doc-kpi-label">Pendentes de liberação</div><div class="doc-kpi-value">${k.pendentes_liberacao || 0}</div><div class="doc-kpi-foot">${k.atrasadas || 0} atrasada(s)</div></div></div>
+    <div class="doc-kpi-card"><div class="doc-kpi-icon slate"><i class="fa-solid fa-road"></i></div><div><div class="doc-kpi-label">KM rodados hoje</div><div class="doc-kpi-value">${fmtNum(k.km_hoje, 1)}</div><div class="doc-kpi-foot">total da frota</div></div></div>`;
 }
 
 async function torreControleRemovida() {
@@ -1074,8 +1523,14 @@ async function carregarLista() {
     const params = new URLSearchParams();
     const st = document.getElementById('f-status').value;
     const ve = document.getElementById('f-veiculo').value;
+    const busca = (document.getElementById('f-busca')?.value || '').trim();
+    const de = document.getElementById('f-data-de')?.value || '';
+    const ate = document.getElementById('f-data-ate')?.value || '';
     if (st) params.set('status', st);
     if (ve) params.set('veiculo_id', ve);
+    if (busca) params.set('q', busca);
+    if (de) params.set('de', de);
+    if (ate) params.set('ate', ate);
     const data = await apiGet('/api/viagem/lista?' + params.toString());
     document.getElementById('viagem-count').textContent = data.length;
     const box = document.getElementById('viagem-list');
@@ -1271,11 +1726,11 @@ function renderParadas(v) {
             }
             if (p.status === 'EmAndamento' || p.status === 'Pendente') {
                 acoes.push(`<button class="doc-btn doc-btn-success doc-btn-sm" onclick="paradaConcluir(${p.id})"><i class="fa-solid fa-check"></i> Concluir</button>`);
-                acoes.push(`<button class="doc-btn doc-btn-danger doc-btn-sm" onclick="paradaNaoRealizada(${p.id})"><i class="fa-solid fa-xmark"></i></button>`);
+                acoes.push(`<button class="doc-btn doc-btn-danger doc-btn-sm" onclick="paradaNaoRealizada(${p.id})"><i class="fa-solid fa-xmark"></i> Não concluída</button>`);
             }
         }
         if (v.status === 'Planejada' || (v.status === 'EmAndamento' && p.status === 'Pendente')) {
-            acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="paradaExcluir(${p.id})"><i class="fa-solid fa-trash"></i></button>`);
+            acoes.push(`<button class="doc-btn doc-btn-ghost doc-btn-sm" onclick="paradaExcluir(${p.id})"><i class="fa-solid fa-trash"></i> Excluir</button>`);
         }
         const podeArrastar = v.status !== 'Concluida' && v.status !== 'Cancelada';
         const coordChip = (p.latitude && p.longitude)
@@ -1905,6 +2360,13 @@ document.querySelectorAll('.doc-modal-overlay').forEach(o => {
 // filtros
 document.getElementById('f-status').addEventListener('change', () => filtroRapido(document.getElementById('f-status').value));
 document.getElementById('f-veiculo').addEventListener('change', carregarLista);
+document.getElementById('f-data-de').addEventListener('change', carregarLista);
+document.getElementById('f-data-ate').addEventListener('change', carregarLista);
+let listaBuscaTimer = null;
+document.getElementById('f-busca').addEventListener('input', () => {
+    clearTimeout(listaBuscaTimer);
+    listaBuscaTimer = setTimeout(() => carregarLista(), 280);
+});
 
 // -------------------- init
 (async () => {

@@ -54,6 +54,21 @@ def faturar_ordem_avulso(solicitacao_id):
     return jsonify({"sucesso": True, "ordem": svc._serializar(solicitacao)})
 
 
+@expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/vincular-of", methods=["POST"])
+@roles_required("Fiscal", "Admin")
+def vincular_of_avulso(solicitacao_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        solicitacao = svc.vincular_ordem_faturamento(
+            solicitacao_id,
+            usuario=session.get("username", ""),
+            cod_ordem_fat=payload.get("cod_ordem_fat"),
+        )
+    except svc.SolicitacaoNFError as exc:
+        return jsonify({"sucesso": False, "erro": str(exc)}), 400
+    return jsonify({"sucesso": True, "ordem": svc._serializar(solicitacao)})
+
+
 @expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/retorno", methods=["POST"])
 @roles_required("Fiscal", "Admin")
 def registrar_retorno_avulso(solicitacao_id):

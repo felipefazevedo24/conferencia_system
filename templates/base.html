@@ -1,9 +1,40 @@
 <!DOCTYPE html>
-<html lang="pt-br" data-theme="{{ current_user_tema or 'claro' }}">
+<html lang="pt-br" data-theme="escuro">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f62c9">
+    <script>
+    (function () {
+        function normalizeTheme(value) {
+            return value === "escuro" ? "escuro" : "claro";
+        }
+        function applyTheme(theme) {
+            var t = normalizeTheme(theme);
+            document.documentElement.setAttribute("data-theme", t);
+            return t;
+        }
+
+        var initial = "escuro";
+        try {
+            initial = normalizeTheme(localStorage.getItem("sync_theme"));
+        } catch (_) {
+            initial = "escuro";
+        }
+        applyTheme(initial);
+
+        window.syncGetTheme = function () {
+            return normalizeTheme(document.documentElement.getAttribute("data-theme"));
+        };
+
+        window.syncSetTheme = function (theme) {
+            var applied = applyTheme(theme);
+            try { localStorage.setItem("sync_theme", applied); } catch (_) {}
+            document.dispatchEvent(new CustomEvent("sync-theme-change", { detail: { theme: applied } }));
+            return applied;
+        };
+    })();
+    </script>
     <title>{% block title %}Columbia Sync{% endblock %}</title>
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
     <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
@@ -126,6 +157,20 @@
         .bia-panel { bottom: 78px; right: 8px; left: 8px; width: auto; height: min(74vh, 620px); }
         .bia-toast { bottom: 78px; right: 8px; left: 8px; width: auto; }
     }
+
+    /* ===== Impressão global =====
+       O shell do app usa tela cheia (height:100vh + overflow:hidden). Sem
+       liberar isso na impressão, o navegador corta o conteúdo na primeira
+       página — por isso romaneios com várias folhas imprimiam só a primeira. */
+    @media print {
+        html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+        #wrapper, #page-content-wrapper, .content-body {
+            height: auto !important; min-height: 0 !important; max-height: none !important;
+            overflow: visible !important; display: block !important;
+        }
+        #sidebar-wrapper, .top-nav, .app-footer, #shell-backdrop { display: none !important; }
+        #bia-toggle, #bia-panel, #bia-toast { display: none !important; }
+    }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     {% block extra_head %}{% endblock %}
@@ -148,9 +193,40 @@
             <a href="/" class="sidebar-brand">
                 <div class="brand-logo-mask"></div>
             </a>
+            <button id="menu-toggle" type="button" class="sidebar-collapse-btn" aria-label="Recolher menu" title="Recolher menu">
+                <i class="fas fa-bars"></i>
+            </button>
         </div>
 
         <div class="sidebar-scroll">
+            <div class="sidebar-search">
+                <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
+                    <i class="fas fa-search"></i>
+                    <span>Pesquisar módulo</span>
+                </button>
+            </div>
+            <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
+                <div class="shell-search-input-wrap">
+                    <i class="fas fa-search"></i>
+                    <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
+                </div>
+                <section class="shell-search-group">
+                    <header>
+                        <strong>Favoritos</strong>
+                    </header>
+                    <div id="shell-search-favorites" class="shell-search-list">
+                        <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
+                    </div>
+                </section>
+                <section class="shell-search-group">
+                    <header>
+                        <strong>Resultados</strong>
+                    </header>
+                    <div id="shell-search-results" class="shell-search-list">
+                        <div class="shell-search-empty">Digite para buscar módulos.</div>
+                    </div>
+                </section>
+            </div>
             <div class="list-group list-group-flush" id="accordionSidebar">
                 <a href="/" class="list-group-item list-group-item-action sidebar-home-link">
                     <span class="nav-group-title"><i class="fas fa-house"></i><span>Menu principal</span></span>
@@ -321,62 +397,41 @@
                 {% endif %}
             </div>
         </div>
-    </aside>
-
-    <div id="page-content-wrapper">
-        <nav class="top-nav">
-            <div class="nav-left">
-                <button id="menu-toggle" type="button" aria-label="Alternar menu"><i class="fas fa-bars"></i></button>
-            </div>
-            <div class="nav-right">
-                <div class="top-nav-center">
-                    <button id="shell-search-toggle" class="shell-search-toggle" type="button" aria-expanded="false" aria-controls="shell-search-panel">
-                        <i class="fas fa-search"></i>
-                        <span>Pesquisar</span>
-                    </button>
-                    <div id="shell-search-panel" class="shell-search-panel" aria-hidden="true">
-                        <div class="shell-search-input-wrap">
-                            <i class="fas fa-search"></i>
-                            <input id="shell-nav-search" type="text" placeholder="Buscar módulo por nome, área ou palavra-chave...">
-                        </div>
-                        <section class="shell-search-group">
-                            <header>
-                                <strong>Favoritos</strong>
-                            </header>
-                            <div id="shell-search-favorites" class="shell-search-list">
-                                <div class="shell-search-empty">Você ainda não fixou favoritos.</div>
-                            </div>
-                        </section>
-                        <section class="shell-search-group">
-                            <header>
-                                <strong>Resultados</strong>
-                            </header>
-                            <div id="shell-search-results" class="shell-search-list">
-                                <div class="shell-search-empty">Digite para buscar módulos.</div>
-                            </div>
-                        </section>
-                    </div>
-                </div>
-                <button id="user-profile-toggle" class="user-profile-btn" type="button" aria-expanded="false" aria-controls="user-profile-panel">
-                    <i class="fas fa-user-circle"></i>
-                    <span>{{ (current_user_display or user)|upper }}</span>
-                    <i class="fas fa-chevron-down"></i>
+        <div class="sidebar-footer">
+            <div class="sidebar-profile" id="sidebar-profile">
+                <button id="sidebar-profile-toggle" class="sidebar-profile-btn" type="button" aria-expanded="false" aria-controls="sidebar-profile-menu">
+                    <span class="sidebar-avatar">
+                        {{ (current_user_display or user or 'U')|trim|first|upper }}
+                        <span class="sidebar-avatar-dot"></span>
+                    </span>
+                    <span class="sidebar-profile-info">
+                        <strong>{{ current_user_display or user }}</strong>
+                        <span>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</span>
+                    </span>
+                    <i class="fas fa-chevron-up sidebar-profile-chev"></i>
                 </button>
-                <div id="user-profile-panel" class="user-profile-panel" aria-hidden="true">
-                    <div class="user-profile-panel-label">Nível de acesso</div>
-                    <strong class="user-profile-panel-role">{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
-                    <a href="/perfil" class="user-profile-config-btn">
+                <div id="sidebar-profile-menu" class="sidebar-profile-menu" role="menu" aria-hidden="true">
+                    <div class="sidebar-profile-menu-head">
+                        <span class="sidebar-profile-menu-label">Nível de acesso</span>
+                        <strong>{{ "Controladoria" if session.get("role") == "Financeiro" else session.get("role", "Operação") }}</strong>
+                    </div>
+                    <a href="/perfil" class="sidebar-profile-menu-item" role="menuitem">
                         <i class="fas fa-gear"></i>
                         <span>Meu perfil e configurações</span>
                     </a>
+                    <button type="button" class="sidebar-profile-menu-item danger" role="menuitem" onclick="confirmarLogout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sair</span>
+                    </button>
                 </div>
-                <a href="javascript:void(0)" onclick="confirmarLogout()" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
             </div>
-        </nav>
+        </div>
+    </aside>
 
+    <div id="page-content-wrapper">
         <main class="content-body">{% block content %}{% endblock %}</main>
         <footer class="app-footer">
-            <span><strong>Columbia SYNC © 2026</strong></span>
+            <span><strong>© 2026</strong></span>
             <span style="opacity:.5; font-size:11px; margin-left:10px;" title="Commit em execução neste servidor agora">build {{ build_info }}</span>
         </footer>
     </div>
@@ -396,6 +451,37 @@
         </div>
     </section>
 </div>
+
+<div class="sync-confirm-overlay" id="logoutConfirmOverlay" aria-hidden="true">
+    <div class="sync-confirm" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle">
+        <div class="sync-confirm-mark"><i class="fas fa-right-from-bracket"></i></div>
+        <h3 id="logoutConfirmTitle">Encerrar sessão?</h3>
+        <p>Você vai sair do Columbia Sync e precisará entrar novamente para continuar.</p>
+        <div class="sync-confirm-actions">
+            <button type="button" class="sync-confirm-btn cancel" id="logoutConfirmCancel">Continuar conectado</button>
+            <button type="button" class="sync-confirm-btn danger" id="logoutConfirmOk"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.sync-confirm-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(5,9,16,.62);backdrop-filter:blur(8px);z-index:2400}
+.sync-confirm-overlay.show{display:flex;animation:syncConfirmFade .18s ease}
+@keyframes syncConfirmFade{from{opacity:0}to{opacity:1}}
+.sync-confirm{width:min(420px,100%);text-align:center;background:linear-gradient(165deg,#0f1a28 0%,#0a121d 100%);border:1px solid rgba(125,196,255,.18);border-radius:20px;box-shadow:0 30px 70px rgba(2,10,20,.6);padding:28px 26px 24px;color:#eaf3fc;animation:syncConfirmPop .2s cubic-bezier(.2,.9,.3,1)}
+@keyframes syncConfirmPop{from{transform:translateY(10px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.sync-confirm-mark{width:56px;height:56px;margin:0 auto 16px;border-radius:16px;display:grid;place-items:center;font-size:22px;color:#ffb4b4;background:rgba(220,38,38,.16);border:1px solid rgba(248,113,113,.3)}
+.sync-confirm h3{margin:0 0 8px;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#fff}
+.sync-confirm p{margin:0 0 22px;font-size:13.5px;line-height:1.55;color:rgba(200,219,238,.7)}
+.sync-confirm-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.sync-confirm-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 20px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.sync-confirm-btn:hover{transform:translateY(-1px)}
+.sync-confirm-btn.cancel{background:rgba(255,255,255,.05);border-color:rgba(125,196,255,.22);color:#dbe9f7}
+.sync-confirm-btn.cancel:hover{background:rgba(28,134,242,.16)}
+.sync-confirm-btn.danger{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;box-shadow:0 8px 22px rgba(220,38,38,.32)}
+.sync-confirm-btn.danger:hover{background:linear-gradient(135deg,#e23b3b,#c81f1f)}
+@media print{.sync-confirm-overlay{display:none !important}}
+</style>
 
 <style>
 .updates-notice-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.55);backdrop-filter:blur(8px);z-index:2100}
@@ -428,10 +514,32 @@ function setShellCollapsed(collapsed) {
 }
 
 function confirmarLogout() {
-    if (confirm("Deseja encerrar a sessao no Columbia Sync?")) {
-        window.location.href = "/logout";
-    }
+    const overlay = document.getElementById("logoutConfirmOverlay");
+    if (!overlay) { window.location.href = "/logout"; return; }
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+    const ok = document.getElementById("logoutConfirmOk");
+    if (ok) ok.focus();
 }
+
+(function () {
+    const overlay = document.getElementById("logoutConfirmOverlay");
+    if (!overlay) return;
+    const fechar = () => {
+        overlay.classList.remove("show");
+        overlay.setAttribute("aria-hidden", "true");
+    };
+    document.getElementById("logoutConfirmCancel")?.addEventListener("click", fechar);
+    document.getElementById("logoutConfirmOk")?.addEventListener("click", function () {
+        window.location.href = "/logout";
+    });
+    overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) fechar();
+    });
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && overlay.classList.contains("show")) fechar();
+    });
+})();
 
 function renderShellFavorites() {
     const favoritesHost = document.getElementById("shell-search-favorites");
@@ -518,8 +626,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const searchToggle = document.getElementById("shell-search-toggle");
     const searchPanel = document.getElementById("shell-search-panel");
     const searchInput = document.getElementById("shell-nav-search");
-    const userProfileToggle = document.getElementById("user-profile-toggle");
-    const userProfilePanel = document.getElementById("user-profile-panel");
+    const userProfileToggle = document.getElementById("sidebar-profile-toggle");
+    const userProfilePanel = document.getElementById("sidebar-profile-menu");
 
     if (window.innerWidth < 992) setShellCollapsed(true);
 
@@ -792,6 +900,19 @@ if ("serviceWorker" in navigator) {
     const panel = $("bia-panel");
     if (!toggle || !panel) return;
 
+    // Se esta página está embutida em um iframe (ex.: Romaneios/Compras/Viagens
+    // dentro de outra tela), a Bia já aparece na página de cima. Remove esta
+    // instância para não duplicar o widget.
+    let emIframe = false;
+    try { emIframe = window.self !== window.top; } catch (e) { emIframe = true; }
+    if (emIframe) {
+        toggle.remove();
+        panel.remove();
+        const t = $("bia-toast");
+        if (t) t.remove();
+        return;
+    }
+
     const badge = $("bia-badge");
     const chatEl = $("bia-chat");
     const chipsEl = $("bia-chips");
@@ -804,21 +925,41 @@ if ("serviceWorker" in navigator) {
 
     // A Bia só opera de verdade na Conferência de Expedição. Nas demais páginas
     // ela aparece, mas em modo "manutenção".
-    const BIA_ATIVA = window.location.pathname.replace(/\/+$/, "") === "/expedicao/conferencia-cega";
+    // A Bia agora conversa em TODO o sistema. BIA_EXPEDICAO liga só os extras da
+    // Conferência de Expedição (panorama de pendências, cobrança, aprovações,
+    // filtros da fila e lembretes periódicos). O chat/LLM funciona em qualquer página.
+    const BIA_EXPEDICAO = window.location.pathname.replace(/\/+$/, "") === "/expedicao/conferencia-cega";
     const API_PENDENCIAS = "/api/expedicao/assistente/pendencias";
     const API_PERGUNTAR = "/api/expedicao/assistente/perguntar";
     const API_COBRANCA_PROXIMA = "/api/expedicao/assistente/cobranca/proxima";
     const API_COBRANCA_RESPONDER = "/api/expedicao/assistente/cobranca/responder";
     const API_COBRANCA_ADIAR = "/api/expedicao/assistente/cobranca/adiar";
     const API_COBRANCA_CCE = "/api/expedicao/assistente/cobranca/cce-feita";
+    const API_COBRANCA_ENCAMINHAR = "/api/expedicao/assistente/cobranca/encaminhar";
+    const API_NOVIDADES = "/api/expedicao/assistente/novidades";
+    const LS_NOVIDADES = "bia_novidades_desde";
+    const API_MENSAGENS = "/api/expedicao/assistente/mensagens";
 
     const BIA_USER = {{ (current_user_display or user or '')|tojson }};
     const BIA_USER_NOME = (BIA_USER || "").trim().split(/\s+/)[0] || "";
+    const BIA_IS_ADMIN = {{ (bia_is_admin or false)|tojson }};
 
     let iniciada = false;
     // Pendência que a Bia está cobrando agora: a próxima mensagem do operador
     // vira o "motivo" dessa pendência (modo cobrança).
     let cobrancaAtual = null;
+    // Memória da conversa: guarda as trocas (operador/Bia) para dar continuidade
+    // ao assunto. Enviamos as últimas trocas junto de cada pergunta.
+    const biaHistorico = [];
+    function pushHist(role, texto) {
+        const t = String(texto == null ? "" : texto).trim();
+        if (!t) return;
+        biaHistorico.push({ role: role, content: t });
+        if (biaHistorico.length > 40) biaHistorico.splice(0, biaHistorico.length - 40);
+    }
+    // Últimas trocas para enviar ao backend, excluindo a última msg (a pergunta
+    // atual, que vai no campo "pergunta").
+    const histParaEnvio = () => biaHistorico.slice(-13, -1);
 
     const escapeHtml = (s) => String(s == null ? "" : s)
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -835,6 +976,7 @@ if ("serviceWorker" in navigator) {
         row.innerHTML = `<div class="bia-bubble"></div>`;
         row.querySelector(".bia-bubble").textContent = texto;
         chatEl.appendChild(row);
+        pushHist("user", texto);
         scrollFim();
     }
 
@@ -844,6 +986,7 @@ if ("serviceWorker" in navigator) {
         row.innerHTML = `${avatarHtml()}<div class="bia-bubble"></div>`;
         row.querySelector(".bia-bubble").textContent = texto;
         chatEl.appendChild(row);
+        pushHist("assistant", texto);
         scrollFim();
         return row;
     }
@@ -870,14 +1013,21 @@ if ("serviceWorker" in navigator) {
 
     function itemHtml(it) {
         const tag = { st: "OC", romaneio: "ROM", registro: "REG" }[it.tipo] || "OF";
+        const ehRegistro = it.tipo === "registro";
         const sub = [];
-        if (it.numero_nf) sub.push(`NF ${escapeHtml(it.numero_nf)}`);
+        // Para Registro de Expedição o id interno não diz nada — o cabeçalho já
+        // mostra a NF, então aqui só complementamos (romaneio/prev/status).
+        if (it.numero_nf && !ehRegistro) sub.push(`NF ${escapeHtml(it.numero_nf)}`);
+        if (it.romaneio) sub.push(`Romaneio ${escapeHtml(it.romaneio)}`);
         if (it.orcamento) sub.push(`Orç ${escapeHtml(it.orcamento)}`);
         if (it.previsao) sub.push(`prev. ${escapeHtml(it.previsao)}`);
         if (it.status) sub.push(escapeHtml(it.status));
         const subHtml = sub.length ? `<div class="bia-ii-sub">${sub.map((s) => `<span>${s}</span>`).join("")}</div>` : "";
+        const topo = (ehRegistro && it.numero_nf)
+            ? `<span class="bia-ii-tag">NF</span> ${escapeHtml(it.numero_nf)} · ${escapeHtml(it.referencia)}`
+            : `<span class="bia-ii-tag">${tag}</span> ${escapeHtml(it.codigo)} · ${escapeHtml(it.referencia)}`;
         return `<li class="bia-card-item">
-            <div class="bia-ii-top"><span class="bia-ii-tag">${tag}</span> ${escapeHtml(it.codigo)} · ${escapeHtml(it.referencia)}</div>
+            <div class="bia-ii-top">${topo}</div>
             ${subHtml}
         </li>`;
     }
@@ -885,7 +1035,7 @@ if ("serviceWorker" in navigator) {
     function cardHtml(c) {
         const itens = (c.itens_amostra || []).map(itemHtml).join("");
         const mais = c.itens_ocultos > 0 ? `<div class="bia-card-mais">+${c.itens_ocultos} não exibido(s)</div>` : "";
-        const link = c.acao_filtro && BIA_ATIVA
+        const link = c.acao_filtro && BIA_EXPEDICAO
             ? `<button type="button" class="bia-card-link" data-filtro="${escapeHtml(c.acao_filtro)}"><i class="fas fa-arrow-right"></i> Ver na fila</button>` : "";
         return `<div class="bia-card sev-${escapeHtml(c.severidade)}">
             <div class="bia-card-head">
@@ -942,11 +1092,18 @@ if ("serviceWorker" in navigator) {
     async function iniciarConversa() {
         if (iniciada) return;
         iniciada = true;
-        if (!BIA_ATIVA) {
-            statusEl.textContent = "Em manutenção";
+        if (!BIA_EXPEDICAO) {
+            statusEl.textContent = "Assistente do sistema";
+            footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
-            await digitar("Nesta área eu ainda estou em manutenção 🛠️. Por enquanto só consigo te ajudar de verdade na Conferência de Expedição.", 900);
-            footEl.style.display = "none";
+            await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema — recebimento, conferência, compras, expedição, romaneios, notas fiscais, contas a receber e mais. O que você precisa?", 900);
+            if (BIA_IS_ADMIN) {
+                await digitar("Como você é Admin, também dá pra mandar avisos: escreva algo como \"avisar todos: <mensagem>\", \"avisar cargo Logística: <mensagem>\" ou \"avisar joao: <mensagem>\".", 900);
+            }
+            const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"];
+            if (BIA_IS_ADMIN) chips.unshift("avisar todos: ");
+            renderChips(chips);
+            flushAvisos();
             return;
         }
         await digitar("Oi! Eu sou a Bia 😊 Tô de olho na expedição pra te ajudar.", 600);
@@ -961,23 +1118,56 @@ if ("serviceWorker" in navigator) {
             renderChips(["O que falta expedir hoje?", "O que está atrasado?", "Faturado sem conferência?", "Quem está sem canhoto?"]);
             // Depois do panorama, a Bia cobra o motivo das pendências (Logística/Admin).
             cobrarProxima();
+            // Avisa o Admin se há estornos de romaneio aguardando aprovação.
+            avisarAprovacoesEstorno();
         } catch (e) {
             t.remove();
             addBot("Ops, não consegui carregar as pendências agora. Tenta de novo daqui a pouco?");
         }
+        flushAvisos();
+    }
+
+    // Avisa o Admin (ao abrir a Bia) sobre estornos de romaneio pendentes de
+    // aprovação. Para quem não é Admin, o endpoint devolve lista vazia.
+    async function avisarAprovacoesEstorno() {
+        if (!BIA_EXPEDICAO) return;
+        try {
+            const r = await fetch("/api/expedicao/assistente/aprovacoes", { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!d.total) return;
+            const linhas = (d.pendentes || []).slice(0, 6).map(
+                (p) => `• #${p.id} — Romaneio ${p.romaneio} (${p.status_romaneio}), pedido por ${p.solicitante}`
+            );
+            const plural = d.total === 1 ? "estorno" : "estornos";
+            await digitar(
+                `Você tem ${d.total} ${plural} de romaneio aguardando aprovação:\n` +
+                linhas.join("\n") +
+                `\nDiga "aprovar estorno <número>" ou "rejeitar estorno <número>".`,
+                900
+            );
+        } catch (e) { /* silencioso */ }
     }
 
     // ----- Cobrança / follow-up de pendências -----
     function renderChipsCobranca() {
-        const chips = ["Já resolvi", "Ainda estou resolvendo", "Deixa pra depois"];
+        const chips = ["Já resolvi", "Ainda estou resolvendo", "Deixa pra depois", "Repassar pra alguém"];
         chipsEl.innerHTML = chips.map((s) => `<button type="button" class="bia-chip">${escapeHtml(s)}</button>`).join("");
         chipsEl.querySelectorAll(".bia-chip").forEach((c) => {
-            c.addEventListener("click", () => { input.value = c.textContent; enviarPergunta(); });
+            c.addEventListener("click", () => {
+                if (c.textContent === "Repassar pra alguém") {
+                    input.value = "repassar essa cobrança para ";
+                    input.focus();
+                    return;
+                }
+                input.value = c.textContent;
+                enviarPergunta();
+            });
         });
     }
 
     async function cobrarProxima() {
-        if (!BIA_ATIVA) return;
+        if (!BIA_EXPEDICAO) return;
         try {
             const r = await fetch(API_COBRANCA_PROXIMA, { headers: { "Accept": "application/json" } });
             if (!r.ok) { cobrancaAtual = null; return; }
@@ -992,7 +1182,7 @@ if ("serviceWorker" in navigator) {
 
     async function enviarPergunta() {
         const q = (input.value || "").trim();
-        if (!q || !BIA_ATIVA) return;
+        if (!q) return;
 
         // Ensinar a Bia: "aprenda: ...", "ensina ...", "anota: ..." (só admin no backend).
         const mLearn = q.match(/^(aprenda|aprender|ensina|ensinar|anota|anote)\s*[:,\-]?\s*(.+)/i);
@@ -1022,10 +1212,20 @@ if ("serviceWorker" in navigator) {
             return;
         }
 
-        // Marcar CC-e como emitida: "cce feita do romaneio 123", "carta de correção pronta 123".
+        // Marcar CC-e como emitida: "cce feita do romaneio ROM-2026-0043", "carta de correção pronta 43".
         const temCce = /cc-?e|carta de corre[çc][ãa]o/i.test(q);
         const acaoFeita = /feita|emitida|pronta|conclu|marcar|marca|resolv|ok/i.test(q);
-        const numRom = (q.match(/\b(\d{3,})\b/) || [])[1];
+        // Prioriza o código completo (ROM-2026-0043). Se o operador digitar só
+        // números soltos, cai no último número de 2+ dígitos (o sufixo do romaneio).
+        const mRomFull = q.match(/rom[-\s]?\d{4}[-\s]?\d{2,}/i);
+        let numRom = null;
+        if (mRomFull) {
+            const partes = mRomFull[0].match(/\d+/g);
+            numRom = `ROM-${partes[0]}-${partes[1]}`;
+        } else {
+            const nums = q.match(/\d{2,}/g);
+            numRom = nums ? nums[nums.length - 1] : null;
+        }
         if (temCce && acaoFeita && numRom) {
             addUser(q);
             input.value = "";
@@ -1055,6 +1255,53 @@ if ("serviceWorker" in navigator) {
         // Modo cobrança: a resposta do operador vira o motivo da pendência.
         if (cobrancaAtual) {
             const c = cobrancaAtual;
+            // Repassar a cobrança para alguém (vira um aviso da Bia).
+            const mFwd = q.match(/^\s*(repassa\w*|repasse|encaminh\w*|delega\w*)\b(.*)$/i);
+            if (mFwd) {
+                const resto = mFwd[2] || "";
+                const mAlvo = resto.match(/\b(?:para|pra|pro|ao|aos)\s+(.+)$/i);
+                const alvo = (mAlvo ? mAlvo[1] : "").trim();
+                addUser(q);
+                input.value = "";
+                if (!alvo) {
+                    addBot("Pra quem eu repasso essa cobrança? Ex.: \"repassar para o joão\", \"repassar para o cargo logística\" ou \"repassar para todos\".");
+                    renderChipsCobranca();
+                    input.focus();
+                    return; // mantém cobrancaAtual
+                }
+                sendBtn.disabled = true;
+                const t = mostrarDigitando();
+                try {
+                    const r = await fetch(API_COBRANCA_ENCAMINHAR, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({
+                            ref_tipo: c.ref_tipo,
+                            ref_id: c.ref_id,
+                            alvo: alvo,
+                            titulo: c.titulo || "",
+                            referencia: c.referencia || "",
+                            numero_nf: c.numero_nf || "",
+                        }),
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    t.remove();
+                    if (r.ok) addBot(d.resposta || "Repassado! ✅");
+                    else if (r.status === 403) addBot("Só a Logística ou um admin podem repassar cobranças 🙂.");
+                    else addBot(d.error || "Não consegui repassar agora. Tenta de novo?");
+                } catch (e) {
+                    t.remove();
+                    addBot("Tive um probleminha pra repassar. Tenta de novo?");
+                } finally {
+                    sendBtn.disabled = false;
+                    input.focus();
+                }
+                // Segue cobrando: volta a lembrar a mesma pendência.
+                const alvoRef = `${c.titulo || "a pendência"} ${c.ref_id}${c.referencia ? " (" + c.referencia + ")" : ""}`;
+                await digitar(`Repassei. Sobre ${alvoRef}, quando puder me diz o motivo do atraso que eu registro. 🙂`, 900);
+                renderChipsCobranca();
+                return; // mantém cobrancaAtual
+            }
             const adiar = /^(depois|deixa pra depois|pular|pula|agora n|mais tarde|skip)/i.test(q);
             // Se o operador faz uma PERGUNTA (em vez de dar o motivo), a Bia
             // responde a dúvida e NÃO registra como motivo nem avança.
@@ -1071,7 +1318,7 @@ if ("serviceWorker" in navigator) {
                     const r = await fetch(API_PERGUNTAR, {
                         method: "POST",
                         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                        body: JSON.stringify({ pergunta: q }),
+                        body: JSON.stringify({ pergunta: q, historico: histParaEnvio() }),
                     });
                     const data = await r.json();
                     t.remove();
@@ -1134,7 +1381,7 @@ if ("serviceWorker" in navigator) {
             const r = await fetch(API_PERGUNTAR, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                body: JSON.stringify({ pergunta: q }),
+                body: JSON.stringify({ pergunta: q, historico: histParaEnvio() }),
             });
             const data = await r.json();
             t.remove();
@@ -1155,7 +1402,7 @@ if ("serviceWorker" in navigator) {
         toggle.setAttribute("aria-expanded", "true");
         esconderToast();
         iniciarConversa();
-        if (BIA_ATIVA) setTimeout(() => input.focus(), 150);
+        setTimeout(() => input.focus(), 150);
     }
     function fecharPainel() {
         panel.classList.remove("open");
@@ -1189,7 +1436,7 @@ if ("serviceWorker" in navigator) {
     (async function saudarEavisar() {
         if (sessionStorage.getItem("bia_bemvindo")) {
             // Mesmo já tendo saudado, mantém o selo atualizado na Expedição.
-            if (BIA_ATIVA) {
+            if (BIA_EXPEDICAO) {
                 try {
                     const r = await fetch(API_PENDENCIAS, { headers: { "Accept": "application/json" } });
                     if (r.ok) { const d = await r.json(); atualizarBadge(d.urgentes, d.total_pendencias); }
@@ -1200,7 +1447,7 @@ if ("serviceWorker" in navigator) {
         sessionStorage.setItem("bia_bemvindo", "1");
         const ola = BIA_USER_NOME ? `Bem-vindo(a) de volta, ${BIA_USER_NOME}! 👋` : "Bem-vindo(a) de volta! 👋";
 
-        if (!BIA_ATIVA) {
+        if (!BIA_EXPEDICAO) {
             setTimeout(() => mostrarToast(`${ola} Precisando de algo, é só me chamar aqui embaixo. 💜`), 1300);
             return;
         }
@@ -1226,7 +1473,7 @@ if ("serviceWorker" in navigator) {
 
     // Lembretes ocasionais: a cada ~20 min, se houver pendências e o painel
     // estiver fechado, a Bia dá um toque amigável (só na Expedição).
-    if (BIA_ATIVA) {
+    if (BIA_EXPEDICAO) {
         setInterval(async () => {
             if (panel.classList.contains("open")) return;
             try {
@@ -1247,7 +1494,67 @@ if ("serviceWorker" in navigator) {
             } catch (e) { /* silencioso */ }
         }, 20 * 60 * 1000);
     }
+
+    // ----- Avisos proativos de "chegou algo novo" (todas as páginas) -----
+    // A Bia checa o que ENTROU desde a última verificação e, se houver novidade,
+    // dá um toque (toast). Cada usuário recebe só os módulos a que tem acesso;
+    // Admin recebe uma visão macro (os números de tudo). No primeiro acesso o
+    // servidor só devolve o marcador de tempo — não despeja o histórico antigo.
+    async function checarNovidades() {
+        try {
+            const desde = localStorage.getItem(LS_NOVIDADES);
+            const url = desde ? `${API_NOVIDADES}?desde=${encodeURIComponent(desde)}` : API_NOVIDADES;
+            const r = await fetch(url, { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            // Avança o marcador para o "agora" do servidor (evita repetir avisos).
+            if (d.agora) localStorage.setItem(LS_NOVIDADES, d.agora);
+            if (!d.tem_novidades || !(d.itens && d.itens.length)) return;
+            // Não interrompe se o painel já estiver aberto.
+            if (panel.classList.contains("open")) return;
+            const linhas = d.itens.map((i) => i.texto);
+            const msg = d.macro
+                ? `Chegou agora: ${linhas.join("; ")}.`
+                : `Chegou pra você: ${linhas.join(" · ")}. 📬`;
+            mostrarToast(msg);
+        } catch (e) { /* silencioso */ }
+    }
+    // Primeira checagem pouco depois de carregar (deixa a saudação aparecer antes),
+    // e depois a cada ~2 min enquanto a página estiver aberta.
+    setTimeout(checarNovidades, 8000);
+    setInterval(checarNovidades, 2 * 60 * 1000);
+
+    // ----- Avisos/recados enviados por um Admin (mensageria da Bia) -----
+    // Fila para exibir no painel na ordem certa quando o chat ainda não abriu.
+    let avisosFila = [];
+    function flushAvisos() {
+        if (!avisosFila.length) return;
+        avisosFila.forEach((t) => addBot(t));
+        avisosFila = [];
+    }
+    function entregarAviso(m) {
+        const quando = m.quando ? ` · ${m.quando}` : "";
+        const texto = `📢 Aviso de ${m.de}${quando}:\n${m.texto}`;
+        if (iniciada) addBot(texto);
+        else avisosFila.push(texto);
+        if (!panel.classList.contains("open")) {
+            const curto = m.texto.length > 90 ? m.texto.slice(0, 90) + "…" : m.texto;
+            mostrarToast(`📢 ${m.de}: ${curto}`);
+        }
+    }
+    async function checarMensagens() {
+        try {
+            const r = await fetch(API_MENSAGENS, { headers: { "Accept": "application/json" } });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!d.mensagens || !d.mensagens.length) return;
+            d.mensagens.forEach(entregarAviso);
+        } catch (e) { /* silencioso */ }
+    }
+    setTimeout(checarMensagens, 4000);
+    setInterval(checarMensagens, 2 * 60 * 1000);
 })();
 </script>
 </body>
 </html>
+

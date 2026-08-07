@@ -136,12 +136,13 @@ def create_app(test_config=None) -> Flask:
 
     @app.context_processor
     def inject_access_control_helpers():
-        from .auth import get_effective_permissions, has_permission
+        from .auth import get_effective_permissions, has_permission, is_admin_session
 
         perms = get_effective_permissions() if "username" in session else {}
         return {
             "can_access": lambda key: has_permission(key),
             "access_permissions": perms,
+            "bia_is_admin": is_admin_session() if "username" in session else False,
         }
 
     @app.context_processor

@@ -28,6 +28,7 @@
 
     /* REMETENTE / DESTINATÁRIO lado a lado */
     .rom-parties-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+    .rom-parties-single { grid-template-columns: 1fr; max-width: 560px; margin-left: auto; margin-right: auto; }
     .rom-party-card { border: 1px solid #d1d5db; border-radius: 6px; padding: 14px 16px; }
     .rom-party-title { font-size: 10px; font-weight: 900; text-transform: uppercase; color: #4338ca; letter-spacing: 0.5px; margin-bottom: 8px; }
     .rom-party-name { font-size: 14px; font-weight: 800; color: #111; margin-bottom: 2px; }
@@ -129,7 +130,7 @@
         .rom-viz-toolbar, .rom-assinatura-canvas-wrap, .rom-assinatura-actions, .rom-assinatura-meta { display: none !important; }
         body { background: #fff; }
         .rom-viz-container { margin: 0; max-width: none; }
-        .rom-viz-document { border: none; padding: 0; page-break-before: always; }
+        .rom-viz-document { border: none; padding: 0; page-break-before: always; page-break-after: auto; }
         .rom-viz-document:first-of-type { page-break-before: auto; }
     }
 </style>
@@ -157,18 +158,24 @@
 
     <!-- DOCUMENTO (uma página por destinatário, mesmo número de romaneio) -->
     {% for grupo in grupos %}
+    {% set orcs = grupo.nfs|map(attribute='orcamento')|select|unique|list %}
+    {% set ocs = grupo.nfs|map(attribute='ordem_compra')|select|unique|list %}
+    {% set ref_parts = [] %}
+    {% if orcs %}{% set _ = ref_parts.append('Orç. ' + orcs|join(', ')) %}{% endif %}
+    {% if ocs %}{% set _ = ref_parts.append('OC ' + ocs|join(', ')) %}{% endif %}
+    {% set ref_display = ref_parts|join(' · ') or '—' %}
     <div class="rom-viz-document"{% if loop.first %} id="rom-root" data-romaneio-id="{{ romaneio.id }}"{% endif %}>
         <!-- CABEÇALHO -->
         <div class="rom-doc-header">
             <img class="rom-doc-logo" src="/static/columbia_sync_logo_v2.png" alt="Columbia Sync">
             <div class="rom-doc-header-text">
                 <div class="rom-doc-title">Romaneio de Expedição</div>
-                <div class="rom-doc-meta">Nº {{ romaneio.numero_romaneio }} &middot; {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }}{% if grupos|length > 1 %} &middot; Destinatário {{ loop.index }} de {{ grupos|length }}{% endif %}</div>
+                <div class="rom-doc-meta">Nº {{ romaneio.numero_romaneio }} &middot; {{ romaneio.data_romaneio.strftime('%d/%m/%Y') if romaneio.data_romaneio else '—' }} &middot; Frete {{ romaneio.tipo_frete or 'FOB' }}</div>
             </div>
         </div>
 
-        <!-- REMETENTE / DESTINATÁRIO -->
-        <div class="rom-parties-grid">
+        <!-- REMETENTE (+ TRANSPORTADORA no FOB) -->
+        <div class="rom-parties-grid{% if romaneio.tipo_frete == 'CIF' %} rom-parties-single{% endif %}">
             <div class="rom-party-card">
                 <div class="rom-party-title">Remetente</div>
                 <div class="rom-party-name">{{ remetente.razao_social }}</div>
@@ -179,17 +186,24 @@
                 {% if remetente.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ remetente.telefone }}</div>{% endif %}
                 <div class="rom-party-line"><strong>Logística:</strong> {{ remetente.email_logistica }}</div>
                 <div class="rom-party-line"><strong>Fiscal:</strong> {{ remetente.email_fiscal }}</div>
+                {% if romaneio.tipo_frete == 'CIF' %}
+                <div class="rom-party-line"><strong>Orçamento / OC:</strong> {{ ref_display }}</div>
+                <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete }}</div>
+                {% endif %}
             </div>
+            {% if romaneio.tipo_frete != 'CIF' %}
             <div class="rom-party-card">
-                <div class="rom-party-title">Destinatário</div>
-                <div class="rom-party-name">{{ grupo.destinatario.razao_social }}</div>
-                <div class="rom-party-line"><strong>CNPJ:</strong> {{ grupo.destinatario.documento or '—' }}{% if grupo.destinatario.inscricao_estadual %} &middot; <strong>IE:</strong> {{ grupo.destinatario.inscricao_estadual }}{% endif %}</div>
-                {% if grupo.destinatario.endereco %}<div class="rom-party-line">{{ grupo.destinatario.endereco }}</div>{% endif %}
-                {% if grupo.destinatario.municipio %}<div class="rom-party-line">{{ grupo.destinatario.municipio }}{% if grupo.destinatario.uf %} - {{ grupo.destinatario.uf }}{% endif %}{% if grupo.destinatario.cep %} &middot; CEP {{ grupo.destinatario.cep }}{% endif %}</div>{% endif %}
-                {% if grupo.destinatario.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ grupo.destinatario.telefone }}</div>{% endif %}
-                <div class="rom-party-line"><strong>Orçamento:</strong> {{ romaneio.orcamento or '—' }}</div>
+                <div class="rom-party-title">Transportadora</div>
+                <div class="rom-party-name">{{ transportadora.razao_social }}</div>
+                {% if transportadora.nome_fantasia %}<div class="rom-party-fantasia">{{ transportadora.nome_fantasia }}</div>{% endif %}
+                <div class="rom-party-line"><strong>CNPJ:</strong> {{ transportadora.documento or '—' }}{% if transportadora.inscricao_estadual %} &middot; <strong>IE:</strong> {{ transportadora.inscricao_estadual }}{% endif %}</div>
+                {% if transportadora.endereco %}<div class="rom-party-line">{{ transportadora.endereco }}</div>{% endif %}
+                {% if transportadora.municipio %}<div class="rom-party-line">{{ transportadora.municipio }}{% if transportadora.uf %} - {{ transportadora.uf }}{% endif %}{% if transportadora.cep %} &middot; CEP {{ transportadora.cep }}{% endif %}</div>{% endif %}
+                {% if transportadora.telefone %}<div class="rom-party-line"><strong>Tel:</strong> {{ transportadora.telefone }}</div>{% endif %}
+                <div class="rom-party-line"><strong>Orçamento / OC:</strong> {{ ref_display }}</div>
                 <div class="rom-party-line"><strong>Tipo de frete:</strong> {{ romaneio.tipo_frete or 'FOB' }}</div>
             </div>
+            {% endif %}
         </div>
 
         <!-- TABELA NFes -->
@@ -198,6 +212,7 @@
                 <thead>
                     <tr>
                         <th style="width: 80px;">NF</th>
+                        <th style="width: 90px;">Orç./OC</th>
                         <th>Cliente</th>
                         <th style="width: 80px;">Peso (kg)</th>
                         <th style="width: 100px;">Qtde Volumes</th>
@@ -210,6 +225,7 @@
                         {% for nf in grupo.nfs %}
                         <tr>
                             <td><strong>{{ nf.numero_nf }}</strong></td>
+                            <td>{% if nf.ordem_compra %}OC {{ nf.ordem_compra }}{% elif nf.orcamento %}Orç. {{ nf.orcamento }}{% else %}—{% endif %}</td>
                             <td>{{ nf.cliente or '—' }}</td>
                             <td style="text-align: right;">{{ "%.2f"|format(nf.peso_bruto or 0) }}</td>
                             <td style="text-align: center;">{{ nf.qtde_volumes or 0 }}</td>
@@ -219,7 +235,7 @@
                         {% endfor %}
                     {% else %}
                     <tr>
-                        <td colspan="6" style="text-align: center; color: #9ca3af;">Nenhuma NF adicionada</td>
+                        <td colspan="7" style="text-align: center; color: #9ca3af;">Nenhuma NF adicionada</td>
                     </tr>
                     {% endif %}
                 </tbody>

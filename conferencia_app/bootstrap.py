@@ -256,6 +256,9 @@ def _ensure_item_nota_columns() -> None:
         if "data_emissao" not in cols:
             conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN data_emissao DATETIME"))
             conn.commit()
+        if "qtd_chapas_und" not in cols:
+            conn.execute(db.text("ALTER TABLE item_nota ADD COLUMN qtd_chapas_und FLOAT"))
+            conn.commit()
 
         cols_log_div = _get_column_names("log_divergencia")
         if "motivo_tipo" not in cols_log_div:
@@ -861,9 +864,25 @@ def _ensure_solicitacao_nf_columns() -> None:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN retorno_at DATETIME"))
         if "observacoes_retorno" not in cols:
             conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN observacoes_retorno VARCHAR(500)"))
+        if "nf_parceiro_nome" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_nome VARCHAR(200)"))
+        if "nf_parceiro_endereco" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN nf_parceiro_endereco VARCHAR(400)"))
+        if "ordem_faturamento" not in cols:
+            conn.execute(db.text("ALTER TABLE solicitacao_nf ADD COLUMN ordem_faturamento INTEGER"))
         conn.commit()
     finally:
         conn.close()
+
+    if _has_table("solicitacao_nf_item"):
+        item_cols = _get_column_names("solicitacao_nf_item")
+        conn = db.engine.connect()
+        try:
+            if "material_local" not in item_cols:
+                conn.execute(db.text("ALTER TABLE solicitacao_nf_item ADD COLUMN material_local VARCHAR(160)"))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def _ensure_expedicao_romaneio_columns() -> None:
@@ -889,6 +908,10 @@ def _ensure_expedicao_romaneio_columns() -> None:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista VARCHAR(160)"))
         if "motorista_documento" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN motorista_documento VARCHAR(40)"))
+        if "transportadora_documento" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN transportadora_documento VARCHAR(40)"))
+        if "transportadora_dados_json" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN transportadora_dados_json TEXT"))
         if "foto_carregamento_file_name" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio ADD COLUMN foto_carregamento_file_name VARCHAR(260)"))
         if "foto_carregamento_file_path" not in cols:
@@ -911,8 +934,8 @@ def _ensure_expedicao_romaneio_columns() -> None:
 
 
 def _ensure_expedicao_romaneio_nf_columns() -> None:
-    """Garante a coluna modfrete_nf (modalidade de frete declarada na NF-e)
-    na expedicao_romaneio_nf."""
+    """Garante colunas adicionais na expedicao_romaneio_nf: modfrete_nf
+    (modalidade de frete declarada na NF-e) e ordem_compra (fluxo ST)."""
     if not _has_table("expedicao_romaneio_nf"):
         return
     cols = _get_column_names("expedicao_romaneio_nf")
@@ -920,6 +943,8 @@ def _ensure_expedicao_romaneio_nf_columns() -> None:
     try:
         if "modfrete_nf" not in cols:
             conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN modfrete_nf VARCHAR(4)"))
+        if "ordem_compra" not in cols:
+            conn.execute(db.text("ALTER TABLE expedicao_romaneio_nf ADD COLUMN ordem_compra VARCHAR(80)"))
         conn.commit()
     finally:
         conn.close()

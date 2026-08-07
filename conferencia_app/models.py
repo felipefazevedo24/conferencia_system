@@ -214,6 +214,9 @@ class ItemNota(db.Model):
     # Data de emissao da NF (dhEmi do XML). Usada para integracao com ERP
     # (matching n_nf + dt_nf na tabela tcompras do Postgres).
     data_emissao = db.Column(db.DateTime, nullable=True, index=True)
+    # Quantidade de chapas em UND informada pelo conferente para material
+    # recebido em peso (KG). Auditavel e enviada no aviso de entrada de chapa.
+    qtd_chapas_und = db.Column(db.Float, nullable=True)
 
 
 class ConferenciaRecebimento(db.Model):
@@ -889,6 +892,16 @@ class SolicitacaoNF(db.Model):
     retorno_at = db.Column(db.DateTime)
     observacoes_retorno = db.Column(db.String(500))
 
+    # Dados do parceiro puxados da NF na bridge (Remessa para Conserto):
+    # para quem o material foi enviado (destinatario) e o endereco.
+    nf_parceiro_nome = db.Column(db.String(200))
+    nf_parceiro_endereco = db.Column(db.String(400))
+
+    # Ordem de faturamento (cod_ordem_fat) do ERP vinculada a esta expedicao
+    # sem NF. Quando a OF for faturada (numero_nf preenchido), a solicitacao
+    # avanca automaticamente para o status final conforme o tipo.
+    ordem_faturamento = db.Column(db.Integer, index=True)
+
     ip_solicitante = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
@@ -914,6 +927,9 @@ class SolicitacaoNFItem(db.Model):
     linha = db.Column(db.Integer, nullable=False, default=0)
     material_codigo = db.Column(db.String(80), index=True)
     material_nome = db.Column(db.String(200))
+    # Local de estoque (endereco) do material no ERP (tproduto.localizacao_estoque),
+    # congelado no momento em que a solicitacao e criada.
+    material_local = db.Column(db.String(160))
     quantidade = db.Column(db.Float, nullable=False, default=0)
     separado = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -2043,6 +2059,11 @@ class ExpedicaoRomaneio(db.Model):
     motorista = db.Column(db.String(160))
     motorista_documento = db.Column(db.String(40))
 
+    # Transportadora do frete FOB: a logistica digita apenas o CNPJ e o Sync
+    # puxa os dados pelo cartao CNPJ (BrasilAPI), gravando um snapshot aqui.
+    transportadora_documento = db.Column(db.String(40))
+    transportadora_dados_json = db.Column(db.Text)
+
     # Dados consolidados das NFes
     peso_bruto_total = db.Column(db.Float, nullable=False, default=0)
     qtde_volumes_total = db.Column(db.Integer, nullable=False, default=0)
@@ -2116,6 +2137,10 @@ class ExpedicaoRomaneioNF(db.Model):
     # Informações da NF
     numero_nf = db.Column(db.String(160), nullable=False, index=True)
     orcamento = db.Column(db.String(80), index=True)
+    # Ordem de compra (fluxo ST/Serviço de Terceiro). Orçamento e OC são
+    # mutuamente exclusivos por NF: FAT preenche orcamento, ST preenche
+    # ordem_compra. Um romaneio pode misturar NFs dos dois tipos.
+    ordem_compra = db.Column(db.String(80), index=True)
     cliente = db.Column(db.String(160))
     
     # Dados da expedição
@@ -2167,6 +2192,73 @@ class ExpedicaoRomaneioExclusao(db.Model):
     admin_observacao = db.Column(db.String(500))
     resolvido_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class ExpedicaoRomaneioEstorno(db.Model):
+    """Solicitacao de estorno de um romaneio ja finalizado (Pronto/Expedido)
+    para voltar a Rascunho e permitir edicao — pedida pela Bia por quem nao e
+    Admin. Precisa de aprovacao de um Admin. Mesmo padrao de
+    ExpedicaoRomaneioExclusao."""
+
+    __tablename__ = "expedicao_romaneio_estorno"
+
+    id = db.Column(db.Integer, primary_key=True)
+    romaneio_id = db.Column(
+        db.Integer,
+        db.ForeignKey("expedicao_romaneio.id"),
+        nullable=False,
+        index=True,
+    )
+    solicitante = db.Column(db.String(100), nullable=False)
+    motivo = db.Column(db.String(500), nullable=False)
+    # Estado do romaneio no momento do pedido (Pronto | Expedido) — informativo.
+    status_romaneio = db.Column(db.String(20))
+    # Pendente | Aprovado | Rejeitado
+    status = db.Column(db.String(20), nullable=False, default="Pendente", index=True)
+    admin_usuario = db.Column(db.String(100))
+    admin_observacao = db.Column(db.String(500))
+    resolvido_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class BiaMensagem(db.Model):
+    """Aviso/recado enviado por um Admin (via chat da Bia) para um usuario
+    especifico, um cargo inteiro ou todos (broadcast). A Bia entrega in-app:
+    toast + registro no painel. A leitura por usuario fica em BiaMensagemLeitura
+    (uma mensagem de cargo/broadcast atinge varias pessoas)."""
+
+    __tablename__ = "bia_mensagem"
+
+    id = db.Column(db.Integer, primary_key=True)
+    remetente = db.Column(db.String(100), nullable=False, index=True)
+    remetente_nome = db.Column(db.String(160))
+    # usuario | cargo | broadcast
+    destino_tipo = db.Column(db.String(20), nullable=False, index=True)
+    # username (usuario) | role (cargo) | "" (broadcast)
+    destino_valor = db.Column(db.String(120), nullable=False, default="", index=True)
+    texto = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
+class BiaMensagemLeitura(db.Model):
+    """Marca que um usuario ja recebeu/leu uma BiaMensagem (para nao reentregar).
+    Uma linha por (mensagem, usuario)."""
+
+    __tablename__ = "bia_mensagem_leitura"
+
+    id = db.Column(db.Integer, primary_key=True)
+    mensagem_id = db.Column(
+        db.Integer,
+        db.ForeignKey("bia_mensagem.id"),
+        nullable=False,
+        index=True,
+    )
+    username = db.Column(db.String(100), nullable=False, index=True)
+    lida_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("mensagem_id", "username", name="ux_bia_mensagem_leitura"),
+    )
 
 
 class ExpedicaoRomaneioFotoCarregamento(db.Model):

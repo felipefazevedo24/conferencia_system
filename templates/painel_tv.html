@@ -128,6 +128,10 @@
   }
   .slides-nav .sdot:hover { background: rgba(255,255,255,.13); color: var(--text); transform: translateY(-1px); }
   .slides-nav .sdot.on { background: var(--recebimento); color: #05203c; border-color: transparent; box-shadow: 0 4px 14px rgba(61,165,244,.32); }
+  .slides-nav .sdot.tone-recebimento.on { background: var(--recebimento); color: #05203c; box-shadow: 0 4px 14px rgba(61,165,244,.32); }
+  .slides-nav .sdot.tone-expedicao.on { background: var(--expedicao); color: #3b2400; box-shadow: 0 4px 14px rgba(251,191,36,.35); }
+  .slides-nav .sdot.tone-frota.on { background: var(--frota); color: #05293a; box-shadow: 0 4px 14px rgba(34,211,238,.30); }
+  .slides-nav .sdot.tone-planejamento.on { background: var(--plan); color: #1f1740; box-shadow: 0 4px 14px rgba(167,139,250,.34); }
   .slides-nav .sdot .sdot-ico { font-size: .95em; }
   .slides-nav .slides-play {
     border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--muted);
@@ -203,6 +207,59 @@
   .plan-task .pt-chip.prazo.atrasada { color: #f87171; border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.12); }
   .plan-task .pt-chip.prio-Alta, .plan-task .pt-chip.prio-Critica { color: #fbbf24; border-color: rgba(251,191,36,.5); }
   .plan-klist .empty, .plan-board .empty { color: var(--muted); font-size: clamp(11px,1.3vh,14px); padding: 10px; text-align: center; }
+
+  /* ---------- Painel operacional (Recebimento + Compras) ---------- */
+  .flow::before { color: var(--recebimento); }
+  .flow .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
+  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; }
+  .tv-kb-wrap.cols-2 { grid-template-rows: 1fr 1fr; }
+  .tv-kb-wrap.cols-1 { grid-template-rows: 1fr; }
+  .tv-kb-group { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .tv-kb-title { font-size: clamp(12px, 1.4vh, 16px); font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+  .tv-kb-board { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
+  .tv-kb-col {
+    min-width: clamp(220px, 17vw, 280px);
+    flex: 1 1 0;
+    background: rgba(255,255,255,.035);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--recebimento);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tv-kb-col.is-alert { border-top-color: #f87171; }
+  .tv-kb-col.is-neutral { border-top-color: #eaf2ff; }
+  .tv-kb-col.is-info { border-top-color: #3da5f4; }
+  .tv-kb-col.is-warn { border-top-color: #fbbf24; }
+  .tv-kb-col.is-ok { border-top-color: #34d399; }
+  .tv-kb-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 11px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tv-kb-head strong { font-size: clamp(11px, 1.25vh, 14px); font-weight: 800; color: var(--text); }
+  .tv-kb-count { font-size: clamp(12px, 1.5vh, 18px); font-weight: 900; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tv-kb-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
+  .tv-kb-card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--recebimento);
+    border-radius: 10px;
+    padding: 7px 9px;
+  }
+  .tv-kb-card.is-alert { border-left-color: #f87171; }
+  .tv-kb-card.is-neutral { border-left-color: #eaf2ff; }
+  .tv-kb-card.is-info { border-left-color: #3da5f4; }
+  .tv-kb-card.is-warn { border-left-color: #fbbf24; }
+  .tv-kb-card.is-ok { border-left-color: #34d399; }
+  .tv-kb-card b { display: block; font-size: clamp(12px, 1.45vh, 16px); font-weight: 800; }
+  .tv-kb-card span { display: block; color: var(--muted); font-size: clamp(10px, 1.15vh, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tv-kb-card .meta { margin-top: 4px; display: flex; justify-content: space-between; gap: 8px; }
+  .tv-kb-card .meta .ago { color: var(--muted); font-size: clamp(9px, 1vh, 11px); }
 
   .panel {
     background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
@@ -407,86 +464,43 @@
   </header>
 
   <main>
-    <!-- SLIDE 1: OPERAÇÃO (Recebimento + Expedição) -->
-    <section class="slide slide-op is-active" data-slide="operacao">
-      <div class="op-grid">
-    <!-- RECEBIMENTO -->
-    <section class="panel rec">
-      <div class="panel-head">
-        <div class="icon"><i class="fas fa-inbox"></i></div>
-        <h2>Recebimento</h2>
-        <div class="tag" id="rec-tag">—</div>
-      </div>
-      <div class="hero">
-        <div class="label" id="rec-hero-label">Notas pendentes de <span class="accent">conferência</span></div>
-        <div class="num accent" id="rec-pend-conf">0</div>
-      </div>
-      <div class="feed">
-        <div class="feed-title"><span id="rec-feed-title">Pendentes de conferência</span><span id="rec-count"></span></div>
-        <div class="mode-switch exp-pills" id="rec-modes"></div>
-        <div class="list" id="rec-list"><div class="empty">Nada pendente</div></div>
-      </div>
+    <!-- SLIDE 1: RECEBIMENTO -->
+    <section class="slide slide-rec is-active" data-slide="recebimento">
+      <section class="panel flow" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-table-columns"></i></div>
+          <h2>Recebimento</h2>
+          <div class="tag" id="rec-tag">—</div>
+        </div>
+        <div class="tv-kb-wrap cols-2">
+          <div class="tv-kb-group">
+            <div class="tv-kb-title">Recebimento</div>
+            <div class="tv-kb-board" id="rec-kb-board"><div class="empty">Carregando…</div></div>
+          </div>
+          <div class="tv-kb-group">
+            <div class="tv-kb-title">Compras</div>
+            <div class="tv-kb-board" id="compras-kb-board"><div class="empty">Carregando…</div></div>
+          </div>
+        </div>
+      </section>
     </section>
 
-    <!-- EXPEDIÇÃO -->
-    <section class="panel exp">
-      <div class="panel-head">
-        <div class="icon"><i class="fas fa-truck-fast"></i></div>
-        <h2>Expedição</h2>
-        <div class="tag" id="exp-tag">—</div>
-      </div>
-      <div class="hero">
-        <div class="label" id="exp-hero-label">Pendentes de <span class="accent">conferência</span></div>
-        <div class="num accent" id="exp-pend-conf">0</div>
-      </div>
-      <div class="feed">
-        <div class="feed-title"><span id="exp-feed-title">Pendentes de conferência</span><span id="exp-count"></span></div>
-        <div class="mode-switch exp-pills" id="exp-modes"></div>
-        <div class="list" id="exp-list"><div class="empty">Nada pendente</div></div>
-      </div>
+    <!-- SLIDE 2: EXPEDIÇÃO -->
+    <section class="slide slide-exp" data-slide="expedicao">
+      <section class="panel flow" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-truck-fast"></i></div>
+          <h2>Expedição</h2>
+          <div class="tag" id="exp-tag">—</div>
+        </div>
+        <div class="tv-kb-wrap cols-1">
+          <div class="tv-kb-group">
+            <div class="tv-kb-title">Expedição</div>
+            <div class="tv-kb-board" id="exp-kb-board"><div class="empty">Carregando…</div></div>
+          </div>
+        </div>
+      </section>
     </section>
-      </div>
-    </section>
-
-    <!-- SLIDE 2: COMPRAS (atrasadas em cima | a chegar na semana embaixo) -->
-    {% if show_compras|default(true) %}
-    <section class="slide slide-compras" data-slide="compras">
-      <div class="compras-stack">
-        <!-- ATRASADAS -->
-        <section class="panel compras compras-atr">
-          <div class="panel-head">
-            <div class="icon"><i class="fas fa-triangle-exclamation"></i></div>
-            <h2>OCs atrasadas</h2>
-            <div class="tag" id="oc-atr-tag">—</div>
-          </div>
-          <div class="hero">
-            <div class="label">Previsão de entrega <span class="accent">vencida</span></div>
-            <div class="num accent" id="oc-atr-total">0</div>
-          </div>
-          <div class="feed">
-            <div class="feed-title"><span>Ordens de compra em atraso</span></div>
-            <div class="oc-grid" id="oc-atr-list"><div class="empty">Carregando…</div></div>
-          </div>
-        </section>
-        <!-- A CHEGAR NA SEMANA -->
-        <section class="panel compras compras-sem">
-          <div class="panel-head">
-            <div class="icon"><i class="fas fa-calendar-days"></i></div>
-            <h2>A chegar (próximo dia)</h2>
-            <div class="tag" id="oc-sem-tag">—</div>
-          </div>
-          <div class="hero">
-            <div class="label">Previsão para <span class="accent">hoje / amanhã</span></div>
-            <div class="num accent" id="oc-sem-total">0</div>
-          </div>
-          <div class="feed">
-            <div class="feed-title"><span>Ordens de compra a chegar</span></div>
-            <div class="oc-grid" id="oc-sem-list"><div class="empty">Carregando…</div></div>
-          </div>
-        </section>
-      </div>
-    </section>
-    {% endif %}
 
     <!-- SLIDE 3: FROTA (mapa ao vivo, GPS do motorista em viagem) -->
     {% if show_frota|default(true) %}
@@ -712,6 +726,32 @@
     };
   }
 
+  function buildKbCard(title, subtitle, meta, tone) {
+    const toneClass = tone ? " " + tone : "";
+    return '<div class="tv-kb-card' + toneClass + '">' +
+      '<b>' + esc(title) + '</b>' +
+      '<span>' + esc(subtitle || "—") + '</span>' +
+      '<div class="meta"><span></span><span class="ago">' + esc(meta || "") + '</span></div>' +
+      '</div>';
+  }
+
+  function renderKbBoard(boardId, columns) {
+    const board = $(boardId);
+    if (!board) return;
+    const sig = JSON.stringify(columns);
+    if (board._sig === sig) return;
+    board._sig = sig;
+    board.innerHTML = columns.map((col) => {
+      const cards = (col.items || []).length
+        ? col.items.map((it) => buildKbCard(it.title, it.subtitle, it.meta, it.tone)).join("")
+        : '<div class="empty">Sem itens</div>';
+      return '<div class="tv-kb-col ' + (col.colClass || "") + '">' +
+        '<div class="tv-kb-head"><strong>' + esc(col.label) + '</strong><span class="tv-kb-count">' + (col.total || 0) + '</span></div>' +
+        '<div class="tv-kb-list">' + cards + '</div>' +
+        '</div>';
+    }).join("");
+  }
+
   // Renderiza a lista somente se o conteudo mudou (preserva o auto-scroll)
   function renderList(containerId, items, buildRow, emptyMsg) {
     const box = $(containerId);
@@ -729,7 +769,7 @@
   // Auto-scroll suave das listas que nao cabem na tela (rola sozinho na TV).
   // Marca _doneScroll quando a lista chega ao fim (ou nao precisa rolar).
   function autoScroll() {
-    document.querySelectorAll(".feed .list, .oc-grid").forEach((el) => {
+    document.querySelectorAll(".feed .list, .oc-grid, .tv-kb-list, .plan-klist").forEach((el) => {
       const max = el.scrollHeight - el.clientHeight;
       if (max <= 4) { el._doneScroll = true; return; }
       const now = Date.now();
@@ -756,110 +796,171 @@
     $("clock-date").textContent = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
   }
 
-  // ----- Expedição: 5 categorias consolidadas (FAT + ST) -----
   let lastData = null;
-  let expIdx = 0;
-  const EXP_VIEWS = [
-    { key: "pendente",          label: "Pendentes de conferência",         hero: 'Pendentes de <span class="accent">conferência</span>',              empty: "Nada pendente" },
-    { key: "conferido",         label: "Conferidos · aguard. faturamento", hero: 'Conferidos · <span class="accent">aguardando faturamento</span>',   empty: "Nada aguardando faturamento" },
-    { key: "faturado_sem_conf", label: "Faturados sem conferência",        hero: 'Faturados <span class="accent">sem conferência</span>',            empty: "Nenhum faturado sem conferência" },
-    { key: "faturado",          label: "Faturados · a expedir",            hero: 'Faturados · <span class="accent">a expedir</span>',                empty: "Nada faturado a expedir" },
-    { key: "expedido",          label: "Expedidos hoje",                   hero: '<span class="accent">Expedidos</span> hoje',                       empty: "Nada expedido hoje" },
-  ];
+  let lastCompras = null;
 
-  function renderExpedicao() {
-    if (!lastData) return;
-    const exp = lastData.expedicao || {};
-    const cats = exp.categorias || {};
-    const g = (k) => cats[k] || { total: 0, lista: [] };
-    if (exp.resumo) {
-      $("exp-tag").textContent = "FAT " + exp.resumo.fat_pendente + " · ST " + exp.resumo.st_pendente;
-    }
-
-    // Card unico (heroi) que rotaciona mostrando o numero da categoria atual.
-    const view = EXP_VIEWS[expIdx];
-    const cat = g(view.key);
-    $("exp-hero-label").innerHTML = view.hero;
-    setNum("exp-pend-conf", cat.total);
-    $("exp-modes").innerHTML = EXP_VIEWS.map((v, i) =>
-      '<button type="button" class="mode-pill' + (i === expIdx ? " active" : "") + '" data-idx="' + i + '">' + v.label + "</button>"
-    ).join("");
-    $("exp-feed-title").textContent = view.label;
-    $("exp-count").textContent = (cat.lista || []).length + " itens";
-    renderList("exp-list", cat.lista || [], buildConsItem, view.empty);
-  }
-
-  // ----- Recebimento: 4 categorias consolidadas -----
-  let recIdx = 0;
-  const REC_VIEWS = [
-    { key: "pendente_conf", label: "Pendentes de conferência", hero: 'Notas pendentes de <span class="accent">conferência</span>', empty: "Nada pendente" },
-    { key: "conferidas",    label: "Conferidas hoje",          hero: 'Notas <span class="accent">conferidas</span> hoje',          empty: "Nenhuma conferida hoje" },
-    { key: "pendente_lanc", label: "Pendentes de lançamento",  hero: 'Notas pendentes de <span class="accent">lançamento</span>',  empty: "Nada aguardando lançamento" },
-    { key: "lancadas",      label: "Lançadas hoje",            hero: 'Notas <span class="accent">lançadas</span> hoje',            empty: "Nada lançado hoje" },
-  ];
-
-  function renderRecebimento() {
+  function renderRecebimentoKanban() {
     if (!lastData) return;
     const rec = lastData.recebimento || {};
+    const exp = lastData.expedicao || {};
+    const expCats = exp.categorias || {};
+    const ge = (k) => expCats[k] || { total: 0, lista: [] };
     const cats = rec.categorias || {};
     const g = (k) => cats[k] || { total: 0, lista: [] };
-    $("rec-tag").textContent = (rec.importadas_hoje || 0) + " chegaram hoje";
+    const pend = g("pendente_conf").total;
+    const lanc = g("pendente_lanc").total;
+    const expPend = ge("pendente").total;
+    const recTag = $("rec-tag");
+    const expTag = $("exp-tag");
+    if (recTag) recTag.textContent = pend + " pend. conf. · " + lanc + " pend. lançamento";
+    if (expTag) expTag.textContent = expPend + " pend. conferência";
 
-    // Card unico (heroi) que rotaciona mostrando o numero da categoria atual.
-    const view = REC_VIEWS[recIdx];
-    const cat = g(view.key);
-    $("rec-hero-label").innerHTML = view.hero;
-    setNum("rec-pend-conf", cat.total);
-    $("rec-modes").innerHTML = REC_VIEWS.map((v, i) =>
-      '<button type="button" class="mode-pill' + (i === recIdx ? " active" : "") + '" data-idx="' + i + '">' + v.label + "</button>"
-    ).join("");
-    $("rec-feed-title").textContent = view.label;
-    $("rec-count").textContent = (cat.lista || []).length + " notas";
-    renderList("rec-list", cat.lista || [], buildRecCons, view.empty);
+    const cols = [
+      {
+        label: "Pend. conferência",
+        total: g("pendente_conf").total,
+        colClass: "is-alert",
+        items: (g("pendente_conf").lista || []).slice(0, 24).map((it) => ({
+          title: "NF " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: it.atrasado ? "is-alert" : "",
+        })),
+      },
+      {
+        label: "Conferidas hoje",
+        total: g("conferidas").total,
+        colClass: "is-info",
+        items: (g("conferidas").lista || []).slice(0, 24).map((it) => ({
+          title: "NF " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-info",
+        })),
+      },
+      {
+        label: "Pend. lançamento",
+        total: g("pendente_lanc").total,
+        colClass: "is-warn",
+        items: (g("pendente_lanc").lista || []).slice(0, 24).map((it) => ({
+          title: "NF " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: it.atrasado ? "is-alert" : "is-warn",
+        })),
+      },
+      {
+        label: "Lançadas hoje",
+        total: g("lancadas").total,
+        colClass: "is-ok",
+        items: (g("lancadas").lista || []).slice(0, 24).map((it) => ({
+          title: "NF " + (it.codigo || "—"),
+          subtitle: (it.parceiro || "—") + (it.extra ? " · " + it.extra : ""),
+          meta: relTime(it.ts || it.desde),
+          tone: "is-ok",
+        })),
+      },
+    ];
+    renderKbBoard("rec-kb-board", cols);
+
+    const expCols = [
+      {
+        label: "Fat. sem conferência",
+        total: ge("faturado_sem_conf").total,
+        colClass: "is-alert",
+        items: (ge("faturado_sem_conf").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-alert",
+        })),
+      },
+      {
+        label: "Pend. conferência",
+        total: ge("pendente").total,
+        colClass: "is-warn",
+        items: (ge("pendente").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
+          meta: relTime(it.ts || it.desde),
+          tone: "is-warn",
+        })),
+      },
+      {
+        label: "Conferido/Ag. Fat",
+        total: ge("conferido").total,
+        colClass: "is-neutral",
+        items: (ge("conferido").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-neutral",
+        })),
+      },
+      {
+        label: "Faturado a expedir",
+        total: ge("faturado").total,
+        colClass: "is-info",
+        items: (ge("faturado").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-info",
+        })),
+      },
+      {
+        label: "Expedidos hoje",
+        total: ge("expedido").total,
+        colClass: "is-ok",
+        items: (ge("expedido").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
+          meta: relTime(it.ts || it.desde),
+          tone: "is-ok",
+        })),
+      },
+    ];
+    renderKbBoard("exp-kb-board", expCols);
   }
 
-  // Clique manual num pill: pula direto pra visao escolhida (sem esperar a
-  // rotacao automatica) e reinicia o cronometro daquele card.
-  function jumpExpTo(idx) {
-    if (!lastData || idx === expIdx) return;
-    const panel = document.querySelector(".panel.exp");
-    panel.classList.add("switching");
-    setTimeout(() => {
-      expIdx = idx;
-      renderExpedicao();
-      panel.classList.remove("switching");
-    }, 200);
-    expLastRot = Date.now();
+  function renderComprasKanban() {
+    if (!lastCompras) return;
+    const atr = lastCompras.atrasadas || { total: 0, lista: [] };
+    const sem = lastCompras.semana || { total: 0, lista: [] };
+    const cols = [
+      {
+        label: "OCs atrasadas",
+        total: atr.total || 0,
+        colClass: "is-alert",
+        items: (atr.lista || []).slice(0, 24).map((it) => ({
+          title: "OC " + (it.oc || "—"),
+          subtitle: it.fornecedor || "—",
+          meta: "Entrega " + fmtDia(it.previsao),
+          tone: "is-alert",
+        })),
+      },
+      {
+        label: "A chegar (hoje/amanhã)",
+        total: sem.total || 0,
+        colClass: "is-warn",
+        items: (sem.lista || []).slice(0, 24).map((it) => ({
+          title: "OC " + (it.oc || "—"),
+          subtitle: it.fornecedor || "—",
+          meta: "Entrega " + fmtDia(it.previsao),
+          tone: "is-warn",
+        })),
+      },
+    ];
+    renderKbBoard("compras-kb-board", cols);
   }
-
-  function jumpRecTo(idx) {
-    if (!lastData || idx === recIdx) return;
-    const panel = document.querySelector(".panel.rec");
-    panel.classList.add("switching");
-    setTimeout(() => {
-      recIdx = idx;
-      renderRecebimento();
-      panel.classList.remove("switching");
-    }, 200);
-    recLastRot = Date.now();
-  }
-
-  $("exp-modes").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-idx]");
-    if (btn) jumpExpTo(Number(btn.dataset.idx));
-  });
-  $("rec-modes").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-idx]");
-    if (btn) jumpRecTo(Number(btn.dataset.idx));
-  });
 
   // ----- Carrossel de slides + rotacao das visoes de expedicao -----
   const SLIDES = Array.from(document.querySelectorAll(".slide")).map((el) => el.dataset.slide);
   const SLIDE_META = {
-    operacao: { label: "Operação", icon: "fa-warehouse" },
-    compras: { label: "Compras", icon: "fa-cart-shopping" },
+    recebimento: { label: "Recebimento", icon: "fa-box-open" },
+    expedicao: { label: "Expedição", icon: "fa-truck-fast" },
     frota: { label: "Frota", icon: "fa-truck-fast" },
-    planejamento: { label: "Planejamento", icon: "fa-table-columns" },
+    planejamento: { label: "Planejamento", icon: "fa-list-check" },
   };
   let slideIdx = 0;
   let manualHold = false;         // quando true, pausa a rotacao automatica
@@ -867,19 +968,19 @@
   const SLIDE_MIN_MS = 15000;    // tempo minimo em cada slide
   const SLIDE_MAX_MS = 150000;   // teto de seguranca
 
-  const EXP_VIEW_MS = 12000;     // tempo por visao da expedicao
+  const EXP_VIEW_MS = 12000;
   let expLastRot = Date.now();
   let recLastRot = Date.now();
-  let expCycles = 0;             // voltas completas das visoes neste slide
+  let expCycles = 0;
 
   function activeScrollers() {
-    return Array.from(document.querySelectorAll(".slide.is-active .feed .list, .slide.is-active .oc-grid"));
+    return Array.from(document.querySelectorAll(".slide.is-active .feed .list, .slide.is-active .oc-grid, .slide.is-active .tv-kb-list, .slide.is-active .plan-klist"));
   }
 
   function renderSlideDots() {
     const dots = SLIDES.map((s, i) => {
       const meta = SLIDE_META[s] || { label: s, icon: "fa-circle" };
-      return '<button type="button" class="sdot' + (i === slideIdx ? " on" : "") +
+      return '<button type="button" class="sdot tone-' + esc(s) + (i === slideIdx ? " on" : "") +
         '" data-idx="' + i + '"><i class="fas ' + meta.icon + ' sdot-ico"></i>' + esc(meta.label) + "</button>";
     }).join("");
     const playBtn = '<button type="button" class="slides-play' + (manualHold ? " paused" : "") +
@@ -903,8 +1004,8 @@
       el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
     });
     renderSlideDots();
-    if (SLIDES[slideIdx] === "operacao") { expIdx = 0; recIdx = 0; renderExpedicao(); renderRecebimento(); }
-    if (SLIDES[slideIdx] === "compras") pollCompras();
+    if (SLIDES[slideIdx] === "recebimento") { renderRecebimentoKanban(); renderComprasKanban(); pollCompras(); }
+    if (SLIDES[slideIdx] === "expedicao") { renderRecebimentoKanban(); }
     if (SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
     if (SLIDES[slideIdx] === "planejamento") pollPlanejamento();
     resetSlideTiming();
@@ -912,39 +1013,12 @@
 
   function nextSlide() { showSlide(slideIdx + 1); }
 
-  // Roda as visoes de expedicao (so no slide operacao) sem cortar o scroll no meio.
   function rotateExp(now) {
-    if (SLIDES[slideIdx] !== "operacao" || !lastData) return;
-    const sc = $("exp-list");
-    const overflow = sc && (sc.scrollHeight - sc.clientHeight) > 4;
-    const doneScroll = !overflow || sc._doneScroll;
-    if (now - expLastRot < EXP_VIEW_MS || !doneScroll) return;
-    expLastRot = now;
-    const panel = document.querySelector(".panel.exp");
-    panel.classList.add("switching");
-    setTimeout(() => {
-      expIdx = (expIdx + 1) % EXP_VIEWS.length;
-      if (expIdx === 0) expCycles++;
-      renderExpedicao();
-      panel.classList.remove("switching");
-    }, 300);
+    return;
   }
 
-  // Roda as visoes do recebimento (so no slide operacao), independente da expedicao.
   function rotateRec(now) {
-    if (SLIDES[slideIdx] !== "operacao" || !lastData) return;
-    const sc = $("rec-list");
-    const overflow = sc && (sc.scrollHeight - sc.clientHeight) > 4;
-    const doneScroll = !overflow || sc._doneScroll;
-    if (now - recLastRot < EXP_VIEW_MS || !doneScroll) return;
-    recLastRot = now;
-    const panel = document.querySelector(".panel.rec");
-    panel.classList.add("switching");
-    setTimeout(() => {
-      recIdx = (recIdx + 1) % REC_VIEWS.length;
-      renderRecebimento();
-      panel.classList.remove("switching");
-    }, 300);
+    return;
   }
 
   // So avanca de slide respeitando o tempo minimo E depois de terminar de rolar tudo.
@@ -952,11 +1026,8 @@
     const elapsed = now - slideShownAt;
     if (elapsed >= SLIDE_MAX_MS) return true;
     if (elapsed < SLIDE_MIN_MS) return false;
-    if (SLIDES[slideIdx] === "operacao") {
-      return expCycles >= 1;   // mostrou todas as visoes ao menos uma vez
-    }
     const lists = activeScrollers();
-    return lists.every((el) => el._doneScroll || (el.scrollHeight - el.clientHeight) <= 4);
+    return lists.length === 0 || lists.every((el) => el._doneScroll || (el.scrollHeight - el.clientHeight) <= 4);
   }
 
   function carouselTick() {
@@ -983,11 +1054,7 @@
       const d = await r.json();
       lastData = d;
 
-      // Recebimento (categorias consolidadas)
-      renderRecebimento();
-
-      // Expedição (visão atual)
-      renderExpedicao();
+      renderRecebimentoKanban();
 
       // Notificações (avisos rápidos) para eventos novos
       const eventos = d.eventos || [];
@@ -1005,23 +1072,17 @@
 
   let comprasAt = 0;
   async function pollCompras() {
-    // evita bater no ERP com muita frequencia (cache tambem no servidor)
-    if (Date.now() - comprasAt < 60000 && $("oc-atr-list")._sig) return;
+    const comprasBoard = $("compras-kb-board");
+    if (Date.now() - comprasAt < 60000 && comprasBoard && comprasBoard._sig) return;
     comprasAt = Date.now();
     try {
       const r = await fetch("/api/painel/compras", { cache: "no-store" });
       const d = await r.json();
-      const atr = d.atrasadas || { total: 0, lista: [] };
-      const sem = d.semana || { total: 0, lista: [] };
-      setNum("oc-atr-total", atr.total || 0);
-      setNum("oc-sem-total", sem.total || 0);
-      $("oc-atr-tag").textContent = (atr.total || 0) + " OCs";
-      $("oc-sem-tag").textContent = (sem.total || 0) + " OCs";
-      renderList("oc-atr-list", atr.lista || [], buildOcItem("atraso"), d.erro ? "ERP indisponível" : "Nenhuma OC atrasada");
-      renderList("oc-sem-list", sem.lista || [], buildOcItem("semana"), d.erro ? "ERP indisponível" : "Nada a chegar no próximo dia");
+      lastCompras = d;
+      renderComprasKanban();
     } catch (e) {
-      renderList("oc-atr-list", [], buildOcItem("atraso"), "ERP indisponível");
-      renderList("oc-sem-list", [], buildOcItem("semana"), "ERP indisponível");
+      lastCompras = { atrasadas: { total: 0, lista: [] }, semana: { total: 0, lista: [] } };
+      renderComprasKanban();
     }
   }
 

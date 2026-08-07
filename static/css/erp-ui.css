@@ -19,6 +19,7 @@
 
     --eui-primary: #0f62c9;
     --eui-primary-hover: #0a4ea3;
+    --eui-primary-contrast: #ffffff;
     --eui-primary-soft: #e6efff;
     --eui-primary-soft-text: #0a4ea3;
 
@@ -74,6 +75,68 @@
 }
 
 /* ----------------------------------------------------------------------------
+ * Tema escuro — variante dos tokens do design system (--eui-*)
+ * Cascateia para TODOS os módulos que usam as variáveis.
+ * -------------------------------------------------------------------------- */
+[data-theme="escuro"] {
+    --eui-bg: #0d141d;
+    --eui-surface: #141d28;
+    --eui-surface-2: #172230;
+    --eui-surface-3: #1e2a39;
+    --eui-border: #263447;
+    --eui-border-strong: #33475f;
+    --eui-text: #e8eef6;
+    --eui-text-soft: #b8c6d6;
+    --eui-muted: #9fb0c4;
+    --eui-muted-2: #7f90a3;
+
+    --eui-primary: #3b93f5;
+    --eui-primary-hover: #5aa6f7;
+    --eui-primary-contrast: #05203d;
+    --eui-primary-soft: rgba(28, 134, 242, 0.18);
+    --eui-primary-soft-text: #9ecbff;
+
+    --eui-success: #4ade80;
+    --eui-success-soft: rgba(34, 197, 94, 0.16);
+    --eui-success-soft-text: #86efac;
+
+    --eui-warning: #fbbf24;
+    --eui-warning-soft: rgba(245, 158, 11, 0.18);
+    --eui-warning-soft-text: #fcd34d;
+
+    --eui-danger: #f87171;
+    --eui-danger-soft: rgba(239, 68, 68, 0.18);
+    --eui-danger-soft-text: #fca5a5;
+
+    --eui-info: #60a5fa;
+    --eui-info-soft: rgba(59, 130, 246, 0.18);
+    --eui-info-soft-text: #93c5fd;
+
+    --eui-violet: #a78bfa;
+    --eui-violet-soft: rgba(139, 92, 246, 0.20);
+    --eui-violet-soft-text: #c4b5fd;
+
+    --eui-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+    --eui-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
+    --eui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --eui-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.55);
+    --eui-focus-ring: 0 0 0 3px rgba(28, 134, 242, 0.35);
+}
+
+/* Autofill do navegador nao deve pintar inputs de branco no tema escuro */
+[data-theme="escuro"] input:-webkit-autofill,
+[data-theme="escuro"] input:-webkit-autofill:hover,
+[data-theme="escuro"] input:-webkit-autofill:focus,
+[data-theme="escuro"] textarea:-webkit-autofill,
+[data-theme="escuro"] select:-webkit-autofill {
+    -webkit-text-fill-color: var(--eui-text);
+    -webkit-box-shadow: 0 0 0 1000px var(--eui-surface) inset;
+    box-shadow: 0 0 0 1000px var(--eui-surface) inset;
+    caret-color: var(--eui-text);
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+/* ----------------------------------------------------------------------------
  * Reset / base utilitárias
  * -------------------------------------------------------------------------- */
 .eui-scope { font-family: var(--eui-font); color: var(--eui-text); }
@@ -87,6 +150,10 @@
 .eui-page-header__title { font-family: var(--eui-font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--eui-text); margin: 0; }
 .eui-page-header__sub { font-size: 13px; color: var(--eui-muted); margin: 4px 0 0; }
 .eui-page-header__eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--eui-primary); margin-bottom: 4px; }
+.eui-page-header + .eui-stats { margin-top: var(--eui-space-4); }
+.eui-stats + .eui-toolbar,
+.eui-stats + .cwf-filters,
+.eui-stats + form { margin-top: var(--eui-space-4); }
 
 /* ----------------------------------------------------------------------------
  * Card
@@ -125,7 +192,7 @@
 .eui-btn:focus-visible { outline: none; box-shadow: var(--eui-focus-ring); }
 .eui-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.eui-btn--primary   { background: var(--eui-primary); border-color: var(--eui-primary); color: #fff; }
+.eui-btn--primary   { background: var(--eui-primary); border-color: var(--eui-primary); color: var(--eui-primary-contrast); }
 .eui-btn--primary:hover:not(:disabled)   { background: var(--eui-primary-hover); border-color: var(--eui-primary-hover); }
 
 .eui-btn--ghost     { background: var(--eui-surface); border-color: var(--eui-border-strong); color: var(--eui-text); }
@@ -175,6 +242,14 @@
 .eui-input:focus, .eui-select:focus, .eui-textarea:focus { outline: none; border-color: var(--eui-primary); box-shadow: var(--eui-focus-ring); }
 .eui-input[readonly] { background: var(--eui-surface-2); color: var(--eui-muted); }
 .eui-textarea { min-height: 84px; resize: vertical; line-height: 1.4; }
+
+/* Dropdown nativo no tema escuro: evita popup branco em selects do workflow. */
+[data-theme="escuro"] .eui-select,
+[data-theme="escuro"] .eui-select option,
+[data-theme="escuro"] .eui-select optgroup {
+    background: var(--eui-surface);
+    color: var(--eui-text);
+}
 
 /* ----------------------------------------------------------------------------
  * Toolbar (filtros)

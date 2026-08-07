@@ -59,6 +59,11 @@
 - **CC-e pendente**: quando a modalidade de frete da NF diverge do romaneio,
   fica pendente uma carta de correção que precisa ser aprovada.
 - **Sem canhoto**: material expedido sem comprovante de entrega anexado.
+  - Regra do comprovante antigo: registros **expedidos antes de ontem** que
+    ficaram **sem canhoto** foram **dispensados** (viraram "Finalizado" sem
+    comprovante) — a Bia **não cobra** mais o comprovante deles. Quem já tinha
+    canhoto continua com ele. **De ontem em diante**, todo material expedido
+    **continua exigindo** o comprovante normalmente.
 - **Conferido parado**: conferido há muito tempo sem seguir para o próximo passo.
 
 ## Como a Bia ajuda
@@ -93,4 +98,97 @@
 - **CC-e**: como o aviso vai para o Teams (mão única), a emissão da carta de
   correção é confirmada dizendo à Bia, por exemplo, "CC-e feita do romaneio 123"
   ou "carta de correção emitida 123" — ela marca a CC-e como resolvida.
+
+## Alcance da Bia (todo o sistema)
+- A Bia está disponível em **todas as páginas** do sistema, pelo botão redondo
+  no canto inferior direito. Ela conversa e tira dúvidas sobre **qualquer
+  módulo** — não só a Expedição.
+- **Dados ao vivo**: hoje o acompanhamento em tempo real (panorama de
+  pendências, cobrança de motivo, aprovação de estorno) é aprofundado na
+  **Conferência de Expedição**. Nos outros módulos ela orienta com base neste
+  conhecimento (o que é o módulo, onde fica, como funciona o fluxo e os termos).
+- Se perguntarem um número/status específico de um módulo cujo dado ao vivo ela
+  ainda não recebe, ela explica onde a pessoa encontra a informação na tela, com
+  honestidade, em vez de inventar.
+
+## Mapa completo dos módulos (onde fica cada coisa)
+
+### Compras
+- **Documento de entrada** (`/upload`): entrada de documentos/NF-e de compra no
+  sistema (upload e leitura do XML), auditoria do XML e lançamento. É por aqui
+  que a nota de fornecedor entra no fluxo.
+- **Compras CPS** (`/compras`): gestão das ordens de compra (OCs), incluindo
+  automações de modalidade CIF.
+- **Workflow de cadastros** (`/cadastros/`): fluxos de solicitação e aprovação
+  de cadastros (por exemplo, cadastro/atualização de itens, fornecedores,
+  clientes), com etapas e SLA.
+- **Inclusão XML / Portaria** (`/portaria`): inclusão de XML na portaria (entrada
+  de material), quando o perfil usa esse ponto de entrada.
+
+### Logística — Recebimento
+- **Conferência de Recebimento** (`/conferencia`): conferência do material que
+  **chega** (entrada), tipicamente por leitura de código de barras, comparando o
+  recebido com a nota.
+- **NF-e liberadas** (`/fiscal/liberadas`): notas fiscais já liberadas
+  fiscalmente, prontas para seguir no fluxo.
+- **Qualidade** (`/qualidade`): checagens de qualidade no recebimento.
+
+### Logística — Expedição
+- **Conferência de Expedição / Conferência Cega** (`/expedicao/conferencia-cega`):
+  o coração da saída. Confere as ordens/NFs que vão sair, com KPIs por status
+  (pendente, conferido, faturado, faturado sem conferência, romaneio, expedido).
+  É o módulo onde a Bia é mais completa (pendências, cobrança, CC-e, canhotos).
+- **Registro de expedição** (`/expedicao/conferencia`): registro da expedição em
+  si (incluindo canhoto/comprovante de entrega).
+- **Romaneios** (`/expedicao/romaneio`): montagem, edição, finalização e
+  expedição de romaneios, com validação da modalidade de frete por NF. A Bia
+  consegue **editar** um romaneio em rascunho e tratar **estornos** por comando
+  no chat (transportadora, placa, motorista, frete, incluir/remover NF).
+
+### Logística — WMS (armazém)
+- **Central WMS** (`/wms`): visão geral do WMS.
+- **Endereçamento** (`/wms/enderecamento`): guarda/movimentação de material nos
+  endereços do armazém.
+- **Estoque em Tempo Real** (`/wms/estoque`): posição de estoque por endereço.
+- **Cadastro de endereços** (`/admin/wms-enderecos`) e **Governança WMS**
+  (`/admin/wms-governanca`): administração da malha de endereços e regras.
+
+### Logística — Inventário
+- **Módulo de Inventário** (`/logistica/inventario`): criação
+  (`/logistica/inventario/novo`) e consulta (`/logistica/inventario/consulta`)
+  de inventários (contagens de estoque).
+
+### Logística — Transporte & Frota
+- **Gestão de Viagens** (`/logistica/viagens`) e **Mapa da Frota**
+  (`/logistica/mapa-frota`): acompanhamento de viagens e localização da frota.
+- **Solicitar Transporte** (`/logistica/solicitar-transporte`): abertura de
+  solicitações de transporte (coleta/entrega), manuais ou automáticas (Auto CIF).
+
+### Controladoria — Contas a receber
+- **Contas a receber** (`/financeiro/contas-receber`): acompanhamento dos
+  títulos a receber.
+- **Faturamento** (`/financeiro/faturamento`): apoio ao faturamento.
+- **Consulta de Boletos** (`/boletos`): consulta de boletos.
+
+### Controladoria — Contabilidade
+- **Classificação contábil** (`/financeiro/classificacao-contabil`) e
+  **Relatório de custos** (`/financeiro/relatorio-custos`).
+
+### Administração
+- **Dashboard** (`/admin`): visão gerencial.
+- **Avisos de atualizações** (`/admin/atualizacoes`) e **Atualizações
+  cadastrais** (`/admin/atualizacoes-cadastrais`).
+- **Gestão de acessos** (`/admin/usuarios`): usuários, papéis e permissões.
+- **Planejamento de tarefas** (`/planejamento`).
+- **Auditoria de Expedição** (`/expedicao/auditoria`): trilha de auditoria da
+  expedição (só Admin).
+- **E-mails de NF-e** (`/faturamento/emails-nfe`): configuração/envio de e-mails
+  de NF-e.
+
+## Papéis e permissões (visão geral)
+- O acesso a cada módulo depende de **permissões de página** (PAGE_*) atribuídas
+  ao papel do usuário. Quem é **Admin** enxerga tudo.
+- No menu, cada pessoa só vê os módulos a que tem acesso. Se alguém perguntar por
+  um módulo que não aparece pra ela, provavelmente é falta de permissão — orientar
+  a falar com um Admin (Gestão de acessos).
 

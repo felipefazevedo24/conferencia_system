@@ -156,10 +156,10 @@ def _obter_ou_criar_registro_rascunho(ordem: ExpedicaoOrdemST, usuario):
         )
     if registro is None:
         registro = ExpedicaoConferenciaSimples(
-            orcamento=ordem.cod_ordem_compra or "",
+            orcamento="",
             ordem_compra=ordem.cod_ordem_compra or "",
             numero_os=ordem.n_os or "",
-            tipo_referencia="Orcamento",
+            tipo_referencia="OrdemCompra",
             conferente=usuario,
             numero_nf=ordem.numero_nf or "",
             nome_cliente=ordem.fornecedor or "",
@@ -394,7 +394,7 @@ def listar_ordens_conf_st():
                 if sl == "expedido" and ordem.expedicao_registro_id:
                     registro = ExpedicaoConferenciaSimples.query.get(ordem.expedicao_registro_id)
                     if registro is not None:
-                        romaneio_info["canhoto_pendente"] = not bool(registro.canhoto_file_name)
+                        romaneio_info["canhoto_pendente"] = registro.status == "Expedido" and not bool(registro.canhoto_file_name)
 
         # Busca por OS percorre TODOS os status; ignora a fila padrao e o
         # filtro de status enquanto houver termo de busca.

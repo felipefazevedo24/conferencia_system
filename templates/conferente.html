@@ -398,26 +398,40 @@
         .item-alerta.warning { color: #92400e; }
         .item-alerta.error { color: #b91c1c; }
 
-        /* === CHAPA: contagem de unidades (UND) para material recebido em peso === */
-        .chapa-wrap { margin-top: 8px; }
+        /* === CHAPA: marcacao opcional (o conferente decide) para material recebido em peso === */
+        .chapa-wrap {
+            margin-top: 8px;
+            display: inline-flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 0; border-radius: 14px;
+            transition: background .16s ease, border-color .16s ease, padding .16s ease;
+        }
+        .chapa-wrap.aberto {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            box-shadow: inset 0 1px 0 #fff;
+        }
         .chapa-btn {
             display: inline-flex; align-items: center; gap: 6px;
-            padding: 6px 12px; border-radius: 10px; cursor: pointer;
-            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em;
-            background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
-            transition: all .18s ease;
+            padding: 5px 13px; border-radius: 999px; cursor: pointer;
+            font-size: 10.5px; font-weight: 800; letter-spacing: .02em; white-space: nowrap;
+            background: #fff; color: #64748b; border: 1.5px dashed #cbd5e1;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+            transition: all .16s ease;
         }
-        .chapa-btn:hover { background: #e0e7ff; border-color: #a5b4fc; }
-        .chapa-btn.preenchido { background: #dcfce7; color: #166534; border-color: #86efac; }
-        .chapa-btn.faltando { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-        .chapa-fields { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #475569; }
+        .chapa-btn i { font-size: 11px; }
+        .chapa-btn:hover { border-color: #94a3b8; color: #475569; transform: translateY(-1px); box-shadow: 0 3px 8px rgba(15,23,42,0.10); }
+        .chapa-btn.preenchido { background: #ecfdf5; color: #15803d; border: 1.5px solid #86efac; }
+        .chapa-btn.faltando { background: #fff7ed; color: #c2410c; border: 1.5px solid #fdba74; }
+        .chapa-fields { display: flex; align-items: center; gap: 8px; }
+        .chapa-fields label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
         .chapa-input {
-            width: 96px; padding: 8px; border: 2px solid #c7d2fe; border-radius: 10px;
+            width: 76px; padding: 7px 8px; border: 2px solid #c7d2fe; border-radius: 10px;
             text-align: center; font-family: monospace; font-weight: 800; font-size: 15px; color: #3730a3; background: #fff;
         }
         .chapa-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99,102,241,0.14); }
-        .chapa-input.faltando { border-color: #ef4444; background: #fef2f2; }
+        .chapa-input.faltando { border-color: #f97316; background: #fff7ed; }
+        .chapa-suffix { font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: .04em; }
         .confirm-box {
             display: flex;
             gap: 10px;
@@ -602,6 +616,101 @@
         .rc-modal-hist__head h3 { margin: 0; font-size: 16px; font-weight: 800; color: #14324d; }
         .rc-modal-hist__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #6b7280; }
         .rc-modal-hist__body { padding: 16px 20px; overflow-y: auto; }
+
+        [data-theme="escuro"] .module-shell {
+            background: var(--eui-surface) !important;
+            border: 1px solid var(--eui-border) !important;
+            box-shadow: var(--eui-shadow-sm) !important;
+        }
+        [data-theme="escuro"] .eui-page-header__sub { color: var(--eui-text-soft); }
+        [data-theme="escuro"] #dashboard-resumo { margin-top: 14px !important; margin-bottom: 22px !important; }
+
+        [data-theme="escuro"] .rc-table thead th {
+            background: var(--eui-surface-2);
+            color: var(--eui-text-soft);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-table tbody td {
+            color: var(--eui-text);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-table tbody tr:hover { background: rgba(59, 147, 245, 0.12); }
+        [data-theme="escuro"] .rc-table .rc-nf { color: #cfe3ff; }
+
+        [data-theme="escuro"] .erp-table th {
+            background: var(--eui-surface-2);
+            color: var(--eui-text-soft);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .erp-table td {
+            color: var(--eui-text);
+            border-bottom-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .erp-table tr:hover td { background: rgba(59, 147, 245, 0.12); }
+
+        [data-theme="escuro"] .qtd-input {
+            background: var(--eui-surface-2) !important;
+            color: var(--eui-text) !important;
+            border-color: var(--eui-border) !important;
+        }
+        [data-theme="escuro"] .qtd-input:focus {
+            background: var(--eui-surface) !important;
+            border-color: var(--eui-primary) !important;
+            box-shadow: 0 0 0 3px rgba(59, 147, 245, 0.28) !important;
+        }
+        [data-theme="escuro"] .qtd-input.input-ok { background: rgba(34, 197, 94, 0.20) !important; color: #c9f7db !important; }
+        [data-theme="escuro"] .qtd-input.input-warning { background: rgba(245, 158, 11, 0.20) !important; color: #fde68a !important; }
+        [data-theme="escuro"] .qtd-input.input-error { background: rgba(239, 68, 68, 0.20) !important; color: #fecaca !important; }
+
+        [data-theme="escuro"] .conf-menu__btn,
+        [data-theme="escuro"] .conf-menu__list,
+        [data-theme="escuro"] .pendencia-item {
+            background: var(--eui-surface) !important;
+            border-color: var(--eui-border) !important;
+            color: var(--eui-text) !important;
+        }
+        [data-theme="escuro"] .conf-menu__btn:hover,
+        [data-theme="escuro"] .conf-menu__item:hover { background: var(--eui-surface-3) !important; }
+        [data-theme="escuro"] .modal-foot { background: var(--eui-surface-2) !important; border-top-color: var(--eui-border) !important; }
+
+        [data-theme="escuro"] .validation-summary {
+            background: var(--eui-surface-2);
+            border-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .validation-summary.ok {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.30);
+        }
+        [data-theme="escuro"] .validation-summary.warn {
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(245, 158, 11, 0.30);
+        }
+        [data-theme="escuro"] .validation-summary i { background: var(--eui-surface); }
+        [data-theme="escuro"] .validation-summary strong,
+        [data-theme="escuro"] .validation-summary span { color: var(--eui-text); }
+
+        [data-theme="escuro"] .rc-hist-head h3,
+        [data-theme="escuro"] .rc-hist-desc,
+        [data-theme="escuro"] .rc-modal-hist__head h3 {
+            color: var(--eui-text);
+        }
+        [data-theme="escuro"] .rc-hist-sub,
+        [data-theme="escuro"] .rc-hist-data,
+        [data-theme="escuro"] .rc-modal-hist__close { color: var(--eui-muted); }
+        [data-theme="escuro"] .rc-hist-item,
+        [data-theme="escuro"] .rc-modal-hist__box {
+            background: var(--eui-surface-2);
+            border-color: var(--eui-border);
+        }
+        [data-theme="escuro"] .rc-modal-hist__head { border-bottom-color: var(--eui-border); }
+
+        [data-theme="escuro"] .empty-conferencia,
+        [data-theme="escuro"] .empty-conferencia h3,
+        [data-theme="escuro"] .empty-conferencia p {
+            background: var(--eui-surface-2);
+            color: var(--eui-text);
+            border-color: var(--eui-border);
+        }
     </style>
 {% endblock %}
 
@@ -1004,11 +1113,24 @@
     }
 
     function toggleChapa(id) {
+        const btn = document.getElementById(`chapa-btn-${id}`);
         const bloco = document.getElementById(`chapa-fields-${id}`);
-        if (!bloco) return;
-        const visivel = bloco.style.display !== 'none';
-        bloco.style.display = visivel ? 'none' : 'flex';
-        if (!visivel) {
+        const wrap = document.querySelector(`.chapa-wrap[data-id="${id}"]`);
+        if (!btn || !bloco) return;
+        const ativo = btn.dataset.ativo === '1';
+        if (ativo) {
+            // Desmarcar chapa: limpa e volta ao estado neutro (nao cobra UND).
+            btn.dataset.ativo = '0';
+            bloco.style.display = 'none';
+            wrap?.classList.remove('aberto');
+            const input = bloco.querySelector('.chapa-input');
+            if (input) input.value = '';
+            atualizarChapa(id);
+        } else {
+            btn.dataset.ativo = '1';
+            bloco.style.display = 'flex';
+            wrap?.classList.add('aberto');
+            atualizarChapa(id);
             setTimeout(() => bloco.querySelector('.chapa-input')?.focus(), 50);
         }
     }
@@ -1017,29 +1139,40 @@
         const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
         const btn = document.getElementById(`chapa-btn-${id}`);
         if (!input || !btn) return;
+        if (btn.dataset.ativo !== '1') {
+            // Nao marcado como chapa: botao neutro, sem cobranca.
+            input.classList.remove('faltando');
+            btn.classList.remove('preenchido', 'faltando');
+            btn.innerHTML = `<i class="fas fa-layer-group"></i> É chapa?`;
+            return;
+        }
         const valor = Number(String(input.value || '').replace(',', '.'));
         const preenchido = Number.isFinite(valor) && valor > 0;
         input.classList.toggle('faltando', !preenchido);
         btn.classList.toggle('preenchido', preenchido);
         btn.classList.toggle('faltando', !preenchido);
         btn.innerHTML = preenchido
-            ? `<i class="fas fa-layer-group"></i> Chapa: ${valor} UND`
+            ? `<i class="fas fa-check"></i> Chapa: ${valor} UND`
             : `<i class="fas fa-layer-group"></i> Chapa`;
     }
 
     function coletarChapas() {
         const chapas = {};
         document.querySelectorAll('.chapa-input').forEach((input) => {
-            chapas[input.dataset.id] = input.value;
+            const btn = document.getElementById(`chapa-btn-${input.dataset.id}`);
+            if (btn && btn.dataset.ativo === '1' && String(input.value || '').trim() !== '') {
+                chapas[input.dataset.id] = input.value;
+            }
         });
         return chapas;
     }
 
-    // Retorna os ids das chapas sem a quantidade em UND informada.
+    // Retorna os ids marcados como chapa que ainda estao sem a quantidade em UND.
     function chapasPendentes() {
         const pendentes = [];
-        document.querySelectorAll('.qtd-input[data-chapa="1"]').forEach((qtd) => {
-            const id = qtd.dataset.id;
+        document.querySelectorAll('.chapa-btn').forEach((btn) => {
+            if (btn.dataset.ativo !== '1') return;
+            const id = btn.dataset.id;
             const input = document.querySelector(`.chapa-input[data-id="${id}"]`);
             const valor = Number(String(input?.value || '').replace(',', '.'));
             if (!Number.isFinite(valor) || valor <= 0) pendentes.push(id);
@@ -1383,12 +1516,13 @@
             const ehChapa = unidadeEhChapa(unidadeItem);
             const blocoChapa = ehChapa ? `
                     <div class="chapa-wrap" data-id="${i.id}">
-                        <button type="button" class="chapa-btn faltando" id="chapa-btn-${i.id}" onclick="toggleChapa('${i.id}')">
-                            <i class="fas fa-layer-group"></i> Chapa
+                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="toggleChapa('${i.id}')">
+                            <i class="fas fa-layer-group"></i> É chapa?
                         </button>
                         <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
-                            <label>Qtd. chapas (UND)</label>
+                            <label>Qtd.</label>
                             <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
+                            <span class="chapa-suffix">UND</span>
                         </div>
                     </div>` : '';
             return `
@@ -1409,6 +1543,23 @@
         `;
         }).join('');
 
+        // Reabre a conferencia ja mostrando a quantidade de chapas (UND) que o
+        // conferente informou antes (auditavel).
+        itens.forEach((i) => {
+            const v = Number(i.qtd_chapas_und);
+            if (!Number.isFinite(v) || v <= 0) return;
+            const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
+            const btn = document.getElementById(`chapa-btn-${i.id}`);
+            const bloco = document.getElementById(`chapa-fields-${i.id}`);
+            const wrap = document.querySelector(`.chapa-wrap[data-id="${i.id}"]`);
+            if (!input || !btn || !bloco) return;
+            input.value = (v === Math.trunc(v)) ? String(Math.trunc(v)) : String(v);
+            btn.dataset.ativo = '1';
+            bloco.style.display = 'flex';
+            wrap?.classList.add('aberto');
+            atualizarChapa(i.id);
+        });
+
         atualizarProgressoConferencia();
     }
 
@@ -1428,7 +1579,7 @@
     }
 
     async function validar() {
-        // Chapa: obriga informar a quantidade de chapas (UND) antes de validar.
+        // Chapa: so cobra a quantidade em UND dos itens que o conferente marcou como chapa.
         const pendentesChapa = chapasPendentes();
         if (pendentesChapa.length > 0) {
             pendentesChapa.forEach((id) => {
@@ -1436,7 +1587,7 @@
                 if (bloco) bloco.style.display = 'flex';
                 atualizarChapa(id);
             });
-            alert('Informe a quantidade de chapas (UND) no botão "Chapa" de cada item recebido em peso antes de validar.');
+            alert('Você marcou item(ns) como chapa. Informe a quantidade de chapas (UND) ou desmarque o botão "É chapa?" antes de validar.');
             document.getElementById(`chapa-fields-${pendentesChapa[0]}`)?.querySelector('.chapa-input')?.focus();
             return;
         }
@@ -1606,6 +1757,7 @@
                 nota: notaSel,
                 contagens: coletarContagens(),
                 conversoes_itens: coletarConversoes(),
+                chapas_itens: coletarChapas(),
                 forcar_pendencia: true,
                 motivos_itens: motivosItens,
                 motivos_tipos: motivosTipos,

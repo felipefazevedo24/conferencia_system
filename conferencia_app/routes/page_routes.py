@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, redirect, render_template, request, session, url_for
 from sqlalchemy import func
@@ -9,6 +9,7 @@ from ..models import (
     ActiveSession,
     AgendamentoSolicitacao,
     BoletoContaReceber,
+    CadastroWorkflowSolicitacao,
     ComexProcesso,
     ExpedicaoConferencia,
     ExpedicaoConferenciaSimples,
@@ -16,6 +17,7 @@ from ..models import (
     PlannerCard,
     PlannerColumn,
     Usuario,
+    Viagem,
 )
 
 
@@ -417,6 +419,8 @@ def _fmt_metric(value: int | float, singular: str, plural: str | None = None) ->
 def _build_home_metrics() -> dict:
     today = datetime.now().date()
     metrics = {
+        "materiais_expedidos": 0,
+        "materiais_recebidos": 0,
         "recebimento_pendente": 0,
         "notas_concluidas": 0,
         "notas_lancadas": 0,
@@ -429,8 +433,9 @@ def _build_home_metrics() -> dict:
         "importadas_hoje": 0,
         "lancadas_hoje": 0,
         "comex_ativo": 0,
+        "cadastro_pendente": 0,
+        "viagens_em_andamento": 0,
     }
-
     try:
         metrics["recebimento_pendente"] = (
             db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
@@ -450,6 +455,17 @@ def _build_home_metrics() -> dict:
             .scalar()
             or 0
         )
+        metrics["materiais_recebidos"] = int(metrics["notas_lancadas"])
+        metrics["materiais_expedidos"] = (
+            db.session.query(func.count(func.distinct(ExpedicaoConferenciaSimples.numero_nf)))
+            .filter(
+                ExpedicaoConferenciaSimples.status.in_(["Expedido", "Finalizado"]),
+                ExpedicaoConferenciaSimples.numero_nf.isnot(None),
+                ExpedicaoConferenciaSimples.numero_nf != "",
+            )
+            .scalar()
+            or 0
+        )
         metrics["auditoria_pendente"] = (
             db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
             .filter(ItemNota.auditor_decisao == "PendenteDecisao")
@@ -466,6 +482,11 @@ def _build_home_metrics() -> dict:
         metrics["agendamento_ativo"] = (
             AgendamentoSolicitacao.query
             .filter(AgendamentoSolicitacao.status.notin_(["Concluida", "Cancelada"]))
+            .count()
+        )
+        metrics["viagens_em_andamento"] = (
+            Viagem.query
+            .filter(Viagem.status == "EmAndamento")
             .count()
         )
         metrics["expedicao_aberta"] = (
@@ -493,6 +514,11 @@ def _build_home_metrics() -> dict:
             .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) == today)
             .scalar()
             or 0
+        )
+        metrics["cadastro_pendente"] = (
+            CadastroWorkflowSolicitacao.query
+            .filter(CadastroWorkflowSolicitacao.status.notin_(["Finalizada", "Cancelada"]))
+            .count()
         )
     except Exception:
         db.session.rollback()
@@ -637,20 +663,230 @@ def _build_user_context(metrics: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Dashboard inicial (home): indicadores e gráficos variáveis por permissão.
+# Cada card/gráfico só aparece se o usuário tem acesso à área correspondente.
+# WMS fica de fora de propósito.
+# ---------------------------------------------------------------------------
+_PERM_RECEBIMENTO = ("PAGE_CONFERENCIA", "PAGE_PORTARIA", "PAGE_FISCAL_LIBERADAS")
+_PERM_COMPRAS = ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
+_PERM_EXPEDICAO = ("PAGE_EXPEDICAO_CONFERENCIA", "PAGE_EXPEDICAO_CONF_CEGA", "PAGE_EXPEDICAO_ROMANEIO")
+_PERM_LOGISTICA = ("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO", "PAGE_LOGISTICA_VIAGEM")
+_PERM_CONTROLADORIA = (
+    "PAGE_FINANCEIRO_FATURAMENTO",
+    "PAGE_FINANCEIRO_CONTAS_RECEBER",
+    "PAGE_FINANCEIRO_CLASSIFICACAO_CONTABIL",
+    "PAGE_FINANCEIRO_RELATORIO_CUSTOS",
+)
+
+
+def _serie_entradas_por_dia(dias: int = 14) -> dict:
+    """Série diária de notas que entraram (por data de importação)."""
+    today = datetime.now().date()
+    inicio = today - timedelta(days=dias - 1)
+    contagem: dict[str, int] = {}
+    try:
+        rows = (
+            db.session.query(
+                func.date(ItemNota.data_importacao),
+                func.count(func.distinct(ItemNota.numero_nota)),
+            )
+            .filter(func.date(ItemNota.data_importacao) >= inicio)
+            .group_by(func.date(ItemNota.data_importacao))
+            .all()
+        )
+        for dia, qtd in rows:
+            contagem[str(dia)] = int(qtd or 0)
+    except Exception:
+        db.session.rollback()
+
+    labels, valores = [], []
+    for i in range(dias):
+        d = inicio + timedelta(days=i)
+        labels.append(d.strftime("%d/%m"))
+        valores.append(contagem.get(str(d), 0))
+    return {"labels": labels, "valores": valores}
+
+
+def _serie_fluxo_notas_por_dia(dias: int = 14) -> dict:
+    """Série diária com entrada de NFs e lançamentos concluídos no ERP."""
+    today = datetime.now().date()
+    inicio = today - timedelta(days=dias - 1)
+    importadas: dict[str, int] = {}
+    lancadas: dict[str, int] = {}
+
+    try:
+        rows_import = (
+            db.session.query(
+                func.date(ItemNota.data_importacao),
+                func.count(func.distinct(ItemNota.numero_nota)),
+            )
+            .filter(func.date(ItemNota.data_importacao) >= inicio)
+            .group_by(func.date(ItemNota.data_importacao))
+            .all()
+        )
+        for dia, qtd in rows_import:
+            importadas[str(dia)] = int(qtd or 0)
+
+        rows_lanc = (
+            db.session.query(
+                func.date(ItemNota.data_lancamento),
+                func.count(func.distinct(ItemNota.numero_nota)),
+            )
+            .filter(ItemNota.status == "Lançado", func.date(ItemNota.data_lancamento) >= inicio)
+            .group_by(func.date(ItemNota.data_lancamento))
+            .all()
+        )
+        for dia, qtd in rows_lanc:
+            lancadas[str(dia)] = int(qtd or 0)
+    except Exception:
+        db.session.rollback()
+
+    labels = []
+    serie_importadas = []
+    serie_lancadas = []
+    for i in range(dias):
+        d = inicio + timedelta(days=i)
+        chave = str(d)
+        labels.append(d.strftime("%d/%m"))
+        serie_importadas.append(importadas.get(chave, 0))
+        serie_lancadas.append(lancadas.get(chave, 0))
+
+    return {
+        "labels": labels,
+        "importadas": serie_importadas,
+        "lancadas": serie_lancadas,
+    }
+
+
+def _dist_expedicao_status() -> dict:
+    """Distribuição de expedições por status."""
+    dados: dict[str, int] = {}
+    try:
+        rows = (
+            db.session.query(ExpedicaoConferencia.status, func.count(ExpedicaoConferencia.id))
+            .group_by(ExpedicaoConferencia.status)
+            .all()
+        )
+        for status, qtd in rows:
+            dados[str(status or "—")] = int(qtd or 0)
+    except Exception:
+        db.session.rollback()
+    return dados
+
+
+def _build_dashboard(metrics: dict) -> list[dict]:
+    perms = get_effective_permissions()
+
+    def ok(keys) -> bool:
+        return any(perms.get(k, False) for k in keys)
+
+    raw_sections = [
+        {
+            "name": "Operação agora",
+            "icon": "fa-bolt",
+            "cards": [
+                {
+                    "perms": _PERM_EXPEDICAO,
+                    "label": "Materiais expedidos",
+                    "value": metrics["materiais_expedidos"],
+                    "caption": "Notas fiscais com status finalizado no Registro de Expedição.",
+                    "icon": "fa-box-open",
+                    "href": "/expedicao/conferencia",
+                    "tone": "emerald",
+                },
+                {
+                    "perms": ("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO", "PAGE_FISCAL_LIBERADAS"),
+                    "label": "Materiais recebidos",
+                    "value": metrics["materiais_recebidos"],
+                    "caption": "Notas fiscais com status lançado no Documento de Entrada.",
+                    "icon": "fa-file-circle-check",
+                    "href": "/upload",
+                    "tone": "blue",
+                },
+                {
+                    "perms": _PERM_EXPEDICAO,
+                    "label": "Materiais com pendência de expedição",
+                    "value": metrics["expedicao_aberta"],
+                    "caption": "Pendentes na conferência de expedição.",
+                    "icon": "fa-boxes-packing",
+                    "href": "/expedicao/conferencia-cega",
+                    "tone": "amber",
+                },
+                {
+                    "perms": ("PAGE_CONFERENCIA", "PAGE_PORTARIA"),
+                    "label": "Materiais com pendência de recebimento",
+                    "value": metrics["recebimento_pendente"],
+                    "caption": "Pendentes na conferência de recebimento.",
+                    "icon": "fa-inbox",
+                    "href": "/conferencia",
+                    "tone": "violet",
+                },
+                {
+                    "perms": _PERM_LOGISTICA,
+                    "label": "Viagens sendo realizadas",
+                    "value": metrics["viagens_em_andamento"],
+                    "caption": "Viagens com status EmAndamento.",
+                    "icon": "fa-truck-fast",
+                    "href": "/logistica/viagens",
+                    "tone": "teal",
+                },
+                {
+                    "perms": ("PAGE_CADASTRO_WORKFLOW",),
+                    "label": "Cadastros aguardando validação",
+                    "value": metrics["cadastro_pendente"],
+                    "caption": "Cadastros com status diferente de concluído.",
+                    "icon": "fa-diagram-project",
+                    "href": "/cadastros/",
+                    "tone": "sky",
+                },
+            ],
+        }
+    ]
+
+    sections = []
+    for sec in raw_sections:
+        cards = [c for c in sec["cards"] if ok(c["perms"])]
+        if cards:
+            sections.append({"name": sec["name"], "icon": sec["icon"], "cards": cards})
+    return sections
+
+
+def _build_dashboard_charts(metrics: dict) -> dict:
+    perms = get_effective_permissions()
+
+    def ok(keys) -> bool:
+        return any(perms.get(k, False) for k in keys)
+
+    charts: dict = {}
+    if ok(_PERM_RECEBIMENTO + _PERM_COMPRAS):
+        charts["fluxo_notas"] = _serie_fluxo_notas_por_dia()
+        charts["recebido_vs_expedido"] = {
+            "Materiais recebidos": int(metrics["materiais_recebidos"]),
+            "Materiais expedidos": int(metrics["materiais_expedidos"]),
+        }
+    if ok(_PERM_RECEBIMENTO + _PERM_EXPEDICAO + ("PAGE_CADASTRO_WORKFLOW",)):
+        charts["pendencias_chave"] = {
+            "Pendência recebimento": int(metrics["recebimento_pendente"]),
+            "Pendência expedição": int(metrics["expedicao_aberta"]),
+            "Cadastros aguardando validação": int(metrics["cadastro_pendente"]),
+        }
+    return charts
+
+
 @page_bp.route("/")
 @login_required
 def home():
     metrics = _build_home_metrics()
-    modules = _build_available_modules(metrics)
-    sections = _group_modules(modules)
+    sections = _build_dashboard(metrics)
+    total_indicadores = sum(len(sec["cards"]) for sec in sections)
     return render_template(
-        "menu_principal.html",
+        "dashboard_home.html",
         user=session.get("username", "Usuário"),
         user_context=_build_user_context(metrics),
-        home_sections=sections,
-        home_modules=modules,
-        home_highlights=_build_home_highlights(metrics),
-        priority_actions=_build_priority_actions(modules, metrics),
+        dashboard_sections=sections,
+        dashboard_charts=_build_dashboard_charts(metrics),
+        total_indicadores=total_indicadores,
         home_metrics=metrics,
     )
 

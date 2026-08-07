@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Columbia Sync{% endblock %}
+
+{% block extra_head %}
+<style>
+    .content-body:has(.dash) { padding: 0 !important; }
+
+    .dash {
+        --dash-bg: #f1f6fb;
+        --dash-surface: #ffffff;
+        --dash-surface-2: #edf3f8;
+        --dash-border: rgba(15, 50, 77, 0.14);
+        --dash-border-strong: rgba(15, 98, 201, 0.24);
+        --dash-ink: #16324d;
+        --dash-ink-strong: #0f2235;
+        --dash-muted: #60758d;
+        --dash-blue: #1c86f2;
+        --dash-blue-soft: #0f62c9;
+        --dash-refresh-bg: rgba(15, 98, 201, 0.10);
+        --dash-refresh-fg: #0f62c9;
+        --dash-refresh-hover: rgba(15, 98, 201, 0.18);
+        --dash-card-bg: linear-gradient(160deg, #ffffff 0%, #f5f9ff 100%);
+        --dash-card-hover-shadow: 0 14px 30px rgba(15, 34, 53, 0.12);
+        --dash-range-bg: rgba(15, 50, 77, 0.05);
+        --dash-range-pill: rgba(15, 98, 201, 0.16);
+        --dash-empty-ink: #16324d;
+        --dash-empty-bg: rgba(255, 255, 255, 0.74);
+        min-height: 100%;
+        padding: 26px 26px 40px;
+        background:
+            radial-gradient(1100px 460px at 88% -8%, rgba(28, 134, 242, 0.12), transparent 60%),
+            radial-gradient(900px 420px at 6% 4%, rgba(15, 98, 201, 0.10), transparent 55%),
+            var(--dash-bg);
+        color: var(--dash-ink);
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    [data-theme="escuro"] .dash {
+        --dash-bg: #070c14;
+        --dash-surface: #0f1a28;
+        --dash-surface-2: #12203180;
+        --dash-border: rgba(125, 196, 255, 0.14);
+        --dash-border-strong: rgba(125, 196, 255, 0.28);
+        --dash-ink: #eaf3fc;
+        --dash-ink-strong: #ffffff;
+        --dash-muted: rgba(200, 219, 238, 0.62);
+        --dash-blue-soft: #7ec4ff;
+        --dash-refresh-bg: rgba(28, 134, 242, 0.14);
+        --dash-refresh-fg: #e8f3ff;
+        --dash-refresh-hover: rgba(28, 134, 242, 0.26);
+        --dash-card-bg: linear-gradient(160deg, var(--dash-surface) 0%, #0b1521 100%);
+        --dash-card-hover-shadow: 0 18px 40px rgba(3, 12, 24, 0.55);
+        --dash-range-bg: rgba(255, 255, 255, 0.03);
+        --dash-range-pill: rgba(28, 134, 242, 0.28);
+        --dash-empty-ink: #f0f7ff;
+        --dash-empty-bg: var(--dash-surface-2);
+        background:
+            radial-gradient(1100px 460px at 88% -8%, rgba(28, 134, 242, 0.16), transparent 60%),
+            radial-gradient(900px 420px at 6% 4%, rgba(15, 98, 201, 0.12), transparent 55%),
+            var(--dash-bg);
+    }
+
+    /* ---- Cabeçalho ---- */
+    .dash-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 26px;
+    }
+    .dash-head h1 {
+        margin: 0;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(26px, 3vw, 34px);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: var(--dash-ink-strong);
+    }
+    .dash-head p {
+        margin: 6px 0 0;
+        font-size: 13.5px;
+        color: var(--dash-muted);
+    }
+    .dash-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .dash-updated {
+        font-size: 11.5px;
+        color: var(--dash-muted);
+    }
+    .dash-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid var(--dash-border-strong);
+        background: rgba(28, 134, 242, 0.14);
+        color: var(--dash-refresh-fg);
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.18s ease, transform 0.18s ease;
+    }
+    .dash-refresh:hover { background: var(--dash-refresh-hover); transform: translateY(-1px); }
+
+    /* ---- Seções ---- */
+    .dash-section { margin-bottom: 30px; }
+    .dash-section-head {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-bottom: 14px;
+    }
+    .dash-section-ico {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: rgba(28, 134, 242, 0.16);
+        border: 1px solid var(--dash-border);
+        color: var(--dash-blue-soft);
+        font-size: 14px;
+    }
+    .dash-section-head strong {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--dash-ink-strong);
+    }
+    .dash-section-line {
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--dash-border), transparent);
+    }
+
+    /* ---- Cards KPI ---- */
+    .dash-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px;
+        margin-bottom: 30px;
+    }
+    .dash-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 16px 15px;
+        border-radius: 16px;
+        border: 1px solid var(--dash-border);
+        background: var(--dash-card-bg);
+        text-decoration: none;
+        color: inherit;
+        overflow: hidden;
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .dash-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        background: var(--card-accent, var(--dash-blue));
+        opacity: 0.9;
+    }
+    .dash-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--dash-border-strong);
+        box-shadow: var(--dash-card-hover-shadow);
+        color: inherit;
+    }
+    .dash-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .dash-card-ico {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        flex-shrink: 0;
+        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 20%, transparent);
+        color: var(--card-accent, var(--dash-blue-soft));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-accent, var(--dash-blue)) 32%, transparent);
+    }
+    .dash-card-tag {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        padding: 4px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+        color: color-mix(in srgb, var(--card-accent, var(--dash-blue-soft)) 78%, #ffffff);
+        background: color-mix(in srgb, var(--card-accent, var(--dash-blue)) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--card-accent, var(--dash-blue)) 26%, transparent);
+    }
+    .dash-card-value {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: var(--dash-ink-strong);
+    }
+    .dash-card-label {
+        margin-top: 8px;
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--dash-ink);
+    }
+    .dash-card-caption {
+        margin-top: 4px;
+        font-size: 11px;
+        line-height: 1.45;
+        color: var(--dash-muted);
+    }
+
+    /* tons dos cards */
+    .tone-amber { --card-accent: #f59e0b; }
+    .tone-blue { --card-accent: #1c86f2; }
+    .tone-violet { --card-accent: #8b5cf6; }
+    .tone-emerald { --card-accent: #10b981; }
+    .tone-sky { --card-accent: #38bdf8; }
+    .tone-teal { --card-accent: #14b8a6; }
+
+    /* ---- Gráficos ---- */
+    .dash-charts {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
+    }
+    .dash-chart {
+        border-radius: 18px;
+        border: 1px solid var(--dash-border);
+        background: var(--dash-card-bg);
+        padding: 18px 18px 14px;
+        display: flex;
+        flex-direction: column;
+        min-height: 300px;
+    }
+    .dash-chart-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+    .dash-chart-head strong {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--dash-ink-strong);
+    }
+    .dash-chart-head span {
+        font-size: 11.5px;
+        color: var(--dash-muted);
+    }
+    .dash-chart-body {
+        position: relative;
+        flex: 1;
+        min-height: 220px;
+    }
+    .dash-range {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 999px;
+        border: 1px solid var(--dash-border);
+        background: var(--dash-range-bg);
+    }
+    .dash-range button {
+        border: none;
+        background: transparent;
+        color: var(--dash-muted);
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.16s ease, color 0.16s ease;
+    }
+    .dash-range button.active {
+        background: var(--dash-range-pill);
+        color: #eaf3fc;
+    }
+
+    /* ---- Estado vazio ---- */
+    .dash-empty {
+        border: 1px dashed var(--dash-border-strong);
+        border-radius: 18px;
+        padding: 46px 20px;
+        text-align: center;
+        color: var(--dash-muted);
+        background: var(--dash-empty-bg);
+    }
+    .dash-empty i { font-size: 30px; color: var(--dash-blue-soft); display: block; margin-bottom: 12px; }
+    .dash-empty strong { display: block; color: var(--dash-empty-ink); font-size: 15px; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
+
+    @media (max-width: 900px) {
+        .dash-charts { grid-template-columns: 1fr; }
+        .dash { padding: 20px 16px 32px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dash">
+    <header class="dash-head">
+        <div>
+            <h1>Dashboard</h1>
+            <p>Olá, {{ (current_user_display or user)|title }} — panorama da sua operação em tempo real.</p>
+        </div>
+        <div class="dash-head-actions">
+            <span class="dash-updated" id="dashUpdated"></span>
+            <button type="button" class="dash-refresh" onclick="window.location.reload()">
+                <i class="fas fa-rotate"></i> Atualizar
+            </button>
+        </div>
+    </header>
+
+    {% if not dashboard_sections %}
+    <div class="dash-empty">
+        <i class="fas fa-compass"></i>
+        <strong>Seu painel está pronto</strong>
+        Use o menu lateral para navegar pelos módulos. Assim que houver indicadores no seu perfil, eles aparecem aqui.
+    </div>
+    {% else %}
+
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div class="dash-section-ico"><i class="fas fa-gauge-high"></i></div>
+            <strong>Prioridades operacionais</strong>
+            <div class="dash-section-line"></div>
+        </div>
+        <div class="dash-kpis">
+            {% for section in dashboard_sections %}
+            {% for card in section.cards %}
+            <a href="{{ card.href }}" class="dash-card tone-{{ card.tone }}">
+                <div class="dash-card-top">
+                    <div class="dash-card-ico"><i class="fas {{ card.icon }}"></i></div>
+                    <span class="dash-card-tag">{{ section.name }}</span>
+                </div>
+                <div class="dash-card-value">{{ card.value }}</div>
+                <div class="dash-card-label">{{ card.label }}</div>
+                <div class="dash-card-caption">{{ card.caption }}</div>
+            </a>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if dashboard_charts.fluxo_notas or dashboard_charts.recebido_vs_expedido or dashboard_charts.pendencias_chave %}
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div class="dash-section-ico"><i class="fas fa-chart-line"></i></div>
+            <strong>Visão de fila e andamento</strong>
+            <div class="dash-section-line"></div>
+        </div>
+        <div class="dash-charts">
+            {% if dashboard_charts.fluxo_notas %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Fluxo diário: entradas x lançamentos</strong>
+                    <div class="dash-range" id="dashRange">
+                        <button type="button" data-dias="7">7 dias</button>
+                        <button type="button" data-dias="14" class="active">14 dias</button>
+                    </div>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartFluxo"></canvas></div>
+            </div>
+            {% endif %}
+            {% if dashboard_charts.recebido_vs_expedido %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Materiais recebidos x expedidos</strong>
+                    <span>Comparativo acumulado do fluxo</span>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartRecebidoExpedido"></canvas></div>
+            </div>
+            {% endif %}
+            {% if dashboard_charts.pendencias_chave %}
+            <div class="dash-chart">
+                <div class="dash-chart-head">
+                    <strong>Pendências que exigem ação</strong>
+                    <span>Recebimento, expedição e validação cadastral</span>
+                </div>
+                <div class="dash-chart-body"><canvas id="chartPendencias"></canvas></div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const DASH = {{ dashboard_charts|tojson }};
+
+        const upd = document.getElementById("dashUpdated");
+        if (upd) {
+            const agora = new Date();
+            upd.textContent = "Atualizado às " + agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        if (typeof Chart === "undefined") return;
+
+        const dashEl = document.querySelector(".dash");
+        const cssVar = (name, fallback) => {
+            if (!dashEl) return fallback;
+            const value = getComputedStyle(dashEl).getPropertyValue(name).trim();
+            return value || fallback;
+        };
+
+        Chart.defaults.color = cssVar("--dash-muted", "rgba(96, 117, 141, 0.9)");
+        Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+        const GRID = cssVar("--dash-border", "rgba(15, 50, 77, 0.15)");
+        const AZUL = "#1c86f2";
+        const VERDE = "#10b981";
+
+        // ----- Fluxo diário de notas (entrada x lançamento) -----
+        let chartFluxo = null;
+        const elFluxo = document.getElementById("chartFluxo");
+        if (elFluxo && DASH.fluxo_notas) {
+            const render = (dias) => {
+                const labels = DASH.fluxo_notas.labels.slice(-dias);
+                const importadas = DASH.fluxo_notas.importadas.slice(-dias);
+                const lancadas = DASH.fluxo_notas.lancadas.slice(-dias);
+                const ctx = elFluxo.getContext("2d");
+                const grad = ctx.createLinearGradient(0, 0, 0, 260);
+                grad.addColorStop(0, "rgba(28, 134, 242, 0.82)");
+                grad.addColorStop(1, "rgba(28, 134, 242, 0.20)");
+                if (chartFluxo) chartFluxo.destroy();
+                chartFluxo = new Chart(ctx, {
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                type: "bar",
+                                label: "Importadas",
+                                data: importadas,
+                                backgroundColor: grad,
+                                borderRadius: 6,
+                                maxBarThickness: 24,
+                            },
+                            {
+                                type: "line",
+                                label: "Lançadas",
+                                data: lancadas,
+                                borderColor: VERDE,
+                                backgroundColor: "rgba(16, 185, 129, 0.2)",
+                                tension: 0.32,
+                                pointRadius: 3,
+                                pointHoverRadius: 4,
+                                pointBackgroundColor: VERDE,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12, padding: 12 } } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
+                            y: { beginAtZero: true, grid: { color: GRID }, ticks: { precision: 0 } }
+                        }
+                    }
+                });
+            };
+            render(14);
+            const range = document.getElementById("dashRange");
+            if (range) {
+                range.querySelectorAll("button").forEach((b) => {
+                    b.addEventListener("click", () => {
+                        range.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+                        b.classList.add("active");
+                        render(parseInt(b.dataset.dias, 10));
+                    });
+                });
+            }
+        }
+
+        // ----- Doughnut helper -----
+        const PALETA = ["#f59e0b", "#1c86f2", "#10b981", "#8b5cf6", "#38bdf8", "#f472b6", "#14b8a6"];
+        function doughnut(elId, obj) {
+            const el = document.getElementById(elId);
+            if (!el || !obj) return;
+            const labels = Object.keys(obj);
+            const valores = labels.map((k) => obj[k]);
+            if (!valores.some((v) => v > 0)) {
+                const ctx = el.getContext("2d");
+                ctx.font = "13px 'IBM Plex Sans'";
+                ctx.fillStyle = "rgba(200,219,238,0.55)";
+                ctx.textAlign = "center";
+                ctx.fillText("Sem dados no período", el.width / 2, el.height / 2);
+                return;
+            }
+            new Chart(el.getContext("2d"), {
+                type: "doughnut",
+                data: { labels: labels, datasets: [{ data: valores, backgroundColor: PALETA, borderColor: cssVar("--dash-surface", "#ffffff"), borderWidth: 2 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: "62%",
+                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 14 } } }
+                }
+            });
+        }
+        doughnut("chartRecebidoExpedido", DASH.recebido_vs_expedido);
+        doughnut("chartPendencias", DASH.pendencias_chave);
+    })();
+</script>
+{% endblock %}
