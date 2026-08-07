@@ -1097,11 +1097,7 @@ if ("serviceWorker" in navigator) {
             footEl.style.display = "";
             await digitar("Oi! Eu sou a Bia 😊", 500);
             await digitar("Posso te ajudar com dúvidas de qualquer módulo do sistema — recebimento, conferência, compras, expedição, romaneios, notas fiscais, contas a receber e mais. O que você precisa?", 900);
-            if (BIA_IS_ADMIN) {
-                await digitar("Como você é Admin, também dá pra mandar avisos: escreva algo como \"avisar todos: <mensagem>\", \"avisar cargo Logística: <mensagem>\" ou \"avisar joao: <mensagem>\".", 900);
-            }
             const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"];
-            if (BIA_IS_ADMIN) chips.unshift("avisar todos: ");
             renderChips(chips);
             flushAvisos();
             return;
