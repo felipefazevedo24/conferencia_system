@@ -229,6 +229,7 @@
     min-height: 0;
   }
   .tv-kb-col.is-alert { border-top-color: #f87171; }
+  .tv-kb-col.is-neutral { border-top-color: #eaf2ff; }
   .tv-kb-col.is-info { border-top-color: #3da5f4; }
   .tv-kb-col.is-warn { border-top-color: #fbbf24; }
   .tv-kb-col.is-ok { border-top-color: #34d399; }
@@ -251,6 +252,7 @@
     padding: 7px 9px;
   }
   .tv-kb-card.is-alert { border-left-color: #f87171; }
+  .tv-kb-card.is-neutral { border-left-color: #eaf2ff; }
   .tv-kb-card.is-info { border-left-color: #3da5f4; }
   .tv-kb-card.is-warn { border-left-color: #fbbf24; }
   .tv-kb-card.is-ok { border-left-color: #34d399; }
@@ -808,8 +810,10 @@
     const pend = g("pendente_conf").total;
     const lanc = g("pendente_lanc").total;
     const expPend = ge("pendente").total;
-    const flowTag = $("flow-tag");
-    if (flowTag) flowTag.textContent = "Rec " + pend + " pend. conf. · Exp " + expPend + " pend. conf.";
+    const recTag = $("rec-tag");
+    const expTag = $("exp-tag");
+    if (recTag) recTag.textContent = pend + " pend. conf. · " + lanc + " pend. lançamento";
+    if (expTag) expTag.textContent = expPend + " pend. conferência";
 
     const cols = [
       {
@@ -861,47 +865,47 @@
 
     const expCols = [
       {
+        label: "Fat. sem conferência",
+        total: ge("faturado_sem_conf").total,
+        colClass: "is-alert",
+        items: (ge("faturado_sem_conf").lista || []).slice(0, 20).map((it) => ({
+          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
+          subtitle: it.parceiro || "—",
+          meta: relTime(it.ts || it.desde),
+          tone: "is-alert",
+        })),
+      },
+      {
         label: "Pend. conferência",
         total: ge("pendente").total,
-        colClass: "is-alert",
+        colClass: "is-warn",
         items: (ge("pendente").lista || []).slice(0, 20).map((it) => ({
           title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
           subtitle: (it.parceiro || "—") + (it.numero_nf ? " · NF " + it.numero_nf : ""),
           meta: relTime(it.ts || it.desde),
-          tone: it.atrasado ? "is-alert" : "",
+          tone: "is-warn",
         })),
       },
       {
         label: "Conferido/Ag. Fat",
         total: ge("conferido").total,
-        colClass: "is-info",
+        colClass: "is-neutral",
         items: (ge("conferido").lista || []).slice(0, 20).map((it) => ({
           title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
           subtitle: it.parceiro || "—",
           meta: relTime(it.ts || it.desde),
-          tone: "is-info",
-        })),
-      },
-      {
-        label: "Fat. sem conferência",
-        total: ge("faturado_sem_conf").total,
-        colClass: "is-warn",
-        items: (ge("faturado_sem_conf").lista || []).slice(0, 20).map((it) => ({
-          title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
-          subtitle: it.parceiro || "—",
-          meta: relTime(it.ts || it.desde),
-          tone: "is-warn",
+          tone: "is-neutral",
         })),
       },
       {
         label: "Faturado a expedir",
         total: ge("faturado").total,
-        colClass: "is-warn",
+        colClass: "is-info",
         items: (ge("faturado").lista || []).slice(0, 20).map((it) => ({
           title: (it.tipo || "FAT") + " " + (it.codigo || "—"),
           subtitle: it.parceiro || "—",
           meta: relTime(it.ts || it.desde),
-          tone: "is-warn",
+          tone: "is-info",
         })),
       },
       {
