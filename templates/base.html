@@ -1678,12 +1678,14 @@ if ("serviceWorker" in navigator) {
             // Avança o marcador para o "agora" do servidor (evita repetir avisos).
             if (d.agora) localStorage.setItem(LS_NOVIDADES, d.agora);
             if (!d.tem_novidades || !(d.itens && d.itens.length)) return;
+            const erros = d.itens.filter((i) => (i.tipo || "info") === "erro");
+            if (!erros.length) return;
             // Não interrompe se o painel já estiver aberto.
             if (panel.classList.contains("open")) return;
-            const linhas = d.itens.map((i) => i.texto);
+            const linhas = erros.map((i) => i.texto);
             const msg = d.macro
-                ? `Chegou agora: ${linhas.join("; ")}.`
-                : `Chegou pra você: ${linhas.join(" · ")}. 📬`;
+                ? `⚠️ Erros novos: ${linhas.join("; ")}.`
+                : `⚠️ Bia detectou erro novo: ${linhas.join(" · ")}.`;
             mostrarToast(msg);
         } catch (e) { /* silencioso */ }
     }
