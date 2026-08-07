@@ -470,6 +470,20 @@
     </div>
 </div>
 
+<div class="sync-confirm-overlay" id="maintenanceConfirmOverlay" aria-hidden="true">
+    <div class="sync-confirm" role="dialog" aria-modal="true" aria-labelledby="maintenanceConfirmTitle">
+        <div class="sync-confirm-mark" id="maintenanceConfirmMark"><i class="fas fa-screwdriver-wrench"></i></div>
+        <h3 id="maintenanceConfirmTitle">Modo manutenção</h3>
+        <p id="maintenanceConfirmText">Confirma a operação?</p>
+        <div class="sync-confirm-actions">
+            <button type="button" class="sync-confirm-btn cancel" id="maintenanceConfirmCancel">Cancelar</button>
+            <button type="button" class="sync-confirm-btn danger" id="maintenanceConfirmOk"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div class="sync-admin-notice" id="maintenanceNotice" aria-live="polite" aria-hidden="true"></div>
+
 <style>
 .sync-confirm-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(5,9,16,.62);backdrop-filter:blur(8px);z-index:2400}
 .sync-confirm-overlay.show{display:flex;animation:syncConfirmFade .18s ease}
@@ -487,6 +501,12 @@
 .sync-confirm-btn.danger{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;box-shadow:0 8px 22px rgba(220,38,38,.32)}
 .sync-confirm-btn.danger:hover{background:linear-gradient(135deg,#e23b3b,#c81f1f)}
 @media print{.sync-confirm-overlay{display:none !important}}
+
+.sync-admin-notice{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2600;display:none;min-width:320px;max-width:min(680px,calc(100vw - 24px));padding:12px 16px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 16px 35px rgba(0,0,0,.28)}
+.sync-admin-notice.show{display:block;animation:syncNoticeIn .18s ease}
+.sync-admin-notice.ok{background:#0f2f22;border:1px solid #1b694c;color:#b8f2da}
+.sync-admin-notice.err{background:#3a1a1f;border:1px solid #7a2734;color:#ffd2d9}
+@keyframes syncNoticeIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
 
 <style>
@@ -550,6 +570,73 @@ function confirmarLogout() {
 (function () {
     const btn = document.getElementById("maintenanceToggleBtn");
     if (!btn) return;
+    const maintenanceOverlay = document.getElementById("maintenanceConfirmOverlay");
+    const maintenanceTitle = document.getElementById("maintenanceConfirmTitle");
+    const maintenanceText = document.getElementById("maintenanceConfirmText");
+    const maintenanceMark = document.getElementById("maintenanceConfirmMark");
+    const maintenanceOk = document.getElementById("maintenanceConfirmOk");
+    const maintenanceCancel = document.getElementById("maintenanceConfirmCancel");
+    const maintenanceNotice = document.getElementById("maintenanceNotice");
+
+    let maintenanceResolver = null;
+
+    function fecharConfirmacaoManutencao() {
+        if (!maintenanceOverlay) return;
+        maintenanceOverlay.classList.remove("show");
+        maintenanceOverlay.setAttribute("aria-hidden", "true");
+    }
+
+    function abrirConfirmacaoManutencao({ titulo, texto, okLabel, danger }) {
+        return new Promise((resolve) => {
+            if (!maintenanceOverlay) {
+                resolve(false);
+                return;
+            }
+            maintenanceResolver = resolve;
+            maintenanceTitle.textContent = titulo || "Modo manutenção";
+            maintenanceText.textContent = texto || "Confirma a operação?";
+            maintenanceOk.innerHTML = `<i class="fas fa-check"></i> ${okLabel || "Confirmar"}`;
+            maintenanceOk.classList.toggle("danger", !!danger);
+            maintenanceMark.innerHTML = danger
+                ? '<i class="fas fa-triangle-exclamation"></i>'
+                : '<i class="fas fa-screwdriver-wrench"></i>';
+            maintenanceOverlay.classList.add("show");
+            maintenanceOverlay.setAttribute("aria-hidden", "false");
+            maintenanceOk.focus();
+        });
+    }
+
+    function responderConfirmacaoManutencao(valor) {
+        if (maintenanceResolver) {
+            maintenanceResolver(valor);
+            maintenanceResolver = null;
+        }
+        fecharConfirmacaoManutencao();
+    }
+
+    function avisoManutencao(texto, tipo) {
+        if (!maintenanceNotice) return;
+        maintenanceNotice.textContent = texto;
+        maintenanceNotice.classList.remove("ok", "err", "show");
+        maintenanceNotice.classList.add(tipo === "err" ? "err" : "ok", "show");
+        maintenanceNotice.setAttribute("aria-hidden", "false");
+        clearTimeout(avisoManutencao._timer);
+        avisoManutencao._timer = setTimeout(() => {
+            maintenanceNotice.classList.remove("show");
+            maintenanceNotice.setAttribute("aria-hidden", "true");
+        }, 4500);
+    }
+
+    maintenanceCancel?.addEventListener("click", () => responderConfirmacaoManutencao(false));
+    maintenanceOk?.addEventListener("click", () => responderConfirmacaoManutencao(true));
+    maintenanceOverlay?.addEventListener("click", (e) => {
+        if (e.target === maintenanceOverlay) responderConfirmacaoManutencao(false);
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && maintenanceOverlay?.classList.contains("show")) {
+            responderConfirmacaoManutencao(false);
+        }
+    });
 
     async function carregarEstado() {
         try {
@@ -565,11 +652,16 @@ function confirmarLogout() {
 
     btn.addEventListener("click", async function () {
         const enabled = btn.dataset.enabled === "1";
-        const action = enabled ? "desativar" : "ativar";
         const msg = enabled
             ? "Desativar modo manutenção e liberar acesso para todos os usuários?"
             : "Ativar modo manutenção agora? Isso vai derrubar imediatamente todos os usuários não-admin.";
-        if (!confirm(msg)) return;
+        const confirmou = await abrirConfirmacaoManutencao({
+            titulo: enabled ? "Desativar manutenção" : "Ativar manutenção",
+            texto: msg,
+            okLabel: enabled ? "Desativar" : "Ativar agora",
+            danger: !enabled,
+        });
+        if (!confirmou) return;
 
         btn.disabled = true;
         const oldText = btn.querySelector("span").textContent;
@@ -582,18 +674,18 @@ function confirmarLogout() {
             });
             const data = await r.json().catch(() => ({}));
             if (!r.ok || !data.sucesso) {
-                alert((data && data.error) || "Não foi possível alterar o modo manutenção.");
+                avisoManutencao((data && data.error) || "Não foi possível alterar o modo manutenção.", "err");
             } else {
                 const encerradas = Number(data.sessions_deactivated || 0);
                 if (!enabled) {
-                    alert(`Modo manutenção ativado. ${encerradas} sessão(ões) de usuário não-admin foram encerradas.`);
+                    avisoManutencao(`Modo manutenção ativado. ${encerradas} sessão(ões) de usuário não-admin foram encerradas.`);
                 } else {
-                    alert("Modo manutenção desativado. Acesso liberado.");
+                    avisoManutencao("Modo manutenção desativado. Acesso liberado.");
                 }
             }
             await carregarEstado();
         } catch (_) {
-            alert("Falha ao comunicar com o servidor.");
+            avisoManutencao("Falha ao comunicar com o servidor.", "err");
             btn.querySelector("span").textContent = oldText;
         } finally {
             btn.disabled = false;
