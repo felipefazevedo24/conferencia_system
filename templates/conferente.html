@@ -647,11 +647,14 @@
             border-bottom-color: var(--eui-border);
         }
         [data-theme="escuro"] .erp-table tr:hover td { background: rgba(59, 147, 245, 0.12); }
+        [data-theme="escuro"] .erp-table tr.contado {
+            background: transparent !important;
+        }
         [data-theme="escuro"] .erp-table tr.contado td {
-            background: rgba(34, 197, 94, 0.16) !important;
+            background: rgba(17, 41, 31, 0.95) !important;
         }
         [data-theme="escuro"] .erp-table tr.contado:hover td {
-            background: rgba(34, 197, 94, 0.22) !important;
+            background: rgba(23, 52, 39, 0.95) !important;
         }
         [data-theme="escuro"] .erp-table tr.contado .status-indicator {
             border-color: var(--eui-surface);
@@ -667,9 +670,21 @@
             border-color: var(--eui-primary) !important;
             box-shadow: 0 0 0 3px rgba(59, 147, 245, 0.28) !important;
         }
-        [data-theme="escuro"] .qtd-input.input-ok { background: rgba(34, 197, 94, 0.20) !important; color: #c9f7db !important; }
-        [data-theme="escuro"] .qtd-input.input-warning { background: rgba(245, 158, 11, 0.20) !important; color: #fde68a !important; }
-        [data-theme="escuro"] .qtd-input.input-error { background: rgba(239, 68, 68, 0.20) !important; color: #fecaca !important; }
+        [data-theme="escuro"] .qtd-input.input-ok {
+            background: rgba(21, 92, 57, 0.72) !important;
+            border-color: #22c55e !important;
+            color: #dcfce7 !important;
+        }
+        [data-theme="escuro"] .qtd-input.input-warning {
+            background: rgba(120, 53, 15, 0.72) !important;
+            border-color: #f59e0b !important;
+            color: #fef3c7 !important;
+        }
+        [data-theme="escuro"] .qtd-input.input-error {
+            background: rgba(127, 29, 29, 0.72) !important;
+            border-color: #ef4444 !important;
+            color: #fee2e2 !important;
+        }
 
         [data-theme="escuro"] .conf-menu__btn,
         [data-theme="escuro"] .conf-menu__list,
