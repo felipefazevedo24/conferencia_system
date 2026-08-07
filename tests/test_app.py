@@ -87,7 +87,13 @@ def set_logged_user(client, username, role):
         sess["role"] = role
 
 
-def build_test_nfe_xml(numero_nota, itens, fornecedor="Fornecedor XML"):
+def build_test_nfe_xml(
+    numero_nota,
+    itens,
+    fornecedor="Fornecedor XML",
+    cnpj_emitente="",
+    chave_acesso="12345678901234567890123456789012345678901234",
+):
         itens_xml = "".join(
                 f"""
                 <det nItem=\"{idx}\">
@@ -105,9 +111,12 @@ def build_test_nfe_xml(numero_nota, itens, fornecedor="Fornecedor XML"):
         return f"""
         <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
             <NFe>
-                <infNFe Id="NFe12345678901234567890123456789012345678901234">
+                <infNFe Id="NFe{chave_acesso}">
                     <ide><nNF>{numero_nota}</nNF></ide>
-                    <emit><xNome>{fornecedor}</xNome></emit>
+                    <emit>
+                        <xNome>{fornecedor}</xNome>
+                        {f"<CNPJ>{cnpj_emitente}</CNPJ>" if cnpj_emitente else ""}
+                    </emit>
                     {itens_xml}
                     <total><ICMSTot><vNF>100.00</vNF><vICMS>18.00</vICMS></ICMSTot></total>
                 </infNFe>
@@ -3022,6 +3031,35 @@ def test_importacao_xml_ignora_cfop_5902_quando_nf_tem_cfop_5124(tmp_path):
     assert len(itens) == 1
     assert itens[0].codigo == "VEN1"
     assert itens[0].cfop == "5124"
+
+
+def test_importacao_xml_aceita_mesmo_numero_para_emitentes_diferentes(tmp_path):
+    app = build_test_app(tmp_path)
+
+    xml_fornecedor_a = build_test_nfe_xml(
+        "1",
+        [{"codigo": "MAT-A", "descricao": "ITEM TESTE A", "cfop": "5124", "quantidade": "1.0000"}],
+        fornecedor="Fornecedor A",
+        cnpj_emitente="11111111000111",
+        chave_acesso="1" * 44,
+    )
+    xml_fornecedor_b = build_test_nfe_xml(
+        "1",
+        [{"codigo": "MAT-B", "descricao": "ITEM TESTE B", "cfop": "5124", "quantidade": "1.0000"}],
+        fornecedor="Fornecedor B",
+        cnpj_emitente="22222222000122",
+        chave_acesso="2" * 44,
+    )
+
+    with app.app_context():
+        assert process_xml_and_store(xml_fornecedor_a, "admin", status_inicial="Pendente") == 1
+        assert process_xml_and_store(xml_fornecedor_b, "admin", status_inicial="Pendente") == 1
+        db.session.commit()
+
+        itens = ItemNota.query.filter_by(numero_nota="1", tipo_documento="NFE").order_by(ItemNota.id.asc()).all()
+
+    assert len(itens) == 2
+    assert {i.cnpj_emitente for i in itens} == {"11111111000111", "22222222000122"}
 
 
 def test_api_itens_ignora_linha_cfop_5902_quando_nf_tem_5124(tmp_path):

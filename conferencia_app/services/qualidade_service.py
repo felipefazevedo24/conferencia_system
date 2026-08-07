@@ -14,7 +14,12 @@ from ..models import ItemNota, QualidadeCertificado
 # Palavras-chave (normalizadas, sem acento e minúsculas) que identificam os
 # fornecedores que exigem análise de qualidade no recebimento.
 FORNECEDORES_QUALIDADE = ("brasimet", "metal paulista", "friese")
-CFOPS_QUALIDADE_PERMITIDOS = {"1124", "2124"}
+CNPJS_QUALIDADE = {
+    "60.856.820/0026-60",  # Brasimet
+    "10.205.087/0001-97",  # Metal Paulista
+    "43.201.912/0001-34",  # Friese
+}
+CFOPS_QUALIDADE_PERMITIDOS = {"1124", "2124", "5124", "6124"}
 CFOPS_QUALIDADE_OCULTAR = {"5902", "5903"}
 
 
@@ -36,6 +41,20 @@ def fornecedor_exige_qualidade(fornecedor: str | None) -> bool:
 
 def _normalizar_cfop(cfop: str | None) -> str:
     return "".join(ch for ch in str(cfop or "") if ch.isdigit())[:4]
+
+
+def _normalizar_cnpj(cnpj: str | None) -> str:
+    return "".join(ch for ch in str(cnpj or "") if ch.isdigit())[:14]
+
+
+CNPJS_QUALIDADE_NORMALIZADOS = {_normalizar_cnpj(cnpj) for cnpj in CNPJS_QUALIDADE}
+
+
+def fornecedor_exige_qualidade_por_cnpj(cnpj_emitente: str | None) -> bool:
+    cnpj = _normalizar_cnpj(cnpj_emitente)
+    if not cnpj:
+        return False
+    return cnpj in CNPJS_QUALIDADE_NORMALIZADOS
 
 
 def _agrupar_cfops_por_nota(numeros_notas: list[str]) -> dict[str, set[str]]:
@@ -93,7 +112,13 @@ def disparar_qualidade_se_necessario(numero_nota: str) -> QualidadeCertificado |
     if not nota_item:
         return None
 
-    if not fornecedor_exige_qualidade(nota_item.fornecedor):
+    # Prioriza o CNPJ do emitente (com normalizacao para aceitar com/sem
+    # pontuacao). Mantemos fallback por nome para nao quebrar historicos
+    # antigos que possam ter CNPJ ausente.
+    if not (
+        fornecedor_exige_qualidade_por_cnpj(nota_item.cnpj_emitente)
+        or fornecedor_exige_qualidade(nota_item.fornecedor)
+    ):
         return None
 
     if not nota_elegivel_para_qualidade(numero_nota):

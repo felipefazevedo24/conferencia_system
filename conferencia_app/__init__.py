@@ -1,5 +1,5 @@
 from flask import Flask
-from flask import g, request, session
+from flask import g, jsonify, render_template, request, session
 import os
 import subprocess
 import time
@@ -97,6 +97,7 @@ def create_app(test_config=None) -> Flask:
     app.register_blueprint(expedicao_auditoria_bp)
     app.register_blueprint(expedicao_assistente_bp)
     app.register_blueprint(comex_bp)
+    app.register_blueprint(qualidade_bp)
     app.register_blueprint(facilities_bp)
     app.register_blueprint(nfe_email_bp)
     app.register_blueprint(rastreamento_bp)
@@ -111,6 +112,43 @@ def create_app(test_config=None) -> Flask:
     @app.before_request
     def before_request_logging():
         g.start_time = time.perf_counter()
+
+        # Modo manutencao: apenas Admin segue acessando o sistema.
+        try:
+            from .auth import is_admin_role
+            from .services.maintenance_mode_service import get_maintenance_state
+
+            maintenance = get_maintenance_state()
+            if maintenance.get("enabled"):
+                path = request.path or ""
+                is_admin = is_admin_role(session.get("role"))
+                if "username" in session and not is_admin:
+                    session.clear()
+
+                allowed_public_paths = {
+                    "/login",
+                    "/cadastrar-senha",
+                    "/api/convite/validar",
+                    "/api/maintenance/state",
+                    "/manutencao",
+                }
+                allowed_prefixes = (
+                    "/static/",
+                )
+
+                if not is_admin:
+                    if path.startswith("/api") and path != "/api/convite/validar":
+                        return jsonify({
+                            "error": "Sistema em manutenção.",
+                            "maintenance": True,
+                            "message": maintenance.get("message"),
+                        }), 503
+
+                    if path not in allowed_public_paths and not path.startswith(allowed_prefixes):
+                        return render_template("maintenance.html", maintenance=maintenance), 503
+        except Exception:
+            pass
+
         if "username" in session:
             now = datetime.now()
             last_activity_raw = session.get("last_activity")

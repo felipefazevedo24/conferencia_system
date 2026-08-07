@@ -101,6 +101,11 @@ from ..services.classificacao_contabil_service import (
     resumo_classificacoes,
 )
 from ..services.email_service import enviar_email_convite_acesso
+from ..services.maintenance_mode_service import (
+    deactivate_non_admin_sessions,
+    get_maintenance_state,
+    set_maintenance_state,
+)
 
 
 def _parse_aviso_datetime(value):
@@ -126,6 +131,38 @@ def _serializar_aviso_atualizacao(aviso):
         "atualizado_por": aviso.atualizado_por,
         "atualizado_em": aviso.atualizado_em.isoformat() if aviso.atualizado_em else None,
     }
+
+
+@api_bp.route("/api/admin/maintenance")
+@roles_required("Admin")
+def obter_modo_manutencao_admin():
+    return jsonify({"sucesso": True, "maintenance": get_maintenance_state()})
+
+
+@api_bp.route("/api/admin/maintenance", methods=["POST"])
+@roles_required("Admin")
+def alterar_modo_manutencao_admin():
+    payload = request.get_json(silent=True) or {}
+    enabled = bool(payload.get("enabled", False))
+    message = str(payload.get("message") or "").strip()
+    if enabled and not message:
+        message = "O Columbia Sync está em manutenção no momento. Tente novamente em alguns minutos."
+
+    maintenance = set_maintenance_state(
+        enabled=enabled,
+        updated_by=str(session.get("username") or "admin"),
+        message=message,
+    )
+
+    sessoes_encerradas = 0
+    if enabled:
+        sessoes_encerradas = deactivate_non_admin_sessions(except_session_id=session.get("session_id"))
+
+    return jsonify({
+        "sucesso": True,
+        "maintenance": maintenance,
+        "sessions_deactivated": sessoes_encerradas,
+    })
 
 
 def _aviso_atualizacao_ativo():
@@ -2143,21 +2180,39 @@ def documento_entrada_lista():
     if etapa != "importados_hoje" and etapa not in _ETAPA_STATUS_MAP:
         return jsonify({"error": "Parâmetro 'etapa' inválido."}), 400
 
-    filtros = []
+    status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
+
+    base_query = db.session.query(
+        ItemNota.numero_nota,
+        func.max(ItemNota.data_importacao).label("data_importacao_max"),
+    )
+
     if etapa == "importados_hoje":
         hoje = datetime.now().date()
-        filtros.append(func.date(ItemNota.data_importacao) == hoje)
-    else:
-        filtros.append(ItemNota.status.in_(_ETAPA_STATUS_MAP[etapa]))
+        base_query = base_query.filter(func.date(ItemNota.data_importacao) == hoje)
+
     if busca:
         termo = f"%{busca}%"
-        filtros.append(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
+        base_query = base_query.filter(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
 
-    base_query = (
-        db.session.query(ItemNota.numero_nota, func.max(ItemNota.data_importacao))
-        .filter(*filtros)
-        .group_by(ItemNota.numero_nota)
-    )
+    base_query = base_query.group_by(ItemNota.numero_nota)
+
+    if etapa == "auditoria":
+        # Auditoria deve conter apenas notas totalmente em AguardandoLiberacao.
+        base_query = base_query.having(
+            func.max(case((ItemNota.status != "AguardandoLiberacao", 1), else_=0)) == 0
+        )
+    elif etapa == "lancamento":
+        base_query = base_query.having(
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)) == 0
+        ).having(
+            func.max(case((ItemNota.status.in_(["Pendente", "Concluído"]), 1), else_=0)) == 1
+        )
+    elif etapa == "finalizado":
+        base_query = base_query.having(
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)) == 1
+        )
+
     total = base_query.count()
     pagina = (
         base_query.order_by(func.max(ItemNota.data_importacao).desc())
@@ -2182,6 +2237,8 @@ def documento_entrada_lista():
         if not itens_nota:
             continue
         status_real = _etapa_atual_por_itens(itens_nota)
+        if etapa != "importados_hoje" and status_real not in _ETAPA_STATUS_MAP[etapa]:
+            continue
         pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
         fornecedor = next((i.fornecedor for i in itens_nota if i.fornecedor), "---")
         data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
