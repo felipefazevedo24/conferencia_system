@@ -207,7 +207,9 @@
   /* ---------- Kanban operacional (Recebimento + Compras) ---------- */
   .flow::before { color: var(--recebimento); }
   .flow .icon { background: rgba(61,165,244,.16); color: var(--recebimento); }
-  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; }
+  .tv-kb-wrap { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; }
+  .tv-kb-wrap.cols-2 { grid-template-rows: 1fr 1fr; }
+  .tv-kb-wrap.cols-1 { grid-template-rows: 1fr; }
   .tv-kb-group { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
   .tv-kb-title { font-size: clamp(12px, 1.4vh, 16px); font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
   .tv-kb-board { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
@@ -456,22 +458,18 @@
   </header>
 
   <main>
-    <!-- SLIDE 1: KANBAN OPERACIONAL (Recebimento + Compras) -->
-    <section class="slide slide-op is-active" data-slide="operacao">
+    <!-- SLIDE 1: KANBAN RECEBIMENTO -->
+    <section class="slide slide-rec is-active" data-slide="recebimento">
       <section class="panel flow" style="flex:1 1 auto;">
         <div class="panel-head">
           <div class="icon"><i class="fas fa-table-columns"></i></div>
-          <h2>Kanban Operacional</h2>
-          <div class="tag" id="flow-tag">—</div>
+          <h2>Kanban Recebimento</h2>
+          <div class="tag" id="rec-tag">—</div>
         </div>
-        <div class="tv-kb-wrap">
+        <div class="tv-kb-wrap cols-2">
           <div class="tv-kb-group">
             <div class="tv-kb-title">Recebimento</div>
             <div class="tv-kb-board" id="rec-kb-board"><div class="empty">Carregando…</div></div>
-          </div>
-          <div class="tv-kb-group">
-            <div class="tv-kb-title">Expedição</div>
-            <div class="tv-kb-board" id="exp-kb-board"><div class="empty">Carregando…</div></div>
           </div>
           <div class="tv-kb-group">
             <div class="tv-kb-title">Compras</div>
@@ -481,7 +479,24 @@
       </section>
     </section>
 
-    <!-- SLIDE 2: FROTA (mapa ao vivo, GPS do motorista em viagem) -->
+    <!-- SLIDE 2: KANBAN EXPEDIÇÃO -->
+    <section class="slide slide-exp" data-slide="expedicao">
+      <section class="panel flow" style="flex:1 1 auto;">
+        <div class="panel-head">
+          <div class="icon"><i class="fas fa-truck-fast"></i></div>
+          <h2>Kanban Expedição</h2>
+          <div class="tag" id="exp-tag">—</div>
+        </div>
+        <div class="tv-kb-wrap cols-1">
+          <div class="tv-kb-group">
+            <div class="tv-kb-title">Expedição</div>
+            <div class="tv-kb-board" id="exp-kb-board"><div class="empty">Carregando…</div></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- SLIDE 3: FROTA (mapa ao vivo, GPS do motorista em viagem) -->
     {% if show_frota|default(true) %}
     <section class="slide slide-frota" data-slide="frota">
       <section class="panel frota" style="flex:1 1 auto;">
@@ -500,7 +515,7 @@
     </section>
     {% endif %}
 
-    <!-- SLIDE 3: PLANEJAMENTO DE TAREFAS -->
+    <!-- SLIDE 4: PLANEJAMENTO DE TAREFAS -->
     {% if show_planejamento|default(true) %}
     <section class="slide slide-plan" data-slide="planejamento">
       <section class="panel plan" style="flex:1 1 auto;">
