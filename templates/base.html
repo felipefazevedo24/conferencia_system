@@ -1272,6 +1272,7 @@ if ("serviceWorker" in navigator) {
             const chips = ["Como funciona a conferência cega?", "Como gero um romaneio?", "O que é documento de entrada?", "Onde vejo os boletos?"];
             renderChips(chips);
             flushAvisos();
+            flushNovidades();
             return;
         }
         await digitar("Oi! Eu sou a Bia 😊 Tô de olho na expedição pra te ajudar.", 600);
@@ -1293,6 +1294,7 @@ if ("serviceWorker" in navigator) {
             addBot("Ops, não consegui carregar as pendências agora. Tenta de novo daqui a pouco?");
         }
         flushAvisos();
+        flushNovidades();
     }
 
     // Avisa o Admin (ao abrir a Bia) sobre estornos de romaneio pendentes de
@@ -1668,6 +1670,18 @@ if ("serviceWorker" in navigator) {
     // dá um toque (toast). Cada usuário recebe só os módulos a que tem acesso;
     // Admin recebe uma visão macro (os números de tudo). No primeiro acesso o
     // servidor só devolve o marcador de tempo — não despeja o histórico antigo.
+    let novidadesFila = [];
+    function flushNovidades() {
+        if (!novidadesFila.length) return;
+        novidadesFila.forEach((t) => addBot(t));
+        novidadesFila = [];
+    }
+    function entregarNovidade(texto) {
+        if (iniciada) addBot(texto);
+        else novidadesFila.push(texto);
+        if (!panel.classList.contains("open")) mostrarToast(texto);
+    }
+
     async function checarNovidades() {
         try {
             const desde = localStorage.getItem(LS_NOVIDADES);
@@ -1680,13 +1694,11 @@ if ("serviceWorker" in navigator) {
             if (!d.tem_novidades || !(d.itens && d.itens.length)) return;
             const erros = d.itens.filter((i) => (i.tipo || "info") === "erro");
             if (!erros.length) return;
-            // Não interrompe se o painel já estiver aberto.
-            if (panel.classList.contains("open")) return;
             const linhas = erros.map((i) => i.texto);
             const msg = d.macro
                 ? `⚠️ Erros novos: ${linhas.join("; ")}.`
                 : `⚠️ Bia detectou erro novo: ${linhas.join(" · ")}.`;
-            mostrarToast(msg);
+            entregarNovidade(msg);
         } catch (e) { /* silencioso */ }
     }
     // Primeira checagem pouco depois de carregar (deixa a saudação aparecer antes),
