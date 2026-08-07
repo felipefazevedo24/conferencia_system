@@ -23,7 +23,7 @@ def listar_ordens_avulso():
 
 
 @expedicao_avulso_bp.route("/api/expedicao/conf-cega-avulso/ordens/<int:solicitacao_id>/separar", methods=["POST"])
-@roles_required("Logística", "Fiscal", "Admin")
+@roles_required("Logística", "Comex", "Fiscal", "Admin")
 def separar_ordem_avulso(solicitacao_id):
     payload = request.get_json(silent=True) or {}
     try:

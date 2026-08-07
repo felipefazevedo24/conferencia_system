@@ -5950,7 +5950,7 @@ def rastreabilidade_expedicao():
 
 
 @api_bp.route("/api/pendentes_priorizadas")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def listar_pendentes_priorizadas():
     notas = (
         db.session.query(ItemNota.numero_nota, ItemNota.fornecedor)
@@ -5997,7 +5997,7 @@ _RECEB_BUCKETS = {
 
 
 @api_bp.route("/api/conferencia/dashboard")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def conferencia_dashboard():
     """Dashboard unificado da conferência de recebimento (layout igual à expedição).
 
@@ -6158,7 +6158,7 @@ def excluir_nota_pendente():
 
 
 @api_bp.route("/api/itens/<nota>")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def buscar_itens(nota):
     ok_lock, lock = _acquire_lock(nota, session["username"])
     if not ok_lock:
@@ -6210,7 +6210,7 @@ def buscar_itens(nota):
 
 
 @api_bp.route("/api/lock/release", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def release_lock():
     data = request.get_json(silent=True) or {}
     payload = nota_schema.load(data)
@@ -6220,7 +6220,7 @@ def release_lock():
 
 
 @api_bp.route("/api/lock/heartbeat", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def lock_heartbeat():
     data = request.get_json(silent=True) or {}
     payload = nota_schema.load(data)
@@ -6239,7 +6239,7 @@ def lock_heartbeat():
 
 
 @api_bp.route("/api/checklist/<nota>")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def obter_checklist(nota):
     checklist = ChecklistRecebimento.query.filter_by(numero_nota=str(nota)).first()
     if not checklist:
@@ -6259,7 +6259,7 @@ def obter_checklist(nota):
 
 
 @api_bp.route("/api/checklist", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def gravar_checklist():
     data = request.get_json(silent=True) or {}
     numero_nota = str(data.get("nota") or "").strip()
@@ -6283,7 +6283,7 @@ def gravar_checklist():
 
 
 @api_bp.route("/api/divergencia/evidencia", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def upload_evidencia_divergencia():
     file = request.files.get("arquivo")
     numero_nota = str(request.form.get("nota") or "").strip()
@@ -6335,7 +6335,7 @@ def listar_tentativas_conferencia(nota):
 
 
 @api_bp.route("/validar", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def validar():
     user = session["username"]
     dados = validar_schema.load(request.json or {})
@@ -6634,7 +6634,7 @@ MOTIVOS_SEM_CONFERENCIA_LOGISTICA = {
 
 
 @api_bp.route("/api/conferencia/sem_conferencia_logistica", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def concluir_sem_conferencia_logistica():
     """Conclui o recebimento sem contagem física quando o material não passou pela
     conferência logística (recebido em contraturno/feriado ou por outro funcionário)."""
@@ -6740,7 +6740,7 @@ def devolver_material():
 
 
 @api_bp.route("/api/recebimento/solicitar_devolucao", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def solicitar_devolucao_recebimento():
     data = devolver_schema.load(request.json or {})
     numero_nota = str(data.get("nota"))
@@ -7694,7 +7694,7 @@ def detalhes_nota_liberada_lancamento(numero):
 
 
 @api_bp.route("/api/historico_completo")
-@roles_required("Admin", "Conferente", "Fiscal", "Logística")
+@roles_required("Admin", "Conferente", "Fiscal", "Logística", "Comex")
 def api_historico():
     data_ini = _parse_date(request.args.get("data_ini"))
     data_fim = _parse_date(request.args.get("data_fim"))
@@ -7712,7 +7712,7 @@ def api_historico():
 
 
 @api_bp.route("/api/conferencia/nota/<nota>/historico")
-@roles_required("Admin", "Conferente", "Fiscal", "Logística")
+@roles_required("Admin", "Conferente", "Fiscal", "Logística", "Comex")
 def api_conferencia_historico_nota(nota):
     """Historico cronologico de uma NF para o painel de logs da conferencia
     cega de recebimento (mesmos eventos da timeline, acessivel aos perfis de
@@ -7721,7 +7721,7 @@ def api_conferencia_historico_nota(nota):
 
 
 @api_bp.route("/api/conferencia/divergencia-produto", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def conferencia_divergencia_produto():
     """Divergencia de produto: o material recebido diverge do comprado. O
     conferente registra o motivo e a NF segue para o Documento de Entrada
@@ -8609,7 +8609,7 @@ def _is_drive_quota_service_account_error(exc):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def listar_registros_conferencia_simples():
     """Lista todos os registros de conferência simples."""
     query = ExpedicaoConferenciaSimples.query
@@ -8741,7 +8741,7 @@ def listar_registros_conferencia_simples():
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/consultar-nf")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def consultar_nf_conferencia_simples():
     """Consulta uma ou mais NFs emitidas no ERP (sem criar registro)."""
     numeros_raw = request.args.get("numero_nf", "")
@@ -8914,7 +8914,7 @@ def _validar_nfs_expedicao_mesmo_cliente(numero_nf: str) -> tuple[dict | None, l
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/foto-rascunho", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def upload_foto_rascunho_expedicao():
     """Recebe UMA foto e salva como rascunho temporário no disco.
     Retorna {rascunho_id, url} para o frontend manter a referência.
@@ -8997,7 +8997,7 @@ def servir_foto_rascunho_expedicao(rascunho_id):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/buscar-nf", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def buscar_nf_conferencia_simples():
     """Busca NF na Consyste e cria registro se encontrada."""
     payload = request.get_json(silent=True) or {}
@@ -9083,7 +9083,7 @@ def buscar_nf_conferencia_simples():
 
 
 @api_bp.route("/api/expedicao/conferencia-simples", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def criar_registro_conferencia_simples():
     """Cria um novo registro de conferência simples (manual ou via formulário)."""
     # Suporta multipart/form-data (com fotos) ou JSON
@@ -9307,7 +9307,7 @@ def criar_registro_conferencia_simples():
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/status", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def atualizar_status_conferencia_simples(registro_id):
     """Atualiza status do registro. Regras:
     - Admin pode ir direto para 'pendente_expedicao' (reabre sem aprovação).
@@ -9461,7 +9461,7 @@ def decidir_estorno_conferencia_simples(estorno_id, acao):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/completar", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def completar_registro_conferencia_simples(registro_id):
     """Salva/completa dados da conferencia sem marcar como expedida."""
     registro = ExpedicaoConferenciaSimples.query.get(registro_id)
@@ -9632,7 +9632,7 @@ def completar_registro_conferencia_simples(registro_id):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/canhoto", methods=["POST"])
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def upload_canhoto_conferencia_simples(registro_id):
     """Faz upload da foto do canhoto e finaliza o registro."""
     registro = ExpedicaoConferenciaSimples.query.get(registro_id)
@@ -9698,7 +9698,7 @@ def upload_canhoto_conferencia_simples(registro_id):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/canhoto")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def obter_canhoto_conferencia_simples(registro_id):
     """Retorna a foto do canhoto de um registro."""
     registro = ExpedicaoConferenciaSimples.query.get(registro_id)
@@ -9726,7 +9726,7 @@ def obter_canhoto_conferencia_simples(registro_id):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto-cliente")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def obter_foto_cliente_conferencia_simples(registro_id):
     """Retorna a foto destinada ao cliente de um registro."""
     registro = ExpedicaoConferenciaSimples.query.get(registro_id)
@@ -9753,7 +9753,7 @@ def obter_foto_cliente_conferencia_simples(registro_id):
 
 
 @api_bp.route("/api/expedicao/conferencia-simples/<int:registro_id>/foto/<int:foto_id>")
-@roles_required("Conferente", "Admin", "Fiscal", "Logística")
+@roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def obter_foto_conferencia_simples(registro_id, foto_id):
     """Retorna uma foto de um registro de conferência simples."""
     foto = ExpedicaoConferenciaSimplesFoto.query.filter_by(

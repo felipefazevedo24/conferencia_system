@@ -54,6 +54,7 @@ PERMISSION_CATALOG = {
     "PAGE_QUALIDADE": "Qualidade > Análise de certificados no recebimento",
     "PAGE_QUALIDADE_APROVAR": "Qualidade > Aprovar laudo (supervisor/gerente)",
     "PAGE_PLANEJAMENTO_TAREFAS": "Planejamento > Board de tarefas (Kanban)",
+    "PAGE_COMEX": "Comex > Processos de importação/exportação",
 }
 
 
@@ -96,6 +97,9 @@ BASE_ROLE_PERMISSIONS = {
         "PAGE_LOGISTICA_VIAGEM",
         "PAGE_LOGISTICA_INVENTARIO",
         "PAGE_CADASTRO_WORKFLOW",
+    },
+    "Comex": {
+        "PAGE_COMEX",
     },
     "Portaria": {
         "PAGE_PORTARIA",

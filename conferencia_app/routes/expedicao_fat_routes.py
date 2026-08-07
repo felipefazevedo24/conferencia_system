@@ -30,7 +30,7 @@ from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 expedicao_fat_bp = Blueprint("expedicao_fat", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
-ROLES = ("Conferente", "Admin", "Fiscal", "Logística")
+ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 
 # "Faturado sem conferência": exibe apenas a partir desta solicitação de
 # faturamento (cod_ordem_fat). O backlog antigo (NFs emitidas na origem antes

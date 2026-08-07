@@ -31,7 +31,7 @@ from ..services.expedicao_photo_storage import using_drive, upload_to_drive
 expedicao_st_bp = Blueprint("expedicao_st", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
-ROLES = ("Conferente", "Admin", "Fiscal", "Logística")
+ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 
 
 def _iso(value):

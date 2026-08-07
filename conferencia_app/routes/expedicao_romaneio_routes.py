@@ -29,8 +29,8 @@ from ..services.nfe_email_service import enviar_aviso_coleta_fob
 expedicao_romaneio_bp = Blueprint("expedicao_romaneio", __name__)
 
 PERMISSION = "PAGE_EXPEDICAO_CONF_CEGA"
-ROLES = ("Conferente", "Admin", "Fiscal", "Logística")
-ROLES_NAO_ADMIN = ("Conferente", "Fiscal", "Logística")
+ROLES = ("Conferente", "Admin", "Fiscal", "Logística", "Comex")
+ROLES_NAO_ADMIN = ("Conferente", "Fiscal", "Logística", "Comex")
 
 
 def _parse_float(valor, default=0.0) -> float:
