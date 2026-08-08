@@ -789,7 +789,7 @@
     let dePaginaAtual = 1;
     let dePageSize = 25;
     let deTotalRegistros = 0;
-    let deNotaAberta = null; // numero da nota atualmente aberta no painel
+    let deNotaAberta = null; // chave da nota atualmente aberta no painel
 
     const DE_TITULOS_ETAPA = {
         importados_hoje: 'Notas — Importados hoje',
@@ -797,6 +797,10 @@
         lancamento: 'Notas — Em lançamento',
         finalizado: 'Notas — Lançamento finalizado',
     };
+
+    function buildNotaRef(numero, cnpjEmitente, fornecedor) {
+        return [String(numero || '').trim(), String(cnpjEmitente || '').trim(), String(fornecedor || '').trim()].join('||');
+    }
 
     async function carregarKpis() {
         try {
@@ -837,8 +841,9 @@
                 const auditorInfo = n.status === 'AguardandoLiberacao'
                     ? `<span class="badge ${badgeClass(n.auditor_status)}" style="margin-left:6px;">${escapeHtml(n.auditor_status || 'NaoAuditado')}</span>`
                     : '';
+                const ref = buildNotaRef(n.numero, n.cnpj_emitente, n.fornecedor);
                 return `
-                <tr class="de-list-row ${deNotaAberta === n.numero ? 'is-active' : ''}" data-numero="${escapeHtml(n.numero)}" data-status="${escapeHtml(n.status)}">
+                <tr class="de-list-row ${deNotaAberta === ref ? 'is-active' : ''}" data-ref="${escapeHtml(ref)}" data-numero="${escapeHtml(n.numero)}" data-cnpj="${escapeHtml(n.cnpj_emitente || '')}" data-fornecedor="${escapeHtml(n.fornecedor || '')}" data-status="${escapeHtml(n.status)}">
                     <td><strong>${escapeHtml(n.numero)}</strong>${alerta}</td>
                     <td>${escapeHtml(n.fornecedor || '---')}</td>
                     <td>${escapeHtml(n.pedido_compra || '---')}</td>
@@ -972,15 +977,18 @@
     document.getElementById('de-tbody').addEventListener('click', async (e) => {
         const row = e.target.closest('.de-list-row');
         if (!row) return;
+        const ref = row.dataset.ref || '';
         const numero = row.dataset.numero;
+        const cnpjEmitente = row.dataset.cnpj || '';
+        const fornecedor = row.dataset.fornecedor || '';
         const status = row.dataset.status;
-        deNotaAberta = numero;
-        document.querySelectorAll('.de-list-row').forEach((r) => r.classList.toggle('is-active', r.dataset.numero === numero));
+        deNotaAberta = ref;
+        document.querySelectorAll('.de-list-row').forEach((r) => r.classList.toggle('is-active', (r.dataset.ref || '') === ref));
 
         if (status === 'AguardandoLiberacao') {
             if (!DE_CAN_AUDITOR) { deToast('Você não tem permissão para auditoria fiscal.', 'err'); return; }
             mostrarPainel('de-panel-auditoria');
-            await selecionarNota(numero);
+            await selecionarNota({ numero, cnpj_emitente: cnpjEmitente, fornecedor });
         } else {
             if (!DE_CAN_LANCAMENTO) { deToast('Você não tem permissão para o fluxo de lançamento.', 'err'); return; }
             mostrarPainel('de-panel-lancamento');
@@ -1163,6 +1171,14 @@
        colidir com o subsistema de lancamento, que usa o mesmo nome.
        ====================================================================== */
     let auditorNotaSelecionada = null;
+
+    function auditorPayloadBase() {
+        return {
+            nota: String(auditorNotaSelecionada?.numero || ''),
+            cnpj_emitente: String(auditorNotaSelecionada?.cnpj_emitente || ''),
+            fornecedor: String(auditorNotaSelecionada?.fornecedor || ''),
+        };
+    }
     let confirmResolver = null;
 
     function toast(msg, tipo = 'ok') { deToast(msg, tipo === 'ok' ? 'ok' : 'err'); }
@@ -1282,10 +1298,19 @@
         }
     }
 
-    async function selecionarNota(numero) {
-        auditorNotaSelecionada = numero;
+    async function selecionarNota(selecao) {
+        auditorNotaSelecionada = typeof selecao === 'string'
+            ? { numero: selecao, cnpj_emitente: '', fornecedor: '' }
+            : {
+                numero: String(selecao?.numero || ''),
+                cnpj_emitente: String(selecao?.cnpj_emitente || ''),
+                fornecedor: String(selecao?.fornecedor || ''),
+            };
         try {
-            const d = await fetchJson(`/api/xml_auditor/nota/${encodeURIComponent(numero)}`);
+            const params = new URLSearchParams();
+            if (auditorNotaSelecionada.cnpj_emitente) params.set('cnpj_emitente', auditorNotaSelecionada.cnpj_emitente);
+            if (auditorNotaSelecionada.fornecedor) params.set('fornecedor', auditorNotaSelecionada.fornecedor);
+            const d = await fetchJson(`/api/xml_auditor/nota/${encodeURIComponent(auditorNotaSelecionada.numero)}?${params.toString()}`);
             document.getElementById('dNota').textContent = d.numero || '---';
             document.getElementById('dStatusFluxo').textContent = d.status_fluxo || '---';
             document.getElementById('dFornecedor').textContent = d.fornecedor || '---';
@@ -1348,7 +1373,7 @@
         try {
             const r = await fetchJson('/api/xml_auditor/decisao', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, autorizado, justificativa }),
+                body: JSON.stringify({ ...auditorPayloadBase(), autorizado, justificativa }),
             });
             fecharDiagnostico();
             toast(r.msg || 'Decisão fiscal registrada.', 'ok');
@@ -1374,16 +1399,18 @@
                 await fetchJson('/api/xml_auditor/vincular_pedido', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        nota: auditorNotaSelecionada, pedido_compra: pedido,
+                        nota: auditorNotaSelecionada.numero, pedido_compra: pedido,
                         material_cliente: false, remessa: false,
                         sem_conferencia_logistica: !!document.getElementById('semConferenciaLogistica')?.checked,
                         observacao,
+                        cnpj_emitente: auditorNotaSelecionada?.cnpj_emitente || '',
+                        fornecedor: auditorNotaSelecionada?.fornecedor || '',
                     }),
                 });
             }
             const r = await fetchJson('/api/xml_auditor/consultar_pedido', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido, conversoes_itens: coletarConversoesAuditor() }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido, conversoes_itens: coletarConversoesAuditor() }),
             });
             if (!r.encontrado) {
                 res.className = 'pedido-result warn';
@@ -1485,7 +1512,7 @@
         if (obsEl) obsEl.value = novaObservacao;
         await fetchJson('/api/xml_auditor/vincular_pedido', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra: pedido, material_cliente, remessa, sem_conferencia_logistica, observacao: novaObservacao }),
+            body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra: pedido, material_cliente, remessa, sem_conferencia_logistica, observacao: novaObservacao }),
         });
     }
 
@@ -1616,7 +1643,7 @@
         try {
             reprocessado = await fetchJson('/api/xml_auditor/consultar_pedido', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido: pedidoAtual, conversoes_itens: coletarConversoesAuditor() }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido: pedidoAtual, conversoes_itens: coletarConversoesAuditor() }),
             });
         } catch (e) {
             toast(`Vínculos salvos, mas falhou ao reprocessar comparação: ${e.message}`, 'err');
@@ -1660,7 +1687,7 @@
         try {
             const r = await fetchJson('/api/xml_auditor/analisar', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada }),
+                body: JSON.stringify({ ...auditorPayloadBase() }),
             });
             toast(r.msg || 'Auditoria concluída.', 'ok');
             await recarregarTudo();
@@ -1682,7 +1709,7 @@
         try {
             const r = await fetchJson('/api/xml_auditor/vincular_pedido', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
             });
             toast(r.msg || 'Pedido vinculado com sucesso.', 'ok');
             await recarregarTudo();
@@ -1696,15 +1723,15 @@
 
     async function retirarNotaDoAuditor() {
         if (!auditorNotaSelecionada) return toast('Selecione uma NF primeiro.', 'err');
-        const motivo = prompt(`Informe o motivo para excluir a NF ${auditorNotaSelecionada} do Auditor XML (mín. 5 caracteres). Esta ação apaga definitivamente os dados importados desta NF:`, '');
+        const motivo = prompt(`Informe o motivo para excluir a NF ${auditorNotaSelecionada.numero} do Auditor XML (mín. 5 caracteres). Esta ação apaga definitivamente os dados importados desta NF:`, '');
         if (motivo === null) return;
         if (!motivo || motivo.trim().length < 5) { toast('Informe um motivo com no mínimo 5 caracteres.', 'err'); return; }
-        const confirmou = await confirmarAcao(`Excluir definitivamente a NF ${auditorNotaSelecionada} do Auditor XML? Os dados importados serão apagados e será necessário reimportar o XML.`);
+        const confirmou = await confirmarAcao(`Excluir definitivamente a NF ${auditorNotaSelecionada.numero} do Auditor XML? Os dados importados serão apagados e será necessário reimportar o XML.`);
         if (!confirmou) return;
         try {
             const r = await fetchJson('/api/xml_auditor/retirar', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, motivo: motivo.trim() }),
+                body: JSON.stringify({ ...auditorPayloadBase(), motivo: motivo.trim() }),
             });
             toast(r.msg || 'NF excluída do Auditor XML.', 'ok');
             auditorNotaSelecionada = null;
@@ -1726,15 +1753,15 @@
         const pedido_compra = (document.getElementById('pedidoCompra').value || '').trim();
         if (!material_cliente && !remessa && !pedido_compra) { abrirPendenciaObrigatoria('pedido'); return; }
         const textoConfirmacao = sem_conferencia_logistica
-            ? `Deseja liberar a NF ${auditorNotaSelecionada} sem conferência logística? Ela irá direto para lançamento.`
-            : `Deseja liberar a NF ${auditorNotaSelecionada} para a conferência física?`;
+            ? `Deseja liberar a NF ${auditorNotaSelecionada.numero} sem conferência logística? Ela irá direto para lançamento.`
+            : `Deseja liberar a NF ${auditorNotaSelecionada.numero} para a conferência física?`;
         const confirmado = await confirmarAcao(textoConfirmacao);
         if (!confirmado) return;
         try {
             const observacao = (document.getElementById('obsFiscal').value || '').trim();
             const r = await fetchJson('/api/xml_auditor/liberar', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nota: auditorNotaSelecionada, pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
+                body: JSON.stringify({ ...auditorPayloadBase(), pedido_compra, material_cliente, remessa, sem_conferencia_logistica, observacao }),
             });
             toast(r.msg || 'NF liberada para conferência.', 'ok');
             auditorNotaSelecionada = null;

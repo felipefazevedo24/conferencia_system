@@ -1820,11 +1820,16 @@
 
         async function estornarConferencia() {
             if (!currentOrdem || !CE_IS_ADMIN) return;
+            const emFaturado = currentOrdem.status_slug === "faturado";
             const motivo = await pedirMotivo({
-                title: "Estornar conferência",
-                sub: "Ação de Admin — a conferência será <b>desfeita</b> e a ordem voltará para a fila de pendentes (a contagem será apagada).",
-                okLabel: "Estornar conferência",
-                placeholder: "Ex.: contagem incorreta / material precisa ser reconferido…",
+                title: emFaturado ? "Habilitar correção em Faturado" : "Estornar conferência",
+                sub: emFaturado
+                    ? "Ação de Admin — habilita a correção de <b>peso/volumes</b> mantendo a ordem em <b>Faturado</b> e sem reenviar notificações."
+                    : "Ação de Admin — a conferência será <b>desfeita</b> e a ordem voltará para a fila de pendentes (a contagem será apagada).",
+                okLabel: emFaturado ? "Habilitar correção" : "Estornar conferência",
+                placeholder: emFaturado
+                    ? "Ex.: ajuste de peso bruto e quantidade de volumes"
+                    : "Ex.: contagem incorreta / material precisa ser reconferido…",
             });
             if (motivo === null) return; // cancelou
 
@@ -1834,7 +1839,11 @@
                 await api(cfg.apiBase + "/ordens/" + encodeURIComponent(codDe(currentOrdem)) + "/estornar-conferencia", {
                     method: "POST", body: JSON.stringify({ motivo: motivo }),
                 });
-                toast("Conferência estornada. Ordem voltou para pendente.", "success");
+                if (emFaturado) {
+                    toast("Correção habilitada no Faturado. Ajuste os dados e salve.", "success");
+                } else {
+                    toast("Conferência estornada. Ordem voltou para pendente.", "success");
+                }
                 voltarDashboard();
                 carregarDashboard();
             } catch (e) {

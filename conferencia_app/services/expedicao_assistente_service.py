@@ -21,6 +21,8 @@ from ..extensions import db
 from ..models import (
     AgendamentoSolicitacao,
     ExpedicaoConferenciaSimples,
+    LogEventoFiscalNota,
+    LogManifestacaoDestinatario,
     ExpedicaoOrdemFat,
     ExpedicaoOrdemST,
     ExpedicaoRomaneio,
@@ -1028,6 +1030,60 @@ def _novas_solicitacoes_viagem(desde: datetime) -> int:
         return 0
 
 
+def _novos_erros_fiscais(desde: datetime) -> tuple[int, list[str]]:
+    """Falhas fiscais recentes para aviso proativo da Bia.
+
+    Retorna (quantidade total de falhas, amostra curta para o toast).
+    """
+    eventos: list[tuple[datetime, str]] = []
+
+    try:
+        falhas_manifestacao = (
+            LogManifestacaoDestinatario.query
+            .filter(LogManifestacaoDestinatario.status == "Falha")
+            .filter(LogManifestacaoDestinatario.data > desde)
+            .order_by(LogManifestacaoDestinatario.data.desc())
+            .limit(30)
+            .all()
+        )
+        for row in falhas_manifestacao:
+            nota = str(row.numero_nota or "").strip() or "?"
+            eventos.append((row.data or datetime.now(), f"NF {nota} (manifestação)"))
+    except Exception:
+        pass
+
+    try:
+        falhas_fiscais = (
+            LogEventoFiscalNota.query
+            .filter(LogEventoFiscalNota.data > desde)
+            .filter(db.func.lower(db.func.coalesce(LogEventoFiscalNota.status, "")) == "falha")
+            .order_by(LogEventoFiscalNota.data.desc())
+            .limit(30)
+            .all()
+        )
+        for row in falhas_fiscais:
+            nota = str(row.numero_nota or "").strip() or "?"
+            evento = str(row.evento or "evento fiscal").strip()
+            eventos.append((row.data or datetime.now(), f"NF {nota} ({evento})"))
+    except Exception:
+        pass
+
+    if not eventos:
+        return 0, []
+
+    eventos.sort(key=lambda e: e[0], reverse=True)
+    vistos = set()
+    amostra = []
+    for _ts, desc in eventos:
+        if desc in vistos:
+            continue
+        vistos.add(desc)
+        amostra.append(desc)
+        if len(amostra) >= 4:
+            break
+    return len(eventos), amostra
+
+
 def novidades(
     desde: datetime | None,
     *,
@@ -1063,6 +1119,7 @@ def novidades(
         if n:
             plural = "notas fiscais" if n > 1 else "nota fiscal"
             itens.append({
+                "tipo": "info",
                 "modulo": "recebimento",
                 "qtd": n,
                 "texto": f"{n} {plural} no recebimento",
@@ -1073,6 +1130,7 @@ def novidades(
         if novas_ordens:
             plural = "ordens de faturamento" if novas_ordens > 1 else "ordem de faturamento"
             itens.append({
+                "tipo": "info",
                 "modulo": "faturamento",
                 "qtd": novas_ordens,
                 "texto": f"{novas_ordens} {plural} para conferir",
@@ -1080,6 +1138,7 @@ def novidades(
         if nfs_emitidas:
             plural = "notas fiscais emitidas" if nfs_emitidas > 1 else "nota fiscal emitida"
             itens.append({
+                "tipo": "info",
                 "modulo": "faturamento_nf",
                 "qtd": nfs_emitidas,
                 "texto": f"{nfs_emitidas} {plural} na expedição",
@@ -1090,9 +1149,22 @@ def novidades(
         if nv:
             plural = "solicitações de viagem" if nv > 1 else "solicitação de viagem"
             itens.append({
+                "tipo": "info",
                 "modulo": "viagem",
                 "qtd": nv,
                 "texto": f"{nv} {plural}",
+            })
+
+    if ver_receb or ver_exped:
+        qtd_erros, amostra_erros = _novos_erros_fiscais(desde)
+        if qtd_erros:
+            resumo = "; ".join(amostra_erros)
+            sufixo = "" if qtd_erros <= len(amostra_erros) else f" (+{qtd_erros - len(amostra_erros)})"
+            itens.append({
+                "tipo": "erro",
+                "modulo": "fiscal_erros",
+                "qtd": qtd_erros,
+                "texto": f"{qtd_erros} falha(s) nova(s): {resumo}{sufixo}",
             })
 
     total = sum(it["qtd"] for it in itens)

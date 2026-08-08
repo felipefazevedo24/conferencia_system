@@ -472,15 +472,17 @@
           <h2>Recebimento</h2>
           <div class="tag" id="rec-tag">—</div>
         </div>
-        <div class="tv-kb-wrap cols-2">
+        <div class="tv-kb-wrap {{ 'cols-2' if show_compras|default(true) else 'cols-1' }}">
           <div class="tv-kb-group">
             <div class="tv-kb-title">Recebimento</div>
             <div class="tv-kb-board" id="rec-kb-board"><div class="empty">Carregando…</div></div>
           </div>
+          {% if show_compras|default(true) %}
           <div class="tv-kb-group">
             <div class="tv-kb-title">Compras</div>
             <div class="tv-kb-board" id="compras-kb-board"><div class="empty">Carregando…</div></div>
           </div>
+          {% endif %}
         </div>
       </section>
     </section>
@@ -540,6 +542,10 @@
 
 <script>
 (function () {
+  const SHOW_COMPRAS = {{ (show_compras|default(true))|tojson }};
+  const SHOW_FROTA = {{ (show_frota|default(true))|tojson }};
+  const SHOW_PLANEJAMENTO = {{ (show_planejamento|default(true))|tojson }};
+
   const POLL_MS = 5000;
   const ICONS = { chegada: "fa-box", conferencia: "fa-magnifying-glass", lancamento: "fa-circle-check", expedicao: "fa-truck-fast" };
   const seenKeys = new Set();
@@ -1004,10 +1010,13 @@
       el.classList.toggle("is-active", el.dataset.slide === SLIDES[slideIdx]);
     });
     renderSlideDots();
-    if (SLIDES[slideIdx] === "recebimento") { renderRecebimentoKanban(); renderComprasKanban(); pollCompras(); }
+    if (SLIDES[slideIdx] === "recebimento") {
+      renderRecebimentoKanban();
+      if (SHOW_COMPRAS) { renderComprasKanban(); pollCompras(); }
+    }
     if (SLIDES[slideIdx] === "expedicao") { renderRecebimentoKanban(); }
-    if (SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
-    if (SLIDES[slideIdx] === "planejamento") pollPlanejamento();
+    if (SHOW_FROTA && SLIDES[slideIdx] === "frota") { pollFrota(); setTimeout(() => frotaMap && frotaMap.invalidateSize(), 80); }
+    if (SHOW_PLANEJAMENTO && SLIDES[slideIdx] === "planejamento") pollPlanejamento();
     resetSlideTiming();
   }
 
@@ -1072,7 +1081,9 @@
 
   let comprasAt = 0;
   async function pollCompras() {
+    if (!SHOW_COMPRAS) return;
     const comprasBoard = $("compras-kb-board");
+    if (!comprasBoard) return;
     if (Date.now() - comprasAt < 60000 && comprasBoard && comprasBoard._sig) return;
     comprasAt = Date.now();
     try {
@@ -1123,6 +1134,7 @@
 
   let frotaAt = 0;
   async function pollFrota() {
+    if (!SHOW_FROTA) return;
     if (Date.now() - frotaAt < 5000) return;
     frotaAt = Date.now();
     try {
@@ -1151,7 +1163,10 @@
 
   let planAt = 0;
   async function pollPlanejamento() {
-    if (Date.now() - planAt < 30000 && $("plan-board")._sig) return;
+    if (!SHOW_PLANEJAMENTO) return;
+    const planBoard = $("plan-board");
+    if (!planBoard) return;
+    if (Date.now() - planAt < 30000 && planBoard._sig) return;
     planAt = Date.now();
     try {
       const r = await fetch("/api/painel/planejamento", { cache: "no-store" });
@@ -1161,15 +1176,15 @@
       $("plan-tag").textContent = (k.total || 0) + " tarefas" + atrTag;
       const cols = d.colunas || [];
       const sig = JSON.stringify(cols);
-      if ($("plan-board")._sig !== sig) {
-        $("plan-board")._sig = sig;
-        $("plan-board").innerHTML = cols.length
+      if (planBoard._sig !== sig) {
+        planBoard._sig = sig;
+        planBoard.innerHTML = cols.length
           ? cols.map(buildPlanCol).join("")
           : '<div class="empty">Sem colunas.</div>';
       }
     } catch (e) {
-      $("plan-board")._sig = "";
-      $("plan-board").innerHTML = '<div class="empty">Indisponível</div>';
+      planBoard._sig = "";
+      planBoard.innerHTML = '<div class="empty">Indisponível</div>';
     }
   }
 
@@ -1213,15 +1228,15 @@
   setInterval(updateClock, 1000 * 15);
   renderSlideDots();
   poll();
-  pollCompras();
-  pollFrota();
-  pollPlanejamento();
+  if (SHOW_COMPRAS) pollCompras();
+  if (SHOW_FROTA) pollFrota();
+  if (SHOW_PLANEJAMENTO) pollPlanejamento();
   setInterval(poll, POLL_MS);
   setInterval(autoScroll, 60);
   setInterval(carouselTick, 500);
-  setInterval(pollCompras, 90000);
-  setInterval(pollFrota, 8000);
-  setInterval(pollPlanejamento, 30000);
+  if (SHOW_COMPRAS) setInterval(pollCompras, 90000);
+  if (SHOW_FROTA) setInterval(pollFrota, 8000);
+  if (SHOW_PLANEJAMENTO) setInterval(pollPlanejamento, 30000);
 })();
 </script>
 </body>

@@ -120,6 +120,72 @@
     .rom-status-pronto { background: #dbeafe; color: #1e40af; }
     .rom-status-expedido { background: #dcfce7; color: #15803d; }
 
+    [data-theme="escuro"] .rom-viz-toolbar {
+        background: var(--eui-surface-2);
+        border-color: var(--eui-border);
+        color: var(--eui-text);
+    }
+    [data-theme="escuro"] .rom-viz-document {
+        background: var(--eui-surface);
+        border-color: var(--eui-border-strong);
+        color: var(--eui-text);
+    }
+    [data-theme="escuro"] .rom-doc-header,
+    [data-theme="escuro"] .rom-assinatura-canvas-wrap,
+    [data-theme="escuro"] .rom-header-value,
+    [data-theme="escuro"] .rom-transport-value,
+    [data-theme="escuro"] .rom-assinatura-img,
+    [data-theme="escuro"] .rom-assinatura-placeholder {
+        border-color: var(--eui-border-strong);
+    }
+    [data-theme="escuro"] .rom-doc-title,
+    [data-theme="escuro"] .rom-doc-section-title,
+    [data-theme="escuro"] .rom-party-name,
+    [data-theme="escuro"] .rom-header-value,
+    [data-theme="escuro"] .rom-transport-value,
+    [data-theme="escuro"] .rom-total-value {
+        color: var(--eui-text);
+    }
+    [data-theme="escuro"] .rom-doc-meta,
+    [data-theme="escuro"] .rom-party-fantasia,
+    [data-theme="escuro"] .rom-party-line,
+    [data-theme="escuro"] .rom-party-line strong,
+    [data-theme="escuro"] .rom-header-label,
+    [data-theme="escuro"] .rom-transport-label,
+    [data-theme="escuro"] .rom-assinatura-label,
+    [data-theme="escuro"] .rom-assinatura-meta {
+        color: var(--eui-text-soft);
+    }
+    [data-theme="escuro"] .rom-party-card,
+    [data-theme="escuro"] .rom-assinatura-canvas-wrap {
+        background: var(--eui-surface-2);
+        border-color: var(--eui-border);
+    }
+    [data-theme="escuro"] .rom-party-title,
+    [data-theme="escuro"] .rom-total-label {
+        color: #cfe3ff;
+    }
+    [data-theme="escuro"] .rom-nf-table th,
+    [data-theme="escuro"] .rom-nf-table td {
+        border-color: var(--eui-border);
+    }
+    [data-theme="escuro"] .rom-nf-table th {
+        background: var(--eui-surface-2);
+        color: var(--eui-text-soft);
+    }
+    [data-theme="escuro"] .rom-nf-table td {
+        color: var(--eui-text);
+    }
+    [data-theme="escuro"] .rom-nf-table tbody tr:nth-child(even) {
+        background: rgba(255, 255, 255, 0.02);
+    }
+    [data-theme="escuro"] .rom-nf-table tbody tr:hover {
+        background: rgba(59, 147, 245, 0.12);
+    }
+    [data-theme="escuro"] .rom-totalizadores {
+        background: rgba(59, 147, 245, 0.16);
+    }
+
     @media print {
         /* Esconde o chrome do app (sidebar, topo, rodapé) — sem isso o
            navegador imprime a página inteira, não só o documento. */

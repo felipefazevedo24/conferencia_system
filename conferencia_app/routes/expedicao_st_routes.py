@@ -596,23 +596,25 @@ def conferir_ordem_conf_st(cod_ordem_compra):
 
     db.session.commit()
 
-    # Aviso no Teams a cada finalizacao bem-sucedida da conferencia.
-    try:
-        from ..services.teams_service import notificar_expedicao_conferida
+    # Aviso no Teams apenas na primeira conferencia concluida. Edicoes
+    # posteriores (inclusive correcao administrativa em Faturado) nao reenviam.
+    if not era_conferido:
+        try:
+            from ..services.teams_service import notificar_expedicao_conferida
 
-        notificar_expedicao_conferida(
-            ordem.fornecedor or "Fornecedor não informado",
-            f"Ordem de compra {ordem.cod_ordem_compra}",
-            conferente=ordem.conferente,
-            volumes=ordem.qtde_volumes,
-            peso_liquido=ordem.peso_liquido,
-            peso_bruto=ordem.peso_bruto,
-            especie_volumes=ordem.especie_volumes,
-            env_var="TEAMS_WEBHOOK_EXPEDICAO_ST_URL",
-            config_key="webhook_expedicao_st",
-        )
-    except Exception:
-        current_app.logger.exception("Falha ao notificar Teams (conf-cega ST %s)", cod_ordem_compra)
+            notificar_expedicao_conferida(
+                ordem.fornecedor or "Fornecedor não informado",
+                f"Ordem de compra {ordem.cod_ordem_compra}",
+                conferente=ordem.conferente,
+                volumes=ordem.qtde_volumes,
+                peso_liquido=ordem.peso_liquido,
+                peso_bruto=ordem.peso_bruto,
+                especie_volumes=ordem.especie_volumes,
+                env_var="TEAMS_WEBHOOK_EXPEDICAO_ST_URL",
+                config_key="webhook_expedicao_st",
+            )
+        except Exception:
+            current_app.logger.exception("Falha ao notificar Teams (conf-cega ST %s)", cod_ordem_compra)
 
     return jsonify({
         "sucesso": True,
@@ -794,18 +796,31 @@ def estornar_conferencia_st(cod_ordem_compra):
     usuario = session.get("username") or "desconhecido"
     status_anterior = ordem.status
 
-    ordem.status = svc.STATUS_FATURADO_SEM_CONF if slug == "faturado" else svc.STATUS_PENDENTE
-    ordem.conferente = None
-    ordem.conferido_at = None
-    ordem.divergente = False
-    ordem.conferido_pos_faturamento = False
-    ordem.peso_liquido = None
-    ordem.peso_bruto = None
-    ordem.qtde_volumes = None
-    ordem.especie_volumes = None
-    for it in ordem.itens:
-        it.qtde_conferida = None
-        it.divergente = False
+    if slug == "faturado":
+        # Em Faturado, o estorno vira "modo correcao": habilita edicao de
+        # peso/volumes sem desmontar a conferencia e sem retroceder etapa.
+        ordem.status = svc.STATUS_FATURADO
+        ordem.divergente = False
+        ordem.conferido_pos_faturamento = True
+        if not ordem.conferido_at:
+            ordem.conferido_at = agora
+        for it in ordem.itens:
+            if it.qtde_conferida is None:
+                it.qtde_conferida = it.qtde_a_faturar
+            it.divergente = False
+    else:
+        ordem.status = svc.STATUS_PENDENTE
+        ordem.conferente = None
+        ordem.conferido_at = None
+        ordem.divergente = False
+        ordem.conferido_pos_faturamento = False
+        ordem.peso_liquido = None
+        ordem.peso_bruto = None
+        ordem.qtde_volumes = None
+        ordem.especie_volumes = None
+        for it in ordem.itens:
+            it.qtde_conferida = None
+            it.divergente = False
     ordem.updated_at = agora
 
     diff_cab = [{"campo": "motivo", "label": "Motivo", "de": "", "para": motivo}] if motivo else []
@@ -813,12 +828,12 @@ def estornar_conferencia_st(cod_ordem_compra):
         origem="st",
         ordem_id=ordem.id,
         cod_ordem=ordem.cod_ordem_compra,
-        acao="estorno_conferencia",
+        acao="estorno_para_correcao_faturado" if slug == "faturado" else "estorno_conferencia",
         usuario=usuario,
         status_anterior=status_anterior,
         status_novo=ordem.status,
         divergente=False,
-        pos_faturamento=False,
+        pos_faturamento=bool(ordem.conferido_pos_faturamento),
         diff_cabecalho=diff_cab,
         diff_itens=[],
     )
@@ -828,6 +843,7 @@ def estornar_conferencia_st(cod_ordem_compra):
         "sucesso": True,
         "status": ordem.status,
         "status_slug": svc.status_slug(ordem.status),
+        "modo_correcao": bool(slug == "faturado"),
     })
 
 

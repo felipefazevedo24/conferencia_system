@@ -2145,23 +2145,59 @@ def documento_entrada_kpis_v2():
     """KPIs reais da página unificada de Documento de Entrada (4 estágios)."""
     hoje = datetime.now().date()
 
-    contagem_status = dict(
-        db.session.query(ItemNota.status, func.count(func.distinct(ItemNota.numero_nota)))
-        .filter(ItemNota.status.in_(["AguardandoLiberacao", "Pendente", "Concluído", "Lançado"]))
-        .group_by(ItemNota.status)
-        .all()
+    status_lancado_variantes = ("Lançado", "Lancado", "LanÃ§ado")
+    sub_notas = (
+        db.session.query(
+            ItemNota.numero_nota.label("numero_nota"),
+            ItemNota.cnpj_emitente.label("cnpj_emitente"),
+            ItemNota.fornecedor.label("fornecedor"),
+            func.max(case((ItemNota.status != "AguardandoLiberacao", 1), else_=0)).label("tem_status_fora_auditoria"),
+            func.max(case((ItemNota.status.in_(["Pendente", "Concluído", "Concluido"]), 1), else_=0)).label("tem_status_lancamento"),
+            func.max(case((ItemNota.status.in_(status_lancado_variantes), 1), else_=0)).label("tem_status_lancado"),
+        )
+        .group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+        .subquery()
     )
-    importados_hoje = (
-        db.session.query(func.count(func.distinct(ItemNota.numero_nota)))
-        .filter(func.date(ItemNota.data_importacao) == hoje)
+
+    em_auditoria = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_fora_auditoria == 0)
         .scalar()
     ) or 0
 
+    em_lancamento = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_lancado == 0)
+        .filter(sub_notas.c.tem_status_lancamento == 1)
+        .scalar()
+    ) or 0
+
+    lancamento_finalizado = (
+        db.session.query(func.count())
+        .select_from(sub_notas)
+        .filter(sub_notas.c.tem_status_lancado == 1)
+        .scalar()
+    ) or 0
+
+    importados_hoje_sub = (
+        db.session.query(
+            ItemNota.numero_nota,
+            ItemNota.cnpj_emitente,
+            ItemNota.fornecedor,
+        )
+        .filter(func.date(ItemNota.data_importacao) == hoje)
+        .group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
+        .subquery()
+    )
+    importados_hoje = db.session.query(func.count()).select_from(importados_hoje_sub).scalar() or 0
+
     return jsonify({
         "importados_hoje": int(importados_hoje),
-        "em_auditoria": int(contagem_status.get("AguardandoLiberacao", 0)),
-        "em_lancamento": int(contagem_status.get("Pendente", 0)) + int(contagem_status.get("Concluído", 0)),
-        "lancamento_finalizado": int(contagem_status.get("Lançado", 0)),
+        "em_auditoria": int(em_auditoria),
+        "em_lancamento": int(em_lancamento),
+        "lancamento_finalizado": int(lancamento_finalizado),
     })
 
 
@@ -2184,6 +2220,8 @@ def documento_entrada_lista():
 
     base_query = db.session.query(
         ItemNota.numero_nota,
+        ItemNota.cnpj_emitente,
+        ItemNota.fornecedor,
         func.max(ItemNota.data_importacao).label("data_importacao_max"),
     )
 
@@ -2195,7 +2233,7 @@ def documento_entrada_lista():
         termo = f"%{busca}%"
         base_query = base_query.filter(db.or_(ItemNota.numero_nota.ilike(termo), ItemNota.fornecedor.ilike(termo)))
 
-    base_query = base_query.group_by(ItemNota.numero_nota)
+    base_query = base_query.group_by(ItemNota.numero_nota, ItemNota.cnpj_emitente, ItemNota.fornecedor)
 
     if etapa == "auditoria":
         # Auditoria deve conter apenas notas totalmente em AguardandoLiberacao.
@@ -2220,25 +2258,30 @@ def documento_entrada_lista():
         .limit(page_size)
         .all()
     )
-    numeros_pagina = [r[0] for r in pagina]
+    chaves_pagina = [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip()) for r in pagina]
+    numeros_pagina = sorted({k[0] for k in chaves_pagina if k[0]})
 
     itens_por_nota = {}
     if numeros_pagina:
         for item in ItemNota.query.filter(ItemNota.numero_nota.in_(numeros_pagina)).all():
-            itens_por_nota.setdefault(item.numero_nota, []).append(item)
+            chave_item = (
+                str(item.numero_nota or "").strip(),
+                str(item.cnpj_emitente or "").strip(),
+                str(item.fornecedor or "").strip(),
+            )
+            itens_por_nota.setdefault(chave_item, []).append(item)
 
     divergencias = _summarize_divergencias_lote(numeros_pagina)
     estornos = _bulk_ultimo_por_nota(LogEstornoLancamento, numeros_pagina, LogEstornoLancamento.data_estorno)
     manifestacoes = _bulk_ultimo_por_nota(LogManifestacaoDestinatario, numeros_pagina, LogManifestacaoDestinatario.data)
 
     notas = []
-    for numero in numeros_pagina:
-        itens_nota = itens_por_nota.get(numero, [])
+    for chave in chaves_pagina:
+        numero = chave[0]
+        itens_nota = itens_por_nota.get(chave, [])
         if not itens_nota:
             continue
         status_real = _etapa_atual_por_itens(itens_nota)
-        if etapa != "importados_hoje" and status_real not in _ETAPA_STATUS_MAP[etapa]:
-            continue
         pedido_compra = _coletar_pedidos_nota(itens_nota).strip() or "---"
         fornecedor = next((i.fornecedor for i in itens_nota if i.fornecedor), "---")
         data_importacao = min((i.data_importacao for i in itens_nota if i.data_importacao), default=None)
@@ -2250,6 +2293,7 @@ def documento_entrada_lista():
         linha = {
             "numero": numero,
             "fornecedor": fornecedor,
+            "cnpj_emitente": str(itens_nota[0].cnpj_emitente or "").strip(),
             "status": status_real,
             "pedido_compra": pedido_compra,
             "data_importacao": data_importacao.strftime("%d/%m/%Y %H:%M") if data_importacao else "---",
@@ -4502,7 +4546,15 @@ def listar_notas_xml_auditor():
 @api_bp.route("/api/xml_auditor/nota/<numero_nota>", methods=["GET"])
 @permission_required("PAGE_XML_AUDITOR")
 def detalhe_nota_xml_auditor(numero_nota):
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    cnpj_emitente = re.sub(r"\D", "", str(request.args.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(request.args.get("fornecedor") or "").strip()
+
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.order_by(ItemNota.id.asc()).all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4551,12 +4603,19 @@ def detalhe_nota_xml_auditor(numero_nota):
 @api_bp.route("/api/xml_auditor/analisar", methods=["POST"])
 @permission_required("PAGE_XML_AUDITOR")
 def analisar_nota_xml_auditor():
-    payload = nota_schema.load(request.json or {})
+    payload = request.get_json() or {}
     numero_nota = str(payload.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(payload.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(payload.get("fornecedor") or "").strip()
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4596,13 +4655,20 @@ def analisar_nota_xml_auditor():
 def registrar_decisao_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     autorizado = bool(data.get("autorizado", False))
     justificativa = str(data.get("justificativa") or "").strip()
 
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4632,6 +4698,8 @@ def registrar_decisao_xml_auditor():
 def retirar_nota_da_fila_auditor_xml():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor_payload = str(data.get("fornecedor") or "").strip()
     motivo = str(data.get("motivo") or "").strip()
 
     if not numero_nota:
@@ -4639,7 +4707,12 @@ def retirar_nota_da_fila_auditor_xml():
     if len(motivo) < 5:
         return jsonify({"sucesso": False, "msg": "Informe o motivo com no mínimo 5 caracteres."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao")
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor_payload:
+        query = query.filter(ItemNota.fornecedor == fornecedor_payload)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada em Aguardando Liberação."}), 404
 
@@ -4655,11 +4728,16 @@ def retirar_nota_da_fila_auditor_xml():
         )
     )
 
-    ItemNota.query.filter_by(numero_nota=numero_nota).delete()
-    LogDivergencia.query.filter_by(numero_nota=numero_nota).delete()
-    LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).delete()
-    LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).delete()
-    _release_lock(numero_nota)
+    ids_alvo = [int(i.id) for i in itens]
+    if ids_alvo:
+        ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).delete(synchronize_session=False)
+
+    # Só limpa logs/lock globais da NF quando não existem mais itens com esse número.
+    if not ItemNota.query.filter_by(numero_nota=numero_nota).first():
+        LogDivergencia.query.filter_by(numero_nota=numero_nota).delete()
+        LogReversaoConferencia.query.filter_by(numero_nota=numero_nota).delete()
+        LogEstornoLancamento.query.filter_by(numero_nota=numero_nota).delete()
+        _release_lock(numero_nota)
 
     db.session.add(
         LogAcessoAdministrativo(
@@ -4672,7 +4750,13 @@ def retirar_nota_da_fila_auditor_xml():
     return jsonify({"sucesso": True, "msg": "NF removida do sistema pelo Auditor XML. Para processar novamente, importe o XML outra vez."})
 
 
-def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str, resultado_comparacao: dict | None = None):
+def _sincronizar_codigo_interno_por_pedido(
+    numero_nota: str,
+    numero_pedido: str,
+    resultado_comparacao: dict | None = None,
+    cnpj_emitente: str | None = None,
+    fornecedor: str | None = None,
+):
     """
     Sincroniza vínculo de linha PO e código interno (coluna D) no item_nota.
     Garante que etapas seguintes sempre leiam o código interno já vinculado.
@@ -4682,7 +4766,15 @@ def _sincronizar_codigo_interno_por_pedido(numero_nota: str, numero_pedido: str,
     if not numero_nota or not numero_pedido:
         return {"atualizou": False}
 
-    itens_nf = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    cnpj_emitente = re.sub(r"\D", "", str(cnpj_emitente or ""))[:14]
+    fornecedor = str(fornecedor or "").strip()
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+
+    itens_nf = query.order_by(ItemNota.id.asc()).all()
     if not itens_nf:
         return {"atualizou": False}
 
@@ -4759,6 +4851,8 @@ def _coletar_pedidos_nota(itens) -> str:
 def vincular_pedido_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     pedido_compra = str(data.get("pedido_compra") or "").strip()
     material_cliente = bool(data.get("material_cliente", False))
     remessa = bool(data.get("remessa", False))
@@ -4768,7 +4862,12 @@ def vincular_pedido_xml_auditor():
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -4790,7 +4889,12 @@ def vincular_pedido_xml_auditor():
     # Tenta vincular automaticamente as linhas XML x PO imediatamente após informar a OC.
     if not material_cliente and not remessa and pedido_compra:
         try:
-            _sincronizar_codigo_interno_por_pedido(numero_nota, pedido_compra)
+            _sincronizar_codigo_interno_por_pedido(
+                numero_nota,
+                pedido_compra,
+                cnpj_emitente=cnpj_emitente,
+                fornecedor=fornecedor,
+            )
         except Exception:
             # Não bloqueia o fluxo de salvar vínculo caso haja indisponibilidade do Sheets.
             db.session.rollback()
@@ -4816,6 +4920,8 @@ def vincular_pedido_xml_auditor():
 def consultar_pedido_excel():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     numero_pedido = str(data.get("pedido") or "").strip()
     conversoes_itens = data.get("conversoes_itens") or {}
 
@@ -4824,7 +4930,12 @@ def consultar_pedido_excel():
 
     itens_nf = []
     if numero_nota:
-        itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+        query = ItemNota.query.filter_by(numero_nota=numero_nota)
+        if cnpj_emitente:
+            query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+        elif fornecedor:
+            query = query.filter(ItemNota.fornecedor == fornecedor)
+        itens_db = query.order_by(ItemNota.id.asc()).all()
         mapa_conversoes = conversoes_itens if isinstance(conversoes_itens, dict) else {}
 
         def _resolver_conversao_item(item: ItemNota):
@@ -4879,7 +4990,13 @@ def consultar_pedido_excel():
 
     # Persiste a sugestão automática 1-para-1 para evitar vinculação manual repetitiva.
     if numero_nota and itens_nf:
-        _sincronizar_codigo_interno_por_pedido(numero_nota, numero_pedido, resultado)
+        _sincronizar_codigo_interno_por_pedido(
+            numero_nota,
+            numero_pedido,
+            resultado,
+            cnpj_emitente=cnpj_emitente,
+            fornecedor=fornecedor,
+        )
 
     return jsonify({"sucesso": True, **resultado})
 
@@ -4920,13 +5037,20 @@ def sugestoes_vinculacao():
     """
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     numero_pedido = str(data.get("pedido") or "").strip()
 
     if not numero_nota or not numero_pedido:
         return jsonify({"sucesso": False, "msg": "NF e Pedido obrigatórios."}), 400
 
     # Recupera items da NF
-    itens_db = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens_db = query.order_by(ItemNota.id.asc()).all()
     
     itens_nf = [
         {
@@ -5061,10 +5185,17 @@ def vincular_linha_po():
 def liberar_nota_via_xml_auditor():
     data = request.get_json() or {}
     numero_nota = str(data.get("nota") or "").strip()
+    cnpj_emitente = re.sub(r"\D", "", str(data.get("cnpj_emitente") or ""))[:14]
+    fornecedor = str(data.get("fornecedor") or "").strip()
     if not numero_nota:
         return jsonify({"sucesso": False, "msg": "NF obrigatória."}), 400
 
-    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    query = ItemNota.query.filter_by(numero_nota=numero_nota)
+    if cnpj_emitente:
+        query = query.filter(ItemNota.cnpj_emitente == cnpj_emitente)
+    elif fornecedor:
+        query = query.filter(ItemNota.fornecedor == fornecedor)
+    itens = query.all()
     if not itens:
         return jsonify({"sucesso": False, "msg": "NF não encontrada."}), 404
 
@@ -5130,23 +5261,33 @@ def liberar_nota_via_xml_auditor():
     # Garante propagação do código interno (coluna D) antes de enviar para próximas etapas.
     if not material_cliente and not remessa and pedidos_nota:
         try:
-            _sincronizar_codigo_interno_por_pedido(numero_nota, pedidos_nota)
+            _sincronizar_codigo_interno_por_pedido(
+                numero_nota,
+                pedidos_nota,
+                cnpj_emitente=cnpj_emitente,
+                fornecedor=fornecedor,
+            )
         except Exception as exc:
             return jsonify({"sucesso": False, "msg": f"Não foi possível sincronizar código interno da OC: {exc}"}), 409
 
     if sem_conferencia_logistica:
         now = datetime.now()
-        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update(
-            {
-                "status": "Concluído",
-                "usuario_conferencia": session.get("username", "sistema"),
-                "inicio_conferencia": now,
-                "fim_conferencia": now,
-            }
-        )
+        ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
+        if ids_alvo:
+            ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update(
+                {
+                    "status": "Concluído",
+                    "usuario_conferencia": session.get("username", "sistema"),
+                    "inicio_conferencia": now,
+                    "fim_conferencia": now,
+                },
+                synchronize_session=False,
+            )
         msg_liberacao = "NF liberada sem conferência logística. Documento enviado direto para Entrada (Concluído)."
     else:
-        ItemNota.query.filter_by(numero_nota=numero_nota, status="AguardandoLiberacao").update({"status": "Pendente"})
+        ids_alvo = [int(i.id) for i in itens if str(i.status or "").strip() == "AguardandoLiberacao"]
+        if ids_alvo:
+            ItemNota.query.filter(ItemNota.id.in_(ids_alvo)).update({"status": "Pendente"}, synchronize_session=False)
         msg_liberacao = "NF liberada para conferência pelo Auditor XML."
     db.session.add(
         LogAcessoAdministrativo(
@@ -7123,25 +7264,24 @@ def confirmar_lancamento():
         ]
         if mesmo_lancamento:
             manifestacao_result = None
+            manifestacao_pendente = False
+            msg_manifestacao = ""
             if manifestar_destinatario:
                 manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
                 if not manifestacao_result.get("sucesso"):
-                    return (
-                        jsonify(
-                            {
-                                "sucesso": False,
-                                "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
-                                "manifestacao": manifestacao_result,
-                            }
-                        ),
-                        manifestacao_result.get("status_code") or 502,
-                    )
+                    manifestacao_pendente = True
+                    msg_manifestacao = manifestacao_result.get("msg") or "Falha ao manifestar destinatário."
             return jsonify(
                 {
                     "sucesso": True,
                     "idempotente": True,
                     "manifestacao": manifestacao_result,
-                    "msg": "NF já lançada com este código.",
+                    "manifestacao_pendente": manifestacao_pendente,
+                    "msg": (
+                        f"NF já lançada com este código, mas a manifestação ficou pendente: {msg_manifestacao}"
+                        if manifestacao_pendente
+                        else "NF já lançada com este código."
+                    ),
                 }
             )
         return jsonify({"sucesso": False, "msg": "NF não encontrada para lançamento."}), 404
@@ -7206,28 +7346,13 @@ def confirmar_lancamento():
         current_app.logger.exception("Falha ao classificar contabilmente a NF %s: %s", numero_nota, exc)
 
     manifestacao_result = None
+    manifestacao_pendente = False
+    msg_manifestacao = ""
     if manifestar_destinatario:
         manifestacao_result = _manifestar_confirmacao_operacao(numero_nota, session["username"])
         if not manifestacao_result.get("sucesso"):
-            ItemNota.query.filter_by(numero_nota=numero_nota, status="Lançado").update(
-                {
-                    "status": "Concluído",
-                    "usuario_lancamento": None,
-                    "data_lancamento": None,
-                    "numero_lancamento": None,
-                }
-            )
-            db.session.commit()
-            return (
-                jsonify(
-                    {
-                        "sucesso": False,
-                        "msg": manifestacao_result.get("msg") or "Falha ao manifestar destinatário.",
-                        "manifestacao": manifestacao_result,
-                    }
-                ),
-                manifestacao_result.get("status_code") or 502,
-            )
+            manifestacao_pendente = True
+            msg_manifestacao = manifestacao_result.get("msg") or "Falha ao manifestar destinatário."
 
     aviso_chapa = None
     try:
@@ -7247,6 +7372,12 @@ def confirmar_lancamento():
         {
             "sucesso": True,
             "manifestacao": manifestacao_result,
+            "manifestacao_pendente": manifestacao_pendente,
+            "msg": (
+                f"Lançamento gravado, mas a manifestação ficou pendente: {msg_manifestacao}"
+                if manifestacao_pendente
+                else "Lançamento gravado com sucesso."
+            ),
             "aviso_chapa": aviso_chapa,
         }
     )
