@@ -233,25 +233,6 @@
                 </div>
                 <div class="cx-field"><label>Data PO</label><input type="date" id="cx-po-data" class="eui-input"></div>
             </div>
-
-            <div class="cx-section-title">Dados gerais da operação</div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>Ref. Despachante</label><input type="text" maxlength="20" id="cx-po-ref-despachante" class="eui-input"></div>
-                <div class="cx-field"><label>BL/AWB</label><input type="text" maxlength="20" id="cx-po-bl-awb" class="eui-input"></div>
-            </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>Invoice</label><input type="text" maxlength="20" id="cx-po-invoice" class="eui-input"></div>
-                <div class="cx-field"><label>ETD</label><input type="date" id="cx-po-etd" class="eui-input"></div>
-            </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>ETA</label><input type="date" id="cx-po-eta" class="eui-input"></div>
-                <div class="cx-field"><label>Previsão Entrega/Expedição</label><input type="date" id="cx-po-previsao-entrega" class="eui-input"></div>
-            </div>
-            <div class="cx-grid-2">
-                <div class="cx-field"><label>Entrega Real</label><input type="text" maxlength="20" id="cx-po-entrega-real" class="eui-input"></div>
-                <div class="cx-field"><label>NF Impo</label><input type="text" maxlength="20" id="cx-po-nf-impo" class="eui-input"></div>
-            </div>
-            <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-po-nf-recebimento" class="eui-input"></div>
             <div class="cx-field">
                 <label>Itens da PO
                     <small style="font-weight:400; color:var(--eui-muted);"> — preenchido manualmente por enquanto (código, NCM, PN, descrição, quantidade e valores)</small>
@@ -308,6 +289,42 @@
             <a class="eui-btn eui-btn--ghost hidden" id="cx-po-btn-pdf" target="_blank"><i class="fas fa-file-pdf"></i> Ver PDF</a>
             <button class="eui-btn eui-btn--ghost" id="cx-po-btn-salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>
             <button class="eui-btn eui-btn--primary" id="cx-po-btn-finalizar"><i class="fas fa-check"></i> Finalizar sem enviar e-mail</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Instrução de Embarque -->
+<div class="cx-modal" id="cx-modal-instrucao">
+    <div class="cx-modal__box">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-paper-plane"></i> Instrução de Embarque — <span id="cx-inst-id-op">—</span></h3>
+            <button class="cx-modal__close" id="cx-fechar-instrucao"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <div class="cx-field hidden" id="cx-inst-status-wrap">
+                <div id="cx-inst-status-info" style="font-size:13px; color:var(--eui-text);"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Ref. Despachante</label><input type="text" maxlength="20" id="cx-inst-ref-despachante" class="eui-input"></div>
+                <div class="cx-field"><label>BL/AWB</label><input type="text" maxlength="20" id="cx-inst-bl-awb" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Invoice</label><input type="text" maxlength="20" id="cx-inst-invoice" class="eui-input"></div>
+                <div class="cx-field"><label>ETD</label><input type="date" id="cx-inst-etd" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>ETA</label><input type="date" id="cx-inst-eta" class="eui-input"></div>
+                <div class="cx-field"><label>Previsão Entrega/Expedição</label><input type="date" id="cx-inst-previsao-entrega" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Entrega Real</label><input type="text" maxlength="20" id="cx-inst-entrega-real" class="eui-input"></div>
+                <div class="cx-field"><label>NF Impo</label><input type="text" maxlength="20" id="cx-inst-nf-impo" class="eui-input"></div>
+            </div>
+            <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-inst-nf-recebimento" class="eui-input"></div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-instrucao-2">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="cx-inst-btn-salvar"><i class="fas fa-paper-plane"></i> Enviar / Salvar</button>
         </div>
     </div>
 </div>
@@ -559,8 +576,16 @@
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
         } else if (p.status_modulo === "Cotacao") {
             itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
+            if (p.cotacao_vencedora_id) {
+                itens += it("instrucao", "fa-paper-plane", "Enviar Instrução de Embarque");
+            }
             itens += it("editar-po", "fa-file-signature", "Ver PO");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
+        } else if (p.status_modulo === "Instrucao") {
+            itens += it("instrucao", "fa-paper-plane", "Editar Instrução de Embarque");
+            itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
+            itens += it("editar-po", "fa-file-signature", "Ver PO");
+            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
         } else {
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
@@ -606,6 +631,8 @@
             abrirModalPo(p);
         } else if (act === "cotacao") {
             abrirModalCotacao(p);
+        } else if (act === "instrucao") {
+            abrirModalInstrucao(p);
         } else if (act === "editar-oc") {
             abrirModalOc(p);
         } else if (act === "apagar-oc") {
@@ -861,15 +888,6 @@
         atualizarLabelFornecedor();
         $("cx-po-pagador-frete").value = p.pagador_frete || "";
         $("cx-po-data").value = p.po_data || "";
-        $("cx-po-ref-despachante").value = p.ref_despachante || "";
-        $("cx-po-bl-awb").value = p.bl_awb || "";
-        $("cx-po-invoice").value = p.invoice_numero || "";
-        $("cx-po-etd").value = p.etd || "";
-        $("cx-po-eta").value = p.eta || "";
-        $("cx-po-previsao-entrega").value = p.previsao_entrega || "";
-        $("cx-po-entrega-real").value = p.entrega_real || "";
-        $("cx-po-nf-impo").value = p.nf_impo || "";
-        $("cx-po-nf-recebimento").value = p.nf_recebimento || "";
         $("cx-po-outras-ocs").innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
         itensPoAtual = [];
         renderItensPo();
@@ -955,15 +973,6 @@
                     ocs_vinculadas_ids: _ocsSelecionadas(),
                     finalizar: !!finalizar,
                     po_data: $("cx-po-data").value || null,
-                    ref_despachante: $("cx-po-ref-despachante").value.trim(),
-                    bl_awb: $("cx-po-bl-awb").value.trim(),
-                    invoice_numero: $("cx-po-invoice").value.trim(),
-                    etd: $("cx-po-etd").value || null,
-                    eta: $("cx-po-eta").value || null,
-                    previsao_entrega: $("cx-po-previsao-entrega").value || null,
-                    entrega_real: $("cx-po-entrega-real").value.trim(),
-                    nf_impo: $("cx-po-nf-impo").value.trim(),
-                    nf_recebimento: $("cx-po-nf-recebimento").value.trim(),
                 }),
             });
             await api(`/api/comex/processos/${processoPoAtual.id}/po/itens`, {
@@ -1132,6 +1141,63 @@
             toast("Cotação escolhida!", "success");
             carregarCotacoes(processoCotacaoAtual.id);
         } catch (err) { toast(err.message, "error"); }
+    });
+
+    // ── MODAL: Instrução de Embarque (Módulo 4, versão mínima) ─────────
+    let processoInstrucaoAtual = null;
+
+    function abrirModalInstrucao(p) {
+        processoInstrucaoAtual = p;
+        $("cx-inst-id-op").textContent = p.id_op;
+        $("cx-inst-ref-despachante").value = p.ref_despachante || "";
+        $("cx-inst-bl-awb").value = p.bl_awb || "";
+        $("cx-inst-invoice").value = p.invoice_numero || "";
+        $("cx-inst-etd").value = p.etd || "";
+        $("cx-inst-eta").value = p.eta || "";
+        $("cx-inst-previsao-entrega").value = p.previsao_entrega || "";
+        $("cx-inst-entrega-real").value = p.entrega_real || "";
+        $("cx-inst-nf-impo").value = p.nf_impo || "";
+        $("cx-inst-nf-recebimento").value = p.nf_recebimento || "";
+
+        const jaEnviada = !!p.instrucao_enviada_em;
+        $("cx-inst-status-wrap").classList.toggle("hidden", !jaEnviada);
+        if (jaEnviada) {
+            $("cx-inst-status-info").innerHTML =
+                `Instrução enviada em <strong>${escapeHtml(p.instrucao_enviada_em)}</strong> por ${escapeHtml(p.instrucao_enviada_por || "—")}`;
+        }
+        $("cx-modal-instrucao").classList.add("open");
+    }
+    function fecharModalInstrucao() { $("cx-modal-instrucao").classList.remove("open"); processoInstrucaoAtual = null; }
+    $("cx-fechar-instrucao").addEventListener("click", fecharModalInstrucao);
+    $("cx-fechar-instrucao-2").addEventListener("click", fecharModalInstrucao);
+
+    $("cx-inst-btn-salvar").addEventListener("click", async () => {
+        if (!processoInstrucaoAtual) return;
+        const btn = $("cx-inst-btn-salvar");
+        btn.disabled = true;
+        try {
+            await api(`/api/comex/processos/${processoInstrucaoAtual.id}/instrucao`, {
+                method: "POST",
+                body: JSON.stringify({
+                    ref_despachante: $("cx-inst-ref-despachante").value.trim(),
+                    bl_awb: $("cx-inst-bl-awb").value.trim(),
+                    invoice_numero: $("cx-inst-invoice").value.trim(),
+                    etd: $("cx-inst-etd").value || null,
+                    eta: $("cx-inst-eta").value || null,
+                    previsao_entrega: $("cx-inst-previsao-entrega").value || null,
+                    entrega_real: $("cx-inst-entrega-real").value.trim(),
+                    nf_impo: $("cx-inst-nf-impo").value.trim(),
+                    nf_recebimento: $("cx-inst-nf-recebimento").value.trim(),
+                }),
+            });
+            toast("Instrução de embarque salva!", "success");
+            fecharModalInstrucao();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
     });
 
     carregar();

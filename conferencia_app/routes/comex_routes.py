@@ -72,6 +72,9 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "entrega_real": p.entrega_real,
         "nf_impo": p.nf_impo,
         "nf_recebimento": p.nf_recebimento,
+        "instrucao_enviada_em": p.instrucao_enviada_em.strftime("%d/%m/%Y %H:%M") if p.instrucao_enviada_em else None,
+        "instrucao_enviada_por": p.instrucao_enviada_por,
+        "cotacao_vencedora_id": p.cotacao_vencedora_id,
     }
 
 
@@ -232,6 +235,24 @@ def api_apagar_po(processo_id):
     usuario = session.get("username", "desconhecido")
     processo = svc.apagar_po(processo, usuario)
     return jsonify({"message": "PO apagada.", "processo": _processo_payload(processo)})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/instrucao", methods=["POST"])
+@permission_required(PERMISSION)
+def api_enviar_instrucao(processo_id):
+    """Módulo 4 (versão mínima) — só disponível depois que uma cotação foi
+    escolhida; libera Ref. Despachante/BL-AWB/Invoice/ETD/ETA/Previsão
+    Entrega/Entrega Real/NF Impo/NF Recebimento para edição."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.enviar_instrucao(processo, payload, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Instrução de embarque salva.", "processo": _processo_payload(processo)})
 
 
 def _item_payload(it: ComexPoItem) -> dict:

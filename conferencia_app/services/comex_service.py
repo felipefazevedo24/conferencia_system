@@ -904,6 +904,34 @@ def escolher_cotacao(cotacao: ComexCotacao, *, usuario: str, justificativa: str 
     return processo
 
 
+# ── Instrucao de Embarque (Modulo 4, versao minima) ────────────────────
+def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> ComexProcesso:
+    """So depois que uma cotacao e escolhida (Modulo 3 concluido) que os
+    dados gerais de operacao (Ref. Despachante, BL/AWB, Invoice, ETD, ETA,
+    Previsao Entrega, Entrega Real, NF Impo, NF Recebimento) sao conhecidos
+    e ficam liberados para edicao - antes disso o operador nao tem essa
+    informacao ainda. Reaproveita `_aplicar_campos_operacionais` (mesmos
+    campos usados em `salvar_po`). Pode ser chamada de novo depois (os
+    campos continuam editaveis), so avanca o modulo na primeira vez."""
+    if processo.status_modulo == "Cotacao" and not processo.cotacao_vencedora_id:
+        raise ValueError("Escolha uma cotação de frete antes de enviar a instrução de embarque.")
+    if processo.status_modulo not in ("Cotacao", "Instrucao"):
+        raise ValueError("A instrução de embarque só pode ser enviada depois da cotação escolhida.")
+
+    agora = datetime.now()
+    primeira_vez = processo.status_modulo == "Cotacao"
+    _aplicar_campos_operacionais(processo, dados)
+    if primeira_vez:
+        processo.status_modulo = "Instrucao"
+        processo.status_slug = status_slug("Instrucao")
+        processo.instrucao_enviada_em = agora
+        processo.instrucao_enviada_por = usuario
+    processo.atualizado_em = agora
+    processo.atualizado_por = usuario
+    db.session.commit()
+    return processo
+
+
 def _to_int(valor):
     if valor in (None, ""):
         return None

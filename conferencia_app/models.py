@@ -2575,6 +2575,15 @@ class ComexProcesso(db.Model):
     cotacao_vencedora_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"))
     cotacao_justificativa = db.Column(db.Text)
 
+    # ── Modulo 4: Instrucao de Embarque (versao minima) ────────────────────
+    # So depois que a instrucao e enviada (cotacao ja escolhida) que os
+    # campos "Dados gerais de operacao" acima (ref_despachante, bl_awb,
+    # invoice_numero, etd, previsao_entrega, entrega_real, nf_impo,
+    # nf_recebimento; ETA reaproveita em_transito_eta) ficam liberados para
+    # edicao - antes disso ainda nao sao conhecidos.
+    instrucao_enviada_em = db.Column(db.DateTime)
+    instrucao_enviada_por = db.Column(db.String(100))
+
     # ── Modulos 4-7: datas/flags rapidos (detalhe no Follow-up) ───────────
     coleta_data = db.Column(db.DateTime)
     em_transito_eta = db.Column(db.Date)
