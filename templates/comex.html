@@ -55,6 +55,12 @@
     .cx-doc-add input[type="text"] { flex: 1; min-width: 160px; }
     .cx-section-title { font-size: 13px; font-weight: 800; color: var(--eui-text); margin: 4px 0 -4px; }
 
+    /* Tabela de itens da PO - largura fixa por coluna (evita cortar codigo/
+       NCM/valores) + permite rolagem horizontal no wrapper em vez de
+       espremer o conteudo. */
+    #cx-po-itens-table { table-layout: fixed; min-width: 920px; }
+    #cx-po-itens-table input.eui-input { width: 100%; }
+
     .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .cx-toast.error { border-left-color: var(--eui-danger); }
     .cx-toast.success { border-left-color: var(--eui-success); }
@@ -254,14 +260,14 @@
                     <table class="erp-table" id="cx-po-itens-table">
                         <thead>
                             <tr>
-                                <th style="width:90px;">Código</th>
-                                <th style="width:80px;">NCM/HS</th>
-                                <th style="width:90px;">PN</th>
+                                <th style="width:130px;">Código</th>
+                                <th style="width:100px;">NCM/HS</th>
+                                <th style="width:100px;">PN</th>
                                 <th>Descrição</th>
-                                <th style="width:70px;">Qtde</th>
-                                <th style="width:100px;">Unit. US$</th>
-                                <th style="width:100px;">Total US$</th>
-                                <th style="width:36px;"></th>
+                                <th style="width:90px;">Qtde</th>
+                                <th style="width:120px;">Unit. US$</th>
+                                <th style="width:120px;">Total US$</th>
+                                <th style="width:40px;"></th>
                             </tr>
                         </thead>
                         <tbody id="cx-po-itens-tbody"></tbody>
@@ -749,6 +755,23 @@
         return "US$ " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
 
+    // Campos numericos da tabela de itens aceitam tanto "10.50" quanto
+    // "10,50" (o teclado numerico do celular e o costume brasileiro usam
+    // virgula) - por isso sao <input type="text" inputmode="decimal">, nao
+    // type="number" (que so aceita ponto e, em alguns navegadores, rejeita
+    // a tecla da virgula silenciosamente).
+    const CAMPOS_NUMERICOS_ITEM = new Set(["quantidade", "valor_unitario", "valor_total"]);
+    function _parseNumeroPt(v) {
+        if (v == null || String(v).trim() === "") return null;
+        const n = parseFloat(String(v).trim().replace(",", "."));
+        return isNaN(n) ? null : n;
+    }
+
+    function _atualizarSubtotalPo() {
+        const subtotal = itensPoAtual.reduce((soma, it) => soma + (Number(it.valor_total) || 0), 0);
+        $("cx-po-itens-subtotal").textContent = "Subtotal: " + _fmtMoeda(subtotal);
+    }
+
     function renderItensPo() {
         const tbody = $("cx-po-itens-tbody");
         if (!itensPoAtual.length) {
@@ -760,15 +783,14 @@
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="ncm" value="${escapeHtml(it.ncm || "")}"></td>
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="pn" value="${escapeHtml(it.pn || "")}"></td>
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="descricao" value="${escapeHtml(it.descricao || "")}"></td>
-                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="quantidade" value="${it.quantidade != null ? it.quantidade : ""}"></td>
-                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="valor_unitario" value="${it.valor_unitario != null ? it.valor_unitario : ""}"></td>
-                    <td><input type="number" step="0.01" class="eui-input" data-idx="${idx}" data-field="valor_total" value="${it.valor_total != null ? it.valor_total : ""}"></td>
+                    <td><input type="text" inputmode="decimal" class="eui-input" data-idx="${idx}" data-field="quantidade" value="${it.quantidade != null ? it.quantidade : ""}"></td>
+                    <td><input type="text" inputmode="decimal" class="eui-input" data-idx="${idx}" data-field="valor_unitario" value="${it.valor_unitario != null ? it.valor_unitario : ""}"></td>
+                    <td><input type="text" inputmode="decimal" class="eui-input" data-idx="${idx}" data-field="valor_total" value="${it.valor_total != null ? it.valor_total : ""}"></td>
                     <td style="text-align:center;"><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-remover-item="${idx}" title="Remover"><i class="fas fa-trash" style="color:var(--eui-danger);"></i></button></td>
                 </tr>
             `).join("");
         }
-        const subtotal = itensPoAtual.reduce((soma, it) => soma + (Number(it.valor_total) || 0), 0);
-        $("cx-po-itens-subtotal").textContent = "Subtotal: " + _fmtMoeda(subtotal);
+        _atualizarSubtotalPo();
     }
 
     $("cx-po-itens-tbody").addEventListener("input", (e) => {
@@ -778,14 +800,19 @@
         const campo = input.dataset.field;
         const item = itensPoAtual[idx];
         if (!item) return;
-        item[campo] = input.type === "number" ? (input.value === "" ? null : parseFloat(input.value)) : input.value;
-        if ((campo === "quantidade" || campo === "valor_unitario") && item.quantidade != null && item.valor_unitario != null) {
-            item.valor_total = Math.round(item.quantidade * item.valor_unitario * 100) / 100;
-            renderItensPo();
-        } else if (campo === "valor_total") {
-            const subtotal = itensPoAtual.reduce((soma, it) => soma + (Number(it.valor_total) || 0), 0);
-            $("cx-po-itens-subtotal").textContent = "Subtotal: " + _fmtMoeda(subtotal);
+        item[campo] = CAMPOS_NUMERICOS_ITEM.has(campo) ? _parseNumeroPt(input.value) : input.value;
+
+        if (campo === "quantidade" || campo === "valor_unitario") {
+            // So recalcula o total; NAO re-renderiza a tabela inteira aqui
+            // (isso recriava os <input>, tirando o foco do campo em que o
+            // usuario estava digitando - dava a impressao de "cursor pulando").
+            item.valor_total = (item.quantidade != null && item.valor_unitario != null)
+                ? Math.round(item.quantidade * item.valor_unitario * 100) / 100
+                : item.valor_total;
+            const totalInput = $("cx-po-itens-tbody").querySelector(`input[data-idx="${idx}"][data-field="valor_total"]`);
+            if (totalInput) totalInput.value = item.valor_total != null ? item.valor_total : "";
         }
+        _atualizarSubtotalPo();
     });
     $("cx-po-itens-tbody").addEventListener("click", (e) => {
         const btn = e.target.closest("[data-remover-item]");
