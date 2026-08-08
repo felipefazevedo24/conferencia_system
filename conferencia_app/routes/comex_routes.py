@@ -13,14 +13,15 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session
+from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 
 from ..auth import permission_required
 from ..extensions import db
-from ..models import ComexProcesso, ComexPoItem
+from ..models import ComexCotacao, ComexDocumento, ComexProcesso, ComexPoItem
 from ..services import comex_service as svc
 from ..services import comex_po_pdf
 from ..services.smtp_service import enviar_mensagem_smtp
+from .api_routes import _resolver_foto_expedicao, _send_foto_expedicao
 
 comex_bp = Blueprint("comex", __name__)
 
@@ -58,6 +59,19 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "po_finalizada_sem_envio": bool(p.po_finalizada_sem_envio),
         "criado_em": p.criado_em.strftime("%d/%m/%Y %H:%M") if p.criado_em else None,
         "criado_por": p.criado_por,
+        # Dados gerais de operacao (visiveis a partir da PO, editaveis ao longo do processo)
+        "direcao_operacao": p.direcao_operacao,
+        "modal_transporte": p.modal_transporte,
+        "po_data": p.po_data.isoformat() if p.po_data else None,
+        "ref_despachante": p.ref_despachante,
+        "bl_awb": p.bl_awb,
+        "invoice_numero": p.invoice_numero,
+        "etd": p.etd.isoformat() if p.etd else None,
+        "eta": p.em_transito_eta.isoformat() if p.em_transito_eta else None,
+        "previsao_entrega": p.previsao_entrega.isoformat() if p.previsao_entrega else None,
+        "entrega_real": p.entrega_real,
+        "nf_impo": p.nf_impo,
+        "nf_recebimento": p.nf_recebimento,
     }
 
 
@@ -186,7 +200,8 @@ def api_salvar_po(processo_id):
 
     payload = request.get_json(silent=True) or {}
     pagador_frete = str(payload.get("pagador_frete") or "").strip()
-    tipo_operacao = str(payload.get("tipo_operacao") or "").strip().upper()
+    direcao_operacao = str(payload.get("direcao_operacao") or "").strip().upper()
+    modal_transporte = str(payload.get("modal_transporte") or "").strip()
     ocs_vinculadas_ids = payload.get("ocs_vinculadas_ids") or []
     finalizar = bool(payload.get("finalizar"))
     usuario = session.get("username", "desconhecido")
@@ -195,10 +210,12 @@ def api_salvar_po(processo_id):
         processo = svc.salvar_po(
             processo,
             pagador_frete=pagador_frete,
-            tipo_operacao=tipo_operacao,
+            direcao_operacao=direcao_operacao,
+            modal_transporte=modal_transporte,
             ocs_vinculadas_ids=ocs_vinculadas_ids,
             usuario=usuario,
             finalizar=finalizar,
+            dados_operacionais=payload,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -381,3 +398,250 @@ def api_enviar_email_po(processo_id):
     db.session.commit()
 
     return jsonify({"message": "E-mail da PO enviado com sucesso.", "processo": _processo_payload(processo)})
+
+
+# ── Anexo de documentos (requisito geral: todo modulo precisa ter uma ─────
+# funcao de anexar documento) ───────────────────────────────────────────
+def _documento_payload(d: ComexDocumento) -> dict:
+    return {
+        "id": d.id,
+        "modulo": d.modulo,
+        "titulo": d.titulo,
+        "file_name": d.file_name,
+        "uploaded_at": d.uploaded_at.strftime("%d/%m/%Y %H:%M") if d.uploaded_at else None,
+        "uploaded_by": d.uploaded_by,
+        "url": f"/api/comex/processos/{d.processo_id}/documentos/{d.id}",
+    }
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/documentos", methods=["GET"])
+@permission_required(PERMISSION)
+def api_listar_documentos(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    modulo = request.args.get("modulo") or None
+    documentos = svc.listar_documentos(processo, modulo=modulo)
+    return jsonify({"documentos": [_documento_payload(d) for d in documentos]})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/documentos", methods=["POST"])
+@permission_required(PERMISSION)
+def api_anexar_documento(processo_id):
+    """Anexa um documento ao processo. Funciona em qualquer modulo do
+    workflow — o modulo de origem vem no campo `modulo` do form."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"error": "Nenhum arquivo recebido."}), 400
+    modulo = str(request.form.get("modulo") or "").strip()
+    titulo = request.form.get("titulo")
+    usuario = session.get("username", "desconhecido")
+
+    try:
+        dados = arquivo.read()
+        documento = svc.anexar_documento(
+            processo,
+            modulo=modulo,
+            dados=dados,
+            file_name=arquivo.filename,
+            usuario=usuario,
+            titulo=titulo,
+            mimetype=arquivo.mimetype,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        current_app.logger.exception("Falha ao anexar documento ao processo %s", processo.id_op)
+        return jsonify({"error": f"Falha ao anexar documento: {exc}"}), 502
+
+    return jsonify({"message": "Documento anexado.", "documento": _documento_payload(documento)})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/documentos/<int:documento_id>", methods=["GET"])
+@permission_required(PERMISSION)
+def api_baixar_documento(processo_id, documento_id):
+    documento = ComexDocumento.query.filter_by(id=documento_id, processo_id=processo_id).first()
+    if not documento:
+        return jsonify({"error": "Documento não encontrado."}), 404
+    pasta = current_app.config.get("COMEX_DOCUMENTOS_DIR", "") or None
+    caminho = _resolver_foto_expedicao(pasta, documento.file_name, documento.file_path)
+    if not caminho:
+        return jsonify({"error": "Arquivo não encontrado."}), 404
+    try:
+        return _send_foto_expedicao(caminho, documento.file_name)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao baixar documento Comex %s", documento_id)
+        return jsonify({"error": f"Falha ao baixar documento: {exc}"}), 502
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/documentos/<int:documento_id>", methods=["DELETE"])
+@permission_required(PERMISSION)
+def api_apagar_documento(processo_id, documento_id):
+    documento = ComexDocumento.query.filter_by(id=documento_id, processo_id=processo_id).first()
+    if not documento:
+        return jsonify({"error": "Documento não encontrado."}), 404
+    svc.apagar_documento(documento)
+    return jsonify({"message": "Documento apagado."})
+
+
+# ── Cotação (Módulo 3) — link público (sem login) para o prestador de ─────
+# frete preencher, no formato do "modelo de cotação.xlsx" da empresa. ─────
+def _cotacao_payload(c: ComexCotacao) -> dict:
+    custos = {}
+    for prefixo, _ in svc.ETAPAS_CUSTO_COTACAO:
+        custos[f"{prefixo}_usd"] = getattr(c, f"{prefixo}_usd")
+        custos[f"{prefixo}_brl"] = getattr(c, f"{prefixo}_brl")
+    return {
+        "id": c.id,
+        "tipo_frete": c.tipo_frete,
+        "status": c.status,
+        "fornecedor_frete": c.fornecedor_frete,
+        "origem": c.origem,
+        "destino": c.destino,
+        "incoterm": c.incoterm,
+        "qtd_40hc": c.qtd_40hc,
+        "qtd_20dry": c.qtd_20dry,
+        "imo_classe": c.imo_classe,
+        "un_numero": c.un_numero,
+        "transit_time": c.transit_time,
+        "rota": c.rota,
+        "validade": c.validade.isoformat() if c.validade else None,
+        "ptax": c.ptax,
+        **custos,
+        "custo_total_usd": c.custo_total_usd,
+        "custo_total_brl": c.custo_total_brl,
+        "is_sugerida_pelo_sistema": bool(c.is_sugerida_pelo_sistema),
+        "is_escolhida": bool(c.is_escolhida),
+        "email_instrucao_embarque": c.email_instrucao_embarque,
+        "link_gerado_em": c.link_gerado_em.strftime("%d/%m/%Y %H:%M") if c.link_gerado_em else None,
+        "recebida_em": c.recebida_em.strftime("%d/%m/%Y %H:%M") if c.recebida_em else None,
+        "expirado": bool(c.token_publico_expira_em and c.token_publico_expira_em < datetime.now() and c.status == "Pendente"),
+        "criado_por": c.criado_por,
+        "volumes": [
+            {"numero": v.numero, "comprimento": v.comprimento, "largura": v.largura, "altura": v.altura, "peso": v.peso}
+            for v in c.volumes
+        ],
+    }
+
+
+def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, link: str, destinatario: str) -> None:
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = f"Solicitação de cotação — {processo.id_op} — Columbia Machine Brasil"
+    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
+    msg["To"] = destinatario
+    corpo = (
+        f"<p>Prezados,</p>"
+        f"<p>Solicitamos cotação de frete ({'FCL' if cotacao.tipo_frete == 'FCL' else 'LCL/Aéreo'}) "
+        f"referente ao processo <strong>{processo.id_op}</strong>.</p>"
+        f"<p>Preencha a cotação pelo link abaixo:</p>"
+        f"<p><a href=\"{link}\">{link}</a></p>"
+        f"<p>Atenciosamente,<br>Columbia Machine Brasil</p>"
+    )
+    msg.attach(MIMEText(corpo, "html", "utf-8"))
+    enviar_mensagem_smtp(current_app, msg)
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/cotacoes", methods=["GET"])
+@permission_required(PERMISSION)
+def api_listar_cotacoes(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    cotacoes = svc.listar_cotacoes(processo)
+    return jsonify({"cotacoes": [_cotacao_payload(c) for c in cotacoes]})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/cotacoes", methods=["POST"])
+@permission_required(PERMISSION)
+def api_criar_link_cotacao(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    tipo_frete = str(payload.get("tipo_frete") or "").strip().upper()
+    usuario = session.get("username", "desconhecido")
+
+    try:
+        cotacao, token = svc.criar_link_cotacao(
+            processo,
+            tipo_frete=tipo_frete,
+            usuario=usuario,
+            email_instrucao_embarque=payload.get("email_instrucao_embarque"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    link = url_for("comex.cotacao_publica_page", token=token, _external=True)
+
+    destinatario = str(payload.get("enviar_para") or "").strip()
+    if destinatario:
+        try:
+            _enviar_email_link_cotacao(processo, cotacao, link, destinatario)
+        except Exception:
+            current_app.logger.exception("Falha ao enviar e-mail do link de cotação (processo %s)", processo.id_op)
+
+    return jsonify({
+        "message": "Link de cotação gerado." + (" E-mail enviado." if destinatario else ""),
+        "cotacao": _cotacao_payload(cotacao),
+        "link": link,
+        "processo": _processo_payload(processo),
+    })
+
+
+@comex_bp.route("/api/comex/cotacoes/<int:cotacao_id>/escolher", methods=["POST"])
+@permission_required(PERMISSION)
+def api_escolher_cotacao(cotacao_id):
+    cotacao = ComexCotacao.query.get(cotacao_id)
+    if not cotacao:
+        return jsonify({"error": "Cotação não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.escolher_cotacao(cotacao, usuario=usuario, justificativa=payload.get("justificativa"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Cotação escolhida.", "processo": _processo_payload(processo)})
+
+
+# ── Formulário público (sem login) ─────────────────────────────────────
+@comex_bp.route("/cotacao-fornecedor/<token>")
+def cotacao_publica_page(token):
+    cotacao = svc.obter_cotacao_por_token(token)
+    if not cotacao:
+        return render_template("acesso_negado.html"), 404
+    return render_template("comex_cotacao_publica.html", token=token)
+
+
+@comex_bp.route("/api/cotacao-fornecedor/<token>")
+def api_cotacao_publica_dados(token):
+    cotacao = svc.obter_cotacao_por_token(token)
+    if not cotacao:
+        return jsonify({"error": "Link inválido ou expirado."}), 404
+    processo = cotacao.processo
+    return jsonify({
+        "valido": svc.link_cotacao_valido(cotacao),
+        "status": cotacao.status,
+        "tipo_frete": cotacao.tipo_frete,
+        "id_op": processo.id_op,
+        "termos": svc.TERMOS_COTACAO,
+        "etapas_custo": [{"campo": p, "label": l} for p, l in svc.ETAPAS_CUSTO_COTACAO],
+        "cotacao": _cotacao_payload(cotacao) if cotacao.status == "Recebida" else None,
+    })
+
+
+@comex_bp.route("/api/cotacao-fornecedor/<token>", methods=["POST"])
+def api_cotacao_publica_submeter(token):
+    cotacao = svc.obter_cotacao_por_token(token)
+    if not cotacao:
+        return jsonify({"error": "Link inválido ou expirado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        svc.submeter_cotacao_publica(cotacao, payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Cotação enviada com sucesso. Obrigado!"})

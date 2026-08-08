@@ -2552,6 +2552,24 @@ class ComexProcesso(db.Model):
     po_destinatarios_email = db.Column(db.String(500))  # separados por ";"
     po_finalizada_sem_envio = db.Column(db.Boolean, default=False)
 
+    # ── Dados gerais de operacao (visiveis a partir da PO, editaveis pelo ──
+    # operador ao longo de todo o processo - nao sao exclusivos de um so
+    # modulo, por isso ficam fora dos blocos "Modulo N"). `direcao_operacao`
+    # e `modal_transporte` juntos determinam o prefixo do ID OP (ver
+    # comex_service._derivar_tipo_operacao): IMPO+Maritimo=IM,
+    # IMPO+Aereo=IA, EXPO+Maritimo=EM, EXPO+Aereo=EA.
+    direcao_operacao = db.Column(db.String(4))  # IMPO | EXPO
+    modal_transporte = db.Column(db.String(20))  # Aereo | Maritimo
+    po_data = db.Column(db.Date)
+    ref_despachante = db.Column(db.String(40))
+    bl_awb = db.Column(db.String(40))
+    invoice_numero = db.Column(db.String(40))
+    etd = db.Column(db.Date)
+    previsao_entrega = db.Column(db.Date)
+    entrega_real = db.Column(db.String(40))
+    nf_impo = db.Column(db.String(40))
+    nf_recebimento = db.Column(db.String(40))
+
     # ── Modulo 3: Cotacao (resumo; detalhe/historico em ComexCotacao) ──────
     frete_aplicavel = db.Column(db.Boolean)  # deriva de pagador_frete == "Columbia"
     cotacao_vencedora_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"))
@@ -2690,7 +2708,7 @@ class ComexProcesso(db.Model):
         "ComexCotacao",
         backref="processo",
         cascade="all, delete-orphan",
-        order_by="ComexCotacao.recebida_em",
+        order_by="ComexCotacao.link_gerado_em",
         foreign_keys="ComexCotacao.processo_id",
     )
     follow_ups = db.relationship(
@@ -2703,6 +2721,12 @@ class ComexProcesso(db.Model):
         backref="processo",
         cascade="all, delete-orphan",
         order_by="ComexEntregaFoto.id",
+    )
+    documentos = db.relationship(
+        "ComexDocumento",
+        backref="processo",
+        cascade="all, delete-orphan",
+        order_by="ComexDocumento.id.desc()",
     )
 
 
@@ -2732,39 +2756,99 @@ class ComexPoItem(db.Model):
 
 
 class ComexCotacao(db.Model):
-    """Uma cotacao de frete recebida para um processo (Modulo 3). Todas as
-    cotacoes recebidas ficam registradas aqui, nao so a vencedora - histórico
-    completo para auditoria. `is_escolhida` marca a selecionada pelo
-    operador (pode ou nao ser a `is_sugerida_pelo_sistema`)."""
+    """Uma cotacao de frete para um processo (Modulo 3), no formato do
+    "modelo de cotação.xlsx" usado hoje pela empresa - dois formularios
+    possiveis (`tipo_frete`): FCL (container fechado) ou LCL_AEREO (volumes
+    soltos/aereo, mesma estrutura para os dois). Todas as cotacoes recebidas
+    ficam registradas aqui, nao so a vencedora - historico completo para
+    auditoria. `is_escolhida` marca a selecionada pelo operador (pode ou nao
+    ser a `is_sugerida_pelo_sistema`, a de menor custo total)."""
 
     __tablename__ = "comex_cotacao"
 
     id = db.Column(db.Integer, primary_key=True)
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
 
-    fornecedor_frete = db.Column(db.String(200), nullable=False)
-    modal = db.Column(db.String(40))
+    tipo_frete = db.Column(db.String(12), nullable=False)  # FCL | LCL_AEREO
+    status = db.Column(db.String(20), nullable=False, default="Pendente")  # Pendente | Recebida
+
+    fornecedor_frete = db.Column(db.String(200))  # preenchido pelo prestador no formulario publico
     origem = db.Column(db.String(120))
     destino = db.Column(db.String(120))
-    prazo_estimado = db.Column(db.String(60))
-    valor_frete = db.Column(db.Float)
-    seguro = db.Column(db.Float)
-    taxas_adicionais = db.Column(db.Float)
-    custo_total = db.Column(db.Float)
+    incoterm = db.Column(db.String(20))  # so LCL_AEREO
+
+    # FCL - equipamento (container)
+    qtd_40hc = db.Column(db.Integer)
+    qtd_20dry = db.Column(db.Integer)
+
+    # Carga perigosa - ambos os formularios ("NA" quando nao aplicavel)
+    imo_classe = db.Column(db.String(20))
+    un_numero = db.Column(db.String(20))
+
+    # LCL_AEREO - logistica (volumes em ComexCotacaoVolume)
+    transit_time = db.Column(db.String(60))
+    rota = db.Column(db.String(200))
+    validade = db.Column(db.Date)
+    ptax = db.Column(db.Float)
+
+    # Custos por etapa, em USD e BRL - mesmas 6 linhas nos dois formularios
+    pick_up_usd = db.Column(db.Float)
+    pick_up_brl = db.Column(db.Float)
+    origem_charges_usd = db.Column(db.Float)
+    origem_charges_brl = db.Column(db.Float)
+    frete_internacional_usd = db.Column(db.Float)
+    frete_internacional_brl = db.Column(db.Float)
+    seguro_usd = db.Column(db.Float)
+    seguro_brl = db.Column(db.Float)
+    destination_charges_usd = db.Column(db.Float)
+    destination_charges_brl = db.Column(db.Float)
+    docs_release_usd = db.Column(db.Float)
+    docs_release_brl = db.Column(db.Float)
+    delivery_usd = db.Column(db.Float)
+    delivery_brl = db.Column(db.Float)
+    custo_total_usd = db.Column(db.Float)  # calculado na submissao
+    custo_total_brl = db.Column(db.Float)  # calculado na submissao
+
+    # Termos de consentimento (ver COMEX_ESPECIFICACAO.md / modelo de
+    # cotação.xlsx linhas 37-49) - aceite obrigatorio para submeter.
+    termos_aceitos = db.Column(db.Boolean, default=False)
+    termos_aceitos_em = db.Column(db.DateTime)
 
     is_sugerida_pelo_sistema = db.Column(db.Boolean, default=False)
     is_escolhida = db.Column(db.Boolean, default=False)
 
     # Link publico e temporario para o fornecedor preencher a cotacao sem
-    # login completo (Modulo 3 - leva futura). O token em si nunca e
-    # persistido em claro, so o hash (mesmo padrao do convite de usuario em
-    # Usuario.convite_token_hash).
-    token_publico_hash = db.Column(db.String(128))
+    # login completo. O token em si nunca e persistido em claro, so o hash
+    # (mesmo padrao do convite de usuario em Usuario.convite_token_hash).
+    token_publico_hash = db.Column(db.String(64), index=True)
     token_publico_expira_em = db.Column(db.DateTime)
-    email_instrucao_embarque = db.Column(db.String(255))  # e-mail informado p/ receber a instrução
+    email_instrucao_embarque = db.Column(db.String(255))  # e-mail do contato do fornecedor de frete
 
-    recebida_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    link_gerado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
     criado_por = db.Column(db.String(100))
+    recebida_em = db.Column(db.DateTime)
+
+    volumes = db.relationship(
+        "ComexCotacaoVolume",
+        backref="cotacao",
+        cascade="all, delete-orphan",
+        order_by="ComexCotacaoVolume.numero",
+    )
+
+
+class ComexCotacaoVolume(db.Model):
+    """Dimensoes/peso de um volume da cotacao LCL/Aereo (ate 5 no modelo
+    original, mas sem limite fixo aqui)."""
+
+    __tablename__ = "comex_cotacao_volume"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"), nullable=False, index=True)
+    numero = db.Column(db.Integer, nullable=False, default=1)
+    comprimento = db.Column(db.Float)
+    largura = db.Column(db.Float)
+    altura = db.Column(db.Float)
+    peso = db.Column(db.Float)
 
 
 class ComexFollowUp(db.Model):
@@ -2835,6 +2919,25 @@ class ComexEntregaFoto(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    file_name = db.Column(db.String(260), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    uploaded_by = db.Column(db.String(100))
+
+
+class ComexDocumento(db.Model):
+    """Documento anexado ao processo em QUALQUER modulo do workflow (nota
+    fiscal, BL/AWB, invoice, packing list, comprovante etc.) - requisito
+    geral do Comex: todo modulo precisa ter uma funcao de anexar documento.
+    Mesmo padrao de storage das fotos de expedicao (Google Drive ou disco
+    local, conforme EXPEDICAO_FOTOS_STORAGE - ver expedicao_photo_storage.py)."""
+
+    __tablename__ = "comex_documento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    modulo = db.Column(db.String(20), nullable=False, index=True)  # OC | PO | Cotacao | ... (ver MODULOS_SEQUENCIA)
+    titulo = db.Column(db.String(200))  # descricao livre opcional (ex.: "Invoice assinada")
     file_name = db.Column(db.String(260), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)

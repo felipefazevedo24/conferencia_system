@@ -1,33 +1,58 @@
 """Geracao do PDF da PO (Modulo 2 do Comex) em ReportLab.
 
-Mesmo padrao usado em conferencia_app/services/qualidade_laudo_pdf.py:
-SimpleDocTemplate + Table/Paragraph -> bytes, servido via send_file.
+Layout replica o modelo real de Purchase Order ja usado pela Columbia
+Machine Brasil (COMPANY/fornecedor + numero(s) de PO + data no topo,
+tabela CODE/Quantity/NCM/PN/DESCRIPTION/UNIT US$/Line Total, Subtotal +
+TOTAL destacado, nota de rodape sobre envio de documentos de embarque).
+
+Mesmo padrao de biblioteca usado em qualidade_laudo_pdf.py: SimpleDocTemplate
++ Table/Paragraph -> bytes, servido via send_file.
 """
 from io import BytesIO
+from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-COR_ESCURA = colors.HexColor("#1C1C1C")
-COR_VERMELHO = colors.HexColor("#C8102E")
+COR_AZUL_ESCURA = colors.HexColor("#1B3B6F")
+COR_AZUL_TABELA = colors.HexColor("#3E6D93")
 COR_CINZA_CLARO = colors.HexColor("#F2F2F2")
+COR_TEXTO = colors.HexColor("#1C1C1C")
 
 _styles = getSampleStyleSheet()
 
+# Dados fixos da Columbia Machine Brasil (emitente da PO) - mesmo endereco
+# usado no restante do sistema (ex.: template de PO/danfe).
+EMITENTE_LINHA1 = "Columbia Machine Brasil - Estr. Carlos Roberto Prataviera, 600"
+EMITENTE_LINHA2 = "Jardim Nova Europa - Hortolândia/SP- Brazil - 13.184-889"
+EMITENTE_LINHA3 = "Phone: (+55) 19 3869 4025"
 
-def _p(text, size=9, bold=False, color=COR_ESCURA):
+# Instrucao fixa de envio de documentos de embarque - a mesma que ja consta
+# no modelo de PO usado hoje pela empresa.
+NOTA_EMBARQUE = (
+    "Once the shipment has been dispatched, please ensure that Larissa "
+    "receives copies of the signed commercial invoice, copy AWB, and "
+    "packing list at <font color='#C0392B'><b>laroli@colmac.com</b></font>. "
+    "It is crucial to adhere to these instructions. Failure to comply may "
+    "lead to complications and delays in payment for any and all freight "
+    "costs associated with this order."
+)
+
+
+def _p(text, size=9, bold=False, color=COR_TEXTO, align=TA_LEFT, leading=None):
     style = ParagraphStyle(
-        name=f"po{size}{bold}",
+        name=f"po{size}{bold}{align}",
         parent=_styles["Normal"],
         fontName="Helvetica-Bold" if bold else "Helvetica",
         fontSize=size,
         textColor=color,
-        alignment=TA_LEFT,
-        leading=size + 3,
+        alignment=align,
+        leading=leading or (size + 3),
     )
     return Paragraph(text if text not in (None, "") else "—", style)
 
@@ -36,18 +61,12 @@ def _fmt_data(v):
     if not v:
         return "—"
     try:
-        return v.strftime("%d/%m/%Y")
-    except AttributeError:
-        return str(v)
-
-
-def _fmt_valor(v):
-    if v is None:
-        return "—"
-    try:
-        return f"US$ {float(v):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    except (TypeError, ValueError):
-        return str(v)
+        return v.strftime("%B %-d, %Y").upper()
+    except (AttributeError, ValueError):
+        try:
+            return v.strftime("%d/%m/%Y")
+        except AttributeError:
+            return str(v)
 
 
 def _fmt_qtd(v):
@@ -60,13 +79,34 @@ def _fmt_qtd(v):
         return str(v)
 
 
+def _fmt_valor(v, com_simbolo=True):
+    if v is None:
+        return "—"
+    try:
+        texto = f"{float(v):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return f"$ {texto}" if com_simbolo else texto
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _obter_caminho_logo() -> str | None:
+    raiz = Path(__file__).resolve().parents[2]
+    for nome in ("columbia_sync_logo_v2.png", "columbia_logo.png"):
+        caminho = raiz / "static" / nome
+        if caminho.is_file():
+            return str(caminho)
+    return None
+
+
 def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | None = None) -> bytes:
-    """Gera o PDF da Purchase Order (PO) de um ComexProcesso."""
+    """Gera o PDF da Purchase Order (PO) de um ComexProcesso, no layout do
+    modelo real de PO da empresa."""
     buf = BytesIO()
+    largura = 174 * mm
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        topMargin=18 * mm,
+        topMargin=15 * mm,
         bottomMargin=15 * mm,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
@@ -74,128 +114,147 @@ def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | Non
     )
     el = []
 
-    el.append(_p("COLUMBIA MACHINE BRASIL", size=15, bold=True, color=COR_VERMELHO))
-    el.append(_p("Purchase Order (PO) — Comex", size=11, bold=True))
-    el.append(Spacer(1, 10))
+    # ---- Cabecalho: logo + dados do emitente ----
+    logo_path = _obter_caminho_logo()
+    logo_cell = ""
+    if logo_path:
+        max_w, max_h = 45 * mm, 16 * mm
+        iw, ih = ImageReader(logo_path).getSize()
+        escala = min(max_w / float(iw), max_h / float(ih)) if iw and ih else 1.0
+        logo_cell = Image(logo_path, width=iw * escala, height=ih * escala)
 
     cabecalho = Table(
-        [
-            [_p("ID OP", bold=True), _p(processo.id_op),
-             _p("Nº PO", bold=True), _p(processo.po_numero or "—")],
-            [_p("Fornecedor", bold=True), _p(processo.fornecedor),
-             _p("Tipo de operação", bold=True), _p("Importação Marítima" if processo.tipo_operacao == "IM" else "Importação Aérea")],
-            [_p("OC(s) vinculada(s)", bold=True), _p(str(processo.cod_ordem_compra)),
-             _p("Pagador do frete", bold=True), _p(processo.pagador_frete or "—")],
-            [_p("Comprador", bold=True), _p(processo.comprador),
-             _p("Data de lançamento", bold=True), _p(_fmt_data(processo.dt_lancamento_oc))],
-        ],
-        colWidths=[38 * mm, 55 * mm, 38 * mm, 45 * mm],
+        [[
+            logo_cell,
+            [
+                _p(EMITENTE_LINHA1, size=8.5, bold=True, color=COR_AZUL_ESCURA, align=TA_RIGHT),
+                _p(EMITENTE_LINHA2, size=8.5, bold=True, color=COR_AZUL_ESCURA, align=TA_RIGHT),
+                _p(EMITENTE_LINHA3, size=8.5, bold=True, color=COR_AZUL_ESCURA, align=TA_RIGHT),
+            ],
+        ]],
+        colWidths=[largura * 0.4, largura * 0.6],
     )
     cabecalho.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), COR_CINZA_CLARO),
-        ("BACKGROUND", (2, 0), (2, -1), COR_CINZA_CLARO),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    el.append(cabecalho)
+    el.append(Spacer(1, 6))
+
+    barra = Table([[""]], colWidths=[largura], rowHeights=[1.6 * mm])
+    barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), COR_AZUL_ESCURA)]))
+    el.append(barra)
+    el.append(Spacer(1, 10))
+
+    el.append(_p("PURCHASE ORDER", size=20, bold=True, color=COR_AZUL_ESCURA, align=TA_CENTER))
+    el.append(Spacer(1, 14))
+
+    # ---- COMPANY (fornecedor) + numero(s) da PO / data ----
+    po_numeros = str(processo.cod_ordem_compra or "")
+    if processo.po_ocs_vinculadas:
+        import json as _json
+        try:
+            codigos = _json.loads(processo.po_ocs_vinculadas)
+            po_numeros = " and ".join(str(c) for c in codigos if c)
+        except (TypeError, ValueError):
+            pass
+
+    bloco_info = Table(
+        [[
+            [
+                _p("COMPANY", size=7.5, bold=True, color=colors.HexColor("#6B7280")),
+                Spacer(1, 3),
+                _p(processo.fornecedor or "—", size=10, bold=True),
+            ],
+            [
+                _p(f"Purchase Order: {po_numeros}", size=10, bold=True, align=TA_RIGHT),
+                _p(_fmt_data(processo.dt_lancamento_oc), size=9, align=TA_RIGHT),
+            ],
+        ]],
+        colWidths=[largura * 0.55, largura * 0.45],
+    )
+    bloco_info.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    el.append(bloco_info)
+    el.append(Spacer(1, 16))
+
+    # ---- Tabela de itens (CODE / Quantity / NCM-HS / PN / DESCRIPTION / UNIT US$ / Line Total) ----
+    itens = itens or []
+    cabecalho_itens = [
+        _p("CODE", size=8, bold=True, color=colors.white),
+        _p("Quantity", size=8, bold=True, color=colors.white),
+        _p("NCM/<br/>HS CODE", size=8, bold=True, color=colors.white),
+        _p("PN", size=8, bold=True, color=colors.white),
+        _p("DESCRIPTION", size=8, bold=True, color=colors.white),
+        _p("UNIT US$", size=8, bold=True, color=colors.white, align=TA_RIGHT),
+        _p("Line Total USD", size=8, bold=True, color=colors.white, align=TA_RIGHT),
+    ]
+    linhas = [cabecalho_itens]
+    subtotal = 0.0
+    for it in itens:
+        linhas.append([
+            _p(it.codigo, size=8.5),
+            _p(_fmt_qtd(it.quantidade), size=8.5),
+            _p(it.ncm, size=8.5),
+            _p(it.pn, size=8.5),
+            _p(it.descricao, size=8.5),
+            _p(_fmt_valor(it.valor_unitario, com_simbolo=False), size=8.5, align=TA_RIGHT),
+            _p(_fmt_valor(it.valor_total), size=8.5, align=TA_RIGHT),
+        ])
+        subtotal += float(it.valor_total or 0)
+
+    if not itens:
+        linhas.append([_p("Nenhum item cadastrado ainda.", size=8.5)] + [""] * 6)
+
+    larguras_fixas = [26 * mm, 16 * mm, 20 * mm, 16 * mm, 20 * mm, 24 * mm]
+    largura_descricao = largura - sum(larguras_fixas)
+    tabela_itens = Table(
+        linhas,
+        colWidths=[
+            larguras_fixas[0], larguras_fixas[1], larguras_fixas[2], larguras_fixas[3],
+            largura_descricao, larguras_fixas[4], larguras_fixas[5],
+        ],
+    )
+    tabela_itens.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), COR_AZUL_TABELA),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COR_CINZA_CLARO]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    el.append(tabela_itens)
+    el.append(Spacer(1, 10))
+
+    # ---- Subtotal / TOTAL ----
+    totais = Table(
+        [
+            [_p("Subtotal", size=9, bold=True, align=TA_RIGHT), _p(_fmt_valor(subtotal), size=9, bold=True, align=TA_RIGHT)],
+            [_p("TOTAL", size=10, bold=True, color=colors.white, align=TA_RIGHT),
+             _p(_fmt_valor(subtotal), size=10, bold=True, color=colors.white, align=TA_RIGHT)],
+        ],
+        colWidths=[largura - 45 * mm, 45 * mm],
+    )
+    totais.setStyle(TableStyle([
+        ("BACKGROUND", (0, 1), (-1, 1), COR_AZUL_ESCURA),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
-    el.append(cabecalho)
+    el.append(totais)
+    el.append(Spacer(1, 26))
+
+    # ---- Nota de rodape sobre documentos de embarque ----
+    el.append(_p(NOTA_EMBARQUE, size=8, color=colors.HexColor("#374151")))
     el.append(Spacer(1, 14))
-
-    if itens:
-        # Itens de linha da PO, no mesmo formato do modelo (CODE, Quantity,
-        # NCM/HS CODE, PN, DESCRIPTION, UNIT US$, Line Total USD).
-        el.append(_p("Itens", size=10, bold=True))
-        el.append(Spacer(1, 4))
-        cabecalho_itens = ["CODE", "Quantity", "NCM/HS", "PN", "DESCRIPTION", "UNIT US$", "Line Total"]
-        linhas_itens = [[_p(c, bold=True, color=colors.white) for c in cabecalho_itens]]
-        subtotal = 0.0
-        for it in itens:
-            linhas_itens.append([
-                _p(it.codigo),
-                _p(_fmt_qtd(it.quantidade)),
-                _p(it.ncm),
-                _p(it.pn),
-                _p(it.descricao),
-                _p(_fmt_valor(it.valor_unitario)),
-                _p(_fmt_valor(it.valor_total)),
-            ])
-            subtotal += float(it.valor_total or 0)
-        tabela_itens = Table(
-            linhas_itens,
-            colWidths=[20 * mm, 14 * mm, 18 * mm, 20 * mm, 52 * mm, 22 * mm, 24 * mm],
-        )
-        tabela_itens.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), COR_ESCURA),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        el.append(tabela_itens)
-        el.append(Spacer(1, 8))
-
-        totais = Table(
-            [[_p("Subtotal", bold=True), _p(_fmt_valor(subtotal), bold=True)],
-             [_p("TOTAL", bold=True, color=colors.white), _p(_fmt_valor(subtotal), bold=True, color=colors.white)]],
-            colWidths=[30 * mm, 30 * mm],
-            hAlign="RIGHT",
-        )
-        totais.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), COR_CINZA_CLARO),
-            ("BACKGROUND", (0, 1), (-1, 1), COR_VERMELHO),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        el.append(totais)
-        el.append(Spacer(1, 16))
-    else:
-        el.append(_p("Ordens de Compra vinculadas", size=10, bold=True))
-        el.append(Spacer(1, 4))
-        el.append(_p(
-            "Nenhum item detalhado ainda — adicione os itens na tela da PO "
-            "(código, NCM, PN, descrição, quantidade e valores).",
-            size=8.5,
-        ))
-        el.append(Spacer(1, 6))
-        linhas_oc = [[_p("Cód. OC", bold=True), _p("Valor produtos", bold=True), _p("Valor total", bold=True)]]
-        linhas_oc.append([
-            _p(str(processo.cod_ordem_compra)),
-            _p(_fmt_valor(processo.total_produtos_oc)),
-            _p(_fmt_valor(processo.total_oc)),
-        ])
-        for oc in (ocs_vinculadas or []):
-            linhas_oc.append([
-                _p(str(oc.cod_ordem_compra)),
-                _p(_fmt_valor(oc.total_produtos_oc)),
-                _p(_fmt_valor(oc.total_oc)),
-            ])
-        tabela_oc = Table(linhas_oc, colWidths=[50 * mm, 50 * mm, 50 * mm])
-        tabela_oc.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), COR_ESCURA),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        el.append(tabela_oc)
-        el.append(Spacer(1, 16))
-
-    el.append(_p(
-        "Este documento consolida os dados da(s) Ordem(ns) de Compra listada(s) acima "
-        "para fins de instrução do processo de importação/exportação identificado pelo "
-        f"ID OP {processo.id_op}.",
-        size=8.5,
-    ))
+    el.append(_p("THANK YOU FOR YOUR BUSINESS!", size=11, bold=True, color=COR_AZUL_ESCURA, align=TA_CENTER))
 
     doc.build(el)
     return buf.getvalue()

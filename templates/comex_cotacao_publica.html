@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotação de Frete | Columbia Sync</title>
+  <meta name="theme-color" content="#06070a">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="shortcut icon" href="/static/favicon16x16.png?v=20260402-2">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg: #06070a; --panel: rgba(16, 18, 24, .9); --panel-2: rgba(20, 24, 32, .78);
+      --line: rgba(160, 184, 215, .24); --line-strong: rgba(160, 184, 215, .42);
+      --text: #eef5ff; --muted: #92a3bd;
+      --green-bg: rgba(52, 211, 153, .16); --red-bg: rgba(251, 113, 133, .16);
+      --radius: 12px; --shadow: 0 14px 40px rgba(0, 0, 0, .5);
+    }
+    body {
+      margin: 0; min-height: 100vh; font-family: "Manrope", "Trebuchet MS", sans-serif; color: var(--text);
+      background: radial-gradient(1200px 460px at 12% -5%, rgba(47, 137, 255, .24), transparent 58%),
+        radial-gradient(900px 420px at 90% 3%, rgba(18, 197, 153, .14), transparent 56%),
+        linear-gradient(180deg, #090b10 0%, #05060a 100%);
+    }
+    .hero { position: relative; overflow: hidden; color: #fff; background: linear-gradient(160deg, rgba(15,18,25,.95), rgba(8,9,13,.98)); border-bottom: 1px solid rgba(255,255,255,.08); padding: 26px 24px 34px; }
+    .wrap { max-width: 900px; margin: 0 auto; position: relative; z-index: 2; }
+    .brand { display: inline-flex; align-items: center; gap: 14px; text-decoration: none; }
+    .brand img { width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 12px 22px rgba(0,0,0,.45)); }
+    .brand span { color: #a9cdff; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .22em; }
+    h1 { font-size: clamp(24px, 4vw, 34px); line-height: 1.1; margin: 16px 0 4px; font-weight: 800; letter-spacing: -.02em; color: #fff; }
+    .subtitle { margin: 0; color: #c4d3ea; font-size: 14px; }
+    .main { max-width: 900px; margin: -14px auto 0; padding: 0 24px 46px; position: relative; z-index: 3; }
+    .section { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(6px); padding: 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; color: #f4f8ff; font-weight: 800; letter-spacing: -.01em; }
+    h2 i { color: #7fb2ff; margin-right: 6px; }
+    label { display: block; font-size: 11px; font-weight: 800; color: #9bb0cd; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    input, select { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; }
+    input:focus, select:focus { outline: none; border-color: #4b9bff; }
+    .field { margin-bottom: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @media (max-width: 620px) { .grid2, .grid3, .grid4 { grid-template-columns: 1fr 1fr; } }
+    table.custos { width: 100%; border-collapse: collapse; }
+    table.custos th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #91a6c4; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    table.custos td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.05); }
+    table.custos td:first-child { font-weight: 700; font-size: 13px; }
+    table.custos input { padding: 7px 9px; }
+    .total-row td { font-weight: 900; font-size: 14px; color: #cfe4ff; padding-top: 12px; }
+    .volumes-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    .volumes-tbl th { text-align: left; font-size: 10px; text-transform: uppercase; color: #91a6c4; padding: 5px 6px; }
+    .volumes-tbl td { padding: 5px 6px; }
+    .volumes-tbl input { padding: 7px 8px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: var(--radius); padding: 12px 18px; font-size: 14px; font-weight: 900; text-decoration: none; cursor: pointer; }
+    .btn-primary { border: 1px solid #4b9bff; background: linear-gradient(135deg, #2a7cf0, #1e62be); color: #fff; width: 100%; justify-content: center; }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-ghost { border: 1px solid rgba(154, 187, 224, .45); background: rgba(255,255,255,.04); color: #d9e9ff; padding: 8px 12px; font-size: 12px; }
+    .terms p { font-size: 13px; color: #c4d3ea; line-height: 1.6; margin: 0 0 10px; }
+    .terms ul { margin: 0 0 10px; padding-left: 20px; }
+    .terms li { font-size: 13px; color: #c4d3ea; line-height: 1.6; margin-bottom: 6px; }
+    .terms .final { font-size: 13px; color: #ffd9a0; font-weight: 700; line-height: 1.6; }
+    .consent { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px; background: rgba(47,137,255,.08); border: 1px dashed rgba(130,177,237,.5); border-radius: var(--radius); }
+    .consent input { width: auto; margin-top: 3px; }
+    .consent span { font-size: 13px; color: #eaf2ff; font-weight: 600; }
+    .empty-state, .loading { text-align: center; padding: 40px 22px; background: rgba(255,255,255,.03); border: 1px dashed rgba(161, 188, 219, .34); border-radius: var(--radius); color: var(--muted); }
+    .empty-state i { width: 58px; height: 58px; display: inline-grid; place-items: center; border-radius: var(--radius); background: rgba(47, 137, 255, .2); color: #cfe5ff; font-size: 24px; margin-bottom: 13px; }
+    .empty-state.is-success i { background: var(--green-bg); color: #9af0d0; }
+    .empty-state.is-error i { background: var(--red-bg); color: #ffc5ce; }
+    .empty-state h3 { margin: 0 0 6px; color: #f2f8ff; }
+    .toast { position: fixed; top: 16px; right: 16px; z-index: 999; background: #1a1d26; border: 1px solid var(--line); border-left: 4px solid #4b9bff; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 700; color: var(--text); max-width: 340px; display: none; box-shadow: var(--shadow); }
+    .toast.error { border-left-color: #fb7185; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <a class="brand" href="#">
+        <img src="/static/columbia_sync_logo_v2.png" alt="Columbia Machine Brasil">
+        <span>Columbia&nbsp;Sync</span>
+      </a>
+      <h1>Cotação de Frete Internacional</h1>
+      <p class="subtitle" id="subtitulo">Carregando…</p>
+    </div>
+  </header>
+  <main class="main">
+    <div id="carregando" class="empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Carregando…</h3></div>
+    <div id="conteudo" class="hidden"></div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const token = "{{ token }}";
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function toast(msg, tipo) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast' + (tipo ? ' ' + tipo : '');
+      el.style.display = 'block';
+      clearTimeout(el._t);
+      el._t = setTimeout(() => { el.style.display = 'none'; }, 4500);
+    }
+
+    function estadoVazio(icone, titulo, texto, classe) {
+      return `<div class="empty-state${classe ? ' ' + classe : ''}"><i class="fas ${icone}"></i><h3>${esc(titulo)}</h3><p>${esc(texto)}</p></div>`;
+    }
+
+    function montarTermos(termos) {
+      const paragrafos = (termos.paragrafos || []).map((p) => `<p>${esc(p)}</p>`).join('');
+      const excecoes = (termos.excecoes || []).map((e) => `<li>${esc(e)}</li>`).join('');
+      return `
+        <div class="terms">
+          ${paragrafos}
+          <ul>${excecoes}</ul>
+          <p class="final">${esc(termos.final || '')}</p>
+        </div>
+      `;
+    }
+
+    function linhaCusto(campo, label) {
+      return `
+        <tr>
+          <td>${esc(label)}</td>
+          <td><input type="number" step="0.01" min="0" data-custo="${campo}_usd" placeholder="0,00"></td>
+          <td><input type="number" step="0.01" min="0" data-custo="${campo}_brl" placeholder="0,00"></td>
+        </tr>
+      `;
+    }
+
+    function linhaVolume(n) {
+      return `
+        <tr data-volume-row="${n}">
+          <td>${n}</td>
+          <td><input type="number" step="0.01" min="0" data-vol="comprimento"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="largura"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="altura"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="peso"></td>
+        </tr>
+      `;
+    }
+
+    function montarFormulario(data) {
+      const isFcl = data.tipo_frete === 'FCL';
+      const custosHtml = (data.etapas_custo || []).map((e) => linhaCusto(e.campo, e.label)).join('');
+      const volumesIniciais = [1, 2].map(linhaVolume).join('');
+
+      return `
+        <form id="formCotacao">
+          <div class="section">
+            <h2><i class="fas fa-building"></i> Dados do prestador</h2>
+            <div class="field"><label>Empresa / Prestador de frete *</label><input type="text" id="fornecedor_frete" required></div>
+            <div class="grid2">
+              <div class="field"><label>Origem</label><input type="text" id="origem"></div>
+              <div class="field"><label>Destino</label><input type="text" id="destino"></div>
+            </div>
+            ${isFcl ? '' : `<div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..."></div>`}
+          </div>
+
+          ${isFcl ? `
+          <div class="section">
+            <h2><i class="fas fa-box"></i> Equipamento (FCL)</h2>
+            <div class="grid2">
+              <div class="field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="qtd_40hc"></div>
+              <div class="field"><label>Qtde 20'DRY</label><input type="number" min="0" step="1" id="qtd_20dry"></div>
+            </div>
+          </div>` : `
+          <div class="section">
+            <h2><i class="fas fa-boxes-stacked"></i> Volumes (cm / kg)</h2>
+            <table class="volumes-tbl">
+              <thead><tr><th>#</th><th>Comprimento</th><th>Largura</th><th>Altura</th><th>Peso</th></tr></thead>
+              <tbody id="volumesBody">${volumesIniciais}</tbody>
+            </table>
+            <button type="button" class="btn-ghost" id="btnAddVolume"><i class="fas fa-plus"></i> Adicionar volume</button>
+          </div>
+          <div class="section">
+            <h2><i class="fas fa-route"></i> Logística</h2>
+            <div class="grid2">
+              <div class="field"><label>Transit Time</label><input type="text" id="transit_time" placeholder="Ex.: 25 dias"></div>
+              <div class="field"><label>Rota</label><input type="text" id="rota"></div>
+              <div class="field"><label>Validade da cotação</label><input type="date" id="validade"></div>
+              <div class="field"><label>Ptax</label><input type="number" step="0.0001" min="0" id="ptax"></div>
+            </div>
+          </div>`}
+
+          <div class="section">
+            <h2><i class="fas fa-triangle-exclamation"></i> Carga perigosa</h2>
+            <div class="grid2">
+              <div class="field"><label>IMO</label><input type="text" id="imo_classe" placeholder="Classe IMO ou NA"></div>
+              <div class="field"><label>UN</label><input type="text" id="un_numero" placeholder="Número UN ou NA"></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2><i class="fas fa-dollar-sign"></i> Custos</h2>
+            <table class="custos">
+              <thead><tr><th>Etapa</th><th>USD</th><th>BRL</th></tr></thead>
+              <tbody>${custosHtml}</tbody>
+              <tfoot>
+                <tr class="total-row"><td>Total</td><td id="totalUsd">US$ 0,00</td><td id="totalBrl">R$ 0,00</td></tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2><i class="fas fa-file-contract"></i> Termos de consentimento</h2>
+            ${montarTermos(data.termos || {})}
+            <label class="consent">
+              <input type="checkbox" id="termos_aceitos" required>
+              <span>Li e concordo com os termos acima. As informações prestadas nesta cotação são de minha responsabilidade.</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="btnEnviar"><i class="fas fa-paper-plane"></i> Enviar cotação</button>
+        </form>
+      `;
+    }
+
+    let numeroVolumes = 2;
+
+    function calcularTotais() {
+      let totalUsd = 0, totalBrl = 0;
+      document.querySelectorAll('[data-custo]').forEach((inp) => {
+        const v = parseFloat(inp.value) || 0;
+        if (inp.dataset.custo.endsWith('_usd')) totalUsd += v; else totalBrl += v;
+      });
+      document.getElementById('totalUsd').textContent = 'US$ ' + totalUsd.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('totalBrl').textContent = 'R$ ' + totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function coletarPayload(data) {
+      const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+      const payload = {
+        fornecedor_frete: g('fornecedor_frete'),
+        origem: g('origem'),
+        destino: g('destino'),
+        incoterm: g('incoterm'),
+        imo_classe: g('imo_classe'),
+        un_numero: g('un_numero'),
+        termos_aceitos: document.getElementById('termos_aceitos').checked,
+      };
+      if (data.tipo_frete === 'FCL') {
+        payload.qtd_40hc = g('qtd_40hc') || null;
+        payload.qtd_20dry = g('qtd_20dry') || null;
+      } else {
+        payload.transit_time = g('transit_time');
+        payload.rota = g('rota');
+        payload.validade = g('validade') || null;
+        payload.ptax = g('ptax') || null;
+        payload.volumes = Array.from(document.querySelectorAll('[data-volume-row]')).map((row) => ({
+          comprimento: row.querySelector('[data-vol="comprimento"]').value || null,
+          largura: row.querySelector('[data-vol="largura"]').value || null,
+          altura: row.querySelector('[data-vol="altura"]').value || null,
+          peso: row.querySelector('[data-vol="peso"]').value || null,
+        }));
+      }
+      document.querySelectorAll('[data-custo]').forEach((inp) => { payload[inp.dataset.custo] = inp.value || null; });
+      return payload;
+    }
+
+    async function carregar() {
+      try {
+        const resp = await fetch(`/api/cotacao-fornecedor/${token}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Link inválido.');
+
+        document.getElementById('subtitulo').textContent = `Processo ${data.id_op} — ${data.tipo_frete === 'FCL' ? 'Container fechado (FCL)' : 'Volumes soltos / Aéreo'}`;
+        const conteudo = document.getElementById('conteudo');
+
+        if (data.status === 'Recebida') {
+          conteudo.innerHTML = estadoVazio('fa-circle-check', 'Cotação já enviada', 'Obrigado! Sua cotação já foi recebida e está em análise pela nossa equipe.', 'is-success');
+        } else if (!data.valido) {
+          conteudo.innerHTML = estadoVazio('fa-triangle-exclamation', 'Link expirado', 'Este link de cotação não está mais válido. Entre em contato com a Columbia Machine Brasil para receber um novo link.', 'is-error');
+        } else {
+          conteudo.innerHTML = montarFormulario(data);
+          document.querySelectorAll('[data-custo]').forEach((inp) => inp.addEventListener('input', calcularTotais));
+          const btnAdd = document.getElementById('btnAddVolume');
+          if (btnAdd) {
+            btnAdd.addEventListener('click', () => {
+              numeroVolumes += 1;
+              document.getElementById('volumesBody').insertAdjacentHTML('beforeend', linhaVolume(numeroVolumes));
+            });
+          }
+          document.getElementById('formCotacao').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnEnviar');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
+            try {
+              const payload = coletarPayload(data);
+              const r = await fetch(`/api/cotacao-fornecedor/${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || 'Erro ao enviar cotação.');
+              conteudo.innerHTML = estadoVazio('fa-circle-check', 'Cotação enviada!', 'Obrigado! Recebemos sua cotação e nossa equipe vai analisá-la.', 'is-success');
+            } catch (err) {
+              toast(err.message, 'error');
+              btn.disabled = false;
+              btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar cotação';
+            }
+          });
+        }
+      } catch (err) {
+        document.getElementById('conteudo').innerHTML = estadoVazio('fa-triangle-exclamation', 'Não foi possível carregar', err.message, 'is-error');
+      } finally {
+        document.getElementById('carregando').classList.add('hidden');
+        document.getElementById('conteudo').classList.remove('hidden');
+      }
+    }
+    carregar();
+  </script>
+</body>
+</html>

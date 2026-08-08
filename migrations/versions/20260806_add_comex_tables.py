@@ -66,6 +66,18 @@ def upgrade():
             sa.Column("po_enviada_por", sa.String(length=100), nullable=True),
             sa.Column("po_destinatarios_email", sa.String(length=500), nullable=True),
             sa.Column("po_finalizada_sem_envio", sa.Boolean(), nullable=True),
+            # Dados gerais de operacao (visiveis a partir da PO, editaveis ao longo do processo)
+            sa.Column("direcao_operacao", sa.String(length=4), nullable=True),
+            sa.Column("modal_transporte", sa.String(length=20), nullable=True),
+            sa.Column("po_data", sa.Date(), nullable=True),
+            sa.Column("ref_despachante", sa.String(length=40), nullable=True),
+            sa.Column("bl_awb", sa.String(length=40), nullable=True),
+            sa.Column("invoice_numero", sa.String(length=40), nullable=True),
+            sa.Column("etd", sa.Date(), nullable=True),
+            sa.Column("previsao_entrega", sa.Date(), nullable=True),
+            sa.Column("entrega_real", sa.String(length=40), nullable=True),
+            sa.Column("nf_impo", sa.String(length=40), nullable=True),
+            sa.Column("nf_recebimento", sa.String(length=40), nullable=True),
             # Modulo 3: Cotacao (resumo)
             sa.Column("frete_aplicavel", sa.Boolean(), nullable=True),
             sa.Column("cotacao_vencedora_id", sa.Integer(), nullable=True),
@@ -192,6 +204,25 @@ def upgrade():
             sa.PrimaryKeyConstraint("id"),
         )
 
+    if inspector.has_table("comex_processo"):
+        cols_processo = {c["name"] for c in inspector.get_columns("comex_processo")}
+        novas_colunas_processo = [
+            ("direcao_operacao", sa.String(length=4)),
+            ("modal_transporte", sa.String(length=20)),
+            ("po_data", sa.Date()),
+            ("ref_despachante", sa.String(length=40)),
+            ("bl_awb", sa.String(length=40)),
+            ("invoice_numero", sa.String(length=40)),
+            ("etd", sa.Date()),
+            ("previsao_entrega", sa.Date()),
+            ("entrega_real", sa.String(length=40)),
+            ("nf_impo", sa.String(length=40)),
+            ("nf_recebimento", sa.String(length=40)),
+        ]
+        for nome, tipo in novas_colunas_processo:
+            if nome not in cols_processo:
+                op.add_column("comex_processo", sa.Column(nome, tipo, nullable=True))
+
     if not inspector.has_table("comex_po_item"):
         op.create_table(
             "comex_po_item",
@@ -211,28 +242,76 @@ def upgrade():
             sa.PrimaryKeyConstraint("id"),
         )
 
+    # comex_cotacao nunca teve UI/uso real ate esta redefinicao (Modulo 3
+    # ainda nao existia) - se a tabela ja foi criada localmente com o
+    # esqueleto antigo (sem "tipo_frete"), e seguro derrubar e recriar no
+    # formato novo em vez de tentar migrar coluna a coluna.
+    if inspector.has_table("comex_cotacao"):
+        cols_cotacao_antigas = {c["name"] for c in inspector.get_columns("comex_cotacao")}
+        if "tipo_frete" not in cols_cotacao_antigas:
+            op.drop_table("comex_cotacao")
+            inspector = inspect(bind)
+
     if not inspector.has_table("comex_cotacao"):
         op.create_table(
             "comex_cotacao",
             sa.Column("id", sa.Integer(), nullable=False),
             sa.Column("processo_id", sa.Integer(), nullable=False),
-            sa.Column("fornecedor_frete", sa.String(length=200), nullable=False),
-            sa.Column("modal", sa.String(length=40), nullable=True),
+            sa.Column("tipo_frete", sa.String(length=12), nullable=False),
+            sa.Column("status", sa.String(length=20), nullable=False),
+            sa.Column("fornecedor_frete", sa.String(length=200), nullable=True),
             sa.Column("origem", sa.String(length=120), nullable=True),
             sa.Column("destino", sa.String(length=120), nullable=True),
-            sa.Column("prazo_estimado", sa.String(length=60), nullable=True),
-            sa.Column("valor_frete", sa.Float(), nullable=True),
-            sa.Column("seguro", sa.Float(), nullable=True),
-            sa.Column("taxas_adicionais", sa.Float(), nullable=True),
-            sa.Column("custo_total", sa.Float(), nullable=True),
+            sa.Column("incoterm", sa.String(length=20), nullable=True),
+            sa.Column("qtd_40hc", sa.Integer(), nullable=True),
+            sa.Column("qtd_20dry", sa.Integer(), nullable=True),
+            sa.Column("imo_classe", sa.String(length=20), nullable=True),
+            sa.Column("un_numero", sa.String(length=20), nullable=True),
+            sa.Column("transit_time", sa.String(length=60), nullable=True),
+            sa.Column("rota", sa.String(length=200), nullable=True),
+            sa.Column("validade", sa.Date(), nullable=True),
+            sa.Column("ptax", sa.Float(), nullable=True),
+            sa.Column("pick_up_usd", sa.Float(), nullable=True),
+            sa.Column("pick_up_brl", sa.Float(), nullable=True),
+            sa.Column("origem_charges_usd", sa.Float(), nullable=True),
+            sa.Column("origem_charges_brl", sa.Float(), nullable=True),
+            sa.Column("frete_internacional_usd", sa.Float(), nullable=True),
+            sa.Column("frete_internacional_brl", sa.Float(), nullable=True),
+            sa.Column("seguro_usd", sa.Float(), nullable=True),
+            sa.Column("seguro_brl", sa.Float(), nullable=True),
+            sa.Column("destination_charges_usd", sa.Float(), nullable=True),
+            sa.Column("destination_charges_brl", sa.Float(), nullable=True),
+            sa.Column("docs_release_usd", sa.Float(), nullable=True),
+            sa.Column("docs_release_brl", sa.Float(), nullable=True),
+            sa.Column("delivery_usd", sa.Float(), nullable=True),
+            sa.Column("delivery_brl", sa.Float(), nullable=True),
+            sa.Column("custo_total_usd", sa.Float(), nullable=True),
+            sa.Column("custo_total_brl", sa.Float(), nullable=True),
+            sa.Column("termos_aceitos", sa.Boolean(), nullable=True),
+            sa.Column("termos_aceitos_em", sa.DateTime(), nullable=True),
             sa.Column("is_sugerida_pelo_sistema", sa.Boolean(), nullable=True),
             sa.Column("is_escolhida", sa.Boolean(), nullable=True),
-            sa.Column("token_publico_hash", sa.String(length=128), nullable=True),
+            sa.Column("token_publico_hash", sa.String(length=64), nullable=True),
             sa.Column("token_publico_expira_em", sa.DateTime(), nullable=True),
             sa.Column("email_instrucao_embarque", sa.String(length=255), nullable=True),
-            sa.Column("recebida_em", sa.DateTime(), nullable=False),
+            sa.Column("link_gerado_em", sa.DateTime(), nullable=False),
             sa.Column("criado_por", sa.String(length=100), nullable=True),
+            sa.Column("recebida_em", sa.DateTime(), nullable=True),
             sa.ForeignKeyConstraint(["processo_id"], ["comex_processo.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
+
+    if not inspector.has_table("comex_cotacao_volume"):
+        op.create_table(
+            "comex_cotacao_volume",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("cotacao_id", sa.Integer(), nullable=False),
+            sa.Column("numero", sa.Integer(), nullable=False),
+            sa.Column("comprimento", sa.Float(), nullable=True),
+            sa.Column("largura", sa.Float(), nullable=True),
+            sa.Column("altura", sa.Float(), nullable=True),
+            sa.Column("peso", sa.Float(), nullable=True),
+            sa.ForeignKeyConstraint(["cotacao_id"], ["comex_cotacao.id"]),
             sa.PrimaryKeyConstraint("id"),
         )
 
@@ -289,6 +368,21 @@ def upgrade():
             sa.PrimaryKeyConstraint("id"),
         )
 
+    if not inspector.has_table("comex_documento"):
+        op.create_table(
+            "comex_documento",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("processo_id", sa.Integer(), nullable=False),
+            sa.Column("modulo", sa.String(length=20), nullable=False),
+            sa.Column("titulo", sa.String(length=200), nullable=True),
+            sa.Column("file_name", sa.String(length=260), nullable=False),
+            sa.Column("file_path", sa.String(length=500), nullable=False),
+            sa.Column("uploaded_at", sa.DateTime(), nullable=False),
+            sa.Column("uploaded_by", sa.String(length=100), nullable=True),
+            sa.ForeignKeyConstraint(["processo_id"], ["comex_processo.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
+
     # Indices (idempotentes - recria o inspector apos as tabelas existirem).
     inspector = inspect(bind)
     _create_index_if_missing(inspector, "ix_comex_processo_id_op", "comex_processo", ["id_op"], unique=True)
@@ -302,22 +396,28 @@ def upgrade():
     _create_index_if_missing(inspector, "ix_comex_processo_po_numero", "comex_processo", ["po_numero"])
     _create_index_if_missing(inspector, "ix_comex_po_item_processo_id", "comex_po_item", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_cotacao_processo_id", "comex_cotacao", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_cotacao_token_publico_hash", "comex_cotacao", ["token_publico_hash"])
+    _create_index_if_missing(inspector, "ix_comex_cotacao_volume_cotacao_id", "comex_cotacao_volume", ["cotacao_id"])
     _create_index_if_missing(inspector, "ix_comex_follow_up_processo_id", "comex_follow_up", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_follow_up_modulo", "comex_follow_up", ["modulo"])
     _create_index_if_missing(inspector, "ix_comex_follow_up_log_follow_up_id", "comex_follow_up_log", ["follow_up_id"])
     _create_index_if_missing(inspector, "ix_comex_follow_up_log_criado_em", "comex_follow_up_log", ["criado_em"])
     _create_index_if_missing(inspector, "ix_comex_lembrete_processo_id", "comex_lembrete", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_entrega_foto_processo_id", "comex_entrega_foto", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_documento_processo_id", "comex_documento", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_documento_modulo", "comex_documento", ["modulo"])
 
 
 def downgrade():
     bind = op.get_bind()
     inspector = inspect(bind)
     for table in (
+        "comex_documento",
         "comex_entrega_foto",
         "comex_lembrete",
         "comex_follow_up_log",
         "comex_follow_up",
+        "comex_cotacao_volume",
         "comex_cotacao",
         "comex_po_item",
         "comex_processo",

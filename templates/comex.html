@@ -45,6 +45,16 @@
     .cx-checklist label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
     .cx-checklist .cx-empty-mini { color: var(--eui-muted); font-size: 12.5px; }
 
+    /* Anexo de documentos - reutilizado em todo modulo (OC, PO, ...). */
+    .cx-doc-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+    .cx-doc-item a { font-weight: 700; color: var(--eui-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cx-doc-item small { color: var(--eui-muted); white-space: nowrap; }
+    .cx-doc-item button { border: none; background: transparent; cursor: pointer; color: var(--eui-danger); font-size: 13px; flex-shrink: 0; }
+    .cx-doc-add { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+    .cx-doc-add input[type="file"] { flex: 1; min-width: 160px; font-size: 12.5px; }
+    .cx-doc-add input[type="text"] { flex: 1; min-width: 160px; }
+    .cx-section-title { font-size: 13px; font-weight: 800; color: var(--eui-text); margin: 4px 0 -4px; }
+
     .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
     .cx-toast.error { border-left-color: var(--eui-danger); }
     .cx-toast.success { border-left-color: var(--eui-success); }
@@ -155,6 +165,15 @@
                 <div class="cx-field"><label>Valor total</label><input type="number" step="0.01" id="cx-oc-total" class="eui-input"></div>
             </div>
             <div class="cx-field"><label>Situação</label><input type="text" id="cx-oc-situacao" class="eui-input"></div>
+            <div class="cx-field">
+                <label>Documentos anexados</label>
+                <div class="cx-checklist" id="cx-oc-documentos"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="file" id="cx-oc-doc-input">
+                    <input type="text" id="cx-oc-doc-titulo" class="eui-input" placeholder="Descrição (opcional)">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-oc-doc-btn-anexar"><i class="fas fa-paperclip"></i> Anexar</button>
+                </div>
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cx-fechar-oc-2">Cancelar</button>
@@ -172,8 +191,8 @@
         </div>
         <div class="cx-modal__body">
             <div class="cx-grid-2">
-                <div class="cx-field"><label>Fornecedor</label><input type="text" id="cx-po-fornecedor" class="eui-input" disabled></div>
-                <div class="cx-field"><label>OC principal</label><input type="text" id="cx-po-oc" class="eui-input" disabled></div>
+                <div class="cx-field"><label id="cx-po-fornecedor-label">Fornecedor</label><input type="text" id="cx-po-fornecedor" class="eui-input" disabled></div>
+                <div class="cx-field"><label>OC/OS principal</label><input type="text" id="cx-po-oc" class="eui-input" disabled></div>
             </div>
             <div class="cx-field">
                 <label>Outras OCs do mesmo fornecedor (opcional)</label>
@@ -181,13 +200,23 @@
             </div>
             <div class="cx-grid-2">
                 <div class="cx-field">
-                    <label>Tipo de operação <span style="color:var(--eui-danger);">*</span></label>
-                    <select id="cx-po-tipo-operacao" class="eui-select">
+                    <label>Direção <span style="color:var(--eui-danger);">*</span></label>
+                    <select id="cx-po-direcao" class="eui-select">
                         <option value="">Selecione…</option>
-                        <option value="IM">Marítima (IM)</option>
-                        <option value="IA">Aérea (IA)</option>
+                        <option value="IMPO">Importação (IMPO)</option>
+                        <option value="EXPO">Exportação (EXPO)</option>
                     </select>
                 </div>
+                <div class="cx-field">
+                    <label>Modal <span style="color:var(--eui-danger);">*</span></label>
+                    <select id="cx-po-modal" class="eui-select">
+                        <option value="">Selecione…</option>
+                        <option value="Aéreo">Aéreo</option>
+                        <option value="Marítimo">Marítimo</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cx-grid-2">
                 <div class="cx-field">
                     <label>Pagador do frete <span style="color:var(--eui-danger);">*</span></label>
                     <select id="cx-po-pagador-frete" class="eui-select">
@@ -196,7 +225,27 @@
                         <option value="Cliente-Fornecedor">Cliente/Fornecedor</option>
                     </select>
                 </div>
+                <div class="cx-field"><label>Data PO</label><input type="date" id="cx-po-data" class="eui-input"></div>
             </div>
+
+            <div class="cx-section-title">Dados gerais da operação</div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Ref. Despachante</label><input type="text" maxlength="20" id="cx-po-ref-despachante" class="eui-input"></div>
+                <div class="cx-field"><label>BL/AWB</label><input type="text" maxlength="20" id="cx-po-bl-awb" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Invoice</label><input type="text" maxlength="20" id="cx-po-invoice" class="eui-input"></div>
+                <div class="cx-field"><label>ETD</label><input type="date" id="cx-po-etd" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>ETA</label><input type="date" id="cx-po-eta" class="eui-input"></div>
+                <div class="cx-field"><label>Previsão Entrega/Expedição</label><input type="date" id="cx-po-previsao-entrega" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Entrega Real</label><input type="text" maxlength="20" id="cx-po-entrega-real" class="eui-input"></div>
+                <div class="cx-field"><label>NF Impo</label><input type="text" maxlength="20" id="cx-po-nf-impo" class="eui-input"></div>
+            </div>
+            <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-po-nf-recebimento" class="eui-input"></div>
             <div class="cx-field">
                 <label>Itens da PO
                     <small style="font-weight:400; color:var(--eui-muted);"> — preenchido manualmente por enquanto (código, NCM, PN, descrição, quantidade e valores)</small>
@@ -238,12 +287,81 @@
                 </div>
                 <small style="color:var(--eui-muted);">Cópia automática para laroli@colmac.com e filoli@colmac.com.</small>
             </div>
+            <div class="cx-field">
+                <label>Documentos anexados</label>
+                <div class="cx-checklist" id="cx-po-documentos"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="file" id="cx-po-doc-input">
+                    <input type="text" id="cx-po-doc-titulo" class="eui-input" placeholder="Descrição (opcional)">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-po-doc-btn-anexar"><i class="fas fa-paperclip"></i> Anexar</button>
+                </div>
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--danger" id="cx-po-btn-apagar"><i class="fas fa-trash"></i> Apagar</button>
             <a class="eui-btn eui-btn--ghost hidden" id="cx-po-btn-pdf" target="_blank"><i class="fas fa-file-pdf"></i> Ver PDF</a>
             <button class="eui-btn eui-btn--ghost" id="cx-po-btn-salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>
             <button class="eui-btn eui-btn--primary" id="cx-po-btn-finalizar"><i class="fas fa-check"></i> Finalizar sem enviar e-mail</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Cotação -->
+<div class="cx-modal" id="cx-modal-cotacao">
+    <div class="cx-modal__box is-wide">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title"><i class="fas fa-file-invoice-dollar"></i> Cotação de Frete — <span id="cx-cot-id-op">—</span></h3>
+            <button class="cx-modal__close" id="cx-fechar-cotacao"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <div class="cx-section-title">Gerar novo link de cotação</div>
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>Tipo de frete</label>
+                    <select id="cx-cot-tipo-frete" class="eui-select">
+                        <option value="FCL">FCL (Container fechado)</option>
+                        <option value="LCL_AEREO">LCL / Aéreo (volumes soltos)</option>
+                    </select>
+                </div>
+                <div class="cx-field">
+                    <label>E-mail do prestador (opcional — envia o link automaticamente)</label>
+                    <input type="email" id="cx-cot-email" class="eui-input" placeholder="frete@transportadora.com">
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+                <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="cx-cot-btn-gerar"><i class="fas fa-link"></i> Gerar link</button>
+            </div>
+            <div class="cx-field hidden" id="cx-cot-link-wrap">
+                <label>Link gerado</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="cx-cot-link" class="eui-input" readonly style="flex:1;">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-cot-btn-copiar"><i class="fas fa-copy"></i> Copiar</button>
+                </div>
+            </div>
+
+            <div class="cx-section-title">Cotações recebidas</div>
+            <div class="cx-table-wrap">
+                <table class="erp-table" id="cx-cot-table">
+                    <thead>
+                        <tr>
+                            <th>Prestador</th>
+                            <th>Tipo</th>
+                            <th>Status</th>
+                            <th>Total USD</th>
+                            <th>Total BRL</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="cx-cot-tbody"><tr><td colspan="6" class="cx-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cx-field hidden" id="cx-cot-escolhida-wrap">
+                <label>Cotação escolhida</label>
+                <div id="cx-cot-escolhida-info" style="font-size:13px; color:var(--eui-text);"></div>
+            </div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cx-fechar-cotacao-2">Fechar</button>
         </div>
     </div>
 </div>
@@ -272,6 +390,76 @@
         if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
         return data;
     }
+
+    // ── Anexo de documentos (requisito geral: todo módulo tem essa função) ─
+    // `prefixo` identifica os elementos na tela (ex.: "cx-oc", "cx-po") e
+    // `modulo` é o estágio do workflow anotado em cada documento salvo.
+    function gerenciadorDocumentos(prefixo, modulo) {
+        let processoId = null;
+
+        function render(docs) {
+            $(`${prefixo}-documentos`).innerHTML = docs.length
+                ? docs.map((d) => `
+                    <div class="cx-doc-item">
+                        <a href="${d.url}" target="_blank" title="${escapeHtml(d.file_name)}">${escapeHtml(d.titulo || d.file_name)}</a>
+                        <small>${escapeHtml(d.uploaded_at || "")}${d.uploaded_by ? " · " + escapeHtml(d.uploaded_by) : ""}</small>
+                        <button type="button" data-apagar-doc="${d.id}" title="Apagar"><i class="fas fa-trash"></i></button>
+                    </div>
+                `).join("")
+                : '<span class="cx-empty-mini">Nenhum documento anexado.</span>';
+        }
+
+        async function carregar(id) {
+            processoId = id;
+            $(`${prefixo}-documentos`).innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
+            try {
+                const data = await api(`/api/comex/processos/${id}/documentos?modulo=${modulo}`);
+                render(data.documentos || []);
+            } catch (err) {
+                $(`${prefixo}-documentos`).innerHTML = `<span class="cx-empty-mini">${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        $(`${prefixo}-documentos`).addEventListener("click", async (e) => {
+            const btn = e.target.closest("[data-apagar-doc]");
+            if (!btn || !processoId) return;
+            if (!confirm("Apagar este documento?")) return;
+            try {
+                await api(`/api/comex/processos/${processoId}/documentos/${btn.dataset.apagarDoc}`, { method: "DELETE" });
+                carregar(processoId);
+            } catch (err) { toast(err.message, "error"); }
+        });
+
+        $(`${prefixo}-doc-btn-anexar`).addEventListener("click", async () => {
+            if (!processoId) return;
+            const input = $(`${prefixo}-doc-input`);
+            const arquivo = input.files[0];
+            if (!arquivo) { toast("Escolha um arquivo para anexar.", "error"); return; }
+            const fd = new FormData();
+            fd.append("arquivo", arquivo);
+            fd.append("modulo", modulo);
+            fd.append("titulo", $(`${prefixo}-doc-titulo`).value.trim());
+            const btn = $(`${prefixo}-doc-btn-anexar`);
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/comex/processos/${processoId}/documentos`, { method: "POST", body: fd });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+                input.value = "";
+                $(`${prefixo}-doc-titulo`).value = "";
+                toast("Documento anexado!", "success");
+                carregar(processoId);
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        return { carregar };
+    }
+    const docsOc = gerenciadorDocumentos("cx-oc", "OC");
+    const docsPo = gerenciadorDocumentos("cx-po", "PO");
 
     let processosCache = [];
     let filtroAtual = "";
@@ -331,7 +519,7 @@
             <tr>
                 <td><strong>${escapeHtml(p.id_op)}</strong></td>
                 <td>${escapeHtml(p.fornecedor || "—")}</td>
-                <td>${p.tipo_operacao === "IA" ? "Aérea" : "Marítima"}</td>
+                <td>${escapeHtml((p.direcao_operacao === "EXPO" ? "Exportação" : "Importação") + " · " + (p.modal_transporte || (p.tipo_operacao === "IA" ? "Aéreo" : "Marítimo")))}</td>
                 <td>${escapeHtml(p.cod_ordem_compra || "—")}</td>
                 <td>${escapeHtml(p.po_numero || "—")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
@@ -359,7 +547,14 @@
             if (p.po_pdf_disponivel !== false && p.po_numero) {
                 itens += it("ver-pdf", "fa-file-pdf", "Ver PDF");
             }
+            if (p.po_status === "Finalizada") {
+                itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
+            }
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
+        } else if (p.status_modulo === "Cotacao") {
+            itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
+            itens += it("editar-po", "fa-file-signature", "Ver PO");
+            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else {
             itens += it("ver", "fa-eye", "Detalhes");
             itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
@@ -403,6 +598,8 @@
         if (!p) return;
         if (act === "criar-po" || act === "editar-po" || act === "ver") {
             abrirModalPo(p);
+        } else if (act === "cotacao") {
+            abrirModalCotacao(p);
         } else if (act === "editar-oc") {
             abrirModalOc(p);
         } else if (act === "apagar-oc") {
@@ -517,6 +714,7 @@
         $("cx-oc-total").value = p.total_oc != null ? p.total_oc : "";
         $("cx-oc-situacao").value = p.situacao_oc || "";
         $("cx-modal-oc").classList.add("open");
+        docsOc.carregar(p.id);
     }
     function fecharModalEditarOc() { $("cx-modal-oc").classList.remove("open"); processoOcAtual = null; }
     $("cx-fechar-oc").addEventListener("click", fecharModalEditarOc);
@@ -627,14 +825,28 @@
         $("cx-po-id-op").textContent = p.id_op;
         $("cx-po-fornecedor").value = p.fornecedor || "";
         $("cx-po-oc").value = p.cod_ordem_compra || "";
-        // So pre-preenche o tipo de operacao se ja foi escolhido numa PO
+        // So pre-preenche direcao/modal se ja foram escolhidos numa PO
         // anterior (po_numero existe) - na primeira vez o operador precisa
-        // escolher explicitamente, nao herdar o "IM" provisorio do import.
-        $("cx-po-tipo-operacao").value = p.po_numero ? (p.tipo_operacao || "") : "";
+        // escolher explicitamente, nao herdar o "IMPO/Marítimo" provisorio
+        // do import.
+        $("cx-po-direcao").value = p.po_numero ? (p.direcao_operacao || "") : "";
+        $("cx-po-modal").value = p.po_numero ? (p.modal_transporte || "") : "";
+        atualizarLabelFornecedor();
         $("cx-po-pagador-frete").value = p.pagador_frete || "";
+        $("cx-po-data").value = p.po_data || "";
+        $("cx-po-ref-despachante").value = p.ref_despachante || "";
+        $("cx-po-bl-awb").value = p.bl_awb || "";
+        $("cx-po-invoice").value = p.invoice_numero || "";
+        $("cx-po-etd").value = p.etd || "";
+        $("cx-po-eta").value = p.eta || "";
+        $("cx-po-previsao-entrega").value = p.previsao_entrega || "";
+        $("cx-po-entrega-real").value = p.entrega_real || "";
+        $("cx-po-nf-impo").value = p.nf_impo || "";
+        $("cx-po-nf-recebimento").value = p.nf_recebimento || "";
         $("cx-po-outras-ocs").innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
         itensPoAtual = [];
         renderItensPo();
+        docsPo.carregar(p.id);
 
         const temPo = !!p.po_numero;
         $("cx-po-status-wrap").classList.toggle("hidden", !temPo);
@@ -689,24 +901,42 @@
     function fecharModalPo() { $("cx-modal-po").classList.remove("open"); processoPoAtual = null; itensPoAtual = []; }
     $("cx-fechar-po").addEventListener("click", fecharModalPo);
 
+    function atualizarLabelFornecedor() {
+        $("cx-po-fornecedor-label").textContent = $("cx-po-direcao").value === "EXPO" ? "Cliente" : "Fornecedor";
+    }
+    $("cx-po-direcao").addEventListener("change", atualizarLabelFornecedor);
+
     function _ocsSelecionadas() {
         return Array.from($("cx-po-outras-ocs").querySelectorAll("input[type=checkbox]:checked")).map((c) => parseInt(c.value, 10));
     }
 
     async function salvarPo(finalizar) {
         if (!processoPoAtual) return;
-        const tipoOperacao = $("cx-po-tipo-operacao").value;
-        if (!tipoOperacao) { toast("Selecione o tipo de operação (Marítima ou Aérea).", "error"); return; }
+        const direcao = $("cx-po-direcao").value;
+        if (!direcao) { toast("Selecione a direção (Importação ou Exportação).", "error"); return; }
+        const modal = $("cx-po-modal").value;
+        if (!modal) { toast("Selecione o modal (Aéreo ou Marítimo).", "error"); return; }
         const pagador = $("cx-po-pagador-frete").value;
         if (!pagador) { toast("Selecione o pagador do frete.", "error"); return; }
         try {
             const resp = await api(`/api/comex/processos/${processoPoAtual.id}/po`, {
                 method: "POST",
                 body: JSON.stringify({
-                    tipo_operacao: tipoOperacao,
+                    direcao_operacao: direcao,
+                    modal_transporte: modal,
                     pagador_frete: pagador,
                     ocs_vinculadas_ids: _ocsSelecionadas(),
                     finalizar: !!finalizar,
+                    po_data: $("cx-po-data").value || null,
+                    ref_despachante: $("cx-po-ref-despachante").value.trim(),
+                    bl_awb: $("cx-po-bl-awb").value.trim(),
+                    invoice_numero: $("cx-po-invoice").value.trim(),
+                    etd: $("cx-po-etd").value || null,
+                    eta: $("cx-po-eta").value || null,
+                    previsao_entrega: $("cx-po-previsao-entrega").value || null,
+                    entrega_real: $("cx-po-entrega-real").value.trim(),
+                    nf_impo: $("cx-po-nf-impo").value.trim(),
+                    nf_recebimento: $("cx-po-nf-recebimento").value.trim(),
                 }),
             });
             await api(`/api/comex/processos/${processoPoAtual.id}/po/itens`, {
@@ -751,6 +981,130 @@
         } finally {
             btn.disabled = false;
         }
+    });
+
+    // ── MODAL: Cotação (Módulo 3) ──────────────────────────────────────
+    let processoCotacaoAtual = null;
+
+    function _fmtMoedaGenerico(v, simbolo) {
+        const n = Number(v);
+        return simbolo + " " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    }
+
+    async function abrirModalCotacao(p) {
+        processoCotacaoAtual = p;
+        $("cx-cot-id-op").textContent = p.id_op;
+        $("cx-cot-email").value = "";
+        $("cx-cot-link-wrap").classList.add("hidden");
+        $("cx-cot-escolhida-wrap").classList.add("hidden");
+        const tipoFreteSel = $("cx-cot-tipo-frete");
+        if (p.modal_transporte === "Aéreo") {
+            tipoFreteSel.value = "LCL_AEREO";
+            tipoFreteSel.disabled = true;
+        } else {
+            tipoFreteSel.disabled = false;
+        }
+        $("cx-modal-cotacao").classList.add("open");
+        await carregarCotacoes(p.id);
+    }
+    function fecharModalCotacao() { $("cx-modal-cotacao").classList.remove("open"); processoCotacaoAtual = null; }
+    $("cx-fechar-cotacao").addEventListener("click", fecharModalCotacao);
+    $("cx-fechar-cotacao-2").addEventListener("click", fecharModalCotacao);
+
+    async function carregarCotacoes(processoId) {
+        $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Carregando…</td></tr>';
+        try {
+            const data = await api(`/api/comex/processos/${processoId}/cotacoes`);
+            renderCotacoes(data.cotacoes || []);
+        } catch (err) {
+            $("cx-cot-tbody").innerHTML = `<tr><td colspan="6" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function renderCotacoes(cotacoes) {
+        if (!cotacoes.length) {
+            $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Nenhum link de cotação gerado ainda.</td></tr>';
+            $("cx-cot-escolhida-wrap").classList.add("hidden");
+            return;
+        }
+        $("cx-cot-tbody").innerHTML = cotacoes.map((c) => {
+            const statusLabel = c.status === "Recebida" ? "Recebida" : (c.expirado ? "Expirado" : "Aguardando");
+            const statusCor = c.status === "Recebida" ? "#15803d" : (c.expirado ? "#dc2626" : "#b45309");
+            const badge = `<span class="eui-badge" style="background:${statusCor}1a; color:${statusCor}; border:1px solid ${statusCor}40;">${statusLabel}${c.is_sugerida_pelo_sistema ? " · sugerida" : ""}</span>`;
+            let acao = "";
+            if (c.is_escolhida) {
+                acao = '<span class="eui-badge eui-badge--success">Escolhida</span>';
+            } else if (c.status === "Recebida") {
+                acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-escolher-cotacao="${c.id}" data-sugerida="${c.is_sugerida_pelo_sistema ? "1" : "0"}">Escolher</button>`;
+            }
+            return `
+                <tr>
+                    <td>${escapeHtml(c.fornecedor_frete || "—")}</td>
+                    <td>${c.tipo_frete === "FCL" ? "FCL" : "LCL/Aéreo"}</td>
+                    <td>${badge}</td>
+                    <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
+                    <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>
+                    <td style="text-align:right;">${acao}</td>
+                </tr>
+            `;
+        }).join("");
+
+        const escolhida = cotacoes.find((c) => c.is_escolhida);
+        $("cx-cot-escolhida-wrap").classList.toggle("hidden", !escolhida);
+        if (escolhida) {
+            $("cx-cot-escolhida-info").innerHTML =
+                `<strong>${escapeHtml(escolhida.fornecedor_frete || "—")}</strong> — ${_fmtMoedaGenerico(escolhida.custo_total_usd, "US$")} / ${_fmtMoedaGenerico(escolhida.custo_total_brl, "R$")}`;
+        }
+    }
+
+    $("cx-cot-btn-gerar").addEventListener("click", async () => {
+        if (!processoCotacaoAtual) return;
+        const btn = $("cx-cot-btn-gerar");
+        btn.disabled = true;
+        try {
+            const resp = await api(`/api/comex/processos/${processoCotacaoAtual.id}/cotacoes`, {
+                method: "POST",
+                body: JSON.stringify({
+                    tipo_frete: $("cx-cot-tipo-frete").value,
+                    email_instrucao_embarque: $("cx-cot-email").value.trim(),
+                    enviar_para: $("cx-cot-email").value.trim(),
+                }),
+            });
+            $("cx-cot-link").value = resp.link;
+            $("cx-cot-link-wrap").classList.remove("hidden");
+            toast(resp.message, "success");
+            carregarCotacoes(processoCotacaoAtual.id);
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    $("cx-cot-btn-copiar").addEventListener("click", () => {
+        const input = $("cx-cot-link");
+        input.select();
+        navigator.clipboard?.writeText(input.value).catch(() => {});
+        toast("Link copiado!", "success");
+    });
+
+    $("cx-cot-tbody").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-escolher-cotacao]");
+        if (!btn || !processoCotacaoAtual) return;
+        let justificativa = "";
+        if (btn.dataset.sugerida !== "1") {
+            justificativa = prompt("Esta não é a cotação de menor custo sugerida pelo sistema. Informe a justificativa para escolhê-la:") || "";
+            if (!justificativa.trim()) { toast("Justificativa obrigatória para escolher uma cotação diferente da sugerida.", "error"); return; }
+        }
+        try {
+            await api(`/api/comex/cotacoes/${btn.dataset.escolherCotacao}/escolher`, {
+                method: "POST",
+                body: JSON.stringify({ justificativa }),
+            });
+            toast("Cotação escolhida!", "success");
+            carregarCotacoes(processoCotacaoAtual.id);
+        } catch (err) { toast(err.message, "error"); }
     });
 
     carregar();

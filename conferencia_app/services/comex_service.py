@@ -15,12 +15,18 @@ que nao sao de importacao/exportacao.
 """
 from __future__ import annotations
 
+import hashlib
 import json
-from datetime import datetime
+import os
+import secrets
+from datetime import datetime, timedelta
+
+from flask import current_app
 
 from ..compras.services import compras_service
 from ..extensions import db
-from ..models import ComexPoItem, ComexProcesso
+from ..models import ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
+from . import expedicao_photo_storage as storage
 
 # Sequencia oficial do workflow (usada tanto para avancar quanto para a
 # funcao "estornar" - que percorre a mesma lista na ordem inversa).
@@ -51,8 +57,24 @@ STATUS_SLUGS = {
     "Concluido": "concluido",
 }
 
-TIPOS_OPERACAO = ("IM", "IA")  # IM = Importacao Maritima | IA = Importacao Aerea
+TIPOS_OPERACAO = ("IM", "IA", "EM", "EA")  # IM/IA = Importacao Mar./Aer. | EM/EA = Exportacao Mar./Aer.
+DIRECOES_OPERACAO = ("IMPO", "EXPO")
+MODAIS_TRANSPORTE = ("Aéreo", "Marítimo")
 PAGADORES_FRETE = ("Columbia", "Cliente-Fornecedor")
+
+# Prefixo do ID OP a partir de (direcao_operacao, modal_transporte) - mantem
+# o formato simples de 2 letras que ja existia (IM/IA), so estendido para
+# tambem cobrir exportacao (EM/EA).
+_MAPA_TIPO_OPERACAO = {
+    ("IMPO", "Marítimo"): "IM",
+    ("IMPO", "Aéreo"): "IA",
+    ("EXPO", "Marítimo"): "EM",
+    ("EXPO", "Aéreo"): "EA",
+}
+
+
+def _derivar_tipo_operacao(direcao_operacao: str, modal_transporte: str) -> str:
+    return _MAPA_TIPO_OPERACAO.get((direcao_operacao, modal_transporte), "IM")
 
 
 def status_slug(status_modulo: str) -> str:
@@ -308,6 +330,8 @@ def importar_oc(oc_header: dict, usuario: str) -> ComexProcesso:
     processo = ComexProcesso(
         id_op=gerar_id_op("IM"),
         tipo_operacao="IM",
+        direcao_operacao="IMPO",
+        modal_transporte="Marítimo",
         status_modulo="OC",
         status_slug=status_slug("OC"),
         criado_por=usuario,
@@ -384,14 +408,52 @@ def _mesmo_fornecedor(processos: list[ComexProcesso]) -> bool:
     return len(fornecedores) <= 1
 
 
+# Campos operacionais gerais (visiveis a partir da PO, editaveis ao longo de
+# todo o processo) - texto livre (ate 20 caracteres, reforcado no front-end;
+# a coluna tem folga ate 40 so como buffer) e data, mapeados pelo nome que
+# chega no JSON do navegador para o atributo do model (o front manda "eta",
+# que reaproveita a coluna ja existente `em_transito_eta`).
+_CAMPOS_PO_TEXTO = {
+    "ref_despachante": "ref_despachante",
+    "bl_awb": "bl_awb",
+    "invoice_numero": "invoice_numero",
+    "entrega_real": "entrega_real",
+    "nf_impo": "nf_impo",
+    "nf_recebimento": "nf_recebimento",
+}
+_CAMPOS_PO_DATA = {
+    "po_data": "po_data",
+    "etd": "etd",
+    "eta": "em_transito_eta",
+    "previsao_entrega": "previsao_entrega",
+}
+
+
+def _parse_date(value):
+    convertido = _parse_dt(value)
+    return convertido.date() if convertido else None
+
+
+def _aplicar_campos_operacionais(processo: ComexProcesso, dados: dict) -> None:
+    for chave_json, atributo in _CAMPOS_PO_TEXTO.items():
+        if chave_json in dados:
+            valor = str(dados.get(chave_json) or "").strip()
+            setattr(processo, atributo, (valor[:40] or None) if valor else None)
+    for chave_json, atributo in _CAMPOS_PO_DATA.items():
+        if chave_json in dados:
+            setattr(processo, atributo, _parse_date(dados.get(chave_json)))
+
+
 def salvar_po(
     processo: ComexProcesso,
     *,
     pagador_frete: str,
-    tipo_operacao: str,
+    direcao_operacao: str,
+    modal_transporte: str,
     ocs_vinculadas_ids: list[int] | None,
     usuario: str,
     finalizar: bool = False,
+    dados_operacionais: dict | None = None,
 ) -> ComexProcesso:
     """Salva (rascunho) ou finaliza a PO do processo (Modulo 2). Quando mais
     de uma OC do mesmo fornecedor e vinculada, os totais da PO passam a
@@ -399,15 +461,25 @@ def salvar_po(
     este (`processo`); as demais OCs so ficam anotadas em
     `po_ocs_vinculadas` para referencia (nao criam processos adicionais).
 
-    O tipo de operacao (IM/IA) e obrigatorio aqui - e o momento em que essa
-    escolha precisa acontecer (nao na importacao da OC). Enquanto a PO
-    ainda esta em Rascunho, trocar o tipo regenera o ID OP (e o numero da
-    PO, que deriva dele) para refletir o prefixo correto; depois de
-    Finalizada o ID OP fica fixo."""
+    A direcao da operacao (Importacao/Exportacao) e o modal de transporte
+    (Aereo/Maritimo) sao obrigatorios aqui - e o momento em que essa escolha
+    precisa acontecer (nao na importacao da OC). Juntos eles derivam o tipo
+    de operacao de 2 letras (IM/IA/EM/EA - ver `_derivar_tipo_operacao`) que
+    define o prefixo do ID OP. Enquanto a PO ainda esta em Rascunho, trocar
+    direcao ou modal regenera o ID OP (e o numero da PO, que deriva dele)
+    para refletir o prefixo correto; depois de Finalizada o ID OP fica fixo.
+
+    `dados_operacionais` traz os demais campos gerais do processo (Data PO,
+    Ref Despachante, BL/AWB, Invoice, ETD, ETA, Previsao Entrega, Entrega
+    Real, NF impo, NF recebimento) - todos opcionais e editaveis a qualquer
+    momento, inclusive depois da PO Finalizada."""
     if pagador_frete not in PAGADORES_FRETE:
         raise ValueError("Pagador do frete invalido.")
-    if tipo_operacao not in TIPOS_OPERACAO:
-        raise ValueError("Selecione o tipo de operação (Marítima ou Aérea) antes de salvar a PO.")
+    if direcao_operacao not in DIRECOES_OPERACAO:
+        raise ValueError("Selecione a direção da operação (Importação ou Exportação) antes de salvar a PO.")
+    if modal_transporte not in MODAIS_TRANSPORTE:
+        raise ValueError("Selecione o modal de transporte (Aéreo ou Marítimo) antes de salvar a PO.")
+    tipo_operacao = _derivar_tipo_operacao(direcao_operacao, modal_transporte)
 
     outros = []
     if ocs_vinculadas_ids:
@@ -422,6 +494,8 @@ def salvar_po(
         processo.id_op = gerar_id_op(tipo_operacao)
     if ainda_editavel or not processo.po_numero:
         processo.po_numero = f"PO-{processo.id_op}"
+    processo.direcao_operacao = direcao_operacao
+    processo.modal_transporte = modal_transporte
     processo.pagador_frete = pagador_frete
     processo.frete_aplicavel = pagador_frete == "Columbia"
     processo.po_ocs_vinculadas = json.dumps(
@@ -430,6 +504,8 @@ def salvar_po(
     processo.po_status = "Finalizada" if finalizar else "Rascunho"
     processo.status_modulo = "PO"
     processo.status_slug = status_slug("PO")
+    if dados_operacionais:
+        _aplicar_campos_operacionais(processo, dados_operacionais)
     processo.atualizado_em = agora
     processo.atualizado_por = usuario
     db.session.commit()
@@ -551,3 +627,303 @@ def metricas_por_modulo() -> dict:
     for processo in ComexProcesso.query.with_entities(ComexProcesso.status_slug).all():
         contagens[processo.status_slug] = contagens.get(processo.status_slug, 0) + 1
     return contagens
+
+
+# ── Anexo de documentos (requisito geral: todo modulo precisa ter uma ─────
+# funcao de anexar documento) - mesmo padrao de storage das fotos de
+# expedicao (Drive ou disco local, conforme EXPEDICAO_FOTOS_STORAGE).
+def _documentos_dir() -> str:
+    return current_app.config.get("COMEX_DOCUMENTOS_DIR", "") or os.path.join(
+        current_app.instance_path, "comex_documentos"
+    )
+
+
+def anexar_documento(
+    processo: ComexProcesso,
+    *,
+    modulo: str,
+    dados: bytes,
+    file_name: str,
+    usuario: str,
+    titulo: str | None = None,
+    mimetype: str | None = None,
+) -> ComexDocumento:
+    """Anexa um documento ao processo, em qualquer modulo do workflow (nota
+    fiscal, BL/AWB, invoice, packing list, comprovante etc.)."""
+    if modulo not in MODULOS_SEQUENCIA:
+        raise ValueError("Módulo inválido para anexar documento.")
+    if not dados:
+        raise ValueError("Arquivo vazio.")
+    if not file_name:
+        raise ValueError("Nome de arquivo inválido.")
+
+    nome_no_storage = f"{processo.id_op}_{modulo}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{file_name}"
+    if storage.using_drive():
+        enviado = storage.upload_bytes_to_drive(dados, nome_no_storage, mimetype)
+        caminho = enviado.file_path
+    else:
+        pasta = _documentos_dir()
+        os.makedirs(pasta, exist_ok=True)
+        caminho = os.path.join(pasta, nome_no_storage)
+        with open(caminho, "wb") as f:
+            f.write(dados)
+
+    documento = ComexDocumento(
+        processo_id=processo.id,
+        modulo=modulo,
+        titulo=(titulo or "").strip() or None,
+        file_name=file_name,
+        file_path=caminho,
+        uploaded_by=usuario,
+    )
+    db.session.add(documento)
+    db.session.commit()
+    return documento
+
+
+def listar_documentos(processo: ComexProcesso, modulo: str | None = None) -> list[ComexDocumento]:
+    query = ComexDocumento.query.filter_by(processo_id=processo.id)
+    if modulo:
+        query = query.filter_by(modulo=modulo)
+    return query.order_by(ComexDocumento.id.desc()).all()
+
+
+# ── Cotacao (Modulo 3) - formulario publico, no formato do "modelo de ─────
+# cotação.xlsx" usado hoje pela empresa (2 variantes: FCL e LCL/Aereo).
+TIPOS_FRETE = ("FCL", "LCL_AEREO")
+
+# Etapas de custo, na mesma ordem do modelo (linhas 14-20 / 22-28 do Excel) -
+# usado tanto para somar o custo total quanto para montar a tabela na tela.
+ETAPAS_CUSTO_COTACAO = (
+    ("pick_up", "Pick-up"),
+    ("origem_charges", "Origem charges"),
+    ("frete_internacional", "International Freight"),
+    ("seguro", "Ensurance"),
+    ("destination_charges", "Destination Charges"),
+    ("docs_release", "Docs release"),
+    ("delivery", "Delivery"),
+)
+
+# Termos de consentimento (modelo de cotação.xlsx, linhas 37-49) - aceite
+# obrigatorio no formulario publico antes de enviar.
+TERMOS_COTACAO = {
+    "paragrafos": [
+        "A cotação deverá contemplar todos os custos necessários para a execução "
+        "integral da operação, incluindo frete, despesas operacionais, "
+        "administrativas, documentais e quaisquer outras taxas normalmente "
+        "aplicáveis à origem, transporte internacional e destino.",
+        "Os valores informados em Origin Charges e Destination Charges deverão "
+        "representar o custo total dessas etapas, não sendo aceitas cobranças "
+        "complementares ou taxas adicionais após a aprovação da cotação.",
+        "Serão aceitas exclusivamente as seguintes exceções:",
+    ],
+    "excecoes": [
+        "Movimentações extraordinárias entre recintos alfandegados não previstas "
+        "na operação original, desde que devidamente justificadas;",
+        "Taxas, tributos, emolumentos ou despesas exigidas por órgãos "
+        "governamentais, aduaneiros ou reguladores, mediante apresentação da "
+        "respectiva documentação comprobatória (fatura, guia de recolhimento ou "
+        "documento equivalente);",
+        "Alterações de escopo solicitadas pelo embarcador ou importador após a "
+        "aprovação da cotação.",
+    ],
+    "final": (
+        "Custos não informados, omitidos ou incorretamente avaliados pelo "
+        "prestador de serviço no momento da cotação serão considerados de sua "
+        "exclusiva responsabilidade e não poderão ser cobrados posteriormente."
+    ),
+}
+
+
+def _hash_token_cotacao(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def criar_link_cotacao(
+    processo: ComexProcesso,
+    *,
+    tipo_frete: str,
+    usuario: str,
+    email_instrucao_embarque: str | None = None,
+    validade_dias: int = 14,
+) -> tuple[ComexCotacao, str]:
+    """Gera um novo link publico de cotacao (Modulo 3) para um prestador de
+    frete preencher sem login. O token bruto so existe neste retorno - so o
+    hash fica salvo (mesmo padrao do convite de usuario). Move o processo
+    para o modulo Cotacao na primeira cotacao gerada."""
+    if tipo_frete not in TIPOS_FRETE:
+        raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
+    if processo.po_status != "Finalizada":
+        raise ValueError("Finalize a PO antes de gerar uma cotação.")
+
+    token = secrets.token_urlsafe(32)
+    agora = datetime.now()
+    cotacao = ComexCotacao(
+        processo_id=processo.id,
+        tipo_frete=tipo_frete,
+        status="Pendente",
+        origem=processo.fornecedor,  # ponto de partida sugerido; o prestador confirma/ajusta
+        token_publico_hash=_hash_token_cotacao(token),
+        token_publico_expira_em=agora + timedelta(days=max(1, validade_dias)),
+        email_instrucao_embarque=(email_instrucao_embarque or "").strip() or None,
+        link_gerado_em=agora,
+        criado_por=usuario,
+    )
+    db.session.add(cotacao)
+
+    if processo.status_modulo == "PO":
+        processo.status_modulo = "Cotacao"
+        processo.status_slug = status_slug("Cotacao")
+        processo.atualizado_em = agora
+        processo.atualizado_por = usuario
+
+    db.session.commit()
+    return cotacao, token
+
+
+def obter_cotacao_por_token(token: str) -> ComexCotacao | None:
+    if not token:
+        return None
+    return ComexCotacao.query.filter_by(token_publico_hash=_hash_token_cotacao(token)).first()
+
+
+def link_cotacao_valido(cotacao: ComexCotacao) -> bool:
+    if not cotacao or cotacao.status != "Pendente":
+        return False
+    if cotacao.token_publico_expira_em and cotacao.token_publico_expira_em < datetime.now():
+        return False
+    return True
+
+
+_CAMPOS_COTACAO_TEXTO = ("fornecedor_frete", "origem", "destino", "incoterm", "imo_classe", "un_numero", "transit_time", "rota")
+_CAMPOS_COTACAO_CUSTO = tuple(f"{prefixo}_{moeda}" for prefixo, _ in ETAPAS_CUSTO_COTACAO for moeda in ("usd", "brl"))
+
+
+def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao:
+    """Recebe o formulario publico preenchido pelo prestador de frete e
+    fecha a cotacao (Modulo 3). So aceita uma vez - o link fica invalido
+    depois (`link_cotacao_valido`)."""
+    if not link_cotacao_valido(cotacao):
+        raise ValueError("Este link de cotação já foi usado ou expirou.")
+    if not dados.get("termos_aceitos"):
+        raise ValueError("É necessário aceitar os termos de consentimento para enviar a cotação.")
+    if not str(dados.get("fornecedor_frete") or "").strip():
+        raise ValueError("Informe o nome do prestador de frete.")
+
+    for campo in _CAMPOS_COTACAO_TEXTO:
+        if campo in dados:
+            valor = str(dados.get(campo) or "").strip()
+            setattr(cotacao, campo, valor[:200] or None)
+
+    if cotacao.tipo_frete == "FCL":
+        cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))
+        cotacao.qtd_20dry = _to_int(dados.get("qtd_20dry"))
+    else:
+        cotacao.transit_time = str(dados.get("transit_time") or "").strip()[:60] or None
+        cotacao.validade = _parse_date(dados.get("validade"))
+        cotacao.ptax = _to_float(dados.get("ptax"))
+        ComexCotacaoVolume.query.filter_by(cotacao_id=cotacao.id).delete()
+        for idx, vol in enumerate(dados.get("volumes") or [], start=1):
+            if not any(vol.get(k) for k in ("comprimento", "largura", "altura", "peso")):
+                continue
+            db.session.add(ComexCotacaoVolume(
+                cotacao_id=cotacao.id,
+                numero=idx,
+                comprimento=_to_float(vol.get("comprimento")),
+                largura=_to_float(vol.get("largura")),
+                altura=_to_float(vol.get("altura")),
+                peso=_to_float(vol.get("peso")),
+            ))
+
+    total_usd = 0.0
+    total_brl = 0.0
+    for campo in _CAMPOS_COTACAO_CUSTO:
+        valor = _to_float(dados.get(campo))
+        setattr(cotacao, campo, valor)
+        if valor:
+            if campo.endswith("_usd"):
+                total_usd += valor
+            else:
+                total_brl += valor
+    cotacao.custo_total_usd = round(total_usd, 2)
+    cotacao.custo_total_brl = round(total_brl, 2)
+
+    agora = datetime.now()
+    cotacao.termos_aceitos = True
+    cotacao.termos_aceitos_em = agora
+    cotacao.status = "Recebida"
+    cotacao.recebida_em = agora
+    db.session.commit()
+
+    _recalcular_sugerida(cotacao.processo_id)
+    db.session.commit()
+    return cotacao
+
+
+def _recalcular_sugerida(processo_id: int) -> None:
+    """Marca como `is_sugerida_pelo_sistema` a cotacao Recebida de menor
+    custo total em USD para o processo - recalculado a cada nova cotacao
+    recebida (a sugestao pode mudar de "dona" com o tempo)."""
+    recebidas = (
+        ComexCotacao.query
+        .filter_by(processo_id=processo_id, status="Recebida")
+        .order_by(ComexCotacao.custo_total_usd.asc())
+        .all()
+    )
+    for idx, c in enumerate(recebidas):
+        c.is_sugerida_pelo_sistema = (idx == 0)
+
+
+def listar_cotacoes(processo: ComexProcesso) -> list[ComexCotacao]:
+    return (
+        ComexCotacao.query
+        .filter_by(processo_id=processo.id)
+        .order_by(ComexCotacao.link_gerado_em.desc())
+        .all()
+    )
+
+
+def escolher_cotacao(cotacao: ComexCotacao, *, usuario: str, justificativa: str | None = None) -> ComexProcesso:
+    """Modulo 3 - o operador escolhe a cotacao vencedora entre as recebidas.
+    Se nao for a sugerida pelo sistema (menor custo), exige justificativa."""
+    if cotacao.status != "Recebida":
+        raise ValueError("Só é possível escolher uma cotação que já foi recebida do prestador.")
+    justificativa = (justificativa or "").strip()
+    if not cotacao.is_sugerida_pelo_sistema and not justificativa:
+        raise ValueError("Informe a justificativa para escolher uma cotação diferente da sugerida pelo sistema (menor custo).")
+
+    ComexCotacao.query.filter_by(processo_id=cotacao.processo_id).update({"is_escolhida": False})
+    cotacao.is_escolhida = True
+
+    processo = cotacao.processo
+    processo.cotacao_vencedora_id = cotacao.id
+    processo.cotacao_justificativa = justificativa or None
+    processo.atualizado_em = datetime.now()
+    processo.atualizado_por = usuario
+    db.session.commit()
+    return processo
+
+
+def _to_int(valor):
+    if valor in (None, ""):
+        return None
+    try:
+        return int(float(valor))
+    except (TypeError, ValueError):
+        return None
+
+
+def apagar_documento(documento: ComexDocumento) -> None:
+    if storage.is_external_url(documento.file_path):
+        try:
+            storage.delete_drive_url(documento.file_path)
+        except Exception:
+            current_app.logger.exception("Falha ao apagar documento Comex do Drive (id=%s)", documento.id)
+    else:
+        try:
+            if documento.file_path and os.path.exists(documento.file_path):
+                os.remove(documento.file_path)
+        except OSError:
+            current_app.logger.exception("Falha ao apagar documento Comex do disco (id=%s)", documento.id)
+    db.session.delete(documento)
+    db.session.commit()
