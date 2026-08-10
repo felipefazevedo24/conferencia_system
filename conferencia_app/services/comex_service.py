@@ -502,14 +502,33 @@ def salvar_po(
         [processo.cod_ordem_compra, *[o.cod_ordem_compra for o in outros]], default=str
     )
     processo.po_status = "Finalizada" if finalizar else "Rascunho"
-    processo.status_modulo = "PO"
-    processo.status_slug = status_slug("PO")
+    if finalizar:
+        processo.po_finalizada_sem_envio = True
+        avancar_modulo_apos_po_finalizada(processo)
+    elif MODULOS_SEQUENCIA.index(processo.status_modulo) <= MODULOS_SEQUENCIA.index("PO"):
+        processo.status_modulo = "PO"
+        processo.status_slug = status_slug("PO")
     if dados_operacionais:
         _aplicar_campos_operacionais(processo, dados_operacionais)
     processo.atualizado_em = agora
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
+
+
+def avancar_modulo_apos_po_finalizada(processo: ComexProcesso) -> None:
+    """Ao finalizar a PO - seja pelo botão "Finalizar sem enviar e-mail" ou
+    pelo envio de e-mail da PO - avanca o processo pro proximo modulo certo:
+    se a Columbia paga o frete, ela mesma precisa cotar (Modulo 3); se o
+    pagador e o cliente/fornecedor, a cotacao nao e responsabilidade da
+    Columbia e o processo pula direto pra Instrucao de Embarque (Modulo 4).
+    So avanca se o processo ainda estiver na PO ou antes dela - nunca
+    retrocede quem ja passou desse ponto (ex.: reenviar o e-mail depois)."""
+    if MODULOS_SEQUENCIA.index(processo.status_modulo) > MODULOS_SEQUENCIA.index("PO"):
+        return
+    proximo_modulo = "Cotacao" if processo.pagador_frete == "Columbia" else "Instrucao"
+    processo.status_modulo = proximo_modulo
+    processo.status_slug = status_slug(proximo_modulo)
 
 
 def salvar_itens_po(processo: ComexProcesso, itens: list[dict]) -> list[ComexPoItem]:
@@ -906,24 +925,29 @@ def escolher_cotacao(cotacao: ComexCotacao, *, usuario: str, justificativa: str 
 
 # ── Instrucao de Embarque (Modulo 4, versao minima) ────────────────────
 def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> ComexProcesso:
-    """So depois que uma cotacao e escolhida (Modulo 3 concluido) que os
-    dados gerais de operacao (Ref. Despachante, BL/AWB, Invoice, ETD, ETA,
-    Previsao Entrega, Entrega Real, NF Impo, NF Recebimento) sao conhecidos
-    e ficam liberados para edicao - antes disso o operador nao tem essa
-    informacao ainda. Reaproveita `_aplicar_campos_operacionais` (mesmos
-    campos usados em `salvar_po`). Pode ser chamada de novo depois (os
-    campos continuam editaveis), so avanca o modulo na primeira vez."""
+    """Libera os dados gerais de operacao (Ref. Despachante, BL/AWB,
+    Invoice, ETD, ETA, Previsao Entrega, Entrega Real, NF Impo, NF
+    Recebimento) para edicao. So chega aqui de duas formas: (a) o pagador
+    do frete e a Columbia - precisa de uma cotacao escolhida primeiro
+    (Modulo 3); ou (b) o pagador e o cliente/fornecedor - a cotacao nao e
+    responsabilidade da Columbia, entao `salvar_po` ja avanca direto pra
+    "Instrucao" sem passar por "Cotacao". Reaproveita
+    `_aplicar_campos_operacionais` (mesmos campos usados em `salvar_po`).
+    Pode ser chamada de novo depois (os campos continuam editaveis) - a
+    deteccao de "primeira vez" usa `instrucao_enviada_em`, nao a transicao
+    de modulo, porque o caminho (b) ja chega em "Instrucao" direto."""
     if processo.status_modulo == "Cotacao" and not processo.cotacao_vencedora_id:
         raise ValueError("Escolha uma cotação de frete antes de enviar a instrução de embarque.")
     if processo.status_modulo not in ("Cotacao", "Instrucao"):
-        raise ValueError("A instrução de embarque só pode ser enviada depois da cotação escolhida.")
+        raise ValueError("A instrução de embarque só pode ser enviada depois da PO finalizada.")
 
     agora = datetime.now()
-    primeira_vez = processo.status_modulo == "Cotacao"
+    primeira_vez = processo.instrucao_enviada_em is None
     _aplicar_campos_operacionais(processo, dados)
-    if primeira_vez:
+    if processo.status_modulo != "Instrucao":
         processo.status_modulo = "Instrucao"
         processo.status_slug = status_slug("Instrucao")
+    if primeira_vez:
         processo.instrucao_enviada_em = agora
         processo.instrucao_enviada_por = usuario
     processo.atualizado_em = agora

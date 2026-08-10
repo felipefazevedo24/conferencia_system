@@ -414,6 +414,11 @@ def api_enviar_email_po(processo_id):
     processo.po_enviada_por = session.get("username", "desconhecido")
     processo.po_destinatarios_email = "; ".join(destinatarios)
     processo.po_finalizada_sem_envio = False
+    # Enviar o e-mail da PO finaliza ela (mesmo efeito de "Finalizar sem
+    # enviar e-mail") e avanca o processo pro proximo modulo certo (Cotacao
+    # se a Columbia paga o frete, Instrucao se nao paga).
+    processo.po_status = "Finalizada"
+    svc.avancar_modulo_apos_po_finalizada(processo)
     processo.atualizado_em = agora
     processo.atualizado_por = session.get("username", "desconhecido")
     db.session.commit()
