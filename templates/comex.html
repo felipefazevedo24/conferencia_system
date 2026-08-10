@@ -887,7 +887,9 @@
         $("cx-po-modal").value = p.po_numero ? (p.modal_transporte || "") : "";
         atualizarLabelFornecedor();
         $("cx-po-pagador-frete").value = p.pagador_frete || "";
-        $("cx-po-data").value = p.po_data || "";
+        // Sugere a data da OC (ja trazida da bridge na importacao) como
+        // ponto de partida - o operador pode ajustar antes de salvar.
+        $("cx-po-data").value = p.po_data || (p.dt_lancamento_oc ? p.dt_lancamento_oc.slice(0, 10) : "");
         $("cx-po-outras-ocs").innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
         itensPoAtual = [];
         renderItensPo();
