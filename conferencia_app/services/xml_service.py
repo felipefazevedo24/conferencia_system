@@ -82,21 +82,35 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
             ".//{*}Numero",
             ".//{*}NumeroNfse",
             ".//{*}numero_nfse",
+            ".//{*}NumeroNota",
+            ".//{*}NroNfse",
+            ".//{*}NroNota",
+            ".//{*}NumeroRps",
         ],
     )
     if not numero_nota:
-        numero_nota = _first_text_by_local_names(root, ["numero", "numeronfse", "numero_nfse", "numnfse"])
+        # Tenta encontrar <Numero> dentro de um contexto específico de NFS-e
+        for _ctx in root.iter():
+            if _local_name(_ctx.tag) in {"infnfse", "compnfse", "nfse", "listanfse"}:
+                _inner = _first_text_by_local_names(_ctx, ["numero", "numeronfse"])
+                if _inner and _inner.isdigit():
+                    numero_nota = _inner
+                    break
+    if not numero_nota:
+        numero_nota = _first_text_by_local_names(root, ["numeronfse", "numero_nfse", "numnfse"])
 
     codigo_verificacao = _first_text_any(root, [".//{*}CodigoVerificacao", ".//{*}codigo_verificacao"])
     if not codigo_verificacao:
         codigo_verificacao = _first_text_by_local_names(root, ["codigoverificacao", "codigo_verificacao"])
 
     if not numero_nota:
-        id_digits = _digits(id_externo)
-        if id_digits:
-            numero_nota = id_digits[-20:]
-        elif codigo_verificacao:
+        # Preferir código de verificação sobre dígitos do ID externo (que pode ser muito longo)
+        if codigo_verificacao:
             numero_nota = f"NFSE-{str(codigo_verificacao).strip()}"[:20]
+        else:
+            id_digits = _digits(id_externo)
+            if id_digits:
+                numero_nota = id_digits[-20:]
 
     if not numero_nota:
         return 0
@@ -112,8 +126,22 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
             ".//{*}PrestadorServico/{*}RazaoSocial",
             ".//{*}Prestador/{*}RazaoSocial",
             ".//{*}prestador_razao_social",
+            ".//{*}RazaoSocialPrestador",
+            ".//{*}NomePrestador",
         ],
     )
+    if not fornecedor:
+        for _ctx in root.iter():
+            if _local_name(_ctx.tag) in {"prestadorservico", "prestador", "dadosprestador", "infprestador"}:
+                fornecedor = _first_text_by_local_names(_ctx, ["razaosocial", "razao_social", "nome", "nomeprestador"])
+                if fornecedor:
+                    break
+    if not fornecedor:
+        # Último recurso: primeira RazaoSocial no documento (normalmente é o prestador)
+        for _nraw in root.iter():
+            if _local_name(_nraw.tag) in {"razaosocial", "razao_social"} and _nraw.text and _nraw.text.strip():
+                fornecedor = _nraw.text.strip()
+                break
     tomador = _first_text_any(
         root,
         [

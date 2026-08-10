@@ -217,6 +217,9 @@ class ItemNota(db.Model):
     # Quantidade de chapas em UND informada pelo conferente para material
     # recebido em peso (KG). Auditavel e enviada no aviso de entrada de chapa.
     qtd_chapas_und = db.Column(db.Float, nullable=True)
+    # Caminho relativo ao instance_path do anexo para documentos não fiscais
+    # (faturas, contas, notas de débito etc.). Ex: "doc_entrada_anexos/42/42_FATURA.pdf"
+    anexo_path = db.Column(db.String(300), nullable=True)
 
 
 class ConferenciaRecebimento(db.Model):

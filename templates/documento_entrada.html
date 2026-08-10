@@ -460,6 +460,75 @@
                 <div id="status" style="margin-top:10px;"></div>
             </div>
         </div>
+
+        <!-- Documento não fiscal (fatura, conta, débito etc.) -->
+        <div class="eui-card de-import-toggle" style="margin-top:0;">
+            <div class="eui-card__head" style="cursor:pointer;" id="de-nf-toggle-head">
+                <h2 class="eui-card__title"><i class="fas fa-file-invoice-dollar"></i> Documento Não Fiscal</h2>
+                <button class="eui-btn eui-btn--ghost eui-btn--sm" type="button" id="de-nf-toggle-btn"><i class="fas fa-chevron-down"></i></button>
+            </div>
+            <div class="eui-card__body de-import-body hidden" id="de-nf-body">
+                <p style="font-size:12px; color:#64748b; margin-bottom:14px;">Registre faturas, notas de débito, contas e outros documentos não eletrônicos, vinculando-os a uma ordem de compra.</p>
+                <div class="de-import-grid">
+                    <div class="de-import-col">
+                        <span class="de-import-col__title"><i class="fas fa-file-alt"></i> Dados do documento</span>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Tipo de documento</label>
+                            <select id="nf-tipo" class="eui-input">
+                                <option value="FATURA">Fatura</option>
+                                <option value="DEBITO">Nota de Débito</option>
+                                <option value="CONTA">Conta</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Número do documento *</label>
+                            <input type="text" id="nf-numero" class="eui-input" placeholder="Ex: FAT-2026-0123">
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Valor (R$)</label>
+                            <input type="number" id="nf-valor" class="eui-input" placeholder="0,00" min="0" step="0.01">
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Observação</label>
+                            <input type="text" id="nf-obs" class="eui-input" placeholder="Descrição ou referência do documento">
+                        </div>
+                    </div>
+                    <div class="de-import-col">
+                        <span class="de-import-col__title"><i class="fas fa-link"></i> Vínculo com Ordem de Compra</span>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Número da OC</label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="nf-oc" class="eui-input" placeholder="Ex: OC-2026-0001">
+                                <button id="btn-nf-oc-buscar" class="eui-btn eui-btn--primary" type="button" onclick="buscarOcParaDocNF()"><i class="fas fa-search"></i> Buscar</button>
+                            </div>
+                            <div id="nf-oc-status" style="display:none; margin-top:8px; border-radius:8px; padding:10px 12px; font-size:12px; font-weight:700;"></div>
+                        </div>
+                        <div class="eui-field">
+                            <label class="eui-field__label">Fornecedor</label>
+                            <input type="text" id="nf-fornecedor" class="eui-input" placeholder="Preenchido automaticamente pela OC ou informe manualmente">
+                        </div>
+                        <div id="nf-oc-linhas-wrap" style="display:none; margin-top:6px;">
+                            <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#64748b; margin-bottom:6px;">Itens da OC</div>
+                            <div id="nf-oc-linhas" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;"></div>
+                        </div>
+                        <div id="nf-anexo-wrap" style="margin-top:14px;">
+                            <label class="eui-field__label">Anexo (PDF/imagem) <span id="nf-anexo-badge" style="color:#64748b; font-weight:600; text-transform:none;">— opcional para todos os tipos</span></label>
+                            <div class="file-drop-area" id="nf-drop-area" style="min-height:60px;">
+                                <i class="fas fa-paperclip" style="font-size:20px; color:var(--sap-blue); opacity:.6;"></i>
+                                <span class="file-msg" id="nf-file-msg">Selecione PDF, PNG ou JPG</span>
+                                <input type="file" id="nf-arquivo" accept=".pdf,.png,.jpg,.jpeg" onchange="nfArquivoSelecionado()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:14px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button type="button" class="eui-btn eui-btn--ghost" onclick="limparFormDocNF()"><i class="fas fa-eraser"></i> Limpar</button>
+                    <button id="btn-nf-adicionar" type="button" class="eui-btn eui-btn--success" onclick="adicionarDocNF()"><i class="fas fa-plus"></i> Registrar documento</button>
+                </div>
+                <div id="nf-feedback" style="display:none; margin-top:10px; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:700;"></div>
+            </div>
+        </div>
         </div><!-- /de-hub-view -->
 
         <!-- ===== TELA FOCADA POR ESTAGIO ===== -->
@@ -968,6 +1037,110 @@
         body.classList.toggle('hidden');
         btn.innerHTML = body.classList.contains('hidden') ? '<i class="fas fa-chevron-down"></i>' : '<i class="fas fa-chevron-up"></i>';
     });
+
+    // Toggle do painel de documento não fiscal
+    document.getElementById('de-nf-toggle-head').addEventListener('click', () => {
+        const body = document.getElementById('de-nf-body');
+        const btn = document.getElementById('de-nf-toggle-btn');
+        body.classList.toggle('hidden');
+        btn.innerHTML = body.classList.contains('hidden') ? '<i class="fas fa-chevron-down"></i>' : '<i class="fas fa-chevron-up"></i>';
+    });
+
+    /* ======================================================================
+       DOCUMENTO NÃO FISCAL — busca OC, upload e registro
+       ====================================================================== */
+
+    function nfArquivoSelecionado() {
+        const input = document.getElementById('nf-arquivo');
+        const msg = document.getElementById('nf-file-msg');
+        msg.textContent = input.files.length ? input.files[0].name : 'Selecione PDF, PNG ou JPG';
+    }
+
+    function nfStatusOC(msg, tipo) {
+        const box = document.getElementById('nf-oc-status');
+        box.style.display = 'block';
+        const cores = { ok: { bg: '#f0fdf4', color: '#166534', border: '#a7f3d0' }, err: { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' }, info: { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' } };
+        const c = cores[tipo] || cores.info;
+        box.style.background = c.bg; box.style.color = c.color; box.style.border = `1px solid ${c.border}`;
+        box.textContent = msg;
+    }
+
+    async function buscarOcParaDocNF() {
+        const numero = (document.getElementById('nf-oc').value || '').trim();
+        if (!numero) { alert('Informe o número da OC.'); return; }
+        const btn = document.getElementById('btn-nf-oc-buscar');
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const r = await fetch(`/api/xml_auditor/lookup_oc?numero=${encodeURIComponent(numero)}`);
+            const d = await r.json();
+            if (!r.ok || !d.sucesso) { nfStatusOC(d.msg || 'OC não encontrada', 'err'); document.getElementById('nf-oc-linhas-wrap').style.display = 'none'; return; }
+            nfStatusOC(`✔ OC encontrada · Fornecedor: ${d.fornecedor || 'N/D'} · Total estimado: R$ ${Number(d.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'ok');
+            if (d.fornecedor) document.getElementById('nf-fornecedor').value = d.fornecedor;
+            const linhasWrap = document.getElementById('nf-oc-linhas-wrap');
+            const linhasDiv = document.getElementById('nf-oc-linhas');
+            if (d.linhas && d.linhas.length) {
+                linhasDiv.innerHTML = d.linhas.map((l) => `
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:11px;">
+                        <strong>${escapeHtml(l.codigo_material || '---')}</strong> — ${escapeHtml(l.descricao_material || '---')}
+                        <span style="color:#64748b; margin-left:8px;">Qtd ${Number(l.qtd || 0).toLocaleString('pt-BR')} · R$ ${Number(l.valor_unit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/un</span>
+                    </div>`).join('');
+                linhasWrap.style.display = 'block';
+            } else {
+                linhasWrap.style.display = 'none';
+            }
+        } catch (e) {
+            nfStatusOC('Falha ao consultar OC: ' + (e.message || e), 'err');
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> Buscar';
+        }
+    }
+
+    async function adicionarDocNF() {
+        const numero = (document.getElementById('nf-numero').value || '').trim();
+        if (!numero) { alert('Informe o número do documento.'); return; }
+        const btn = document.getElementById('btn-nf-adicionar');
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
+        const fd = new FormData();
+        fd.append('tipo', document.getElementById('nf-tipo').value);
+        fd.append('numero_documento', numero);
+        fd.append('pedido_compra', document.getElementById('nf-oc').value || '');
+        fd.append('fornecedor', document.getElementById('nf-fornecedor').value || '');
+        fd.append('valor', document.getElementById('nf-valor').value || '0');
+        fd.append('observacao', document.getElementById('nf-obs').value || '');
+        const arquivoInput = document.getElementById('nf-arquivo');
+        if (arquivoInput.files.length) fd.append('arquivo', arquivoInput.files[0]);
+        try {
+            const r = await fetch('/api/documento_entrada/nao_fiscal', { method: 'POST', body: fd });
+            const d = await r.json();
+            const feedEl = document.getElementById('nf-feedback');
+            feedEl.style.display = 'block';
+            if (r.ok && d.sucesso) {
+                feedEl.style.background = '#f0fdf4'; feedEl.style.color = '#166534'; feedEl.style.border = '1px solid #a7f3d0';
+                feedEl.textContent = `✔ ${d.msg || 'Documento registrado'} (nº ${d.numero})`;
+                limparFormDocNF(false);
+                await recarregarTudo();
+            } else {
+                feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+                feedEl.textContent = d.msg || 'Falha ao registrar documento';
+            }
+        } catch (e) {
+            const feedEl = document.getElementById('nf-feedback');
+            feedEl.style.display = 'block'; feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+            feedEl.textContent = 'Erro de conexão: ' + (e.message || e);
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> Registrar documento';
+        }
+    }
+
+    function limparFormDocNF(limparFeedback = true) {
+        ['nf-numero', 'nf-oc', 'nf-fornecedor', 'nf-valor', 'nf-obs'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+        document.getElementById('nf-tipo').value = 'FATURA';
+        document.getElementById('nf-arquivo').value = '';
+        document.getElementById('nf-file-msg').textContent = 'Selecione PDF, PNG ou JPG';
+        document.getElementById('nf-oc-status').style.display = 'none';
+        document.getElementById('nf-oc-linhas-wrap').style.display = 'none';
+        if (limparFeedback) document.getElementById('nf-feedback').style.display = 'none';
+    }
 
     function mostrarPainel(id) {
         document.querySelectorAll('.de-panel').forEach((p) => p.classList.remove('is-visible'));
