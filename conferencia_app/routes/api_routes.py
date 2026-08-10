@@ -2312,6 +2312,130 @@ def documento_entrada_lista():
     return jsonify({"total": total, "page": page, "page_size": page_size, "notas": notas})
 
 
+# ---------------------------------------------------------------------------
+# Documentos não fiscais (faturas, contas, notas de débito etc.)
+# ---------------------------------------------------------------------------
+
+@api_bp.route("/api/xml_auditor/lookup_oc", methods=["GET"])
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR")
+def lookup_oc():
+    """Retorna dados da OC (fornecedor + linhas) sem exigir nota vinculada."""
+    numero = str(request.args.get("numero") or "").strip()
+    if not numero:
+        return jsonify({"sucesso": False, "msg": "Informe o número do pedido"}), 400
+    try:
+        linhas = buscar_linhas_pedido(numero)
+    except Exception as exc:
+        current_app.logger.warning("lookup_oc: erro ao buscar OC %s: %s", numero, exc)
+        return jsonify({"sucesso": False, "msg": str(exc)}), 500
+
+    if not linhas:
+        return jsonify({"sucesso": False, "msg": f"Pedido '{numero}' não encontrado"}), 404
+
+    fornecedor = next((l.get("fornecedor_nome") for l in linhas if l.get("fornecedor_nome")), "")
+    valor_total = sum(
+        float(l.get("qtd") or 0) * float(l.get("valor_unit") or 0) for l in linhas
+    )
+    return jsonify({
+        "sucesso": True,
+        "pedido": numero,
+        "fornecedor": fornecedor,
+        "valor_total": round(valor_total, 2),
+        "linhas": [
+            {
+                "codigo_material": l.get("codigo_material", ""),
+                "descricao_material": l.get("descricao_material", ""),
+                "qtd": l.get("qtd", 0),
+                "valor_unit": l.get("valor_unit", 0),
+            }
+            for l in linhas[:20]
+        ],
+    })
+
+
+_TIPOS_DOC_NAO_FISCAL = {"FATURA", "DEBITO", "CONTA", "OUTRO"}
+_EXTENSOES_ANEXO_VALIDAS = {".pdf", ".png", ".jpg", ".jpeg"}
+
+
+@api_bp.route("/api/documento_entrada/nao_fiscal", methods=["POST"])
+@permission_required("PAGE_UPLOAD")
+def criar_documento_nao_fiscal():
+    """Cria um documento não fiscal (fatura, conta, etc.) vinculado a uma OC."""
+    tipo = str(request.form.get("tipo") or "FATURA").strip().upper()
+    if tipo not in _TIPOS_DOC_NAO_FISCAL:
+        tipo = "FATURA"
+
+    numero_documento = str(request.form.get("numero_documento") or "").strip()
+    pedido_compra = str(request.form.get("pedido_compra") or "").strip()
+    fornecedor = str(request.form.get("fornecedor") or "").strip()
+    valor_str = str(request.form.get("valor") or "0").replace(",", ".").strip()
+    observacao = str(request.form.get("observacao") or "").strip()[:300]
+
+    if not numero_documento:
+        return jsonify({"sucesso": False, "msg": "Número do documento é obrigatório"}), 400
+
+    try:
+        valor = float(valor_str) if valor_str else 0.0
+    except ValueError:
+        valor = 0.0
+
+    # Valida duplicidade: mesmo número + tipo + pedido
+    dup_q = ItemNota.query.filter_by(numero_nota=numero_documento[:20], tipo_documento=tipo)
+    if pedido_compra:
+        dup_q = dup_q.filter_by(pedido_compra=pedido_compra[:50])
+    if dup_q.first():
+        return jsonify({"sucesso": False, "msg": "Documento já cadastrado com este número e tipo"}), 409
+
+    item = ItemNota(
+        tipo_documento=tipo,
+        numero_nota=numero_documento[:20],
+        fornecedor=(fornecedor or "Não informado")[:100],
+        pedido_compra=pedido_compra[:50] if pedido_compra else None,
+        cfop="",
+        codigo="DOC-NAO-FISCAL",
+        descricao=(f"{observacao}" or f"Documento não fiscal ({tipo})")[:200],
+        qtd_real=1.0,
+        unidade_comercial="UN",
+        valor_produto=valor,
+        status="Concluído",
+        usuario_importacao=session["username"],
+        valor_total=f"R$ {valor:.2f}",
+        valor_imposto="---",
+        sem_conferencia_logistica=True,
+        auditor_status="SemInconsistencia",
+        auditor_decisao="XML Aprovado",
+    )
+    db.session.add(item)
+    db.session.flush()  # obtém item.id antes do commit
+
+    arquivo = request.files.get("arquivo")
+    if arquivo and arquivo.filename:
+        ext = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
+        if ext not in _EXTENSOES_ANEXO_VALIDAS:
+            db.session.rollback()
+            return jsonify({"sucesso": False, "msg": "Formato inválido. Use PDF, PNG ou JPG"}), 400
+        pasta = os.path.join(current_app.instance_path, "doc_entrada_anexos", str(item.id))
+        os.makedirs(pasta, exist_ok=True)
+        nome_arquivo = secure_filename(f"{item.id}_{numero_documento[:30]}{ext}")
+        arquivo.save(os.path.join(pasta, nome_arquivo))
+        item.anexo_path = os.path.join("doc_entrada_anexos", str(item.id), nome_arquivo)
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "Documento registrado com sucesso", "id": item.id, "numero": numero_documento})
+
+
+@api_bp.route("/api/documento_entrada/<int:item_id>/anexo", methods=["GET"])
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
+def baixar_anexo_nao_fiscal(item_id):
+    item = ItemNota.query.get_or_404(item_id)
+    if not item.anexo_path:
+        return jsonify({"error": "Nenhum anexo para este documento"}), 404
+    caminho = os.path.join(current_app.instance_path, item.anexo_path)
+    if not os.path.isfile(caminho):
+        return jsonify({"error": "Arquivo não encontrado"}), 404
+    return send_file(caminho, as_attachment=False)
+
+
 @api_bp.route("/api/permissoes/catalogo", methods=["GET"])
 @roles_required("Admin")
 def listar_catalogo_permissoes():
