@@ -2397,13 +2397,13 @@ def criar_documento_nao_fiscal():
         qtd_real=1.0,
         unidade_comercial="UN",
         valor_produto=valor,
-        status="AguardandoLiberacao",
+        status="Concluído",
         usuario_importacao=session["username"],
         valor_total=f"R$ {valor:.2f}",
         valor_imposto="---",
         sem_conferencia_logistica=True,
         auditor_status="SemInconsistencia",
-        auditor_decisao="PendenteDecisao",
+        auditor_decisao="XML Aprovado",
     )
     db.session.add(item)
     db.session.flush()  # obtém item.id antes do commit
