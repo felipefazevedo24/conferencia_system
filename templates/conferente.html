@@ -695,7 +695,16 @@
         }
         [data-theme="escuro"] .conf-menu__btn:hover,
         [data-theme="escuro"] .conf-menu__item:hover { background: var(--eui-surface-3) !important; }
+        [data-theme="escuro"] .modal-body { background: var(--eui-surface) !important; color: var(--eui-text) !important; }
         [data-theme="escuro"] .modal-foot { background: var(--eui-surface-2) !important; border-top-color: var(--eui-border) !important; }
+        [data-theme="escuro"] .table-container { background: var(--eui-surface-2) !important; border-color: var(--eui-border) !important; }
+        [data-theme="escuro"] .pendencia-item { background: var(--eui-surface-2) !important; border-color: var(--eui-border) !important; }
+        [data-theme="escuro"] .pendencia-item strong { color: var(--eui-text) !important; }
+        [data-theme="escuro"] .pendencia-item select,
+        [data-theme="escuro"] .pendencia-item textarea,
+        [data-theme="escuro"] .devolucao-textarea { background: var(--eui-surface) !important; color: var(--eui-text) !important; border-color: var(--eui-border) !important; }
+        [data-theme="escuro"] .confirm-box label { color: var(--eui-danger) !important; }
+        [data-theme="escuro"] #modal-resultado .modal-body *:not(i):not(button) { color: var(--eui-text); }
 
         [data-theme="escuro"] .validation-summary {
             background: var(--eui-surface-2);
@@ -710,8 +719,14 @@
             border-color: rgba(245, 158, 11, 0.30);
         }
         [data-theme="escuro"] .validation-summary i { background: var(--eui-surface); }
+        [data-theme="escuro"] .validation-summary.ok i { color: #4ade80; }
+        [data-theme="escuro"] .validation-summary.warn i { color: #fbbf24; }
         [data-theme="escuro"] .validation-summary strong,
         [data-theme="escuro"] .validation-summary span { color: var(--eui-text); }
+        [data-theme="escuro"] .result-status.ok { color: #4ade80; }
+        [data-theme="escuro"] .result-status.warn { color: #fbbf24; }
+        [data-theme="escuro"] #modal-resultado .resumo-val { color: var(--eui-text-soft) !important; }
+        [data-theme="escuro"] #modal-resultado .erp-table td > div { color: var(--eui-muted) !important; }
 
         [data-theme="escuro"] .rc-hist-head h3,
         [data-theme="escuro"] .rc-hist-desc,
@@ -1663,7 +1678,7 @@
                         <span>${ok ? 'As quantidades informadas estão compatíveis com a NF. Confirme para concluir o recebimento.' : 'Revise os itens abaixo ou registre a pendência com justificativa operacional.'}</span>
                     </div>
                 </div>
-                <div style="margin:0 0 12px; color:#475569; font-weight:700;">Resumo: ${dados?.resumo?.ok || 0} item(ns) sem divergência.</div>
+                <div class="resumo-val" style="margin:0 0 12px; color:#475569; font-weight:700;">Resumo: ${dados?.resumo?.ok || 0} item(ns) sem divergência.</div>
                 <table class="erp-table">${dados.itens.map(i => `<tr><td>${i.descricao}<div style="font-size:11px; color:#64748b; margin-top:4px;">${i.msg || ''}</div></td><td><span class="result-status ${i.status==='OK'?'ok':'warn'}"><i class="fas ${i.status==='OK'?'fa-check':'fa-triangle-exclamation'}"></i>${i.status}</span></td></tr>`).join('')}</table>`;
             recontarBtn.style.display = ok ? 'none' : 'inline-block';
             pendenciaBtn.style.display = ok ? 'none' : 'inline-block';
