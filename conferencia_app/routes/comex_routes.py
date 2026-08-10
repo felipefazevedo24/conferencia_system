@@ -75,6 +75,7 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "instrucao_enviada_em": p.instrucao_enviada_em.strftime("%d/%m/%Y %H:%M") if p.instrucao_enviada_em else None,
         "instrucao_enviada_por": p.instrucao_enviada_por,
         "cotacao_vencedora_id": p.cotacao_vencedora_id,
+        "cotacao_substatus": svc.cotacao_substatus(p),
     }
 
 

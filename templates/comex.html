@@ -337,6 +337,9 @@
             <button class="cx-modal__close" id="cx-fechar-cotacao"><i class="fas fa-xmark"></i></button>
         </div>
         <div class="cx-modal__body">
+            <div class="cx-field" id="cx-cot-substatus-wrap">
+                <span class="eui-badge" id="cx-cot-substatus-badge"></span>
+            </div>
             <div class="cx-section-title">Gerar novo link de cotação</div>
             <div class="cx-grid-2">
                 <div class="cx-field">
@@ -529,7 +532,8 @@
             desembaraco: "#b45309", transporte: "#b45309", nf_cambio: "#15803d",
         };
         const cor = cores[p.status_slug] || "#475569";
-        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(p.status_modulo)}</span>`;
+        const label = p.cotacao_substatus ? `${p.status_modulo} · ${p.cotacao_substatus}` : p.status_modulo;
+        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(label)}</span>`;
     }
 
     function renderTabela(processos) {
@@ -1029,9 +1033,22 @@
         return simbolo + " " + (isNaN(n) ? "0,00" : n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
 
+    const CORES_SUBSTATUS_COTACAO = { "Não iniciado": "#94a3b8", "Em Cotação": "#0369a1", "Fechado": "#15803d" };
+
     async function abrirModalCotacao(p) {
         processoCotacaoAtual = p;
         $("cx-cot-id-op").textContent = p.id_op;
+        const substatusEl = $("cx-cot-substatus-badge");
+        if (p.cotacao_substatus) {
+            const cor = CORES_SUBSTATUS_COTACAO[p.cotacao_substatus] || "#475569";
+            substatusEl.textContent = p.cotacao_substatus;
+            substatusEl.style.background = cor + "1a";
+            substatusEl.style.color = cor;
+            substatusEl.style.border = `1px solid ${cor}40`;
+            $("cx-cot-substatus-wrap").classList.remove("hidden");
+        } else {
+            $("cx-cot-substatus-wrap").classList.add("hidden");
+        }
         $("cx-cot-email").value = "";
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");

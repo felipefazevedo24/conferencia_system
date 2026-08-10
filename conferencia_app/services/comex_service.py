@@ -902,6 +902,30 @@ def listar_cotacoes(processo: ComexProcesso) -> list[ComexCotacao]:
     )
 
 
+COTACAO_SUBSTATUS_NAO_INICIADO = "Não iniciado"
+COTACAO_SUBSTATUS_EM_COTACAO = "Em Cotação"
+COTACAO_SUBSTATUS_FECHADO = "Fechado"
+
+
+def cotacao_substatus(processo: ComexProcesso) -> str | None:
+    """Sub-status do Modulo 3: Nao iniciado (nenhum link gerado ainda) ->
+    Em Cotacao (pelo menos um link gerado, aguardando/comparando propostas)
+    -> Fechado (uma cotacao ja foi escolhida - so a partir daqui a acao
+    "Enviar Instrução de Embarque" fica disponivel). "Fechado" continua
+    valendo mesmo depois que o processo avanca pra Instrucao (o pagador do
+    frete e a Columbia, entao passou por Cotacao antes) - so retorna None
+    quando o processo nem chegou a Cotacao ainda, ou pulou ela de vez
+    (pagador do frete e o cliente/fornecedor)."""
+    if processo.cotacao_vencedora_id:
+        return COTACAO_SUBSTATUS_FECHADO
+    if processo.status_modulo != "Cotacao":
+        return None
+    tem_cotacoes = db.session.query(
+        ComexCotacao.query.filter_by(processo_id=processo.id).exists()
+    ).scalar()
+    return COTACAO_SUBSTATUS_EM_COTACAO if tem_cotacoes else COTACAO_SUBSTATUS_NAO_INICIADO
+
+
 def escolher_cotacao(cotacao: ComexCotacao, *, usuario: str, justificativa: str | None = None) -> ComexProcesso:
     """Modulo 3 - o operador escolhe a cotacao vencedora entre as recebidas.
     Se nao for a sugerida pelo sistema (menor custo), exige justificativa."""
