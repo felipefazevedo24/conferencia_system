@@ -336,6 +336,13 @@
     [data-theme="escuro"] .ce-vol-table thead th { background: var(--rec-surface-alt); color: var(--rec-ink-500); border-bottom-color: var(--rec-border); }
     [data-theme="escuro"] .ce-vol-table tbody td { color: var(--rec-ink-700); border-bottom-color: var(--rec-border); }
     [data-theme="escuro"] .ce-vol-table tbody td:first-child { color: var(--rec-ink-900); }
+    /* Documento não fiscal — modo escuro */
+    [data-theme="escuro"] #nf-tipo,
+    [data-theme="escuro"] #nf-tipo option { background: var(--rec-surface) !important; color: var(--rec-ink-900) !important; border-color: var(--rec-border) !important; }
+    [data-theme="escuro"] .nf-oc-linha { background: var(--rec-surface-alt) !important; border-color: var(--rec-border) !important; color: var(--rec-ink-700) !important; }
+    [data-theme="escuro"] .nf-oc-linha strong { color: var(--rec-ink-900) !important; }
+    [data-theme="escuro"] .nf-oc-linha span { color: var(--rec-ink-500) !important; }
+    [data-theme="escuro"] #nf-oc-linhas-wrap > div:first-child { color: var(--rec-ink-500) !important; }
 
     [data-theme="escuro"] #decisaoInconsistenciaBox {
         border-color: rgba(239, 68, 68, .30) !important;
@@ -474,7 +481,7 @@
                         <span class="de-import-col__title"><i class="fas fa-file-alt"></i> Dados do documento</span>
                         <div class="eui-field">
                             <label class="eui-field__label">Tipo de documento</label>
-                            <select id="nf-tipo" class="eui-input">
+                            <select id="nf-tipo" class="eui-input" style="appearance:auto;">
                                 <option value="FATURA">Fatura</option>
                                 <option value="DEBITO">Nota de Débito</option>
                                 <option value="CONTA">Conta</option>
@@ -484,10 +491,6 @@
                         <div class="eui-field">
                             <label class="eui-field__label">Número do documento *</label>
                             <input type="text" id="nf-numero" class="eui-input" placeholder="Ex: FAT-2026-0123">
-                        </div>
-                        <div class="eui-field">
-                            <label class="eui-field__label">Valor (R$)</label>
-                            <input type="number" id="nf-valor" class="eui-input" placeholder="0,00" min="0" step="0.01">
                         </div>
                         <div class="eui-field">
                             <label class="eui-field__label">Observação</label>
@@ -513,7 +516,7 @@
                             <div id="nf-oc-linhas" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;"></div>
                         </div>
                         <div id="nf-anexo-wrap" style="margin-top:14px;">
-                            <label class="eui-field__label">Anexo (PDF/imagem) <span id="nf-anexo-badge" style="color:#64748b; font-weight:600; text-transform:none;">— opcional para todos os tipos</span></label>
+                            <label class="eui-field__label">Anexo (PDF/imagem) <span style="color:#dc2626; font-weight:800;">*</span> <span id="nf-anexo-badge" style="color:#64748b; font-weight:600; text-transform:none;">— obrigatório</span></label>
                             <div class="file-drop-area" id="nf-drop-area" style="min-height:60px;">
                                 <i class="fas fa-paperclip" style="font-size:20px; color:var(--sap-blue); opacity:.6;"></i>
                                 <span class="file-msg" id="nf-file-msg">Selecione PDF, PNG ou JPG</span>
@@ -1080,7 +1083,7 @@
             const linhasDiv = document.getElementById('nf-oc-linhas');
             if (d.linhas && d.linhas.length) {
                 linhasDiv.innerHTML = d.linhas.map((l) => `
-                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:11px;">
+                    <div class="nf-oc-linha" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:11px;">
                         <strong>${escapeHtml(l.codigo_material || '---')}</strong> — ${escapeHtml(l.descricao_material || '---')}
                         <span style="color:#64748b; margin-left:8px;">Qtd ${Number(l.qtd || 0).toLocaleString('pt-BR')} · R$ ${Number(l.valor_unit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/un</span>
                     </div>`).join('');
@@ -1098,6 +1101,13 @@
     async function adicionarDocNF() {
         const numero = (document.getElementById('nf-numero').value || '').trim();
         if (!numero) { alert('Informe o número do documento.'); return; }
+        const arquivoInput = document.getElementById('nf-arquivo');
+        if (!arquivoInput.files.length) {
+            const feedEl = document.getElementById('nf-feedback');
+            feedEl.style.display = 'block'; feedEl.style.background = '#fef2f2'; feedEl.style.color = '#991b1b'; feedEl.style.border = '1px solid #fecaca';
+            feedEl.textContent = 'O anexo é obrigatório. Selecione o arquivo PDF ou imagem do documento.';
+            return;
+        }
         const btn = document.getElementById('btn-nf-adicionar');
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
         const fd = new FormData();
@@ -1105,10 +1115,8 @@
         fd.append('numero_documento', numero);
         fd.append('pedido_compra', document.getElementById('nf-oc').value || '');
         fd.append('fornecedor', document.getElementById('nf-fornecedor').value || '');
-        fd.append('valor', document.getElementById('nf-valor').value || '0');
         fd.append('observacao', document.getElementById('nf-obs').value || '');
-        const arquivoInput = document.getElementById('nf-arquivo');
-        if (arquivoInput.files.length) fd.append('arquivo', arquivoInput.files[0]);
+        fd.append('arquivo', arquivoInput.files[0]);
         try {
             const r = await fetch('/api/documento_entrada/nao_fiscal', { method: 'POST', body: fd });
             const d = await r.json();
@@ -1133,7 +1141,7 @@
     }
 
     function limparFormDocNF(limparFeedback = true) {
-        ['nf-numero', 'nf-oc', 'nf-fornecedor', 'nf-valor', 'nf-obs'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['nf-numero', 'nf-oc', 'nf-fornecedor', 'nf-obs'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
         document.getElementById('nf-tipo').value = 'FATURA';
         document.getElementById('nf-arquivo').value = '';
         document.getElementById('nf-file-msg').textContent = 'Selecione PDF, PNG ou JPG';

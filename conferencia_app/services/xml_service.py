@@ -71,8 +71,8 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
             id_externo = str(node.attrib.get("Id") or node.attrib.get("id") or "").strip()
             if id_externo:
                 break
-        if not id_externo:
-            id_externo = str(node.attrib.get("Id") or node.attrib.get("id") or "").strip()
+    # Nao usa id_externo de elementos genericos: poderia ser um ID de sessao
+    # da API que se repete em todas as requisicoes, gerando falso duplicado.
 
     numero_nota = _first_text_any(
         root,
@@ -93,11 +93,11 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
         for _ctx in root.iter():
             if _local_name(_ctx.tag) in {"infnfse", "compnfse", "nfse", "listanfse"}:
                 _inner = _first_text_by_local_names(_ctx, ["numero", "numeronfse"])
-                if _inner and _inner.isdigit():
-                    numero_nota = _inner
+                if _inner and _inner.strip():
+                    numero_nota = _inner.strip()
                     break
     if not numero_nota:
-        numero_nota = _first_text_by_local_names(root, ["numeronfse", "numero_nfse", "numnfse"])
+        numero_nota = _first_text_by_local_names(root, ["numero", "numeronfse", "numero_nfse", "numnfse"])
 
     codigo_verificacao = _first_text_any(root, [".//{*}CodigoVerificacao", ".//{*}codigo_verificacao"])
     if not codigo_verificacao:
