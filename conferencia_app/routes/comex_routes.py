@@ -77,6 +77,7 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "cotacao_vencedora_id": p.cotacao_vencedora_id,
         "cotacao_substatus": svc.cotacao_substatus(p),
         "po_subtotal_usd": svc.subtotal_itens_po(p),
+        "taxa_cambio_referencia": p.taxa_cambio_referencia,
     }
 
 
@@ -543,6 +544,7 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         **custos,
         "custo_total_usd": c.custo_total_usd,
         "custo_total_brl": c.custo_total_brl,
+        "custo_total_consolidado_brl": svc.custo_total_consolidado_brl(c),
         "is_sugerida_pelo_sistema": bool(c.is_sugerida_pelo_sistema),
         "is_escolhida": bool(c.is_escolhida),
         "email_instrucao_embarque": c.email_instrucao_embarque,
@@ -582,6 +584,24 @@ def api_listar_cotacoes(processo_id):
         return jsonify({"error": "Processo não encontrado."}), 404
     cotacoes = svc.listar_cotacoes(processo)
     return jsonify({"cotacoes": [_cotacao_payload(c) for c in cotacoes]})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/taxa-cambio", methods=["POST"])
+@permission_required(PERMISSION)
+def api_definir_taxa_cambio(processo_id):
+    """Taxa de câmbio de referência do processo (ex.: PTAX do dia) - usada
+    pra comparar o custo total de todas as cotações na mesma moeda,
+    independente da taxa que cada fornecedor informou por conta própria."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.definir_taxa_cambio(processo, payload.get("taxa_cambio_referencia"), usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Taxa de câmbio salva.", "processo": _processo_payload(processo)})
 
 
 @comex_bp.route("/api/comex/processos/<int:processo_id>/cotacoes", methods=["POST"])

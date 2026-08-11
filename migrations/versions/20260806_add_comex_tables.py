@@ -85,6 +85,7 @@ def upgrade():
             sa.Column("frete_aplicavel", sa.Boolean(), nullable=True),
             sa.Column("cotacao_vencedora_id", sa.Integer(), nullable=True),
             sa.Column("cotacao_justificativa", sa.Text(), nullable=True),
+            sa.Column("taxa_cambio_referencia", sa.Float(), nullable=True),
             # Modulos 4-7
             sa.Column("coleta_data", sa.DateTime(), nullable=True),
             sa.Column("em_transito_eta", sa.Date(), nullable=True),
@@ -223,6 +224,7 @@ def upgrade():
             ("nf_recebimento", sa.String(length=40)),
             ("instrucao_enviada_em", sa.DateTime()),
             ("instrucao_enviada_por", sa.String(length=100)),
+            ("taxa_cambio_referencia", sa.Float()),
         ]
         for nome, tipo in novas_colunas_processo:
             if nome not in cols_processo:

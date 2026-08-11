@@ -972,6 +972,35 @@ def listar_cotacoes(processo: ComexProcesso) -> list[ComexCotacao]:
     )
 
 
+def definir_taxa_cambio(processo: ComexProcesso, taxa: float | str | None, usuario: str) -> ComexProcesso:
+    """Define a taxa de cambio de referencia do processo (ex.: PTAX do dia),
+    usada pra converter o custo total de TODAS as cotacoes desse processo
+    pra um total consolidado em BRL - a mesma taxa vale pra qualquer
+    fornecedor comparado, em vez de cada um informar a sua."""
+    valor = _to_float(taxa)
+    if not valor or valor <= 0:
+        raise ValueError("Informe uma taxa de câmbio válida (maior que zero).")
+    processo.taxa_cambio_referencia = valor
+    processo.atualizado_em = datetime.now()
+    processo.atualizado_por = usuario
+    db.session.commit()
+    return processo
+
+
+def custo_total_consolidado_brl(cotacao: ComexCotacao) -> float | None:
+    """Custo total da cotacao convertido pra um unico valor em BRL, usando a
+    taxa de cambio de referencia do processo (a mesma pra todos os
+    fornecedores comparados) - (custo_total_usd * taxa) + custo_total_brl.
+    None se faltar a taxa ou nao houver nenhum custo lancado ainda."""
+    taxa = cotacao.processo.taxa_cambio_referencia if cotacao.processo else None
+    if not taxa:
+        return None
+    if cotacao.custo_total_usd is None and cotacao.custo_total_brl is None:
+        return None
+    total = (float(cotacao.custo_total_usd or 0) * taxa) + float(cotacao.custo_total_brl or 0)
+    return round(total, 2)
+
+
 COTACAO_SUBSTATUS_NAO_INICIADO = "Não iniciado"
 COTACAO_SUBSTATUS_EM_COTACAO = "Em Cotação"
 COTACAO_SUBSTATUS_FECHADO = "Fechado"

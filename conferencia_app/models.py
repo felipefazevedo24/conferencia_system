@@ -2577,6 +2577,12 @@ class ComexProcesso(db.Model):
     frete_aplicavel = db.Column(db.Boolean)  # deriva de pagador_frete == "Columbia"
     cotacao_vencedora_id = db.Column(db.Integer, db.ForeignKey("comex_cotacao.id"))
     cotacao_justificativa = db.Column(db.Text)
+    # Taxa de cambio de referencia (ex.: PTAX do dia), digitada uma vez pelo
+    # operador e usada pra converter o custo total de TODAS as cotacoes
+    # desse processo pra um total consolidado em BRL - garante que a
+    # comparacao entre fornecedores use a mesma taxa, nao a que cada um
+    # informou por conta propria.
+    taxa_cambio_referencia = db.Column(db.Float)
 
     # ── Modulo 4: Instrucao de Embarque (versao minima) ────────────────────
     # So depois que a instrucao e enviada (cotacao ja escolhida) que os

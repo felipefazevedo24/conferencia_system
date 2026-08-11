@@ -397,6 +397,13 @@
             </div>
 
             <div class="cx-section-title">Cotações recebidas</div>
+            <div class="cx-field">
+                <label>Taxa de câmbio de referência <small style="font-weight:400; color:var(--eui-muted);">— mesma taxa usada pra comparar todos os fornecedores, independente do que cada um informou</small></label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" inputmode="decimal" id="cx-cot-taxa-cambio" class="eui-input" placeholder="Ex.: 5,35" style="max-width:160px;">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-cot-btn-salvar-taxa">Salvar taxa</button>
+                </div>
+            </div>
             <div class="cx-table-wrap">
                 <table class="erp-table" id="cx-cot-table">
                     <thead>
@@ -406,10 +413,11 @@
                             <th>Status</th>
                             <th>Total USD</th>
                             <th>Total BRL</th>
+                            <th>Total Consolidado (BRL)</th>
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody id="cx-cot-tbody"><tr><td colspan="6" class="cx-empty">Carregando…</td></tr></tbody>
+                    <tbody id="cx-cot-tbody"><tr><td colspan="7" class="cx-empty">Carregando…</td></tr></tbody>
                 </table>
             </div>
             <div class="cx-field hidden" id="cx-cot-escolhida-wrap">
@@ -1080,35 +1088,70 @@
         } else {
             $("cx-cot-substatus-wrap").classList.add("hidden");
         }
+        $("cx-cot-taxa-cambio").value = p.taxa_cambio_referencia != null ? p.taxa_cambio_referencia : "";
         $("cx-cot-email").value = "";
-        $("cx-cot-origem").value = "";
-        $("cx-cot-destino").value = "";
-        $("cx-cot-incoterm").value = "";
-        $("cx-cot-qtd-40hc").value = "";
-        $("cx-cot-qtd-20dry").value = "";
-        $("cx-cot-imo").value = "";
-        $("cx-cot-un").value = "";
-        // Sugere o subtotal dos itens da PO como valor da mercadoria - o
-        // operador confirma ou ajusta antes de gerar o link.
-        $("cx-cot-valor-mercadoria").value = p.po_subtotal_usd != null ? p.po_subtotal_usd : "";
-        volumesCotacaoAtual = [{ comprimento: null, largura: null, altura: null, peso: null }, { comprimento: null, largura: null, altura: null, peso: null }];
-        renderVolumesCotacao();
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");
+        $("cx-modal-cotacao").classList.add("open");
+
+        const cotacoesExistentes = await carregarCotacoes(p.id);
+        preencherFormularioCotacao(p, cotacoesExistentes[0] || null);
+    }
+    function fecharModalCotacao() { $("cx-modal-cotacao").classList.remove("open"); processoCotacaoAtual = null; }
+    $("cx-fechar-cotacao").addEventListener("click", fecharModalCotacao);
+    $("cx-fechar-cotacao-2").addEventListener("click", fecharModalCotacao);
+
+    // Dados do embarque (origem/destino/incoterm/equipamento/volumes/IMO-UN)
+    // sao os mesmos pra qualquer fornecedor cotado no mesmo processo - uma
+    // vez preenchidos (na primeira cotacao gerada), os proximos links ja
+    // nascem com esses dados prontos, sem precisar digitar de novo.
+    // `cotacoesExistentesAtual` guarda a lista carregada por ultimo, pra
+    // checar se ja existe cotacao Pendente/Recebida na hora de avisar sobre
+    // mudanca nos dados.
+    let cotacoesExistentesAtual = [];
+    let baselineDadosEmbarque = null;
+
+    function _snapshotDadosEmbarqueForm() {
+        return JSON.stringify({
+            origem: $("cx-cot-origem").value.trim(),
+            destino: $("cx-cot-destino").value.trim(),
+            incoterm: $("cx-cot-incoterm").value.trim(),
+            qtd_40hc: $("cx-cot-qtd-40hc").value,
+            qtd_20dry: $("cx-cot-qtd-20dry").value,
+            imo_classe: $("cx-cot-imo").value.trim(),
+            un_numero: $("cx-cot-un").value.trim(),
+            valor_mercadoria_usd: $("cx-cot-valor-mercadoria").value,
+            volumes: volumesCotacaoAtual,
+        });
+    }
+
+    function preencherFormularioCotacao(p, base) {
         const tipoFreteSel = $("cx-cot-tipo-frete");
         if (p.modal_transporte === "Aéreo") {
             tipoFreteSel.value = "LCL_AEREO";
             tipoFreteSel.disabled = true;
         } else {
+            tipoFreteSel.value = base ? base.tipo_frete : "FCL";
             tipoFreteSel.disabled = false;
         }
+        $("cx-cot-origem").value = base ? (base.origem || "") : "";
+        $("cx-cot-destino").value = base ? (base.destino || "") : "";
+        $("cx-cot-incoterm").value = base ? (base.incoterm || "") : "";
+        $("cx-cot-qtd-40hc").value = base && base.qtd_40hc != null ? base.qtd_40hc : "";
+        $("cx-cot-qtd-20dry").value = base && base.qtd_20dry != null ? base.qtd_20dry : "";
+        $("cx-cot-imo").value = base ? (base.imo_classe || "") : "";
+        $("cx-cot-un").value = base ? (base.un_numero || "") : "";
+        // Valor da mercadoria: usa o da cotacao anterior se existir, senao
+        // sugere o subtotal dos itens da PO.
+        const valorMercadoria = base && base.valor_mercadoria_usd != null ? base.valor_mercadoria_usd : p.po_subtotal_usd;
+        $("cx-cot-valor-mercadoria").value = valorMercadoria != null ? valorMercadoria : "";
+        volumesCotacaoAtual = (base && base.volumes && base.volumes.length)
+            ? base.volumes.map((v) => ({ ...v }))
+            : [{ comprimento: null, largura: null, altura: null, peso: null }, { comprimento: null, largura: null, altura: null, peso: null }];
+        renderVolumesCotacao();
         atualizarCamposTipoFreteCotacao();
-        $("cx-modal-cotacao").classList.add("open");
-        await carregarCotacoes(p.id);
+        baselineDadosEmbarque = _snapshotDadosEmbarqueForm();
     }
-    function fecharModalCotacao() { $("cx-modal-cotacao").classList.remove("open"); processoCotacaoAtual = null; }
-    $("cx-fechar-cotacao").addEventListener("click", fecharModalCotacao);
-    $("cx-fechar-cotacao-2").addEventListener("click", fecharModalCotacao);
 
     function atualizarCamposTipoFreteCotacao() {
         const isFcl = $("cx-cot-tipo-frete").value === "FCL";
@@ -1146,18 +1189,22 @@
     });
 
     async function carregarCotacoes(processoId) {
-        $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Carregando…</td></tr>';
+        $("cx-cot-tbody").innerHTML = '<tr><td colspan="7" class="cx-empty">Carregando…</td></tr>';
         try {
             const data = await api(`/api/comex/processos/${processoId}/cotacoes`);
-            renderCotacoes(data.cotacoes || []);
+            cotacoesExistentesAtual = data.cotacoes || [];
+            renderCotacoes(cotacoesExistentesAtual);
+            return cotacoesExistentesAtual;
         } catch (err) {
-            $("cx-cot-tbody").innerHTML = `<tr><td colspan="6" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
+            $("cx-cot-tbody").innerHTML = `<tr><td colspan="7" class="cx-empty">${escapeHtml(err.message)}</td></tr>`;
+            cotacoesExistentesAtual = [];
+            return [];
         }
     }
 
     function renderCotacoes(cotacoes) {
         if (!cotacoes.length) {
-            $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Nenhum link de cotação gerado ainda.</td></tr>';
+            $("cx-cot-tbody").innerHTML = '<tr><td colspan="7" class="cx-empty">Nenhum link de cotação gerado ainda.</td></tr>';
             $("cx-cot-escolhida-wrap").classList.add("hidden");
             return;
         }
@@ -1178,6 +1225,7 @@
                     <td>${badge}</td>
                     <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
                     <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>
+                    <td>${c.custo_total_consolidado_brl != null ? _fmtMoedaGenerico(c.custo_total_consolidado_brl, "R$") : "—"}</td>
                     <td style="text-align:right;">${acao}</td>
                 </tr>
             `;
@@ -1191,8 +1239,39 @@
         }
     }
 
+    $("cx-cot-btn-salvar-taxa").addEventListener("click", async () => {
+        if (!processoCotacaoAtual) return;
+        const taxa = _parseNumeroPt($("cx-cot-taxa-cambio").value);
+        if (!taxa) { toast("Informe uma taxa de câmbio válida.", "error"); return; }
+        const btn = $("cx-cot-btn-salvar-taxa");
+        btn.disabled = true;
+        try {
+            const resp = await api(`/api/comex/processos/${processoCotacaoAtual.id}/taxa-cambio`, {
+                method: "POST",
+                body: JSON.stringify({ taxa_cambio_referencia: taxa }),
+            });
+            processoCotacaoAtual = resp.processo;
+            toast("Taxa de câmbio salva!", "success");
+            carregarCotacoes(processoCotacaoAtual.id);
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
     $("cx-cot-btn-gerar").addEventListener("click", async () => {
         if (!processoCotacaoAtual) return;
+        const dadosMudaram = baselineDadosEmbarque !== null && _snapshotDadosEmbarqueForm() !== baselineDadosEmbarque;
+        const temCotacaoEmAndamento = cotacoesExistentesAtual.some((c) => c.status === "Pendente" || c.status === "Recebida");
+        if (dadosMudaram && temCotacaoEmAndamento) {
+            const confirmar = confirm(
+                "Você alterou os dados do embarque em relação à(s) cotação(ões) já gerada(s) pra este processo. " +
+                "As cotações anteriores continuam com os dados antigos — considere avisar os fornecedores já contatados. " +
+                "Deseja continuar mesmo assim?"
+            );
+            if (!confirmar) return;
+        }
         const btn = $("cx-cot-btn-gerar");
         btn.disabled = true;
         try {
@@ -1216,6 +1295,7 @@
             $("cx-cot-link").value = resp.link;
             $("cx-cot-link-wrap").classList.remove("hidden");
             toast(resp.message, "success");
+            baselineDadosEmbarque = _snapshotDadosEmbarqueForm();
             carregarCotacoes(processoCotacaoAtual.id);
             carregar();
         } catch (err) {
