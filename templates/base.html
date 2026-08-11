@@ -188,6 +188,10 @@
 <div id="wrapper">
     <div id="shell-backdrop"></div>
 
+    <button id="mobile-menu-toggle" type="button" aria-label="Abrir menu" title="Abrir menu" aria-expanded="false" aria-controls="sidebar-wrapper">
+        <i class="fas fa-bars"></i>
+    </button>
+
     <aside id="sidebar-wrapper">
         <div class="sidebar-heading">
             <a href="/" class="sidebar-brand">
@@ -529,6 +533,7 @@ const RECENTS_KEY = "columbia_sync_home_recents";
 const FAVORITES_KEY = "columbia_sync_home_favorites";
 const wrapper = document.getElementById("wrapper");
 const menuToggle = document.getElementById("menu-toggle");
+const mobileMenuToggle = document.getElementById("mobile-menu-toggle");
 const shellBackdrop = document.getElementById("shell-backdrop");
 
 function setShellCollapsed(collapsed) {
@@ -536,6 +541,7 @@ function setShellCollapsed(collapsed) {
     shellBackdrop.classList.toggle("active", window.innerWidth < 992 && !collapsed);
     menuToggle.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
     menuToggle.setAttribute("title", collapsed ? "Expandir menu" : "Recolher menu");
+    if (mobileMenuToggle) mobileMenuToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     if (typeof window.closeSidebarFlyouts === "function") window.closeSidebarFlyouts();
 }
 
@@ -807,6 +813,13 @@ document.addEventListener("DOMContentLoaded", function () {
         e.preventDefault();
         setShellCollapsed(!wrapper.classList.contains("toggled"));
     });
+
+    if (mobileMenuToggle) {
+        mobileMenuToggle.addEventListener("click", function (e) {
+            e.preventDefault();
+            setShellCollapsed(!wrapper.classList.contains("toggled"));
+        });
+    }
 
     shellBackdrop.addEventListener("click", function () {
         setShellCollapsed(true);
