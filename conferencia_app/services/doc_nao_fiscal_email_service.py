@@ -63,10 +63,10 @@ def notificar_doc_nao_fiscal(
     else:
         assunto = f"[SYNC] DOCUMENTO NÃO FISCAL LANÇADO — {tipo_label.upper()} {numero}"
         cor = "#059669"
-        titulo = "Documento não fiscal lançado no ERP"
+        titulo = "Documento não fiscal lançado no GRV"
         subtitulo = "Lançamento registrado pelo Columbia Sync — Documento de Entrada."
         linha_erp = (
-            f'<tr><td style="padding:7px 0;font-weight:bold;width:140px;">Código ERP:</td>'
+            f'<tr><td style="padding:7px 0;font-weight:bold;width:140px;">Código GRV:</td>'
             f'<td style="padding:7px 0;">{codigo_erp or "&mdash;"}</td></tr>'
         )
 
