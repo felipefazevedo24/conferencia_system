@@ -148,25 +148,28 @@
       const isFcl = data.tipo_frete === 'FCL';
       const custosHtml = (data.etapas_custo || []).map((e) => linhaCusto(e.campo, e.label)).join('');
       const volumesIniciais = [1, 2].map(linhaVolume).join('');
+      const pre = data.pre_preenchido || {};
+      const v = (x) => esc(x == null ? '' : x);
 
       return `
         <form id="formCotacao">
           <div class="section">
             <h2><i class="fas fa-building"></i> Dados do prestador</h2>
+            <p class="muted" style="font-size:12px; margin:-4px 0 12px;">Os campos abaixo já vêm preenchidos pela Columbia com os dados do embarque — confira e ajuste se precisar.</p>
             <div class="field"><label>Empresa / Prestador de frete *</label><input type="text" id="fornecedor_frete" required></div>
             <div class="grid2">
-              <div class="field"><label>Origem</label><input type="text" id="origem"></div>
-              <div class="field"><label>Destino</label><input type="text" id="destino"></div>
+              <div class="field"><label>Origem</label><input type="text" id="origem" value="${v(pre.origem)}"></div>
+              <div class="field"><label>Destino</label><input type="text" id="destino" value="${v(pre.destino)}"></div>
             </div>
-            ${isFcl ? '' : `<div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..."></div>`}
+            ${isFcl ? '' : `<div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..." value="${v(pre.incoterm)}"></div>`}
           </div>
 
           ${isFcl ? `
           <div class="section">
             <h2><i class="fas fa-box"></i> Equipamento (FCL)</h2>
             <div class="grid2">
-              <div class="field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="qtd_40hc"></div>
-              <div class="field"><label>Qtde 20'DRY</label><input type="number" min="0" step="1" id="qtd_20dry"></div>
+              <div class="field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="qtd_40hc" value="${v(pre.qtd_40hc)}"></div>
+              <div class="field"><label>Qtde 20'DRY</label><input type="number" min="0" step="1" id="qtd_20dry" value="${v(pre.qtd_20dry)}"></div>
             </div>
           </div>` : `
           <div class="section">
@@ -190,8 +193,8 @@
           <div class="section">
             <h2><i class="fas fa-triangle-exclamation"></i> Carga perigosa</h2>
             <div class="grid2">
-              <div class="field"><label>IMO</label><input type="text" id="imo_classe" placeholder="Classe IMO ou NA"></div>
-              <div class="field"><label>UN</label><input type="text" id="un_numero" placeholder="Número UN ou NA"></div>
+              <div class="field"><label>IMO</label><input type="text" id="imo_classe" placeholder="Classe IMO ou NA" value="${v(pre.imo_classe)}"></div>
+              <div class="field"><label>UN</label><input type="text" id="un_numero" placeholder="Número UN ou NA" value="${v(pre.un_numero)}"></div>
             </div>
           </div>
 

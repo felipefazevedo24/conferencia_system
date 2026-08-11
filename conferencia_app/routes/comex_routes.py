@@ -599,6 +599,7 @@ def api_criar_link_cotacao(processo_id):
             tipo_frete=tipo_frete,
             usuario=usuario,
             email_instrucao_embarque=payload.get("email_instrucao_embarque"),
+            pre_preenchido=payload,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -658,6 +659,18 @@ def api_cotacao_publica_dados(token):
         "termos": svc.TERMOS_COTACAO,
         "etapas_custo": [{"campo": p, "label": l} for p, l in svc.ETAPAS_CUSTO_COTACAO],
         "cotacao": _cotacao_payload(cotacao) if cotacao.status == "Recebida" else None,
+        # Dados de embarque que a Columbia ja preencheu ao gerar o link -
+        # aparecem mesmo antes da submissao, pra pre-preencher o formulario
+        # do prestador (ele so confirma/ajusta, nao digita do zero).
+        "pre_preenchido": {
+            "origem": cotacao.origem,
+            "destino": cotacao.destino,
+            "incoterm": cotacao.incoterm,
+            "imo_classe": cotacao.imo_classe,
+            "un_numero": cotacao.un_numero,
+            "qtd_40hc": cotacao.qtd_40hc,
+            "qtd_20dry": cotacao.qtd_20dry,
+        },
     })
 
 

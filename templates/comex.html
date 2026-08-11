@@ -341,6 +341,7 @@
                 <span class="eui-badge" id="cx-cot-substatus-badge"></span>
             </div>
             <div class="cx-section-title">Gerar novo link de cotação</div>
+            <small style="color:var(--eui-muted); margin-top:-8px;">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
             <div class="cx-grid-2">
                 <div class="cx-field">
                     <label>Tipo de frete</label>
@@ -353,6 +354,22 @@
                     <label>E-mail do prestador (opcional — envia o link automaticamente)</label>
                     <input type="email" id="cx-cot-email" class="eui-input" placeholder="frete@transportadora.com">
                 </div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>Origem</label><input type="text" id="cx-cot-origem" class="eui-input"></div>
+                <div class="cx-field"><label>Destino</label><input type="text" id="cx-cot-destino" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2" id="cx-cot-incoterm-wrap">
+                <div class="cx-field"><label>Incoterm</label><input type="text" id="cx-cot-incoterm" class="eui-input" placeholder="Ex.: FOB, EXW, CIF..."></div>
+                <div></div>
+            </div>
+            <div class="cx-grid-2 hidden" id="cx-cot-equipamento-wrap">
+                <div class="cx-field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="cx-cot-qtd-40hc" class="eui-input"></div>
+                <div class="cx-field"><label>Qtde 20'DRY</label><input type="number" min="0" step="1" id="cx-cot-qtd-20dry" class="eui-input"></div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field"><label>IMO</label><input type="text" id="cx-cot-imo" class="eui-input" placeholder="Classe IMO ou NA"></div>
+                <div class="cx-field"><label>UN</label><input type="text" id="cx-cot-un" class="eui-input" placeholder="Número UN ou NA"></div>
             </div>
             <div style="display:flex; justify-content:flex-end;">
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="cx-cot-btn-gerar"><i class="fas fa-link"></i> Gerar link</button>
@@ -1050,6 +1067,13 @@
             $("cx-cot-substatus-wrap").classList.add("hidden");
         }
         $("cx-cot-email").value = "";
+        $("cx-cot-origem").value = "";
+        $("cx-cot-destino").value = "";
+        $("cx-cot-incoterm").value = "";
+        $("cx-cot-qtd-40hc").value = "";
+        $("cx-cot-qtd-20dry").value = "";
+        $("cx-cot-imo").value = "";
+        $("cx-cot-un").value = "";
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");
         const tipoFreteSel = $("cx-cot-tipo-frete");
@@ -1059,12 +1083,20 @@
         } else {
             tipoFreteSel.disabled = false;
         }
+        atualizarCamposTipoFreteCotacao();
         $("cx-modal-cotacao").classList.add("open");
         await carregarCotacoes(p.id);
     }
     function fecharModalCotacao() { $("cx-modal-cotacao").classList.remove("open"); processoCotacaoAtual = null; }
     $("cx-fechar-cotacao").addEventListener("click", fecharModalCotacao);
     $("cx-fechar-cotacao-2").addEventListener("click", fecharModalCotacao);
+
+    function atualizarCamposTipoFreteCotacao() {
+        const isFcl = $("cx-cot-tipo-frete").value === "FCL";
+        $("cx-cot-equipamento-wrap").classList.toggle("hidden", !isFcl);
+        $("cx-cot-incoterm-wrap").classList.toggle("hidden", isFcl);
+    }
+    $("cx-cot-tipo-frete").addEventListener("change", atualizarCamposTipoFreteCotacao);
 
     async function carregarCotacoes(processoId) {
         $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Carregando…</td></tr>';
@@ -1123,6 +1155,13 @@
                     tipo_frete: $("cx-cot-tipo-frete").value,
                     email_instrucao_embarque: $("cx-cot-email").value.trim(),
                     enviar_para: $("cx-cot-email").value.trim(),
+                    origem: $("cx-cot-origem").value.trim(),
+                    destino: $("cx-cot-destino").value.trim(),
+                    incoterm: $("cx-cot-incoterm").value.trim(),
+                    qtd_40hc: $("cx-cot-qtd-40hc").value || null,
+                    qtd_20dry: $("cx-cot-qtd-20dry").value || null,
+                    imo_classe: $("cx-cot-imo").value.trim(),
+                    un_numero: $("cx-cot-un").value.trim(),
                 }),
             });
             $("cx-cot-link").value = resp.link;

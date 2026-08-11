@@ -758,6 +758,20 @@ def _hash_token_cotacao(token: str) -> str:
     return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
 
 
+# Campos que o operador pode pre-preencher ao gerar o link (Columbia ja sabe
+# essa informacao - origem/destino/carga - antes de pedir a cotacao; o
+# prestador de frete recebe pre-preenchido e so confirma/ajusta se precisar,
+# em vez de ter que descobrir/digitar tudo do zero). Tamanho maximo de cada
+# um bate com a coluna correspondente em ComexCotacao.
+_CAMPOS_COTACAO_PRE_PREENCHIDO = {
+    "origem": 120,
+    "destino": 120,
+    "incoterm": 20,
+    "imo_classe": 20,
+    "un_numero": 20,
+}
+
+
 def criar_link_cotacao(
     processo: ComexProcesso,
     *,
@@ -765,11 +779,17 @@ def criar_link_cotacao(
     usuario: str,
     email_instrucao_embarque: str | None = None,
     validade_dias: int = 14,
+    pre_preenchido: dict | None = None,
 ) -> tuple[ComexCotacao, str]:
     """Gera um novo link publico de cotacao (Modulo 3) para um prestador de
     frete preencher sem login. O token bruto so existe neste retorno - so o
     hash fica salvo (mesmo padrao do convite de usuario). Move o processo
-    para o modulo Cotacao na primeira cotacao gerada."""
+    para o modulo Cotacao na primeira cotacao gerada.
+
+    `pre_preenchido` traz os campos que o operador ja sabe e preenche antes
+    de mandar o link (origem, destino, incoterm, IMO/UN e, se FCL,
+    quantidade de equipamento) - o prestador recebe isso pronto no
+    formulario publico e so confirma ou ajusta."""
     if tipo_frete not in TIPOS_FRETE:
         raise ValueError("Tipo de frete inválido (use FCL ou LCL_AEREO).")
     if processo.po_status != "Finalizada":
@@ -781,13 +801,19 @@ def criar_link_cotacao(
         processo_id=processo.id,
         tipo_frete=tipo_frete,
         status="Pendente",
-        origem=processo.fornecedor,  # ponto de partida sugerido; o prestador confirma/ajusta
         token_publico_hash=_hash_token_cotacao(token),
         token_publico_expira_em=agora + timedelta(days=max(1, validade_dias)),
         email_instrucao_embarque=(email_instrucao_embarque or "").strip() or None,
         link_gerado_em=agora,
         criado_por=usuario,
     )
+    pre_preenchido = pre_preenchido or {}
+    for campo, tamanho in _CAMPOS_COTACAO_PRE_PREENCHIDO.items():
+        valor = str(pre_preenchido.get(campo) or "").strip()
+        setattr(cotacao, campo, valor[:tamanho] or None)
+    if tipo_frete == "FCL":
+        cotacao.qtd_40hc = _to_int(pre_preenchido.get("qtd_40hc"))
+        cotacao.qtd_20dry = _to_int(pre_preenchido.get("qtd_20dry"))
     db.session.add(cotacao)
 
     if processo.status_modulo == "PO":
@@ -814,7 +840,19 @@ def link_cotacao_valido(cotacao: ComexCotacao) -> bool:
     return True
 
 
-_CAMPOS_COTACAO_TEXTO = ("fornecedor_frete", "origem", "destino", "incoterm", "imo_classe", "un_numero", "transit_time", "rota")
+# Tamanho maximo de cada campo de texto - bate com a coluna correspondente
+# em ComexCotacao (truncar sem isso pode estourar o limite da coluna e
+# quebrar o INSERT/UPDATE no MySQL de producao, que roda em modo estrito).
+_CAMPOS_COTACAO_TEXTO = {
+    "fornecedor_frete": 200,
+    "origem": 120,
+    "destino": 120,
+    "incoterm": 20,
+    "imo_classe": 20,
+    "un_numero": 20,
+    "transit_time": 60,
+    "rota": 200,
+}
 _CAMPOS_COTACAO_CUSTO = tuple(f"{prefixo}_{moeda}" for prefixo, _ in ETAPAS_CUSTO_COTACAO for moeda in ("usd", "brl"))
 
 
@@ -829,10 +867,10 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
     if not str(dados.get("fornecedor_frete") or "").strip():
         raise ValueError("Informe o nome do prestador de frete.")
 
-    for campo in _CAMPOS_COTACAO_TEXTO:
+    for campo, tamanho in _CAMPOS_COTACAO_TEXTO.items():
         if campo in dados:
             valor = str(dados.get(campo) or "").strip()
-            setattr(cotacao, campo, valor[:200] or None)
+            setattr(cotacao, campo, valor[:tamanho] or None)
 
     if cotacao.tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))
