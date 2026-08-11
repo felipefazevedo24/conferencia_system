@@ -132,14 +132,16 @@
       `;
     }
 
-    function linhaVolume(n) {
+    function linhaVolume(n, vol) {
+      vol = vol || {};
+      const val = (x) => x == null ? '' : x;
       return `
         <tr data-volume-row="${n}">
           <td>${n}</td>
-          <td><input type="number" step="0.01" min="0" data-vol="comprimento"></td>
-          <td><input type="number" step="0.01" min="0" data-vol="largura"></td>
-          <td><input type="number" step="0.01" min="0" data-vol="altura"></td>
-          <td><input type="number" step="0.01" min="0" data-vol="peso"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="comprimento" value="${val(vol.comprimento)}"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="largura" value="${val(vol.largura)}"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="altura" value="${val(vol.altura)}"></td>
+          <td><input type="number" step="0.01" min="0" data-vol="peso" value="${val(vol.peso)}"></td>
         </tr>
       `;
     }
@@ -147,8 +149,12 @@
     function montarFormulario(data) {
       const isFcl = data.tipo_frete === 'FCL';
       const custosHtml = (data.etapas_custo || []).map((e) => linhaCusto(e.campo, e.label)).join('');
-      const volumesIniciais = [1, 2].map(linhaVolume).join('');
       const pre = data.pre_preenchido || {};
+      const preVolumes = pre.volumes || [];
+      numeroVolumes = preVolumes.length || 2;
+      const volumesIniciais = preVolumes.length
+        ? preVolumes.map((vol, idx) => linhaVolume(idx + 1, vol)).join('')
+        : [1, 2].map((n) => linhaVolume(n)).join('');
       const v = (x) => esc(x == null ? '' : x);
 
       return `

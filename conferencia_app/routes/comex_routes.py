@@ -673,6 +673,10 @@ def api_cotacao_publica_dados(token):
             "qtd_40hc": cotacao.qtd_40hc,
             "qtd_20dry": cotacao.qtd_20dry,
             "valor_mercadoria_usd": cotacao.valor_mercadoria_usd,
+            "volumes": [
+                {"comprimento": v.comprimento, "largura": v.largura, "altura": v.altura, "peso": v.peso}
+                for v in cotacao.volumes
+            ],
         },
     })
 

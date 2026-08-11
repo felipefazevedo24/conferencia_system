@@ -367,6 +367,16 @@
                 <div class="cx-field"><label>Qtde 40'HC</label><input type="number" min="0" step="1" id="cx-cot-qtd-40hc" class="eui-input"></div>
                 <div class="cx-field"><label>Qtde 20'DRY</label><input type="number" min="0" step="1" id="cx-cot-qtd-20dry" class="eui-input"></div>
             </div>
+            <div class="cx-field" id="cx-cot-volumes-wrap">
+                <label>Volumes (cm / kg)</label>
+                <div class="cx-table-wrap">
+                    <table class="erp-table">
+                        <thead><tr><th>#</th><th>Comprimento</th><th>Largura</th><th>Altura</th><th>Peso</th></tr></thead>
+                        <tbody id="cx-cot-volumes-tbody"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-cot-btn-add-volume" style="margin-top:8px;"><i class="fas fa-plus"></i> Adicionar volume</button>
+            </div>
             <div class="cx-grid-2">
                 <div class="cx-field"><label>IMO</label><input type="text" id="cx-cot-imo" class="eui-input" placeholder="Classe IMO ou NA"></div>
                 <div class="cx-field"><label>UN</label><input type="text" id="cx-cot-un" class="eui-input" placeholder="Número UN ou NA"></div>
@@ -1081,6 +1091,8 @@
         // Sugere o subtotal dos itens da PO como valor da mercadoria - o
         // operador confirma ou ajusta antes de gerar o link.
         $("cx-cot-valor-mercadoria").value = p.po_subtotal_usd != null ? p.po_subtotal_usd : "";
+        volumesCotacaoAtual = [{ comprimento: null, largura: null, altura: null, peso: null }, { comprimento: null, largura: null, altura: null, peso: null }];
+        renderVolumesCotacao();
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");
         const tipoFreteSel = $("cx-cot-tipo-frete");
@@ -1102,8 +1114,36 @@
         const isFcl = $("cx-cot-tipo-frete").value === "FCL";
         $("cx-cot-equipamento-wrap").classList.toggle("hidden", !isFcl);
         $("cx-cot-incoterm-wrap").classList.toggle("hidden", isFcl);
+        $("cx-cot-volumes-wrap").classList.toggle("hidden", isFcl);
     }
     $("cx-cot-tipo-frete").addEventListener("change", atualizarCamposTipoFreteCotacao);
+
+    // ── Volumes (LCL/Aéreo) no formulário de gerar link ────────────────
+    let volumesCotacaoAtual = [];
+
+    function renderVolumesCotacao() {
+        $("cx-cot-volumes-tbody").innerHTML = volumesCotacaoAtual.map((v, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td><input type="number" step="0.01" min="0" class="eui-input" data-vidx="${idx}" data-vfield="comprimento" value="${v.comprimento != null ? v.comprimento : ""}"></td>
+                <td><input type="number" step="0.01" min="0" class="eui-input" data-vidx="${idx}" data-vfield="largura" value="${v.largura != null ? v.largura : ""}"></td>
+                <td><input type="number" step="0.01" min="0" class="eui-input" data-vidx="${idx}" data-vfield="altura" value="${v.altura != null ? v.altura : ""}"></td>
+                <td><input type="number" step="0.01" min="0" class="eui-input" data-vidx="${idx}" data-vfield="peso" value="${v.peso != null ? v.peso : ""}"></td>
+            </tr>
+        `).join("");
+    }
+    $("cx-cot-volumes-tbody").addEventListener("input", (e) => {
+        const input = e.target.closest("input[data-vidx]");
+        if (!input) return;
+        const idx = parseInt(input.dataset.vidx, 10);
+        const item = volumesCotacaoAtual[idx];
+        if (!item) return;
+        item[input.dataset.vfield] = input.value === "" ? null : parseFloat(input.value);
+    });
+    $("cx-cot-btn-add-volume").addEventListener("click", () => {
+        volumesCotacaoAtual.push({ comprimento: null, largura: null, altura: null, peso: null });
+        renderVolumesCotacao();
+    });
 
     async function carregarCotacoes(processoId) {
         $("cx-cot-tbody").innerHTML = '<tr><td colspan="6" class="cx-empty">Carregando…</td></tr>';
@@ -1170,6 +1210,7 @@
                     imo_classe: $("cx-cot-imo").value.trim(),
                     un_numero: $("cx-cot-un").value.trim(),
                     valor_mercadoria_usd: _parseNumeroPt($("cx-cot-valor-mercadoria").value),
+                    volumes: volumesCotacaoAtual,
                 }),
             });
             $("cx-cot-link").value = resp.link;

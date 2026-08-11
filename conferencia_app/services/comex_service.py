@@ -780,6 +780,24 @@ _CAMPOS_COTACAO_PRE_PREENCHIDO = {
 }
 
 
+def _adicionar_volumes(cotacao: ComexCotacao, volumes_dados: list[dict] | None) -> None:
+    """Cria as linhas de ComexCotacaoVolume a partir de uma lista de dicts
+    {comprimento, largura, altura, peso} - ignora linhas totalmente vazias.
+    Usado tanto ao gerar o link (operador ja sabe as dimensoes) quanto na
+    submissao do prestador (que pode ajustar)."""
+    for idx, vol in enumerate(volumes_dados or [], start=1):
+        if not any(vol.get(k) for k in ("comprimento", "largura", "altura", "peso")):
+            continue
+        db.session.add(ComexCotacaoVolume(
+            cotacao=cotacao,
+            numero=idx,
+            comprimento=_to_float(vol.get("comprimento")),
+            largura=_to_float(vol.get("largura")),
+            altura=_to_float(vol.get("altura")),
+            peso=_to_float(vol.get("peso")),
+        ))
+
+
 def criar_link_cotacao(
     processo: ComexProcesso,
     *,
@@ -828,6 +846,8 @@ def criar_link_cotacao(
     if tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(pre_preenchido.get("qtd_40hc"))
         cotacao.qtd_20dry = _to_int(pre_preenchido.get("qtd_20dry"))
+    else:
+        _adicionar_volumes(cotacao, pre_preenchido.get("volumes"))
     # Valor da mercadoria - essencial pro prestador calcular o seguro. Se o
     # operador nao informou, sugere o subtotal dos itens da PO.
     cotacao.valor_mercadoria_usd = _to_float(pre_preenchido.get("valor_mercadoria_usd")) or subtotal_itens_po(processo)
@@ -902,17 +922,7 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         cotacao.validade = _parse_date(dados.get("validade"))
         cotacao.ptax = _to_float(dados.get("ptax"))
         ComexCotacaoVolume.query.filter_by(cotacao_id=cotacao.id).delete()
-        for idx, vol in enumerate(dados.get("volumes") or [], start=1):
-            if not any(vol.get(k) for k in ("comprimento", "largura", "altura", "peso")):
-                continue
-            db.session.add(ComexCotacaoVolume(
-                cotacao_id=cotacao.id,
-                numero=idx,
-                comprimento=_to_float(vol.get("comprimento")),
-                largura=_to_float(vol.get("largura")),
-                altura=_to_float(vol.get("altura")),
-                peso=_to_float(vol.get("peso")),
-            ))
+        _adicionar_volumes(cotacao, dados.get("volumes"))
 
     total_usd = 0.0
     total_brl = 0.0
