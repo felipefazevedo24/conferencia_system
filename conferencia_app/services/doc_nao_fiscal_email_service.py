@@ -55,38 +55,38 @@ def notificar_doc_nao_fiscal(
     tipo_label = _LABELS_TIPO.get(tipo, tipo)
 
     if evento == "importado":
-        assunto = f"[Sync] Novo documento nao fiscal — {tipo_label} {numero}"
+        assunto = f"[SYNC] NOVO DOCUMENTO NÃO FISCAL — {tipo_label.upper()} {numero}"
         cor = "#0f62c9"
-        icone = "&#128196;"  # 📄
-        titulo = f"Novo documento nao fiscal registrado"
+        titulo = f"Novo documento não fiscal registrado"
+        subtitulo = "Registro automático do Columbia Sync — Documento de Entrada."
         linha_erp = ""
     else:
-        assunto = f"[Sync] Documento nao fiscal lancado — {tipo_label} {numero}"
+        assunto = f"[SYNC] DOCUMENTO NÃO FISCAL LANÇADO — {tipo_label.upper()} {numero}"
         cor = "#059669"
-        icone = "&#9989;"   # ✅
-        titulo = "Documento nao fiscal lancado no ERP"
+        titulo = "Documento não fiscal lançado no ERP"
+        subtitulo = "Lançamento registrado pelo Columbia Sync — Documento de Entrada."
         linha_erp = (
-            f'<tr><td style="padding:7px 0;font-weight:bold;width:140px;">Codigo ERP:</td>'
+            f'<tr><td style="padding:7px 0;font-weight:bold;width:140px;">Código ERP:</td>'
             f'<td style="padding:7px 0;">{codigo_erp or "&mdash;"}</td></tr>'
         )
 
     linhas_tabela = (
         f'<tr><td style="padding:7px 0;font-weight:bold;width:140px;">Tipo:</td><td style="padding:7px 0;">{tipo_label}</td></tr>'
-        f'<tr><td style="padding:7px 0;font-weight:bold;">Numero:</td><td style="padding:7px 0;">{numero}</td></tr>'
+        f'<tr><td style="padding:7px 0;font-weight:bold;">Número:</td><td style="padding:7px 0;">{numero}</td></tr>'
         f'<tr><td style="padding:7px 0;font-weight:bold;">Fornecedor:</td><td style="padding:7px 0;">{fornecedor or "&mdash;"}</td></tr>'
         f'<tr><td style="padding:7px 0;font-weight:bold;">OC vinculada:</td><td style="padding:7px 0;">{pedido_compra or "&mdash;"}</td></tr>'
         f'{linha_erp}'
-        f'<tr><td style="padding:7px 0;font-weight:bold;">Usuario:</td><td style="padding:7px 0;">{usuario}</td></tr>'
+        f'<tr><td style="padding:7px 0;font-weight:bold;">Usuário:</td><td style="padding:7px 0;">{usuario}</td></tr>'
     )
 
     html = (
         f'<html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:20px;">'
         f'<div style="max-width:580px;margin:auto;background:#fff;border-radius:10px;padding:24px;'
         f'border-top:4px solid {cor};box-shadow:0 2px 10px rgba(15,23,42,.08);">'
-        f'<h2 style="color:{cor};margin:0 0 6px;font-size:18px;">{icone} {titulo}</h2>'
-        f'<p style="color:#64748b;font-size:13px;margin:0 0 18px;">Registro automatico do Columbia Sync &mdash; Documento de Entrada.</p>'
+        f'<h2 style="color:{cor};margin:0 0 6px;font-size:18px;">{titulo}</h2>'
+        f'<p style="color:#64748b;font-size:13px;margin:0 0 18px;">{subtitulo}</p>'
         f'<table style="width:100%;font-size:14px;color:#334155;border-collapse:collapse;">{linhas_tabela}</table>'
-        f'<p style="margin-top:22px;font-size:11px;color:#94a3b8;">E-mail automatico. Nao responda.</p>'
+        f'<p style="margin-top:22px;font-size:11px;color:#94a3b8;">E-mail automático. Não responda.</p>'
         f'</div></body></html>'
     )
 
