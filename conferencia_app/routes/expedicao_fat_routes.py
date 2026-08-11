@@ -711,6 +711,26 @@ def conferir_ordem_conf_cega(cod_ordem_fat):
 
     db.session.commit()
 
+    # Devolve peso/volumes + liberacao pro faturamento pra API do emitente
+    # (assincrono, best-effort - nunca bloqueia o salvamento local). Envia em
+    # toda conferencia salva (primeira vez ou edicao), pra manter o dado deles
+    # atualizado com o que foi de fato conferido.
+    try:
+        from ..services import erp_ordem_fat_client as erp_fat_svc
+
+        erp_fat_svc.atualizar_ordem_faturamento(
+            ordem.cod_ordem_fat,
+            especie_volumes=ordem.especie_volumes,
+            qtde_volumes=ordem.qtde_volumes,
+            peso_liquido=ordem.peso_liquido,
+            peso_bruto=ordem.peso_bruto,
+            liberado_para_faturamento=1,
+        )
+    except Exception:
+        current_app.logger.exception(
+            "Falha ao acionar atualizacao de ordem-faturamento no emitente (%s)", cod_ordem_fat
+        )
+
     # Aviso no Teams apenas na primeira conferencia concluida. Edicoes
     # posteriores (inclusive correcao administrativa em Faturado) nao reenviam.
     if not era_conferido:
