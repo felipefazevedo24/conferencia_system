@@ -629,14 +629,28 @@ def api_criar_link_cotacao(processo_id):
     link = url_for("comex.cotacao_publica_page", token=token, _external=True)
 
     destinatario = str(payload.get("enviar_para") or "").strip()
+    email_enviado = None
+    email_erro = None
     if destinatario:
         try:
             _enviar_email_link_cotacao(processo, cotacao, link, destinatario)
-        except Exception:
+            email_enviado = True
+        except Exception as exc:
             current_app.logger.exception("Falha ao enviar e-mail do link de cotação (processo %s)", processo.id_op)
+            email_enviado = False
+            email_erro = str(exc)
+
+    if destinatario and email_enviado:
+        mensagem = "Link de cotação gerado. E-mail enviado."
+    elif destinatario:
+        mensagem = f"Link de cotação gerado, mas o e-mail NÃO foi enviado: {email_erro}"
+    else:
+        mensagem = "Link de cotação gerado."
 
     return jsonify({
-        "message": "Link de cotação gerado." + (" E-mail enviado." if destinatario else ""),
+        "message": mensagem,
+        "email_enviado": email_enviado,
+        "email_erro": email_erro,
         "cotacao": _cotacao_payload(cotacao),
         "link": link,
         "processo": _processo_payload(processo),

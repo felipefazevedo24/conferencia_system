@@ -1294,7 +1294,7 @@
             });
             $("cx-cot-link").value = resp.link;
             $("cx-cot-link-wrap").classList.remove("hidden");
-            toast(resp.message, "success");
+            toast(resp.message, resp.email_enviado === false ? "error" : "success");
             baselineDadosEmbarque = _snapshotDadosEmbarqueForm();
             carregarCotacoes(processoCotacaoAtual.id);
             carregar();
