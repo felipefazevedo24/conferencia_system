@@ -2416,12 +2416,24 @@ def criar_documento_nao_fiscal():
             item.anexo_path = os.path.join("doc_entrada_anexos", str(item.id), nome_arquivo)
 
         db.session.commit()
+        # Notifica fiscal e compras sobre o novo documento
+        try:
+            from ..services.doc_nao_fiscal_email_service import notificar_doc_nao_fiscal
+            notificar_doc_nao_fiscal(
+                evento="importado",
+                numero=numero_documento,
+                tipo=tipo,
+                fornecedor=item.fornecedor or "",
+                pedido_compra=pedido_compra or "",
+                usuario=session.get("username", ""),
+            )
+        except Exception as _email_exc:
+            current_app.logger.warning("Falha ao enviar e-mail doc nao fiscal: %s", _email_exc)
         return jsonify({"sucesso": True, "msg": "Documento registrado com sucesso", "id": item.id, "numero": numero_documento})
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("Erro ao criar documento nao fiscal")
         return jsonify({"sucesso": False, "msg": f"Erro interno: {exc}"}), 500
-
 
 @api_bp.route("/api/documento_entrada/<int:item_id>/anexo", methods=["GET"])
 @permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
@@ -7491,6 +7503,24 @@ def confirmar_lancamento():
         current_app.logger.exception("Falha ao acionar aviso de entrada de chapa NF %s: %s", numero_nota, exc)
         aviso_chapa = {"sucesso": False, "erro": str(exc)}
 
+    # Notifica fiscal/compras quando for documento não fiscal lançado
+    try:
+        item_0 = itens_concluidos[0] if itens_concluidos else None
+        _tipos_nao_fiscais = {"FATURA", "DEBITO", "CONTA", "OUTRO"}
+        if item_0 and str(item_0.tipo_documento or "").upper() in _tipos_nao_fiscais:
+            from ..services.doc_nao_fiscal_email_service import notificar_doc_nao_fiscal
+            notificar_doc_nao_fiscal(
+                evento="lancado",
+                numero=numero_nota,
+                tipo=str(item_0.tipo_documento or ""),
+                fornecedor=str(item_0.fornecedor or ""),
+                pedido_compra=str(item_0.pedido_compra or ""),
+                usuario=session.get("username", ""),
+                codigo_erp=str(codigo or ""),
+            )
+    except Exception as _email_exc:
+        current_app.logger.warning("Falha ao enviar e-mail lancamento nao fiscal: %s", _email_exc)
+
     return jsonify(
         {
             "sucesso": True,
@@ -7643,6 +7673,48 @@ def estornar_conferencia_recebimento():
     db.session.commit()
 
     return jsonify({"sucesso": True, "msg": "Conferência estornada. NF voltou para a fila de conferência cega."})
+
+
+_TIPOS_DOC_NAO_FISCAL_SET = {"FATURA", "DEBITO", "CONTA", "OUTRO"}
+
+
+@api_bp.route("/api/fiscal/retornar_auditor", methods=["POST"])
+@roles_required("Fiscal", "Admin")
+def retornar_doc_para_auditor():
+    """Retorna um documento não fiscal para o Auditor (AguardandoLiberacao),
+    permitindo editar a OC, alterar dados ou excluir o documento."""
+    data = request.get_json(silent=True) or {}
+    numero_nota = str(data.get("nota") or "").strip()
+    motivo = str(data.get("motivo") or "").strip()
+
+    if not numero_nota:
+        return jsonify({"sucesso": False, "msg": "Número do documento obrigatório"}), 400
+    if len(motivo) < 3:
+        return jsonify({"sucesso": False, "msg": "Informe um motivo com pelo menos 3 caracteres"}), 400
+
+    itens = ItemNota.query.filter_by(numero_nota=numero_nota).all()
+    if not itens:
+        return jsonify({"sucesso": False, "msg": "Documento não encontrado"}), 404
+
+    tipo = str(itens[0].tipo_documento or "").upper()
+    if tipo not in _TIPOS_DOC_NAO_FISCAL_SET:
+        return jsonify({"sucesso": False, "msg": "Esta operação é exclusiva para documentos não fiscais"}), 400
+
+    ItemNota.query.filter_by(numero_nota=numero_nota).update({
+        "status": "AguardandoLiberacao",
+        "auditor_status": "NaoAuditado",
+        "auditor_decisao": "PendenteDecisao",
+        "numero_lancamento": None,
+        "usuario_lancamento": None,
+        "data_lancamento": None,
+    })
+    db.session.add(LogEstornoLancamento(
+        numero_nota=numero_nota,
+        usuario_estorno=session["username"],
+        motivo=f"[RETORNO AUDITOR] {motivo}",
+    ))
+    db.session.commit()
+    return jsonify({"sucesso": True, "msg": "Documento retornado ao Auditor com sucesso"})
 
 
 @api_bp.route("/api/notas_lancadas")
@@ -7886,6 +7958,7 @@ def detalhes_nf(numero):
             ),
             "has_anexo": bool(itens[0].anexo_path),
             "item_id": itens[0].id,
+            "tipo_documento": str(itens[0].tipo_documento or "NFE"),
             "checklist": checklist_info,
             "workflow": workflow,
             "pendencias": pendencias,

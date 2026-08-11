@@ -781,7 +781,7 @@
             <div class="doc-form-help" id="estorno-resumo">Nenhuma NF selecionada.</div>
             <div class="doc-form-block">
                 <label class="doc-form-label">Tipo de estorno</label>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div id="estorno-tipos-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <button id="btn-tipo-estorno-lancamento" type="button" onclick="selecionarTipoEstorno('lancamento')" style="padding:16px 14px; border-radius:14px; border:2px solid #3b82f6; background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%); cursor:pointer; text-align:left;">
                         <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
                             <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-book"></i></span>
@@ -795,6 +795,13 @@
                             <strong style="font-size:13px; color:#065f46;">Estornar Conferência</strong>
                         </div>
                         <p style="margin:0; font-size:11px; color:#64748b;">Reverte a conferência do recebimento.</p>
+                    </button>
+                    <button id="btn-tipo-estorno-auditor" type="button" onclick="selecionarTipoEstorno('auditor')" style="display:none; padding:16px 14px; border-radius:14px; border:2px solid #e2e8f0; background:#fff; cursor:pointer; text-align:left;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); color:#fff; display:flex; align-items:center; justify-content:center;"><i class="fas fa-rotate-left"></i></span>
+                            <strong style="font-size:13px; color:#92400e;">Retornar ao Auditor</strong>
+                        </div>
+                        <p style="margin:0; font-size:11px; color:#64748b;">Volta para auditoria para editar OC ou dados.</p>
                     </button>
                 </div>
             </div>
@@ -2247,8 +2254,9 @@
         } catch (e) { console.warn('Erro ao buscar checklist:', e); }
 
         const possuiLancamento = detalhesSelecionados.etapa === 'Lançado' || detalhesSelecionados.status === 'Lançado' || detalhesSelecionados.status_atual === 'Lançado' || detalhesSelecionados.etapa_atual === 'Lançada';
+        const ehDocNaoFiscal = ['FATURA', 'DEBITO', 'CONTA', 'OUTRO'].includes((detalhesSelecionados.tipo_documento || '').toUpperCase());
 
-        document.getElementById('estorno-resumo').innerText = `NF ${detalhesSelecionados.numero} · ${detalhesSelecionados.fornecedor || 'Fornecedor não informado'} · Último lançamento ${detalhesSelecionados.data_lancamento || '---'}`;
+        document.getElementById('estorno-resumo').innerText = `${ehDocNaoFiscal ? 'Doc' : 'NF'} ${detalhesSelecionados.numero} · ${detalhesSelecionados.fornecedor || 'Fornecedor não informado'} · Último lançamento ${detalhesSelecionados.data_lancamento || '---'}`;
         document.getElementById('estorno-complemento').value = '';
         document.getElementById('estorno-motivo').value = '';
         document.getElementById('estorno-feedback').innerText = '';
@@ -2256,17 +2264,25 @@
 
         const btnLancamento = document.getElementById('btn-tipo-estorno-lancamento');
         const btnConferencia = document.getElementById('btn-tipo-estorno-conferencia');
+        const btnAuditor = document.getElementById('btn-tipo-estorno-auditor');
+        const grid = document.getElementById('estorno-tipos-grid');
+
+        // Botão "Retornar ao Auditor": apenas docs não fiscais
+        btnAuditor.style.display = ehDocNaoFiscal ? '' : 'none';
+        grid.style.gridTemplateColumns = ehDocNaoFiscal ? '1fr 1fr 1fr' : '1fr 1fr';
+
         btnLancamento.disabled = !possuiLancamento;
         btnLancamento.style.opacity = possuiLancamento ? '1' : '0.5';
         btnLancamento.style.cursor = possuiLancamento ? 'pointer' : 'not-allowed';
         btnConferencia.disabled = !possuiConferencia;
         btnConferencia.style.opacity = possuiConferencia ? '1' : '0.5';
         btnConferencia.style.cursor = possuiConferencia ? 'pointer' : 'not-allowed';
-        btnLancamento.title = possuiLancamento ? '' : 'Esta NF não possui lançamento para estornar';
-        btnConferencia.title = possuiConferencia ? '' : 'Esta NF não possui conferência registrada';
+        btnLancamento.title = possuiLancamento ? '' : 'Este documento não possui lançamento para estornar';
+        btnConferencia.title = possuiConferencia ? '' : 'Este documento não possui conferência registrada';
 
         if (possuiLancamento) selecionarTipoEstorno('lancamento');
         else if (possuiConferencia) selecionarTipoEstorno('conferencia');
+        else if (ehDocNaoFiscal) selecionarTipoEstorno('auditor');
 
         document.getElementById('modal-estorno').style.display = 'flex';
     }
@@ -2275,22 +2291,47 @@
         tipoEstornoSelecionado = tipo;
         const btnLancamento = document.getElementById('btn-tipo-estorno-lancamento');
         const btnConferencia = document.getElementById('btn-tipo-estorno-conferencia');
+        const btnAuditor = document.getElementById('btn-tipo-estorno-auditor');
         const fieldsLancamento = document.getElementById('estorno-lancamento-fields');
         const fieldsConferencia = document.getElementById('estorno-conferencia-fields');
+        const resetBtn = (btn) => { btn.style.border = '2px solid #e2e8f0'; btn.style.background = '#fff'; };
+        resetBtn(btnLancamento); resetBtn(btnConferencia); if (btnAuditor) resetBtn(btnAuditor);
+        fieldsLancamento.style.display = 'none'; fieldsConferencia.style.display = 'none';
         if (tipo === 'lancamento' && !btnLancamento.disabled) {
             btnLancamento.style.border = '2px solid #3b82f6'; btnLancamento.style.background = 'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)';
-            btnConferencia.style.border = '2px solid #e2e8f0'; btnConferencia.style.background = '#fff';
-            fieldsLancamento.style.display = 'block'; fieldsConferencia.style.display = 'none';
+            fieldsLancamento.style.display = 'block';
         } else if (tipo === 'conferencia' && !btnConferencia.disabled) {
             btnConferencia.style.border = '2px solid #10b981'; btnConferencia.style.background = 'linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)';
-            btnLancamento.style.border = '2px solid #e2e8f0'; btnLancamento.style.background = '#fff';
-            fieldsLancamento.style.display = 'none'; fieldsConferencia.style.display = 'block';
+            fieldsConferencia.style.display = 'block';
+        } else if (tipo === 'auditor' && btnAuditor) {
+            btnAuditor.style.border = '2px solid #f59e0b'; btnAuditor.style.background = 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)';
         }
     }
 
     async function confirmarEstorno() {
         if (tipoEstornoSelecionado === 'lancamento') await confirmarEstornoLancamento();
+        else if (tipoEstornoSelecionado === 'auditor') await confirmarRetornoAuditor();
         else await confirmarEstornoConferencia();
+    }
+
+    async function confirmarRetornoAuditor() {
+        if (!detalhesSelecionados) return;
+        const motivo = (document.getElementById('estorno-motivo').value || '').trim();
+        if (motivo.length < 3) { document.getElementById('estorno-feedback').innerText = 'Descreva o motivo com pelo menos 3 caracteres.'; return; }
+        const botao = document.getElementById('btn-confirmar-estorno');
+        botao.disabled = true;
+        const resp = await fetch('/api/fiscal/retornar_auditor', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo }),
+        });
+        const resultado = await resp.json();
+        botao.disabled = false;
+        if (!resp.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao retornar ao auditor.'; return; }
+        const numero = detalhesSelecionados.numero;
+        fecharModalEstorno();
+        detalhesCache.delete(String(numero));
+        await recarregarTudo();
+        exibirFeedback('success', 'Documento retornado', 'O documento voltou para o Auditor. Você pode editar a OC e os dados.');
     }
 
     async function confirmarEstornoLancamento() {
