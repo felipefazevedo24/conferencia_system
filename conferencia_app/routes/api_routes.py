@@ -2358,70 +2358,69 @@ _EXTENSOES_ANEXO_VALIDAS = {".pdf", ".png", ".jpg", ".jpeg"}
 
 
 @api_bp.route("/api/documento_entrada/nao_fiscal", methods=["POST"])
-@permission_required("PAGE_UPLOAD")
+@permission_required_any("PAGE_UPLOAD", "PAGE_XML_AUDITOR", "PAGE_LANCAMENTO")
 def criar_documento_nao_fiscal():
     """Cria um documento não fiscal (fatura, conta, etc.) vinculado a uma OC."""
-    tipo = str(request.form.get("tipo") or "FATURA").strip().upper()
-    if tipo not in _TIPOS_DOC_NAO_FISCAL:
-        tipo = "FATURA"
-
-    numero_documento = str(request.form.get("numero_documento") or "").strip()
-    pedido_compra = str(request.form.get("pedido_compra") or "").strip()
-    fornecedor = str(request.form.get("fornecedor") or "").strip()
-    valor_str = str(request.form.get("valor") or "0").replace(",", ".").strip()
-    observacao = str(request.form.get("observacao") or "").strip()[:300]
-
-    if not numero_documento:
-        return jsonify({"sucesso": False, "msg": "Número do documento é obrigatório"}), 400
-
     try:
-        valor = float(valor_str) if valor_str else 0.0
-    except ValueError:
-        valor = 0.0
+        tipo = str(request.form.get("tipo") or "FATURA").strip().upper()
+        if tipo not in _TIPOS_DOC_NAO_FISCAL:
+            tipo = "FATURA"
 
-    # Valida duplicidade: mesmo número + tipo + pedido
-    dup_q = ItemNota.query.filter_by(numero_nota=numero_documento[:20], tipo_documento=tipo)
-    if pedido_compra:
-        dup_q = dup_q.filter_by(pedido_compra=pedido_compra[:50])
-    if dup_q.first():
-        return jsonify({"sucesso": False, "msg": "Documento já cadastrado com este número e tipo"}), 409
+        numero_documento = str(request.form.get("numero_documento") or "").strip()
+        pedido_compra = str(request.form.get("pedido_compra") or "").strip()
+        fornecedor = str(request.form.get("fornecedor") or "").strip()
+        observacao = str(request.form.get("observacao") or "").strip()[:300]
 
-    item = ItemNota(
-        tipo_documento=tipo,
-        numero_nota=numero_documento[:20],
-        fornecedor=(fornecedor or "Não informado")[:100],
-        pedido_compra=pedido_compra[:50] if pedido_compra else None,
-        cfop="",
-        codigo="DOC-NAO-FISCAL",
-        descricao=(f"{observacao}" or f"Documento não fiscal ({tipo})")[:200],
-        qtd_real=1.0,
-        unidade_comercial="UN",
-        valor_produto=valor,
-        status="Concluído",
-        usuario_importacao=session["username"],
-        valor_total=f"R$ {valor:.2f}",
-        valor_imposto="---",
-        sem_conferencia_logistica=True,
-        auditor_status="SemInconsistencia",
-        auditor_decisao="XML Aprovado",
-    )
-    db.session.add(item)
-    db.session.flush()  # obtém item.id antes do commit
+        if not numero_documento:
+            return jsonify({"sucesso": False, "msg": "Número do documento é obrigatório"}), 400
 
-    arquivo = request.files.get("arquivo")
-    if arquivo and arquivo.filename:
-        ext = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
-        if ext not in _EXTENSOES_ANEXO_VALIDAS:
-            db.session.rollback()
-            return jsonify({"sucesso": False, "msg": "Formato inválido. Use PDF, PNG ou JPG"}), 400
-        pasta = os.path.join(current_app.instance_path, "doc_entrada_anexos", str(item.id))
-        os.makedirs(pasta, exist_ok=True)
-        nome_arquivo = secure_filename(f"{item.id}_{numero_documento[:30]}{ext}")
-        arquivo.save(os.path.join(pasta, nome_arquivo))
-        item.anexo_path = os.path.join("doc_entrada_anexos", str(item.id), nome_arquivo)
+        # Valida duplicidade: mesmo número + tipo + pedido
+        dup_q = ItemNota.query.filter_by(numero_nota=numero_documento[:20], tipo_documento=tipo)
+        if pedido_compra:
+            dup_q = dup_q.filter_by(pedido_compra=pedido_compra[:50])
+        if dup_q.first():
+            return jsonify({"sucesso": False, "msg": "Documento já cadastrado com este número e tipo"}), 409
 
-    db.session.commit()
-    return jsonify({"sucesso": True, "msg": "Documento registrado com sucesso", "id": item.id, "numero": numero_documento})
+        item = ItemNota(
+            tipo_documento=tipo,
+            numero_nota=numero_documento[:20],
+            fornecedor=(fornecedor or "Não informado")[:100],
+            pedido_compra=pedido_compra[:50] if pedido_compra else None,
+            cfop="",
+            codigo="DOC-NAO-FISCAL",
+            descricao=(observacao or f"Documento não fiscal ({tipo})")[:200],
+            qtd_real=1.0,
+            unidade_comercial="UN",
+            valor_produto=0.0,
+            status="Concluído",
+            usuario_importacao=session["username"],
+            valor_total="---",
+            valor_imposto="---",
+            sem_conferencia_logistica=True,
+            auditor_status="SemInconsistencia",
+            auditor_decisao="XML Aprovado",
+        )
+        db.session.add(item)
+        db.session.flush()  # obtém item.id antes do commit
+
+        arquivo = request.files.get("arquivo")
+        if arquivo and arquivo.filename:
+            ext = os.path.splitext(secure_filename(arquivo.filename or ""))[1].lower()
+            if ext not in _EXTENSOES_ANEXO_VALIDAS:
+                db.session.rollback()
+                return jsonify({"sucesso": False, "msg": "Formato inválido. Use PDF, PNG ou JPG"}), 400
+            pasta = os.path.join(current_app.instance_path, "doc_entrada_anexos", str(item.id))
+            os.makedirs(pasta, exist_ok=True)
+            nome_arquivo = secure_filename(f"{item.id}_{numero_documento[:30]}{ext}")
+            arquivo.save(os.path.join(pasta, nome_arquivo))
+            item.anexo_path = os.path.join("doc_entrada_anexos", str(item.id), nome_arquivo)
+
+        db.session.commit()
+        return jsonify({"sucesso": True, "msg": "Documento registrado com sucesso", "id": item.id, "numero": numero_documento})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Erro ao criar documento nao fiscal")
+        return jsonify({"sucesso": False, "msg": f"Erro interno: {exc}"}), 500
 
 
 @api_bp.route("/api/documento_entrada/<int:item_id>/anexo", methods=["GET"])
