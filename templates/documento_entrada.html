@@ -1998,6 +1998,7 @@
         const etapa = String(dados?.etapa_atual || '');
         const status = String(dados?.status_atual || '');
         const documentosDisponiveis = Boolean(dados?.documentos_disponiveis);
+        const hasAnexo = Boolean(dados?.has_anexo);
         const podeLancar = status === 'Concluído' || etapa === 'Liberada';
         const podeManifestar = status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada';
         const podeEstornar = Boolean(dados?.numero);
@@ -2005,7 +2006,7 @@
         document.getElementById('btn-action-manifestar').disabled = !podeManifestar;
         document.getElementById('btn-action-estornar').disabled = !podeEstornar;
         document.getElementById('btn-action-xml').disabled = !documentosDisponiveis;
-        document.getElementById('btn-action-pdf').disabled = !documentosDisponiveis;
+        document.getElementById('btn-action-pdf').disabled = !documentosDisponiveis && !hasAnexo;
     }
 
     async function excluirPendenciaAtual() {
@@ -2354,6 +2355,11 @@
 
     function baixarDocumentoSelecionado(tipo) {
         if (!detalhesSelecionados) return;
+        // Documento n\u00e3o fiscal: baixar o anexo armazenado localmente
+        if (tipo === 'pdf' && detalhesSelecionados.has_anexo && detalhesSelecionados.item_id) {
+            window.open(`/api/documento_entrada/${encodeURIComponent(detalhesSelecionados.item_id)}/anexo`, '_blank');
+            return;
+        }
         window.open(`/api/consyste/documento?nota=${encodeURIComponent(detalhesSelecionados.numero)}&tipo=${encodeURIComponent(tipo)}`, '_blank');
     }
 

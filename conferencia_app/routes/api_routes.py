@@ -7884,6 +7884,8 @@ def detalhes_nf(numero):
             "documentos_disponiveis": any(
                 str(i.chave_acesso or "").strip() for i in itens
             ),
+            "has_anexo": bool(itens[0].anexo_path),
+            "item_id": itens[0].id,
             "checklist": checklist_info,
             "workflow": workflow,
             "pendencias": pendencias,
