@@ -77,54 +77,6 @@ def _validar_table(table: str) -> str:
     return table
 
 
-# ── Validadores do update parcial de TORDEM_FAT (peso/volumes/liberacao) ──
-# Cada um recebe o valor bruto do JSON e devolve (ok, valor_ou_mensagem_erro):
-# se ok=True, o segundo item e o valor ja convertido, pronto pro parametro do
-# UPDATE; se ok=False, e a mensagem de erro pra devolver no 400.
-def _validar_texto_opcional(valor: Any) -> tuple[bool, Any]:
-    if valor is None:
-        return True, None
-    texto = str(valor).strip()
-    return True, (texto or None)
-
-
-def _validar_numero_nao_negativo(valor: Any) -> tuple[bool, Any]:
-    if valor is None:
-        return True, None
-    try:
-        numero = float(valor)
-    except (TypeError, ValueError):
-        return False, "deve ser numerico"
-    if numero < 0:
-        return False, "nao pode ser negativo"
-    return True, numero
-
-
-def _validar_flag_0_1(valor: Any) -> tuple[bool, Any]:
-    # Diferente dos demais campos, este NAO aceita nulo - a coluna e
-    # obrigatoriamente 0 ou 1 (ver especificacao do emitente). int(True)==1
-    # e int(False)==0, entao um JSON boolean tambem funciona aqui.
-    try:
-        numero = int(valor)
-    except (TypeError, ValueError):
-        return False, "deve ser 0 ou 1"
-    if numero not in (0, 1):
-        return False, "deve ser 0 ou 1"
-    return True, numero
-
-
-# Campos aceitos no update parcial de TORDEM_FAT: chave do JSON -> (coluna no
-# banco, validador). So os campos presentes no payload entram no SET - os
-# demais registros da linha ficam intocados (update parcial de verdade).
-CAMPOS_ORDEM_FAT = {
-    "especie_volumes": ("ESPECIE_VOLUMES", _validar_texto_opcional),
-    "qtde_volumes": ("QTDE_VOLUMES", _validar_numero_nao_negativo),
-    "peso_liquido": ("PESO_LIQUIDO", _validar_numero_nao_negativo),
-    "peso_bruto": ("PESO_BRUTO", _validar_numero_nao_negativo),
-    "liberado_para_faturamento": ("LIBERADO_PARA_FATURAMENTO", _validar_flag_0_1),
-}
-
-
 def _conectar(cfg: dict[str, Any]):
     return psycopg2.connect(
         host=cfg["host"],
@@ -1903,83 +1855,6 @@ def create_app() -> Flask:
             })
         except Exception as exc:
             app.logger.exception("Falha ao consultar entradas de chapa desde data no ERP")
-            return jsonify({"sucesso": False, "erro": str(exc)}), 500
-
-    @app.post("/api/erp/expedicao/ordem-fat")
-    def atualizar_ordem_fat():
-        """Update parcial de TORDEM_FAT (peso liquido/bruto, qtde e especie
-        de volumes, liberacao pro faturamento) - endpoint pedido pelo
-        emitente pra devolver as medidas reais capturadas na coleta/
-        carregamento. So altera as colunas presentes no payload; o CODIGO
-        (chave) e obrigatorio e vem no corpo da requisicao."""
-        cfg = _config()
-        if not _authorized(cfg):
-            return jsonify({"sucesso": False, "erro": "nao_autorizado"}), 401
-        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
-            return jsonify({"sucesso": False, "erro": "postgres_nao_configurado"}), 500
-
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({"sucesso": False, "erro": "payload_invalido"}), 400
-
-        codigo_bruto = payload.get("codigo")
-        if codigo_bruto in (None, ""):
-            return jsonify({"sucesso": False, "erro": "codigo_obrigatorio"}), 400
-        try:
-            codigo = int(codigo_bruto)
-        except (TypeError, ValueError):
-            return jsonify({"sucesso": False, "erro": "codigo_invalido"}), 400
-
-        sets: list[str] = []
-        valores: list[Any] = []
-        erros: list[str] = []
-        for chave_json, (coluna, validador) in CAMPOS_ORDEM_FAT.items():
-            if chave_json not in payload:
-                continue
-            ok, valor_ou_erro = validador(payload.get(chave_json))
-            if not ok:
-                erros.append(f"{chave_json}: {valor_ou_erro}")
-                continue
-            sets.append(f"{coluna} = %s")
-            valores.append(valor_ou_erro)
-
-        if erros:
-            return jsonify({"sucesso": False, "erro": "validacao", "detalhes": erros}), 400
-        if not sets:
-            return jsonify({"sucesso": False, "erro": "nenhum_campo_informado"}), 400
-
-        valores.append(codigo)
-        sql_update = f"UPDATE TORDEM_FAT SET {', '.join(sets)} WHERE CODIGO = %s"
-        sql_select = (
-            "SELECT CODIGO, ESPECIE_VOLUMES, QTDE_VOLUMES, PESO_LIQUIDO, "
-            "PESO_BRUTO, LIBERADO_PARA_FATURAMENTO FROM TORDEM_FAT WHERE CODIGO = %s"
-        )
-
-        try:
-            with _conectar(cfg) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(sql_update, tuple(valores))
-                    encontrado = cur.rowcount > 0
-                    dados = None
-                    if encontrado:
-                        cur.execute(sql_select, (codigo,))
-                        cols = [desc[0] for desc in cur.description]
-                        row = cur.fetchone()
-                        dados = dict(zip(cols, row)) if row else None
-
-            if not encontrado:
-                return jsonify({"sucesso": False, "erro": "codigo_nao_encontrado"}), 404
-
-            app.logger.info(
-                "TORDEM_FAT %s atualizado (%s)", codigo, ", ".join(c.split(" ")[0] for c in sets)
-            )
-            return jsonify({
-                "sucesso": True,
-                "mensagem": "Ordem de faturamento atualizada.",
-                "dados": _json_safe(dados),
-            })
-        except Exception as exc:
-            app.logger.exception("Falha ao atualizar TORDEM_FAT (codigo=%s)", codigo)
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
     return app
