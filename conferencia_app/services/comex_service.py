@@ -578,6 +578,14 @@ def listar_itens_po(processo: ComexProcesso) -> list[ComexPoItem]:
     )
 
 
+def subtotal_itens_po(processo: ComexProcesso) -> float | None:
+    """Soma do valor_total dos itens da PO (USD) - usado como sugestao de
+    "Valor da mercadoria" ao gerar uma cotacao de frete (o prestador precisa
+    disso pra calcular o seguro). None se ainda nao ha itens."""
+    total = sum(float(it.valor_total or 0) for it in listar_itens_po(processo))
+    return round(total, 2) if total else None
+
+
 def _to_float(valor):
     if valor in (None, ""):
         return None
@@ -801,6 +809,12 @@ def criar_link_cotacao(
         processo_id=processo.id,
         tipo_frete=tipo_frete,
         status="Pendente",
+        # Vazio (nao None) de proposito: bancos ja provisionados antes do
+        # redesenho deste modulo ainda tem "fornecedor_frete" como NOT NULL
+        # (sync_missing_columns.py so adiciona coluna que falta, nao ajusta
+        # restricao de coluna que ja existia) - inserir None quebraria o
+        # INSERT nesses bancos. O prestador substitui isso ao submeter.
+        fornecedor_frete="",
         token_publico_hash=_hash_token_cotacao(token),
         token_publico_expira_em=agora + timedelta(days=max(1, validade_dias)),
         email_instrucao_embarque=(email_instrucao_embarque or "").strip() or None,
@@ -814,6 +828,9 @@ def criar_link_cotacao(
     if tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(pre_preenchido.get("qtd_40hc"))
         cotacao.qtd_20dry = _to_int(pre_preenchido.get("qtd_20dry"))
+    # Valor da mercadoria - essencial pro prestador calcular o seguro. Se o
+    # operador nao informou, sugere o subtotal dos itens da PO.
+    cotacao.valor_mercadoria_usd = _to_float(pre_preenchido.get("valor_mercadoria_usd")) or subtotal_itens_po(processo)
     db.session.add(cotacao)
 
     if processo.status_modulo == "PO":
@@ -871,6 +888,11 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
         if campo in dados:
             valor = str(dados.get(campo) or "").strip()
             setattr(cotacao, campo, valor[:tamanho] or None)
+
+    # Valor da mercadoria ja vem sugerido (subtotal da PO ou informado pelo
+    # operador ao gerar o link) - o prestador so ajusta se o valor mudou.
+    if "valor_mercadoria_usd" in dados:
+        cotacao.valor_mercadoria_usd = _to_float(dados.get("valor_mercadoria_usd")) or cotacao.valor_mercadoria_usd
 
     if cotacao.tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))

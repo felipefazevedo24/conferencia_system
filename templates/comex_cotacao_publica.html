@@ -162,6 +162,10 @@
               <div class="field"><label>Destino</label><input type="text" id="destino" value="${v(pre.destino)}"></div>
             </div>
             ${isFcl ? '' : `<div class="field"><label>Incoterm</label><input type="text" id="incoterm" placeholder="Ex.: FOB, EXW, CIF..." value="${v(pre.incoterm)}"></div>`}
+            <div class="field">
+              <label>Valor da mercadoria (USD)</label>
+              <input type="text" inputmode="decimal" id="valor_mercadoria_usd" value="${v(pre.valor_mercadoria_usd)}">
+            </div>
           </div>
 
           ${isFcl ? `
@@ -244,6 +248,7 @@
         incoterm: g('incoterm'),
         imo_classe: g('imo_classe'),
         un_numero: g('un_numero'),
+        valor_mercadoria_usd: g('valor_mercadoria_usd').trim().replace(',', '.') || null,
         termos_aceitos: document.getElementById('termos_aceitos').checked,
       };
       if (data.tipo_frete === 'FCL') {

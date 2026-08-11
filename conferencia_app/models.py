@@ -2797,6 +2797,11 @@ class ComexCotacao(db.Model):
     imo_classe = db.Column(db.String(20))
     un_numero = db.Column(db.String(20))
 
+    # Valor da mercadoria (USD) - essencial pro prestador de frete calcular o
+    # seguro (Ensurance); sugerido automaticamente a partir do subtotal dos
+    # itens da PO, mas o operador pode ajustar.
+    valor_mercadoria_usd = db.Column(db.Float)
+
     # LCL_AEREO - logistica (volumes em ComexCotacaoVolume)
     transit_time = db.Column(db.String(60))
     rota = db.Column(db.String(200))

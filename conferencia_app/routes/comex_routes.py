@@ -76,6 +76,7 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "instrucao_enviada_por": p.instrucao_enviada_por,
         "cotacao_vencedora_id": p.cotacao_vencedora_id,
         "cotacao_substatus": svc.cotacao_substatus(p),
+        "po_subtotal_usd": svc.subtotal_itens_po(p),
     }
 
 
@@ -534,6 +535,7 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
         "qtd_20dry": c.qtd_20dry,
         "imo_classe": c.imo_classe,
         "un_numero": c.un_numero,
+        "valor_mercadoria_usd": c.valor_mercadoria_usd,
         "transit_time": c.transit_time,
         "rota": c.rota,
         "validade": c.validade.isoformat() if c.validade else None,
@@ -670,6 +672,7 @@ def api_cotacao_publica_dados(token):
             "un_numero": cotacao.un_numero,
             "qtd_40hc": cotacao.qtd_40hc,
             "qtd_20dry": cotacao.qtd_20dry,
+            "valor_mercadoria_usd": cotacao.valor_mercadoria_usd,
         },
     })
 

@@ -371,6 +371,10 @@
                 <div class="cx-field"><label>IMO</label><input type="text" id="cx-cot-imo" class="eui-input" placeholder="Classe IMO ou NA"></div>
                 <div class="cx-field"><label>UN</label><input type="text" id="cx-cot-un" class="eui-input" placeholder="Número UN ou NA"></div>
             </div>
+            <div class="cx-field">
+                <label>Valor da mercadoria (USD) <small style="font-weight:400; color:var(--eui-muted);">— essencial pro prestador calcular o seguro</small></label>
+                <input type="text" inputmode="decimal" id="cx-cot-valor-mercadoria" class="eui-input">
+            </div>
             <div style="display:flex; justify-content:flex-end;">
                 <button type="button" class="eui-btn eui-btn--primary eui-btn--sm" id="cx-cot-btn-gerar"><i class="fas fa-link"></i> Gerar link</button>
             </div>
@@ -1074,6 +1078,9 @@
         $("cx-cot-qtd-20dry").value = "";
         $("cx-cot-imo").value = "";
         $("cx-cot-un").value = "";
+        // Sugere o subtotal dos itens da PO como valor da mercadoria - o
+        // operador confirma ou ajusta antes de gerar o link.
+        $("cx-cot-valor-mercadoria").value = p.po_subtotal_usd != null ? p.po_subtotal_usd : "";
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");
         const tipoFreteSel = $("cx-cot-tipo-frete");
@@ -1162,6 +1169,7 @@
                     qtd_20dry: $("cx-cot-qtd-20dry").value || null,
                     imo_classe: $("cx-cot-imo").value.trim(),
                     un_numero: $("cx-cot-un").value.trim(),
+                    valor_mercadoria_usd: _parseNumeroPt($("cx-cot-valor-mercadoria").value),
                 }),
             });
             $("cx-cot-link").value = resp.link;

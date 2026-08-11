@@ -272,6 +272,7 @@ def upgrade():
             sa.Column("qtd_20dry", sa.Integer(), nullable=True),
             sa.Column("imo_classe", sa.String(length=20), nullable=True),
             sa.Column("un_numero", sa.String(length=20), nullable=True),
+            sa.Column("valor_mercadoria_usd", sa.Float(), nullable=True),
             sa.Column("transit_time", sa.String(length=60), nullable=True),
             sa.Column("rota", sa.String(length=200), nullable=True),
             sa.Column("validade", sa.Date(), nullable=True),
