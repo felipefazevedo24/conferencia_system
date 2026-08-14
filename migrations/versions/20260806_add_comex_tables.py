@@ -391,6 +391,24 @@ def upgrade():
             sa.PrimaryKeyConstraint("id"),
         )
 
+    if not inspector.has_table("comex_fornecedor"):
+        op.create_table(
+            "comex_fornecedor",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("razao_social", sa.String(length=200), nullable=False),
+            sa.Column("nome_fantasia", sa.String(length=200), nullable=True),
+            sa.Column("cnpj", sa.String(length=20), nullable=True),
+            sa.Column("email", sa.String(length=300), nullable=True),
+            sa.Column("telefone", sa.String(length=40), nullable=True),
+            sa.Column("tipo_fornecedor", sa.String(length=30), nullable=False),
+            sa.Column("ativo", sa.Boolean(), nullable=False),
+            sa.Column("criado_em", sa.DateTime(), nullable=False),
+            sa.Column("criado_por", sa.String(length=100), nullable=True),
+            sa.Column("atualizado_em", sa.DateTime(), nullable=False),
+            sa.Column("atualizado_por", sa.String(length=100), nullable=True),
+            sa.PrimaryKeyConstraint("id"),
+        )
+
     # Indices (idempotentes - recria o inspector apos as tabelas existirem).
     inspector = inspect(bind)
     _create_index_if_missing(inspector, "ix_comex_processo_id_op", "comex_processo", ["id_op"], unique=True)
@@ -413,6 +431,11 @@ def upgrade():
     _create_index_if_missing(inspector, "ix_comex_lembrete_processo_id", "comex_lembrete", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_entrega_foto_processo_id", "comex_entrega_foto", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_documento_processo_id", "comex_documento", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_fornecedor_razao_social", "comex_fornecedor", ["razao_social"])
+    _create_index_if_missing(inspector, "ix_comex_fornecedor_nome_fantasia", "comex_fornecedor", ["nome_fantasia"])
+    _create_index_if_missing(inspector, "ix_comex_fornecedor_cnpj", "comex_fornecedor", ["cnpj"])
+    _create_index_if_missing(inspector, "ix_comex_fornecedor_tipo_fornecedor", "comex_fornecedor", ["tipo_fornecedor"])
+    _create_index_if_missing(inspector, "ix_comex_fornecedor_ativo", "comex_fornecedor", ["ativo"])
     _create_index_if_missing(inspector, "ix_comex_documento_modulo", "comex_documento", ["modulo"])
 
 
@@ -420,6 +443,7 @@ def downgrade():
     bind = op.get_bind()
     inspector = inspect(bind)
     for table in (
+        "comex_fornecedor",
         "comex_documento",
         "comex_entrega_foto",
         "comex_lembrete",

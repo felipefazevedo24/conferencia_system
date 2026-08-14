@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Fornecedores — Comex{% endblock %}
+{% block shell_title %}Comex — Fornecedores{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cx-wrap { display: grid; gap: 18px; }
+    .cx-table-wrap { overflow-x: auto; }
+    .cx-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+
+    .cx-modal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); padding: 20px; }
+    .cx-modal.open { display: flex; }
+    .cx-modal__box { background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.35); width: min(640px, 100%); max-height: 90vh; overflow-y: auto; }
+    .cx-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--eui-border); }
+    .cx-modal__title { font-size: 16px; font-weight: 800; color: var(--eui-text); margin: 0; }
+    .cx-modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: var(--eui-muted); }
+    .cx-modal__body { padding: 18px 22px; display: grid; gap: 14px; }
+    .cx-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--eui-border); flex-wrap: wrap; }
+    .cx-field { display: grid; gap: 6px; }
+    .cx-field label { font-size: 12.5px; font-weight: 700; color: var(--eui-text); }
+    .cx-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .cx-grid-2 { grid-template-columns: 1fr; } }
+
+    .cx-badge-tipo { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+    .cx-badge-tipo.ff { background: #eef2ff; color: #4338ca; }
+    .cx-badge-tipo.transp { background: #fff7ed; color: #c2410c; }
+    .cx-badge-tipo.proddist { background: #ecfdf5; color: #047857; }
+    .cx-badge-inativo { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: #fee2e2; color: #b91c1c; }
+
+    .cx-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .cx-toast.error { border-left-color: var(--eui-danger); }
+    .cx-toast.success { border-left-color: var(--eui-success); }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cx-wrap">
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div>
+                <h2 class="eui-card__title"><i class="fas fa-address-book"></i> Fornecedores — Comex</h2>
+                <p class="eui-card__sub">Cadastro usado no envio de PO (Módulo 2) e no envio de cotações de frete (Módulo 3).</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a class="eui-btn eui-btn--subtle eui-btn--sm" href="{{ url_for('comex.comex_page') }}"><i class="fas fa-arrow-left"></i> Voltar ao Comex</a>
+                <button class="eui-btn eui-btn--primary" id="cf-btn-novo"><i class="fas fa-plus"></i> Novo fornecedor</button>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px; display:flex; gap:10px; flex-wrap:wrap;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:360px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="cf-busca" class="eui-input" autocomplete="off" placeholder="Buscar por razão social, fantasia ou CNPJ…" style="width:100%; padding-left:34px;">
+                </div>
+                <select id="cf-filtro-tipo" class="eui-input" style="max-width:220px;">
+                    <option value="">Todos os tipos</option>
+                </select>
+                <select id="cf-filtro-ativo" class="eui-input" style="max-width:180px;">
+                    <option value="">Ativos</option>
+                    <option value="todos">Todos (inclui inativos)</option>
+                </select>
+            </div>
+            <div class="cx-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Razão social</th>
+                            <th>Nome fantasia</th>
+                            <th>CNPJ</th>
+                            <th>Tipo</th>
+                            <th>E-mail</th>
+                            <th>Telefone</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cf-tbody">
+                        <tr><td colspan="7" class="cx-empty">Carregando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Criar/editar fornecedor -->
+<div class="cx-modal" id="cf-modal">
+    <div class="cx-modal__box">
+        <div class="cx-modal__head">
+            <h3 class="cx-modal__title" id="cf-modal-titulo"><i class="fas fa-address-book"></i> Novo fornecedor</h3>
+            <button class="cx-modal__close" id="cf-fechar-modal"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="cx-modal__body">
+            <input type="hidden" id="cf-id">
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>Razão social *</label>
+                    <input type="text" id="cf-razao-social" class="eui-input" maxlength="200">
+                </div>
+                <div class="cx-field">
+                    <label>Nome fantasia</label>
+                    <input type="text" id="cf-nome-fantasia" class="eui-input" maxlength="200">
+                </div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>CNPJ</label>
+                    <input type="text" id="cf-cnpj" class="eui-input" placeholder="00.000.000/0000-00" maxlength="20">
+                </div>
+                <div class="cx-field">
+                    <label>Tipo de fornecedor *</label>
+                    <select id="cf-tipo" class="eui-input"></select>
+                </div>
+            </div>
+            <div class="cx-grid-2">
+                <div class="cx-field">
+                    <label>Telefone</label>
+                    <input type="text" id="cf-telefone" class="eui-input" maxlength="40">
+                </div>
+                <div class="cx-field">
+                    <label>E-mail(s)</label>
+                    <input type="text" id="cf-email" class="eui-input" placeholder="Separe vários com ; (ex.: a@x.com; b@x.com)">
+                </div>
+            </div>
+        </div>
+        <div class="cx-modal__foot">
+            <button class="eui-btn eui-btn--ghost" id="cf-cancelar">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" id="cf-salvar"><i class="fas fa-check"></i> Salvar</button>
+        </div>
+    </div>
+</div>
+
+<div class="cx-toast" id="cf-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    // Mesma lista de conferencia_app/services/comex_fornecedor_service.py
+    // (TIPOS_FORNECEDOR) - fixa, nao muda com frequencia.
+    const TIPOS = ["Freight Forwarder", "Transportador", "Prod/Dist"];
+
+    function toast(msg, tipo) {
+        const el = $("cf-toast");
+        el.textContent = msg;
+        el.className = "cx-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4200);
+    }
+
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
+        return data;
+    }
+
+    function classeTipo(tipo) {
+        if (tipo === "Freight Forwarder") return "ff";
+        if (tipo === "Transportador") return "transp";
+        return "proddist";
+    }
+
+    function preencherSelectsTipo() {
+        const selectFiltro = $("cf-filtro-tipo");
+        const selectModal = $("cf-tipo");
+        TIPOS.forEach((t) => {
+            const optF = document.createElement("option");
+            optF.value = t; optF.textContent = t;
+            selectFiltro.appendChild(optF);
+            const optM = document.createElement("option");
+            optM.value = t; optM.textContent = t;
+            selectModal.appendChild(optM);
+        });
+    }
+
+    function linhaFornecedor(f) {
+        const tr = document.createElement("tr");
+        if (!f.ativo) tr.style.opacity = "0.55";
+        tr.innerHTML = `
+            <td><strong>${f.razao_social || "—"}</strong></td>
+            <td>${f.nome_fantasia || "—"}</td>
+            <td>${f.cnpj || "—"}</td>
+            <td><span class="cx-badge-tipo ${classeTipo(f.tipo_fornecedor)}">${f.tipo_fornecedor}</span>${f.ativo ? "" : ' <span class="cx-badge-inativo">Inativo</span>'}</td>
+            <td>${f.email || "—"}</td>
+            <td>${f.telefone || "—"}</td>
+            <td style="text-align:right; white-space:nowrap;">
+                <button class="eui-btn eui-btn--subtle eui-btn--sm cf-btn-editar" data-id="${f.id}"><i class="fas fa-pen"></i></button>
+                <button class="eui-btn eui-btn--subtle eui-btn--sm cf-btn-toggle" data-id="${f.id}" data-ativo="${f.ativo ? "1" : "0"}"><i class="fas fa-${f.ativo ? "ban" : "rotate-left"}"></i></button>
+            </td>
+        `;
+        return tr;
+    }
+
+    let fornecedoresCache = [];
+
+    async function carregar() {
+        const tbody = $("cf-tbody");
+        tbody.innerHTML = `<tr><td colspan="7" class="cx-empty">Carregando…</td></tr>`;
+        const params = new URLSearchParams();
+        const tipo = $("cf-filtro-tipo").value;
+        const ativo = $("cf-filtro-ativo").value;
+        const busca = $("cf-busca").value.trim();
+        if (tipo) params.set("tipo", tipo);
+        if (ativo) params.set("ativo", ativo);
+        if (busca) params.set("busca", busca);
+        const data = await api("/api/comex/fornecedores?" + params.toString());
+        fornecedoresCache = data.fornecedores || [];
+        tbody.innerHTML = "";
+        if (!fornecedoresCache.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="cx-empty">Nenhum fornecedor encontrado.</td></tr>`;
+            return;
+        }
+        fornecedoresCache.forEach((f) => tbody.appendChild(linhaFornecedor(f)));
+    }
+
+    function abrirModal(fornecedor) {
+        $("cf-id").value = fornecedor ? fornecedor.id : "";
+        $("cf-razao-social").value = fornecedor ? (fornecedor.razao_social || "") : "";
+        $("cf-nome-fantasia").value = fornecedor ? (fornecedor.nome_fantasia || "") : "";
+        $("cf-cnpj").value = fornecedor ? (fornecedor.cnpj || "") : "";
+        $("cf-telefone").value = fornecedor ? (fornecedor.telefone || "") : "";
+        $("cf-email").value = fornecedor ? (fornecedor.email || "") : "";
+        $("cf-tipo").value = fornecedor ? (fornecedor.tipo_fornecedor || "") : (TIPOS[0] || "");
+        $("cf-modal-titulo").innerHTML = fornecedor
+            ? '<i class="fas fa-pen-to-square"></i> Editar fornecedor'
+            : '<i class="fas fa-address-book"></i> Novo fornecedor';
+        $("cf-modal").classList.add("open");
+    }
+
+    function fecharModal() {
+        $("cf-modal").classList.remove("open");
+    }
+
+    $("cf-btn-novo").addEventListener("click", () => abrirModal(null));
+    $("cf-fechar-modal").addEventListener("click", fecharModal);
+    $("cf-cancelar").addEventListener("click", fecharModal);
+    $("cf-modal").addEventListener("click", (e) => { if (e.target.id === "cf-modal") fecharModal(); });
+
+    $("cf-salvar").addEventListener("click", async () => {
+        const id = $("cf-id").value;
+        const payload = {
+            razao_social: $("cf-razao-social").value.trim(),
+            nome_fantasia: $("cf-nome-fantasia").value.trim(),
+            cnpj: $("cf-cnpj").value.trim(),
+            telefone: $("cf-telefone").value.trim(),
+            email: $("cf-email").value.trim(),
+            tipo_fornecedor: $("cf-tipo").value,
+        };
+        const btn = $("cf-salvar");
+        btn.disabled = true;
+        try {
+            if (id) {
+                await api(`/api/comex/fornecedores/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            } else {
+                await api("/api/comex/fornecedores", { method: "POST", body: JSON.stringify(payload) });
+            }
+            toast("Fornecedor salvo!", "success");
+            fecharModal();
+            carregar();
+        } catch (err) {
+            toast(err.message, "error");
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.addEventListener("click", async (e) => {
+        const btnEditar = e.target.closest(".cf-btn-editar");
+        if (btnEditar) {
+            const f = fornecedoresCache.find((x) => String(x.id) === btnEditar.dataset.id);
+            if (f) abrirModal(f);
+            return;
+        }
+        const btnToggle = e.target.closest(".cf-btn-toggle");
+        if (btnToggle) {
+            const ativoAtual = btnToggle.dataset.ativo === "1";
+            const acao = ativoAtual ? "desativar" : "reativar";
+            if (!confirm(`Deseja ${acao} este fornecedor?`)) return;
+            try {
+                await api(`/api/comex/fornecedores/${btnToggle.dataset.id}/ativo`, {
+                    method: "POST",
+                    body: JSON.stringify({ ativo: !ativoAtual }),
+                });
+                toast("Status atualizado!", "success");
+                carregar();
+            } catch (err) {
+                toast(err.message, "error");
+            }
+        }
+    });
+
+    $("cf-filtro-tipo").addEventListener("change", carregar);
+    $("cf-filtro-ativo").addEventListener("change", carregar);
+    let buscaTimer = null;
+    $("cf-busca").addEventListener("input", () => {
+        clearTimeout(buscaTimer);
+        buscaTimer = setTimeout(carregar, 300);
+    });
+
+    preencherSelectsTipo();
+    carregar();
+})();
+</script>
+{% endblock %}

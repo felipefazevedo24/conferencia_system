@@ -2948,6 +2948,32 @@ class ComexEntregaFoto(db.Model):
     uploaded_by = db.Column(db.String(100))
 
 
+class ComexFornecedor(db.Model):
+    """Cadastro de fornecedores do Comex - compartilhado entre modulos.
+    Modulo 2 (PO): qualquer fornecedor ativo pode ser selecionado pra
+    pre-preencher o(s) e-mail(s) de envio. Modulo 3 (Cotacao): a selecao
+    multipla pro envio em lote filtra so os do tipo "Freight Forwarder"."""
+
+    __tablename__ = "comex_fornecedor"
+
+    id = db.Column(db.Integer, primary_key=True)
+    razao_social = db.Column(db.String(200), nullable=False, index=True)
+    nome_fantasia = db.Column(db.String(200), index=True)
+    cnpj = db.Column(db.String(20), index=True)
+    # Um ou mais enderecos separados por ";" - mesmo padrao ja usado em
+    # ComexProcesso.po_destinatarios_email.
+    email = db.Column(db.String(300))
+    telefone = db.Column(db.String(40))
+    # Freight Forwarder | Transportador | Prod/Dist (ver TIPOS_FORNECEDOR
+    # em comex_fornecedor_service.py)
+    tipo_fornecedor = db.Column(db.String(30), nullable=False, index=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    criado_por = db.Column(db.String(100))
+    atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    atualizado_por = db.Column(db.String(100))
+
+
 class ComexDocumento(db.Model):
     """Documento anexado ao processo em QUALQUER modulo do workflow (nota
     fiscal, BL/AWB, invoice, packing list, comprovante etc.) - requisito

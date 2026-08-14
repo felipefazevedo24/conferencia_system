@@ -268,6 +268,9 @@
             </div>
             <div class="cx-field hidden" id="cx-po-email-wrap">
                 <label>Enviar para (e-mails separados por ";")</label>
+                <select id="cx-po-email-fornecedor-select" class="eui-select" style="margin-bottom:8px;">
+                    <option value="">+ Adicionar e-mail de fornecedor cadastrado…</option>
+                </select>
                 <div style="display:flex; gap:8px;">
                     <input type="text" id="cx-po-email-destinatarios" class="eui-input" placeholder="fornecedor@exemplo.com; outro@exemplo.com" style="flex:1;">
                     <button class="eui-btn eui-btn--primary" id="cx-po-btn-enviar-email"><i class="fas fa-paper-plane"></i> Enviar</button>
@@ -342,18 +345,20 @@
             </div>
             <div class="cx-section-title">Gerar novo link de cotação</div>
             <small style="color:var(--eui-muted); margin-top:-8px;">Preencha o que a Columbia já sabe sobre o embarque — o prestador de frete recebe isso pronto e só cota os valores.</small>
-            <div class="cx-grid-2">
-                <div class="cx-field">
-                    <label>Tipo de frete</label>
-                    <select id="cx-cot-tipo-frete" class="eui-select">
-                        <option value="FCL">FCL (Container fechado)</option>
-                        <option value="LCL_AEREO">LCL / Aéreo (volumes soltos)</option>
-                    </select>
-                </div>
-                <div class="cx-field">
-                    <label>E-mail do prestador (opcional — envia o link automaticamente)</label>
-                    <input type="email" id="cx-cot-email" class="eui-input" placeholder="frete@transportadora.com">
-                </div>
+            <div class="cx-field">
+                <label>Tipo de frete</label>
+                <select id="cx-cot-tipo-frete" class="eui-select">
+                    <option value="FCL">FCL (Container fechado)</option>
+                    <option value="LCL_AEREO">LCL / Aéreo (volumes soltos)</option>
+                </select>
+            </div>
+            <div class="cx-field">
+                <label>Freight Forwarders cadastrados <small style="font-weight:400; color:var(--eui-muted);">— marque um ou mais pra enviar o link em lote</small></label>
+                <div class="cx-checklist" id="cx-cot-forwarders"><span class="cx-empty-mini">Carregando…</span></div>
+            </div>
+            <div class="cx-field">
+                <label>Outro e-mail (opcional — além dos marcados acima)</label>
+                <input type="email" id="cx-cot-email" class="eui-input" placeholder="frete@transportadora.com">
             </div>
             <div class="cx-grid-2">
                 <div class="cx-field"><label>Origem</label><input type="text" id="cx-cot-origem" class="eui-input"></div>
@@ -916,6 +921,38 @@
         }
     });
 
+    // ── Cadastro de fornecedores (compartilhado entre PO e Cotação) ───────
+    async function carregarFornecedores(tipo) {
+        const params = tipo ? `?tipo=${encodeURIComponent(tipo)}` : "";
+        const data = await api(`/api/comex/fornecedores${params}`);
+        return data.fornecedores || [];
+    }
+    async function popularSelectFornecedores(selectEl, tipo) {
+        try {
+            const fornecedores = await carregarFornecedores(tipo);
+            selectEl.innerHTML = '<option value="">+ Adicionar e-mail de fornecedor cadastrado…</option>' +
+                fornecedores.filter((f) => f.email).map((f) =>
+                    `<option value="${escapeHtml(f.email)}">${escapeHtml(f.nome_fantasia ? `${f.razao_social} (${f.nome_fantasia})` : f.razao_social)}</option>`
+                ).join("");
+        } catch (err) {
+            // Selecao de fornecedor cadastrado e so um atalho - falha
+            // silenciosa, o operador ainda pode digitar o e-mail direto.
+        }
+    }
+    async function popularChecklistFornecedores(containerEl, tipo) {
+        containerEl.innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
+        try {
+            const fornecedores = (await carregarFornecedores(tipo)).filter((f) => f.email);
+            containerEl.innerHTML = fornecedores.length
+                ? fornecedores.map((f) =>
+                    `<label><input type="checkbox" value="${escapeHtml(f.email)}"> ${escapeHtml(f.nome_fantasia ? `${f.razao_social} (${f.nome_fantasia})` : f.razao_social)}</label>`
+                  ).join("")
+                : '<span class="cx-empty-mini">Nenhum fornecedor cadastrado com e-mail — cadastre em Comex → Fornecedores.</span>';
+        } catch (err) {
+            containerEl.innerHTML = `<span class="cx-empty-mini">${escapeHtml(err.message)}</span>`;
+        }
+    }
+
     // ── MODAL: PO ───────────────────────────────────────────────────────
     async function abrirModalPo(p) {
         processoPoAtual = p;
@@ -948,6 +985,7 @@
         $("cx-po-email-wrap").classList.toggle("hidden", !temPo);
         $("cx-po-btn-pdf").classList.toggle("hidden", !temPo);
         if (temPo) $("cx-po-btn-pdf").href = `/api/comex/processos/${p.id}/po.pdf`;
+        if (temPo) popularSelectFornecedores($("cx-po-email-fornecedor-select"));
 
         $("cx-modal-po").classList.add("open");
 
@@ -1043,6 +1081,18 @@
         } catch (err) { toast(err.message, "error"); }
     });
 
+    $("cx-po-email-fornecedor-select").addEventListener("change", (e) => {
+        const email = e.target.value;
+        e.target.value = "";
+        if (!email) return;
+        const input = $("cx-po-email-destinatarios");
+        const atuais = input.value.split(";").map((s) => s.trim()).filter(Boolean);
+        email.split(";").map((s) => s.trim()).filter(Boolean).forEach((em) => {
+            if (!atuais.includes(em)) atuais.push(em);
+        });
+        input.value = atuais.join("; ");
+    });
+
     $("cx-po-btn-enviar-email").addEventListener("click", async () => {
         if (!processoPoAtual) return;
         const destinatarios = $("cx-po-email-destinatarios").value.trim();
@@ -1092,6 +1142,7 @@
         $("cx-cot-email").value = "";
         $("cx-cot-link-wrap").classList.add("hidden");
         $("cx-cot-escolhida-wrap").classList.add("hidden");
+        popularChecklistFornecedores($("cx-cot-forwarders"), "Freight Forwarder");
         $("cx-modal-cotacao").classList.add("open");
 
         const cotacoesExistentes = await carregarCotacoes(p.id);
@@ -1272,29 +1323,57 @@
             );
             if (!confirmar) return;
         }
+        // Cada fornecedor marcado no checklist (+ o e-mail avulso, se
+        // digitado) recebe um link proprio - a mesma chamada e repetida uma
+        // vez por destinatario, reaproveitando os dados de embarque do
+        // formulario, ja que cada cotacao recebida e' rastreada por link.
+        const emailsForwarders = Array.from($("cx-cot-forwarders").querySelectorAll("input[type=checkbox]:checked")).map((c) => c.value);
+        const emailAvulso = $("cx-cot-email").value.trim();
+        const destinatarios = [...emailsForwarders];
+        if (emailAvulso && !destinatarios.includes(emailAvulso)) destinatarios.push(emailAvulso);
+
+        const montarBody = (email) => ({
+            tipo_frete: $("cx-cot-tipo-frete").value,
+            email_instrucao_embarque: email,
+            enviar_para: email,
+            origem: $("cx-cot-origem").value.trim(),
+            destino: $("cx-cot-destino").value.trim(),
+            incoterm: $("cx-cot-incoterm").value.trim(),
+            qtd_40hc: $("cx-cot-qtd-40hc").value || null,
+            qtd_20dry: $("cx-cot-qtd-20dry").value || null,
+            imo_classe: $("cx-cot-imo").value.trim(),
+            un_numero: $("cx-cot-un").value.trim(),
+            valor_mercadoria_usd: _parseNumeroPt($("cx-cot-valor-mercadoria").value),
+            volumes: volumesCotacaoAtual,
+        });
+
         const btn = $("cx-cot-btn-gerar");
         btn.disabled = true;
         try {
-            const resp = await api(`/api/comex/processos/${processoCotacaoAtual.id}/cotacoes`, {
-                method: "POST",
-                body: JSON.stringify({
-                    tipo_frete: $("cx-cot-tipo-frete").value,
-                    email_instrucao_embarque: $("cx-cot-email").value.trim(),
-                    enviar_para: $("cx-cot-email").value.trim(),
-                    origem: $("cx-cot-origem").value.trim(),
-                    destino: $("cx-cot-destino").value.trim(),
-                    incoterm: $("cx-cot-incoterm").value.trim(),
-                    qtd_40hc: $("cx-cot-qtd-40hc").value || null,
-                    qtd_20dry: $("cx-cot-qtd-20dry").value || null,
-                    imo_classe: $("cx-cot-imo").value.trim(),
-                    un_numero: $("cx-cot-un").value.trim(),
-                    valor_mercadoria_usd: _parseNumeroPt($("cx-cot-valor-mercadoria").value),
-                    volumes: volumesCotacaoAtual,
-                }),
-            });
-            $("cx-cot-link").value = resp.link;
-            $("cx-cot-link-wrap").classList.remove("hidden");
-            toast(resp.message, resp.email_enviado === false ? "error" : "success");
+            if (destinatarios.length <= 1) {
+                const resp = await api(`/api/comex/processos/${processoCotacaoAtual.id}/cotacoes`, {
+                    method: "POST",
+                    body: JSON.stringify(montarBody(destinatarios[0] || "")),
+                });
+                $("cx-cot-link").value = resp.link;
+                $("cx-cot-link-wrap").classList.remove("hidden");
+                toast(resp.message, resp.email_enviado === false ? "error" : "success");
+            } else {
+                let enviados = 0, falhas = 0;
+                for (const email of destinatarios) {
+                    try {
+                        const resp = await api(`/api/comex/processos/${processoCotacaoAtual.id}/cotacoes`, {
+                            method: "POST",
+                            body: JSON.stringify(montarBody(email)),
+                        });
+                        if (resp.email_enviado === false) falhas++; else enviados++;
+                    } catch (err) {
+                        falhas++;
+                    }
+                }
+                $("cx-cot-link-wrap").classList.add("hidden");
+                toast(`${enviados} link(s) enviado(s) em lote` + (falhas ? `, ${falhas} falha(s) — veja a tabela abaixo.` : "."), falhas ? "error" : "success");
+            }
             baselineDadosEmbarque = _snapshotDadosEmbarqueForm();
             carregarCotacoes(processoCotacaoAtual.id);
             carregar();
