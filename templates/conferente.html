@@ -609,11 +609,12 @@
         .ce-dropdown-menu .eui-btn { width: 100%; justify-content: flex-start; white-space: nowrap; }
 
         /* Remove o "container branco" externo para espelhar a sensação visual da expedição. */
-        .receb-shell-neutral {
+        .module-shell.receb-shell-neutral {
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             padding: 0 !important;
+            border-radius: 0 !important;
         }
 
         .rc-table-wrap { overflow-x: auto; }
@@ -637,6 +638,13 @@
             background: var(--eui-surface) !important;
             border: 1px solid var(--eui-border) !important;
             box-shadow: var(--eui-shadow-sm) !important;
+        }
+        [data-theme="escuro"] .module-shell.receb-shell-neutral {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
         }
         [data-theme="escuro"] .eui-page-header__sub { color: var(--eui-text-soft); }
         [data-theme="escuro"] #dashboard-resumo { margin-top: 14px !important; margin-bottom: 22px !important; }
