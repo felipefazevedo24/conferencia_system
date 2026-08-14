@@ -600,6 +600,22 @@
         .eui-stat.is-clickable { cursor: pointer; }
         .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
 
+        .ce-wrap { display: grid; gap: 18px; }
+        .ce-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; background: transparent; border: none; }
+        .ce-table-wrap { overflow-x: auto; }
+        .ce-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted, #64748b); font-weight: 600; }
+        .ce-dropdown-menu { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); padding: 8px; flex-direction: column; gap: 6px; min-width: 240px; }
+        .ce-dropdown-menu.open { display: flex; }
+        .ce-dropdown-menu .eui-btn { width: 100%; justify-content: flex-start; white-space: nowrap; }
+
+        /* Remove o "container branco" externo para espelhar a sensação visual da expedição. */
+        .receb-shell-neutral {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+
         .rc-table-wrap { overflow-x: auto; }
         .rc-table { width: 100%; border-collapse: collapse; }
         .rc-table thead th { text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--eui-muted, #64748b); padding: 10px 12px; border-bottom: 1px solid var(--eui-border, #e2e8f0); white-space: nowrap; }
@@ -754,22 +770,34 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-erp eui-scope">
-    <div class="module-shell">
-    <div id="lista-view">
+<div class="container-erp eui-scope" style="max-width:1600px; margin:0 auto;">
+<div class="module-shell receb-shell-neutral">
+<section class="eui-page" style="max-width:1600px; margin:0 auto; padding:0; background:transparent; min-height:0;">
+    <div id="lista-view" class="ce-wrap">
         <header class="eui-page-header">
             <div>
                 <div class="eui-page-header__eyebrow">Recebimento</div>
                 <h1 class="eui-page-header__title"><i class="fas fa-barcode"></i> Conferência de Recebimento</h1>
                 <p class="eui-page-header__sub">Fila operacional das NF-es liberadas para contagem física no recebimento.</p>
             </div>
-            <div class="eui-toolbar" style="padding:0;background:transparent;border:none;">
-                <div class="eui-input-group" style="position:relative; min-width:280px;">
+        </header>
+
+        <div class="eui-toolbar ce-toolbar-actions" style="justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div class="ce-search" style="display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px;">
+                <div class="eui-input-group" style="flex:1; position:relative;">
                     <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
                     <input id="filtro-nota-pendente" class="eui-input" placeholder="Buscar por NF ou fornecedor..." oninput="agendarBuscaNotas()" autocomplete="off" style="width:100%; padding-left:34px;" />
                 </div>
+                <button class="eui-btn eui-btn--ghost hidden" id="receb-btn-limpar-busca" onclick="limparBuscaReceb()" title="Limpar busca"><i class="fas fa-xmark"></i></button>
             </div>
-        </header>
+            <div style="position:relative;">
+                <button class="eui-btn eui-btn--ghost" type="button" onclick="toggleMenuReceb(event)"><i class="fas fa-ellipsis-vertical"></i> Ações</button>
+                <div class="ce-dropdown-menu" id="receb-toolbar-menu">
+                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); carregarNotas();"><i class="fas fa-rotate"></i> Atualizar</button>
+                    <button class="eui-btn eui-btn--ghost" type="button" onclick="fecharMenuReceb(); abrirConsultaOcorrencias();"><i class="fas fa-clock-rotate-left"></i> Livro de ocorrências</button>
+                </div>
+            </div>
+        </div>
 
         <!-- KPIs / FLUXOS CLICÁVEIS (mesmo padrão da Conferência de Expedição) -->
         <div class="eui-stats" id="dashboard-resumo" style="margin-bottom:18px;">
@@ -818,8 +846,8 @@
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="notas-btn-limpar-filtro" onclick="aplicarFiltroReceb(null, null)"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
             </div>
             <div class="eui-card__body eui-card__body--tight">
-                <div class="rc-table-wrap">
-                    <table class="rc-table">
+                <div class="ce-table-wrap">
+                    <table class="erp-table ce-table rc-table">
                         <thead>
                             <tr>
                                 <th width="120">ID Conferência</th>
@@ -832,7 +860,7 @@
                             </tr>
                         </thead>
                         <tbody id="notas-tbody">
-                            <tr><td colspan="7" class="rc-empty">Carregando…</td></tr>
+                            <tr><td colspan="7" class="ce-empty">Carregando…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -918,7 +946,8 @@
         </div>
       </div>
     </div>
-    </div>
+</section>
+</div>
 </div>
 
 <div class="modal-overlay" id="modal-consulta">
@@ -1366,6 +1395,31 @@
     function agendarBuscaNotas() {
         clearTimeout(buscaRecebTimer);
         buscaRecebTimer = setTimeout(carregarNotas, 300);
+        const btn = document.getElementById('receb-btn-limpar-busca');
+        if (btn) {
+            const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
+            btn.classList.toggle('hidden', !termo);
+        }
+    }
+
+    function limparBuscaReceb() {
+        const input = document.getElementById('filtro-nota-pendente');
+        if (input) input.value = '';
+        const btn = document.getElementById('receb-btn-limpar-busca');
+        if (btn) btn.classList.add('hidden');
+        carregarNotas();
+    }
+
+    function toggleMenuReceb(ev) {
+        ev?.stopPropagation();
+        const menu = document.getElementById('receb-toolbar-menu');
+        if (!menu) return;
+        menu.classList.toggle('open');
+    }
+
+    function fecharMenuReceb() {
+        const menu = document.getElementById('receb-toolbar-menu');
+        if (menu) menu.classList.remove('open');
     }
 
     function aplicarFiltroReceb(slug, elemento) {
@@ -1432,7 +1486,7 @@
             const termo = (document.getElementById('filtro-nota-pendente')?.value || '').trim();
             const msg = termo ? 'Nenhuma NF encontrada para esta busca.'
                 : (filtroReceb ? 'Nenhuma NF neste fluxo.' : 'Não há conferências na fila.');
-            tbody.innerHTML = `<tr><td colspan="7" class="rc-empty">${msg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="ce-empty">${msg}</td></tr>`;
             return;
         }
 
@@ -2143,6 +2197,14 @@
     }
 
     // Inicialização
+    document.addEventListener('click', (ev) => {
+        const menu = document.getElementById('receb-toolbar-menu');
+        if (!menu) return;
+        const alvo = ev.target;
+        if (!(alvo instanceof Element)) return;
+        if (!menu.contains(alvo)) menu.classList.remove('open');
+    });
+
     carregarNotas();
     atualizarIconeSom();
     

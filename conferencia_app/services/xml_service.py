@@ -18,6 +18,22 @@ def _digits(value: str) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _normalizar_numero_nfse(valor: str) -> str:
+    """Normaliza o número da NFS-e para evitar valores enormes vindos de
+    campos genéricos (ex.: identificadores longos de sessão/protocolo)."""
+    bruto = str(valor or "").strip()
+    if not bruto:
+        return ""
+    digitos = _digits(bruto)
+    if not digitos:
+        return ""
+    # Número de NFS-e costuma ser curto; quando vier muito longo, mantemos os
+    # dígitos finais (onde normalmente está o número real da nota).
+    if len(digitos) > 20:
+        digitos = digitos[-20:]
+    return digitos
+
+
 def _float_xml(value, default=0.0):
     try:
         return float(str(value if value is not None else default).replace(",", "."))
@@ -74,7 +90,7 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
     # Nao usa id_externo de elementos genericos: poderia ser um ID de sessao
     # da API que se repete em todas as requisicoes, gerando falso duplicado.
 
-    numero_nota = _first_text_any(
+    numero_nota_raw = _first_text_any(
         root,
         [
             ".//{*}InfNfse/{*}Numero",
@@ -88,16 +104,19 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
             ".//{*}NumeroRps",
         ],
     )
+    numero_nota = _normalizar_numero_nfse(numero_nota_raw)
     if not numero_nota:
         # Tenta encontrar <Numero> dentro de um contexto específico de NFS-e
         for _ctx in root.iter():
             if _local_name(_ctx.tag) in {"infnfse", "compnfse", "nfse", "listanfse"}:
                 _inner = _first_text_by_local_names(_ctx, ["numero", "numeronfse"])
                 if _inner and _inner.strip():
-                    numero_nota = _inner.strip()
+                    numero_nota = _normalizar_numero_nfse(_inner)
                     break
     if not numero_nota:
-        numero_nota = _first_text_by_local_names(root, ["numero", "numeronfse", "numero_nfse", "numnfse"])
+        numero_nota = _normalizar_numero_nfse(
+            _first_text_by_local_names(root, ["numero", "numeronfse", "numero_nfse", "numnfse"])
+        )
 
     codigo_verificacao = _first_text_any(root, [".//{*}CodigoVerificacao", ".//{*}codigo_verificacao"])
     if not codigo_verificacao:
@@ -106,7 +125,7 @@ def _process_nfse_and_store(root, user: str, status_inicial: str = "Pendente") -
     if not numero_nota:
         # Preferir código de verificação sobre dígitos do ID externo (que pode ser muito longo)
         if codigo_verificacao:
-            numero_nota = f"NFSE-{str(codigo_verificacao).strip()}"[:20]
+            numero_nota = _normalizar_numero_nfse(codigo_verificacao)
         else:
             id_digits = _digits(id_externo)
             if id_digits:
