@@ -400,10 +400,6 @@
             </div>
             <div class="row">
                 <div class="q-field"><label>Orçamento nº *</label><input id="f-orc" class="${roCls}" ${ro} value="${esc(r.numero_orcamento)}"></div>
-                <div class="q-field"><label>Nº do certificado *</label><input id="f-cert" class="${roCls}" ${ro} value="${esc(r.numero_certificado)}"></div>
-            </div>
-            <div class="row">
-                <div class="q-field"><label>OS / Lote-CP *</label><input id="f-os" class="${roCls}" ${ro} value="${esc(r.os)}"><div style="font-size:11px;color:#94a3b8;margin-top:3px;">OS e Lote/CP são o mesmo valor.</div></div>
                 <div></div>
             </div>
 
@@ -423,12 +419,12 @@
         // Monta os blocos de componentes (Grid/Sapatas)
         estadoBlocos = [];
         if (r.grid_resultado || r.grid_dureza || r.grid_chd) {
-            estadoBlocos.push({ tipo: 'Grid', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
+            estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.os || '', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
         }
         if (r.sapatas_resultado || r.sapatas_dureza || r.sapatas_chd) {
-            estadoBlocos.push({ tipo: 'Sapatas', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
+            estadoBlocos.push({ tipo: 'Sapatas', os: r.sapatas_os || r.os || '', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
         }
-        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', dureza: '', chd: '', resultado: '' });
+        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.sapatas_os || r.os || '', dureza: '', chd: '', resultado: '' });
         renderBlocos(!editavel);
     }
 
@@ -458,6 +454,10 @@
                 ${remover}
             </div>
             <div class="row">
+                <div class="q-field"><label>OS / Lote-CP *</label><input id="c${idx}-os" class="${roCls}" ${ro} value="${esc(b.os || '')}" placeholder="ex.: 7254"><div style="font-size:11px;color:#94a3b8;margin-top:3px;">Informação específica deste ${esc(b.tipo)}.</div></div>
+                <div></div>
+            </div>
+            <div class="row">
                 <div class="q-field"><label>Dureza medida *</label><input id="c${idx}-dureza" class="${roCls}" ${ro} value="${esc(b.dureza)}" placeholder="ex: 63 HRC"></div>
                 <div class="q-field"><label>CHD medida *</label><input id="c${idx}-chd" class="${roCls}" ${ro} value="${esc(b.chd)}" placeholder="ex: 1,6 mm"></div>
             </div>
@@ -478,11 +478,13 @@
     function lerBlocosDOM() {
         estadoBlocos = estadoBlocos.map((b, i) => {
             const tipoEl = document.getElementById(`c${i}-tipo`);
+            const osEl = document.getElementById(`c${i}-os`);
             const durEl = document.getElementById(`c${i}-dureza`);
             const chdEl = document.getElementById(`c${i}-chd`);
             const resEl = document.getElementById(`c${i}-resultado`);
             return {
                 tipo: tipoEl ? tipoEl.value : b.tipo,
+                os: osEl ? osEl.value : b.os,
                 dureza: durEl ? durEl.value : b.dureza,
                 chd: chdEl ? chdEl.value : b.chd,
                 resultado: resEl ? resEl.value : b.resultado,
@@ -506,7 +508,7 @@
         lerBlocosDOM();
         const existente = estadoBlocos[0] ? estadoBlocos[0].tipo : 'Grid';
         const novoTipo = existente === 'Grid' ? 'Sapatas' : 'Grid';
-        estadoBlocos.push({ tipo: novoTipo, dureza: '', chd: '', resultado: '' });
+        estadoBlocos.push({ tipo: novoTipo, os: '', dureza: '', chd: '', resultado: '' });
         renderBlocos(false);
     }
 
@@ -542,17 +544,17 @@
 
         const fd = new FormData();
         fd.append('numero_orcamento', document.getElementById('f-orc').value.trim());
-        fd.append('numero_certificado', document.getElementById('f-cert').value.trim());
-        fd.append('os', document.getElementById('f-os').value.trim());
         // Zera os dois; preenche conforme os blocos selecionados
         const map = { Grid: 'grid', Sapatas: 'sapatas' };
         ['grid', 'sapatas'].forEach(k => {
+            fd.append(`${k}_os`, '');
             fd.append(`${k}_dureza`, '');
             fd.append(`${k}_chd`, '');
             fd.append(`${k}_resultado`, '');
         });
         estadoBlocos.forEach(b => {
             const k = map[b.tipo];
+            fd.set(`${k}_os`, (b.os || '').trim());
             fd.set(`${k}_dureza`, (b.dureza || '').trim());
             fd.set(`${k}_chd`, (b.chd || '').trim());
             fd.set(`${k}_resultado`, b.resultado || '');

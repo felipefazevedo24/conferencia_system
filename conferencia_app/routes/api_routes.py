@@ -247,7 +247,7 @@ from ..services.expedicao_photo_storage import (
 )
 from ..services.xml_service import process_xml_and_store
 from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf
-from ..services.qualidade_service import disparar_qualidade_se_necessario
+from ..services.qualidade_service import disparar_qualidade_se_necessario, sincronizar_qualidade_por_pedido
 
 
 register_schema = RegisterSchema()
@@ -5078,6 +5078,11 @@ def vincular_pedido_xml_auditor():
             )
         except Exception:
             # Não bloqueia o fluxo de salvar vínculo caso haja indisponibilidade do Sheets.
+            db.session.rollback()
+        try:
+            if sincronizar_qualidade_por_pedido(numero_nota, pedido_compra):
+                db.session.commit()
+        except Exception:
             db.session.rollback()
     return jsonify(
         {

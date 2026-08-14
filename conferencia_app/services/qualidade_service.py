@@ -97,6 +97,58 @@ def notas_qualidade_visiveis_map(numeros_notas: list[str]) -> dict[str, bool]:
     }
 
 
+def inferir_os_por_pedido_compra(pedido_compra: str | None) -> str:
+    pedido = str(pedido_compra or "").strip()
+    if not pedido:
+        return ""
+
+    try:
+        from .pedidos_service import buscar_linhas_pedido
+
+        linhas = buscar_linhas_pedido(pedido)
+    except Exception:
+        return ""
+
+    valores: list[str] = []
+    vistos: set[str] = set()
+    for linha in linhas or []:
+        for chave in ("cod_os_completo", "cod_os", "n_os", "numero_os", "os_numero"):
+            valor = str((linha or {}).get(chave) or "").strip()
+            if not valor or valor in vistos:
+                continue
+            vistos.add(valor)
+            valores.append(valor)
+            break
+
+    return ", ".join(valores)[:120]
+
+
+def sincronizar_qualidade_por_pedido(numero_nota: str, pedido_compra: str | None) -> bool:
+    numero_nota = str(numero_nota or "").strip()
+    if not numero_nota:
+        return False
+
+    os_inferida = inferir_os_por_pedido_compra(pedido_compra)
+    if not os_inferida:
+        return False
+
+    registro = QualidadeCertificado.query.filter_by(numero_nota=numero_nota).first()
+    if not registro:
+        return False
+
+    alterou = False
+    if not str(registro.os or "").strip():
+        registro.os = os_inferida
+        alterou = True
+    if not str(registro.grid_os or "").strip():
+        registro.grid_os = os_inferida
+        alterou = True
+    if not str(registro.sapatas_os or "").strip():
+        registro.sapatas_os = os_inferida
+        alterou = True
+    return alterou
+
+
 def disparar_qualidade_se_necessario(numero_nota: str) -> QualidadeCertificado | None:
     """Cria (se ainda não existir) a pendência de análise de qualidade para a NF
     informada quando o remetente for um dos fornecedores monitorados.
@@ -108,9 +160,10 @@ def disparar_qualidade_se_necessario(numero_nota: str) -> QualidadeCertificado |
     if not numero_nota:
         return None
 
-    nota_item = ItemNota.query.filter_by(numero_nota=numero_nota).first()
-    if not nota_item:
+    itens_nota = ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    if not itens_nota:
         return None
+    nota_item = itens_nota[0]
 
     # Prioriza o CNPJ do emitente (com normalizacao para aceitar com/sem
     # pontuacao). Mantemos fallback por nome para nao quebrar historicos
@@ -128,10 +181,16 @@ def disparar_qualidade_se_necessario(numero_nota: str) -> QualidadeCertificado |
     if ja_existe:
         return ja_existe
 
+    pedido_compra = next((str(item.pedido_compra or "").strip() for item in itens_nota if str(item.pedido_compra or "").strip()), "")
+    os_inferida = inferir_os_por_pedido_compra(pedido_compra)
+
     registro = QualidadeCertificado(
         numero_nota=numero_nota,
         chave_acesso=nota_item.chave_acesso,
         fornecedor=nota_item.fornecedor,
+        os=os_inferida or None,
+        grid_os=os_inferida or None,
+        sapatas_os=os_inferida or None,
         status="Pendente de análise",
     )
     db.session.add(registro)
