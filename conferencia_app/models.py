@@ -2840,6 +2840,14 @@ class ComexCotacao(db.Model):
     is_sugerida_pelo_sistema = db.Column(db.Boolean, default=False)
     is_escolhida = db.Column(db.Boolean, default=False)
 
+    # Texto livre do prestador com as proximas saidas/embarques disponiveis
+    # (aceita colar tabela do Excel/planilha - so texto corrido, sem parsing).
+    proximas_saidas = db.Column(db.Text)
+    # Saida especifica que o operador confirmou com o prestador ao escolher
+    # esta cotacao como vencedora - obrigatoria nesse momento (ver
+    # comex_service.escolher_cotacao) e enviada no e-mail de selecao.
+    saida_escolhida = db.Column(db.Text)
+
     # Link publico e temporario para o fornecedor preencher a cotacao sem
     # login completo. O token em si nunca e persistido em claro, so o hash
     # (mesmo padrao do convite de usuario em Usuario.convite_token_hash).

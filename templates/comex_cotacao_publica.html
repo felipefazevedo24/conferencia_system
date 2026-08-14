@@ -38,8 +38,9 @@
     h2 { margin: 0 0 12px; font-size: 16px; color: #f4f8ff; font-weight: 800; letter-spacing: -.01em; }
     h2 i { color: #7fb2ff; margin-right: 6px; }
     label { display: block; font-size: 11px; font-weight: 800; color: #9bb0cd; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
-    input, select { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; }
-    input:focus, select:focus { outline: none; border-color: #4b9bff; }
+    input, select, textarea { width: 100%; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #4b9bff; }
+    textarea { resize: vertical; min-height: 110px; line-height: 1.5; white-space: pre; }
     .field { margin-bottom: 12px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -220,6 +221,15 @@
           </div>
 
           <div class="section">
+            <h2><i class="fas fa-calendar-days"></i> Próximas saídas</h2>
+            <p class="muted" style="font-size:12px; margin:-4px 0 12px;">Informe as próximas datas de saída/embarque disponíveis. Pode digitar ou colar uma tabela direto do Excel (Ctrl+V).</p>
+            <div class="field">
+              <label>Próximas saídas (opcional)</label>
+              <textarea id="proximas_saidas" rows="6" placeholder="Ex.: 20/08 - Santos&#10;27/08 - Santos&#10;03/09 - Santos"></textarea>
+            </div>
+          </div>
+
+          <div class="section">
             <h2><i class="fas fa-file-contract"></i> Termos de consentimento</h2>
             ${montarTermos(data.termos || {})}
             <label class="consent">
@@ -255,6 +265,7 @@
         imo_classe: g('imo_classe'),
         un_numero: g('un_numero'),
         valor_mercadoria_usd: g('valor_mercadoria_usd').trim().replace(',', '.') || null,
+        proximas_saidas: g('proximas_saidas'),
         termos_aceitos: document.getElementById('termos_aceitos').checked,
       };
       if (data.tipo_frete === 'FCL') {

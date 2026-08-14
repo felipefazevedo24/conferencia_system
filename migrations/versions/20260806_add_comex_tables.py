@@ -305,9 +305,17 @@ def upgrade():
             sa.Column("link_gerado_em", sa.DateTime(), nullable=False),
             sa.Column("criado_por", sa.String(length=100), nullable=True),
             sa.Column("recebida_em", sa.DateTime(), nullable=True),
+            sa.Column("proximas_saidas", sa.Text(), nullable=True),
+            sa.Column("saida_escolhida", sa.Text(), nullable=True),
             sa.ForeignKeyConstraint(["processo_id"], ["comex_processo.id"]),
             sa.PrimaryKeyConstraint("id"),
         )
+
+    if inspector.has_table("comex_cotacao"):
+        cols_cotacao = {c["name"] for c in inspector.get_columns("comex_cotacao")}
+        for nome, tipo in (("proximas_saidas", sa.Text()), ("saida_escolhida", sa.Text())):
+            if nome not in cols_cotacao:
+                op.add_column("comex_cotacao", sa.Column(nome, tipo, nullable=True))
 
     if not inspector.has_table("comex_cotacao_volume"):
         op.create_table(

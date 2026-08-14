@@ -914,6 +914,9 @@ def submeter_cotacao_publica(cotacao: ComexCotacao, dados: dict) -> ComexCotacao
     if "valor_mercadoria_usd" in dados:
         cotacao.valor_mercadoria_usd = _to_float(dados.get("valor_mercadoria_usd")) or cotacao.valor_mercadoria_usd
 
+    if "proximas_saidas" in dados:
+        cotacao.proximas_saidas = str(dados.get("proximas_saidas") or "").strip() or None
+
     if cotacao.tipo_frete == "FCL":
         cotacao.qtd_40hc = _to_int(dados.get("qtd_40hc"))
         cotacao.qtd_20dry = _to_int(dados.get("qtd_20dry"))
@@ -1025,17 +1028,26 @@ def cotacao_substatus(processo: ComexProcesso) -> str | None:
     return COTACAO_SUBSTATUS_EM_COTACAO if tem_cotacoes else COTACAO_SUBSTATUS_NAO_INICIADO
 
 
-def escolher_cotacao(cotacao: ComexCotacao, *, usuario: str, justificativa: str | None = None) -> ComexProcesso:
+def escolher_cotacao(
+    cotacao: ComexCotacao, *, usuario: str, justificativa: str | None = None, saida_escolhida: str | None = None
+) -> ComexProcesso:
     """Modulo 3 - o operador escolhe a cotacao vencedora entre as recebidas.
-    Se nao for a sugerida pelo sistema (menor custo), exige justificativa."""
+    Se nao for a sugerida pelo sistema (menor custo), exige justificativa.
+    Tambem exige a saida/embarque confirmada com o prestador (o operador ve
+    as "proximas saidas" que ele informou e confirma qual foi combinada) -
+    e o que vai no e-mail de selecao enviado ao prestador escolhido."""
     if cotacao.status != "Recebida":
         raise ValueError("Só é possível escolher uma cotação que já foi recebida do prestador.")
     justificativa = (justificativa or "").strip()
     if not cotacao.is_sugerida_pelo_sistema and not justificativa:
         raise ValueError("Informe a justificativa para escolher uma cotação diferente da sugerida pelo sistema (menor custo).")
+    saida_escolhida = (saida_escolhida or "").strip()
+    if not saida_escolhida:
+        raise ValueError("Informe a saída de embarque escolhida com o prestador antes de confirmar.")
 
     ComexCotacao.query.filter_by(processo_id=cotacao.processo_id).update({"is_escolhida": False})
     cotacao.is_escolhida = True
+    cotacao.saida_escolhida = saida_escolhida
 
     processo = cotacao.processo
     processo.cotacao_vencedora_id = cotacao.id

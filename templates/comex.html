@@ -324,6 +324,10 @@
                 <div class="cx-field"><label>NF Impo</label><input type="text" maxlength="20" id="cx-inst-nf-impo" class="eui-input"></div>
             </div>
             <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-inst-nf-recebimento" class="eui-input"></div>
+            <div class="cx-field">
+                <label>Enviar para (e-mails separados por ";") <small style="font-weight:400; color:var(--eui-muted);">— opcional, deixe vazio pra só salvar sem enviar</small></label>
+                <input type="text" id="cx-inst-email-destinatarios" class="eui-input" placeholder="fornecedor@exemplo.com; outro@exemplo.com">
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cx-fechar-instrucao-2">Cancelar</button>
@@ -1177,14 +1181,13 @@
     }
 
     function preencherFormularioCotacao(p, base) {
+        // Pre-seleciona conforme o modal do processo (Aereo sugere
+        // LCL/Aereo, Maritimo sugere o que a cotacao anterior usou ou FCL),
+        // mas sempre deixa o operador trocar - as vezes o modal do processo
+        // nao reflete exatamente como o frete vai ser cotado.
         const tipoFreteSel = $("cx-cot-tipo-frete");
-        if (p.modal_transporte === "Aéreo") {
-            tipoFreteSel.value = "LCL_AEREO";
-            tipoFreteSel.disabled = true;
-        } else {
-            tipoFreteSel.value = base ? base.tipo_frete : "FCL";
-            tipoFreteSel.disabled = false;
-        }
+        tipoFreteSel.disabled = false;
+        tipoFreteSel.value = base ? base.tipo_frete : (p.modal_transporte === "Aéreo" ? "LCL_AEREO" : "FCL");
         $("cx-cot-origem").value = base ? (base.origem || "") : "";
         $("cx-cot-destino").value = base ? (base.destino || "") : "";
         $("cx-cot-incoterm").value = base ? (base.incoterm || "") : "";
@@ -1192,9 +1195,11 @@
         $("cx-cot-qtd-20dry").value = base && base.qtd_20dry != null ? base.qtd_20dry : "";
         $("cx-cot-imo").value = base ? (base.imo_classe || "") : "";
         $("cx-cot-un").value = base ? (base.un_numero || "") : "";
-        // Valor da mercadoria: usa o da cotacao anterior se existir, senao
-        // sugere o subtotal dos itens da PO.
-        const valorMercadoria = base && base.valor_mercadoria_usd != null ? base.valor_mercadoria_usd : p.po_subtotal_usd;
+        // Valor da mercadoria: sempre puxa direto o subtotal atual dos itens
+        // da PO (o prestador precisa do valor real pra calcular o seguro) -
+        // so cai pro valor salvo numa cotacao anterior se a PO ainda nao tem
+        // itens lancados.
+        const valorMercadoria = p.po_subtotal_usd != null ? p.po_subtotal_usd : (base ? base.valor_mercadoria_usd : null);
         $("cx-cot-valor-mercadoria").value = valorMercadoria != null ? valorMercadoria : "";
         volumesCotacaoAtual = (base && base.volumes && base.volumes.length)
             ? base.volumes.map((v) => ({ ...v }))
@@ -1269,6 +1274,9 @@
             } else if (c.status === "Recebida") {
                 acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-escolher-cotacao="${c.id}" data-sugerida="${c.is_sugerida_pelo_sistema ? "1" : "0"}">Escolher</button>`;
             }
+            if (c.proximas_saidas) {
+                acao = `<button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-ver-saidas="${c.id}" title="Próximas saídas informadas pelo prestador"><i class="fas fa-calendar-days"></i></button> ${acao}`;
+            }
             return `
                 <tr>
                     <td>${escapeHtml(c.fornecedor_frete || "—")}</td>
@@ -1277,7 +1285,7 @@
                     <td>${c.custo_total_usd != null ? _fmtMoedaGenerico(c.custo_total_usd, "US$") : "—"}</td>
                     <td>${c.custo_total_brl != null ? _fmtMoedaGenerico(c.custo_total_brl, "R$") : "—"}</td>
                     <td>${c.custo_total_consolidado_brl != null ? _fmtMoedaGenerico(c.custo_total_consolidado_brl, "R$") : "—"}</td>
-                    <td style="text-align:right;">${acao}</td>
+                    <td style="text-align:right; white-space:nowrap;">${acao}</td>
                 </tr>
             `;
         }).join("");
@@ -1286,7 +1294,8 @@
         $("cx-cot-escolhida-wrap").classList.toggle("hidden", !escolhida);
         if (escolhida) {
             $("cx-cot-escolhida-info").innerHTML =
-                `<strong>${escapeHtml(escolhida.fornecedor_frete || "—")}</strong> — ${_fmtMoedaGenerico(escolhida.custo_total_usd, "US$")} / ${_fmtMoedaGenerico(escolhida.custo_total_brl, "R$")}`;
+                `<strong>${escapeHtml(escolhida.fornecedor_frete || "—")}</strong> — ${_fmtMoedaGenerico(escolhida.custo_total_usd, "US$")} / ${_fmtMoedaGenerico(escolhida.custo_total_brl, "R$")}` +
+                (escolhida.saida_escolhida ? `<br><small style="color:var(--eui-muted);">Saída confirmada: ${escapeHtml(escolhida.saida_escolhida)}</small>` : "");
         }
     }
 
@@ -1392,6 +1401,13 @@
     });
 
     $("cx-cot-tbody").addEventListener("click", async (e) => {
+        const btnVer = e.target.closest("[data-ver-saidas]");
+        if (btnVer) {
+            const c = cotacoesExistentesAtual.find((x) => String(x.id) === btnVer.dataset.verSaidas);
+            alert("Próximas saídas informadas pelo prestador:\n\n" + (c ? c.proximas_saidas : "—"));
+            return;
+        }
+
         const btn = e.target.closest("[data-escolher-cotacao]");
         if (!btn || !processoCotacaoAtual) return;
         let justificativa = "";
@@ -1399,13 +1415,20 @@
             justificativa = prompt("Esta não é a cotação de menor custo sugerida pelo sistema. Informe a justificativa para escolhê-la:") || "";
             if (!justificativa.trim()) { toast("Justificativa obrigatória para escolher uma cotação diferente da sugerida.", "error"); return; }
         }
+        const c = cotacoesExistentesAtual.find((x) => String(x.id) === btn.dataset.escolherCotacao);
+        const mensagemSaida = c && c.proximas_saidas
+            ? "Próximas saídas informadas pelo prestador:\n\n" + c.proximas_saidas + "\n\nConfirme com o prestador e digite abaixo a saída escolhida:"
+            : "O prestador não informou próximas saídas nesta cotação. Confirme diretamente com ele e digite abaixo a saída escolhida:";
+        const saidaEscolhida = prompt(mensagemSaida) || "";
+        if (!saidaEscolhida.trim()) { toast("Informe a saída de embarque escolhida antes de confirmar o fornecedor.", "error"); return; }
         try {
-            await api(`/api/comex/cotacoes/${btn.dataset.escolherCotacao}/escolher`, {
+            const resp = await api(`/api/comex/cotacoes/${btn.dataset.escolherCotacao}/escolher`, {
                 method: "POST",
-                body: JSON.stringify({ justificativa }),
+                body: JSON.stringify({ justificativa, saida_escolhida: saidaEscolhida.trim() }),
             });
-            toast("Cotação escolhida!", "success");
+            toast(resp.message, resp.email_enviado === false ? "error" : "success");
             carregarCotacoes(processoCotacaoAtual.id);
+            carregar();
         } catch (err) { toast(err.message, "error"); }
     });
 
@@ -1424,6 +1447,9 @@
         $("cx-inst-entrega-real").value = p.entrega_real || "";
         $("cx-inst-nf-impo").value = p.nf_impo || "";
         $("cx-inst-nf-recebimento").value = p.nf_recebimento || "";
+        // Pre-preenche com o e-mail do prestador vencedor da cotacao (se
+        // houver) - o operador pode trocar/completar antes de enviar.
+        $("cx-inst-email-destinatarios").value = p.cotacao_vencedora_email || "";
 
         const jaEnviada = !!p.instrucao_enviada_em;
         $("cx-inst-status-wrap").classList.toggle("hidden", !jaEnviada);
@@ -1442,7 +1468,7 @@
         const btn = $("cx-inst-btn-salvar");
         btn.disabled = true;
         try {
-            await api(`/api/comex/processos/${processoInstrucaoAtual.id}/instrucao`, {
+            const resp = await api(`/api/comex/processos/${processoInstrucaoAtual.id}/instrucao`, {
                 method: "POST",
                 body: JSON.stringify({
                     ref_despachante: $("cx-inst-ref-despachante").value.trim(),
@@ -1454,9 +1480,10 @@
                     entrega_real: $("cx-inst-entrega-real").value.trim(),
                     nf_impo: $("cx-inst-nf-impo").value.trim(),
                     nf_recebimento: $("cx-inst-nf-recebimento").value.trim(),
+                    destinatarios: $("cx-inst-email-destinatarios").value.trim(),
                 }),
             });
-            toast("Instrução de embarque salva!", "success");
+            toast(resp.message, resp.email_enviado === false ? "error" : "success");
             fecharModalInstrucao();
             carregar();
         } catch (err) {
