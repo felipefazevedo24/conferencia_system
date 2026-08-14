@@ -199,6 +199,7 @@
     .doc-pendency-text, .doc-timeline-text { font-size: 12px; line-height: 1.5; font-weight: 700; color: var(--doc-muted); }
     .doc-timeline-meta { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-muted); font-weight: 800; }
     .doc-modal-overlay { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 24px; }
+    .doc-modal-overlay.active { display: flex; }
     .doc-modal { width: min(720px, 100%); border-radius: 20px; background: #ffffff; border: 1px solid var(--doc-border); box-shadow: 0 30px 70px rgba(15, 23, 42, 0.2); overflow: hidden; }
     .doc-modal.small { width: min(580px, 100%); }
     .doc-modal-head, .doc-modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 22px; }
@@ -832,6 +833,31 @@
         </div>
     </div>
 </div>
+
+<div id="modal-excluir-pendencia" class="doc-modal-overlay" onclick="if(event.target===this)fecharModalExclusaoPendencia()">
+    <div class="doc-modal small">
+        <div class="doc-modal-head" style="background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%);">
+            <h3>Excluir NF da fila de pendências</h3>
+            <button class="doc-modal-close" type="button" onclick="fecharModalExclusaoPendencia()">&times;</button>
+        </div>
+        <div class="doc-modal-body">
+            <div class="doc-form-help" id="excluir-pendencia-resumo"></div>
+            <div class="doc-form-block">
+                <label class="doc-form-label" for="input-excluir-confirmacao">Confirme o número da NF</label>
+                <input id="input-excluir-confirmacao" class="doc-input" placeholder="Digite exatamente o número da NF">
+            </div>
+            <div class="doc-form-block">
+                <label class="doc-form-label" for="input-excluir-motivo">Motivo da exclusão</label>
+                <textarea id="input-excluir-motivo" class="doc-textarea" rows="4" placeholder="Mínimo de 5 caracteres."></textarea>
+            </div>
+            <div id="excluir-pendencia-feedback" class="doc-estorno-feedback"></div>
+        </div>
+        <div class="doc-modal-foot">
+            <button class="doc-btn doc-btn-secondary" type="button" onclick="fecharModalExclusaoPendencia()">Cancelar</button>
+            <button class="doc-btn doc-btn-danger" type="button" onclick="confirmarModalExclusaoPendencia()"><i class="fas fa-trash"></i> Excluir NF</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1182,7 +1208,7 @@
             mostrarPainel('de-panel-lancamento');
             notaSelecionada = numero;
             try {
-                await carregarDetalhes(numero);
+                await carregarDetalhes({ numero, cnpj_emitente: cnpjEmitente, fornecedor });
             } catch (erro) {
                 exibirFeedback('error', 'Falha ao abrir a nota', escapeHtml(erro.message || 'Não foi possível carregar o painel detalhado.'));
             }
@@ -1368,6 +1394,7 @@
         };
     }
     let confirmResolver = null;
+    let excluirPendenciaResolver = null;
 
     function toast(msg, tipo = 'ok') { deToast(msg, tipo === 'ok' ? 'ok' : 'err'); }
 
@@ -1384,6 +1411,67 @@
     function responderConfirmacao(resposta) {
         document.getElementById('modalOverlay').classList.remove('active');
         if (confirmResolver) { confirmResolver(resposta); confirmResolver = null; }
+    }
+
+    function abrirModalExclusaoPendencia(numero) {
+        if (excluirPendenciaResolver) {
+            excluirPendenciaResolver(null);
+            excluirPendenciaResolver = null;
+        }
+        const overlay = document.getElementById('modal-excluir-pendencia');
+        const resumo = document.getElementById('excluir-pendencia-resumo');
+        const inputConfirmacao = document.getElementById('input-excluir-confirmacao');
+        const inputMotivo = document.getElementById('input-excluir-motivo');
+        const feedback = document.getElementById('excluir-pendencia-feedback');
+        const nf = String(numero || '').trim();
+
+        overlay.dataset.notaEsperada = nf;
+        resumo.textContent = `Você está excluindo a NF ${nf} da fila de pendências. Esta ação só é permitida para notas pendentes.`;
+        inputConfirmacao.value = '';
+        inputMotivo.value = '';
+        feedback.textContent = '';
+        overlay.classList.add('active');
+        setTimeout(() => inputConfirmacao.focus(), 0);
+
+        return new Promise((resolve) => {
+            excluirPendenciaResolver = resolve;
+        });
+    }
+
+    function fecharModalExclusaoPendencia() {
+        const overlay = document.getElementById('modal-excluir-pendencia');
+        overlay.classList.remove('active');
+        if (excluirPendenciaResolver) {
+            excluirPendenciaResolver(null);
+            excluirPendenciaResolver = null;
+        }
+    }
+
+    function confirmarModalExclusaoPendencia() {
+        const overlay = document.getElementById('modal-excluir-pendencia');
+        const inputConfirmacao = document.getElementById('input-excluir-confirmacao');
+        const inputMotivo = document.getElementById('input-excluir-motivo');
+        const feedback = document.getElementById('excluir-pendencia-feedback');
+        const notaEsperada = String(overlay.dataset.notaEsperada || '').trim();
+        const confirmacao = String(inputConfirmacao.value || '').trim();
+        const motivo = String(inputMotivo.value || '').trim();
+
+        if (confirmacao !== notaEsperada) {
+            feedback.textContent = 'Número não confere com a NF selecionada.';
+            inputConfirmacao.focus();
+            return;
+        }
+        if (motivo.length < 5) {
+            feedback.textContent = 'Informe um motivo com no mínimo 5 caracteres.';
+            inputMotivo.focus();
+            return;
+        }
+
+        overlay.classList.remove('active');
+        if (excluirPendenciaResolver) {
+            excluirPendenciaResolver({ confirmacao, motivo });
+            excluirPendenciaResolver = null;
+        }
     }
 
     function fecharPendenciaObrigatoria() { document.getElementById('pendenciaOverlay').classList.remove('active'); }
@@ -1981,20 +2069,37 @@
         deToast(`${titulo ? titulo + ': ' : ''}${mensagem || ''}`.replace(/<[^>]+>/g, ''), tipo === 'error' ? 'err' : 'ok');
     }
 
-    async function carregarDetalhes(numero, force = false) {
-        const chave = String(numero || '');
+    function detalhesPayloadBase() {
+        return {
+            nota: String(detalhesSelecionados?.numero || '').trim(),
+            cnpj_emitente: String(detalhesSelecionados?.cnpj_emitente || '').trim(),
+            fornecedor: String(detalhesSelecionados?.fornecedor || '').trim(),
+        };
+    }
+
+    async function carregarDetalhes(selecao, force = false) {
+        const numero = typeof selecao === 'object' && selecao !== null ? String(selecao.numero || '').trim() : String(selecao || '').trim();
+        const cnpjEmitente = typeof selecao === 'object' && selecao !== null ? String(selecao.cnpj_emitente || '').trim() : '';
+        const fornecedor = typeof selecao === 'object' && selecao !== null ? String(selecao.fornecedor || '').trim() : '';
+        const chave = `${numero}||${cnpjEmitente}||${fornecedor}`;
         if (!force && detalhesCache.has(chave)) {
             detalhesSelecionados = detalhesCache.get(chave);
             renderizarDetalhe(detalhesSelecionados);
             return detalhesSelecionados;
         }
-        const resposta = await fetch(`/api/detalhes_nf/${encodeURIComponent(chave)}`);
+        const params = new URLSearchParams();
+        if (cnpjEmitente) params.set('cnpj_emitente', cnpjEmitente);
+        if (fornecedor) params.set('fornecedor', fornecedor);
+        const sufixo = params.toString() ? `?${params.toString()}` : '';
+        const resposta = await fetch(`/api/detalhes_nf/${encodeURIComponent(numero)}${sufixo}`);
         if (!resposta.ok) {
             detalhesSelecionados = null;
             renderizarDetalhe(null);
             throw new Error('Não foi possível carregar os detalhes da NF.');
         }
         const dados = await resposta.json();
+        if (!dados.cnpj_emitente) dados.cnpj_emitente = cnpjEmitente;
+        if (!dados.fornecedor) dados.fornecedor = fornecedor;
         detalhesCache.set(chave, dados);
         detalhesSelecionados = dados;
         renderizarDetalhe(dados);
@@ -2004,10 +2109,11 @@
     function atualizarBotoesDetalhe(dados) {
         const etapa = String(dados?.etapa_atual || '');
         const status = String(dados?.status_atual || '');
+        const tipoDocumento = String(dados?.tipo_documento || 'NFE').toUpperCase();
         const documentosDisponiveis = Boolean(dados?.documentos_disponiveis);
         const hasAnexo = Boolean(dados?.has_anexo);
         const podeLancar = status === 'Concluído' || etapa === 'Liberada';
-        const podeManifestar = status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada';
+        const podeManifestar = (status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada') && tipoDocumento === 'NFE';
         const podeEstornar = Boolean(dados?.numero);
         document.getElementById('btn-action-lancar').disabled = !podeLancar;
         document.getElementById('btn-action-manifestar').disabled = !podeManifestar;
@@ -2016,19 +2122,25 @@
         document.getElementById('btn-action-pdf').disabled = !documentosDisponiveis && !hasAnexo;
     }
 
+    function podeManifestarDestinatario(dados) {
+        return String(dados?.tipo_documento || 'NFE').toUpperCase() === 'NFE';
+    }
+
     async function excluirPendenciaAtual() {
         if (!detalhesSelecionados) return;
         const numero = detalhesSelecionados.numero;
-        const confirmacao = prompt(`Confirme o número da NF ${numero} para excluí-la definitivamente da fila de pendências:`, '');
-        if (confirmacao === null) return;
-        if (String(confirmacao).trim() !== String(numero).trim()) { deToast('Número não confere. Exclusão cancelada.', 'err'); return; }
-        const motivo = prompt('Motivo da exclusão (mín. 5 caracteres):', '');
-        if (motivo === null) return;
-        if (!motivo || motivo.trim().length < 5) { deToast('Informe um motivo com no mínimo 5 caracteres.', 'err'); return; }
+        const dadosExclusao = await abrirModalExclusaoPendencia(numero);
+        if (!dadosExclusao) return;
         try {
             const resp = await fetch('/api/excluir_nota_pendente', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ numero_nota: numero, confirmacao, motivo: motivo.trim() }),
+                body: JSON.stringify({
+                    nota: String(numero || '').trim(),
+                    confirmacao_nota: dadosExclusao.confirmacao,
+                    motivo: dadosExclusao.motivo,
+                    cnpj_emitente: String(detalhesSelecionados?.cnpj_emitente || '').trim(),
+                    fornecedor: String(detalhesSelecionados?.fornecedor || '').trim(),
+                }),
             });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok || !data.sucesso) {
@@ -2164,7 +2276,12 @@
         const dados = detalhesSelecionados;
         document.getElementById('input-codigo-erp').value = '';
         document.getElementById('input-codigo-material').value = '';
-        document.getElementById('input-manifestar-destinatario').checked = true;
+        const checkManifestar = document.getElementById('input-manifestar-destinatario');
+        const boxManifestar = checkManifestar?.closest('label.doc-inline-check');
+        const permiteManifestacao = podeManifestarDestinatario(dados);
+        checkManifestar.checked = permiteManifestacao;
+        checkManifestar.disabled = !permiteManifestacao;
+        if (boxManifestar) boxManifestar.style.display = permiteManifestacao ? 'flex' : 'none';
         document.getElementById('lancamento-resumo').innerText = `NF ${dados.numero} · ${dados.fornecedor || 'Fornecedor não informado'} · Etapa ${dados.etapa_atual || dados.status_atual || '---'}`;
 
         const tipoBox = document.getElementById('tipo-documento-box');
@@ -2220,17 +2337,19 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 nota: dados.numero, codigo, codigo_material: codigoMaterial, codigos_materiais: codigosMateriais,
-                manifestar_destinatario: document.getElementById('input-manifestar-destinatario').checked,
+                manifestar_destinatario: podeManifestarDestinatario(dados) && document.getElementById('input-manifestar-destinatario').checked,
                 idempotency_key: gerarIdempotencyKey(`lanc-${dados.numero}`),
+                cnpj_emitente: String(dados.cnpj_emitente || '').trim(),
+                fornecedor: String(dados.fornecedor || '').trim(),
             }),
         });
         const resultado = await resposta.json();
         if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha no lançamento', escapeHtml(resultado.msg || 'Não foi possível gravar a escrituração fiscal.')); return; }
 
         fecharModalLancamento();
-        detalhesCache.delete(String(dados.numero));
+        detalhesCache.delete(`${String(dados.numero || '').trim()}||${String(dados.cnpj_emitente || '').trim()}||${String(dados.fornecedor || '').trim()}`);
         await recarregarTudo();
-        await carregarDetalhes(dados.numero, true);
+        await carregarDetalhes({ numero: dados.numero, cnpj_emitente: dados.cnpj_emitente, fornecedor: dados.fornecedor }, true);
 
         const textoConserto = resultado.conserto && Number(resultado.conserto.baixas_sugeridas || 0) > 0
             ? ` Abra a central de conserto para validar ${resultado.conserto.baixas_sugeridas} sugestão(ões) de baixa.` : '';
@@ -2322,14 +2441,14 @@
         botao.disabled = true;
         const resp = await fetch('/api/fiscal/retornar_auditor', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo }),
+            body: JSON.stringify({ ...detalhesPayloadBase(), motivo }),
         });
         const resultado = await resp.json();
         botao.disabled = false;
         if (!resp.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao retornar ao auditor.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(String(numero));
+        detalhesCache.delete(`${String(numero || '').trim()}||${String(detalhesSelecionados?.cnpj_emitente || '').trim()}||${String(detalhesSelecionados?.fornecedor || '').trim()}`);
         await recarregarTudo();
         exibirFeedback('success', 'Documento retornado', 'O documento voltou para o Auditor. Você pode editar a OC e os dados.');
     }
@@ -2342,16 +2461,16 @@
         botao.disabled = true;
         const resposta = await fetch('/api/fiscal/estornar_lancamento', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo, motivo_padrao: document.getElementById('estorno-motivo-padrao').value, complemento: document.getElementById('estorno-complemento').value }),
+            body: JSON.stringify({ ...detalhesPayloadBase(), motivo, motivo_padrao: document.getElementById('estorno-motivo-padrao').value, complemento: document.getElementById('estorno-complemento').value }),
         });
         const resultado = await resposta.json();
         botao.disabled = false;
         if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar o lançamento.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(String(numero));
+        detalhesCache.delete(`${String(numero || '').trim()}||${String(detalhesSelecionados?.cnpj_emitente || '').trim()}||${String(detalhesSelecionados?.fornecedor || '').trim()}`);
         await recarregarTudo();
-        await carregarDetalhes(numero, true);
+        await carregarDetalhes({ numero, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback('success', 'Lançamento estornado', escapeHtml(resultado.motivo || 'Estorno fiscal realizado com sucesso.'));
     }
 
@@ -2363,16 +2482,16 @@
         botao.disabled = true;
         const resposta = await fetch('/api/fiscal/estornar_conferencia', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: detalhesSelecionados.numero, motivo }),
+            body: JSON.stringify({ ...detalhesPayloadBase(), motivo }),
         });
         const resultado = await resposta.json();
         botao.disabled = false;
         if (!resposta.ok || !resultado.sucesso) { document.getElementById('estorno-feedback').innerText = resultado.msg || 'Falha ao estornar a conferência.'; return; }
         const numero = detalhesSelecionados.numero;
         fecharModalEstorno();
-        detalhesCache.delete(String(numero));
+        detalhesCache.delete(`${String(numero || '').trim()}||${String(detalhesSelecionados?.cnpj_emitente || '').trim()}||${String(detalhesSelecionados?.fornecedor || '').trim()}`);
         await recarregarTudo();
-        await carregarDetalhes(numero, true);
+        await carregarDetalhes({ numero, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback('success', 'Conferência estornada', 'A conferência de recebimento foi estornada. O conferente deverá refazer o checklist.');
     }
 
@@ -2384,13 +2503,17 @@
     async function reenviarManifestacao(numero) {
         const resposta = await fetch('/api/fiscal/manifestar_destinatario', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nota: numero, idempotency_key: gerarIdempotencyKey(`mani-${numero}`) }),
+            body: JSON.stringify({
+                ...detalhesPayloadBase(),
+                nota: numero,
+                idempotency_key: gerarIdempotencyKey(`mani-${numero}`),
+            }),
         });
         const resultado = await resposta.json();
         if (!resposta.ok || !resultado.sucesso) { exibirFeedback('error', 'Falha na manifestação', escapeHtml(resultado.msg || 'Não foi possível enviar a confirmação da operação.')); return; }
-        detalhesCache.delete(String(numero));
+        detalhesCache.delete(`${String(numero || '').trim()}||${String(detalhesSelecionados?.cnpj_emitente || '').trim()}||${String(detalhesSelecionados?.fornecedor || '').trim()}`);
         await recarregarTudo();
-        await carregarDetalhes(numero, true);
+        await carregarDetalhes({ numero, cnpj_emitente: detalhesSelecionados?.cnpj_emitente, fornecedor: detalhesSelecionados?.fornecedor }, true);
         exibirFeedback(resultado.idempotente ? 'info' : 'success', resultado.idempotente ? 'Manifestação já existente' : 'Manifestação enviada', escapeHtml(resultado.msg || 'Confirmação da operação enviada com sucesso.'));
     }
 
@@ -2401,7 +2524,13 @@
             window.open(`/api/documento_entrada/${encodeURIComponent(detalhesSelecionados.item_id)}/anexo`, '_blank');
             return;
         }
-        window.open(`/api/consyste/documento?nota=${encodeURIComponent(detalhesSelecionados.numero)}&tipo=${encodeURIComponent(tipo)}`, '_blank');
+        const params = new URLSearchParams({
+            nota: String(detalhesSelecionados.numero || ''),
+            tipo: String(tipo || 'xml'),
+        });
+        if (detalhesSelecionados.cnpj_emitente) params.set('cnpj_emitente', String(detalhesSelecionados.cnpj_emitente));
+        if (detalhesSelecionados.fornecedor) params.set('fornecedor', String(detalhesSelecionados.fornecedor));
+        window.open(`/api/consyste/documento?${params.toString()}`, '_blank');
     }
 
     async function sincronizarErpLancamento() {

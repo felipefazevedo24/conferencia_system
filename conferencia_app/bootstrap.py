@@ -575,6 +575,29 @@ def _ensure_item_nota_columns() -> None:
         conn.close()
 
 
+def _ensure_qualidade_certificado_columns() -> None:
+    conn = db.engine.connect()
+    try:
+        cols = _get_column_names("qualidade_certificado")
+        if not cols:
+            return
+
+        if "grid_os" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN grid_os VARCHAR(120)"))
+            conn.commit()
+        if "sapatas_os" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN sapatas_os VARCHAR(120)"))
+            conn.commit()
+        if "grid_numero_certificado" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN grid_numero_certificado VARCHAR(120)"))
+            conn.commit()
+        if "sapatas_numero_certificado" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN sapatas_numero_certificado VARCHAR(120)"))
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def _ensure_expedicao_conferencia_simples_schema() -> None:
     conn = db.engine.connect()
     try:
@@ -1032,6 +1055,11 @@ def initialize_database(app: Flask) -> None:
             _ensure_item_nota_columns()
         except Exception:
             # Mantem compatibilidade com bancos antigos sem impedir startup.
+            pass
+
+        try:
+            _ensure_qualidade_certificado_columns()
+        except Exception:
             pass
 
         try:

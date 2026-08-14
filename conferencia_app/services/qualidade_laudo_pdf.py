@@ -2,8 +2,8 @@
 
 Reproduz o modelo Excel (qualidade_certificado_modelo.xlsx) usando ReportLab,
 preenchendo os campos editáveis (amarelos) com os dados registrados na tela de
-Qualidade: Nº do certificado, OS/Lote-CP e os resultados das linhas Grid e
-Sapatas (Dureza, CHD e Resultado).
+Qualidade: OS/Lote-CP e os resultados das linhas Grid e Sapatas (Dureza,
+CHD e Resultado).
 """
 from io import BytesIO
 from pathlib import Path
@@ -240,7 +240,7 @@ def gerar_laudo_pdf(registro) -> bytes:
     el.append(especs)
     el.append(Spacer(1, 6))
 
-    # Composição química + Nº Laudo do Material (numero_certificado)
+    # Composição química
     el.append(_p("Composição Química do Material (elementos relevantes para cementação)",
                  size=8, bold=True))
     quim = Table(
@@ -250,19 +250,17 @@ def gerar_laudo_pdf(registro) -> bytes:
              _p("Si (%)", bold=True, color=colors.white, align=TA_CENTER),
              _p("Cr (%)", bold=True, color=colors.white, align=TA_CENTER),
              _p("Ni (%)", bold=True, color=colors.white, align=TA_CENTER),
-             _p("Mo (%)", bold=True, color=colors.white, align=TA_CENTER),
-             _p("Nº Laudo do Material", bold=True, color=colors.white, align=TA_CENTER)],
+             _p("Mo (%)", bold=True, color=colors.white, align=TA_CENTER)],
             [_p("0,25", align=TA_CENTER), _p("1,25", align=TA_CENTER), _p("0,17", align=TA_CENTER),
              _p("0,25", align=TA_CENTER), _p("0,15", align=TA_CENTER), _p("0,18", align=TA_CENTER),
-             _p(_valor(getattr(registro, "numero_certificado", "")), bold=True, align=TA_CENTER)],
+             ],
         ],
-        colWidths=[18 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, largura - 108 * mm],
+        colWidths=[30 * mm, 30 * mm, 30 * mm, 30 * mm, 30 * mm, largura - 150 * mm],
         hAlign="LEFT",
     )
     quim.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), COR_CINZA_HEADER),
-        ("BACKGROUND", (0, 1), (5, 1), colors.white),
-        ("BACKGROUND", (6, 1), (6, 1), COR_AMARELO),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.white),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CCCCCC")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 4),
@@ -293,7 +291,8 @@ def gerar_laudo_pdf(registro) -> bytes:
 
     # ---- 4. REGISTRO DOS RESULTADOS DO CORPO DE PROVA ----
     el.append(_secao("4.  REGISTRO DOS RESULTADOS DO CORPO DE PROVA"))
-    os_lote = _valor(getattr(registro, "os", ""))
+    os_grid = _valor(getattr(registro, "grid_os", None) or getattr(registro, "os", ""))
+    os_sapatas = _valor(getattr(registro, "sapatas_os", None) or getattr(registro, "os", ""))
     grid_tem = bool(getattr(registro, "grid_resultado", None) or getattr(registro, "grid_dureza", None))
     sapatas_tem = bool(getattr(registro, "sapatas_resultado", None) or getattr(registro, "sapatas_dureza", None))
 
@@ -303,20 +302,21 @@ def gerar_laudo_pdf(registro) -> bytes:
     reg = Table(
         [
             [_p("Componente", bold=True, color=colors.white, align=TA_CENTER),
+             _p("N° Cert.", bold=True, color=colors.white, align=TA_CENTER),
              _p("Lote / CP", bold=True, color=colors.white, align=TA_CENTER),
              _p("Dureza medida", bold=True, color=colors.white, align=TA_CENTER),
              _p("CHD medida", bold=True, color=colors.white, align=TA_CENTER),
              _p("Resultado", bold=True, color=colors.white, align=TA_CENTER)],
-            [_p("Grid", bold=True, align=TA_CENTER), _res_cell(os_lote if grid_tem else ""),
+            [_p("Grid", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "grid_numero_certificado", "") if grid_tem else ""), _res_cell(os_grid if grid_tem else ""),
              _res_cell(getattr(registro, "grid_dureza", "")),
              _res_cell(getattr(registro, "grid_chd", "")),
              _res_cell(getattr(registro, "grid_resultado", ""))],
-            [_p("Sapatas", bold=True, align=TA_CENTER), _res_cell(os_lote if sapatas_tem else ""),
+            [_p("Sapatas", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "sapatas_numero_certificado", "") if sapatas_tem else ""), _res_cell(os_sapatas if sapatas_tem else ""),
              _res_cell(getattr(registro, "sapatas_dureza", "")),
              _res_cell(getattr(registro, "sapatas_chd", "")),
              _res_cell(getattr(registro, "sapatas_resultado", ""))],
         ],
-        colWidths=[32 * mm, 32 * mm, 40 * mm, 40 * mm, largura - 144 * mm],
+        colWidths=[25 * mm, 28 * mm, 28 * mm, 34 * mm, 34 * mm, largura - 149 * mm],
         hAlign="LEFT",
     )
     reg.setStyle(TableStyle([

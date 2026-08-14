@@ -71,11 +71,15 @@ class ConfirmarLancamentoSchema(Schema):
     codigos_materiais = fields.List(fields.Nested(CodigoMaterialItemSchema), required=False, load_default=[])
     manifestar_destinatario = fields.Bool(required=False, load_default=True)
     idempotency_key = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
+    cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
+    fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
 
 
 class ManifestarDestinatarioSchema(Schema):
     nota = fields.Raw(required=True)
     idempotency_key = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
+    cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
+    fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
 
 
 class EstornoLancamentoSchema(Schema):
@@ -83,13 +87,19 @@ class EstornoLancamentoSchema(Schema):
     motivo = fields.Str(required=True, validate=validate.Length(min=3, max=500))
     motivo_padrao = fields.Str(required=False, load_default="", validate=validate.Length(max=120))
     complemento = fields.Str(required=False, load_default="", validate=validate.Length(max=300))
+    cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
+    fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
 
 
 class NotaSchema(Schema):
     nota = fields.Raw(required=True)
+    cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
+    fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))
 
 
 class ExcluirNotaPendenteSchema(Schema):
     nota = fields.Raw(required=True)
     confirmacao_nota = fields.Raw(required=True)
     motivo = fields.Str(required=True, validate=validate.Length(min=5, max=500))
+    cnpj_emitente = fields.Str(required=False, load_default="", validate=validate.Length(max=20))
+    fornecedor = fields.Str(required=False, load_default="", validate=validate.Length(max=160))

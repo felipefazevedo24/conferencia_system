@@ -352,11 +352,11 @@
             <div class="rom-transportador-grid">
                 <div class="rom-transport-field">
                     <div class="rom-transport-label">Transportadora</div>
-                    <div class="rom-transport-value">{{ romaneio.transportadora_nome or '—' }}</div>
+                    <div class="rom-transport-value">{{ romaneio.transportadora or romaneio.transportadora_nome or '—' }}</div>
                 </div>
                 <div class="rom-transport-field">
                     <div class="rom-transport-label">Nome Motorista / Conferente</div>
-                    <div class="rom-transport-value">{{ romaneio.motorista_nome or '—' }}</div>
+                    <div class="rom-transport-value">{{ romaneio.motorista or romaneio.motorista_nome or '—' }}</div>
                 </div>
                 <div class="rom-transport-field">
                     <div class="rom-transport-label">Número Documento (CPF/CNPJ)</div>
