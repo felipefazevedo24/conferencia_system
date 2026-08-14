@@ -23,6 +23,7 @@ from ..models import (
     ExpedicaoConferenciaSimples,
     LogEventoFiscalNota,
     LogManifestacaoDestinatario,
+    LogReversaoConferencia,
     ExpedicaoOrdemFat,
     ExpedicaoOrdemST,
     ExpedicaoRomaneio,
@@ -1456,6 +1457,190 @@ def _responder_llm(pergunta: str, historico=None) -> str | None:
         return None
 
 
+def _resposta_recebimento_historico(pergunta: str) -> str | None:
+    """Resposta objetiva sobre quem recebeu/conferiu/lançou uma NF no passado.
+
+    Exemplos:
+    - "quem recebeu a nota 12345 do fornecedor X no dia 10/08/2026?"
+    - "quem conferiu a nf 12345?"
+    - "quem lançou a nota 12345?"
+    """
+    import re
+
+    q = _normalizar(pergunta)
+    if not any(t in q for t in ("recebeu", "receb", "conferiu", "conferi", "lançou", "lanç", "importou", "entrad", "status da nf", "status da nota")):
+        return None
+
+    match_num = re.search(r"\b(\d{3,})\b", pergunta)
+    if not match_num:
+        return None
+    numero = match_num.group(1)
+
+    query = ItemNota.query.filter_by(numero_nota=numero)
+    rows = query.all()
+    if not rows:
+        return None
+
+    fornecedor_desejado = None
+    m_fornecedor = re.search(r"fornecedor\s+(.+?)(?=\s+(?:no|na|em|dia|de|$))", pergunta, re.IGNORECASE)
+    if m_fornecedor:
+        fornecedor_desejado = _normalizar(m_fornecedor.group(1))
+    if fornecedor_desejado:
+        rows = [
+            r for r in rows
+            if fornecedor_desejado in _normalizar(str(r.fornecedor or ""))
+            or _normalizar(str(r.fornecedor or "")) in fornecedor_desejado
+        ]
+    if not rows:
+        return f"Não encontrei a NF {numero} com esse fornecedor no histórico de recebimento."
+
+    row = rows[0]
+
+    data_ref = None
+    m_data = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", pergunta)
+    if m_data:
+        try:
+            data_ref = datetime.strptime(f"{m_data.group(1)}/{m_data.group(2)}/{m_data.group(3)}", "%d/%m/%Y").date()
+        except ValueError:
+            data_ref = None
+
+    if data_ref and row.data_importacao and row.data_importacao.date() != data_ref:
+        return (
+            f"A NF {numero} não foi importada no dia {data_ref.strftime('%d/%m/%Y')}. "
+            f"No histórico, a entrada foi em {row.data_importacao.strftime('%d/%m/%Y %H:%M')}."
+        )
+
+    fornecedor = row.fornecedor or "—"
+    importado = row.data_importacao.strftime("%d/%m/%Y %H:%M") if row.data_importacao else "não registrado"
+    conferido = row.fim_conferencia.strftime("%d/%m/%Y %H:%M") if row.fim_conferencia else "não registrada"
+    lancado = row.data_lancamento.strftime("%d/%m/%Y %H:%M") if row.data_lancamento else "não registrado"
+
+    return (
+        f"A NF {numero} do fornecedor {fornecedor} foi recebida/importada por {row.usuario_importacao or '—'} "
+        f"em {importado}. Conferida por {row.usuario_conferencia or '—'} em {conferido}. "
+        f"Lançada por {row.usuario_lancamento or '—'} em {lancado}. Status final: {row.status or '—'}."
+    )
+
+
+def _extrair_numero_nota(pergunta: str) -> str | None:
+    import re
+    m = re.search(r"\b(?:nf|nota|nfe|nota fiscal|numero da nf|numero da nota)[^\d]{0,10}(\d{3,})\b", pergunta, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b(\d{3,})\b", pergunta)
+    return m.group(1) if m else None
+
+
+def _extrair_motivo(pergunta: str) -> str:
+    q = pergunta or ""
+    for padrao in (r"\b(?:porque|motivo|pois)\s*[:\-]?\s*(.+)$", r"\b(?:por|para)\s+(.+)$"):
+        import re
+        m = re.search(padrao, q, re.IGNORECASE)
+        if m:
+            motivo = m.group(1).strip().strip(".")
+            if motivo:
+                return motivo
+    return "Ação solicitada pela Bia"
+
+
+def _interpretar_acao_recebimento(pergunta: str, ctx: dict) -> dict | None:
+    """Executa ações operacionais no recebimento via texto natural.
+
+    Regras:
+    - só aceita comandos com referência explícita a NF/nota;
+    - exige autorização do papel/usuário ou admin;
+    - não permite burlar o processo: estorno/volta da conferência reabre o status,
+      avanço sem conferência só marca como concluído com registro explícito.
+    """
+    q = _normalizar(pergunta)
+    if not q:
+        return None
+    if not any(t in q for t in ("estorn", "volta", "reabre", "avanc", "pular", "sem confer", "sem conferencia")):
+        return None
+
+    numero = _extrair_numero_nota(pergunta)
+    if not numero:
+        return None
+
+    role = str((ctx or {}).get("role") or "").strip()
+    role_norm = _normalizar(role)
+    is_admin = bool((ctx or {}).get("is_admin"))
+    if not (is_admin or role_norm in {"admin", "fiscal", "conferente", "logistica", "comex", "compras"}):
+        return {
+            "resposta": "Só quem tem acesso ao recebimento pode executar essa ação.",
+            "pendencias": [],
+            "sugestoes": SUGESTOES,
+        }
+
+    motivos = [
+        "estorn", "volta", "reabre", "reabrir", "retorna", "retornar",
+    ]
+    if any(m in q for m in motivos):
+        rows = ItemNota.query.filter_by(numero_nota=numero).all()
+        if not rows:
+            return {"resposta": f"Não encontrei a NF {numero} no histórico de recebimento.", "pendencias": [], "sugestoes": SUGESTOES}
+        if any((r.status or "") == "Lançado" or r.data_lancamento for r in rows):
+            return {"resposta": f"A NF {numero} já foi lançada. Estorne o lançamento fiscal primeiro.", "pendencias": [], "sugestoes": SUGESTOES}
+        for item in rows:
+            item.status = "Pendente"
+            item.qtd_conferida = 0
+            item.usuario_conferencia = None
+            item.inicio_conferencia = None
+            item.fim_conferencia = None
+            item.auditor_status = "NaoAuditado"
+            item.auditor_decisao = "PendenteDecisao"
+            item.auditor_diagnostico = None
+            item.auditor_inconsistencias = None
+            item.auditor_justificativa = None
+            item.auditor_observacao = None
+            item.auditor_usuario = None
+            item.auditor_data = None
+        db.session.add(
+            LogReversaoConferencia(
+                numero_nota=numero,
+                usuario_reversao=str((ctx or {}).get("username") or "bia"),
+                motivo=_extrair_motivo(pergunta),
+            )
+        )
+        db.session.commit()
+        return {
+            "resposta": f"Conferência da NF {numero} estornada com sucesso. Ela voltou para Pendente.",
+            "pendencias": [],
+            "sugestoes": SUGESTOES,
+        }
+
+    if any(t in q for t in ("avanc", "pular", "sem confer", "sem conferencia")):
+        rows = ItemNota.query.filter_by(numero_nota=numero, status="Pendente").all()
+        if not rows:
+            return {"resposta": f"A NF {numero} não está pendente para avanço sem conferência.", "pendencias": [], "sugestoes": SUGESTOES}
+        agora = datetime.now()
+        for item in rows:
+            if not item.inicio_conferencia:
+                item.inicio_conferencia = agora
+            item.status = "Concluído"
+            item.usuario_conferencia = str((ctx or {}).get("username") or "bia")
+            item.fim_conferencia = agora
+            item.sem_conferencia_logistica = True
+        db.session.add(
+            LogEventoFiscalNota(
+                numero_nota=numero,
+                evento="RecebidoSemConferenciaLogistica",
+                etapa="Recebimento",
+                status="Concluído",
+                detalhe=_extrair_motivo(pergunta)[:1000],
+                usuario=str((ctx or {}).get("username") or "bia"),
+            )
+        )
+        db.session.commit()
+        return {
+            "resposta": f"NF {numero} avançada para concluída sem conferência logística, com registro do motivo.",
+            "pendencias": [],
+            "sugestoes": SUGESTOES,
+        }
+
+    return None
+
+
 def responder(pergunta: str, historico=None) -> dict:
     """Responde a uma pergunta em linguagem natural.
 
@@ -1463,6 +1648,9 @@ def responder(pergunta: str, historico=None) -> dict:
     conversar de forma livre e natural, sempre alimentado com os dados reais da
     expedição E com o histórico da conversa (para dar continuidade ao assunto).
     Sem LLM, cai no motor offline determinístico (mais tagarela)."""
+    recebimento = _resposta_recebimento_historico(pergunta)
+    if recebimento:
+        return {"resposta": recebimento, "pendencias": [], "sugestoes": SUGESTOES}
     # Consultas objetivas "de qual romaneio é a NF X" são respondidas de forma
     # DETERMINÍSTICA (o LLM tende a inventar/confundir com o id do registro).
     direta = _resposta_direta_romaneio_da_nf(pergunta)
