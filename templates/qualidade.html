@@ -418,13 +418,13 @@
 
         // Monta os blocos de componentes (Grid/Sapatas)
         estadoBlocos = [];
-        if (r.grid_resultado || r.grid_dureza || r.grid_chd) {
-            estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.os || '', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
+        if (r.grid_resultado || r.grid_dureza || r.grid_chd || r.grid_numero_certificado || r.grid_os) {
+            estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.os || '', numeroCertificado: r.grid_numero_certificado || r.numero_certificado || '', dureza: r.grid_dureza || '', chd: r.grid_chd || '', resultado: r.grid_resultado || '' });
         }
-        if (r.sapatas_resultado || r.sapatas_dureza || r.sapatas_chd) {
-            estadoBlocos.push({ tipo: 'Sapatas', os: r.sapatas_os || r.os || '', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
+        if (r.sapatas_resultado || r.sapatas_dureza || r.sapatas_chd || r.sapatas_numero_certificado || r.sapatas_os) {
+            estadoBlocos.push({ tipo: 'Sapatas', os: r.sapatas_os || r.os || '', numeroCertificado: r.sapatas_numero_certificado || r.numero_certificado || '', dureza: r.sapatas_dureza || '', chd: r.sapatas_chd || '', resultado: r.sapatas_resultado || '' });
         }
-        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.sapatas_os || r.os || '', dureza: '', chd: '', resultado: '' });
+        if (!estadoBlocos.length) estadoBlocos.push({ tipo: 'Grid', os: r.grid_os || r.sapatas_os || r.os || '', numeroCertificado: r.grid_numero_certificado || r.sapatas_numero_certificado || r.numero_certificado || '', dureza: '', chd: '', resultado: '' });
         renderBlocos(!editavel);
     }
 
@@ -454,6 +454,10 @@
                 ${remover}
             </div>
             <div class="row">
+                <div class="q-field"><label>N° do certificado *</label><input id="c${idx}-cert" class="${roCls}" ${ro} value="${esc(b.numeroCertificado || '')}" placeholder="ex.: 12345"></div>
+                <div></div>
+            </div>
+            <div class="row">
                 <div class="q-field"><label>OS / Lote-CP *</label><input id="c${idx}-os" class="${roCls}" ${ro} value="${esc(b.os || '')}" placeholder="ex.: 7254"><div style="font-size:11px;color:#94a3b8;margin-top:3px;">Informação específica deste ${esc(b.tipo)}.</div></div>
                 <div></div>
             </div>
@@ -469,8 +473,12 @@
         const wrap = document.getElementById('componentes-wrap');
         if (!wrap) return;
         let html = estadoBlocos.map((b, i) => blocoComponenteHtml(i, b, concluido)).join('');
-        if (!concluido && estadoBlocos.length < 2) {
-            html += `<button type="button" onclick="adicionarComponente()" style="border:1px dashed #1d4ed8;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;font-size:13px;margin-bottom:12px;"><i class="fas fa-plus"></i> Adicionar componente</button>`;
+        if (!concluido) {
+            const limiteAtingido = estadoBlocos.length >= 2;
+            html += `<button type="button" onclick="adicionarComponente()" ${limiteAtingido ? 'disabled' : ''} style="border:1px dashed #1d4ed8;background:${limiteAtingido ? '#e2e8f0' : '#eff6ff'};color:${limiteAtingido ? '#64748b' : '#1d4ed8'};border-radius:8px;padding:9px 14px;font-weight:700;cursor:${limiteAtingido ? 'not-allowed' : 'pointer'};font-size:13px;margin-bottom:12px;"><i class="fas fa-plus"></i> Adicionar componente</button>`;
+            if (limiteAtingido) {
+                html += `<div style="font-size:11px;color:#94a3b8;margin:-4px 0 12px;">Máximo atual: 2 componentes no laudo (Grid e Sapatas).</div>`;
+            }
         }
         wrap.innerHTML = html;
     }
@@ -478,12 +486,14 @@
     function lerBlocosDOM() {
         estadoBlocos = estadoBlocos.map((b, i) => {
             const tipoEl = document.getElementById(`c${i}-tipo`);
+            const certEl = document.getElementById(`c${i}-cert`);
             const osEl = document.getElementById(`c${i}-os`);
             const durEl = document.getElementById(`c${i}-dureza`);
             const chdEl = document.getElementById(`c${i}-chd`);
             const resEl = document.getElementById(`c${i}-resultado`);
             return {
                 tipo: tipoEl ? tipoEl.value : b.tipo,
+                numeroCertificado: certEl ? certEl.value : b.numeroCertificado,
                 os: osEl ? osEl.value : b.os,
                 dureza: durEl ? durEl.value : b.dureza,
                 chd: chdEl ? chdEl.value : b.chd,
@@ -506,9 +516,10 @@
 
     function adicionarComponente() {
         lerBlocosDOM();
+        if (estadoBlocos.length >= 2) return;
         const existente = estadoBlocos[0] ? estadoBlocos[0].tipo : 'Grid';
         const novoTipo = existente === 'Grid' ? 'Sapatas' : 'Grid';
-        estadoBlocos.push({ tipo: novoTipo, os: '', dureza: '', chd: '', resultado: '' });
+        estadoBlocos.push({ tipo: novoTipo, os: '', numeroCertificado: '', dureza: '', chd: '', resultado: '' });
         renderBlocos(false);
     }
 
@@ -547,6 +558,7 @@
         // Zera os dois; preenche conforme os blocos selecionados
         const map = { Grid: 'grid', Sapatas: 'sapatas' };
         ['grid', 'sapatas'].forEach(k => {
+            fd.append(`${k}_numero_certificado`, '');
             fd.append(`${k}_os`, '');
             fd.append(`${k}_dureza`, '');
             fd.append(`${k}_chd`, '');
@@ -554,6 +566,7 @@
         });
         estadoBlocos.forEach(b => {
             const k = map[b.tipo];
+            fd.set(`${k}_numero_certificado`, (b.numeroCertificado || '').trim());
             fd.set(`${k}_os`, (b.os || '').trim());
             fd.set(`${k}_dureza`, (b.dureza || '').trim());
             fd.set(`${k}_chd`, (b.chd || '').trim());

@@ -2017,12 +2017,14 @@ class QualidadeCertificado(db.Model):
 
     # Linha GRID (registro dos resultados do corpo de prova)
     grid_os = db.Column(db.String(120))       # OS / Lote-CP da linha Grid
+    grid_numero_certificado = db.Column(db.String(120))
     grid_dureza = db.Column(db.String(120))   # F35
     grid_chd = db.Column(db.String(120))      # I35
     grid_resultado = db.Column(db.String(20))  # L35 - Conforme | Não Conforme
 
     # Linha SAPATAS
     sapatas_os = db.Column(db.String(120))       # OS / Lote-CP da linha Sapatas
+    sapatas_numero_certificado = db.Column(db.String(120))
     sapatas_dureza = db.Column(db.String(120))   # F36
     sapatas_chd = db.Column(db.String(120))      # I36
     sapatas_resultado = db.Column(db.String(20))  # L36 - Conforme | Não Conforme

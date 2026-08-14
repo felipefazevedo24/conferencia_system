@@ -91,10 +91,12 @@ def _serialize(registro: QualidadeCertificado) -> dict:
         "numero_certificado": registro.numero_certificado or "",
         "os": registro.os or "",
         "grid_os": registro.grid_os or registro.os or "",
+        "grid_numero_certificado": registro.grid_numero_certificado or registro.numero_certificado or "",
         "grid_dureza": registro.grid_dureza or "",
         "grid_chd": registro.grid_chd or "",
         "grid_resultado": registro.grid_resultado or "",
         "sapatas_os": registro.sapatas_os or registro.os or "",
+        "sapatas_numero_certificado": registro.sapatas_numero_certificado or registro.numero_certificado or "",
         "sapatas_dureza": registro.sapatas_dureza or "",
         "sapatas_chd": registro.sapatas_chd or "",
         "sapatas_resultado": registro.sapatas_resultado or "",
@@ -201,6 +203,8 @@ def api_analisar_certificado(id):
     os_lote = (dados.get("os") or "").strip()
     grid_os = (dados.get("grid_os") or os_lote or "").strip()
     sapatas_os = (dados.get("sapatas_os") or os_lote or "").strip()
+    grid_numero_certificado = (dados.get("grid_numero_certificado") or numero_certificado or "").strip()
+    sapatas_numero_certificado = (dados.get("sapatas_numero_certificado") or numero_certificado or "").strip()
     grid_dureza = (dados.get("grid_dureza") or "").strip()
     grid_chd = (dados.get("grid_chd") or "").strip()
     grid_resultado = (dados.get("grid_resultado") or "").strip()
@@ -220,12 +224,14 @@ def api_analisar_certificado(id):
     if grid_preenchido:
         if grid_resultado not in RESULTADOS_VALIDOS:
             return jsonify({"error": "Selecione o resultado do Grid: Conforme ou Não Conforme."}), 400
+        obrigatorios["N° do certificado (Grid)"] = grid_numero_certificado
         obrigatorios["OS / Lote-CP (Grid)"] = grid_os
         obrigatorios["Dureza medida (Grid)"] = grid_dureza
         obrigatorios["CHD medida (Grid)"] = grid_chd
     if sapatas_preenchido:
         if sapatas_resultado not in RESULTADOS_VALIDOS:
             return jsonify({"error": "Selecione o resultado das Sapatas: Conforme ou Não Conforme."}), 400
+        obrigatorios["N° do certificado (Sapatas)"] = sapatas_numero_certificado
         obrigatorios["OS / Lote-CP (Sapatas)"] = sapatas_os
         obrigatorios["Dureza medida (Sapatas)"] = sapatas_dureza
         obrigatorios["CHD medida (Sapatas)"] = sapatas_chd
@@ -240,9 +246,11 @@ def api_analisar_certificado(id):
         registro.foto_path = nova_foto
 
     registro.numero_orcamento = numero_orcamento[:120]
-    registro.numero_certificado = numero_certificado[:120] or None
+    registro.numero_certificado = (grid_numero_certificado or sapatas_numero_certificado or numero_certificado)[:120] or None
     registro.grid_os = grid_os[:120] if grid_preenchido else None
+    registro.grid_numero_certificado = grid_numero_certificado[:120] if grid_preenchido else None
     registro.sapatas_os = sapatas_os[:120] if sapatas_preenchido else None
+    registro.sapatas_numero_certificado = sapatas_numero_certificado[:120] if sapatas_preenchido else None
     registro.os = (registro.grid_os or registro.sapatas_os or os_lote[:120] or None)
     registro.grid_dureza = grid_dureza[:120] if grid_preenchido else None
     registro.grid_chd = grid_chd[:120] if grid_preenchido else None
@@ -272,8 +280,10 @@ def api_excluir_laudo(id):
     registro.numero_orcamento = None
     registro.os = None
     registro.grid_os = None
+    registro.grid_numero_certificado = None
     registro.grid_dureza = registro.grid_chd = registro.grid_resultado = None
     registro.sapatas_os = None
+    registro.sapatas_numero_certificado = None
     registro.sapatas_dureza = registro.sapatas_chd = registro.sapatas_resultado = None
     registro.foto_path = None
     registro.analista = None

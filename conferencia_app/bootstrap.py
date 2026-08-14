@@ -588,6 +588,12 @@ def _ensure_qualidade_certificado_columns() -> None:
         if "sapatas_os" not in cols:
             conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN sapatas_os VARCHAR(120)"))
             conn.commit()
+        if "grid_numero_certificado" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN grid_numero_certificado VARCHAR(120)"))
+            conn.commit()
+        if "sapatas_numero_certificado" not in cols:
+            conn.execute(db.text("ALTER TABLE qualidade_certificado ADD COLUMN sapatas_numero_certificado VARCHAR(120)"))
+            conn.commit()
     finally:
         conn.close()
 

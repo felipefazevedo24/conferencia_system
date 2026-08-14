@@ -302,20 +302,21 @@ def gerar_laudo_pdf(registro) -> bytes:
     reg = Table(
         [
             [_p("Componente", bold=True, color=colors.white, align=TA_CENTER),
+             _p("N° Cert.", bold=True, color=colors.white, align=TA_CENTER),
              _p("Lote / CP", bold=True, color=colors.white, align=TA_CENTER),
              _p("Dureza medida", bold=True, color=colors.white, align=TA_CENTER),
              _p("CHD medida", bold=True, color=colors.white, align=TA_CENTER),
              _p("Resultado", bold=True, color=colors.white, align=TA_CENTER)],
-            [_p("Grid", bold=True, align=TA_CENTER), _res_cell(os_grid if grid_tem else ""),
+            [_p("Grid", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "grid_numero_certificado", "") if grid_tem else ""), _res_cell(os_grid if grid_tem else ""),
              _res_cell(getattr(registro, "grid_dureza", "")),
              _res_cell(getattr(registro, "grid_chd", "")),
              _res_cell(getattr(registro, "grid_resultado", ""))],
-            [_p("Sapatas", bold=True, align=TA_CENTER), _res_cell(os_sapatas if sapatas_tem else ""),
+            [_p("Sapatas", bold=True, align=TA_CENTER), _res_cell(getattr(registro, "sapatas_numero_certificado", "") if sapatas_tem else ""), _res_cell(os_sapatas if sapatas_tem else ""),
              _res_cell(getattr(registro, "sapatas_dureza", "")),
              _res_cell(getattr(registro, "sapatas_chd", "")),
              _res_cell(getattr(registro, "sapatas_resultado", ""))],
         ],
-        colWidths=[32 * mm, 32 * mm, 40 * mm, 40 * mm, largura - 144 * mm],
+        colWidths=[25 * mm, 28 * mm, 28 * mm, 34 * mm, 34 * mm, largura - 149 * mm],
         hAlign="LEFT",
     )
     reg.setStyle(TableStyle([
