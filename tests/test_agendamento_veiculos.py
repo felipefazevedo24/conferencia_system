@@ -562,6 +562,17 @@ def test_busca_linhas_pedido_usa_erp_postgres():
     salvar_cache.assert_not_called()
 
 
+def test_busca_linhas_pedido_registra_erro_da_bridge_sem_ocultar_falha():
+    with patch("conferencia_app.services.pedidos_service._buscar_linhas_pedido_postgres", side_effect=RuntimeError("bridge caiu")), patch(
+        "conferencia_app.services.pedidos_service.logger.exception"
+    ) as log_exception:
+        linhas = buscar_linhas_pedido("OC-9001")
+
+    assert linhas == []
+    log_exception.assert_called_once()
+    assert "OC-9001" in str(log_exception.call_args)
+
+
 def test_consultar_nf_agendamento_usa_nfe_emitida_erp_postgres(tmp_path):
     fornecedores = tmp_path / "fornecedores.xlsx"
     clientes = tmp_path / "clientes.xlsx"
