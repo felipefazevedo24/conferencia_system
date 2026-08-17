@@ -132,7 +132,8 @@ def _conectar(cfg: dict[str, Any]):
 
 
 def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datetime | None]]):
-    """Recebe pares (n_nf, data_emissao_or_None) e retorna {n_nf: (codigo, dt_nf)}.
+    """Recebe pares (n_nf, data_emissao_or_None) e retorna
+    {n_nf: {"codigo", "dt_nf", "chv_nfe", "fornecedor_cnpj", "fornecedor_nome"}}.
 
     Quando `data_emissao` vier preenchida, restringe pela data (match exato).
     Quando vier None (NFs antigas sem dhEmi), consulta apenas por n_nf e
@@ -145,33 +146,62 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
     if not table.replace("_", "").isalnum():
         raise ValueError(f"Nome de tabela invalido: {table}")
 
-    resultados: dict[str, tuple[str, Any]] = {}
+    resultados: dict[str, dict[str, Any]] = {}
 
     def _normalizar_linhas(rows):
         linhas_validas = [
-            (str(row[0]).strip(), row[1], str(row[2] or "").strip())
+            (
+                str(row[0]).strip(),
+                row[1],
+                str(row[2] or "").strip(),
+                str(row[3] or "").strip(),
+                str(row[4] or "").strip(),
+            )
             for row in rows
             if row and row[0] is not None and str(row[0]).strip()
         ]
         if not linhas_validas:
             return None
 
-        chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe in linhas_validas if chv_nfe}
+        chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe, _cnpj, _nome in linhas_validas if chv_nfe}
         if len(chaves) == 1:
-            codigo, dt_nf, _chv_nfe = linhas_validas[0]
-            return codigo, dt_nf
+            return linhas_validas[0]
 
         assinaturas = {
             (codigo, dt_nf.isoformat() if hasattr(dt_nf, "isoformat") else str(dt_nf))
-            for codigo, dt_nf, _chv_nfe in linhas_validas
+            for codigo, dt_nf, _chv_nfe, _cnpj, _nome in linhas_validas
         }
         if not chaves and len(assinaturas) == 1:
-            codigo, dt_nf, _chv_nfe = linhas_validas[0]
-            return codigo, dt_nf
+            return linhas_validas[0]
         return None
 
-    sql_com_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s AND dt_nf::date = %s LIMIT 50"
-    sql_sem_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s LIMIT 50"
+    def _linha_para_resultado(row: tuple[str, Any, str, str, str]) -> dict[str, Any]:
+        return {
+            "codigo": row[0],
+            "dt_nf": row[1],
+            "chv_nfe": row[2],
+            "fornecedor_cnpj": row[3],
+            "fornecedor_nome": row[4],
+        }
+
+    sql_com_data = f"""
+        SELECT c.codigo, c.dt_nf, c.chv_nfe,
+               regexp_replace(coalesce(f.cgc, ''), '\\D', '', 'g') as fornecedor_cnpj,
+               coalesce(nullif(c.fornecedor, ''), f.razao_social, f.nome) as fornecedor_nome
+        FROM {table} c
+        LEFT JOIN public.tfornece f
+          ON f.cod_empresa = c.cod_empresa AND f.codigo = c.cod_fornecedor
+        WHERE c.n_nf = %s AND c.dt_nf::date = %s LIMIT 50
+    """
+    sql_sem_data = f"""
+        SELECT c.codigo, c.dt_nf, c.chv_nfe,
+               regexp_replace(coalesce(f.cgc, ''), '\\D', '', 'g') as fornecedor_cnpj,
+               coalesce(nullif(c.fornecedor, ''), f.razao_social, f.nome) as fornecedor_nome
+        FROM {table} c
+        LEFT JOIN public.tfornece f
+          ON f.cod_empresa = c.cod_empresa AND f.codigo = c.cod_fornecedor
+        WHERE c.n_nf = %s LIMIT 50
+    """
 
     with _conectar(cfg) as conn:
         with conn.cursor() as cur:
@@ -181,7 +211,7 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                         cur.execute(sql_com_data, (str(n_nf), data_emi.date()))
                         row = _normalizar_linhas(cur.fetchall())
                         if row:
-                            resultados[str(n_nf)] = row
+                            resultados[str(n_nf)] = _linha_para_resultado(row)
                         else:
                             # A data local vem do XML; em algumas bases a dt_nf do ERP
                             # representa a entrada/lancamento. Se a data falhar, tenta
@@ -190,7 +220,7 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                             rows_sem_data = cur.fetchall()
                             row_sem_data = _normalizar_linhas(rows_sem_data)
                             if row_sem_data:
-                                resultados[str(n_nf)] = row_sem_data
+                                resultados[str(n_nf)] = _linha_para_resultado(row_sem_data)
                             elif rows_sem_data:
                                 logger.warning(
                                     "ERP Lancamento: NF %s sem match por data %s, mas com %d matches por numero; pulando por ambiguidade.",
@@ -207,7 +237,7 @@ def _consultar_codigos_no_erp(cfg: dict[str, Any], chaves: list[tuple[str, datet
                         rows = cur.fetchall()
                         row = _normalizar_linhas(rows)
                         if row:
-                            resultados[str(n_nf)] = row
+                            resultados[str(n_nf)] = _linha_para_resultado(row)
                         elif rows:
                             logger.warning(
                                 "ERP Lancamento: NF %s tem %d matches em %s sem data_emissao local; pulando para evitar ambiguidade.",
@@ -296,23 +326,30 @@ def _consultar_codigos_via_api(cfg: dict[str, Any], chaves: list[tuple[str, date
             if motivo:
                 _registrar_status(str(n_nf), str(motivo))
 
+    def _linha_para_resultado(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "codigo": str(row.get("codigo") or "").strip(),
+            "dt_nf": _parse_dt_nf_api(row.get("dt_nf")),
+            "chv_nfe": str(row.get("chv_nfe") or "").strip(),
+            "fornecedor_cnpj": str(row.get("fornecedor_cnpj") or "").strip(),
+            "fornecedor_nome": str(row.get("fornecedor_nome") or "").strip(),
+        }
+
     resultados_raw = data.get("resultados") or {}
-    resultados: dict[str, tuple[str, Any]] = {}
+    resultados: dict[str, dict[str, Any]] = {}
     if isinstance(resultados_raw, dict):
         for n_nf, row in resultados_raw.items():
             if not isinstance(row, dict):
                 continue
-            codigo = str(row.get("codigo") or "").strip()
-            if codigo:
-                resultados[str(n_nf)] = (codigo, _parse_dt_nf_api(row.get("dt_nf")))
+            if str(row.get("codigo") or "").strip():
+                resultados[str(n_nf)] = _linha_para_resultado(row)
     elif isinstance(resultados_raw, list):
         for row in resultados_raw:
             if not isinstance(row, dict):
                 continue
             n_nf = str(row.get("n_nf") or "").strip()
-            codigo = str(row.get("codigo") or "").strip()
-            if n_nf and codigo:
-                resultados[n_nf] = (codigo, _parse_dt_nf_api(row.get("dt_nf")))
+            if n_nf and str(row.get("codigo") or "").strip():
+                resultados[n_nf] = _linha_para_resultado(row)
 
     return resultados
 
@@ -836,6 +873,9 @@ def sincronizar_lancamentos_grv_periodo(data_inicio: datetime, data_fim: datetim
             cfg["usuario_lancamento"],
             _parse_dt_nf_api(row.get("dt_nf")),
             row.get("dt_lancamento"),
+            chave_erp=chave,
+            fornecedor_cnpj_erp=str(row.get("fornecedor_cnpj") or ""),
+            fornecedor_nome_erp=str(row.get("fornecedor_nome") or ""),
         )
         if atualizados:
             resumo["aplicados"] += 1
@@ -881,18 +921,82 @@ def _consultar_codigos(cfg: dict[str, Any], chaves: list[tuple[str, datetime | N
     return _consultar_codigos_no_erp(cfg, chaves)
 
 
+def _validar_correspondencia_nf(
+    itens_locais: list[ItemNota],
+    chave_erp: str,
+    fornecedor_cnpj_erp: str,
+    fornecedor_nome_erp: str,
+) -> tuple[bool, str]:
+    """Confere se o lancamento encontrado no ERP realmente pertence a esta NF local.
+
+    Evita aplicar um `codigo`/lancamento errado quando dois documentos
+    diferentes compartilham o mesmo numero de NF (comum entre fornecedores
+    distintos). Exige, nesta ordem: (1) chave de acesso identica, ou,
+    quando a chave nao estiver disponivel dos dois lados, (2) CNPJ do
+    fornecedor/cliente identico, ou (3) nome do fornecedor/cliente batendo.
+    Sem nenhum desses sinais em comum, o lancamento NAO e aplicado.
+    """
+    chave_local = ""
+    cnpj_local = ""
+    fornecedor_local = ""
+    for item in itens_locais:
+        if not chave_local:
+            chave_local = "".join(ch for ch in str(item.chave_acesso or "") if ch.isdigit())
+        if not cnpj_local:
+            cnpj_local = "".join(ch for ch in str(item.cnpj_emitente or "") if ch.isdigit())
+        if not fornecedor_local:
+            fornecedor_local = str(item.fornecedor or "").strip()
+
+    chave_erp_digits = "".join(ch for ch in str(chave_erp or "") if ch.isdigit())
+    if len(chave_local) == 44 and len(chave_erp_digits) == 44:
+        if chave_local == chave_erp_digits:
+            return True, ""
+        return False, "Chave de acesso retornada pelo ERP diverge da chave do XML importado."
+
+    cnpj_erp_digits = "".join(ch for ch in str(fornecedor_cnpj_erp or "") if ch.isdigit())
+    if cnpj_local and cnpj_erp_digits:
+        if cnpj_local == cnpj_erp_digits:
+            return True, ""
+        return False, "CNPJ do fornecedor/cliente no ERP diverge do CNPJ do XML importado."
+
+    nome_local = _normalizar_match_texto(fornecedor_local)
+    nome_erp = _normalizar_match_texto(fornecedor_nome_erp)
+    if nome_local and nome_erp and (nome_local == nome_erp or nome_local in nome_erp or nome_erp in nome_local):
+        return True, ""
+
+    return False, "Não foi possível confirmar a chave de acesso nem o fornecedor/cliente do lançamento com os dados do ERP."
+
+
 def _aplicar_lancamento_local(
     numero_nota: str,
     codigo: str,
     usuario: str,
     dt_nf_erp: Any = None,
     dt_lancamento_erp: Any = None,
+    chave_erp: str = "",
+    fornecedor_cnpj_erp: str = "",
+    fornecedor_nome_erp: str = "",
 ) -> int:
     """Replica exatamente o fluxo manual: status->Lancado, numero_lancamento=codigo.
+
+    Antes de aplicar, valida que o lancamento encontrado no ERP realmente
+    corresponde a esta NF local (chave de acesso ou fornecedor/cliente —
+    ver `_validar_correspondencia_nf`); NFs com numero repetido entre
+    fornecedores/clientes diferentes nao sao lancadas automaticamente.
 
     Faz tambem backfill de `data_emissao` quando estiver vazia e o ERP tiver
     retornado `dt_nf` (NFs importadas antes da feature).
     """
+    itens_locais = ItemNota.query.filter_by(numero_nota=numero_nota, status="Concluído").all()
+    if not itens_locais:
+        return 0
+
+    valido, motivo = _validar_correspondencia_nf(itens_locais, chave_erp, fornecedor_cnpj_erp, fornecedor_nome_erp)
+    if not valido:
+        logger.warning("ERP Lancamento: NF %s nao aplicada - %s", numero_nota, motivo)
+        _registrar_status(numero_nota, f"Lançamento encontrado no ERP, mas não aplicado: {motivo}")
+        return 0
+
     data_lancamento = _parse_dt_nf_api(dt_lancamento_erp) if dt_lancamento_erp else datetime.now()
     update_values: dict[str, Any] = {
         "status": "Lançado",
@@ -954,6 +1058,7 @@ def executar_ciclo() -> dict[str, Any]:
         "consultadas": 0,
         "encontradas": 0,
         "lancadas": 0,
+        "divergencias": 0,
         "erros": 0,
         "mensagem": "",
     }
@@ -1014,9 +1119,23 @@ def executar_ciclo() -> dict[str, Any]:
 
     usuario = cfg["usuario_lancamento"]
     total_lancadas = 0
-    for n_nf, (codigo, dt_nf_erp) in achados.items():
+    for n_nf, info in achados.items():
+        codigo = info["codigo"]
+        dt_nf_erp = info.get("dt_nf")
         try:
-            atualizadas = _aplicar_lancamento_local(n_nf, codigo, usuario, dt_nf_erp)
+            atualizadas = _aplicar_lancamento_local(
+                n_nf,
+                codigo,
+                usuario,
+                dt_nf_erp,
+                chave_erp=info.get("chv_nfe", ""),
+                fornecedor_cnpj_erp=info.get("fornecedor_cnpj", ""),
+                fornecedor_nome_erp=info.get("fornecedor_nome", ""),
+            )
+            if atualizadas == 0:
+                motivo = (_STATUS_CONSULTA.get(str(n_nf), {}) or {}).get("motivo", "")
+                if motivo.startswith("Lançamento encontrado no ERP, mas não aplicado"):
+                    resumo["divergencias"] += 1
             if atualizadas > 0:
                 # Commit do lancamento antes de chamar a SEFAZ (a manifestacao
                 # consulta o numero_nota com status=Lancado).
@@ -1082,5 +1201,8 @@ def executar_ciclo() -> dict[str, Any]:
         resumo["erros"] += 1
 
     resumo["lancadas"] = total_lancadas
-    resumo["mensagem"] = f"{total_lancadas} NF(s) lancada(s) via ERP."
+    mensagem = f"{total_lancadas} NF(s) lancada(s) via ERP."
+    if resumo["divergencias"]:
+        mensagem += f" {resumo['divergencias']} NF(s) encontrada(s) no ERP mas nao aplicada(s) por divergencia de chave/fornecedor."
+    resumo["mensagem"] = mensagem
     return resumo

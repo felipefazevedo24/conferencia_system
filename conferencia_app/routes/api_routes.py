@@ -786,7 +786,7 @@ def _summarize_divergencias_lote(numeros):
 def _etapa_atual_por_itens(itens):
     """Status "mais avançado" entre os itens de uma nota (mesma prioridade
     já usada em ``/api/detalhes_nf``: Lançado > Concluído > Devolvido >
-    AguardandoLiberacao > Pendente)."""
+    AguardandoDevolucao > AguardandoLiberacao > Pendente)."""
     statuses = {str(i.status or "").strip() for i in itens}
     if "Lançado" in statuses:
         return "Lançado"
@@ -794,6 +794,8 @@ def _etapa_atual_por_itens(itens):
         return "Concluído"
     if "Devolvido" in statuses:
         return "Devolvido"
+    if "AguardandoDevolucao" in statuses:
+        return "AguardandoDevolucao"
     if "AguardandoLiberacao" in statuses:
         return "AguardandoLiberacao"
     return "Pendente"
@@ -1427,6 +1429,27 @@ def _build_documento_entrada_timeline(numero_nota: str, itens: list[ItemNota] | 
 
 def _build_documento_entrada_pendencias(numero_nota: str, itens: list[ItemNota], pedido_compra: str | None):
     pendencias = []
+
+    if itens and any(str(i.status or "").strip() == "AguardandoDevolucao" for i in itens):
+        solicitacao = (
+            SolicitacaoDevolucaoRecebimento.query.filter_by(numero_nota=numero_nota, ativa=True, status="Pendente")
+            .order_by(SolicitacaoDevolucaoRecebimento.data_solicitacao.desc())
+            .first()
+        )
+        descricao = (
+            f"Recusa total solicitada por {solicitacao.usuario_solicitante}: {solicitacao.motivo}."
+            if solicitacao
+            else "Recusa total solicitada na conferência de recebimento."
+        )
+        pendencias.append(
+            {
+                "tipo": "devolucao",
+                "titulo": "Aguardando aprovação de devolução",
+                "severidade": "warning",
+                "descricao": f"{descricao} Resolva em Conferência de Recebimento > Devoluções p/ aprovar (perfil Admin).",
+            }
+        )
+
     resumo_divergencia = _summarize_divergencia_nota(numero_nota)
     if resumo_divergencia["divergencia"] == "Sim":
         pendencias.append(
@@ -7955,6 +7978,8 @@ def detalhes_nf(numero):
         etapa_atual = "Concluído"
     elif "Devolvido" in statuses:
         etapa_atual = "Devolvido"
+    elif "AguardandoDevolucao" in statuses:
+        etapa_atual = "AguardandoDevolucao"
     elif any(i.fim_conferencia for i in itens):
         etapa_atual = "Conferido"
     else:

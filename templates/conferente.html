@@ -841,6 +841,16 @@
                     <div class="eui-stat__hint">Lançadas no ERP</div>
                 </div>
             </div>
+            {% if session.get('role') == 'Admin' %}
+            <div class="eui-stat is-clickable" data-filter="devolucao" onclick="abrirModalDevolucoesPendentes()">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-rotate-left"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Devoluções p/ aprovar</div>
+                    <div class="eui-stat__value" id="dash-devolucao-pendente">0</div>
+                    <div class="eui-stat__hint">Recusa total aguardando decisão admin</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:10px;" class="alert-pendencia"></div>
@@ -1046,6 +1056,55 @@
     </div>
 </div>
 
+{% if session.get('role') == 'Admin' %}
+<div id="modal-devolucoes-pendentes" class="modal-overlay" style="z-index: 3200;">
+    <div class="modal-sap" style="max-width: 900px;">
+        <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fas fa-rotate-left"></i> DEVOLUÇÕES AGUARDANDO APROVAÇÃO</span>
+            <button onclick="fecharModalDevolucoesPendentes()" style="color:white; background:none; border:none; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+                <table class="erp-table ce-table">
+                    <thead>
+                        <tr>
+                            <th width="110">NF-e</th>
+                            <th>Fornecedor</th>
+                            <th width="140">Solicitante</th>
+                            <th>Motivo</th>
+                            <th width="150">Data</th>
+                            <th width="110" style="text-align:center;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devolucoes-pendentes-tbody">
+                        <tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Carregando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-aprovar-devolucao" class="modal-overlay" style="z-index: 3400;">
+    <div class="modal-sap" style="max-width: 560px;">
+        <div class="modal-head"><span>APROVAR DEVOLUÇÃO — NF <span id="aprovar-devolucao-nf-ref">---</span></span></div>
+        <div class="modal-body">
+            <div style="color:#475569; margin-bottom:14px; line-height:1.5;">Ao aprovar, a NF é marcada como <strong>Devolvida</strong> e a operação de "não realizada" é enviada ao Consyste/SEFAZ. Esta ação não pode ser desfeita por aqui.</div>
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:13px;">
+                <div><strong>Motivo do conferente:</strong> <span id="aprovar-devolucao-motivo">---</span></div>
+            </div>
+            <label class="form-label">Observação do admin (opcional)</label>
+            <textarea id="aprovar-devolucao-observacao" class="devolucao-textarea" placeholder="Observação sobre a aprovação (opcional)..."></textarea>
+            <div id="aprovar-devolucao-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-sap btn-secondary" onclick="fecharModalAprovarDevolucao()">Cancelar</button>
+            <button id="btn-confirmar-aprovar-devolucao" class="btn-sap btn-danger" onclick="confirmarAprovarDevolucao()">Aprovar devolução</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div id="modal-sem-conferencia" class="modal-overlay" style="z-index: 3300;">
     <div class="modal-sap" style="max-width: 600px;">
         <div class="modal-head"><span>MATERIAL SEM CONFERÊNCIA LOGÍSTICA</span></div>
@@ -1156,6 +1215,9 @@
     let heartbeatTimer = null;
     const motivosPadrao = ['Falta de item', 'Sobra de item', 'Item divergente do comprado', 'Avaria'];
     const canReverter = "{{ '1' if session.get('role') in ['Admin', 'Fiscal'] else '0' }}" === "1";
+    const isAdminReceb = "{{ '1' if session.get('role') == 'Admin' else '0' }}" === "1";
+    let devolucoesPendentesCache = [];
+    let devolucaoAprovarSelecionada = null;
 
     function coletarContagens() {
         const contagens = {};
@@ -2131,6 +2193,98 @@
         location.reload();
     }
 
+    function escapeHtml(valor) {
+        return String(valor ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    async function carregarDevolucoesPendentes() {
+        if (!isAdminReceb) return;
+        try {
+            const res = await fetch('/api/admin/recebimento/solicitacoes_devolucao');
+            if (!res.ok) return;
+            devolucoesPendentesCache = await res.json();
+            const badge = document.getElementById('dash-devolucao-pendente');
+            if (badge) badge.innerText = devolucoesPendentesCache.length;
+        } catch (e) { /* silencioso: nao bloqueia o carregamento da tela principal */ }
+    }
+
+    async function abrirModalDevolucoesPendentes() {
+        if (!isAdminReceb) return;
+        await carregarDevolucoesPendentes();
+        renderDevolucoesPendentes();
+        document.getElementById('modal-devolucoes-pendentes').style.display = 'flex';
+    }
+
+    function fecharModalDevolucoesPendentes() {
+        document.getElementById('modal-devolucoes-pendentes').style.display = 'none';
+    }
+
+    function renderDevolucoesPendentes() {
+        const tbody = document.getElementById('devolucoes-pendentes-tbody');
+        if (!tbody) return;
+        if (!devolucoesPendentesCache.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Nenhuma devolução aguardando aprovação.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = devolucoesPendentesCache.map((s) => `
+            <tr>
+                <td style="font-weight:800; color:var(--sap-blue);"># ${escapeHtml(String(s.numero))}</td>
+                <td>${escapeHtml(s.fornecedor || '---')}</td>
+                <td><span style="background:#eef2f7; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700;">${escapeHtml(s.solicitante || '---')}</span></td>
+                <td style="font-size:12px;">${escapeHtml(s.motivo || '---')}</td>
+                <td style="font-family:monospace; font-size:12px;">${escapeHtml(s.data || '---')}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-danger" style="padding:5px 10px; font-size:10px" onclick='abrirModalAprovarDevolucao(${JSON.stringify(s).replace(/'/g, "&#39;")})'>Aprovar</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function abrirModalAprovarDevolucao(solicitacao) {
+        devolucaoAprovarSelecionada = solicitacao;
+        document.getElementById('aprovar-devolucao-nf-ref').innerText = solicitacao.numero;
+        document.getElementById('aprovar-devolucao-motivo').innerText = solicitacao.motivo || '---';
+        document.getElementById('aprovar-devolucao-observacao').value = '';
+        document.getElementById('aprovar-devolucao-feedback').innerText = '';
+        document.getElementById('modal-aprovar-devolucao').style.display = 'flex';
+    }
+
+    function fecharModalAprovarDevolucao() {
+        document.getElementById('modal-aprovar-devolucao').style.display = 'none';
+        devolucaoAprovarSelecionada = null;
+    }
+
+    async function confirmarAprovarDevolucao() {
+        if (!devolucaoAprovarSelecionada) return;
+        const feedback = document.getElementById('aprovar-devolucao-feedback');
+        const btn = document.getElementById('btn-confirmar-aprovar-devolucao');
+        const observacao = (document.getElementById('aprovar-devolucao-observacao').value || '').trim();
+
+        feedback.innerText = 'Processando aprovação...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ solicitacao_id: devolucaoAprovarSelecionada.id, observacao_admin: observacao }),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok || !data.sucesso) {
+                feedback.innerText = data.msg || 'Falha ao aprovar a devolução.';
+                return;
+            }
+            fecharModalAprovarDevolucao();
+            await carregarDevolucoesPendentes();
+            renderDevolucoesPendentes();
+            await carregarNotas();
+            alert(data.msg || 'Devolução aprovada com sucesso.');
+        } catch (e) {
+            btn.disabled = false;
+            feedback.innerText = 'Erro de rede.';
+        }
+    }
+
     async function cancelarConferencia() {
         pararHeartbeat();
         if (notaSel) {
@@ -2215,7 +2369,8 @@
 
     carregarNotas();
     atualizarIconeSom();
-    
+    carregarDevolucoesPendentes();
+
     // Carregar histórico em background para dashboard
     fetch('/api/historico_completo').then(r => r.json()).then(data => {
         dadosHistoricoCache = data;

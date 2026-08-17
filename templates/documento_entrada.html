@@ -927,6 +927,7 @@
             'Concluído': ['Pronta p/ lançar', 'primary'],
             'Lançado': ['Lançada', 'success'],
             Devolvido: ['Devolvida', 'danger'],
+            AguardandoDevolucao: ['Aguardando aprovação (devolução)', 'danger'],
         };
         const [label, tom] = mapa[status] || [status || '---', 'neutral'];
         return `<span class="eui-badge eui-badge--${tom}">${escapeHtml(label)}</span>`;
@@ -2114,10 +2115,14 @@
         const hasAnexo = Boolean(dados?.has_anexo);
         const podeLancar = status === 'Concluído' || etapa === 'Liberada';
         const podeManifestar = (status === 'Lançado' || etapa === 'Lançada' || etapa === 'Manifestada') && tipoDocumento === 'NFE';
-        const podeEstornar = Boolean(dados?.numero);
+        const podeEstornar = Boolean(dados?.numero) && status !== 'AguardandoDevolucao';
         document.getElementById('btn-action-lancar').disabled = !podeLancar;
         document.getElementById('btn-action-manifestar').disabled = !podeManifestar;
-        document.getElementById('btn-action-estornar').disabled = !podeEstornar;
+        const btnEstornar = document.getElementById('btn-action-estornar');
+        btnEstornar.disabled = !podeEstornar;
+        btnEstornar.title = status === 'AguardandoDevolucao'
+            ? 'Devolução aguardando aprovação admin — resolva em Conferência de Recebimento > Devoluções p/ aprovar.'
+            : '';
         document.getElementById('btn-action-xml').disabled = !documentosDisponiveis;
         document.getElementById('btn-action-pdf').disabled = !documentosDisponiveis && !hasAnexo;
     }
@@ -2546,7 +2551,8 @@
             const partes = [];
             if (typeof r.lancadas === 'number') partes.push(`${r.lancadas} lançada(s)`);
             if (typeof r.candidatas === 'number') partes.push(`${r.candidatas} consultada(s)`);
-            deToast(`Sincronização ERP concluída. ${partes.join(' · ')}`, 'ok');
+            if (typeof r.divergencias === 'number' && r.divergencias > 0) partes.push(`${r.divergencias} com divergência (não aplicada)`);
+            deToast(`Sincronização ERP concluída. ${partes.join(' · ')}`, r.divergencias ? 'warn' : 'ok');
             await recarregarTudo();
         } catch (err) {
             deToast('Erro ao sincronizar com o ERP: ' + (err && err.message ? err.message : err), 'err');
