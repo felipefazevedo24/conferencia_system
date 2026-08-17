@@ -246,7 +246,7 @@ from ..services.expedicao_photo_storage import (
     using_drive,
 )
 from ..services.xml_service import process_xml_and_store
-from ..services.pedidos_service import buscar_linhas_pedido, comparar_pedido_com_nf
+from ..services.pedidos_service import PedidoERPIndisponivelError, buscar_linhas_pedido, comparar_pedido_com_nf
 from ..services.qualidade_service import disparar_qualidade_se_necessario, sincronizar_qualidade_por_pedido
 
 
@@ -5169,6 +5169,9 @@ def consultar_pedido_excel():
 
     try:
         resultado = comparar_pedido_com_nf(numero_pedido, itens_nf)
+    except PedidoERPIndisponivelError as exc:
+        current_app.logger.error("consultar_pedido: %s", exc)
+        return jsonify({"sucesso": False, "msg": str(exc), "erro": "bridge_erp_indisponivel"}), 503
     except FileNotFoundError as exc:
         return jsonify({"sucesso": False, "msg": str(exc)}), 404
     except Exception as exc:

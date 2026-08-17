@@ -23,6 +23,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+class PedidoERPIndisponivelError(RuntimeError):
+    pass
+
 try:
     import openpyxl
 except Exception:
@@ -827,9 +831,11 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
 
     try:
         return _buscar_linhas_pedido_postgres(pedidos)
-    except Exception:
+    except Exception as exc:
         logger.exception("Falha ao consultar pedido(s) %s via bridge ERP/Postgres", numero_pedido)
-        return []
+        raise PedidoERPIndisponivelError(
+            f"Bridge ERP indisponível ao consultar o pedido '{numero_pedido}': {exc}"
+        ) from exc
 
 
 def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
