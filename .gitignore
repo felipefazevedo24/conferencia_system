@@ -24,6 +24,10 @@ dist/
 
 # Local database and runtime files
 database.db
+*.db
+*.db-journal
+*.log
+backup banco de dados/
 instance/
 
 # APK do app do motorista (binário, sobe direto no servidor, não versiona)
@@ -42,6 +46,8 @@ columbia-sync-59d7163c97b6.json
 
 # Scripts de debug/uso pontual (não versionar) e binarios de terceiros
 temp_*.py
+temp_*.js
+_patch_*.py
 ngrok.exe
 ngrok.zip
 *.zip
