@@ -44,6 +44,16 @@ def build_test_app(tmp_path):
     )
 
 
+def test_alembic_env_works_with_app_context(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        import importlib
+
+        env_module = importlib.import_module("migrations.env")
+        assert env_module.get_engine_url()
+        assert env_module.target_db is not None
+
+
 def enable_sqlite_foreign_keys(app):
     with app.app_context():
         engine = db.engine
@@ -300,6 +310,37 @@ def test_initialize_database_resets_truncated_admin_hash(tmp_path):
         admin = Usuario.query.filter_by(username="ADMIN").first()
         assert admin.role == "Admin"
         assert check_password_hash(admin.password, "admin1234")
+
+
+def test_initialize_database_adds_missing_usuario_ativo_column(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        from sqlalchemy import text
+        from conferencia_app.models import Usuario
+
+        db.create_all()
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE usuario RENAME TO usuario_legacy"))
+            conn.execute(
+                text(
+                    "CREATE TABLE usuario ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "username VARCHAR(80) NOT NULL UNIQUE, "
+                    "email VARCHAR(160), "
+                    "password VARCHAR(255), "
+                    "role VARCHAR(20), "
+                    "criado_em DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                )
+            )
+            conn.commit()
+
+        initialize_database(app)
+
+        cols = {c["name"] for c in db.inspect(db.engine).get_columns("usuario")}
+        assert "ativo" in cols
+        assert Usuario.query.filter(Usuario.ativo.is_(True)).count() >= 0
 
 
 def test_check_active_session_retries_after_operational_error(tmp_path):

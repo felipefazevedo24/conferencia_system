@@ -2,7 +2,7 @@ import logging
 import os
 from logging.config import fileConfig
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 from alembic import context
 
@@ -19,7 +19,26 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 logger = logging.getLogger('alembic.env')
 
 
+def _ensure_app_context():
+    """Alembic pode ser executado diretamente com `python -m alembic`, fora do
+    fluxo da CLI do Flask. Nesse caso, precisamos criar o app e empurrar um
+    contexto explicitamente antes de consultar `current_app`.
+    """
+    if has_app_context():
+        return
+    try:
+        from conferencia_app import create_app
+
+        app = create_app()
+        app.app_context().push()
+    except Exception:
+        pass
+
+
 def get_engine():
+    _ensure_app_context()
+    if not has_app_context():
+        raise RuntimeError("Alembic sem application context. Não foi possível inicializar o app do Flask.")
     try:
         # this works with Flask-SQLAlchemy<3 and Alchemical
         return current_app.extensions['migrate'].db.get_engine()
@@ -29,6 +48,7 @@ def get_engine():
 
 
 def get_engine_url():
+    _ensure_app_context()
     try:
         return get_engine().url.render_as_string(hide_password=False).replace(
             '%', '%%')
@@ -40,8 +60,9 @@ def get_engine_url():
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
+_ensure_app_context()
 config.set_main_option('sqlalchemy.url', get_engine_url())
-target_db = current_app.extensions['migrate'].db
+target_db = current_app.extensions['migrate'].db if has_app_context() else None
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
