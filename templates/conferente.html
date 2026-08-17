@@ -1087,18 +1087,19 @@
 
 <div id="modal-aprovar-devolucao" class="modal-overlay" style="z-index: 3400;">
     <div class="modal-sap" style="max-width: 560px;">
-        <div class="modal-head"><span>APROVAR DEVOLUÇÃO — NF <span id="aprovar-devolucao-nf-ref">---</span></span></div>
+        <div class="modal-head"><span>DECIDIR DEVOLUÇÃO — NF <span id="aprovar-devolucao-nf-ref">---</span></span></div>
         <div class="modal-body">
-            <div style="color:#475569; margin-bottom:14px; line-height:1.5;">Ao aprovar, a NF é marcada como <strong>Devolvida</strong> e a operação de "não realizada" é enviada ao Consyste/SEFAZ. Esta ação não pode ser desfeita por aqui.</div>
+            <div style="color:#475569; margin-bottom:14px; line-height:1.5;"><strong>Aprovar:</strong> a NF é marcada como Devolvida e a operação de "não realizada" é enviada ao Consyste/SEFAZ. <strong>Recusar:</strong> a solicitação é descartada e a NF volta para a fila de conferência cega, como se nada tivesse acontecido. Nenhuma das duas ações pode ser desfeita por aqui.</div>
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:13px;">
                 <div><strong>Motivo do conferente:</strong> <span id="aprovar-devolucao-motivo">---</span></div>
             </div>
             <label class="form-label">Observação do admin (opcional)</label>
-            <textarea id="aprovar-devolucao-observacao" class="devolucao-textarea" placeholder="Observação sobre a aprovação (opcional)..."></textarea>
+            <textarea id="aprovar-devolucao-observacao" class="devolucao-textarea" placeholder="Observação sobre a decisão (opcional)..."></textarea>
             <div id="aprovar-devolucao-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
         </div>
-        <div class="modal-foot">
+        <div class="modal-foot" style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
             <button class="btn-sap btn-secondary" onclick="fecharModalAprovarDevolucao()">Cancelar</button>
+            <button id="btn-confirmar-recusar-devolucao" class="btn-sap btn-warning" onclick="confirmarRecusarDevolucao()">Recusar solicitação</button>
             <button id="btn-confirmar-aprovar-devolucao" class="btn-sap btn-danger" onclick="confirmarAprovarDevolucao()">Aprovar devolução</button>
         </div>
     </div>
@@ -2254,35 +2255,46 @@
         devolucaoAprovarSelecionada = null;
     }
 
-    async function confirmarAprovarDevolucao() {
+    async function _decidirDevolucao(endpoint, mensagemProcessando, mensagemPadrao) {
         if (!devolucaoAprovarSelecionada) return;
         const feedback = document.getElementById('aprovar-devolucao-feedback');
-        const btn = document.getElementById('btn-confirmar-aprovar-devolucao');
+        const btnAprovar = document.getElementById('btn-confirmar-aprovar-devolucao');
+        const btnRecusar = document.getElementById('btn-confirmar-recusar-devolucao');
         const observacao = (document.getElementById('aprovar-devolucao-observacao').value || '').trim();
 
-        feedback.innerText = 'Processando aprovação...';
-        btn.disabled = true;
+        feedback.innerText = mensagemProcessando;
+        btnAprovar.disabled = true;
+        btnRecusar.disabled = true;
         try {
-            const res = await fetch('/api/admin/recebimento/aprovar_devolucao', {
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ solicitacao_id: devolucaoAprovarSelecionada.id, observacao_admin: observacao }),
             });
             const data = await res.json();
-            btn.disabled = false;
             if (!res.ok || !data.sucesso) {
-                feedback.innerText = data.msg || 'Falha ao aprovar a devolução.';
+                feedback.innerText = data.msg || 'Falha ao processar a decisão.';
                 return;
             }
             fecharModalAprovarDevolucao();
             await carregarDevolucoesPendentes();
             renderDevolucoesPendentes();
             await carregarNotas();
-            alert(data.msg || 'Devolução aprovada com sucesso.');
+            alert(data.msg || mensagemPadrao);
         } catch (e) {
-            btn.disabled = false;
             feedback.innerText = 'Erro de rede.';
+        } finally {
+            btnAprovar.disabled = false;
+            btnRecusar.disabled = false;
         }
+    }
+
+    async function confirmarAprovarDevolucao() {
+        await _decidirDevolucao('/api/admin/recebimento/aprovar_devolucao', 'Processando aprovação...', 'Devolução aprovada com sucesso.');
+    }
+
+    async function confirmarRecusarDevolucao() {
+        await _decidirDevolucao('/api/admin/recebimento/recusar_devolucao', 'Processando recusa...', 'Solicitação recusada. NF voltou para a fila de conferência cega.');
     }
 
     async function cancelarConferencia() {

@@ -7304,6 +7304,67 @@ def aprovar_devolucao_recebimento():
     return jsonify({"sucesso": True, "msg": "Devolução aprovada e enviada para Consyste."})
 
 
+@api_bp.route("/api/admin/recebimento/recusar_devolucao", methods=["POST"])
+@roles_required("Admin")
+def recusar_devolucao_recebimento():
+    """Recusa a solicitação de devolução: a NF volta para a fila de
+    conferência cega (mesmo reset usado em /api/fiscal/estornar_conferencia),
+    em vez de ser marcada como Devolvida."""
+    payload = aprovar_solicitacao_devolucao_schema.load(request.json or {})
+    solicitacao_id = int(payload.get("solicitacao_id"))
+    observacao_admin = str(payload.get("observacao_admin") or "").strip()
+    usuario = session.get("username", "admin")
+
+    solicitacao = SolicitacaoDevolucaoRecebimento.query.filter_by(
+        id=solicitacao_id,
+        ativa=True,
+        status="Pendente",
+    ).first()
+    if not solicitacao:
+        return jsonify({"sucesso": False, "msg": "Solicitação não encontrada ou já processada."}), 404
+
+    itens_nota = ItemNota.query.filter_by(numero_nota=solicitacao.numero_nota).all()
+    if not itens_nota:
+        return jsonify({"sucesso": False, "msg": "NF vinculada à solicitação não encontrada."}), 404
+
+    checklist = ChecklistRecebimento.query.filter_by(numero_nota=solicitacao.numero_nota).first()
+    if checklist:
+        db.session.delete(checklist)
+
+    for item in itens_nota:
+        item.status = "Pendente"
+        item.qtd_conferida = 0
+        item.usuario_conferencia = None
+        item.inicio_conferencia = None
+        item.fim_conferencia = None
+        item.auditor_status = "NaoAuditado"
+        item.auditor_decisao = "PendenteDecisao"
+        item.auditor_diagnostico = None
+        item.auditor_inconsistencias = None
+        item.auditor_justificativa = None
+        item.auditor_observacao = None
+        item.auditor_usuario = None
+        item.auditor_data = None
+
+    db.session.add(
+        LogReversaoConferencia(
+            numero_nota=solicitacao.numero_nota,
+            usuario_reversao=usuario,
+            motivo=f"Solicitação de devolução recusada pelo admin: {observacao_admin or solicitacao.motivo}",
+        )
+    )
+
+    solicitacao.status = "Recusada"
+    solicitacao.ativa = False
+    solicitacao.usuario_aprovador = usuario
+    solicitacao.observacao_admin = observacao_admin[:500]
+    solicitacao.data_decisao = datetime.now()
+    _release_lock(solicitacao.numero_nota)
+    db.session.commit()
+
+    return jsonify({"sucesso": True, "msg": "Solicitação recusada. NF voltou para a fila de conferência cega."})
+
+
 @api_bp.route("/api/admin/resetar_nota", methods=["POST"])
 @roles_required("Admin", "Fiscal")
 def resetar_nota_admin():
