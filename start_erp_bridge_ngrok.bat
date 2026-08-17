@@ -5,8 +5,13 @@ cd /d "%~dp0"
 REM ============================================================
 REM  Sobe a API bridge do ERP Lancamento + tunel ngrok (fixo)
 REM  - Bridge (Flask)  : http://localhost:%ERP_BRIDGE_PORT%
-REM  - ngrok           : https://clumsy-outbreak-irk.ngrok-free.dev
+REM  - ngrok           : https://pouncing-saucy-bless.ngrok-free.dev
 REM ============================================================
+
+REM ---- Dominio ngrok; arquivo local pode sobrescrever -------
+set "NGROK_DOMAIN=pouncing-saucy-bless.ngrok-free.dev"
+set "NGROK_LOCAL_CONFIG=%~dp0instance\erp_bridge_ngrok.bat"
+if exist "%NGROK_LOCAL_CONFIG%" call "%NGROK_LOCAL_CONFIG%"
 
 REM ---- Configuracao da bridge ------------------------------
 set ERP_BRIDGE_PORT=8088
@@ -21,9 +26,6 @@ set ERP_LANCAMENTO_PG_USER=DevLeitura
 set ERP_LANCAMENTO_PG_PASSWORD=PZdyLt8i7A5@@
 set ERP_LANCAMENTO_PG_TABLE=tcompras
 
-REM ---- Dominio fixo do ngrok -------------------------------
-set NGROK_DOMAIN=clumsy-outbreak-irk.ngrok-free.dev
-
 REM ---- Ambiente virtual ------------------------------------
 if not exist ".venv\Scripts\python.exe" (
   echo Ambiente virtual nao encontrado em .venv
@@ -36,6 +38,20 @@ where ngrok >nul 2>nul
 if errorlevel 1 (
   echo [ERRO] ngrok nao encontrado no PATH.
   echo        Instale em https://ngrok.com/download e adicione ao PATH.
+  pause
+  exit /b 1
+)
+
+if not defined NGROK_DOMAIN (
+  echo [ERRO] NGROK_DOMAIN nao configurado.
+  pause
+  exit /b 1
+)
+
+ngrok config check >nul 2>nul
+if errorlevel 1 (
+  echo [ERRO] ngrok ainda nao esta autenticado nesta maquina.
+  echo        Rode uma vez: ngrok config add-authtoken SEU_TOKEN
   pause
   exit /b 1
 )
