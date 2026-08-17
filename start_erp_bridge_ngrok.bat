@@ -33,11 +33,17 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 
-REM ---- Verifica ngrok --------------------------------------
+REM ---- Localiza ngrok --------------------------------------
+set "NGROK_EXE="
 where ngrok >nul 2>nul
-if errorlevel 1 (
+if not errorlevel 1 set "NGROK_EXE=ngrok"
+if not defined NGROK_EXE if exist "%~dp0ngrok.exe" set "NGROK_EXE=%~dp0ngrok.exe"
+if not defined NGROK_EXE if exist "%LOCALAPPDATA%\ngrok\ngrok.exe" set "NGROK_EXE=%LOCALAPPDATA%\ngrok\ngrok.exe"
+
+if not defined NGROK_EXE (
   echo [ERRO] ngrok nao encontrado no PATH.
-  echo        Instale em https://ngrok.com/download e adicione ao PATH.
+  echo        Baixe em https://ngrok.com/download e coloque ngrok.exe em:
+  echo        %~dp0
   pause
   exit /b 1
 )
@@ -48,7 +54,7 @@ if not defined NGROK_DOMAIN (
   exit /b 1
 )
 
-ngrok config check >nul 2>nul
+"%NGROK_EXE%" config check >nul 2>nul
 if errorlevel 1 (
   echo [ERRO] ngrok ainda nao esta autenticado nesta maquina.
   echo        Rode uma vez: ngrok config add-authtoken SEU_TOKEN
@@ -67,7 +73,7 @@ echo Iniciando API bridge na porta %ERP_BRIDGE_PORT%...
 start "ERP Bridge" cmd /k ".venv\Scripts\python.exe scripts\erp_lancamento_api_bridge.py"
 
 echo Iniciando tunel ngrok em https://%NGROK_DOMAIN% ...
-start "ngrok" cmd /k "ngrok http --url=%NGROK_DOMAIN% %ERP_BRIDGE_PORT%"
+start "ngrok" cmd /k ""%NGROK_EXE%" http --url=%NGROK_DOMAIN% %ERP_BRIDGE_PORT%"
 
 echo.
 echo Bridge e ngrok iniciados em janelas separadas.

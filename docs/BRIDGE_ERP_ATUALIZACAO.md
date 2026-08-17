@@ -61,9 +61,12 @@ os caminhos que a bridge realmente usa:
 
 3. Abre um terminal novo, do zero, na mesma pasta, e roda:
    ```powershell
-  ngrok config add-authtoken SEU_TOKEN_DA_CONTA
-   start_erp_bridge_ngrok.bat
+  .\ngrok.exe config add-authtoken SEU_TOKEN_DA_CONTA
+  .\start_erp_bridge_ngrok.bat
    ```
+  Se `ngrok` nao estiver instalado no `PATH`, baixe a versao Windows em
+  `https://ngrok.com/download`, extraia `ngrok.exe` na raiz do projeto e use
+  os comandos acima. O launcher procura primeiro no `PATH` e depois nessa pasta.
   O comando `ngrok config add-authtoken` precisa ser executado somente uma
   vez por máquina/conta. O token fica no arquivo privado do ngrok e nunca
   deve ser gravado no `.bat` ou enviado ao Git.
