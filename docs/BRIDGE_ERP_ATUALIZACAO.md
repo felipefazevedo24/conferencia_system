@@ -9,7 +9,7 @@ consultas no ERP sem ter acesso direto ao banco dele.
 
 ```
 Produção (PythonAnywhere)  --HTTPS-->  ngrok  --localhost:8088-->  Bridge (Flask)  --psycopg2-->  Postgres do ERP
-                            https://clumsy-outbreak-irk.ngrok-free.dev
+                            https://pouncing-saucy-bless.ngrok-free.dev
 ```
 
 ## Onde roda
@@ -61,8 +61,15 @@ os caminhos que a bridge realmente usa:
 
 3. Abre um terminal novo, do zero, na mesma pasta, e roda:
    ```powershell
-   start_erp_bridge_ngrok.bat
+  .\ngrok.exe config add-authtoken SEU_TOKEN_DA_CONTA
+  .\start_erp_bridge_ngrok.bat
    ```
+  Se `ngrok` nao estiver instalado no `PATH`, baixe a versao Windows em
+  `https://ngrok.com/download`, extraia `ngrok.exe` na raiz do projeto e use
+  os comandos acima. O launcher procura primeiro no `PATH` e depois nessa pasta.
+  O comando `ngrok config add-authtoken` precisa ser executado somente uma
+  vez por máquina/conta. O token fica no arquivo privado do ngrok e nunca
+  deve ser gravado no `.bat` ou enviado ao Git.
    Isso mata qualquer processo antigo escutando na porta 8088, sobe a bridge
    de novo (usando o Python de dentro de `.venv\Scripts\python.exe` — **não**
    o `python` global, que não existe no PATH dessa VM) e abre o túnel ngrok
@@ -110,7 +117,10 @@ os caminhos que a bridge realmente usa:
 |---|---|
 | Pasta na VM | `C:\Users\cmb-dev\Desktop\conferencia_system` |
 | Porta da bridge | `8088` |
-| URL pública (ngrok, fixa) | `https://clumsy-outbreak-irk.ngrok-free.dev` |
+| URL pública (ngrok, fixa) | `https://pouncing-saucy-bless.ngrok-free.dev` |
 | Inspetor local do ngrok | `http://127.0.0.1:4040` (só na VM) |
 | Subir tudo | `start_erp_bridge_ngrok.bat` (raiz do repo) |
 | Credenciais (Postgres do ERP, token da bridge) | dentro do `start_erp_bridge_ngrok.bat` |
+
+Depois de trocar o dominio publico, atualize tambem `api_url` em
+`instance/erp_lancamento_config.json` no PythonAnywhere e recarregue o Web App.

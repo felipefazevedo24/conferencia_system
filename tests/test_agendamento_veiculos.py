@@ -2,13 +2,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from openpyxl import Workbook
 from werkzeug.security import generate_password_hash
 
 from conferencia_app import create_app
 from conferencia_app.extensions import db
 from conferencia_app.models import AgendamentoMotorista, AgendamentoSolicitacao, AgendamentoVeiculo, Usuario, Viagem, ViagemParada, ViagemPosicao
-from conferencia_app.services.pedidos_service import _linha_postgres_to_pedido, buscar_linhas_pedido
+from conferencia_app.services.pedidos_service import (
+    PedidoERPIndisponivelError,
+    _linha_postgres_to_pedido,
+    buscar_linhas_pedido,
+)
 
 
 def build_test_app(tmp_path: Path, fornecedores_path: Path, clientes_path: Path):
@@ -560,6 +565,17 @@ def test_busca_linhas_pedido_usa_erp_postgres():
     assert linhas[0]["vl_pendente"] == 23.0
     carregar_sheets.assert_not_called()
     salvar_cache.assert_not_called()
+
+
+def test_busca_linhas_pedido_registra_erro_da_bridge_sem_ocultar_falha():
+    with patch("conferencia_app.services.pedidos_service._buscar_linhas_pedido_postgres", side_effect=RuntimeError("bridge caiu")), patch(
+        "conferencia_app.services.pedidos_service.logger.exception"
+    ) as log_exception:
+        with pytest.raises(PedidoERPIndisponivelError, match="bridge caiu"):
+            buscar_linhas_pedido("OC-9001")
+
+    log_exception.assert_called_once()
+    assert "OC-9001" in str(log_exception.call_args)
 
 
 def test_consultar_nf_agendamento_usa_nfe_emitida_erp_postgres(tmp_path):

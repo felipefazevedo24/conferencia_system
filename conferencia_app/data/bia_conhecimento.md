@@ -30,6 +30,12 @@
   modalidade de frete etc.) que precisa de tratamento antes de seguir.
 
 ## Módulos principais
+- **Documento de Entrada**: fluxo de entrada de notas e documentos de compra,
+  incluindo upload/recebimento do XML, auditoria fiscal, liberação e lançamento
+  na documentação do recebimento.
+- **Conferência Cega de Recebimento**: etapa crítica de entrada em que o material
+  é conferido sem viés visual, comparando o recebido com a nota, identificando
+  divergências, qualidade e pendências antes do lançamento final.
 - **Conferência de Expedição (Conferência Cega)**: coração da operação de saída.
   Mostra as ordens/NFs a conferir, com KPIs por status (pendente, conferido,
   faturado, faturado sem conferência, romaneio, expedido).

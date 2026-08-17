@@ -11,6 +11,7 @@ Planilha (pública):
 
 import csv
 import json
+import logging
 import os
 import re
 import unicodedata
@@ -19,6 +20,12 @@ from pathlib import Path
 from datetime import datetime
 
 import requests
+
+logger = logging.getLogger(__name__)
+
+
+class PedidoERPIndisponivelError(RuntimeError):
+    pass
 
 try:
     import openpyxl
@@ -824,8 +831,11 @@ def buscar_linhas_pedido(numero_pedido: str) -> list:
 
     try:
         return _buscar_linhas_pedido_postgres(pedidos)
-    except Exception:
-        return []
+    except Exception as exc:
+        logger.exception("Falha ao consultar pedido(s) %s via bridge ERP/Postgres", numero_pedido)
+        raise PedidoERPIndisponivelError(
+            f"Bridge ERP indisponível ao consultar o pedido '{numero_pedido}': {exc}"
+        ) from exc
 
 
 def comparar_pedido_com_nf(numero_pedido: str, itens_nf: list) -> dict:
