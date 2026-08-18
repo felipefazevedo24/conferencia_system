@@ -1318,6 +1318,27 @@ def _format_dt_br(value):
     return value.strftime("%d/%m/%Y %H:%M") if value else "---"
 
 
+def _ordem_evento_processo(tipo: str | None) -> int:
+    tipo_norm = str(tipo or "").strip().casefold()
+    if "import" in tipo_norm:
+        return 10
+    if "confer" in tipo_norm:
+        return 20
+    if "contagem" in tipo_norm:
+        return 30
+    if "diverg" in tipo_norm:
+        return 35
+    if "estorno" in tipo_norm or "exclus" in tipo_norm or "devolu" in tipo_norm:
+        return 40
+    if "manifesta" in tipo_norm or "governan" in tipo_norm or "fiscal" in tipo_norm:
+        return 50
+    if "lança" in tipo_norm or "lanca" in tipo_norm:
+        return 60
+    if "visual" in tipo_norm:
+        return 70
+    return 45
+
+
 def _build_documento_entrada_timeline(numero_nota: str, itens: list[ItemNota] | None = None):
     numero_nota = str(numero_nota)
     itens = itens if itens is not None else ItemNota.query.filter_by(numero_nota=numero_nota).all()
@@ -1432,7 +1453,7 @@ def _build_documento_entrada_timeline(numero_nota: str, itens: list[ItemNota] | 
         )
 
     eventos = [e for e in eventos if e.get("data")]
-    eventos.sort(key=lambda e: e["data"])
+    eventos.sort(key=lambda e: (_ordem_evento_processo(e.get("tipo")), e["data"]))
     return [
         {
             "data": _format_dt_br(e["data"]),
@@ -6622,7 +6643,8 @@ def excluir_nota_pendente():
 @api_bp.route("/api/itens/<nota>")
 @roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def buscar_itens(nota):
-    ok_lock, lock = _acquire_lock(nota, session["username"])
+    usuario_atual = session.get("username") or "desconhecido"
+    ok_lock, lock = _acquire_lock(nota, usuario_atual)
     if not ok_lock:
         return (
             jsonify(
@@ -6652,9 +6674,39 @@ def buscar_itens(nota):
         _release_lock(nota)
         db.session.commit()
         return jsonify({"error": "NF sem itens elegíveis para conferência."}), 404
+    iniciou_conferencia = False
     for item in itens:
         if not item.inicio_conferencia:
             item.inicio_conferencia = datetime.now()
+            iniciou_conferencia = True
+        if not item.usuario_conferencia:
+            item.usuario_conferencia = usuario_atual
+
+    processo_log_svc.registrar_evento(
+        numero_nota=nota,
+        cnpj_emitente=itens[0].cnpj_emitente,
+        fornecedor=itens[0].fornecedor,
+        categoria="Visualização",
+        acao="conferencia_aberta",
+        descricao="Abriu a conferência de recebimento",
+        usuario=usuario_atual,
+        dados={"tela": "conferencia_recebimento", "endpoint": request.path},
+        ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+        user_agent=request.user_agent.string,
+    )
+    if iniciou_conferencia:
+        processo_log_svc.registrar_evento(
+            numero_nota=nota,
+            cnpj_emitente=itens[0].cnpj_emitente,
+            fornecedor=itens[0].fornecedor,
+            categoria="Conferência",
+            acao="conferencia_iniciada",
+            descricao=f"Iniciou a conferência ({usuario_atual})",
+            usuario=usuario_atual,
+            dados={"tela": "conferencia_recebimento", "endpoint": request.path},
+            ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+            user_agent=request.user_agent.string,
+        )
     db.session.commit()
     return jsonify(
         [
@@ -8576,7 +8628,7 @@ def _timeline_eventos(nota):
                 {
                     "data": ini_conf.inicio_conferencia,
                     "tipo": "Conferência",
-                    "descricao": "Início da conferência",
+                    "descricao": f"Início da conferência por {ini_conf.usuario_conferencia or '---'}",
                 }
             )
 
@@ -8706,7 +8758,7 @@ def _timeline_eventos(nota):
         )
 
     eventos = [e for e in eventos if e.get("data")]
-    eventos.sort(key=lambda e: e["data"])
+    eventos.sort(key=lambda e: (_ordem_evento_processo(e.get("tipo")), e["data"]))
     return [
         {
             "data": e["data"].strftime("%d/%m/%Y %H:%M"),

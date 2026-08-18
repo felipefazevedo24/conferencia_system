@@ -1151,6 +1151,101 @@ def test_conferencia_visualizacao_completa_retorna_itens_e_historico(tmp_path):
     )
 
 
+def test_abrir_conferencia_pendente_registra_logs_de_abertura_e_inicio(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3012",
+                fornecedor="Fornecedor Conferencia Pendente",
+                codigo="SKU-3012",
+                descricao="Item pendente",
+                qtd_real=5.0,
+                status="Pendente",
+                pedido_compra="450011",
+                unidade_comercial="UN",
+                cnpj_emitente="22345678000199",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/itens/3012")
+    assert response.status_code == 200
+    itens = response.get_json()
+    assert isinstance(itens, list)
+    assert len(itens) == 1
+
+    historico = client.get("/api/conferencia/nota/3012/historico")
+    assert historico.status_code == 200
+    eventos = historico.get_json()
+    assert any(
+        evento["tipo"] == "Visualização"
+        and "abriu a conferência de recebimento" in evento["descricao"].lower()
+        for evento in eventos
+    )
+    assert any(
+        evento["tipo"] == "Conferência"
+        and "iniciou a conferência" in evento["descricao"].lower()
+        and "admin" in evento["descricao"].lower()
+        for evento in eventos
+    )
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        abertura = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3012",
+            acao="conferencia_aberta",
+        ).one()
+        inicio = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3012",
+            acao="conferencia_iniciada",
+        ).one()
+        assert abertura.usuario == "ADMIN"
+        assert inicio.usuario == "ADMIN"
+
+
+def test_timeline_ordenada_por_etapa_mantem_lancamento_antes_de_visualizacao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="3013",
+            fornecedor="Fornecedor Ordem",
+            codigo="SKU-3013",
+            descricao="Item ordem",
+            qtd_real=1.0,
+            status="Lançado",
+            pedido_compra="450012",
+            data_importacao=datetime.now() - timedelta(days=2),
+            fim_conferencia=datetime.now() - timedelta(days=1, hours=4),
+            data_lancamento=datetime.now() - timedelta(days=1),
+            usuario_conferencia="OPERADOR",
+            usuario_lancamento="FISCAL",
+            numero_lancamento="L-3013",
+            cnpj_emitente="33345678000199",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+    # Gera evento de visualizacao posterior ao lancamento.
+    vis = client.get("/api/conferencia/nota/3013/visualizacao")
+    assert vis.status_code == 200
+
+    historico = client.get("/api/conferencia/nota/3013/historico")
+    assert historico.status_code == 200
+    eventos = historico.get_json()
+    tipos = [str(evento.get("tipo") or "") for evento in eventos]
+    assert "Lançamento" in tipos
+    assert "Visualização" in tipos
+    assert tipos.index("Lançamento") < tipos.index("Visualização")
+
+
 def test_download_documento_por_numero_da_nf(tmp_path):
     app = build_test_app(tmp_path)
     client = app.test_client()

@@ -957,7 +957,7 @@
 
         <div class="eui-card rc-hist-card">
             <div class="rc-hist-head">
-                <h3><i class="fas fa-clock-rotate-left"></i> Histórico da nota</h3>
+                <h3><i class="fas fa-clock-rotate-left"></i> Logs da nota</h3>
                 <span class="rc-hist-sub">Trilha de eventos desta NF: importação, conferência, divergências, lançamento e ocorrências.</span>
             </div>
             <div id="rc-hist-lista" class="rc-historico"></div>
@@ -1191,7 +1191,7 @@
 <div id="modal-hist-nota" class="rc-modal-hist" role="dialog" aria-modal="true">
     <div class="rc-modal-hist__box">
         <div class="rc-modal-hist__head">
-            <h3><i class="fas fa-clock-rotate-left"></i> Histórico da NF <span id="hist-nota-ref">—</span></h3>
+            <h3><i class="fas fa-clock-rotate-left"></i> Logs da NF <span id="hist-nota-ref">—</span></h3>
             <button type="button" class="rc-modal-hist__close" onclick="fecharHistoricoNota()"><i class="fas fa-xmark"></i></button>
         </div>
         <div class="rc-modal-hist__body">
@@ -1695,7 +1695,7 @@
             if (!r.ok) throw new Error();
             const lista = await r.json();
             box.innerHTML = (!lista || !lista.length)
-                ? '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>'
+                ? '<div class="rc-hist-empty">Sem logs registrados para esta nota.</div>'
                 : lista.map(e => {
                     const cat = _rcCategoria(e.tipo);
                     return `<div class="rc-hist-item ${cat.item}">
@@ -1730,7 +1730,7 @@
         const box = document.getElementById('rc-hist-lista');
         if (!box) return;
         if (!lista || !lista.length) {
-            box.innerHTML = '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>';
+            box.innerHTML = '<div class="rc-hist-empty">Sem logs registrados para esta nota.</div>';
             return;
         }
         // Ordem cronológica (mais antigo primeiro).

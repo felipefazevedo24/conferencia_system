@@ -198,6 +198,18 @@
     .doc-pendency-title, .doc-timeline-type { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-ink); margin-bottom: 6px; }
     .doc-pendency-text, .doc-timeline-text { font-size: 12px; line-height: 1.5; font-weight: 700; color: var(--doc-muted); }
     .doc-timeline-meta { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-muted); font-weight: 800; }
+    /* Logs: mesmo padrão visual da Conferência */
+    .rc-historico { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+    .rc-hist-item { border: 1px solid #e2e8f0; border-left: 3px solid #0f62c9; border-radius: 10px; padding: 10px 14px; background: #f8fafc; }
+    .rc-hist-item.is-danger { border-left-color: #dc2626; }
+    .rc-hist-item.is-success { border-left-color: #16a34a; }
+    .rc-hist-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .rc-hist-tipo { font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; background: #e0ecff; color: #0f62c9; }
+    .rc-hist-tipo--danger { background: #fee2e2; color: #b91c1c; }
+    .rc-hist-tipo--success { background: #dcfce7; color: #15803d; }
+    .rc-hist-data { color: #64748b; font-size: 11px; font-weight: 700; margin-left: auto; font-family: monospace; }
+    .rc-hist-desc { font-size: 13px; color: #334155; margin-top: 6px; font-weight: 600; }
+    .rc-hist-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 22px; }
     .doc-modal-overlay { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(6px); align-items: center; justify-content: center; padding: 24px; }
     .doc-modal-overlay.active { display: flex; }
     .doc-modal { width: min(720px, 100%); border-radius: 20px; background: #ffffff; border: 1px solid var(--doc-border); box-shadow: 0 30px 70px rgba(15, 23, 42, 0.2); overflow: hidden; }
@@ -319,6 +331,9 @@
     [data-theme="escuro"] .doc-step.pending { background: var(--rec-surface-alt); border-color: var(--rec-border); }
     [data-theme="escuro"] .doc-pendency-item,
     [data-theme="escuro"] .doc-timeline-item { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .rc-hist-item { background: var(--rec-surface-alt); border-color: var(--rec-border); }
+    [data-theme="escuro"] .rc-hist-desc { color: var(--rec-text); }
+    [data-theme="escuro"] .rc-hist-data { color: var(--rec-text-soft); }
     [data-theme="escuro"] .doc-modal { background: var(--rec-surface); border-color: var(--rec-border); }
     [data-theme="escuro"] .doc-modal-foot { background: var(--rec-surface-alt); border-top-color: var(--rec-border); }
     [data-theme="escuro"] .doc-item-code-card { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.30); }
@@ -2194,12 +2209,23 @@
             </tr>`).join('');
 
         const timeline = (dados.timeline || []).length
-            ? dados.timeline.map((evento) => `
-                <div class="doc-timeline-item">
-                    <div class="doc-timeline-meta"><span>${escapeHtml(evento.data || '---')}</span><span>${escapeHtml(evento.tipo || 'Evento')}</span></div>
-                    <div class="doc-timeline-text">${escapeHtml(evento.descricao || 'Sem descrição')}</div>
-                </div>`).join('')
-            : '<div class="doc-timeline-item"><div class="doc-timeline-text">Ainda não há eventos cronológicos registrados para esta NF.</div></div>';
+            ? dados.timeline.map((evento) => {
+                const tipo = String(evento.tipo || 'Evento');
+                const tipoLower = tipo.toLowerCase();
+                const classe = (tipoLower.includes('diverg') || tipoLower.includes('estorno') || tipoLower.includes('exclus') || tipoLower.includes('recus') || tipoLower.includes('devolu'))
+                    ? 'is-danger'
+                    : (tipoLower.includes('lança') || tipoLower.includes('lanca') ? 'is-success' : '');
+                const tag = classe === 'is-danger' ? 'rc-hist-tipo--danger' : (classe === 'is-success' ? 'rc-hist-tipo--success' : '');
+                return `
+                <div class="rc-hist-item ${classe}">
+                    <div class="rc-hist-head-row">
+                        <span class="rc-hist-tipo ${tag}">${escapeHtml(tipo)}</span>
+                        <span class="rc-hist-data">${escapeHtml(evento.data || '---')}</span>
+                    </div>
+                    <div class="rc-hist-desc">${escapeHtml(evento.descricao || 'Sem descrição')}</div>
+                </div>`;
+            }).join('')
+            : '<div class="rc-hist-empty">Sem logs registrados para esta nota.</div>';
 
         const ultimaGovernanca = dados.ultimo_evento_fiscal
             ? `${dados.ultimo_evento_fiscal.evento || 'Evento'} · ${dados.ultimo_evento_fiscal.status || 'Sem status'} · ${dados.ultimo_evento_fiscal.data || '---'}`
@@ -2249,8 +2275,8 @@
             </section>
             ${DE_IS_ADMIN ? `
             <section class="doc-card">
-                <h3>Linha do tempo</h3>
-                <div class="doc-timeline-list">${timeline}</div>
+                <h3>Logs</h3>
+                <div class="rc-historico">${timeline}</div>
             </section>` : ''}
         `;
         atualizarBotoesDetalhe(dados);
