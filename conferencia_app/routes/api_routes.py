@@ -8062,7 +8062,7 @@ def detalhes_nf(numero):
         numero_nota=numero,
         cnpj_emitente=itens[0].cnpj_emitente,
         fornecedor=itens[0].fornecedor,
-        categoria="Visualizacao",
+        categoria="Visualização",
         acao="detalhe_visualizado",
         descricao="Visualizou os detalhes do documento de entrada",
         usuario=session.get("username") or "desconhecido",
@@ -8409,6 +8409,87 @@ def api_conferencia_historico_nota(nota):
     return jsonify(_timeline_eventos(nota))
 
 
+@api_bp.route("/api/conferencia/nota/<nota>/visualizacao")
+@roles_required("Admin", "Conferente", "Fiscal", "Logística", "Comex")
+def api_conferencia_visualizacao_nota(nota):
+    numero_nota = str(nota).strip()
+    itens = _filter_itens_para_conferencia(
+        ItemNota.query.filter_by(numero_nota=numero_nota).order_by(ItemNota.id.asc()).all()
+    )
+    if not itens:
+        return jsonify({"error": "NF não encontrada para visualização."}), 404
+
+    ultimas_tentativas = {}
+    for tentativa in (
+        LogTentativaConferencia.query.filter_by(numero_nota=numero_nota)
+        .order_by(LogTentativaConferencia.tentativa_numero.desc(), LogTentativaConferencia.id.desc())
+        .all()
+    ):
+        item_id = int(tentativa.item_id)
+        if item_id not in ultimas_tentativas:
+            ultimas_tentativas[item_id] = tentativa
+
+    processo_log_svc.registrar_evento(
+        numero_nota=numero_nota,
+        cnpj_emitente=itens[0].cnpj_emitente,
+        fornecedor=itens[0].fornecedor,
+        categoria="Visualização",
+        acao="conferencia_visualizada",
+        descricao="Abriu a visualização completa da conferência de recebimento",
+        usuario=session.get("username") or "desconhecido",
+        dados={"tela": "conferencia_recebimento", "endpoint": request.path},
+        ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+        user_agent=request.user_agent.string,
+    )
+    db.session.commit()
+
+    return jsonify(
+        {
+            "numero": numero_nota,
+            "fornecedor": itens[0].fornecedor or "---",
+            "pedido_compra": _coletar_pedidos_nota(itens) or "---",
+            "status_atual": _etapa_atual_por_itens(itens),
+            "itens": [
+                {
+                    "id": item.id,
+                    "codigo": item.codigo,
+                    "descricao": item.descricao,
+                    "qtd_esperada": item.qtd_real,
+                    "unidade": item.unidade_comercial or "UN",
+                    "pedido_compra": item.pedido_compra or "",
+                    "qtd_chapas_und": item.qtd_chapas_und,
+                    "qtd_ultima": (
+                        ultimas_tentativas[int(item.id)].qtd_convertida
+                        if int(item.id) in ultimas_tentativas
+                        else None
+                    ),
+                    "fator_ultimo": (
+                        ultimas_tentativas[int(item.id)].fator_conversao
+                        if int(item.id) in ultimas_tentativas
+                        else None
+                    ),
+                    "unidade_ultima": (
+                        ultimas_tentativas[int(item.id)].unidade_informada
+                        if int(item.id) in ultimas_tentativas
+                        else ""
+                    ),
+                    "status_ultima": (
+                        ultimas_tentativas[int(item.id)].status_item
+                        if int(item.id) in ultimas_tentativas
+                        else ""
+                    ),
+                    "motivo_ultima": (
+                        ultimas_tentativas[int(item.id)].motivo
+                        if int(item.id) in ultimas_tentativas
+                        else ""
+                    ),
+                }
+                for item in itens
+            ],
+        }
+    )
+
+
 @api_bp.route("/api/conferencia/divergencia-produto", methods=["POST"])
 @roles_required("Conferente", "Admin", "Fiscal", "Logística", "Comex")
 def conferencia_divergencia_produto():
@@ -8607,6 +8688,20 @@ def _timeline_eventos(nota):
                 "data": log.data_exclusao,
                 "tipo": "Exclusão",
                 "descricao": f"{log.usuario_exclusao}: {log.motivo}",
+            }
+        )
+
+    item_identidade = itens[0] if itens else None
+    for log in processo_log_svc.listar_eventos(
+        nota,
+        cnpj_emitente=item_identidade.cnpj_emitente if item_identidade else None,
+        fornecedor=item_identidade.fornecedor if item_identidade else None,
+    ):
+        eventos.append(
+            {
+                "data": log.created_at,
+                "tipo": log.categoria,
+                "descricao": f"{log.usuario}: {log.descricao}",
             }
         )
 

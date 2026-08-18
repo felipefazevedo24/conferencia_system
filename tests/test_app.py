@@ -1070,7 +1070,7 @@ def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     assert len(data["motivos_estorno_padrao"]) >= 1
     assert isinstance(data["timeline"], list)
     assert any(
-        evento["tipo"] == "Visualizacao"
+        evento["tipo"] == "Visualização"
         and "ADMIN" in evento["descricao"]
         and "Visualizou os detalhes" in evento["descricao"]
         for evento in data["timeline"]
@@ -1092,6 +1092,63 @@ def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     assert response_fiscal.status_code == 200
     data_fiscal = response_fiscal.get_json()
     assert data_fiscal["timeline"] == []
+
+
+def test_conferencia_visualizacao_completa_retorna_itens_e_historico(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogTentativaConferencia
+
+        item = ItemNota(
+            numero_nota="3011",
+            fornecedor="Fornecedor Visao Completa",
+            codigo="SKU-3011",
+            descricao="Item visão",
+            qtd_real=10.0,
+            status="Concluído",
+            pedido_compra="450010",
+            unidade_comercial="UN",
+            cnpj_emitente="12345678000199",
+        )
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(
+            LogTentativaConferencia(
+                numero_nota="3011",
+                item_id=item.id,
+                tentativa_numero=1,
+                qtd_esperada=10.0,
+                qtd_digitada=10.0,
+                qtd_convertida=10.0,
+                unidade_informada="UN",
+                fator_conversao=1.0,
+                status_item="OK",
+                motivo="Conferido.",
+                usuario="ADMIN",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/conferencia/nota/3011/visualizacao")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["numero"] == "3011"
+    assert isinstance(data["itens"], list)
+    assert len(data["itens"]) == 1
+    assert data["itens"][0]["codigo"] == "SKU-3011"
+    assert data["itens"][0]["status_ultima"] == "OK"
+
+    timeline = client.get("/api/conferencia/nota/3011/historico")
+    assert timeline.status_code == 200
+    eventos = timeline.get_json()
+    assert any(
+        evento["tipo"] == "Visualização"
+        and "visualização completa da conferência" in evento["descricao"].lower()
+        for evento in eventos
+    )
 
 
 def test_download_documento_por_numero_da_nf(tmp_path):
