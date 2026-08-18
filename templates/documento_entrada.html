@@ -2083,11 +2083,6 @@
         const cnpjEmitente = typeof selecao === 'object' && selecao !== null ? String(selecao.cnpj_emitente || '').trim() : '';
         const fornecedor = typeof selecao === 'object' && selecao !== null ? String(selecao.fornecedor || '').trim() : '';
         const chave = `${numero}||${cnpjEmitente}||${fornecedor}`;
-        if (!force && detalhesCache.has(chave)) {
-            detalhesSelecionados = detalhesCache.get(chave);
-            renderizarDetalhe(detalhesSelecionados);
-            return detalhesSelecionados;
-        }
         const params = new URLSearchParams();
         if (cnpjEmitente) params.set('cnpj_emitente', cnpjEmitente);
         if (fornecedor) params.set('fornecedor', fornecedor);
@@ -2252,10 +2247,11 @@
                     </table>
                 </div>
             </section>
+            ${DE_IS_ADMIN ? `
             <section class="doc-card">
                 <h3>Linha do tempo</h3>
                 <div class="doc-timeline-list">${timeline}</div>
-            </section>
+            </section>` : ''}
         `;
         atualizarBotoesDetalhe(dados);
     }

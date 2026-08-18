@@ -556,12 +556,14 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
     final obsController = TextEditingController();
     File? foto;
     String? erroFoto;
+    String? erroObs;
 
     final confirmou = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final exigeFoto = widget.parada.tipo == 'ENTREGA' && !_resultadosNaoRealizada.contains(resultado);
+          final exigeJustificativa = _resultadosNaoRealizada.contains(resultado);
 
           Future<void> escolherFoto(ImageSource origem) async {
             final picker = ImagePicker();
@@ -630,11 +632,20 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
                     ],
                   ],
                   const SizedBox(height: 12),
-                  const Text('Observação (opcional)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(
+                    exigeJustificativa ? 'Justificativa *' : 'Observação (opcional)',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                   TextField(
                     controller: obsController,
                     maxLines: 3,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    onChanged: (_) {
+                      if (erroObs != null) setDialogState(() => erroObs = null);
+                    },
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: erroObs,
+                    ),
                   ),
                 ],
               ),
@@ -645,6 +656,10 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
                 onPressed: () {
                   if (exigeFoto && foto == null) {
                     setDialogState(() => erroFoto = 'Anexe a foto do canhoto para concluir a entrega.');
+                    return;
+                  }
+                  if (exigeJustificativa && obsController.text.trim().isEmpty) {
+                    setDialogState(() => erroObs = 'Informe o motivo.');
                     return;
                   }
                   Navigator.pop(ctx, true);
@@ -679,6 +694,88 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
     }
   }
 
+  Future<void> _abrirNaoRealizada() async {
+    String resultado = 'NaoRealizada';
+    final obsController = TextEditingController();
+    String? erroObs;
+
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Não feita'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Motivo', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                DropdownButton<String>(
+                  value: resultado,
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: 'NaoRealizada', child: Text('Não realizada')),
+                    DropdownMenuItem(value: 'Recusado', child: Text('Recusado pelo destinatário')),
+                    DropdownMenuItem(value: 'AusenciaRecebedor', child: Text('Ausência do recebedor')),
+                  ],
+                  onChanged: (v) => setDialogState(() => resultado = v ?? resultado),
+                ),
+                const SizedBox(height: 12),
+                const Text('Justificativa *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                TextField(
+                  controller: obsController,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.newline,
+                  onChanged: (_) {
+                    if (erroObs != null) setDialogState(() => erroObs = null);
+                  },
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'Ex: cliente ausente, carga recusada, endereço fechado...',
+                    errorText: erroObs,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () {
+                if (obsController.text.trim().isEmpty) {
+                  setDialogState(() => erroObs = 'Informe o motivo.');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Registrar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmou != true) return;
+    setState(() => _carregando = true);
+    try {
+      final pos = await _pos();
+      final repo = ref.read(motoristaRepositoryProvider);
+      await repo.concluirParada(
+        vid: widget.vid,
+        token: widget.token,
+        pid: widget.parada.id,
+        resultado: resultado,
+        observacao: obsController.text.trim(),
+        latitude: pos['latitude'],
+        longitude: pos['longitude'],
+      );
+      ref.invalidate(paradasProvider((vid: widget.vid, token: widget.token)));
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _carregando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.parada;
@@ -699,12 +796,38 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
         trailing: _carregando
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
             : p.concluida
-                ? const Icon(Icons.check_circle, color: AppColors.accent500)
+                ? Icon(
+                    p.status == 'Nao_realizada' ? Icons.report_problem_outlined : Icons.check_circle,
+                    color: p.status == 'Nao_realizada' ? AppColors.warning500 : AppColors.accent500,
+                  )
                 : widget.somenteLeitura
                     ? null
-                    : p.noLocal
-                        ? TextButton(onPressed: _abrirConcluir, child: const Text('Concluir'))
-                        : TextButton(onPressed: _marcarChegada, child: const Text('Cheguei')),
+                    : SizedBox(
+                        width: 152,
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 2,
+                          children: [
+                            TextButton(
+                              onPressed: p.noLocal ? _abrirConcluir : _marcarChegada,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              child: Text(p.noLocal ? 'Concluir' : 'Cheguei'),
+                            ),
+                            TextButton(
+                              onPressed: _abrirNaoRealizada,
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.danger500,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              child: const Text('Não feita'),
+                            ),
+                          ],
+                        ),
+                      ),
       ),
     );
   }

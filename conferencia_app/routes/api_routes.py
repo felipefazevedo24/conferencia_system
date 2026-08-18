@@ -24,6 +24,7 @@ from ..auth import (
     get_base_role_permissions,
     get_effective_permissions,
     get_permission_catalog,
+    is_admin_role,
     login_required,
     permission_required,
     permission_required_any,
@@ -82,6 +83,7 @@ from ..schemas.api_schemas import (
     ValidarSchema,
 )
 from ..services.consyste_service import enviar_decisao_consyste, manifestar_destinatario_consyste
+from ..services import processo_recebimento_log_service as processo_log_svc
 from ..services.consyste_service import consultar_emissao_nfe_consyste, solicitar_emissao_nfe_consyste
 from ..services.consyste_service import download_documento_consyste, listar_documentos_consyste
 from ..services.classificacao_contabil_service import (
@@ -1412,6 +1414,20 @@ def _build_documento_entrada_timeline(numero_nota: str, itens: list[ItemNota] | 
                 "data": log.data_exclusao,
                 "tipo": "Exclusao",
                 "descricao": f"{log.usuario_exclusao}: {log.motivo}",
+            }
+        )
+
+    item_identidade = itens[0] if itens else None
+    for log in processo_log_svc.listar_eventos(
+        numero_nota,
+        cnpj_emitente=item_identidade.cnpj_emitente if item_identidade else None,
+        fornecedor=item_identidade.fornecedor if item_identidade else None,
+    ):
+        eventos.append(
+            {
+                "data": log.created_at,
+                "tipo": log.categoria,
+                "descricao": f"{log.usuario}: {log.descricao}",
             }
         )
 
@@ -2842,6 +2858,22 @@ def consyste_documento():
         extensao = "pdf" if tipo_resolvido == "pdf" else "xml"
         mime = "application/pdf" if tipo_resolvido == "pdf" else "application/xml"
         nome_base = numero_resolvido or chave_resolvida or "documento_nf"
+
+        if numero_resolvido and itens:
+            processo_log_svc.registrar_evento(
+                numero_nota=numero_resolvido,
+                cnpj_emitente=itens[0].cnpj_emitente,
+                fornecedor=itens[0].fornecedor,
+                categoria="Documento",
+                acao="download_documento",
+                descricao=f"Baixou o documento {extensao.upper()} da NF",
+                usuario=session.get("username") or "desconhecido",
+                dados={"tipo": extensao},
+                ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+                user_agent=request.user_agent.string,
+            )
+            db.session.commit()
+
         return send_file(
             io.BytesIO(resp.content),
             mimetype=mime,
@@ -6709,6 +6741,25 @@ def gravar_checklist():
     checklist.etiqueta_ok = bool(data.get("etiqueta_ok"))
     checklist.observacao = str(data.get("observacao") or "").strip()[:500]
     checklist.data = datetime.now()
+
+    item_ref = ItemNota.query.filter_by(numero_nota=numero_nota).first()
+    processo_log_svc.registrar_evento(
+        numero_nota=numero_nota,
+        cnpj_emitente=item_ref.cnpj_emitente if item_ref else None,
+        fornecedor=item_ref.fornecedor if item_ref else None,
+        categoria="Checklist",
+        acao="checklist_preenchido",
+        descricao="Preencheu o checklist de recebimento",
+        usuario=session["username"],
+        dados={
+            "lacre_ok": checklist.lacre_ok,
+            "volumes_ok": checklist.volumes_ok,
+            "avaria_visual": checklist.avaria_visual,
+            "etiqueta_ok": checklist.etiqueta_ok,
+        },
+        ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+        user_agent=request.user_agent.string,
+    )
     db.session.commit()
     return jsonify({"sucesso": True})
 
@@ -8007,6 +8058,20 @@ def detalhes_nf(numero):
     if not itens:
         return jsonify({"erro": "Nota não encontrada"}), 404
 
+    processo_log_svc.registrar_evento(
+        numero_nota=numero,
+        cnpj_emitente=itens[0].cnpj_emitente,
+        fornecedor=itens[0].fornecedor,
+        categoria="Visualizacao",
+        acao="detalhe_visualizado",
+        descricao="Visualizou os detalhes do documento de entrada",
+        usuario=session.get("username") or "desconhecido",
+        dados={"tela": "documento_entrada", "endpoint": request.path},
+        ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+        user_agent=request.user_agent.string,
+    )
+    db.session.commit()
+
     lista_itens = [
         {
             "id": i.id,
@@ -8120,7 +8185,11 @@ def detalhes_nf(numero):
         }
 
     pendencias = _build_documento_entrada_pendencias(str(numero), itens, pedido_compra)
-    timeline = _build_documento_entrada_timeline(str(numero), itens)
+    timeline = (
+        _build_documento_entrada_timeline(str(numero), itens)
+        if is_admin_role(session.get("role"))
+        else []
+    )
     workflow = [
         {"nome": "Importada", "estado": "done" if data_importacao else "pending"},
         {"nome": "Conferida", "estado": "done" if fim_conferencia else "pending"},

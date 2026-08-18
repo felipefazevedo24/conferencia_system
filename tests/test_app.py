@@ -1,4 +1,6 @@
 import io
+import hashlib
+import hmac
 from datetime import datetime, timedelta
 import sqlite3
 from datetime import datetime
@@ -29,6 +31,9 @@ from conferencia_app.models import (
     LogEventoFiscalNota,
     LogManifestacaoDestinatario,
     SolicitacaoDevolucaoRecebimento,
+    AgendamentoVeiculo,
+    Viagem,
+    ViagemParada,
 )
 from conferencia_app.services.xml_service import process_xml_and_store
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -1064,6 +1069,29 @@ def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     assert isinstance(data["pendencias"], list)
     assert len(data["motivos_estorno_padrao"]) >= 1
     assert isinstance(data["timeline"], list)
+    assert any(
+        evento["tipo"] == "Visualizacao"
+        and "ADMIN" in evento["descricao"]
+        and "Visualizou os detalhes" in evento["descricao"]
+        for evento in data["timeline"]
+    )
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3010",
+            acao="detalhe_visualizado",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert evento.fornecedor == "Fornecedor Detalhe"
+        assert evento.ip_address == "127.0.0.1"
+
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+    response_fiscal = client.get("/api/detalhes_nf/3010")
+    assert response_fiscal.status_code == 200
+    data_fiscal = response_fiscal.get_json()
+    assert data_fiscal["timeline"] == []
 
 
 def test_download_documento_por_numero_da_nf(tmp_path):
@@ -1096,6 +1124,63 @@ def test_download_documento_por_numero_da_nf(tmp_path):
     assert response.data == b"%PDF-1.4 fake"
     assert "NF_321.pdf" in response.headers["Content-Disposition"]
     mocked_get.assert_called_once()
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="321",
+            acao="download_documento",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert "PDF" in evento.descricao
+
+
+def test_gravar_checklist_registra_evento_processo(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="330",
+                fornecedor="Fornecedor Checklist",
+                codigo="CK1",
+                descricao="Item checklist",
+                qtd_real=1.0,
+                status="Pendente",
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/checklist",
+        json={
+            "nota": "330",
+            "lacre_ok": True,
+            "volumes_ok": True,
+            "avaria_visual": False,
+            "observacao": "Sem avarias.",
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="330",
+            acao="checklist_preenchido",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert evento.fornecedor == "Fornecedor Checklist"
+
+    detalhe = client.get("/api/detalhes_nf/330")
+    assert detalhe.status_code == 200
+    timeline = detalhe.get_json()["timeline"]
+    assert any(evento["tipo"] == "Checklist" for evento in timeline)
 
 
 def test_portaria_pode_consultar_nfes_liberadas_mas_nao_baixar_documento(tmp_path):
@@ -5011,3 +5096,50 @@ def test_process_xml_store_nfse_sem_numero_usa_fallback(tmp_path):
         assert item is not None
         assert item.status == "AguardandoLiberacao"
         assert str(item.numero_nota or "").strip() != ""
+
+
+def test_motorista_nao_realizada_exige_justificativa(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        db.create_all()
+        veiculo = AgendamentoVeiculo(codigo="VAN-TST", nome_exibicao="Van Teste")
+        db.session.add(veiculo)
+        db.session.flush()
+        viagem = Viagem(
+            codigo="VG-TST-NAO-REALIZADA",
+            veiculo_id=veiculo.id,
+            status="EmAndamento",
+            liberada=True,
+        )
+        db.session.add(viagem)
+        db.session.flush()
+        parada = ViagemParada(
+            viagem_id=viagem.id,
+            sequencia=1,
+            tipo="ENTREGA",
+            parceiro_nome="Cliente Teste",
+            status="Pendente",
+        )
+        db.session.add(parada)
+        db.session.commit()
+
+        secret = (app.config.get("SECRET_KEY") or "dev").encode("utf-8")
+        token = hmac.new(secret, f"viagem:{viagem.id}".encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        viagem_id = viagem.id
+        parada_id = parada.id
+
+    client = app.test_client()
+    url = f"/motorista/viagem/{viagem_id}/{token}/parada/{parada_id}/concluir"
+
+    sem_motivo = client.post(url, json={"resultado": "NaoRealizada"})
+    assert sem_motivo.status_code == 400
+    assert "justificativa" in sem_motivo.get_json()["msg"].lower()
+
+    com_motivo = client.post(url, json={"resultado": "NaoRealizada", "observacao": "Cliente fechado no horario."})
+    assert com_motivo.status_code == 200
+    assert com_motivo.get_json()["status"] == "Nao_realizada"
+
+    with app.app_context():
+        atualizada = db.session.get(ViagemParada, parada_id)
+        assert atualizada.status == "Nao_realizada"
+        assert atualizada.observacao == "Cliente fechado no horario."

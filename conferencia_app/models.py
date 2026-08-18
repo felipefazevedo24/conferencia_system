@@ -409,6 +409,23 @@ class LogEventoFiscalNota(db.Model):
     data = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
 
 
+class ProcessoRecebimentoEvento(db.Model):
+    __tablename__ = "processo_recebimento_evento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero_nota = db.Column(db.String(20), nullable=False, index=True)
+    cnpj_emitente = db.Column(db.String(20), index=True)
+    fornecedor = db.Column(db.String(200), index=True)
+    categoria = db.Column(db.String(40), nullable=False, index=True)
+    acao = db.Column(db.String(80), nullable=False, index=True)
+    descricao = db.Column(db.String(500), nullable=False)
+    usuario = db.Column(db.String(100), nullable=False, index=True)
+    dados_json = db.Column(db.Text)
+    ip_address = db.Column(db.String(64))
+    user_agent = db.Column(db.String(400))
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+
 class BoletoContaReceber(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_nota = db.Column(db.String(20), nullable=False, unique=True, index=True)

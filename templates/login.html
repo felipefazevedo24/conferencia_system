@@ -89,17 +89,6 @@
                     <form id="register-form" novalidate style="display:none">
                         <input type="hidden" id="reg-token" value="">
                         <div class="field">
-                            <label for="reg-email">
-                                <span>Seu e-mail corporativo</span>
-                                <span class="field-note" id="email-hint">Informe o e-mail cadastrado pelo admin</span>
-                            </label>
-                            <div class="input-shell">
-                                <input type="email" id="reg-email" name="email" autocomplete="email" placeholder="seu.email@empresa.com">
-                            </div>
-                            <div class="field-meta" id="email-meta"></div>
-                        </div>
-
-                        <div class="field">
                             <label for="reg-pass">
                                 <span>Defina sua senha</span>
                                 <span class="field-note">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo</span>
@@ -127,7 +116,7 @@
                         <button type="submit" class="login-button" id="register-button">
                             <span class="button-content">
                                 <span class="spinner" aria-hidden="true"></span>
-                                <span class="button-text">Cadastrar senha</span>
+                                <span class="button-text">Ativar acesso</span>
                             </span>
                         </button>
 
@@ -307,22 +296,13 @@
         passInput.addEventListener("keydown", updateCapsLockState);
 
         /* ── Switch to registration view ── */
-        function showRegistrationForm(emailHint, prefillEmail = "", lockEmail = false) {
+        function showRegistrationForm() {
             loginForm.style.display = "none";
             registerForm.style.display = "";
-            cardTitle.textContent = "Primeiro acesso";
-            cardCopy.textContent = "Ative sua conta e cadastre sua senha para acessar o sistema.";
-            if (emailHint) {
-                document.getElementById("email-hint").textContent = `Dica: ${emailHint}`;
-            }
-            const regEmail = document.getElementById("reg-email");
-            const regToken = document.getElementById("reg-token");
-            regToken.value = activeInviteToken;
-            regEmail.readOnly = !!lockEmail;
-            if (prefillEmail) {
-                regEmail.value = prefillEmail;
-            }
-            document.getElementById("reg-email").focus();
+            cardTitle.textContent = "Ativar acesso";
+            cardCopy.textContent = "Defina sua senha para concluir a ativação da sua conta.";
+            document.getElementById("reg-token").value = activeInviteToken;
+            document.getElementById("reg-pass").focus();
         }
 
         function showLoginForm() {
@@ -351,13 +331,12 @@
         /* ── Registration form submit ── */
         registerForm.addEventListener("submit", async (event) => {
             event.preventDefault();
-            const email = document.getElementById("reg-email").value.trim();
             const senha = document.getElementById("reg-pass").value;
             const confirma = document.getElementById("reg-pass-confirm").value;
             const token = document.getElementById("reg-token").value.trim();
 
-            if (!email) {
-                showFeedback("warning", "Informe o e-mail cadastrado pelo administrador.");
+            if (!token) {
+                showFeedback("error", "Convite ausente ou inválido. Peça a um administrador para reenviá-lo.");
                 pulseError();
                 return;
             }
@@ -375,23 +354,20 @@
             const regBtn = document.getElementById("register-button");
             regBtn.disabled = true;
             regBtn.classList.add("loading");
-            showFeedback("info", "Cadastrando sua senha...");
+            showFeedback("info", "Ativando seu acesso...");
 
             try {
                 const response = await fetch("/cadastrar-senha", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, senha, token })
+                    body: JSON.stringify({ senha, token })
                 });
                 const data = await response.json();
                 if (data.sucesso) {
-                    showFeedback("success", data.msg, "Redirecionando para o login...");
+                    showFeedback("success", data.msg || "Senha cadastrada com sucesso!", "Redirecionando para o sistema...");
                     setTimeout(() => {
-                        showLoginForm();
-                        if (data.username) userInput.value = data.username;
-                        passInput.focus();
-                        showFeedback("success", "Senha cadastrada! Agora faça login.");
-                    }, 1500);
+                        window.location.href = data.redirect_to || "/";
+                    }, 500);
                 } else {
                     showFeedback("error", data.msg || "Falha ao cadastrar senha.");
                     pulseError();
@@ -456,10 +432,11 @@
                     return;
                 }
 
-                /* First login — show registration form */
+                /* First login — sem token não há como se auto-cadastrar */
                 if (data.code === "FIRST_LOGIN") {
-                    showFeedback("info", data.msg);
-                    showRegistrationForm(data.email_hint || "");
+                    passInput.value = "";
+                    showFeedback("warning", data.msg);
+                    pulseError();
                     return;
                 }
 
@@ -508,14 +485,14 @@
                 const response = await fetch(`/api/convite/validar?token=${encodeURIComponent(activeInviteToken)}`);
                 const data = await response.json();
                 if (!response.ok || !data.sucesso) {
-                    showFeedback("warning", data.msg || "Convite inválido ou expirado.");
+                    showFeedback("warning", data.msg || "Convite inválido ou expirado.", "Peça a um administrador para reenviá-lo.");
                     return;
                 }
                 const detalhe = data.expires_at
-                    ? `Convite válido para ${data.username} até ${new Date(data.expires_at).toLocaleString("pt-BR")}.`
-                    : `Convite válido para ${data.username}.`;
+                    ? `Convite válido para ${data.username}${data.email ? ` (${data.email})` : ""} até ${new Date(data.expires_at).toLocaleString("pt-BR")}.`
+                    : `Convite válido para ${data.username}${data.email ? ` (${data.email})` : ""}.`;
                 showFeedback("info", "Convite identificado.", detalhe);
-                showRegistrationForm(data.email ? `Convite para ${data.email}` : "Convite confirmado", data.email || "", !!data.email);
+                showRegistrationForm();
             } catch (err) {
                 showFeedback("warning", "Não foi possível validar o convite agora.");
             }
