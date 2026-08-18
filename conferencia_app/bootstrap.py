@@ -1,5 +1,6 @@
 from flask import Flask
 from sqlalchemy import inspect
+from sqlalchemy.exc import OperationalError
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
@@ -14,6 +15,16 @@ from .models import (
 
 DEFAULT_ADMIN_USERNAME = "ADMIN"
 DEFAULT_ADMIN_PASSWORD = "admin1234"
+
+
+def _is_mysql_table_exists_error(exc: OperationalError) -> bool:
+    """Detecta erro idempotente de DDL em MySQL (table already exists)."""
+    original = getattr(exc, "orig", None)
+    args = getattr(original, "args", ()) if original is not None else ()
+    if args and str(args[0]) == "1050":
+        return True
+    mensagem = str(exc).lower()
+    return "already exists" in mensagem and "create table" in mensagem
 
 
 def _has_table(table_name: str) -> bool:
@@ -1030,7 +1041,13 @@ def initialize_database(app: Flask) -> None:
             _ensure_usuario_password_capacity()
         except Exception:
             pass
-        db.create_all()
+        try:
+            db.create_all()
+        except OperationalError as exc:
+            # Em produção (ex.: PythonAnywhere), múltiplos workers podem subir
+            # ao mesmo tempo e disputar o CREATE TABLE no primeiro boot.
+            if not _is_mysql_table_exists_error(exc):
+                raise
 
         try:
             _ensure_usuario_email_column()
