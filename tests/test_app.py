@@ -565,6 +565,60 @@ def test_listas_documento_entrada_retorna_resumo_leve_por_status(tmp_path):
     assert lancadas["3101"]["manifestacao"]["status"] == "Falha"
 
 
+def test_documento_entrada_finalizado_inclui_recusado_como_historico_lancado(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3110",
+                fornecedor="Fornecedor Recusado",
+                codigo="RC1",
+                descricao="Item recusado historico",
+                qtd_real=1.0,
+                status="AguardandoLiberacao",
+                auditor_decisao="XML Recusado",
+                data_importacao=datetime.now() - timedelta(hours=3),
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="3111",
+                fornecedor="Fornecedor Lancado",
+                codigo="LC2",
+                descricao="Item lancado",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(hours=2),
+            )
+        )
+        db.session.commit()
+
+    resp_finalizado = client.get("/api/documento_entrada/lista?etapa=finalizado&page=1&page_size=50")
+    assert resp_finalizado.status_code == 200
+    finalizado = {item["numero"]: item for item in resp_finalizado.get_json()["notas"]}
+    assert "3110" in finalizado
+    assert finalizado["3110"]["status"] == "Lançado"
+    assert finalizado["3110"]["tem_recusa_historica"] is True
+
+    resp_auditoria = client.get("/api/documento_entrada/lista?etapa=auditoria&page=1&page_size=50")
+    assert resp_auditoria.status_code == 200
+    numeros_auditoria = {item["numero"] for item in resp_auditoria.get_json()["notas"]}
+    assert "3110" not in numeros_auditoria
+
+    resp_lancamento = client.get("/api/documento_entrada/lista?etapa=lancamento&page=1&page_size=50")
+    assert resp_lancamento.status_code == 200
+    numeros_lancamento = {item["numero"] for item in resp_lancamento.get_json()["notas"]}
+    assert "3110" not in numeros_lancamento
+
+    resp_kpis = client.get("/api/documento_entrada/kpis")
+    assert resp_kpis.status_code == 200
+    kpis = resp_kpis.get_json()
+    assert kpis["lancamento_finalizado"] >= 2
+
+
 def test_erp_lancamento_bridge_401_tem_mensagem_configuravel():
     from conferencia_app.services.erp_lancamento_service import (
         ERPBridgeUnauthorizedError,
@@ -1092,6 +1146,111 @@ def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     assert response_fiscal.status_code == 200
     data_fiscal = response_fiscal.get_json()
     assert data_fiscal["timeline"] == []
+
+
+def test_detalhes_nf_nao_mistura_manifestacao_de_mesmo_numero_com_fornecedor_diferente(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="4001",
+                fornecedor="Fornecedor Abril",
+                cnpj_emitente="11111111000111",
+                chave_acesso="11111111111111111111111111111111111111111111",
+                codigo="SKU-OLD",
+                descricao="Item antigo",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(days=120),
+            )
+        )
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota="4001",
+                chave_acesso="11111111111111111111111111111111111111111111",
+                manifestacao="confirmada",
+                status="Sucesso",
+                detalhe="Manifestação nota antiga",
+                usuario="ADMIN",
+            )
+        )
+
+        db.session.add(
+            ItemNota(
+                numero_nota="4001",
+                fornecedor="Fornecedor Atual",
+                cnpj_emitente="22222222000122",
+                chave_acesso="22222222222222222222222222222222222222222222",
+                codigo="SKU-NEW",
+                descricao="Item atual",
+                qtd_real=1.0,
+                status="Concluído",
+                data_importacao=datetime.now() - timedelta(days=1),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/detalhes_nf/4001?cnpj_emitente=22222222000122")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["fornecedor"] == "Fornecedor Atual"
+    assert data["manifestacao"] is None
+    assert all(
+        "Manifestacao" not in str(evento.get("tipo") or "")
+        for evento in (data.get("timeline") or [])
+    )
+
+
+def test_conferencia_dashboard_e_visualizacao_respeitam_identidade_da_nf(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="4002",
+                fornecedor="Fornecedor Antigo",
+                cnpj_emitente="11111111000111",
+                chave_acesso="33333333333333333333333333333333333333333333",
+                codigo="SKU-OLD-4002",
+                descricao="Item antigo",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(days=60),
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="4002",
+                fornecedor="Fornecedor Atual",
+                cnpj_emitente="22222222000122",
+                chave_acesso="44444444444444444444444444444444444444444444",
+                codigo="SKU-NEW-4002",
+                descricao="Item atual",
+                qtd_real=2.0,
+                status="Pendente",
+                data_importacao=datetime.now() - timedelta(hours=3),
+            )
+        )
+        db.session.commit()
+
+    response_dashboard = client.get("/api/conferencia/dashboard?status=pendente")
+    assert response_dashboard.status_code == 200
+    notas = response_dashboard.get_json()["notas"]
+    nota_alvo = next((n for n in notas if n["numero"] == "4002" and n["cnpj_emitente"] == "22222222000122"), None)
+    assert nota_alvo is not None
+    assert nota_alvo["fornecedor"] == "Fornecedor Atual"
+
+    response_visualizacao = client.get(
+        "/api/conferencia/nota/4002/visualizacao?cnpj_emitente=22222222000122"
+    )
+    assert response_visualizacao.status_code == 200
+    visualizacao = response_visualizacao.get_json()
+    assert visualizacao["fornecedor"] == "Fornecedor Atual"
 
 
 def test_conferencia_visualizacao_completa_retorna_itens_e_historico(tmp_path):
