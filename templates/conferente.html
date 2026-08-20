@@ -841,6 +841,16 @@
                     <div class="eui-stat__hint">Lançadas no ERP</div>
                 </div>
             </div>
+            {% if session.get('role') == 'Admin' %}
+            <div class="eui-stat is-clickable" data-filter="devolucao" onclick="abrirModalDevolucoesPendentes()">
+                <div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-rotate-left"></i></div>
+                <div class="eui-stat__body">
+                    <div class="eui-stat__label">Devoluções p/ aprovar</div>
+                    <div class="eui-stat__value" id="dash-devolucao-pendente">0</div>
+                    <div class="eui-stat__hint">Recusa total aguardando decisão admin</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         <div id="msg-lock" style="display:none; margin-bottom:20px; border-radius:10px;" class="alert-pendencia"></div>
@@ -901,7 +911,7 @@
             <div class="eui-card__head">
                 <div>
                     <h2 class="eui-card__title"><i class="fas fa-clipboard-list"></i> Itens da conferência</h2>
-                    <p class="eui-card__sub">Conferência cega — informe a contagem física de cada item.</p>
+                    <p class="eui-card__sub" id="conf-itens-subtitulo">Conferência cega — informe a contagem física de cada item.</p>
                 </div>
             </div>
             <div class="eui-card__body eui-card__body--tight">
@@ -938,7 +948,7 @@
                         </button>
                     </div>
                 </div>
-                <button class="eui-btn eui-btn--subtle" onclick="cancelarConferencia()">Sair sem salvar</button>
+                <button class="eui-btn eui-btn--subtle" id="btn-sair-conferencia" onclick="cancelarConferencia()">Sair sem salvar</button>
                 <button class="eui-btn eui-btn--success" id="btn-finalizar" onclick="validar()" disabled>
                     <i class="fas fa-check-double"></i> Validar Conferência
                 </button>
@@ -947,7 +957,7 @@
 
         <div class="eui-card rc-hist-card">
             <div class="rc-hist-head">
-                <h3><i class="fas fa-clock-rotate-left"></i> Histórico da nota</h3>
+                <h3><i class="fas fa-clock-rotate-left"></i> Logs da nota</h3>
                 <span class="rc-hist-sub">Trilha de eventos desta NF: importação, conferência, divergências, lançamento e ocorrências.</span>
             </div>
             <div id="rc-hist-lista" class="rc-historico"></div>
@@ -1046,6 +1056,56 @@
     </div>
 </div>
 
+{% if session.get('role') == 'Admin' %}
+<div id="modal-devolucoes-pendentes" class="modal-overlay" style="z-index: 3200;">
+    <div class="modal-sap" style="max-width: 900px;">
+        <div class="modal-head" style="display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fas fa-rotate-left"></i> DEVOLUÇÕES AGUARDANDO APROVAÇÃO</span>
+            <button onclick="fecharModalDevolucoesPendentes()" style="color:white; background:none; border:none; cursor:pointer; font-size:20px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+                <table class="erp-table ce-table">
+                    <thead>
+                        <tr>
+                            <th width="110">NF-e</th>
+                            <th>Fornecedor</th>
+                            <th width="140">Solicitante</th>
+                            <th>Motivo</th>
+                            <th width="150">Data</th>
+                            <th width="110" style="text-align:center;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devolucoes-pendentes-tbody">
+                        <tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Carregando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-aprovar-devolucao" class="modal-overlay" style="z-index: 3400;">
+    <div class="modal-sap" style="max-width: 560px;">
+        <div class="modal-head"><span>DECIDIR DEVOLUÇÃO — NF <span id="aprovar-devolucao-nf-ref">---</span></span></div>
+        <div class="modal-body">
+            <div style="color:#475569; margin-bottom:14px; line-height:1.5;"><strong>Aprovar:</strong> a NF é marcada como Devolvida e a operação de "não realizada" é enviada ao Consyste/SEFAZ. <strong>Recusar:</strong> a solicitação é descartada e a NF volta para a fila de conferência cega, como se nada tivesse acontecido. Nenhuma das duas ações pode ser desfeita por aqui.</div>
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:13px;">
+                <div><strong>Motivo do conferente:</strong> <span id="aprovar-devolucao-motivo">---</span></div>
+            </div>
+            <label class="form-label">Observação do admin (opcional)</label>
+            <textarea id="aprovar-devolucao-observacao" class="devolucao-textarea" placeholder="Observação sobre a decisão (opcional)..."></textarea>
+            <div id="aprovar-devolucao-feedback" style="margin-top:10px; color:var(--danger-erp); font-weight:700;"></div>
+        </div>
+        <div class="modal-foot" style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+            <button class="btn-sap btn-secondary" onclick="fecharModalAprovarDevolucao()">Cancelar</button>
+            <button id="btn-confirmar-recusar-devolucao" class="btn-sap btn-warning" onclick="confirmarRecusarDevolucao()">Recusar solicitação</button>
+            <button id="btn-confirmar-aprovar-devolucao" class="btn-sap btn-danger" onclick="confirmarAprovarDevolucao()">Aprovar devolução</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div id="modal-sem-conferencia" class="modal-overlay" style="z-index: 3300;">
     <div class="modal-sap" style="max-width: 600px;">
         <div class="modal-head"><span>MATERIAL SEM CONFERÊNCIA LOGÍSTICA</span></div>
@@ -1131,7 +1191,7 @@
 <div id="modal-hist-nota" class="rc-modal-hist" role="dialog" aria-modal="true">
     <div class="rc-modal-hist__box">
         <div class="rc-modal-hist__head">
-            <h3><i class="fas fa-clock-rotate-left"></i> Histórico da NF <span id="hist-nota-ref">—</span></h3>
+            <h3><i class="fas fa-clock-rotate-left"></i> Logs da NF <span id="hist-nota-ref">—</span></h3>
             <button type="button" class="rc-modal-hist__close" onclick="fecharHistoricoNota()"><i class="fas fa-xmark"></i></button>
         </div>
         <div class="rc-modal-hist__body">
@@ -1154,8 +1214,13 @@
     let checklistPendente = null;
     let checklistResolver = null;
     let heartbeatTimer = null;
+    let modoVisualizacao = false;
+    let lockAtivo = false;
     const motivosPadrao = ['Falta de item', 'Sobra de item', 'Item divergente do comprado', 'Avaria'];
     const canReverter = "{{ '1' if session.get('role') in ['Admin', 'Fiscal'] else '0' }}" === "1";
+    const isAdminReceb = "{{ '1' if session.get('role') == 'Admin' else '0' }}" === "1";
+    let devolucoesPendentesCache = [];
+    let devolucaoAprovarSelecionada = null;
 
     function coletarContagens() {
         const contagens = {};
@@ -1486,6 +1551,22 @@
         return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     }
 
+    function _rcIdentityQuery(cnpjEmitente, fornecedor) {
+        const params = new URLSearchParams();
+        if (String(cnpjEmitente || '').trim()) params.set('cnpj_emitente', String(cnpjEmitente).trim());
+        if (String(fornecedor || '').trim()) params.set('fornecedor', String(fornecedor).trim());
+        const qs = params.toString();
+        return qs ? `?${qs}` : '';
+    }
+
+    function _rcFindNotaMeta(numero, cnpjEmitente = '', fornecedor = '') {
+        return notasPendentesCache.find((item) =>
+            String(item.numero || '') === String(numero || '')
+            && String(item.cnpj_emitente || '') === String(cnpjEmitente || '')
+            && String(item.fornecedor || '') === String(fornecedor || '')
+        ) || null;
+    }
+
     function renderNotasPendentes() {
         const tbody = document.getElementById('notas-tbody');
         const notas = notasPendentesCache;
@@ -1508,8 +1589,8 @@
             const lanc = n.status_slug === 'lancado' && n.numero_lancamento
                 ? `<div style="font-size:11px; color:#64748b; margin-top:2px;">Lanç.: ${_rcEsc(n.numero_lancamento)}</div>` : '';
             const acao = n.status_slug === 'pendente'
-                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}')"><i class="fas fa-barcode"></i> Conferir</button>`
-                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="verHistoricoNota('${_rcEsc(n.numero)}')"><i class="fas fa-clock-rotate-left"></i> Histórico</button>`;
+                ? `<button class="eui-btn eui-btn--primary eui-btn--sm" onclick="abrir('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}')"><i class="fas fa-barcode"></i> Conferir</button>`
+                : `<button class="eui-btn eui-btn--ghost eui-btn--sm" onclick="abrirVisualizacao('${_rcEsc(n.numero)}','${_rcEsc(n.cnpj_emitente || '')}','${_rcEsc(n.fornecedor || '')}')"><i class="fas fa-eye"></i> Visualizar</button>`;
             return `<tr>
                 <td class="rc-cod">${_rcEsc(n.codigo_conferencia)}</td>
                 <td class="rc-nf">${_rcEsc(n.numero)}</td>
@@ -1522,18 +1603,115 @@
         }).join('');
     }
 
-    async function verHistoricoNota(nota) {
+    function _fmtNumero(valor) {
+        const num = Number(valor);
+        if (!Number.isFinite(num)) return '---';
+        return num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+    }
+
+    function aplicarModoConferenciaVisualizacao(ativo) {
+        modoVisualizacao = !!ativo;
+        const btnFinalizar = document.getElementById('btn-finalizar');
+        const confMenu = document.getElementById('conf-menu');
+        const btnSair = document.getElementById('btn-sair-conferencia');
+        const subtitulo = document.getElementById('conf-itens-subtitulo');
+        if (btnFinalizar) {
+            btnFinalizar.classList.toggle('hidden', modoVisualizacao);
+            if (modoVisualizacao) btnFinalizar.disabled = true;
+        }
+        if (confMenu) confMenu.classList.toggle('hidden', modoVisualizacao);
+        if (btnSair) btnSair.innerText = modoVisualizacao ? 'Voltar à lista' : 'Sair sem salvar';
+        if (subtitulo) {
+            subtitulo.innerText = modoVisualizacao
+                ? 'Visualização completa da conferência e da trilha de logs desta NF.'
+                : 'Conferência cega — informe a contagem física de cada item.';
+        }
+    }
+
+    function renderItensConferencia(itens, somenteLeitura = false) {
+        const tbody = document.getElementById('itens-container');
+        tbody.innerHTML = itens.map((i) => {
+            const unidadeItem = i.unidade || 'UN';
+            const ehChapa = unidadeEhChapa(unidadeItem);
+            const valorContagem = somenteLeitura
+                ? (i.qtd_ultima != null ? String(i.qtd_ultima) : '')
+                : '';
+            const fatorInicial = somenteLeitura
+                ? (i.fator_ultimo != null ? String(i.fator_ultimo) : '1')
+                : '1';
+            const unidadeInicial = somenteLeitura
+                ? (String(i.unidade_ultima || '').trim() || unidadeItem)
+                : unidadeItem;
+            const blocoChapa = (!somenteLeitura && ehChapa) ? `
+                    <div class="chapa-wrap" data-id="${i.id}">
+                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="toggleChapa('${i.id}')">
+                            <i class="fas fa-layer-group"></i> É chapa?
+                        </button>
+                        <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
+                            <label>Qtd.</label>
+                            <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
+                            <span class="chapa-suffix">UND</span>
+                        </div>
+                    </div>` : '';
+            const rowClass = (somenteLeitura && valorContagem) ? 'contado' : '';
+            const detalheVisual = somenteLeitura
+                ? `<div class="item-alerta ${String(i.status_ultima || '').toUpperCase() === 'DIVERGÊNCIA' ? 'error' : ''}" data-id="${i.id}">${_rcEscape(i.motivo_ultima || i.status_ultima || '')}</div>`
+                : `<div class="item-alerta" data-id="${i.id}"></div>${blocoChapa}`;
+            return `
+            <tr class="${rowClass}">
+                <td style="text-align:center"><span class="status-indicator"></span></td>
+                <td style="font-family:monospace; color:var(--sap-blue); font-weight:800">${_rcEscape(i.codigo)}</td>
+                <td style="font-weight:600">${_rcEscape(i.descricao)}</td>
+                <td style="text-align:center; font-weight:800; color:#475569;">${_rcEscape(unidadeItem)}</td>
+                <td style="text-align: center;">
+                    <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${unidadeItem}"${ehChapa ? ' data-chapa="1"' : ''} ${somenteLeitura ? 'disabled readonly' : `oninput="atualizarStatusLinha(this)"`} step="0.001" value="${_rcEscape(valorContagem)}">
+                    ${detalheVisual}
+                </td>
+                <td style="text-align:center;">
+                    <input type="number" class="fator-input" data-id="${i.id}" value="${_rcEscape(fatorInicial)}" ${somenteLeitura ? 'disabled readonly' : `oninput="atualizarStatusLinha(document.querySelector('.qtd-input[data-id=\\'${i.id}\\']'))"`} step="0.0001" style="width:55px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
+                    <input type="text" class="unidade-input" data-id="${i.id}" value="${_rcEscape(unidadeInicial)}" ${somenteLeitura ? 'disabled readonly' : ''} style="width:40px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
+                </td>
+            </tr>
+        `;
+        }).join('');
+
+        if (somenteLeitura) {
+            const btnFinalizar = document.getElementById('btn-finalizar');
+            if (btnFinalizar) btnFinalizar.disabled = true;
+            atualizarProgressoConferencia();
+            return;
+        }
+
+        itens.forEach((i) => {
+            const v = Number(i.qtd_chapas_und);
+            if (!Number.isFinite(v) || v <= 0) return;
+            const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
+            const btn = document.getElementById(`chapa-btn-${i.id}`);
+            const bloco = document.getElementById(`chapa-fields-${i.id}`);
+            const wrap = document.querySelector(`.chapa-wrap[data-id="${i.id}"]`);
+            if (!input || !btn || !bloco) return;
+            input.value = (v === Math.trunc(v)) ? String(Math.trunc(v)) : String(v);
+            btn.dataset.ativo = '1';
+            bloco.style.display = 'flex';
+            wrap?.classList.add('aberto');
+            atualizarChapa(i.id);
+        });
+
+        atualizarProgressoConferencia();
+    }
+
+    async function verHistoricoNota(nota, cnpjEmitente = '', fornecedor = '') {
         const modal = document.getElementById('modal-hist-nota');
         document.getElementById('hist-nota-ref').textContent = nota;
         const box = document.getElementById('rc-hist-modal-lista');
         box.innerHTML = '<div class="rc-hist-empty">Carregando…</div>';
         modal.classList.add('open');
         try {
-            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico');
+            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico' + _rcIdentityQuery(cnpjEmitente, fornecedor));
             if (!r.ok) throw new Error();
             const lista = await r.json();
             box.innerHTML = (!lista || !lista.length)
-                ? '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>'
+                ? '<div class="rc-hist-empty">Sem logs registrados para esta nota.</div>'
                 : lista.map(e => {
                     const cat = _rcCategoria(e.tipo);
                     return `<div class="rc-hist-item ${cat.item}">
@@ -1568,7 +1746,7 @@
         const box = document.getElementById('rc-hist-lista');
         if (!box) return;
         if (!lista || !lista.length) {
-            box.innerHTML = '<div class="rc-hist-empty">Sem eventos registrados para esta nota.</div>';
+            box.innerHTML = '<div class="rc-hist-empty">Sem logs registrados para esta nota.</div>';
             return;
         }
         // Ordem cronológica (mais antigo primeiro).
@@ -1583,11 +1761,11 @@
             </div>`;
         }).join('');
     }
-    async function carregarHistoricoNota(nota) {
+    async function carregarHistoricoNota(nota, cnpjEmitente = '', fornecedor = '') {
         const box = document.getElementById('rc-hist-lista');
         if (box) box.innerHTML = '<div class="rc-hist-empty">Carregando…</div>';
         try {
-            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico');
+            const r = await fetch('/api/conferencia/nota/' + encodeURIComponent(nota) + '/historico' + _rcIdentityQuery(cnpjEmitente, fornecedor));
             if (!r.ok) throw new Error();
             renderHistoricoNota(await r.json());
         } catch (e) {
@@ -1595,10 +1773,12 @@
         }
     }
 
-    async function abrir(n) {
+    async function abrir(n, cnpjEmitente = '', fornecedor = '') {
         notaSel = n;
-        const metaNota = notasPendentesCache.find(item => String(item.numero) === String(n));
-        let res = await fetch('/api/itens/' + n);
+        lockAtivo = false;
+        aplicarModoConferenciaVisualizacao(false);
+        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor);
+        let res = await fetch('/api/itens/' + n + _rcIdentityQuery(cnpjEmitente, fornecedor));
         if (res.status === 423) {
             const d = await res.json();
             mostrarMensagemOperacional(`NF ${n} bloqueada por ${d.usuario}. Expira em: ${d.expira_em}`);
@@ -1607,61 +1787,40 @@
         document.getElementById('msg-lock').style.display = 'none';
         document.getElementById('lista-view').classList.add('hidden');
         document.getElementById('conf-view').classList.remove('hidden');
-        carregarHistoricoNota(n);
+        carregarHistoricoNota(n, cnpjEmitente, fornecedor);
         iniciarHeartbeat();
+        lockAtivo = true;
         const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || '---'}`);
         document.getElementById('n-atual').innerHTML = `<i class="fas fa-barcode"></i> Conferência NF ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:600;">${refPedido} | Liberada em: ${metaNota?.data_liberacao || '---'}</div>`;
         const itens = await res.json();
-        document.getElementById('itens-container').innerHTML = itens.map(i => {
-            const unidadeItem = i.unidade || 'UN';
-            const ehChapa = unidadeEhChapa(unidadeItem);
-            const blocoChapa = ehChapa ? `
-                    <div class="chapa-wrap" data-id="${i.id}">
-                        <button type="button" class="chapa-btn" id="chapa-btn-${i.id}" data-id="${i.id}" data-ativo="0" onclick="toggleChapa('${i.id}')">
-                            <i class="fas fa-layer-group"></i> É chapa?
-                        </button>
-                        <div class="chapa-fields" id="chapa-fields-${i.id}" style="display:none;">
-                            <label>Qtd.</label>
-                            <input type="number" class="chapa-input" data-id="${i.id}" min="0" step="1" placeholder="0" oninput="atualizarChapa('${i.id}')">
-                            <span class="chapa-suffix">UND</span>
-                        </div>
-                    </div>` : '';
-            return `
-            <tr>
-                <td style="text-align:center"><span class="status-indicator"></span></td>
-                <td style="font-family:monospace; color:var(--sap-blue); font-weight:800">${i.codigo}</td>
-                <td style="font-weight:600">${i.descricao}</td>
-                <td style="text-align:center; font-weight:800; color:#475569;">${unidadeItem}</td>
-                <td style="text-align: center;">
-                    <input type="number" class="qtd-input" data-id="${i.id}" data-qtd-esperada="${i.qtd_esperada}" data-unidade="${unidadeItem}"${ehChapa ? ' data-chapa="1"' : ''} oninput="atualizarStatusLinha(this)" step="0.001">
-                    <div class="item-alerta" data-id="${i.id}"></div>${blocoChapa}
-                </td>
-                <td style="text-align:center;">
-                    <input type="number" class="fator-input" data-id="${i.id}" value="1" oninput="atualizarStatusLinha(document.querySelector('.qtd-input[data-id=\'${i.id}\']'))" step="0.0001" style="width:55px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
-                    <input type="text" class="unidade-input" data-id="${i.id}" value="${unidadeItem}" style="width:40px; border:1px solid #cbd5e1; border-radius:4px; padding:4px">
-                </td>
-            </tr>
-        `;
-        }).join('');
+        renderItensConferencia(itens, false);
+    }
 
-        // Reabre a conferencia ja mostrando a quantidade de chapas (UND) que o
-        // conferente informou antes (auditavel).
-        itens.forEach((i) => {
-            const v = Number(i.qtd_chapas_und);
-            if (!Number.isFinite(v) || v <= 0) return;
-            const input = document.querySelector(`.chapa-input[data-id="${i.id}"]`);
-            const btn = document.getElementById(`chapa-btn-${i.id}`);
-            const bloco = document.getElementById(`chapa-fields-${i.id}`);
-            const wrap = document.querySelector(`.chapa-wrap[data-id="${i.id}"]`);
-            if (!input || !btn || !bloco) return;
-            input.value = (v === Math.trunc(v)) ? String(Math.trunc(v)) : String(v);
-            btn.dataset.ativo = '1';
-            bloco.style.display = 'flex';
-            wrap?.classList.add('aberto');
-            atualizarChapa(i.id);
-        });
-
-        atualizarProgressoConferencia();
+    async function abrirVisualizacao(n, cnpjEmitente = '', fornecedor = '') {
+        notaSel = n;
+        lockAtivo = false;
+        pararHeartbeat();
+        aplicarModoConferenciaVisualizacao(true);
+        const metaNota = _rcFindNotaMeta(n, cnpjEmitente, fornecedor);
+        try {
+            const res = await fetch('/api/conferencia/nota/' + encodeURIComponent(n) + '/visualizacao' + _rcIdentityQuery(cnpjEmitente, fornecedor));
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                mostrarMensagemOperacional(data.error || 'Não foi possível abrir a visualização da conferência.', true);
+                return;
+            }
+            const dados = await res.json();
+            document.getElementById('msg-lock').style.display = 'none';
+            document.getElementById('lista-view').classList.add('hidden');
+            document.getElementById('conf-view').classList.remove('hidden');
+            carregarHistoricoNota(n, cnpjEmitente, fornecedor);
+            const refPedido = metaNota?.remessa ? 'NF de remessa' : (metaNota?.material_cliente ? 'Material do cliente' : `Pedido: ${metaNota?.pedido_compra || dados.pedido_compra || '---'}`);
+            const statusTxt = dados.status_atual ? ` | Status: ${dados.status_atual}` : '';
+            document.getElementById('n-atual').innerHTML = `<i class="fas fa-eye"></i> Visualização da Conferência NF ${n}<div style="font-size:12px; margin-top:4px; color:#64748b; font-weight:600;">${refPedido}${statusTxt}</div>`;
+            renderItensConferencia(Array.isArray(dados.itens) ? dados.itens : [], true);
+        } catch (e) {
+            mostrarMensagemOperacional('Erro ao abrir visualização completa da conferência.', true);
+        }
     }
 
     function atualizarProgressoConferencia() {
@@ -2131,15 +2290,120 @@
         location.reload();
     }
 
+    function escapeHtml(valor) {
+        return String(valor ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    async function carregarDevolucoesPendentes() {
+        if (!isAdminReceb) return;
+        try {
+            const res = await fetch('/api/admin/recebimento/solicitacoes_devolucao');
+            if (!res.ok) return;
+            devolucoesPendentesCache = await res.json();
+            const badge = document.getElementById('dash-devolucao-pendente');
+            if (badge) badge.innerText = devolucoesPendentesCache.length;
+        } catch (e) { /* silencioso: nao bloqueia o carregamento da tela principal */ }
+    }
+
+    async function abrirModalDevolucoesPendentes() {
+        if (!isAdminReceb) return;
+        await carregarDevolucoesPendentes();
+        renderDevolucoesPendentes();
+        document.getElementById('modal-devolucoes-pendentes').style.display = 'flex';
+    }
+
+    function fecharModalDevolucoesPendentes() {
+        document.getElementById('modal-devolucoes-pendentes').style.display = 'none';
+    }
+
+    function renderDevolucoesPendentes() {
+        const tbody = document.getElementById('devolucoes-pendentes-tbody');
+        if (!tbody) return;
+        if (!devolucoesPendentesCache.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Nenhuma devolução aguardando aprovação.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = devolucoesPendentesCache.map((s) => `
+            <tr>
+                <td style="font-weight:800; color:var(--sap-blue);"># ${escapeHtml(String(s.numero))}</td>
+                <td>${escapeHtml(s.fornecedor || '---')}</td>
+                <td><span style="background:#eef2f7; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700;">${escapeHtml(s.solicitante || '---')}</span></td>
+                <td style="font-size:12px;">${escapeHtml(s.motivo || '---')}</td>
+                <td style="font-family:monospace; font-size:12px;">${escapeHtml(s.data || '---')}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sap btn-primary" style="padding:5px 10px; font-size:10px" onclick='abrirModalAprovarDevolucao(${JSON.stringify(s).replace(/'/g, "&#39;")})'>Analisar</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function abrirModalAprovarDevolucao(solicitacao) {
+        devolucaoAprovarSelecionada = solicitacao;
+        document.getElementById('aprovar-devolucao-nf-ref').innerText = solicitacao.numero;
+        document.getElementById('aprovar-devolucao-motivo').innerText = solicitacao.motivo || '---';
+        document.getElementById('aprovar-devolucao-observacao').value = '';
+        document.getElementById('aprovar-devolucao-feedback').innerText = '';
+        document.getElementById('modal-aprovar-devolucao').style.display = 'flex';
+    }
+
+    function fecharModalAprovarDevolucao() {
+        document.getElementById('modal-aprovar-devolucao').style.display = 'none';
+        devolucaoAprovarSelecionada = null;
+    }
+
+    async function _decidirDevolucao(endpoint, mensagemProcessando, mensagemPadrao) {
+        if (!devolucaoAprovarSelecionada) return;
+        const feedback = document.getElementById('aprovar-devolucao-feedback');
+        const btnAprovar = document.getElementById('btn-confirmar-aprovar-devolucao');
+        const btnRecusar = document.getElementById('btn-confirmar-recusar-devolucao');
+        const observacao = (document.getElementById('aprovar-devolucao-observacao').value || '').trim();
+
+        feedback.innerText = mensagemProcessando;
+        btnAprovar.disabled = true;
+        btnRecusar.disabled = true;
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ solicitacao_id: devolucaoAprovarSelecionada.id, observacao_admin: observacao }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.sucesso) {
+                feedback.innerText = data.msg || 'Falha ao processar a decisão.';
+                return;
+            }
+            fecharModalAprovarDevolucao();
+            await carregarDevolucoesPendentes();
+            renderDevolucoesPendentes();
+            await carregarNotas();
+            alert(data.msg || mensagemPadrao);
+        } catch (e) {
+            feedback.innerText = 'Erro de rede.';
+        } finally {
+            btnAprovar.disabled = false;
+            btnRecusar.disabled = false;
+        }
+    }
+
+    async function confirmarAprovarDevolucao() {
+        await _decidirDevolucao('/api/admin/recebimento/aprovar_devolucao', 'Processando aprovação...', 'Devolução aprovada com sucesso.');
+    }
+
+    async function confirmarRecusarDevolucao() {
+        await _decidirDevolucao('/api/admin/recebimento/recusar_devolucao', 'Processando recusa...', 'Solicitação recusada. NF voltou para a fila de conferência cega.');
+    }
+
     async function cancelarConferencia() {
         pararHeartbeat();
-        if (notaSel) {
+        if (notaSel && lockAtivo) {
             await fetch('/api/lock/release', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ nota: notaSel }),
             });
         }
+        lockAtivo = false;
+        aplicarModoConferenciaVisualizacao(false);
         notaSel = '';
         document.getElementById('conf-view').classList.add('hidden');
         document.getElementById('lista-view').classList.remove('hidden');
@@ -2215,7 +2479,8 @@
 
     carregarNotas();
     atualizarIconeSom();
-    
+    carregarDevolucoesPendentes();
+
     // Carregar histórico em background para dashboard
     fetch('/api/historico_completo').then(r => r.json()).then(data => {
         dadosHistoricoCache = data;

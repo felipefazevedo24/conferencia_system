@@ -1,5 +1,6 @@
 from flask import Flask
 from sqlalchemy import inspect
+from sqlalchemy.exc import OperationalError
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
@@ -14,6 +15,16 @@ from .models import (
 
 DEFAULT_ADMIN_USERNAME = "ADMIN"
 DEFAULT_ADMIN_PASSWORD = "admin1234"
+
+
+def _is_mysql_table_exists_error(exc: OperationalError) -> bool:
+    """Detecta erro idempotente de DDL em MySQL (table already exists)."""
+    original = getattr(exc, "orig", None)
+    args = getattr(original, "args", ()) if original is not None else ()
+    if args and str(args[0]) == "1050":
+        return True
+    mensagem = str(exc).lower()
+    return "already exists" in mensagem and "create table" in mensagem
 
 
 def _has_table(table_name: str) -> bool:
@@ -1030,7 +1041,13 @@ def initialize_database(app: Flask) -> None:
             _ensure_usuario_password_capacity()
         except Exception:
             pass
-        db.create_all()
+        try:
+            db.create_all()
+        except OperationalError as exc:
+            # Em produção (ex.: PythonAnywhere), múltiplos workers podem subir
+            # ao mesmo tempo e disputar o CREATE TABLE no primeiro boot.
+            if not _is_mysql_table_exists_error(exc):
+                raise
 
         try:
             _ensure_usuario_email_column()
@@ -1302,19 +1319,80 @@ def _seed_ciclos_troca_epi() -> None:
 
 
 def _ensure_usuario_email_column() -> None:
-    """Add email column to usuario table if missing, and remove non-admin users.
-    Also ensures password column is nullable (SQLite requires table recreation)."""
+    """Compatibiliza a tabela `usuario` com o schema atual do modelo.
+
+    Banco legado pode faltar colunas como `ativo`, `ultimo_login_em`,
+    `convite_token_hash`, etc. Essas colunas precisam existir antes que qualquer
+    consulta do modelo `Usuario` execute, porque o ORM usa todas elas na query.
+    """
     from sqlalchemy import text, inspect as sa_inspect
     insp = sa_inspect(db.engine)
     cols = {c["name"] for c in insp.get_columns("usuario")}
+    if not cols:
+        return
+
+    def add_column(name: str, ddl_sql: str) -> None:
+        if name in cols:
+            return
+        with db.engine.connect() as conn:
+            conn.execute(text(ddl_sql))
+            conn.commit()
+        cols.add(name)
+
+    if db.engine.dialect.name == "mysql":
+        add_column("ativo", "ALTER TABLE usuario ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE")
+        add_column("nome_exibicao", "ALTER TABLE usuario ADD COLUMN nome_exibicao VARCHAR(120)")
+        add_column("telefone", "ALTER TABLE usuario ADD COLUMN telefone VARCHAR(40)")
+        add_column("tema", "ALTER TABLE usuario ADD COLUMN tema VARCHAR(10)")
+        add_column("senha_atualizada_em", "ALTER TABLE usuario ADD COLUMN senha_atualizada_em DATETIME")
+        add_column("ultimo_login_em", "ALTER TABLE usuario ADD COLUMN ultimo_login_em DATETIME")
+        add_column("convite_token_hash", "ALTER TABLE usuario ADD COLUMN convite_token_hash VARCHAR(64)")
+        add_column("convite_expires_at", "ALTER TABLE usuario ADD COLUMN convite_expires_at DATETIME")
+        add_column("convite_enviado_em", "ALTER TABLE usuario ADD COLUMN convite_enviado_em DATETIME")
+        add_column("convite_aceito_em", "ALTER TABLE usuario ADD COLUMN convite_aceito_em DATETIME")
+        add_column("forcar_troca_senha", "ALTER TABLE usuario ADD COLUMN forcar_troca_senha BOOLEAN NOT NULL DEFAULT FALSE")
+        add_column("criado_em", "ALTER TABLE usuario ADD COLUMN criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        add_column("criado_por", "ALTER TABLE usuario ADD COLUMN criado_por VARCHAR(100)")
+        add_column("atualizado_em", "ALTER TABLE usuario ADD COLUMN atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        add_column("atualizado_por", "ALTER TABLE usuario ADD COLUMN atualizado_por VARCHAR(100)")
+        add_column("email", "ALTER TABLE usuario ADD COLUMN email VARCHAR(160)")
+    else:
+        add_column("ativo", "ALTER TABLE usuario ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT 1")
+        add_column("nome_exibicao", "ALTER TABLE usuario ADD COLUMN nome_exibicao VARCHAR(120)")
+        add_column("telefone", "ALTER TABLE usuario ADD COLUMN telefone VARCHAR(40)")
+        add_column("tema", "ALTER TABLE usuario ADD COLUMN tema VARCHAR(10)")
+        add_column("senha_atualizada_em", "ALTER TABLE usuario ADD COLUMN senha_atualizada_em DATETIME")
+        add_column("ultimo_login_em", "ALTER TABLE usuario ADD COLUMN ultimo_login_em DATETIME")
+        add_column("convite_token_hash", "ALTER TABLE usuario ADD COLUMN convite_token_hash VARCHAR(64)")
+        add_column("convite_expires_at", "ALTER TABLE usuario ADD COLUMN convite_expires_at DATETIME")
+        add_column("convite_enviado_em", "ALTER TABLE usuario ADD COLUMN convite_enviado_em DATETIME")
+        add_column("convite_aceito_em", "ALTER TABLE usuario ADD COLUMN convite_aceito_em DATETIME")
+        add_column("forcar_troca_senha", "ALTER TABLE usuario ADD COLUMN forcar_troca_senha BOOLEAN NOT NULL DEFAULT 0")
+        add_column("criado_em", "ALTER TABLE usuario ADD COLUMN criado_em DATETIME DEFAULT CURRENT_TIMESTAMP")
+        add_column("criado_por", "ALTER TABLE usuario ADD COLUMN criado_por VARCHAR(100)")
+        add_column("atualizado_em", "ALTER TABLE usuario ADD COLUMN atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP")
+        add_column("atualizado_por", "ALTER TABLE usuario ADD COLUMN atualizado_por VARCHAR(100)")
+        add_column("email", "ALTER TABLE usuario ADD COLUMN email VARCHAR(160)")
+
     if "email" not in cols:
         with db.engine.connect() as conn:
             conn.execute(text("ALTER TABLE usuario ADD COLUMN email VARCHAR(160)"))
             conn.commit()
-        # Remove all non-admin users so they can be re-registered with email
+        cols.add("email")
+
+    # Remove non-admin users only when creating email migration on a legacy table,
+    # to force re-registration of the remaining users with proper email data.
+    if "email" in cols and "email" not in {c["name"] for c in sa_inspect(db.engine).get_columns("usuario")}:
+        pass
+
+    # Para serializar users antigos sem email, mantemos os admins e limpamos os demais
+    # durante a migração de email apenas se a coluna realmente acabou de ser criada.
+    if "email" in cols:
         with db.engine.connect() as conn:
-            conn.execute(text("DELETE FROM usuario WHERE UPPER(username) != 'ADMIN'"))
-            conn.commit()
+            current_columns = {c["name"] for c in sa_inspect(db.engine).get_columns("usuario")}
+            if "email" in current_columns and "email" not in cols:
+                conn.execute(text("DELETE FROM usuario WHERE UPPER(username) != 'ADMIN'"))
+                conn.commit()
 
     # Ensure password is nullable (SQLite needs table recreation, MySQL uses ALTER)
     col_details = _get_column_details("usuario", "password")
@@ -1331,11 +1409,26 @@ def _ensure_usuario_email_column() -> None:
                     "username VARCHAR(80) NOT NULL UNIQUE, "
                     "password VARCHAR(120), "
                     "role VARCHAR(20), "
-                    "email VARCHAR(160) UNIQUE)"
+                    "email VARCHAR(160) UNIQUE, "
+                    "ativo BOOLEAN NOT NULL DEFAULT 1, "
+                    "nome_exibicao VARCHAR(120), "
+                    "telefone VARCHAR(40), "
+                    "tema VARCHAR(10), "
+                    "senha_atualizada_em DATETIME, "
+                    "ultimo_login_em DATETIME, "
+                    "convite_token_hash VARCHAR(64), "
+                    "convite_expires_at DATETIME, "
+                    "convite_enviado_em DATETIME, "
+                    "convite_aceito_em DATETIME, "
+                    "forcar_troca_senha BOOLEAN NOT NULL DEFAULT 0, "
+                    "criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "criado_por VARCHAR(100), "
+                    "atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                    "atualizado_por VARCHAR(100))"
                 ))
                 conn.execute(text(
-                    "INSERT INTO usuario_tmp (id, username, password, role, email) "
-                    "SELECT id, username, password, role, email FROM usuario"
+                    "INSERT INTO usuario_tmp (id, username, password, role, email, ativo, nome_exibicao, telefone, tema, senha_atualizada_em, ultimo_login_em, convite_token_hash, convite_expires_at, convite_enviado_em, convite_aceito_em, forcar_troca_senha, criado_em, criado_por, atualizado_em, atualizado_por) "
+                    "SELECT id, username, password, role, email, ativo, nome_exibicao, telefone, tema, senha_atualizada_em, ultimo_login_em, convite_token_hash, convite_expires_at, convite_enviado_em, convite_aceito_em, forcar_troca_senha, criado_em, criado_por, atualizado_em, atualizado_por FROM usuario"
                 ))
                 conn.execute(text("DROP TABLE usuario"))
                 conn.execute(text("ALTER TABLE usuario_tmp RENAME TO usuario"))

@@ -109,21 +109,27 @@ def _iso_dt(valor: Any) -> str | None:
     return str(valor)
 
 
-def _normalizar_linhas_lancamento(rows: list[tuple[Any, Any, Any]]) -> tuple[str, Any, str] | None:
+def _normalizar_linhas_lancamento(rows: list[tuple[Any, ...]]) -> tuple[str, Any, str, str, str] | None:
     linhas_validas = [
-        (str(row[0]).strip(), row[1], str(row[2] or "").strip())
+        (
+            str(row[0]).strip(),
+            row[1],
+            str(row[2] or "").strip(),
+            str(row[3] or "").strip() if len(row) > 3 else "",
+            str(row[4] or "").strip() if len(row) > 4 else "",
+        )
         for row in rows
         if row and row[0] is not None and str(row[0]).strip()
     ]
     if not linhas_validas:
         return None
 
-    chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe in linhas_validas if chv_nfe}
+    chaves = {chv_nfe for _codigo, _dt_nf, chv_nfe, _cnpj, _nome in linhas_validas if chv_nfe}
     if len(chaves) == 1:
         return linhas_validas[0]
 
     # Fallback para bases antigas/linhas sem chave: so aceita se codigo e data tambem forem identicos.
-    assinaturas = {(codigo, _iso_dt(dt_nf)) for codigo, dt_nf, _chv_nfe in linhas_validas}
+    assinaturas = {(codigo, _iso_dt(dt_nf)) for codigo, dt_nf, _chv_nfe, _cnpj, _nome in linhas_validas}
     if not chaves and len(assinaturas) == 1:
         return linhas_validas[0]
     return None
@@ -1244,8 +1250,33 @@ def create_app() -> Flask:
 
             resultados: dict[str, dict[str, Any]] = {}
             status: dict[str, str] = {}
-            sql_com_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s AND dt_nf::date = %s LIMIT 50"
-            sql_sem_data = f"SELECT codigo, dt_nf, chv_nfe FROM {table} WHERE n_nf = %s LIMIT 50"
+            sql_com_data = f"""
+                SELECT c.codigo, c.dt_nf, c.chv_nfe,
+                       regexp_replace(coalesce(f.cgc, ''), '\\D', '', 'g') as fornecedor_cnpj,
+                       coalesce(nullif(c.fornecedor, ''), f.razao_social, f.nome) as fornecedor_nome
+                FROM {table} c
+                LEFT JOIN public.tfornece f
+                  ON f.cod_empresa = c.cod_empresa AND f.codigo = c.cod_fornecedor
+                WHERE c.n_nf = %s AND c.dt_nf::date = %s LIMIT 50
+            """
+            sql_sem_data = f"""
+                SELECT c.codigo, c.dt_nf, c.chv_nfe,
+                       regexp_replace(coalesce(f.cgc, ''), '\\D', '', 'g') as fornecedor_cnpj,
+                       coalesce(nullif(c.fornecedor, ''), f.razao_social, f.nome) as fornecedor_nome
+                FROM {table} c
+                LEFT JOIN public.tfornece f
+                  ON f.cod_empresa = c.cod_empresa AND f.codigo = c.cod_fornecedor
+                WHERE c.n_nf = %s LIMIT 50
+            """
+
+            def _linha_para_resultado(row: tuple[str, Any, str, str, str]) -> dict[str, Any]:
+                return {
+                    "codigo": row[0],
+                    "dt_nf": _iso_dt(row[1]),
+                    "chv_nfe": row[2],
+                    "fornecedor_cnpj": row[3],
+                    "fornecedor_nome": row[4],
+                }
 
             with _conectar(cfg) as conn:
                 with conn.cursor() as cur:
@@ -1260,7 +1291,7 @@ def create_app() -> Flask:
                             cur.execute(sql_com_data, (n_nf, data_emissao))
                             row = _normalizar_linhas_lancamento(cur.fetchall())
                             if row:
-                                resultados[n_nf] = {"codigo": row[0], "dt_nf": _iso_dt(row[1]), "chv_nfe": row[2]}
+                                resultados[n_nf] = _linha_para_resultado(row)
                             else:
                                 # Fallback seguro: se a dt_nf do ERP nao for a emissao
                                 # do XML, tenta por numero e aceita apenas retorno unico.
@@ -1268,11 +1299,7 @@ def create_app() -> Flask:
                                 rows_sem_data = cur.fetchall()
                                 row_sem_data = _normalizar_linhas_lancamento(rows_sem_data)
                                 if row_sem_data:
-                                    resultados[n_nf] = {
-                                        "codigo": row_sem_data[0],
-                                        "dt_nf": _iso_dt(row_sem_data[1]),
-                                        "chv_nfe": row_sem_data[2],
-                                    }
+                                    resultados[n_nf] = _linha_para_resultado(row_sem_data)
                                 elif rows_sem_data:
                                     status[n_nf] = "ERP encontrou o numero, mas com multiplas chaves/datas - confirme manualmente"
                                 else:
@@ -1282,7 +1309,7 @@ def create_app() -> Flask:
                             rows = cur.fetchall()
                             row = _normalizar_linhas_lancamento(rows)
                             if row:
-                                resultados[n_nf] = {"codigo": row[0], "dt_nf": _iso_dt(row[1]), "chv_nfe": row[2]}
+                                resultados[n_nf] = _linha_para_resultado(row)
                             elif rows:
                                 status[n_nf] = "Multiplas chaves de acesso para esse numero no ERP - vincule manualmente"
                             else:
@@ -1378,17 +1405,21 @@ def create_app() -> Flask:
 
             sql = f"""
                 select
-                    codigo::text as codigo,
-                    n_nf::text as numero_nota,
-                    dt_nf,
-                    dt_lancamento,
-                    coalesce(nullif(chv_nfe, ''), '') as chave_acesso
-                from {table}
-                where dt_lancamento::date >= %s
-                  and dt_lancamento::date <= %s
-                  and coalesce(codigo::text, '') <> ''
-                  and coalesce(n_nf::text, '') <> ''
-                order by dt_lancamento desc nulls last, codigo desc
+                    c.codigo::text as codigo,
+                    c.n_nf::text as numero_nota,
+                    c.dt_nf,
+                    c.dt_lancamento,
+                    coalesce(nullif(c.chv_nfe, ''), '') as chave_acesso,
+                    regexp_replace(coalesce(f.cgc, ''), '\\D', '', 'g') as fornecedor_cnpj,
+                    coalesce(nullif(c.fornecedor, ''), f.razao_social, f.nome) as fornecedor_nome
+                from {table} c
+                left join public.tfornece f
+                  on f.cod_empresa = c.cod_empresa and f.codigo = c.cod_fornecedor
+                where c.dt_lancamento::date >= %s
+                  and c.dt_lancamento::date <= %s
+                  and coalesce(c.codigo::text, '') <> ''
+                  and coalesce(c.n_nf::text, '') <> ''
+                order by c.dt_lancamento desc nulls last, c.codigo desc
                 limit %s
             """
             with _conectar(cfg) as conn:

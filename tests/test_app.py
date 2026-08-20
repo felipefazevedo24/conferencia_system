@@ -1,4 +1,6 @@
 import io
+import hashlib
+import hmac
 from datetime import datetime, timedelta
 import sqlite3
 from datetime import datetime
@@ -29,6 +31,9 @@ from conferencia_app.models import (
     LogEventoFiscalNota,
     LogManifestacaoDestinatario,
     SolicitacaoDevolucaoRecebimento,
+    AgendamentoVeiculo,
+    Viagem,
+    ViagemParada,
 )
 from conferencia_app.services.xml_service import process_xml_and_store
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -42,6 +47,16 @@ def build_test_app(tmp_path):
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
         }
     )
+
+
+def test_alembic_env_works_with_app_context(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        import importlib
+
+        env_module = importlib.import_module("migrations.env")
+        assert env_module.get_engine_url()
+        assert env_module.target_db is not None
 
 
 def enable_sqlite_foreign_keys(app):
@@ -302,6 +317,37 @@ def test_initialize_database_resets_truncated_admin_hash(tmp_path):
         assert check_password_hash(admin.password, "admin1234")
 
 
+def test_initialize_database_adds_missing_usuario_ativo_column(tmp_path):
+    app = build_test_app(tmp_path)
+
+    with app.app_context():
+        from sqlalchemy import text
+        from conferencia_app.models import Usuario
+
+        db.create_all()
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE usuario RENAME TO usuario_legacy"))
+            conn.execute(
+                text(
+                    "CREATE TABLE usuario ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "username VARCHAR(80) NOT NULL UNIQUE, "
+                    "email VARCHAR(160), "
+                    "password VARCHAR(255), "
+                    "role VARCHAR(20), "
+                    "criado_em DATETIME DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                )
+            )
+            conn.commit()
+
+        initialize_database(app)
+
+        cols = {c["name"] for c in db.inspect(db.engine).get_columns("usuario")}
+        assert "ativo" in cols
+        assert Usuario.query.filter(Usuario.ativo.is_(True)).count() >= 0
+
+
 def test_check_active_session_retries_after_operational_error(tmp_path):
     app = build_test_app(tmp_path)
     sessao_mock = Mock()
@@ -517,6 +563,60 @@ def test_listas_documento_entrada_retorna_resumo_leve_por_status(tmp_path):
     assert lancadas["3101"]["etapa_atual"] == "Lançada"
     assert lancadas["3101"]["codigo_erp"] == "ERP-3101"
     assert lancadas["3101"]["manifestacao"]["status"] == "Falha"
+
+
+def test_documento_entrada_finalizado_inclui_recusado_como_historico_lancado(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3110",
+                fornecedor="Fornecedor Recusado",
+                codigo="RC1",
+                descricao="Item recusado historico",
+                qtd_real=1.0,
+                status="AguardandoLiberacao",
+                auditor_decisao="XML Recusado",
+                data_importacao=datetime.now() - timedelta(hours=3),
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="3111",
+                fornecedor="Fornecedor Lancado",
+                codigo="LC2",
+                descricao="Item lancado",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(hours=2),
+            )
+        )
+        db.session.commit()
+
+    resp_finalizado = client.get("/api/documento_entrada/lista?etapa=finalizado&page=1&page_size=50")
+    assert resp_finalizado.status_code == 200
+    finalizado = {item["numero"]: item for item in resp_finalizado.get_json()["notas"]}
+    assert "3110" in finalizado
+    assert finalizado["3110"]["status"] == "Lançado"
+    assert finalizado["3110"]["tem_recusa_historica"] is True
+
+    resp_auditoria = client.get("/api/documento_entrada/lista?etapa=auditoria&page=1&page_size=50")
+    assert resp_auditoria.status_code == 200
+    numeros_auditoria = {item["numero"] for item in resp_auditoria.get_json()["notas"]}
+    assert "3110" not in numeros_auditoria
+
+    resp_lancamento = client.get("/api/documento_entrada/lista?etapa=lancamento&page=1&page_size=50")
+    assert resp_lancamento.status_code == 200
+    numeros_lancamento = {item["numero"] for item in resp_lancamento.get_json()["notas"]}
+    assert "3110" not in numeros_lancamento
+
+    resp_kpis = client.get("/api/documento_entrada/kpis")
+    assert resp_kpis.status_code == 200
+    kpis = resp_kpis.get_json()
+    assert kpis["lancamento_finalizado"] >= 2
 
 
 def test_erp_lancamento_bridge_401_tem_mensagem_configuravel():
@@ -1023,6 +1123,286 @@ def test_detalhes_nf_retorna_workflow_pendencias_e_motivos_estorno(tmp_path):
     assert isinstance(data["pendencias"], list)
     assert len(data["motivos_estorno_padrao"]) >= 1
     assert isinstance(data["timeline"], list)
+    assert any(
+        evento["tipo"] == "Visualização"
+        and "ADMIN" in evento["descricao"]
+        and "Visualizou os detalhes" in evento["descricao"]
+        for evento in data["timeline"]
+    )
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3010",
+            acao="detalhe_visualizado",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert evento.fornecedor == "Fornecedor Detalhe"
+        assert evento.ip_address == "127.0.0.1"
+
+    set_logged_user(client, "fiscal_teste", "Fiscal")
+    response_fiscal = client.get("/api/detalhes_nf/3010")
+    assert response_fiscal.status_code == 200
+    data_fiscal = response_fiscal.get_json()
+    assert data_fiscal["timeline"] == []
+
+
+def test_detalhes_nf_nao_mistura_manifestacao_de_mesmo_numero_com_fornecedor_diferente(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="4001",
+                fornecedor="Fornecedor Abril",
+                cnpj_emitente="11111111000111",
+                chave_acesso="11111111111111111111111111111111111111111111",
+                codigo="SKU-OLD",
+                descricao="Item antigo",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(days=120),
+            )
+        )
+        db.session.add(
+            LogManifestacaoDestinatario(
+                numero_nota="4001",
+                chave_acesso="11111111111111111111111111111111111111111111",
+                manifestacao="confirmada",
+                status="Sucesso",
+                detalhe="Manifestação nota antiga",
+                usuario="ADMIN",
+            )
+        )
+
+        db.session.add(
+            ItemNota(
+                numero_nota="4001",
+                fornecedor="Fornecedor Atual",
+                cnpj_emitente="22222222000122",
+                chave_acesso="22222222222222222222222222222222222222222222",
+                codigo="SKU-NEW",
+                descricao="Item atual",
+                qtd_real=1.0,
+                status="Concluído",
+                data_importacao=datetime.now() - timedelta(days=1),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/detalhes_nf/4001?cnpj_emitente=22222222000122")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["fornecedor"] == "Fornecedor Atual"
+    assert data["manifestacao"] is None
+    assert all(
+        "Manifestacao" not in str(evento.get("tipo") or "")
+        for evento in (data.get("timeline") or [])
+    )
+
+
+def test_conferencia_dashboard_e_visualizacao_respeitam_identidade_da_nf(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="4002",
+                fornecedor="Fornecedor Antigo",
+                cnpj_emitente="11111111000111",
+                chave_acesso="33333333333333333333333333333333333333333333",
+                codigo="SKU-OLD-4002",
+                descricao="Item antigo",
+                qtd_real=1.0,
+                status="Lançado",
+                data_importacao=datetime.now() - timedelta(days=60),
+            )
+        )
+        db.session.add(
+            ItemNota(
+                numero_nota="4002",
+                fornecedor="Fornecedor Atual",
+                cnpj_emitente="22222222000122",
+                chave_acesso="44444444444444444444444444444444444444444444",
+                codigo="SKU-NEW-4002",
+                descricao="Item atual",
+                qtd_real=2.0,
+                status="Pendente",
+                data_importacao=datetime.now() - timedelta(hours=3),
+            )
+        )
+        db.session.commit()
+
+    response_dashboard = client.get("/api/conferencia/dashboard?status=pendente")
+    assert response_dashboard.status_code == 200
+    notas = response_dashboard.get_json()["notas"]
+    nota_alvo = next((n for n in notas if n["numero"] == "4002" and n["cnpj_emitente"] == "22222222000122"), None)
+    assert nota_alvo is not None
+    assert nota_alvo["fornecedor"] == "Fornecedor Atual"
+
+    response_visualizacao = client.get(
+        "/api/conferencia/nota/4002/visualizacao?cnpj_emitente=22222222000122"
+    )
+    assert response_visualizacao.status_code == 200
+    visualizacao = response_visualizacao.get_json()
+    assert visualizacao["fornecedor"] == "Fornecedor Atual"
+
+
+def test_conferencia_visualizacao_completa_retorna_itens_e_historico(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        from conferencia_app.models import LogTentativaConferencia
+
+        item = ItemNota(
+            numero_nota="3011",
+            fornecedor="Fornecedor Visao Completa",
+            codigo="SKU-3011",
+            descricao="Item visão",
+            qtd_real=10.0,
+            status="Concluído",
+            pedido_compra="450010",
+            unidade_comercial="UN",
+            cnpj_emitente="12345678000199",
+        )
+        db.session.add(item)
+        db.session.flush()
+        db.session.add(
+            LogTentativaConferencia(
+                numero_nota="3011",
+                item_id=item.id,
+                tentativa_numero=1,
+                qtd_esperada=10.0,
+                qtd_digitada=10.0,
+                qtd_convertida=10.0,
+                unidade_informada="UN",
+                fator_conversao=1.0,
+                status_item="OK",
+                motivo="Conferido.",
+                usuario="ADMIN",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/conferencia/nota/3011/visualizacao")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["numero"] == "3011"
+    assert isinstance(data["itens"], list)
+    assert len(data["itens"]) == 1
+    assert data["itens"][0]["codigo"] == "SKU-3011"
+    assert data["itens"][0]["status_ultima"] == "OK"
+
+    timeline = client.get("/api/conferencia/nota/3011/historico")
+    assert timeline.status_code == 200
+    eventos = timeline.get_json()
+    assert any(
+        evento["tipo"] == "Visualização"
+        and "visualização completa da conferência" in evento["descricao"].lower()
+        for evento in eventos
+    )
+
+
+def test_abrir_conferencia_pendente_registra_logs_de_abertura_e_inicio(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="3012",
+                fornecedor="Fornecedor Conferencia Pendente",
+                codigo="SKU-3012",
+                descricao="Item pendente",
+                qtd_real=5.0,
+                status="Pendente",
+                pedido_compra="450011",
+                unidade_comercial="UN",
+                cnpj_emitente="22345678000199",
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/itens/3012")
+    assert response.status_code == 200
+    itens = response.get_json()
+    assert isinstance(itens, list)
+    assert len(itens) == 1
+
+    historico = client.get("/api/conferencia/nota/3012/historico")
+    assert historico.status_code == 200
+    eventos = historico.get_json()
+    assert any(
+        evento["tipo"] == "Visualização"
+        and "abriu a conferência de recebimento" in evento["descricao"].lower()
+        for evento in eventos
+    )
+    assert any(
+        evento["tipo"] == "Conferência"
+        and "iniciou a conferência" in evento["descricao"].lower()
+        and "admin" in evento["descricao"].lower()
+        for evento in eventos
+    )
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        abertura = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3012",
+            acao="conferencia_aberta",
+        ).one()
+        inicio = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="3012",
+            acao="conferencia_iniciada",
+        ).one()
+        assert abertura.usuario == "ADMIN"
+        assert inicio.usuario == "ADMIN"
+
+
+def test_timeline_ordenada_por_etapa_mantem_lancamento_antes_de_visualizacao(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        item = ItemNota(
+            numero_nota="3013",
+            fornecedor="Fornecedor Ordem",
+            codigo="SKU-3013",
+            descricao="Item ordem",
+            qtd_real=1.0,
+            status="Lançado",
+            pedido_compra="450012",
+            data_importacao=datetime.now() - timedelta(days=2),
+            fim_conferencia=datetime.now() - timedelta(days=1, hours=4),
+            data_lancamento=datetime.now() - timedelta(days=1),
+            usuario_conferencia="OPERADOR",
+            usuario_lancamento="FISCAL",
+            numero_lancamento="L-3013",
+            cnpj_emitente="33345678000199",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+    # Gera evento de visualizacao posterior ao lancamento.
+    vis = client.get("/api/conferencia/nota/3013/visualizacao")
+    assert vis.status_code == 200
+
+    historico = client.get("/api/conferencia/nota/3013/historico")
+    assert historico.status_code == 200
+    eventos = historico.get_json()
+    tipos = [str(evento.get("tipo") or "") for evento in eventos]
+    assert "Lançamento" in tipos
+    assert "Visualização" in tipos
+    assert tipos.index("Lançamento") < tipos.index("Visualização")
 
 
 def test_download_documento_por_numero_da_nf(tmp_path):
@@ -1055,6 +1435,63 @@ def test_download_documento_por_numero_da_nf(tmp_path):
     assert response.data == b"%PDF-1.4 fake"
     assert "NF_321.pdf" in response.headers["Content-Disposition"]
     mocked_get.assert_called_once()
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="321",
+            acao="download_documento",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert "PDF" in evento.descricao
+
+
+def test_gravar_checklist_registra_evento_processo(tmp_path):
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+    login_admin(client)
+
+    with app.app_context():
+        db.session.add(
+            ItemNota(
+                numero_nota="330",
+                fornecedor="Fornecedor Checklist",
+                codigo="CK1",
+                descricao="Item checklist",
+                qtd_real=1.0,
+                status="Pendente",
+            )
+        )
+        db.session.commit()
+
+    response = client.post(
+        "/api/checklist",
+        json={
+            "nota": "330",
+            "lacre_ok": True,
+            "volumes_ok": True,
+            "avaria_visual": False,
+            "observacao": "Sem avarias.",
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["sucesso"] is True
+
+    with app.app_context():
+        from conferencia_app.models import ProcessoRecebimentoEvento
+
+        evento = ProcessoRecebimentoEvento.query.filter_by(
+            numero_nota="330",
+            acao="checklist_preenchido",
+        ).one()
+        assert evento.usuario == "ADMIN"
+        assert evento.fornecedor == "Fornecedor Checklist"
+
+    detalhe = client.get("/api/detalhes_nf/330")
+    assert detalhe.status_code == 200
+    timeline = detalhe.get_json()["timeline"]
+    assert any(evento["tipo"] == "Checklist" for evento in timeline)
 
 
 def test_portaria_pode_consultar_nfes_liberadas_mas_nao_baixar_documento(tmp_path):
@@ -4970,3 +5407,50 @@ def test_process_xml_store_nfse_sem_numero_usa_fallback(tmp_path):
         assert item is not None
         assert item.status == "AguardandoLiberacao"
         assert str(item.numero_nota or "").strip() != ""
+
+
+def test_motorista_nao_realizada_exige_justificativa(tmp_path):
+    app = build_test_app(tmp_path)
+    with app.app_context():
+        db.create_all()
+        veiculo = AgendamentoVeiculo(codigo="VAN-TST", nome_exibicao="Van Teste")
+        db.session.add(veiculo)
+        db.session.flush()
+        viagem = Viagem(
+            codigo="VG-TST-NAO-REALIZADA",
+            veiculo_id=veiculo.id,
+            status="EmAndamento",
+            liberada=True,
+        )
+        db.session.add(viagem)
+        db.session.flush()
+        parada = ViagemParada(
+            viagem_id=viagem.id,
+            sequencia=1,
+            tipo="ENTREGA",
+            parceiro_nome="Cliente Teste",
+            status="Pendente",
+        )
+        db.session.add(parada)
+        db.session.commit()
+
+        secret = (app.config.get("SECRET_KEY") or "dev").encode("utf-8")
+        token = hmac.new(secret, f"viagem:{viagem.id}".encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        viagem_id = viagem.id
+        parada_id = parada.id
+
+    client = app.test_client()
+    url = f"/motorista/viagem/{viagem_id}/{token}/parada/{parada_id}/concluir"
+
+    sem_motivo = client.post(url, json={"resultado": "NaoRealizada"})
+    assert sem_motivo.status_code == 400
+    assert "justificativa" in sem_motivo.get_json()["msg"].lower()
+
+    com_motivo = client.post(url, json={"resultado": "NaoRealizada", "observacao": "Cliente fechado no horario."})
+    assert com_motivo.status_code == 200
+    assert com_motivo.get_json()["status"] == "Nao_realizada"
+
+    with app.app_context():
+        atualizada = db.session.get(ViagemParada, parada_id)
+        assert atualizada.status == "Nao_realizada"
+        assert atualizada.observacao == "Cliente fechado no horario."

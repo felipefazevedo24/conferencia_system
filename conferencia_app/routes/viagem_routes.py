@@ -2381,6 +2381,8 @@ def motorista_concluir_parada(vid: int, token: str, pid: int):
     p.resultado = (data.get("resultado") or ("Entregue" if p.tipo == "ENTREGA" else "Coletado")).strip()
     obs = (data.get("observacao") or "").strip()
     nao_realizada = p.resultado in {"Recusado", "AusenciaRecebedor", "NaoRealizada"}
+    if nao_realizada and not obs:
+        return jsonify({"sucesso": False, "msg": "Informe a justificativa da coleta/entrega não realizada."}), 400
     # Foto do canhoto é obrigatória ao concluir uma ENTREGA com sucesso
     # (não se aplica quando o resultado é recusa/ausência/não realizada).
     if p.tipo == "ENTREGA" and not nao_realizada and not foto and not p.foto_paths:

@@ -8,7 +8,6 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 from flask import current_app
-from sqlalchemy import func
 
 from ..models import Usuario
 from ..schemas.api_schemas import LoginSchema
@@ -41,6 +40,58 @@ def _password_policy_error(password: str) -> str | None:
 
 def _attempt_key(username: str, ip: str) -> str:
     return f"{username.lower()}::{ip}"
+
+
+def _iniciar_sessao(user: Usuario) -> dict:
+    """Cria a sessão autenticada para o usuário e retorna o payload de resposta.
+
+    Compartilhado entre /login e /cadastrar-senha para que ativar a conta
+    já deixe o usuário conectado, sem pedir usuário/senha de novo.
+    """
+    maintenance = get_maintenance_state()
+    is_admin = "admin" in str(getattr(user, "role", "") or "").strip().casefold()
+    if maintenance.get("enabled") and not is_admin:
+        return {
+            "sucesso": False,
+            "code": "MAINTENANCE_MODE",
+            "msg": str(maintenance.get("message") or "Sistema em manutenção."),
+            "status_code": 503,
+        }
+
+    ultimo_acesso = (
+        ActiveSession.query
+        .filter(ActiveSession.username == user.username)
+        .order_by(ActiveSession.last_activity.desc())
+        .first()
+    )
+    session["username"] = user.username
+    session["role"] = user.role
+    session.permanent = True
+    session["last_activity"] = datetime.now().isoformat()
+    session["show_update_notice"] = True
+    session_id = str(uuid.uuid4())
+    session["session_id"] = session_id
+    db.session.add(ActiveSession(
+        username=user.username,
+        session_id=session_id,
+        created_at=datetime.now(),
+        last_activity=datetime.now(),
+        is_active=True,
+        ip_address=(request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()[:64],
+        user_agent=(request.headers.get("User-Agent", "") or "")[:400],
+    ))
+    user.ultimo_login_em = datetime.now()
+    db.session.commit()
+
+    return {
+        "sucesso": True,
+        "redirect_to": "/",
+        "user": {
+            "username": user.username,
+            "role": user.role,
+        },
+        "previous_access_at": ultimo_acesso.last_activity.isoformat() if ultimo_acesso and ultimo_acesso.last_activity else None,
+    }
 
 
 def _password_matches_and_upgrade(user: Usuario | None, password: str | None) -> bool:
@@ -97,61 +148,24 @@ def login_page():
                 "msg": "Seu acesso está inativo. Procure um administrador.",
             }), 403
 
-        # Usuário sem senha definida — precisa se cadastrar
+        # Usuário sem senha definida — só pode ativar a conta pelo link de convite
         if user and not user.password:
             return jsonify({
                 "sucesso": False,
                 "code": "FIRST_LOGIN",
-                "msg": "Primeiro acesso detectado. Cadastre sua senha.",
-                "email_hint": _mask_email(user.email),
+                "msg": (
+                    f"Seu acesso ainda não foi ativado. Procure em {_mask_email(user.email)} "
+                    "o link de convite, ou peça a um administrador para reenviá-lo."
+                ),
             }), 403
 
         if _password_matches_and_upgrade(user, password):
-            maintenance = get_maintenance_state()
-            is_admin = "admin" in str(getattr(user, "role", "") or "").strip().casefold()
-            if maintenance.get("enabled") and not is_admin:
-                return jsonify({
-                    "sucesso": False,
-                    "code": "MAINTENANCE_MODE",
-                    "msg": str(maintenance.get("message") or "Sistema em manutenção."),
-                }), 503
-
-            ultimo_acesso = (
-                ActiveSession.query
-                .filter(ActiveSession.username == user.username)
-                .order_by(ActiveSession.last_activity.desc())
-                .first()
-            )
-            session["username"] = user.username
-            session["role"] = user.role
-            session.permanent = True
-            session["last_activity"] = datetime.now().isoformat()
-            session["show_update_notice"] = True
-            # Gerar um session_id único e registrar sessão ativa
-            session_id = str(uuid.uuid4())
-            session["session_id"] = session_id
-            db.session.add(ActiveSession(
-                username=user.username,
-                session_id=session_id,
-                created_at=datetime.now(),
-                last_activity=datetime.now(),
-                is_active=True,
-                ip_address=(request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()[:64],
-                user_agent=(request.headers.get("User-Agent", "") or "")[:400],
-            ))
-            user.ultimo_login_em = datetime.now()
-            db.session.commit()
+            payload = _iniciar_sessao(user)
+            if not payload.get("sucesso"):
+                status_code = payload.pop("status_code", 400)
+                return jsonify(payload), status_code
             _login_attempts.pop(key, None)
-            redirect_to = "/"
-            return jsonify({
-                "sucesso": True,
-                "redirect_to": redirect_to,
-                "user": {
-                    "username": user.username,
-                    "role": user.role,
-                },
-                "previous_access_at": ultimo_acesso.last_activity.isoformat() if ultimo_acesso and ultimo_acesso.last_activity else None,
-            })
+            return jsonify(payload)
 
         max_attempts = current_app.config.get("LOGIN_MAX_ATTEMPTS", 5)
         lock_minutes = current_app.config.get("LOGIN_LOCK_MINUTES", 10)
@@ -192,11 +206,13 @@ def _mask_email(email):
 
 @auth_bp.route("/cadastrar-senha", methods=["POST"])
 def cadastrar_senha():
-    """Ativação de senha via convite (token) com fallback por e-mail."""
+    """Ativação de senha via convite (token). Já loga o usuário ao final."""
     data = request.json or {}
-    email = (data.get("email") or "").strip().lower()
     nova_senha = (data.get("senha") or "").strip()
     token = (data.get("token") or "").strip()
+
+    if not token:
+        return jsonify({"sucesso": False, "msg": "Convite ausente ou inválido. Peça a um administrador para reenviá-lo."}), 400
 
     if not nova_senha:
         return jsonify({"sucesso": False, "msg": "Senha obrigatória."}), 400
@@ -205,24 +221,14 @@ def cadastrar_senha():
     if policy_error:
         return jsonify({"sucesso": False, "msg": policy_error}), 400
 
-    user = None
-    if token:
-        token_hash = _hash_invite_token(token)
-        user = Usuario.query.filter_by(convite_token_hash=token_hash).first()
-        if not user:
-            return jsonify({"sucesso": False, "msg": "Convite inválido."}), 400
-        if not bool(getattr(user, "ativo", True)):
-            return jsonify({"sucesso": False, "msg": "Este usuário está inativo. Procure um administrador."}), 403
-        if user.convite_expires_at and user.convite_expires_at < datetime.now():
-            return jsonify({"sucesso": False, "msg": "Convite expirado. Solicite um novo envio ao administrador."}), 400
-        if email and user.email and str(user.email).lower() != email:
-            return jsonify({"sucesso": False, "msg": "O e-mail informado não corresponde ao convite."}), 400
-    else:
-        if not email:
-            return jsonify({"sucesso": False, "msg": "E-mail é obrigatório quando não há token."}), 400
-        user = Usuario.query.filter(func.lower(Usuario.email) == email).first()
-        if not user:
-            return jsonify({"sucesso": False, "msg": "E-mail não encontrado no sistema. Fale com um administrador."}), 404
+    token_hash = _hash_invite_token(token)
+    user = Usuario.query.filter_by(convite_token_hash=token_hash).first()
+    if not user:
+        return jsonify({"sucesso": False, "msg": "Convite inválido."}), 400
+    if not bool(getattr(user, "ativo", True)):
+        return jsonify({"sucesso": False, "msg": "Este usuário está inativo. Procure um administrador."}), 403
+    if user.convite_expires_at and user.convite_expires_at < datetime.now():
+        return jsonify({"sucesso": False, "msg": "Convite expirado. Solicite um novo envio ao administrador."}), 400
 
     if user.password and not bool(getattr(user, "forcar_troca_senha", False)):
         return jsonify({"sucesso": False, "msg": "Este usuário já possui senha definida. Faça login normalmente."}), 409
@@ -235,7 +241,16 @@ def cadastrar_senha():
     user.forcar_troca_senha = False
     user.atualizado_em = datetime.now()
     db.session.commit()
-    return jsonify({"sucesso": True, "msg": "Senha cadastrada com sucesso! Faça login com seu usuário e senha.", "username": user.username})
+
+    payload = _iniciar_sessao(user)
+    if not payload.get("sucesso"):
+        # Senha foi criada; só a sessão automática não pôde ser aberta agora (ex.: manutenção).
+        status_code = payload.pop("status_code", 400)
+        payload["msg"] = f"Senha cadastrada com sucesso! {payload.get('msg', '')}".strip()
+        return jsonify(payload), status_code
+
+    payload["msg"] = "Senha cadastrada com sucesso! Você já está conectado."
+    return jsonify(payload)
 
 
 @auth_bp.route("/api/convite/validar", methods=["GET"])
