@@ -399,6 +399,18 @@ def upgrade():
             sa.PrimaryKeyConstraint("id"),
         )
 
+    if not inspector.has_table("comex_comentario"):
+        op.create_table(
+            "comex_comentario",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("processo_id", sa.Integer(), nullable=False),
+            sa.Column("texto", sa.Text(), nullable=False),
+            sa.Column("criado_em", sa.DateTime(), nullable=False),
+            sa.Column("criado_por", sa.String(length=100), nullable=True),
+            sa.ForeignKeyConstraint(["processo_id"], ["comex_processo.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
+
     if not inspector.has_table("comex_fornecedor"):
         op.create_table(
             "comex_fornecedor",
@@ -439,6 +451,8 @@ def upgrade():
     _create_index_if_missing(inspector, "ix_comex_lembrete_processo_id", "comex_lembrete", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_entrega_foto_processo_id", "comex_entrega_foto", ["processo_id"])
     _create_index_if_missing(inspector, "ix_comex_documento_processo_id", "comex_documento", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_comentario_processo_id", "comex_comentario", ["processo_id"])
+    _create_index_if_missing(inspector, "ix_comex_comentario_criado_em", "comex_comentario", ["criado_em"])
     _create_index_if_missing(inspector, "ix_comex_fornecedor_razao_social", "comex_fornecedor", ["razao_social"])
     _create_index_if_missing(inspector, "ix_comex_fornecedor_nome_fantasia", "comex_fornecedor", ["nome_fantasia"])
     _create_index_if_missing(inspector, "ix_comex_fornecedor_cnpj", "comex_fornecedor", ["cnpj"])
@@ -452,6 +466,7 @@ def downgrade():
     inspector = inspect(bind)
     for table in (
         "comex_fornecedor",
+        "comex_comentario",
         "comex_documento",
         "comex_entrega_foto",
         "comex_lembrete",

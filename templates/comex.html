@@ -180,6 +180,14 @@
                     <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-oc-doc-btn-anexar"><i class="fas fa-paperclip"></i> Anexar</button>
                 </div>
             </div>
+            <div class="cx-field">
+                <label>Comentários do processo <small style="font-weight:400; color:var(--eui-muted);">— mesmo histórico em qualquer módulo</small></label>
+                <div class="cx-checklist" id="cx-oc-comentarios"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="text" id="cx-oc-comentario-texto" class="eui-input" placeholder="Descreva o que aconteceu...">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-oc-comentario-btn-add"><i class="fas fa-comment"></i> Adicionar</button>
+                </div>
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cx-fechar-oc-2">Cancelar</button>
@@ -286,6 +294,14 @@
                     <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-po-doc-btn-anexar"><i class="fas fa-paperclip"></i> Anexar</button>
                 </div>
             </div>
+            <div class="cx-field">
+                <label>Comentários do processo <small style="font-weight:400; color:var(--eui-muted);">— mesmo histórico em qualquer módulo</small></label>
+                <div class="cx-checklist" id="cx-po-comentarios"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="text" id="cx-po-comentario-texto" class="eui-input" placeholder="Descreva o que aconteceu...">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-po-comentario-btn-add"><i class="fas fa-comment"></i> Adicionar</button>
+                </div>
+            </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--danger" id="cx-po-btn-apagar"><i class="fas fa-trash"></i> Apagar</button>
@@ -300,7 +316,7 @@
 <div class="cx-modal" id="cx-modal-instrucao">
     <div class="cx-modal__box">
         <div class="cx-modal__head">
-            <h3 class="cx-modal__title"><i class="fas fa-paper-plane"></i> Instrução de Embarque — <span id="cx-inst-id-op">—</span></h3>
+            <h3 class="cx-modal__title"><i class="fas fa-clipboard-list"></i> Dados de Embarque — <span id="cx-inst-id-op">—</span></h3>
             <button class="cx-modal__close" id="cx-fechar-instrucao"><i class="fas fa-xmark"></i></button>
         </div>
         <div class="cx-modal__body">
@@ -325,13 +341,26 @@
             </div>
             <div class="cx-field"><label>NF Recebimento</label><input type="text" maxlength="20" id="cx-inst-nf-recebimento" class="eui-input"></div>
             <div class="cx-field">
-                <label>Enviar para (e-mails separados por ";") <small style="font-weight:400; color:var(--eui-muted);">— opcional, deixe vazio pra só salvar sem enviar</small></label>
-                <input type="text" id="cx-inst-email-destinatarios" class="eui-input" placeholder="fornecedor@exemplo.com; outro@exemplo.com">
+                <label>Documentos anexados <small style="font-weight:400; color:var(--eui-muted);">— ex.: HBL, Invoice, packing list...</small></label>
+                <div class="cx-checklist" id="cx-inst-documentos"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="file" id="cx-inst-doc-input">
+                    <input type="text" id="cx-inst-doc-titulo" class="eui-input" placeholder="Descrição (ex.: HBL, Invoice...)">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-inst-doc-btn-anexar"><i class="fas fa-paperclip"></i> Anexar</button>
+                </div>
+            </div>
+            <div class="cx-field">
+                <label>Comentários do processo <small style="font-weight:400; color:var(--eui-muted);">— mesmo histórico em qualquer módulo</small></label>
+                <div class="cx-checklist" id="cx-inst-comentarios"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="text" id="cx-inst-comentario-texto" class="eui-input" placeholder="Descreva o que aconteceu...">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-inst-comentario-btn-add"><i class="fas fa-comment"></i> Adicionar</button>
+                </div>
             </div>
         </div>
         <div class="cx-modal__foot">
             <button class="eui-btn eui-btn--ghost" id="cx-fechar-instrucao-2">Cancelar</button>
-            <button class="eui-btn eui-btn--primary" id="cx-inst-btn-salvar"><i class="fas fa-paper-plane"></i> Enviar / Salvar</button>
+            <button class="eui-btn eui-btn--primary" id="cx-inst-btn-salvar"><i class="fas fa-floppy-disk"></i> Salvar</button>
         </div>
     </div>
 </div>
@@ -432,6 +461,14 @@
             <div class="cx-field hidden" id="cx-cot-escolhida-wrap">
                 <label>Cotação escolhida</label>
                 <div id="cx-cot-escolhida-info" style="font-size:13px; color:var(--eui-text);"></div>
+            </div>
+            <div class="cx-field">
+                <label>Comentários do processo <small style="font-weight:400; color:var(--eui-muted);">— mesmo histórico em qualquer módulo</small></label>
+                <div class="cx-checklist" id="cx-cot-comentarios"><span class="cx-empty-mini">—</span></div>
+                <div class="cx-doc-add">
+                    <input type="text" id="cx-cot-comentario-texto" class="eui-input" placeholder="Descreva o que aconteceu...">
+                    <button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" id="cx-cot-comentario-btn-add"><i class="fas fa-comment"></i> Adicionar</button>
+                </div>
             </div>
         </div>
         <div class="cx-modal__foot">
@@ -534,6 +571,61 @@
     }
     const docsOc = gerenciadorDocumentos("cx-oc", "OC");
     const docsPo = gerenciadorDocumentos("cx-po", "PO");
+    const docsInst = gerenciadorDocumentos("cx-inst", "Instrucao");
+
+    // ── Comentários (requisito geral: mesmo histórico em qualquer módulo -
+    // não é por módulo como os documentos, é um único campo/histórico por
+    // processo, por isso os 4 prefixos abaixo apontam pro mesmo endpoint) ──
+    function gerenciadorComentarios(prefixo) {
+        let processoId = null;
+
+        function render(comentarios) {
+            $(`${prefixo}-comentarios`).innerHTML = comentarios.length
+                ? comentarios.map((c) => `
+                    <div class="cx-doc-item">
+                        <span>${escapeHtml(c.texto)}</span>
+                        <small>${escapeHtml(c.criado_em || "")}${c.criado_por ? " · " + escapeHtml(c.criado_por) : ""}</small>
+                    </div>
+                `).join("")
+                : '<span class="cx-empty-mini">Nenhum comentário ainda.</span>';
+        }
+
+        async function carregar(id) {
+            processoId = id;
+            $(`${prefixo}-comentarios`).innerHTML = '<span class="cx-empty-mini">Carregando…</span>';
+            try {
+                const data = await api(`/api/comex/processos/${id}/comentarios`);
+                render(data.comentarios || []);
+            } catch (err) {
+                $(`${prefixo}-comentarios`).innerHTML = `<span class="cx-empty-mini">${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        $(`${prefixo}-comentario-btn-add`).addEventListener("click", async () => {
+            if (!processoId) return;
+            const input = $(`${prefixo}-comentario-texto`);
+            const texto = input.value.trim();
+            if (!texto) { toast("Escreva um comentário antes de adicionar.", "error"); return; }
+            const btn = $(`${prefixo}-comentario-btn-add`);
+            btn.disabled = true;
+            try {
+                await api(`/api/comex/processos/${processoId}/comentarios`, { method: "POST", body: JSON.stringify({ texto }) });
+                input.value = "";
+                toast("Comentário adicionado!", "success");
+                carregar(processoId);
+            } catch (err) {
+                toast(err.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        return { carregar };
+    }
+    const comentariosOc = gerenciadorComentarios("cx-oc");
+    const comentariosPo = gerenciadorComentarios("cx-po");
+    const comentariosCot = gerenciadorComentarios("cx-cot");
+    const comentariosInst = gerenciadorComentarios("cx-inst");
 
     let processosCache = [];
     let filtroAtual = "";
@@ -616,7 +708,7 @@
         if (p.status_modulo === "OC") {
             itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
             itens += it("criar-po", "fa-file-signature", "Criar PO");
-            itens += "<hr>" + it("apagar-oc", "fa-trash", "Apagar OC", true);
+            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("apagar-oc", "fa-trash", "Apagar OC", true);
         } else if (p.status_modulo === "PO") {
             itens += it("editar-po", "fa-pen-to-square", "Ver / Editar PO");
             if (p.po_pdf_disponivel !== false && p.po_numero) {
@@ -625,22 +717,23 @@
             if (p.po_status === "Finalizada") {
                 itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             }
-            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
+            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
         } else if (p.status_modulo === "Cotacao") {
             itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             if (p.cotacao_vencedora_id) {
-                itens += it("instrucao", "fa-paper-plane", "Enviar Instrução de Embarque");
+                itens += it("notificar-instrucao", "fa-paper-plane", "Enviar Instrução de Embarque");
             }
             itens += it("editar-po", "fa-file-signature", "Ver PO");
-            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
+            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
-            itens += it("instrucao", "fa-paper-plane", "Editar Instrução de Embarque");
+            itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
+            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
-            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
+            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
         } else {
             itens += it("ver", "fa-eye", "Detalhes");
-            itens += "<hr>" + it("estornar", "fa-rotate-left", "Estornar módulo", true);
+            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         }
         return itens;
     }
@@ -685,6 +778,26 @@
             abrirModalCotacao(p);
         } else if (act === "instrucao") {
             abrirModalInstrucao(p);
+        } else if (act === "notificar-instrucao") {
+            const destino = p.cotacao_vencedora_email
+                ? `${p.cotacao_vencedora_fornecedor || "o prestador"} <${p.cotacao_vencedora_email}>`
+                : null;
+            let destinatarios = null;
+            if (destino) {
+                if (!confirm(`Enviar e-mail de instrução de embarque para ${destino}?`)) return;
+            } else {
+                const email = prompt(`Nenhum e-mail cadastrado para ${p.cotacao_vencedora_fornecedor || "o prestador"}. Informe o e-mail pra enviar a instrução:`) || "";
+                if (!email.trim()) return;
+                destinatarios = email.trim();
+            }
+            try {
+                const resp = await api(`/api/comex/processos/${id}/instrucao/notificar`, {
+                    method: "POST",
+                    body: JSON.stringify(destinatarios ? { destinatarios } : {}),
+                });
+                toast(resp.message, "success");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
         } else if (act === "editar-oc") {
             abrirModalOc(p);
         } else if (act === "apagar-oc") {
@@ -701,6 +814,13 @@
             try {
                 await api(`/api/comex/processos/${id}/estornar`, { method: "POST" });
                 toast("Processo estornado.");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        } else if (act === "pular-status") {
+            if (!confirm("Pular direto para o próximo módulo? Isso ignora as validações normais do módulo atual - use só pra processos iniciados fora do sistema ou acompanhamento manual de status.")) return;
+            try {
+                const resp = await api(`/api/comex/processos/${id}/pular-status`, { method: "POST" });
+                toast(resp.message, "success");
                 carregar();
             } catch (err) { toast(err.message, "error"); }
         }
@@ -800,6 +920,7 @@
         $("cx-oc-situacao").value = p.situacao_oc || "";
         $("cx-modal-oc").classList.add("open");
         docsOc.carregar(p.id);
+        comentariosOc.carregar(p.id);
     }
     function fecharModalEditarOc() { $("cx-modal-oc").classList.remove("open"); processoOcAtual = null; }
     $("cx-fechar-oc").addEventListener("click", fecharModalEditarOc);
@@ -978,6 +1099,7 @@
         itensPoAtual = [];
         renderItensPo();
         docsPo.carregar(p.id);
+        comentariosPo.carregar(p.id);
 
         const temPo = !!p.po_numero;
         $("cx-po-status-wrap").classList.toggle("hidden", !temPo);
@@ -1148,6 +1270,7 @@
         $("cx-cot-escolhida-wrap").classList.add("hidden");
         popularChecklistFornecedores($("cx-cot-forwarders"), "Freight Forwarder");
         $("cx-modal-cotacao").classList.add("open");
+        comentariosCot.carregar(p.id);
 
         const cotacoesExistentes = await carregarCotacoes(p.id);
         preencherFormularioCotacao(p, cotacoesExistentes[0] || null);
@@ -1426,7 +1549,7 @@
                 method: "POST",
                 body: JSON.stringify({ justificativa, saida_escolhida: saidaEscolhida.trim() }),
             });
-            toast(resp.message, resp.email_enviado === false ? "error" : "success");
+            toast(resp.message, "success");
             carregarCotacoes(processoCotacaoAtual.id);
             carregar();
         } catch (err) { toast(err.message, "error"); }
@@ -1447,15 +1570,14 @@
         $("cx-inst-entrega-real").value = p.entrega_real || "";
         $("cx-inst-nf-impo").value = p.nf_impo || "";
         $("cx-inst-nf-recebimento").value = p.nf_recebimento || "";
-        // Pre-preenche com o e-mail do prestador vencedor da cotacao (se
-        // houver) - o operador pode trocar/completar antes de enviar.
-        $("cx-inst-email-destinatarios").value = p.cotacao_vencedora_email || "";
+        docsInst.carregar(p.id);
+        comentariosInst.carregar(p.id);
 
         const jaEnviada = !!p.instrucao_enviada_em;
         $("cx-inst-status-wrap").classList.toggle("hidden", !jaEnviada);
         if (jaEnviada) {
             $("cx-inst-status-info").innerHTML =
-                `Instrução enviada em <strong>${escapeHtml(p.instrucao_enviada_em)}</strong> por ${escapeHtml(p.instrucao_enviada_por || "—")}`;
+                `Módulo Instrução iniciado em <strong>${escapeHtml(p.instrucao_enviada_em)}</strong> por ${escapeHtml(p.instrucao_enviada_por || "—")}`;
         }
         $("cx-modal-instrucao").classList.add("open");
     }
@@ -1480,10 +1602,9 @@
                     entrega_real: $("cx-inst-entrega-real").value.trim(),
                     nf_impo: $("cx-inst-nf-impo").value.trim(),
                     nf_recebimento: $("cx-inst-nf-recebimento").value.trim(),
-                    destinatarios: $("cx-inst-email-destinatarios").value.trim(),
                 }),
             });
-            toast(resp.message, resp.email_enviado === false ? "error" : "success");
+            toast(resp.message, "success");
             fecharModalInstrucao();
             carregar();
         } catch (err) {

@@ -32,12 +32,6 @@ PERMISSION = "PAGE_COMEX"
 PO_EMAIL_CC_FIXO = ["laroli@colmac.com", "filoli@colmac.com"]
 
 
-def _texto_para_html(texto: str | None) -> str:
-    """Escapa e preserva quebra de linha de texto livre (ex.: proximas
-    saidas colado pelo prestador, possivelmente com tabela do Excel)."""
-    return html.escape(str(texto or "")).replace("\n", "<br>")
-
-
 def _cotacao_vencedora(p: ComexProcesso) -> ComexCotacao | None:
     if not p.cotacao_vencedora_id:
         return None
@@ -265,46 +259,79 @@ def api_apagar_po(processo_id):
     return jsonify({"message": "PO apagada.", "processo": _processo_payload(processo)})
 
 
-def _fmt_data_instrucao(valor) -> str:
-    return valor.strftime("%d/%m/%Y") if valor else "—"
-
-
-def _enviar_email_instrucao_embarque(processo: ComexProcesso, destinatarios: list[str]) -> None:
+def _enviar_email_resultado_cotacao(processo: ComexProcesso, destinatarios: list[str]) -> None:
+    """"Resultado da Cotação de Frete" - avisa o fornecedor vencedor que foi
+    selecionado e pode seguir com o booking. Disparado a partir do botao
+    "Enviar Instrução de Embarque" (nao mais automaticamente ao "Escolher"
+    a cotacao) - o operador decide o momento de notificar o fornecedor."""
+    cotacao_vencedora = _cotacao_vencedora(processo)
+    nome_fornecedor = (cotacao_vencedora.fornecedor_frete if cotacao_vencedora else None) or processo.fornecedor or ""
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Instrução de Embarque — {processo.id_op} — Columbia Machine Brasil"
+    msg["Subject"] = f"Resultado da Cotação de Frete – Processo {processo.id_op}"
     msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
     msg["To"] = ", ".join(destinatarios)
-    linhas = [
-        ("Ref. Despachante", processo.ref_despachante or "—"),
-        ("BL/AWB", processo.bl_awb or "—"),
-        ("Invoice", processo.invoice_numero or "—"),
-        ("ETD", _fmt_data_instrucao(processo.etd)),
-        ("ETA", _fmt_data_instrucao(processo.em_transito_eta)),
-        ("Previsão de entrega", _fmt_data_instrucao(processo.previsao_entrega)),
-    ]
-    tabela = "".join(
-        f"<tr><td style='padding:4px 12px 4px 0; font-weight:700;'>{html.escape(label)}</td>"
-        f"<td style='padding:4px 0;'>{html.escape(valor)}</td></tr>"
-        for label, valor in linhas
-    )
     corpo = (
         f"<p>Prezados,</p>"
-        f"<p>Segue a instrução de embarque referente ao processo <strong>{processo.id_op}</strong>:</p>"
-        f"<table>{tabela}</table>"
-        f"<p>Atenciosamente,<br>Columbia Machine Brasil</p>"
+        f"<p>Agradecemos o envio da cotação referente ao processo <strong>{processo.id_op}</strong>.</p>"
+        f"<p>Informamos que a análise foi concluída, a {html.escape(nome_fornecedor)} foi selecionada para este embarque.</p>"
+        f"<p>Favor seguir com a solicitação do booking.</p>"
+        f"<p>Atenciosamente,</p>"
+        f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
     enviar_mensagem_smtp(current_app, msg)
 
 
+@comex_bp.route("/api/comex/processos/<int:processo_id>/instrucao/notificar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_notificar_instrucao(processo_id):
+    """Botão "Enviar Instrução de Embarque" (1 clique, a partir do menu de
+    ações) - avança o processo pro módulo Instrução (se ainda não estava) e
+    dispara o e-mail de "Resultado da Cotação de Frete" pro prestador
+    vencedor. Os dados operacionais (Ref. Despachante/BL-AWB/ETD/ETA/etc.)
+    só existem depois que o embarque de fato acontece, então ficam num
+    passo separado (ver api_enviar_instrucao) - esta rota não mexe neles."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.enviar_instrucao(processo, {}, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    destinatarios_raw = str(payload.get("destinatarios") or "").strip()
+    destinatarios = [d.strip() for d in destinatarios_raw.split(";") if d.strip()]
+    if not destinatarios:
+        email_padrao = _cotacao_vencedora_email(processo)
+        if email_padrao:
+            destinatarios = [email_padrao]
+    if not destinatarios:
+        return jsonify({"error": "Nenhum e-mail cadastrado para o prestador vencedor. Informe um e-mail."}), 400
+
+    try:
+        _enviar_email_resultado_cotacao(processo, destinatarios)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao enviar e-mail de resultado da cotação (processo %s)", processo.id_op)
+        return jsonify({
+            "error": f"Instrução registrada, mas o e-mail NÃO foi enviado: {exc}",
+            "processo": _processo_payload(processo),
+        }), 502
+
+    return jsonify({
+        "message": "E-mail de instrução de embarque enviado.",
+        "processo": _processo_payload(processo),
+    })
+
+
 @comex_bp.route("/api/comex/processos/<int:processo_id>/instrucao", methods=["POST"])
 @permission_required(PERMISSION)
 def api_enviar_instrucao(processo_id):
-    """Módulo 4 (versão mínima) — só disponível depois que uma cotação foi
-    escolhida; salva Ref. Despachante/BL-AWB/Invoice/ETD/ETA/Previsão
-    Entrega/Entrega Real/NF Impo/NF Recebimento e, se `destinatarios` vier
-    preenchido, envia esses dados por e-mail pro prestador escolhido (mesmo
-    padrao do envio de e-mail da PO - salva e envia na mesma chamada)."""
+    """Edição dos dados operacionais do embarque (Ref. Despachante/BL-AWB/
+    Invoice/ETD/ETA/Previsão Entrega/Entrega Real/NF Impo/NF Recebimento) -
+    preenchidos depois que o embarque acontece de fato, sem relação com o
+    e-mail de notificação (ver api_notificar_instrucao)."""
     processo = ComexProcesso.query.get(processo_id)
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404
@@ -314,33 +341,7 @@ def api_enviar_instrucao(processo_id):
         processo = svc.enviar_instrucao(processo, payload, usuario)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-
-    destinatarios_raw = str(payload.get("destinatarios") or "").strip()
-    destinatarios = [d.strip() for d in destinatarios_raw.split(";") if d.strip()]
-    email_enviado = None
-    email_erro = None
-    if destinatarios:
-        try:
-            _enviar_email_instrucao_embarque(processo, destinatarios)
-            email_enviado = True
-        except Exception as exc:
-            current_app.logger.exception("Falha ao enviar e-mail da instrução de embarque (processo %s)", processo.id_op)
-            email_enviado = False
-            email_erro = str(exc)
-
-    if destinatarios and email_enviado:
-        mensagem = "Instrução de embarque salva. E-mail enviado."
-    elif destinatarios:
-        mensagem = f"Instrução de embarque salva, mas o e-mail NÃO foi enviado: {email_erro}"
-    else:
-        mensagem = "Instrução de embarque salva."
-
-    return jsonify({
-        "message": mensagem,
-        "email_enviado": email_enviado,
-        "email_erro": email_erro,
-        "processo": _processo_payload(processo),
-    })
+    return jsonify({"message": "Dados de embarque salvos.", "processo": _processo_payload(processo)})
 
 
 def _item_payload(it: ComexPoItem) -> dict:
@@ -413,6 +414,32 @@ def api_estornar(processo_id):
     return jsonify({"message": "Processo estornado.", "processo": _processo_payload(processo)})
 
 
+@comex_bp.route("/api/comex/processos/<int:processo_id>/pular-status", methods=["POST"])
+@permission_required(PERMISSION)
+def api_pular_status(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.pular_status(processo, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Status avançado para {processo.status_modulo}.", "processo": _processo_payload(processo)})
+
+
+def _lista_ocs_texto(numeros: list[str]) -> str:
+    """Formata uma lista de numeros de OC em texto natural: "X", "X and Y"
+    ou "X, Y and Z" - usado no e-mail da PO pra listar todas as OCs
+    combinadas (a principal + as vinculadas)."""
+    numeros = [str(n) for n in numeros if n]
+    if not numeros:
+        return "—"
+    if len(numeros) == 1:
+        return numeros[0]
+    return ", ".join(numeros[:-1]) + " and " + numeros[-1]
+
+
 def _ocs_vinculadas_do_processo(processo: ComexProcesso) -> list[ComexProcesso]:
     if not processo.po_ocs_vinculadas:
         return []
@@ -478,11 +505,21 @@ def api_enviar_email_po(processo_id):
     msg["To"] = ", ".join(destinatarios)
     msg["Cc"] = ", ".join(PO_EMAIL_CC_FIXO)
 
+    numeros_oc = [processo.cod_ordem_compra] + [o.cod_ordem_compra for o in ocs_vinculadas]
     corpo = (
-        f"<p>Prezados,</p>"
-        f"<p>Segue em anexo a Purchase Order <strong>{processo.po_numero}</strong> "
-        f"referente ao processo <strong>{processo.id_op}</strong>.</p>"
-        f"<p>Atenciosamente,<br>Columbia Machine Brasil</p>"
+        f"<p>Dear,</p>"
+        f"<p>Please see the attached new Purchase Orders (PO Nº {html.escape(_lista_ocs_texto(numeros_oc))}) for CMB.</p>"
+        f"<p>Could you please confirm receipt and advise the expected readiness date?</p>"
+        f"<p>Additionally, we kindly request the following information:</p>"
+        f"<ul>"
+        f"<li>Net Weight</li>"
+        f"<li>Gross Weight</li>"
+        f"<li>Packing dimensions</li>"
+        f"<li>Manufacturer's name</li>"
+        f"<li>Manufacturer's full address</li>"
+        f"</ul>"
+        f"<p>We look forward to your confirmation and the requested details.</p>"
+        f"<p>Thank you in advance for your support.</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
 
@@ -602,6 +639,41 @@ def api_apagar_documento(processo_id, documento_id):
     return jsonify({"message": "Documento apagado."})
 
 
+# ── Comentários (requisito geral: mesmo campo em qualquer módulo) ─────────
+def _comentario_payload(c) -> dict:
+    return {
+        "id": c.id,
+        "texto": c.texto,
+        "criado_em": c.criado_em.strftime("%d/%m/%Y %H:%M") if c.criado_em else None,
+        "criado_por": c.criado_por,
+    }
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/comentarios", methods=["GET"])
+@permission_required(PERMISSION)
+def api_listar_comentarios(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    comentarios = svc.listar_comentarios(processo)
+    return jsonify({"comentarios": [_comentario_payload(c) for c in comentarios]})
+
+
+@comex_bp.route("/api/comex/processos/<int:processo_id>/comentarios", methods=["POST"])
+@permission_required(PERMISSION)
+def api_adicionar_comentario(processo_id):
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "desconhecido")
+    try:
+        comentario = svc.adicionar_comentario(processo, payload.get("texto"), usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Comentário adicionado.", "comentario": _comentario_payload(comentario)})
+
+
 # ── Cotação (Módulo 3) — link público (sem login) para o prestador de ─────
 # frete preencher, no formato do "modelo de cotação.xlsx" da empresa. ─────
 def _cotacao_payload(c: ComexCotacao) -> dict:
@@ -648,16 +720,17 @@ def _cotacao_payload(c: ComexCotacao) -> dict:
 
 def _enviar_email_link_cotacao(processo: ComexProcesso, cotacao: ComexCotacao, link: str, destinatario: str) -> None:
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Solicitação de cotação — {processo.id_op} — Columbia Machine Brasil"
+    msg["Subject"] = f"Solicitação de Cotação de Frete – {processo.id_op} – Columbia Machine Brasil"
     msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
     msg["To"] = destinatario
     corpo = (
         f"<p>Prezados,</p>"
-        f"<p>Solicitamos cotação de frete ({'FCL' if cotacao.tipo_frete == 'FCL' else 'LCL/Aéreo'}) "
-        f"referente ao processo <strong>{processo.id_op}</strong>.</p>"
-        f"<p>Preencha a cotação pelo link abaixo:</p>"
+        f"<p>Solicitamos, por gentileza, a cotação de frete referente ao processo <strong>{processo.id_op}</strong>.</p>"
+        f"<p>A cotação deverá ser imputada através do link, acesse-o e preencha as informações solicitadas:</p>"
         f"<p><a href=\"{link}\">{link}</a></p>"
-        f"<p>Atenciosamente,<br>Columbia Machine Brasil</p>"
+        f"<p>Agradecemos sua atenção e ficamos no aguardo do retorno dentro do prazo estabelecido.</p>"
+        f"<p>Atenciosamente,</p>"
+        f"<p>Columbia Machine Brasil</p>"
     )
     msg.attach(MIMEText(corpo, "html", "utf-8"))
     enviar_mensagem_smtp(current_app, msg)
@@ -744,25 +817,12 @@ def api_criar_link_cotacao(processo_id):
     })
 
 
-def _enviar_email_fornecedor_selecionado(processo: ComexProcesso, cotacao: ComexCotacao) -> None:
-    msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"Cotação selecionada — {processo.id_op} — Columbia Machine Brasil"
-    msg["From"] = f"{current_app.config.get('MAIL_SENDER_NAME', 'Columbia Sync')} <{current_app.config.get('MAIL_SENDER', '')}>"
-    msg["To"] = cotacao.email_instrucao_embarque
-    corpo = (
-        f"<p>Prezados,</p>"
-        f"<p>Informamos que a cotação de frete de vocês para o processo <strong>{processo.id_op}</strong> foi selecionada.</p>"
-        f"<p><strong>Saída de embarque confirmada:</strong><br>{_texto_para_html(cotacao.saida_escolhida)}</p>"
-        f"<p>Em breve enviaremos a instrução de embarque com os demais detalhes operacionais.</p>"
-        f"<p>Atenciosamente,<br>Columbia Machine Brasil</p>"
-    )
-    msg.attach(MIMEText(corpo, "html", "utf-8"))
-    enviar_mensagem_smtp(current_app, msg)
-
-
 @comex_bp.route("/api/comex/cotacoes/<int:cotacao_id>/escolher", methods=["POST"])
 @permission_required(PERMISSION)
 def api_escolher_cotacao(cotacao_id):
+    """So registra a escolha internamente (nao envia e-mail nenhum) - o
+    aviso ao prestador de que foi selecionado sai depois, quando o operador
+    clicar em "Enviar Instrução de Embarque" (ver api_enviar_instrucao)."""
     cotacao = ComexCotacao.query.get(cotacao_id)
     if not cotacao:
         return jsonify({"error": "Cotação não encontrada."}), 404
@@ -778,30 +838,7 @@ def api_escolher_cotacao(cotacao_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    email_enviado = None
-    email_erro = None
-    if cotacao.email_instrucao_embarque:
-        try:
-            _enviar_email_fornecedor_selecionado(processo, cotacao)
-            email_enviado = True
-        except Exception as exc:
-            current_app.logger.exception("Falha ao enviar e-mail de seleção da cotação %s", cotacao.id)
-            email_enviado = False
-            email_erro = str(exc)
-
-    if email_enviado:
-        mensagem = "Cotação escolhida. E-mail de seleção enviado ao prestador."
-    elif email_enviado is False:
-        mensagem = f"Cotação escolhida, mas o e-mail de seleção NÃO foi enviado: {email_erro}"
-    else:
-        mensagem = "Cotação escolhida. Nenhum e-mail cadastrado para esse prestador — avise manualmente."
-
-    return jsonify({
-        "message": mensagem,
-        "email_enviado": email_enviado,
-        "email_erro": email_erro,
-        "processo": _processo_payload(processo),
-    })
+    return jsonify({"message": "Cotação escolhida.", "processo": _processo_payload(processo)})
 
 
 # ── Formulário público (sem login) ─────────────────────────────────────

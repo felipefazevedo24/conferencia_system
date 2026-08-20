@@ -3003,3 +3003,19 @@ class ComexDocumento(db.Model):
     file_path = db.Column(db.String(500), nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     uploaded_by = db.Column(db.String(100))
+
+
+class ComexComentario(db.Model):
+    """Comentario livre do operador sobre o processo (requisito geral do
+    Comex) - NAO e por modulo: e um unico historico append-only por
+    processo, exibido igual em qualquer modal do workflow (OC, PO,
+    Cotacao, Instrucao, ...), pra registrar o que aconteceu ao longo do
+    processo sem depender de em qual etapa ele esta agora."""
+
+    __tablename__ = "comex_comentario"
+
+    id = db.Column(db.Integer, primary_key=True)
+    processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
+    texto = db.Column(db.Text, nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+    criado_por = db.Column(db.String(100))

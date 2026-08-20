@@ -25,7 +25,7 @@ from flask import current_app
 
 from ..compras.services import compras_service
 from ..extensions import db
-from ..models import ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
+from ..models import ComexComentario, ComexCotacao, ComexCotacaoVolume, ComexDocumento, ComexPoItem, ComexProcesso
 from . import expedicao_photo_storage as storage
 
 # Sequencia oficial do workflow (usada tanto para avancar quanto para a
@@ -632,6 +632,25 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     return processo
 
 
+def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
+    """Funcao "Pular Status" (requisito geral do Comex, espelho do
+    "estornar"): avanca o processo manualmente pro proximo modulo do
+    workflow, IGNORANDO as validacoes normais de cada modulo (PO
+    finalizada, cotacao escolhida, etc.). Existe pra dois casos: processos
+    que comecaram fora do sistema (ja estao mais adiantados no mundo real
+    do que o cadastro reflete) e simples acompanhamento/follow-up de status
+    de embarque sem precisar repetir cada acao do fluxo normal."""
+    proximo = _proximo_modulo(processo.status_modulo)
+    if proximo is None:
+        raise ValueError("Este processo já está no último módulo do workflow (NF/Câmbio) - não há como avançar mais.")
+    processo.status_modulo = proximo
+    processo.status_slug = status_slug(proximo)
+    processo.atualizado_em = datetime.now()
+    processo.atualizado_por = usuario
+    db.session.commit()
+    return processo
+
+
 def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[ComexProcesso]:
     query = ComexProcesso.query
     if status_modulo:
@@ -1114,3 +1133,24 @@ def apagar_documento(documento: ComexDocumento) -> None:
             current_app.logger.exception("Falha ao apagar documento Comex do disco (id=%s)", documento.id)
     db.session.delete(documento)
     db.session.commit()
+
+
+# ── Comentarios (requisito geral: mesmo campo/historico em qualquer ────────
+# modulo do workflow, nao muda de acordo com a etapa atual do processo) ────
+def listar_comentarios(processo: ComexProcesso) -> list[ComexComentario]:
+    return (
+        ComexComentario.query
+        .filter_by(processo_id=processo.id)
+        .order_by(ComexComentario.criado_em.desc())
+        .all()
+    )
+
+
+def adicionar_comentario(processo: ComexProcesso, texto: str, usuario: str) -> ComexComentario:
+    texto = str(texto or "").strip()
+    if not texto:
+        raise ValueError("Informe o comentário.")
+    comentario = ComexComentario(processo_id=processo.id, texto=texto, criado_por=usuario)
+    db.session.add(comentario)
+    db.session.commit()
+    return comentario
