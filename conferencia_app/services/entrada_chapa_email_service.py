@@ -205,14 +205,19 @@ def _texto(valor: Any) -> str:
     )
 
 
-def _und_chapas_por_codigo(numero_nota: str) -> dict[str, float]:
-    """Quantidade de chapas (UND) informada pelo conferente, indexada por código.
+def _normalizar_match_item(valor: Any) -> str:
+    return re.sub(r"\s+", " ", str(valor or "").strip()).casefold()
+
+
+def _und_chapas_index(numero_nota: str) -> dict[str, dict[str, float]]:
+    """Quantidade de chapas (UND) informada pelo conferente, indexada por chave.
 
     O valor é auditado na conferência de recebimento (ItemNota.qtd_chapas_und)
     e usado para complementar o aviso — a NF vem em KG, mas a UND é o que
     interessa para a etiquetagem/lote.
     """
-    mapa: dict[str, float] = {}
+    by_code: dict[str, float] = {}
+    by_desc: dict[str, float] = {}
     try:
         rows = (
             ItemNota.query
@@ -221,12 +226,41 @@ def _und_chapas_por_codigo(numero_nota: str) -> dict[str, float]:
             .all()
         )
     except Exception:
-        return mapa
+        return {"by_code": by_code, "by_desc": by_desc}
     for r in rows:
-        codigo = str(r.codigo or "").strip()
-        if codigo and r.qtd_chapas_und:
-            mapa[codigo] = float(r.qtd_chapas_und)
-    return mapa
+        if not r.qtd_chapas_und:
+            continue
+        qtd = float(r.qtd_chapas_und)
+        for codigo in (r.codigo, getattr(r, "codigo_grv", None)):
+            chave = _normalizar_match_item(codigo)
+            if chave:
+                by_code[chave] = qtd
+        desc = _normalizar_match_item(r.descricao)
+        if desc:
+            by_desc[desc] = qtd
+    return {"by_code": by_code, "by_desc": by_desc}
+
+
+def _anexar_qtd_chapas_und(numero_nota: str, itens: list[dict[str, Any]]) -> None:
+    idx = _und_chapas_index(numero_nota)
+    by_code = idx.get("by_code") or {}
+    by_desc = idx.get("by_desc") or {}
+    if not by_code and not by_desc:
+        return
+
+    for item in itens:
+        qtd = None
+        for codigo in (item.get("cod_interno"), item.get("codigo"), item.get("codigo_grv")):
+            chave = _normalizar_match_item(codigo)
+            if chave and chave in by_code:
+                qtd = by_code[chave]
+                break
+        if qtd is None:
+            desc = _normalizar_match_item(item.get("descricao"))
+            if desc and desc in by_desc:
+                qtd = by_desc[desc]
+        if qtd is not None:
+            item["qtd_chapas_und"] = qtd
 
 
 def _fmt_und(valor: Any) -> str:
@@ -317,12 +351,7 @@ def _enviar_email(app, entrada: dict[str, Any], itens: list[dict[str, Any]], cfo
 
     # Complementa cada item com a quantidade de chapas (UND) informada e
     # auditada na conferência de recebimento (a NF vem em KG).
-    und_por_codigo = _und_chapas_por_codigo(numero_nota)
-    if und_por_codigo:
-        for item in itens:
-            codigo = str(item.get("cod_interno") or "").strip()
-            if codigo and codigo in und_por_codigo:
-                item["qtd_chapas_und"] = und_por_codigo[codigo]
+    _anexar_qtd_chapas_und(numero_nota, itens)
 
     assunto = f"CONTROLE DE LOTE - NF {numero_nota} - AR {numero_ar or 'Nao informado'}"
     log = existente or EmailEntradaChapa(numero_nota=numero_nota, numero_ar=numero_ar_log, criado_em=datetime.now())
