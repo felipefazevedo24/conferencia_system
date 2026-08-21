@@ -556,7 +556,9 @@ def dashboard_central_viagens():
         query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
 
-    automaticas = [row for row in rows if _is_origem_automatica(row)]
+    # Mostra também registros legados/manuais para não perder visibilidade
+    # operacional na Central, mesmo com criação manual já descontinuada.
+    automaticas = list(rows)
     if termo:
         def match(row: AgendamentoSolicitacao) -> bool:
             haystack = " ".join(
@@ -576,6 +578,7 @@ def dashboard_central_viagens():
         automaticas = [row for row in automaticas if match(row)]
 
     veiculos = {row.id: row for row in listar_veiculos_agendamento()}
+    motoristas = listar_motoristas_agendamento()
     cards = [_serializar_solicitacao(row, veiculo=veiculos.get(row.veiculo_id)) for row in automaticas]
     coletas = [c for c in cards if c.get("tipo") == "COLETA"]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
@@ -598,6 +601,15 @@ def dashboard_central_viagens():
             "coletas": coletas,
             "entregas": entregas,
             "counts": {"coletas": len(coletas), "entregas": len(entregas)},
+            "veiculos": [
+                {
+                    "id": row.id,
+                    "codigo": str(row.codigo or "").strip(),
+                    "nome": str(row.nome_exibicao or row.codigo or "").strip(),
+                }
+                for row in veiculos.values()
+            ],
+            "motoristas": motoristas,
         }
     )
 

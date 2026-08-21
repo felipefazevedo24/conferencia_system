@@ -21,6 +21,7 @@
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
     .vt-type.entrega { background: #ecfdf3; color: #067647; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
+    .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
     .vt-actions-menu.open { display: flex; }
     .vt-actions-menu button { border: none; background: transparent; text-align: left; width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -34,9 +35,11 @@
     .vt-modal__foot { padding: 12px 16px; border-top: 1px solid var(--eui-border); display: flex; justify-content: flex-end; gap: 8px; }
     .vt-preview { max-height: 42vh; overflow: auto; border: 1px solid var(--eui-border); border-radius: 10px; }
     .vt-mini { font-size: 12px; color: var(--eui-text-muted); }
+    .vt-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     @media (max-width: 760px) {
         .vt-toolbar { align-items: stretch; }
         .vt-tabs { width: 100%; }
+      .vt-grid-2 { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -168,6 +171,55 @@
         </div>
     </div>
 </div>
+
+<div id="modalAlocar" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:620px;">
+    <div class="vt-modal__head">
+      <strong>Alocar Rota e Motorista</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAlocar')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <input type="hidden" id="alocar-id">
+      <div class="vt-grid-2">
+        <div class="eui-field">
+          <label class="eui-field__label">Departamento</label>
+          <select id="alocar-departamento" class="eui-select">
+            <option value="COMPRAS">COMPRAS</option>
+            <option value="ASSISTÊNCIA TÉCNICA">ASSISTÊNCIA TÉCNICA</option>
+            <option value="ENGENHARIA/PCP">ENGENHARIA/PCP</option>
+            <option value="LOGÍSTICA" selected>LOGÍSTICA</option>
+            <option value="FACILITIES">FACILITIES</option>
+          </select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Veículo</label>
+          <select id="alocar-veiculo" class="eui-select"></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Motorista</label>
+          <select id="alocar-motorista" class="eui-select"></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Saída prevista</label>
+          <input id="alocar-saida" type="datetime-local" class="eui-input">
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Retorno previsto</label>
+          <input id="alocar-retorno" type="datetime-local" class="eui-input">
+        </div>
+      </div>
+      <div class="eui-field">
+        <label class="eui-field__label">Observações</label>
+        <textarea id="alocar-obs" class="eui-input" rows="3" placeholder="Ex.: janela de atendimento, rota sugerida, cuidados."></textarea>
+      </div>
+      <div id="alocar-state" class="vt-mini"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAlocar')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarAlocacao()">Salvar alocação</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -178,7 +230,9 @@ const state = {
   q: '',
   coletas: [],
   entregas: [],
-  ocConsulta: null
+  ocConsulta: null,
+  veiculos: [],
+  motoristas: []
 };
 
 const filtrosStatus = [
@@ -306,6 +360,8 @@ async function loadDashboard() {
   }
   state.coletas = d.coletas || [];
   state.entregas = d.entregas || [];
+  state.veiculos = d.veiculos || [];
+  state.motoristas = d.motoristas || [];
   renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
   renderFilters();
   renderTable();
@@ -321,14 +377,23 @@ function openActionsMenu(id, x, y) {
   if (!row) return;
   menu.innerHTML = `
     <button onclick="acaoVisualizar(${id})"><i class='fas fa-eye'></i> Visualizar detalhes</button>
+    <button onclick="acaoAlocar(${id})"><i class='fas fa-truck-fast'></i> Alocar rota e motorista</button>
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
     <button onclick="acaoReorganizar(${id})"><i class='fas fa-shuffle'></i> Reorganizar</button>
     <button onclick="acaoPrioridade(${id})"><i class='fas fa-arrow-up-9-1'></i> Alterar prioridade</button>
     <button class='danger' onclick="acaoCancelar(${id})"><i class='fas fa-ban'></i> Cancelar viagem</button>
     <button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Excluir viagem</button>
   `;
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const w = 270;
+  const h = 340;
+  const left = Math.max(8, Math.min(x, vw - w - 8));
+  const top = Math.max(8, Math.min(y, vh - h - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.maxHeight = `${Math.max(180, vh - top - 12)}px`;
+  menu.style.overflowY = 'auto';
   menu.classList.add('open');
 }
 
@@ -359,15 +424,77 @@ function acaoAbrirOrigem(id) {
   if (!row) return;
   if (row.tipo === 'ENTREGA') {
     const q = encodeURIComponent(row.romaneio_numero || row.orcamento || '');
-    window.open(`/expedicao/romaneio${q ? ('?q=' + q) : ''}`, '_blank');
+    window.location.href = `/expedicao/romaneio${q ? ('?q=' + q) : ''}`;
     return;
   }
   if (row.numero_oc || row.documento_numero) {
     const termo = encodeURIComponent(row.numero_oc || row.documento_numero);
-    window.open(`/compras?q=${termo}`, '_blank');
+    window.location.href = `/compras?q=${termo}`;
     return;
   }
   showToast('Documento de origem não encontrado.', 'error');
+}
+
+function acaoAlocar(id) {
+  const row = rowById(id);
+  if (!row) return;
+
+  document.getElementById('alocar-id').value = String(id);
+  document.getElementById('alocar-state').textContent = `Alocando ${row.codigo || ('#' + id)} • ${row.parceiro_nome || '-'}`;
+  document.getElementById('alocar-obs').value = row.observacoes_logistica || '';
+  document.getElementById('alocar-saida').value = row.data_hora_saida_prevista || '';
+  document.getElementById('alocar-retorno').value = row.data_hora_retorno_prevista || '';
+
+  const veiculoSel = document.getElementById('alocar-veiculo');
+  const motoristaSel = document.getElementById('alocar-motorista');
+
+  veiculoSel.innerHTML = '<option value="">Selecione...</option>' + (state.veiculos || []).map((v) =>
+    `<option value="${v.id}" ${(row.veiculo?.id === v.id) ? 'selected' : ''}>${v.nome || v.codigo || ('Veículo ' + v.id)}</option>`
+  ).join('');
+  motoristaSel.innerHTML = '<option value="">Selecione...</option>' + (state.motoristas || []).map((m) =>
+    `<option value="${m.id}" ${(row.motorista?.id === m.id) ? 'selected' : ''}>${m.nome || ('Motorista ' + m.id)}</option>`
+  ).join('');
+
+  document.getElementById('vt-actions-menu').classList.remove('open');
+  openModal('modalAlocar');
+}
+
+async function confirmarAlocacao() {
+  const id = Number(document.getElementById('alocar-id').value);
+  if (!id) return;
+
+  const veiculo_id = document.getElementById('alocar-veiculo').value;
+  const motorista_id = document.getElementById('alocar-motorista').value;
+  const data_hora_saida_prevista = document.getElementById('alocar-saida').value;
+  const data_hora_retorno_prevista = document.getElementById('alocar-retorno').value;
+  const departamento_solicitante = document.getElementById('alocar-departamento').value;
+  const observacoes_logistica = (document.getElementById('alocar-obs').value || '').trim();
+
+  if (!veiculo_id || !motorista_id || !data_hora_saida_prevista) {
+    showToast('Preencha veículo, motorista e saída prevista.', 'error');
+    return;
+  }
+
+  const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/alocar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      veiculo_id: Number(veiculo_id),
+      motorista_id: Number(motorista_id),
+      data_hora_saida_prevista,
+      data_hora_retorno_prevista: data_hora_retorno_prevista || null,
+      departamento_solicitante,
+      observacoes_logistica,
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao salvar alocação.', 'error');
+    return;
+  }
+  closeModal('modalAlocar');
+  showToast('Alocação salva com sucesso.', 'success');
+  loadDashboard();
 }
 
 function acaoReorganizar(id) {
@@ -395,7 +522,7 @@ async function confirmarReorganizacao() {
 }
 
 async function acaoPrioridade(id) {
-  const valor = prompt('Nova prioridade: Baixa, Media, Alta ou Critica', 'Media');
+  const valor = (document.getElementById('reo-prioridade').value || 'Media');
   if (!valor) return;
   const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/prioridade`, {
     method: 'POST',
@@ -412,7 +539,7 @@ async function acaoPrioridade(id) {
 }
 
 async function acaoCancelar(id) {
-  const motivo = prompt('Informe o motivo do cancelamento:');
+  const motivo = (document.getElementById('alocar-obs').value || '').trim() || 'Cancelamento solicitado pela Central.';
   if (!motivo) return;
   const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/cancelar`, {
     method: 'POST',
@@ -429,8 +556,7 @@ async function acaoCancelar(id) {
 }
 
 async function acaoExcluir(id) {
-  if (!confirm('Excluir esta viagem?')) return;
-  const motivo = (prompt('Motivo da exclusão (será registrado no log):', 'Registro inválido ou cancelado na origem.') || '').trim();
+  const motivo = (document.getElementById('alocar-obs').value || '').trim() || 'Registro inválido ou cancelado na origem.';
   const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/excluir`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
@@ -501,7 +627,7 @@ async function confirmarImportacaoOc() {
   }
   showToast('Coleta gerada com sucesso.', 'success');
   if (d.pdf_url) {
-    window.open(d.pdf_url, '_blank');
+    window.location.href = d.pdf_url;
   }
   closeModal('modalImportar');
   loadDashboard();
