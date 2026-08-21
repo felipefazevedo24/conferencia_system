@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, send_file
-from sqlalchemy import or_
+from sqlalchemy import inspect, or_, true
 
 from ..auth import permission_required, permission_required_any
 from ..extensions import db
@@ -135,7 +135,18 @@ def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:
     return False
 
 
+def _has_solicitacao_excluida_column() -> bool:
+    try:
+        bind = db.session.get_bind() or db.engine
+        cols = inspect(bind).get_columns("agendamento_solicitacao")
+        return any(str(c.get("name") or "").strip().lower() == "excluida" for c in cols)
+    except Exception:
+        return False
+
+
 def _filtro_solicitacao_visivel():
+    if not _has_solicitacao_excluida_column():
+        return true()
     return or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None))
 
 
@@ -1009,6 +1020,8 @@ def central_viagens_excluir(solicitacao_id: int):
     row = _get_solicitacao_visivel(solicitacao_id)
     if not row or not _is_origem_automatica(row):
         return jsonify({"error": "Viagem não encontrada."}), 404
+    if not _has_solicitacao_excluida_column():
+        return jsonify({"error": "Base desatualizada na homologação. Execute alembic upgrade head antes de excluir."}), 503
     if row.status == "EmRota":
         return jsonify({"error": "Não é possível excluir viagem em rota."}), 409
     payload = request.get_json(silent=True) or {}

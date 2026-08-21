@@ -10,7 +10,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
-from sqlalchemy import func, or_
+from sqlalchemy import func, inspect, or_, true
 from werkzeug.utils import secure_filename
 
 from ..auth import permission_required, permission_required_any
@@ -657,6 +657,18 @@ def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
     sol.alocado_por = None
     sol.alocado_em = None
     sol.atualizado_em = datetime.now()
+
+
+def _filtro_solicitacao_visivel_viagem():
+    try:
+        bind = db.session.get_bind() or db.engine
+        cols = inspect(bind).get_columns("agendamento_solicitacao")
+        has_excluida = any(str(c.get("name") or "").strip().lower() == "excluida" for c in cols)
+    except Exception:
+        has_excluida = False
+    if not has_excluida:
+        return true()
+    return or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None))
 
 
 # --------------------------------------------------------------------------- LISTAGEM / DASHBOARD
@@ -1576,7 +1588,7 @@ def auxiliares():
     sols = (
         AgendamentoSolicitacao.query
         .filter(AgendamentoSolicitacao.status.in_(["Pendente", "Alocada", "Aprovada"]))
-        .filter(or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None)))
+        .filter(_filtro_solicitacao_visivel_viagem())
         .order_by(
             AgendamentoSolicitacao.prazo_limite.is_(None),
             AgendamentoSolicitacao.prazo_limite.asc(),
@@ -1632,7 +1644,7 @@ def rotas_planejadas():
     q = (AgendamentoSolicitacao.query
          .filter(AgendamentoSolicitacao.veiculo_id.isnot(None))
          .filter(AgendamentoSolicitacao.status.in_(["Alocada", "Aprovada", "Pendente"]))
-            .filter(or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None)))
+            .filter(_filtro_solicitacao_visivel_viagem())
          .filter(AgendamentoSolicitacao.data_hora_saida_prevista >= ini)
          .filter(AgendamentoSolicitacao.data_hora_saida_prevista < fim))
     if veiculo_id:
