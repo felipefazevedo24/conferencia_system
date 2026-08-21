@@ -1108,14 +1108,22 @@ def central_viagens_excluir(solicitacao_id: int):
     return jsonify({"sucesso": True})
 
 
-@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/excluir-lote", methods=["DELETE"])
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/excluir-lote", methods=["POST", "DELETE"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_excluir_lote():
     if not is_admin_session():
         return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
 
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+
     ids_raw = payload.get("ids") if isinstance(payload.get("ids"), list) else []
+    if not ids_raw:
+        ids_query = str(request.args.get("ids") or "").strip()
+        if ids_query:
+            ids_raw = [item.strip() for item in ids_query.split(",") if item.strip()]
+
     ids: list[int] = []
     for item in ids_raw:
         try:

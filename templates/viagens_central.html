@@ -282,6 +282,7 @@ const state = {
   selectedIds: [],
   posAlocacaoIds: [],
   posAlocacaoMotoristaId: null,
+  autoCriarViagemAposAlocacao: false,
   detalheViagemId: null
 };
 
@@ -770,7 +771,7 @@ async function acaoCriarViagemSelecionadas() {
 
   const invalidas = rows.filter((r) => String(r.status || '').trim() !== 'Alocada');
   if (invalidas.length) {
-    acaoAlocarSelecionadas();
+    acaoAlocarSelecionadas({ autoCriarViagem: true });
     return;
   }
 
@@ -782,7 +783,8 @@ async function acaoCriarViagemSelecionadas() {
 
   state.posAlocacaoIds = ids;
   state.posAlocacaoMotoristaId = motoristas[0];
-  await abrirMontagemPosAlocacao();
+  state.autoCriarViagemAposAlocacao = false;
+  await criarViagemComSolicitacoesSelecionadas();
 }
 
 async function acaoExcluirSelecionadasLote() {
@@ -801,7 +803,7 @@ async function acaoExcluirSelecionadasLote() {
   if (!ok) return;
 
   const r = await fetch('/api/logistica/central-viagens/solicitacoes/excluir-lote', {
-    method: 'DELETE',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ids,
@@ -982,7 +984,8 @@ function acaoAlocar(id) {
   openModal('modalAlocar');
 }
 
-function acaoAlocarSelecionadas() {
+function acaoAlocarSelecionadas({ autoCriarViagem = false } = {}) {
+  state.autoCriarViagemAposAlocacao = Boolean(autoCriarViagem);
   if (!state.selectedIds.length) {
     showToast('Selecione pelo menos uma solicitação.', 'error');
     return;
@@ -1359,10 +1362,17 @@ async function confirmarAlocacao() {
   state.selectedIds = [];
   closeModal('modalAlocar');
   showToast(`Alocação concluída. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
-  loadDashboard();
+  await loadDashboard();
   if (!falhas && state.posAlocacaoIds.length) {
+    if (state.autoCriarViagemAposAlocacao) {
+      state.autoCriarViagemAposAlocacao = false;
+      await criarViagemComSolicitacoesSelecionadas();
+      return;
+    }
     setTimeout(() => { abrirMontagemPosAlocacao(); }, 250);
+    return;
   }
+  state.autoCriarViagemAposAlocacao = false;
 }
 
 function acaoReorganizar(id) {
