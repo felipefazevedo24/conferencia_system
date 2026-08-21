@@ -261,6 +261,66 @@
     </div>
   </div>
 </div>
+
+<div id="modalConfirmacao" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:520px;">
+    <div class="vt-modal__head">
+      <strong id="confirmacao-titulo">Confirmar ação</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalConfirmacao')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <div id="confirmacao-mensagem" class="vt-mini"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalConfirmacao')">Cancelar</button>
+      <button id="confirmacao-btn" class="eui-btn eui-btn--danger" onclick="confirmarAcaoModal()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalCancelarViagem" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:620px;">
+    <div class="vt-modal__head">
+      <strong>Cancelar viagem</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCancelarViagem')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <input type="hidden" id="cancelar-viagem-id">
+      <div id="cancelar-viagem-info" class="vt-mini"></div>
+      <div class="eui-field">
+        <label class="eui-field__label">Motivo do cancelamento</label>
+        <textarea id="cancelar-viagem-motivo" class="eui-input" rows="3" placeholder="Informe o motivo"></textarea>
+      </div>
+      <div id="cancelar-viagem-state" class="vt-mini"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalCancelarViagem')">Fechar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarCancelarViagemModal()">Confirmar cancelamento</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalAdicionarSolicitacaoViagem" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:680px;">
+    <div class="vt-modal__head">
+      <strong>Adicionar solicitação na viagem</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAdicionarSolicitacaoViagem')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <input type="hidden" id="addsol-viagem-id">
+      <div id="addsol-info" class="vt-mini"></div>
+      <div class="eui-field">
+        <label class="eui-field__label">Solicitação disponível</label>
+        <select id="addsol-select" class="eui-select"></select>
+      </div>
+      <div id="addsol-state" class="vt-mini"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAdicionarSolicitacaoViagem')">Fechar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarAdicionarSolicitacaoNaViagem()">Adicionar</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -283,8 +343,11 @@ const state = {
   posAlocacaoIds: [],
   posAlocacaoMotoristaId: null,
   autoCriarViagemAposAlocacao: false,
-  detalheViagemId: null
+  detalheViagemId: null,
+  detalheViagemData: null
 };
+
+let confirmacaoCallback = null;
 
 const subFiltrosSolicitacoes = [
   { value: 'PENDENTES', label: 'Pendentes' },
@@ -325,6 +388,23 @@ function closeModal(id) {
 
 function openModal(id) {
   document.getElementById(id).classList.add('open');
+}
+
+function openConfirmModal({ titulo = 'Confirmar ação', mensagem = '', textoBotao = 'Confirmar', classeBotao = 'eui-btn--danger', onConfirm = null }) {
+  document.getElementById('confirmacao-titulo').textContent = titulo;
+  document.getElementById('confirmacao-mensagem').textContent = mensagem;
+  const btn = document.getElementById('confirmacao-btn');
+  btn.textContent = textoBotao;
+  btn.className = `eui-btn ${classeBotao}`;
+  confirmacaoCallback = typeof onConfirm === 'function' ? onConfirm : null;
+  openModal('modalConfirmacao');
+}
+
+async function confirmarAcaoModal() {
+  const fn = confirmacaoCallback;
+  confirmacaoCallback = null;
+  closeModal('modalConfirmacao');
+  if (fn) await fn();
 }
 
 function badgeStatus(status) {
@@ -821,28 +901,33 @@ async function acaoExcluirSelecionadasLote() {
     return;
   }
 
-  const ok = window.confirm(`Confirmar exclusao em massa de ${ids.length} solicitação(ões)?`);
-  if (!ok) return;
+  openConfirmModal({
+    titulo: 'Excluir solicitações',
+    mensagem: `Confirmar exclusão em massa de ${ids.length} solicitação(ões)?`,
+    textoBotao: 'Excluir selecionadas',
+    classeBotao: 'eui-btn--danger',
+    onConfirm: async () => {
+      const r = await fetch('/api/logistica/central-viagens/solicitacoes/excluir-lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids,
+          motivo: 'Exclusão em massa na Central de Viagens.'
+        })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.sucesso) {
+        showToast(d.error || 'Falha ao excluir solicitações selecionadas.', 'error');
+        return;
+      }
 
-  const r = await fetch('/api/logistica/central-viagens/solicitacoes/excluir-lote', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ids,
-      motivo: 'Exclusão em massa na Central de Viagens.'
-    })
+      state.selectedIds = [];
+      const falhas = Array.isArray(d.falhas) ? d.falhas.length : 0;
+      const excluidas = Number(d.excluidas || 0);
+      showToast(`Exclusão em massa concluída. Excluídas: ${excluidas}. Falhas: ${falhas}.`, falhas ? 'info' : 'success');
+      await loadDashboard();
+    }
   });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || !d.sucesso) {
-    showToast(d.error || 'Falha ao excluir solicitações selecionadas.', 'error');
-    return;
-  }
-
-  state.selectedIds = [];
-  const falhas = Array.isArray(d.falhas) ? d.falhas.length : 0;
-  const excluidas = Number(d.excluidas || 0);
-  showToast(`Exclusão em massa concluída. Excluídas: ${excluidas}. Falhas: ${falhas}.`, falhas ? 'info' : 'success');
-  await loadDashboard();
 }
 
 function renderMetrics(resumo, counts) {
@@ -1081,6 +1166,7 @@ async function acaoAbrirViagem(viagemId) {
     return;
   }
   state.detalheViagemId = vid;
+  state.detalheViagemData = d;
 
   const paradas = Array.isArray(d.paradas) ? d.paradas : [];
   const paradasHtml = paradas.length
@@ -1110,6 +1196,11 @@ async function acaoAbrirViagem(viagemId) {
     ? `<div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">${acoesDetalhe.join('')}</div>`
     : '';
 
+  const eventos = Array.isArray(d.eventos) ? d.eventos : [];
+  const eventosHtml = eventos.length
+    ? `<div style="margin-top:10px;"><strong>Logs da viagem:</strong><div class="vt-preview" style="margin-top:6px;"><table class="erp-table"><thead><tr><th>Quando</th><th>Tipo</th><th>Título</th><th>Descrição</th><th>Usuário</th></tr></thead><tbody>${eventos.slice().reverse().map((e) => `<tr><td>${formatDateTime(e.registrado_em)}</td><td>${e.tipo || '-'}</td><td>${e.titulo || '-'}</td><td>${e.descricao || '-'}</td><td>${e.registrado_por || '-'}</td></tr>`).join('')}</tbody></table></div></div>`
+    : '<div style="margin-top:10px;" class="vt-mini">Sem logs registrados nesta viagem.</div>';
+
   document.getElementById('detalheBody').innerHTML = `
     <div><strong>Código:</strong> ${d.codigo || ('#' + vid)}</div>
     <div><strong>Status:</strong> ${d.status || '-'}</div>
@@ -1120,6 +1211,7 @@ async function acaoAbrirViagem(viagemId) {
     <div><strong>Retorno previsto:</strong> ${formatDateTime(d.retorno_previsto)}</div>
     <div><strong>Paradas:</strong> ${Number(d.qtd_paradas || 0)}</div>
     <div style="margin-top:8px;"><strong>Roteiro:</strong>${paradasHtml}</div>
+    ${eventosHtml}
     ${acoesHtml}
   `;
   openModal('modalDetalhe');
@@ -1199,35 +1291,77 @@ async function acaoExcluirViagem(viagemId, codigoLabel) {
   }
 
   const nome = codigoLabel || ('#' + vid);
-  const ok = window.confirm(`Confirmar exclusao da viagem ${nome}? Esta acao nao pode ser desfeita.`);
-  if (!ok) return;
+  openConfirmModal({
+    titulo: 'Apagar viagem',
+    mensagem: `Confirmar exclusão da viagem ${nome}? Esta ação não pode ser desfeita.`,
+    textoBotao: 'Apagar viagem',
+    classeBotao: 'eui-btn--danger',
+    onConfirm: async () => {
+      const r = await fetch(`/api/viagem/${vid}`, { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.sucesso) {
+        showToast(d.msg || d.error || 'Falha ao apagar viagem.', 'error');
+        return;
+      }
 
-  const r = await fetch(`/api/viagem/${vid}`, { method: 'DELETE' });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || !d.sucesso) {
-    showToast(d.msg || d.error || 'Falha ao apagar viagem.', 'error');
-    return;
-  }
-
-  closeModal('modalDetalhe');
-  showToast('Viagem apagada com sucesso.', 'success');
-  state.viagensCacheKey = '';
-  await loadDashboard();
+      closeModal('modalDetalhe');
+      showToast('Viagem apagada com sucesso.', 'success');
+      state.viagensCacheKey = '';
+      await loadDashboard();
+    }
+  });
 }
 
 async function acaoCancelarViagem(viagemId, codigoLabel) {
   const vid = Number(viagemId);
   if (!vid) return;
-
   const nome = codigoLabel || ('#' + vid);
-  const motivo = window.prompt(`Motivo do cancelamento da viagem ${nome}:`, 'Cancelamento solicitado pela logística.');
-  if (motivo === null) return;
-  const texto = String(motivo || '').trim();
+  document.getElementById('cancelar-viagem-id').value = String(vid);
+  document.getElementById('cancelar-viagem-info').textContent = `Viagem: ${nome}`;
+  document.getElementById('cancelar-viagem-motivo').value = 'Cancelamento solicitado pela logística.';
+  document.getElementById('cancelar-viagem-state').textContent = '';
+  openModal('modalCancelarViagem');
+}
+
+async function acaoAdicionarSolicitacaoNaViagem(viagemId, codigoLabel) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+  const nome = codigoLabel || ('#' + vid);
+  const select = document.getElementById('addsol-select');
+  const info = document.getElementById('addsol-info');
+  const stateBox = document.getElementById('addsol-state');
+  const jaNaViagem = new Set((state.detalheViagemData?.paradas || []).map((p) => Number(p.solicitacao_id || 0)).filter((x) => x > 0));
+  const candidatas = [...state.coletas, ...state.entregas]
+    .filter((r) => !['Concluida', 'Cancelada'].includes(String(r.status || '').trim()))
+    .filter((r) => Number(r.id) > 0 && !jaNaViagem.has(Number(r.id)));
+
+  if (!candidatas.length) {
+    showToast('Sem solicitações elegíveis para anexar no contexto atual.', 'info');
+    return;
+  }
+
+  document.getElementById('addsol-viagem-id').value = String(vid);
+  info.textContent = `Viagem: ${nome}`;
+  select.innerHTML = candidatas.map((r) => {
+    const doc = r.tipo === 'COLETA' ? (r.numero_oc || r.documento_numero || '-') : (r.romaneio_numero || r.orcamento || r.documento_numero || '-');
+    const cidade = r.endereco?.cidade || r.cidade || '-';
+    const uf = r.endereco?.uf || r.uf || '-';
+    return `<option value="${Number(r.id)}">#${Number(r.id)} · ${r.codigo || '-'} · ${r.tipo || '-'} · ${doc} · ${r.parceiro_nome || '-'} · ${cidade}/${uf}</option>`;
+  }).join('');
+  stateBox.textContent = '';
+  openModal('modalAdicionarSolicitacaoViagem');
+}
+
+async function confirmarCancelarViagemModal() {
+  const vid = Number(document.getElementById('cancelar-viagem-id').value || 0);
+  const texto = String(document.getElementById('cancelar-viagem-motivo').value || '').trim();
+  const stateBox = document.getElementById('cancelar-viagem-state');
+  if (!vid) return;
   if (!texto) {
     showToast('Informe o motivo do cancelamento.', 'error');
     return;
   }
-
+  stateBox.textContent = 'Cancelando viagem...';
   const r = await fetch(`/api/viagem/${vid}/cancelar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1235,38 +1369,26 @@ async function acaoCancelarViagem(viagemId, codigoLabel) {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.sucesso) {
+    stateBox.textContent = '';
     showToast(d.msg || d.error || 'Falha ao cancelar viagem.', 'error');
     return;
   }
-
+  closeModal('modalCancelarViagem');
   closeModal('modalDetalhe');
   showToast('Viagem cancelada. Solicitações voltaram para pendente.', 'success');
   state.viagensCacheKey = '';
   await loadDashboard();
 }
 
-async function acaoAdicionarSolicitacaoNaViagem(viagemId, codigoLabel) {
-  const vid = Number(viagemId);
-  if (!vid) return;
-
-  const entrada = window.prompt(`Informe o ID da solicitação para anexar na viagem ${codigoLabel || ('#' + vid)}:`);
-  if (entrada === null) return;
-  const txt = String(entrada || '').trim();
-  if (!txt) {
-    showToast('Informe o ID da solicitação.', 'error');
+async function confirmarAdicionarSolicitacaoNaViagem() {
+  const vid = Number(document.getElementById('addsol-viagem-id').value || 0);
+  const sid = Number(document.getElementById('addsol-select').value || 0);
+  const stateBox = document.getElementById('addsol-state');
+  if (!vid || !sid) {
+    showToast('Selecione uma solicitação.', 'error');
     return;
   }
-
-  let sid = Number(txt);
-  if (!Number.isFinite(sid) || sid <= 0) {
-    const row = [...state.coletas, ...state.entregas].find((r) => String(r.codigo || '').trim().toUpperCase() === txt.toUpperCase());
-    sid = Number(row?.id || 0);
-  }
-  if (!sid || sid <= 0) {
-    showToast('Solicitação não localizada na tela atual. Informe o ID numérico.', 'error');
-    return;
-  }
-
+  stateBox.textContent = 'Anexando solicitação...';
   const r = await fetch(`/api/viagem/${vid}/anexar-solicitacao/${sid}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1274,8 +1396,10 @@ async function acaoAdicionarSolicitacaoNaViagem(viagemId, codigoLabel) {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.sucesso) {
+    stateBox.textContent = '';
     if (d && d.viagem_id) {
       showToast(d.msg || 'Solicitação já vinculada em outra viagem. Abrindo viagem atual.', 'info');
+      closeModal('modalAdicionarSolicitacaoViagem');
       window.location.href = `/logistica/viagens?vid=${Number(d.viagem_id)}`;
       return;
     }
@@ -1283,6 +1407,7 @@ async function acaoAdicionarSolicitacaoNaViagem(viagemId, codigoLabel) {
     return;
   }
 
+  closeModal('modalAdicionarSolicitacaoViagem');
   showToast('Solicitação anexada com sucesso.', d.liberacao_revogada ? 'info' : 'success');
   state.viagensCacheKey = '';
   await loadDashboard();
