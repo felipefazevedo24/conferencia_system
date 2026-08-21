@@ -933,9 +933,33 @@ function acaoAlocarSelecionadas() {
   openModal('modalAlocar');
 }
 
-function acaoAbrirViagem(viagemId) {
-  if (!viagemId) return;
-  window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
+async function acaoAbrirViagem(viagemId) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+  const r = await fetch(`/api/viagem/${vid}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    showToast(d.msg || 'Nao foi possivel abrir os detalhes da viagem.', 'error');
+    return;
+  }
+
+  const paradas = Array.isArray(d.paradas) ? d.paradas : [];
+  const paradasHtml = paradas.length
+    ? `<ol style="margin:6px 0 0 18px; padding:0;">${paradas.map((p) => `<li style="margin-bottom:4px;"><strong>${p.tipo || 'PARADA'}</strong> · ${p.parceiro_nome || '-'} · ${(p.cidade || '-')}/${(p.uf || '-')}</li>`).join('')}</ol>`
+    : '<div class="vt-mini">Sem paradas cadastradas.</div>';
+
+  document.getElementById('detalheBody').innerHTML = `
+    <div><strong>Código:</strong> ${d.codigo || ('#' + vid)}</div>
+    <div><strong>Status:</strong> ${d.status || '-'}</div>
+    <div><strong>Tipo:</strong> ${d.tipo || '-'}</div>
+    <div><strong>Motorista:</strong> ${d.motorista_nome || '-'}</div>
+    <div><strong>Veículo:</strong> ${d.veiculo_label || '-'}</div>
+    <div><strong>Saída prevista:</strong> ${formatDateTime(d.saida_prevista)}</div>
+    <div><strong>Retorno previsto:</strong> ${formatDateTime(d.retorno_previsto)}</div>
+    <div><strong>Paradas:</strong> ${Number(d.qtd_paradas || 0)}</div>
+    <div style="margin-top:8px;"><strong>Roteiro:</strong>${paradasHtml}</div>
+  `;
+  openModal('modalDetalhe');
 }
 
 async function acaoLiberarMotorista(viagemId) {
@@ -1348,6 +1372,20 @@ if (btnCriarViagemSelecionadas) {
   btnCriarViagemSelecionadas.addEventListener('click', acaoCriarViagemSelecionadas);
 }
 
-loadDashboard();
+(async () => {
+  await loadDashboard();
+  const vid = Number(new URLSearchParams(window.location.search).get('vid') || 0);
+  if (vid > 0) {
+    state.tab = 'VIAGENS';
+    state.subfiltro = 'PROGRAMADAS';
+    document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
+    const tabViagens = document.querySelector('.vt-tab[data-tab="VIAGENS"]');
+    if (tabViagens) tabViagens.classList.add('is-active');
+    await loadViagens();
+    renderFilters();
+    renderTable();
+    await acaoAbrirViagem(vid);
+  }
+})();
 </script>
 {% endblock %}
