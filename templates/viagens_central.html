@@ -248,6 +248,7 @@ const state = {
   coletas: [],
   entregas: [],
   viagens: [],
+  viagensCacheKey: '',
   ocConsulta: null,
   veiculos: [],
   motoristas: [],
@@ -762,15 +763,32 @@ function renderMetrics(resumo, counts) {
 }
 
 async function loadViagens() {
+  const cacheKey = `${state.q}::${state.subfiltro}`;
+  if (state.viagensCacheKey === cacheKey) {
+    return;
+  }
+
   const p = new URLSearchParams();
   if (state.q) p.set('q', state.q);
+  if (state.subfiltro === 'PROGRAMADAS') {
+    p.set('status', 'Planejada');
+  } else if (state.subfiltro === 'EM_ANDAMENTO') {
+    p.set('status', 'EmAndamento');
+  }
+
   const r = await fetch(`/api/viagem/lista?${p.toString()}`);
   const d = await r.json().catch(() => ([]));
   if (!r.ok) {
     state.viagens = [];
+    state.viagensCacheKey = '';
     return;
   }
-  state.viagens = Array.isArray(d) ? d : [];
+  let viagens = Array.isArray(d) ? d : [];
+  if (state.subfiltro === 'CONCLUIDAS') {
+    viagens = viagens.filter((v) => ['Concluida', 'Cancelada'].includes(String(v.status || '').trim()));
+  }
+  state.viagens = viagens;
+  state.viagensCacheKey = cacheKey;
 }
 
 async function loadDashboard() {
@@ -786,10 +804,15 @@ async function loadDashboard() {
   state.entregas = d.entregas || [];
   state.veiculos = d.veiculos || [];
   state.motoristas = d.motoristas || [];
-  await loadViagens();
   renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
   renderFilters();
   renderTable();
+
+  if (state.tab === 'VIAGENS') {
+    await loadViagens();
+    renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
+    renderTable();
+  }
 }
 
 function rowById(id) {
@@ -1294,12 +1317,16 @@ buscaInput.addEventListener('input', () => {
 });
 
 Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
-  tab.addEventListener('click', () => {
+  tab.addEventListener('click', async () => {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
     state.tab = tab.dataset.tab;
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : 'PENDENTES';
     if (state.tab === 'VIAGENS') state.selectedIds = [];
+    if (state.tab === 'VIAGENS') {
+      await loadViagens();
+      document.getElementById('count-viagens').textContent = String(state.viagens.length || 0);
+    }
     renderFilters();
     renderTable();
   });
