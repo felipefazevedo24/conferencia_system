@@ -55,6 +55,7 @@ PERMISSION_CATALOG = {
     "PAGE_QUALIDADE_APROVAR": "Qualidade > Aprovar laudo (supervisor/gerente)",
     "PAGE_PLANEJAMENTO_TAREFAS": "Planejamento > Board de tarefas (Kanban)",
     "PAGE_COMEX": "Comex > Processos de importação/exportação",
+    "PAGE_COMEX_PULAR_STATUS": "Comex > Pular Status (gerência)",
 }
 
 

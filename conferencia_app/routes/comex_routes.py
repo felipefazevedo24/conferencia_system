@@ -16,7 +16,7 @@ from email.mime.text import MIMEText
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
 
-from ..auth import permission_required
+from ..auth import has_permission, permission_required
 from ..extensions import db
 from ..models import ComexCotacao, ComexDocumento, ComexProcesso, ComexPoItem
 from ..services import comex_service as svc
@@ -103,7 +103,12 @@ def _processo_payload(p: ComexProcesso) -> dict:
 @comex_bp.route("/comex")
 @permission_required(PERMISSION)
 def comex_page():
-    return render_template("comex.html", user=session.get("username"), is_admin=session.get("role") == "Admin")
+    return render_template(
+        "comex.html",
+        user=session.get("username"),
+        is_admin=session.get("role") == "Admin",
+        pode_pular_status=has_permission("PAGE_COMEX_PULAR_STATUS"),
+    )
 
 
 @comex_bp.route("/api/comex/metricas")
@@ -414,9 +419,31 @@ def api_estornar(processo_id):
     return jsonify({"message": "Processo estornado.", "processo": _processo_payload(processo)})
 
 
+@comex_bp.route("/api/comex/processos/<int:processo_id>/avancar", methods=["POST"])
+@permission_required(PERMISSION)
+def api_avancar_status(processo_id):
+    """"Avançar" - avanço normal (validado) pro próximo módulo, disponível
+    pra qualquer operador com acesso ao Comex."""
+    processo = ComexProcesso.query.get(processo_id)
+    if not processo:
+        return jsonify({"error": "Processo não encontrado."}), 404
+    usuario = session.get("username", "desconhecido")
+    try:
+        processo = svc.avancar_status(processo, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Status avançado para {processo.status_modulo}.", "processo": _processo_payload(processo)})
+
+
 @comex_bp.route("/api/comex/processos/<int:processo_id>/pular-status", methods=["POST"])
 @permission_required(PERMISSION)
 def api_pular_status(processo_id):
+    """"Pular Status" - avanço SEM validação nenhuma, reservado pra
+    processos excepcionais (iniciados fora do sistema, acompanhamento
+    manual). Exige permissão extra de gerência (PAGE_COMEX_PULAR_STATUS),
+    além do acesso normal ao Comex."""
+    if not has_permission("PAGE_COMEX_PULAR_STATUS"):
+        return jsonify({"error": "Você não tem permissão pra usar o Pular Status - fale com a gerência."}), 403
     processo = ComexProcesso.query.get(processo_id)
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404

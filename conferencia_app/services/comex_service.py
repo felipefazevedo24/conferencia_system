@@ -22,6 +22,7 @@ import secrets
 from datetime import datetime, timedelta
 
 from flask import current_app
+from sqlalchemy.exc import IntegrityError
 
 from ..compras.services import compras_service
 from ..extensions import db
@@ -131,14 +132,23 @@ def gerar_id_op(tipo_operacao: str) -> str:
     """Gera o identificador unico do processo (ID OP), ex.: IM-2026-00001.
     Sequencial por tipo de operacao + ano. Nao confundir com `ref_ff`
     (Referencia Freight Forward), que e atribuida pelo freight forward mais
-    adiante no workflow, nao gerada pelo sistema."""
+    adiante no workflow, nao gerada pelo sistema.
+
+    Ordena pelo proprio `id_op` (nao pelo id/PK de insercao): como o numero
+    final e zero-padded (%05d) e todos os candidatos compartilham o mesmo
+    prefixo+ano, ordem alfabetica desc aqui equivale a ordem numerica desc.
+    Isso importa porque o numero pode ser regenerado pra um processo
+    existente a qualquer momento (troca de direcao/modal com a PO ainda em
+    Rascunho - ver `salvar_po`), entao a ordem de insercao no banco nao
+    reflete mais o maior numero ja usado; usar `id DESC` ali causava colisao
+    (numero duplicado) quando processos eram renumerados fora de ordem."""
     tipo_operacao = tipo_operacao if tipo_operacao in TIPOS_OPERACAO else "IM"
     ano = datetime.now().year
     prefixo = f"{tipo_operacao}-{ano}-"
     ultimo = (
         ComexProcesso.query
         .filter(ComexProcesso.id_op.like(f"{prefixo}%"))
-        .order_by(ComexProcesso.id.desc())
+        .order_by(ComexProcesso.id_op.desc())
         .first()
     )
     proximo_num = 1
@@ -651,6 +661,45 @@ def pular_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     return processo
 
 
+# Campos minimos de embarque exigidos pra avancar normalmente (nao via
+# "Pular Status") de Coleta pra Em Transito.
+_CAMPOS_OBRIGATORIOS_EM_TRANSITO = {
+    "ref_despachante": "Ref. Despachante",
+    "bl_awb": "BL/AWB",
+    "etd": "ETD",
+    "em_transito_eta": "ETA",
+}
+
+
+def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
+    """Funcao "Avançar" - avanco NORMAL (validado) pro proximo modulo,
+    disponivel pra qualquer operador com acesso ao Comex (diferente de
+    "Pular Status", que ignora toda validacao e exige permissao extra de
+    gerencia). Cada transicao pode ter sua propria regra de validacao; hoje
+    so Coleta -> Em Transito exige algo (dados minimos de embarque ja
+    preenchidos - ver `_CAMPOS_OBRIGATORIOS_EM_TRANSITO`)."""
+    proximo = _proximo_modulo(processo.status_modulo)
+    if proximo is None:
+        raise ValueError("Este processo já está no último módulo do workflow (NF/Câmbio) - não há como avançar mais.")
+
+    if processo.status_modulo == "Coleta" and proximo == "EmTransito":
+        faltando = [
+            label for campo, label in _CAMPOS_OBRIGATORIOS_EM_TRANSITO.items()
+            if not getattr(processo, campo, None)
+        ]
+        if faltando:
+            raise ValueError(
+                "Preencha os dados de embarque antes de avançar pra Em Trânsito: " + ", ".join(faltando) + "."
+            )
+
+    processo.status_modulo = proximo
+    processo.status_slug = status_slug(proximo)
+    processo.atualizado_em = datetime.now()
+    processo.atualizado_por = usuario
+    db.session.commit()
+    return processo
+
+
 def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[ComexProcesso]:
     query = ComexProcesso.query
     if status_modulo:
@@ -1089,16 +1138,22 @@ def enviar_instrucao(processo: ComexProcesso, dados: dict, usuario: str) -> Come
     `_aplicar_campos_operacionais` (mesmos campos usados em `salvar_po`).
     Pode ser chamada de novo depois (os campos continuam editaveis) - a
     deteccao de "primeira vez" usa `instrucao_enviada_em`, nao a transicao
-    de modulo, porque o caminho (b) ja chega em "Instrucao" direto."""
+    de modulo, porque o caminho (b) ja chega em "Instrucao" direto.
+
+    Os dados de embarque continuam editaveis nos modulos seguintes tambem
+    (Coleta, Em Transito) - o BL/AWB, ETD/ETA etc. podem precisar de ajuste
+    depois que o processo ja avancou, entao isso NAO regride o modulo atual
+    (so avanca Cotacao -> Instrucao na primeira vez; dali pra frente so
+    atualiza os campos, sem mexer no status_modulo)."""
     if processo.status_modulo == "Cotacao" and not processo.cotacao_vencedora_id:
         raise ValueError("Escolha uma cotação de frete antes de enviar a instrução de embarque.")
-    if processo.status_modulo not in ("Cotacao", "Instrucao"):
+    if processo.status_modulo not in ("Cotacao", "Instrucao", "Coleta", "EmTransito"):
         raise ValueError("A instrução de embarque só pode ser enviada depois da PO finalizada.")
 
     agora = datetime.now()
     primeira_vez = processo.instrucao_enviada_em is None
     _aplicar_campos_operacionais(processo, dados)
-    if processo.status_modulo != "Instrucao":
+    if processo.status_modulo == "Cotacao":
         processo.status_modulo = "Instrucao"
         processo.status_slug = status_slug("Instrucao")
     if primeira_vez:

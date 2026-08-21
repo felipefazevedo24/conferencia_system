@@ -485,6 +485,7 @@
 <script>
 (function () {
     const $ = (id) => document.getElementById(id);
+    const PODE_PULAR_STATUS = {{ pode_pular_status | tojson }};
 
     function toast(msg, tipo) {
         const el = $("cx-toast");
@@ -701,14 +702,24 @@
     }
 
     // ── Menu de ações (kebab) ──────────────────────────────────────────
+    // A partir de "Instrucao" em diante, avançar de modulo e' so
+    // atualizacao de status (sem acao de negocio dedicada) - por isso
+    // ganham o botao generico "Avançar" (valida por transicao, ver
+    // comex_service.avancar_status; hoje so Coleta -> Em Transito exige
+    // os dados de embarque preenchidos). OC/PO/Cotacao NAO ganham
+    // "Avançar" porque ja tem seu proprio mecanismo de avanco (Criar PO,
+    // finalizar PO, gerar link + escolher cotacao / enviar instrucao).
+    // "Pular Status" ignora toda validacao e so aparece pra quem tem a
+    // permissao extra de gerencia (PAGE_COMEX_PULAR_STATUS).
     function montarAcoes(p) {
         const it = (act, icon, label, danger) =>
             `<button data-act="${act}" data-id="${p.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+        const btnPularStatus = () => PODE_PULAR_STATUS ? it("pular-status", "fa-forward-fast", "Pular Status", true) : "";
         let itens = "";
         if (p.status_modulo === "OC") {
             itens += it("editar-oc", "fa-pen-to-square", "Editar OC");
             itens += it("criar-po", "fa-file-signature", "Criar PO");
-            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("apagar-oc", "fa-trash", "Apagar OC", true);
+            itens += "<hr>" + btnPularStatus() + it("apagar-oc", "fa-trash", "Apagar OC", true);
         } else if (p.status_modulo === "PO") {
             itens += it("editar-po", "fa-pen-to-square", "Ver / Editar PO");
             if (p.po_pdf_disponivel !== false && p.po_numero) {
@@ -717,23 +728,28 @@
             if (p.po_status === "Finalizada") {
                 itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             }
-            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
+            itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ OC", true);
         } else if (p.status_modulo === "Cotacao") {
             itens += it("cotacao", "fa-file-invoice-dollar", "Cotação de Frete");
             if (p.cotacao_vencedora_id) {
                 itens += it("notificar-instrucao", "fa-paper-plane", "Enviar Instrução de Embarque");
             }
             itens += it("editar-po", "fa-file-signature", "Ver PO");
-            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
+            itens += "<hr>" + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ PO", true);
         } else if (p.status_modulo === "Instrucao") {
             itens += it("notificar-instrucao", "fa-paper-plane", "Reenviar Instrução de Embarque");
             itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
             itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
             itens += it("editar-po", "fa-file-signature", "Ver PO");
-            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
+            itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar p/ Cotação", true);
+        } else if (p.status_modulo === "Coleta" || p.status_modulo === "EmTransito") {
+            itens += it("instrucao", "fa-clipboard-list", "Editar dados de embarque");
+            itens += it("cotacao", "fa-file-invoice-dollar", "Ver Cotações");
+            itens += it("editar-po", "fa-file-signature", "Ver PO");
+            itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         } else {
             itens += it("ver", "fa-eye", "Detalhes");
-            itens += "<hr>" + it("pular-status", "fa-forward", "Pular Status", true) + it("estornar", "fa-rotate-left", "Estornar módulo", true);
+            itens += "<hr>" + it("avancar", "fa-forward", "Avançar") + btnPularStatus() + it("estornar", "fa-rotate-left", "Estornar módulo", true);
         }
         return itens;
     }
@@ -814,6 +830,12 @@
             try {
                 await api(`/api/comex/processos/${id}/estornar`, { method: "POST" });
                 toast("Processo estornado.");
+                carregar();
+            } catch (err) { toast(err.message, "error"); }
+        } else if (act === "avancar") {
+            try {
+                const resp = await api(`/api/comex/processos/${id}/avancar`, { method: "POST" });
+                toast(resp.message, "success");
                 carregar();
             } catch (err) { toast(err.message, "error"); }
         } else if (act === "pular-status") {
