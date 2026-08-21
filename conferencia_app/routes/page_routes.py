@@ -127,30 +127,30 @@ HOME_MODULES = [
     },
     {
         "id": "agendamento_solicitacao",
-        "title": "Solicitar Coleta ou Entrega",
-        "subtitle": "Abertura rápida",
-        "description": "Abra uma demanda em poucos passos e acompanhe o andamento sem entrar no planner da logística.",
-        "href": "/logistica/solicitar-transporte",
+        "title": "Central de Viagens",
+        "subtitle": "Logística • Transportes",
+        "description": "Visualize e opere coletas e entregas geradas automaticamente pelo sistema.",
+        "href": "/logistica/viagens",
         "icon": "fa-file-circle-plus",
-        "permission": "PAGE_LOGISTICA_SOLICITACAO",
+        "permission": "PAGE_LOGISTICA_AGENDAMENTO",
         "section": "Logística",
         "tone": "slate",
         "priority": 88,
-        "keywords": ["solicitacao", "coleta", "entrega", "pedido", "transporte"],
+        "keywords": ["central", "viagens", "coleta", "entrega", "transporte"],
         "metric_key": "agendamento_ativo",
     },
     {
         "id": "agendamento_veiculos",
-        "title": "Gestão de Viagens",
-        "subtitle": "Solicitações & planner logístico",
-        "description": "Gerencie solicitações de transporte, aloque motorista e veículo, acompanhe agenda e cadastros.",
-        "href": "/logistica/viagens?tab=solicitacoes",
+        "title": "Central de Viagens",
+        "subtitle": "Logística • Transportes",
+        "description": "Central gerencial única para coletas e entregas com rastreabilidade por documento de origem.",
+        "href": "/logistica/viagens",
         "icon": "fa-truck-fast",
         "permission": "PAGE_LOGISTICA_AGENDAMENTO",
         "section": "Logística",
         "tone": "emerald",
         "priority": 87,
-        "keywords": ["agendamento", "kanban", "veiculo", "coleta", "entrega", "solicitacao"],
+        "keywords": ["central", "viagens", "coleta", "entrega", "transporte"],
         "metric_key": "agendamento_ativo",
     },
     {
@@ -169,9 +169,9 @@ HOME_MODULES = [
     },
     {
         "id": "logistica_viagem",
-        "title": "Gestão de Viagens",
+        "title": "Central de Viagens",
         "subtitle": "Rastreamento ponta-a-ponta",
-        "description": "Planeje, acompanhe em tempo real e consolide cada viagem: paradas, GPS, ocorrências, abastecimento e relatório final.",
+        "description": "Tela gerencial de coletas e entregas automáticas, com controle operacional e rastreabilidade.",
         "href": "/logistica/viagens",
         "icon": "fa-route",
         "permission": "PAGE_LOGISTICA_VIAGEM",
@@ -1039,18 +1039,13 @@ def expedicao_conferencia_page():
 @page_bp.route("/logistica/solicitar-transporte")
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def solicitar_transporte_page():
-    return render_template(
-        "agendamento_solicitacao.html",
-        user=session["username"],
-        user_role=session.get("role", ""),
-        is_admin=session.get("role") == "Admin",
-    )
+    return redirect("/logistica/viagens", code=302)
 
 
 @page_bp.route("/logistica/agendamento-veiculos")
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def agendamento_veiculos_page():
-    return redirect("/logistica/viagens?tab=viagens", code=302)
+    return redirect("/logistica/viagens", code=302)
 
 
 @page_bp.route("/logistica/operacao")
@@ -1120,7 +1115,7 @@ def viagens_page():
     if not (has_permission("PAGE_LOGISTICA_VIAGEM") or has_permission("PAGE_LOGISTICA_AGENDAMENTO")):
         return render_template("acesso_negado.html", user=session.get("username")), 403
     return render_template(
-        "viagens.html",
+        "viagens_central.html",
         user=session["username"],
         user_role=session.get("role", ""),
         is_admin=session.get("role") == "Admin",

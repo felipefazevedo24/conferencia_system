@@ -616,6 +616,8 @@ def _sync_solicitacao_viagem(sol: AgendamentoSolicitacao | None, v: Viagem, stat
     """Mantem a solicitacao de transporte alinhada com a viagem consolidada."""
     if not sol:
         return
+    if bool(getattr(sol, "excluida", False)):
+        return
     status_atual = str(sol.status or "").strip()
     if status_atual in {"Concluida", "Cancelada"} and status != "Concluida":
         return
@@ -644,7 +646,7 @@ def _sync_solicitacoes_da_viagem(v: Viagem, status: str) -> None:
 
 
 def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
-    if not sol or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
+    if not sol or bool(getattr(sol, "excluida", False)) or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return
     sol.status = "Pendente"
     sol.veiculo_id = None
@@ -960,113 +962,7 @@ def detalhe(vid: int):
 @viagem_bp.route("", methods=["POST"])
 @permission_required(PERM)
 def criar():
-    p = request.get_json(silent=True) or {}
-    veiculo_id = _parse_int(p.get("veiculo_id"))
-    if not veiculo_id:
-        return jsonify({"sucesso": False, "msg": "Veículo obrigatório."}), 400
-    motorista_id = _parse_int(p.get("motorista_id"))
-    motorista = AgendamentoMotorista.query.get(motorista_id) if motorista_id else None
-    tipo = str(p.get("tipo") or "MISTA").upper().strip()
-    if tipo not in {"MISTA", "COLETA", "ENTREGA", "ALEATORIA"}:
-        return jsonify({"sucesso": False, "msg": "Tipo de viagem invalido."}), 400
-    observacao = str(p.get("observacao") or "").strip()
-    if tipo == "ALEATORIA" and not observacao:
-        return jsonify({"sucesso": False, "msg": "Descricao obrigatoria para viagem aleatoria."}), 400
-    avulsa = bool(p.get("avulsa"))
-    funcionario_responsavel = str(p.get("funcionario_responsavel") or "").strip()
-    if avulsa and not funcionario_responsavel:
-        return jsonify({"sucesso": False, "msg": "Informe o nome do funcionario que esta saindo com o veiculo."}), 400
-    sol_ids = p.get("solicitacao_ids") or []
-    paradas_livres = p.get("paradas") or []
-    if avulsa:
-        sol_ids = []
-        paradas_livres = []
-    elif tipo == "ALEATORIA":
-        sol_ids = []
-        paradas_livres = []
-    elif not sol_ids and not paradas_livres:
-        return jsonify({"sucesso": False, "msg": "Selecione pelo menos uma solicitacao pendente ou parada manual."}), 400
-    if sol_ids and not motorista_id:
-        return jsonify({"sucesso": False, "msg": "Selecione um motorista para assumir as solicitações da viagem."}), 400
-
-    saida_prevista = _parse_dt(p.get("saida_prevista"))
-    retorno_previsto = _parse_dt(p.get("retorno_previsto"))
-    conflito = _validar_conflito_recurso(
-        veiculo_id=veiculo_id,
-        motorista_id=motorista_id,
-        saida=saida_prevista,
-        retorno=retorno_previsto,
-    )
-    if conflito:
-        return jsonify({"sucesso": False, "msg": conflito}), 409
-
-    v = Viagem(
-        codigo=_proximo_codigo(),
-        veiculo_id=veiculo_id,
-        motorista_id=motorista_id,
-        motorista_nome=(p.get("motorista_nome") or (motorista.nome if motorista else None) or (funcionario_responsavel if avulsa else None)),
-        tipo=tipo,
-        status="Planejada",
-        titulo=str(p.get("titulo") or "").strip() or None,
-        observacao=observacao or None,
-        avulsa=avulsa,
-        funcionario_responsavel=funcionario_responsavel or None,
-        saida_prevista=saida_prevista,
-        retorno_previsto=retorno_previsto,
-        km_previsto=_parse_float(p.get("km_previsto")),
-        origem_label=str(p.get("origem_label") or "").strip() or None,
-        origem_lat=_parse_float(p.get("origem_lat")),
-        origem_lng=_parse_float(p.get("origem_lng")),
-        destino_label=str(p.get("destino_label") or "").strip() or None,
-        destino_lat=_parse_float(p.get("destino_lat")),
-        destino_lng=_parse_float(p.get("destino_lng")),
-        criado_por=_user(),
-    )
-    db.session.add(v)
-    db.session.flush()
-
-    # Vincular solicitações existentes como paradas
-    seq = 1
-    for sid in sol_ids:
-        sol = db.session.get(AgendamentoSolicitacao, int(sid))
-        if not sol:
-            continue
-        endereco = ", ".join([x for x in [sol.logradouro, sol.numero, sol.bairro] if x])
-        db.session.add(ViagemParada(
-            viagem_id=v.id,
-            sequencia=seq,
-            solicitacao_id=sol.id,
-            tipo=sol.tipo,
-            parceiro_nome=sol.parceiro_nome,
-            endereco=endereco or None,
-            cidade=sol.cidade,
-            uf=sol.uf,
-            latitude=sol.destino_latitude or sol.origem_latitude,
-            longitude=sol.destino_longitude or sol.origem_longitude,
-            previsao_chegada=sol.data_hora_saida_prevista,
-        ))
-        _sync_solicitacao_viagem(sol, v, "Alocada")
-        seq += 1
-
-    # Paradas livres
-    for par in paradas_livres:
-        db.session.add(ViagemParada(
-            viagem_id=v.id,
-            sequencia=seq,
-            tipo=str(par.get("tipo") or "ENTREGA").upper(),
-            parceiro_nome=str(par.get("parceiro_nome") or "").strip() or None,
-            endereco=str(par.get("endereco") or "").strip() or None,
-            cidade=str(par.get("cidade") or "").strip() or None,
-            uf=str(par.get("uf") or "").strip() or None,
-            latitude=_parse_float(par.get("latitude")),
-            longitude=_parse_float(par.get("longitude")),
-            previsao_chegada=_parse_dt(par.get("previsao_chegada")),
-        ))
-        seq += 1
-
-    _log_evento(v.id, "INICIO", f"Viagem {v.codigo} criada", descricao=f"Planejada por {_user()}", severidade="info")
-    db.session.commit()
-    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "otimizacao": None})
+    return jsonify({"sucesso": False, "msg": "Criação manual de viagens foi descontinuada. Use a Central de Viagens."}), 410
 
 
 @viagem_bp.route("/<int:vid>", methods=["PATCH"])
@@ -1505,76 +1401,13 @@ def _parada_dict_from_solicitacao(sid: int, sequencia: int = 1):
 @viagem_bp.route("/nova-de-solicitacao/<int:sid>", methods=["POST"])
 @permission_required(PERM)
 def nova_viagem_de_solicitacao(sid: int):
-    """Cria uma nova Viagem contendo esta única solicitação como 1ª parada.
-    Requer que a solicitação já tenha veículo + motorista alocados."""
-    s = db.session.get(AgendamentoSolicitacao, sid)
-    if not s:
-        return jsonify({"sucesso": False, "msg": "Solicitação não encontrada."}), 404
-    if not s.veiculo_id or not s.motorista_id:
-        return jsonify({"sucesso": False, "msg": "Aloque veículo E motorista antes de montar a viagem."}), 400
-    # verifica se já existe uma viagem Planejada com esta solicitação
-    ja = ViagemParada.query.filter_by(solicitacao_id=sid).first()
-    if ja:
-        return jsonify({"sucesso": False, "msg": f"Esta solicitação já está em uma viagem (Viagem #{ja.viagem_id}).", "viagem_id": ja.viagem_id}), 409
-    v = Viagem(
-        codigo=_proximo_codigo(),
-        veiculo_id=s.veiculo_id,
-        motorista_id=s.motorista_id,
-        status="Planejada",
-        saida_prevista=s.data_hora_saida_prevista,
-        retorno_previsto=s.data_hora_retorno_prevista,
-        criado_por=_user(),
-    )
-    db.session.add(v)
-    db.session.flush()
-    parada = _parada_dict_from_solicitacao(sid, 1)
-    if parada:
-        parada.viagem_id = v.id
-        db.session.add(parada)
-        _sync_solicitacao_viagem(s, v, "Alocada")
-    _log_evento(v.id, "OBSERVACAO", "Viagem criada a partir de solicitação",
-                descricao=f"Solicitação {s.codigo or '#'+str(s.id)} - {s.parceiro_nome}. Gestor: {_user()}.",
-                severidade="info")
-    db.session.commit()
-    return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
+    return jsonify({"sucesso": False, "msg": "Criação manual de viagens foi descontinuada. Use a Central de Viagens."}), 410
 
 
 @viagem_bp.route("/<int:vid>/anexar-solicitacao/<int:sid>", methods=["POST"])
 @permission_required(PERM)
 def anexar_solicitacao_viagem(vid: int, sid: int):
-    """Anexa uma solicitação existente como nova parada da viagem."""
-    v = db.session.get(Viagem, vid)
-    s = db.session.get(AgendamentoSolicitacao, sid)
-    if not v or not s:
-        return jsonify({"sucesso": False, "msg": "Viagem ou solicitação não encontrada."}), 404
-    if v.status not in ("Planejada", "EmAndamento"):
-        return jsonify({"sucesso": False, "msg": "Viagem já encerrada."}), 400
-    ja = ViagemParada.query.filter_by(solicitacao_id=sid).first()
-    if ja:
-        return jsonify({"sucesso": False, "msg": f"Solicitação já está na viagem #{ja.viagem_id}.", "viagem_id": ja.viagem_id}), 409
-    ultima = db.session.query(func.coalesce(func.max(ViagemParada.sequencia), 0)).filter_by(viagem_id=vid).scalar() or 0
-    parada = _parada_dict_from_solicitacao(sid, ultima + 1)
-    if not parada:
-        return jsonify({"sucesso": False, "msg": "Falha ao montar parada."}), 400
-    parada.viagem_id = vid
-    db.session.add(parada)
-    db.session.flush()
-    _sync_solicitacao_viagem(s, v, "EmRota" if v.status == "EmAndamento" else "Alocada")
-    revogou = False
-    # se estava liberada, revoga (o motorista precisa ver o novo plano antes)
-    if v.liberada and v.status == "Planejada":
-        v.liberada = False
-        v.liberada_em = None
-        v.liberada_por = None
-        revogou = True
-        _log_evento(vid, "OBSERVACAO", "Liberação revogada automaticamente",
-                    descricao=f"Nova parada ({s.parceiro_nome}) anexada pelo gestor {_user()}.",
-                    severidade="warning")
-    _log_evento(vid, "PARADA_EXTRA",
-                f"Solicitação anexada: {s.parceiro_nome}",
-                parada_id=parada.id, severidade="info")
-    db.session.commit()
-    return jsonify({"sucesso": True, "viagem_id": vid, "liberacao_revogada": revogou})
+    return jsonify({"sucesso": False, "msg": "Criação manual de viagens foi descontinuada. Use a Central de Viagens."}), 410
 
 
 @viagem_bp.route("/planejadas-do-motorista/<int:mid>", methods=["GET"])
@@ -1743,6 +1576,7 @@ def auxiliares():
     sols = (
         AgendamentoSolicitacao.query
         .filter(AgendamentoSolicitacao.status.in_(["Pendente", "Alocada", "Aprovada"]))
+        .filter(or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None)))
         .order_by(
             AgendamentoSolicitacao.prazo_limite.is_(None),
             AgendamentoSolicitacao.prazo_limite.asc(),
@@ -1798,6 +1632,7 @@ def rotas_planejadas():
     q = (AgendamentoSolicitacao.query
          .filter(AgendamentoSolicitacao.veiculo_id.isnot(None))
          .filter(AgendamentoSolicitacao.status.in_(["Alocada", "Aprovada", "Pendente"]))
+            .filter(or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None)))
          .filter(AgendamentoSolicitacao.data_hora_saida_prevista >= ini)
          .filter(AgendamentoSolicitacao.data_hora_saida_prevista < fim))
     if veiculo_id:
@@ -1848,115 +1683,7 @@ def rotas_planejadas():
 @viagem_bp.route("/importar-rota", methods=["POST"])
 @permission_required(PERM)
 def importar_rota():
-    """Cria uma Viagem 'Planejada' a partir de uma rota planejada (veículo + data).
-
-    Body: { veiculo_id, data (YYYY-MM-DD), titulo?, observacao? }
-    Usa todas as solicitações alocadas do dia para o veículo.
-    """
-    p = request.get_json(silent=True) or {}
-    veiculo_id = _parse_int(p.get("veiculo_id"))
-    if not veiculo_id:
-        return jsonify({"sucesso": False, "msg": "Veículo obrigatório."}), 400
-    data_str = (p.get("data") or "").strip()
-    try:
-        dia = datetime.strptime(data_str, "%Y-%m-%d").date() if data_str else date.today()
-    except ValueError:
-        return jsonify({"sucesso": False, "msg": "Data inválida."}), 400
-
-    ini = datetime.combine(dia, datetime.min.time())
-    fim = ini + timedelta(days=1)
-
-    ja_usadas = {
-        r[0] for r in db.session.query(ViagemParada.solicitacao_id)
-        .join(Viagem, Viagem.id == ViagemParada.viagem_id)
-        .filter(ViagemParada.solicitacao_id.isnot(None))
-        .filter(Viagem.status != "Cancelada")
-        .all()
-    }
-    sols = (AgendamentoSolicitacao.query
-            .filter(AgendamentoSolicitacao.veiculo_id == veiculo_id)
-            .filter(AgendamentoSolicitacao.status.in_(["Alocada", "Aprovada", "Pendente"]))
-            .filter(AgendamentoSolicitacao.data_hora_saida_prevista >= ini)
-            .filter(AgendamentoSolicitacao.data_hora_saida_prevista < fim)
-            .order_by(AgendamentoSolicitacao.data_hora_saida_prevista.asc())
-            .all())
-    sols = [s for s in sols if s.id not in ja_usadas]
-    if not sols:
-        return jsonify({"sucesso": False, "msg": "Nenhuma solicitação alocada encontrada para esse veículo/data."}), 404
-
-    primeira = sols[0]
-    ultima = sols[-1]
-    motorista = AgendamentoMotorista.query.get(primeira.motorista_id) if primeira.motorista_id else None
-    tipos = {s.tipo for s in sols if s.tipo}
-    if len(tipos) == 1:
-        tipo_v = next(iter(tipos))
-    else:
-        tipo_v = "MISTA"
-    saida_prevista = primeira.data_hora_saida_prevista
-    retorno_previsto = ultima.data_hora_retorno_prevista or ultima.data_hora_saida_prevista
-    conflito = _validar_conflito_recurso(
-        veiculo_id=veiculo_id,
-        motorista_id=primeira.motorista_id,
-        saida=saida_prevista,
-        retorno=retorno_previsto,
-    )
-    if conflito:
-        return jsonify({"sucesso": False, "msg": conflito}), 409
-
-    v = Viagem(
-        codigo=_proximo_codigo(),
-        veiculo_id=veiculo_id,
-        motorista_id=primeira.motorista_id,
-        motorista_nome=primeira.motorista_nome or (motorista.nome if motorista else None),
-        tipo=tipo_v,
-        status="Planejada",
-        titulo=str(p.get("titulo") or f"Rota {dia.strftime('%d/%m/%Y')}").strip(),
-        observacao=str(p.get("observacao") or "").strip() or None,
-        saida_prevista=saida_prevista,
-        retorno_previsto=retorno_previsto,
-        origem_lat=primeira.origem_latitude,
-        origem_lng=primeira.origem_longitude,
-        destino_label=f"{ultima.parceiro_nome} — {ultima.cidade}/{ultima.uf}" if ultima.parceiro_nome else None,
-        destino_lat=ultima.destino_latitude,
-        destino_lng=ultima.destino_longitude,
-        criado_por=_user(),
-    )
-    db.session.add(v)
-    db.session.flush()
-
-    seq = 1
-    for s in sols:
-        endereco = ", ".join([x for x in [s.logradouro, s.numero, s.bairro] if x])
-        db.session.add(ViagemParada(
-            viagem_id=v.id,
-            sequencia=seq,
-            solicitacao_id=s.id,
-            tipo=s.tipo,
-            parceiro_nome=s.parceiro_nome,
-            endereco=endereco or None,
-            cidade=s.cidade,
-            uf=s.uf,
-            latitude=s.destino_latitude or s.origem_latitude,
-            longitude=s.destino_longitude or s.origem_longitude,
-            previsao_chegada=s.data_hora_saida_prevista,
-        ))
-        _sync_solicitacao_viagem(s, v, "Alocada")
-        seq += 1
-
-    _log_evento(
-        v.id,
-        "INICIO",
-        f"Viagem {v.codigo} importada da rota planejada",
-        descricao=f"{len(sols)} parada(s) importada(s) de {dia.strftime('%d/%m/%Y')} — por {_user()}",
-        severidade="info",
-    )
-    db.session.commit()
-    return jsonify({
-        "sucesso": True,
-        "viagem": _viagem_dict(v, detalhada=True),
-        "paradas_importadas": len(sols),
-        "otimizacao": None,
-    })
+    return jsonify({"sucesso": False, "msg": "Criação manual de viagens foi descontinuada. Use a Central de Viagens."}), 410
 
 
 # --------------------------------------------------------------------------- OTIMIZADOR (Nearest Neighbor) - uso interno + endpoint

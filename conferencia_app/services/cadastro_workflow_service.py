@@ -85,7 +85,7 @@ MATERIAL_SOLICITANTE_FIELDS = [
     ("descricao", "Descrição", True),
     ("unidade_medida", "Unidade de medida desejada", True),
     ("utilizacao", "Utilização", True),
-    ("detalhe_utilizacao", "Como e por que vai usar", True),
+    ("detalhe_utilizacao", "Explique a utilização do material", True),
     ("fornecedor_sugerido", "Fornecedor sugerido", False),
 ]
 
@@ -161,12 +161,12 @@ MATERIAL_UTILIZACAO_RAPIDA = [
         "utilizacao": "99",
         "texto": "Será usado em situação específica que não se enquadra nas utilizações padrão, conforme justificativa da área solicitante.",
     },
-    {
-        "label": "Manutenção",
-        "utilizacao": "07",
-        "texto": "Será usado na manutenção de equipamento ou componente existente, para reposição de item desgastado e continuidade da operação.",
-    },
 ]
+
+MATERIAL_UTILIZACAO_SUGESTOES = {
+    item["utilizacao"]: item["texto"]
+    for item in MATERIAL_UTILIZACAO_RAPIDA
+}
 
 MATERIAL_FISCAL_FIELDS = [
     ("ncm_sugerido", "NCM sugerido", False),
