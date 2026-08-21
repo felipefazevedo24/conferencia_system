@@ -220,55 +220,76 @@ class _ViagemDetailScreenState extends ConsumerState<ViagemDetailScreen> {
     final token = _token;
     final finalizada = _status == 'Concluida' || _status == 'Cancelada';
     return Scaffold(
-      appBar: AppBar(title: Text(widget.viagem.codigo)),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.viagem.codigo),
+            Text(
+              _status == 'EmAndamento' ? 'Em andamento' : _status,
+              style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
       body: vid == null || token == null
           ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Link da viagem inválido.')))
-          : SafeArea(
-              child: Column(
-                children: [
-                  _ResumoViagemCard(viagem: widget.viagem, status: _status),
-                  if (!finalizada)
-                    _CardRastreamento(
-                      status: _status,
-                      rastreando: _rastreando,
-                      pontosEnviados: _pontosEnviados,
-                      pontosPendentes: _pontosPendentes,
-                      ultimaPosicaoTexto: _ultimaPosicaoTexto,
-                    ),
-                  if (_status == 'Planejada')
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                      child: FilledButton.icon(
-                        onPressed: _acaoEmAndamento ? null : _iniciarViagem,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Iniciar viagem'),
+          : Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFEAF2FB), AppColors.surfaceAlt],
+                ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    _ResumoViagemCard(viagem: widget.viagem, status: _status),
+                    if (!finalizada)
+                      _CardRastreamento(
+                        status: _status,
+                        rastreando: _rastreando,
+                        pontosEnviados: _pontosEnviados,
+                        pontosPendentes: _pontosPendentes,
+                        ultimaPosicaoTexto: _ultimaPosicaoTexto,
                       ),
-                    ),
-                  if (_status == 'EmAndamento' && !_rastreando)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          await LocationTrackingService.solicitarPermissoes();
-                          await LocationTrackingService.iniciar(vid: vid, token: token, codigoViagem: widget.viagem.codigo);
-                          setState(() => _rastreando = true);
-                        },
-                        icon: const Icon(Icons.satellite_alt),
-                        label: const Text('Retomar rastreamento'),
+                    Expanded(child: _ParadasList(vid: vid, token: token, somenteLeitura: finalizada)),
+                    if (_status == 'Planejada' || _status == 'EmAndamento')
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                        child: Column(
+                          children: [
+                            if (_status == 'Planejada')
+                              FilledButton.icon(
+                                onPressed: _acaoEmAndamento ? null : _iniciarViagem,
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Iniciar viagem'),
+                              ),
+                            if (_status == 'EmAndamento' && !_rastreando) ...[
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  await LocationTrackingService.solicitarPermissoes();
+                                  await LocationTrackingService.iniciar(vid: vid, token: token, codigoViagem: widget.viagem.codigo);
+                                  setState(() => _rastreando = true);
+                                },
+                                icon: const Icon(Icons.satellite_alt),
+                                label: const Text('Retomar rastreamento'),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            if (_status == 'EmAndamento')
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(backgroundColor: AppColors.accent500),
+                                onPressed: _acaoEmAndamento ? null : _concluirViagem,
+                                icon: const Icon(Icons.flag),
+                                label: const Text('Concluir viagem'),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  Expanded(child: _ParadasList(vid: vid, token: token, somenteLeitura: finalizada)),
-                  if (_status == 'EmAndamento')
-                    Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: AppColors.accent500),
-                        onPressed: _acaoEmAndamento ? null : _concluirViagem,
-                        icon: const Icon(Icons.flag),
-                        label: const Text('Concluir viagem'),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
     );
@@ -286,6 +307,10 @@ class _ResumoViagemCard extends StatelessWidget {
     final rota = [viagem.origemLabel, viagem.destinoLabel].where((e) => e != null && e.isNotEmpty).join(' → ');
     return Card(
       margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: const BorderSide(color: AppColors.border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -293,6 +318,16 @@ class _ResumoViagemCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary600.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.local_shipping_rounded, color: AppColors.primary600, size: 18),
+                ),
+                const SizedBox(width: 10),
                 if (viagem.titulo != null && viagem.titulo!.isNotEmpty)
                   Expanded(
                     child: Text(viagem.titulo!,
@@ -301,7 +336,10 @@ class _ResumoViagemCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                   decoration: BoxDecoration(color: cor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
-                  child: Text(status, style: TextStyle(color: cor, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                  child: Text(
+                    status == 'EmAndamento' ? 'Em andamento' : status,
+                    style: TextStyle(color: cor, fontSize: 10.5, fontWeight: FontWeight.w800),
+                  ),
                 ),
               ],
             ),
@@ -383,7 +421,13 @@ class _CardRastreamento extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: BorderSide(
+          color: rastreando ? AppColors.accent400.withValues(alpha: 0.45) : AppColors.border,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -400,7 +444,7 @@ class _CardRastreamento extends StatelessWidget {
                 children: [
                   Text(
                     rastreando ? 'Rastreamento ativo' : 'Rastreamento parado',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.text),
                   ),
                   Text(
                     '$pontosEnviados ponto${pontosEnviados == 1 ? '' : 's'} enviado${pontosEnviados == 1 ? '' : 's'}'
@@ -408,7 +452,7 @@ class _CardRastreamento extends StatelessWidget {
                     style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                   if (ultimaPosicaoTexto != null)
-                    Text(ultimaPosicaoTexto!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                    Text(ultimaPosicaoTexto!, style: const TextStyle(fontSize: 12, color: AppColors.textSoft)),
                 ],
               ),
             ),
@@ -785,49 +829,83 @@ class _ParadaTileState extends ConsumerState<_ParadaTile> {
     ].join(' · ');
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: p.concluida ? AppColors.accent500.withValues(alpha: 0.14) : AppColors.primary600.withValues(alpha: 0.10),
-          foregroundColor: p.concluida ? AppColors.accent500 : AppColors.primary600,
-          child: Text('${p.sequencia}'),
-        ),
-        title: Text('${p.parceiroNome ?? 'Parada ${p.sequencia}'} · ${_labelTipo[p.tipo] ?? p.tipo}'),
-        subtitle: subtitulo.isEmpty ? null : Text(subtitulo),
-        trailing: _carregando
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : p.concluida
-                ? Icon(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        side: BorderSide(color: p.concluida ? AppColors.border : AppColors.borderStrong),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: p.concluida ? AppColors.accent500.withValues(alpha: 0.14) : AppColors.primary600.withValues(alpha: 0.10),
+                  foregroundColor: p.concluida ? AppColors.accent500 : AppColors.primary600,
+                  child: Text('${p.sequencia}'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${p.parceiroNome ?? 'Parada ${p.sequencia}'} · ${_labelTipo[p.tipo] ?? p.tipo}',
+                        style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.text),
+                      ),
+                      if (subtitulo.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(subtitulo, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+                        ),
+                    ],
+                  ),
+                ),
+                if (_carregando)
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                else if (p.concluida)
+                  Icon(
                     p.status == 'Nao_realizada' ? Icons.report_problem_outlined : Icons.check_circle,
                     color: p.status == 'Nao_realizada' ? AppColors.warning500 : AppColors.accent500,
-                  )
-                : widget.somenteLeitura
-                    ? null
-                    : SizedBox(
-                        width: 152,
-                        child: Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 2,
-                          children: [
-                            TextButton(
-                              onPressed: p.noLocal ? _abrirConcluir : _marcarChegada,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: Text(p.noLocal ? 'Concluir' : 'Cheguei'),
-                            ),
-                            TextButton(
-                              onPressed: _abrirNaoRealizada,
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.danger500,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: const Text('Não feita'),
-                            ),
-                          ],
-                        ),
+                  ),
+              ],
+            ),
+            if (!p.concluida && !widget.somenteLeitura) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed: p.noLocal ? _abrirConcluir : _marcarChegada,
+                      icon: Icon(p.noLocal ? Icons.flag_circle_outlined : Icons.location_on_outlined),
+                      label: Text(p.noLocal ? 'Concluir parada' : 'Cheguei no local'),
+                      style: FilledButton.styleFrom(
+                        foregroundColor: AppColors.primary600,
+                        backgroundColor: AppColors.primary600.withValues(alpha: 0.10),
+                        minimumSize: const Size.fromHeight(42),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _abrirNaoRealizada,
+                      icon: const Icon(Icons.report_gmailerrorred_outlined),
+                      label: const Text('Não feita'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger500,
+                        side: const BorderSide(color: AppColors.danger500),
+                        minimumSize: const Size.fromHeight(42),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
