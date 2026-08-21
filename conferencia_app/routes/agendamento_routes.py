@@ -601,6 +601,7 @@ def dashboard_central_viagens():
                     Viagem.id,
                     Viagem.codigo,
                     Viagem.status,
+                    Viagem.liberada,
                 )
                 .join(Viagem, Viagem.id == ViagemParada.viagem_id)
                 .filter(ViagemParada.solicitacao_id.in_(ids_solicitacao))
@@ -608,7 +609,7 @@ def dashboard_central_viagens():
                 .order_by(Viagem.id.desc())
                 .all()
             )
-            for solicitacao_id, viagem_id, viagem_codigo, viagem_status in vinculos:
+            for solicitacao_id, viagem_id, viagem_codigo, viagem_status, viagem_liberada in vinculos:
                 sid = int(solicitacao_id)
                 if sid in viagem_por_solicitacao:
                     continue
@@ -616,6 +617,7 @@ def dashboard_central_viagens():
                     "id": int(viagem_id),
                     "codigo": str(viagem_codigo or "").strip() or f"VG-{viagem_id}",
                     "status": str(viagem_status or "").strip(),
+                    "liberada": bool(viagem_liberada),
                 }
     except Exception:
         # Compatibilidade defensiva: em ambientes legados, não quebrar dashboard.

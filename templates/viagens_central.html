@@ -497,7 +497,8 @@ function renderTable() {
               <span class="vt-group-meta">Solicitacoes: ${item.rows.length}</span>
               <span class="vt-group-meta">Selecionadas: ${selecionadasViagem}</span>
               ${statusViagem ? `<span class="vt-group-meta">Status: ${statusViagem}</span>` : ''}
-              ${item.viagem?.id ? `<button class="eui-btn eui-btn--ghost" style="margin-left:auto;" onclick="acaoAbrirViagem(${Number(item.viagem.id)})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>` : ''}
+              ${item.viagem?.id && !item.viagem?.liberada ? `<button class="eui-btn eui-btn--primary" style="margin-left:auto;" onclick="acaoLiberarMotorista(${Number(item.viagem.id)})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>` : ''}
+              ${item.viagem?.id && item.viagem?.liberada ? `<span class="vt-group-meta" style="margin-left:auto; color:#067647; border-color:#86efac; background:#ecfdf3;">Motorista liberado</span>` : ''}
             </div>
           </td>
         </tr>
@@ -663,11 +664,13 @@ function openActionsMenu(id, x, y) {
   if (!row) return;
   const viagemId = row.viagem?.id || '';
   const motoristaId = row.motorista?.id || '';
+  const liberada = Boolean(row.viagem?.liberada);
   menu.innerHTML = `
     <button onclick="acaoVisualizar(${id})"><i class='fas fa-eye'></i> Visualizar detalhes</button>
     <button onclick="acaoAlocar(${id})"><i class='fas fa-truck-fast'></i> Alocar rota e motorista</button>
     <button onclick="acaoMontarViagem(${id})"><i class='fas fa-route'></i> Montar/anexar em viagem</button>
-    ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-paper-plane'></i> Abrir viagem e liberar motorista</button>` : ''}
+    ${viagemId && !liberada ? `<button onclick="acaoLiberarMotorista(${viagemId})"><i class='fas fa-paper-plane'></i> Liberar motorista agora</button>` : ''}
+    ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-route'></i> Abrir viagem</button>` : ''}
     ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
     <button onclick="acaoReorganizar(${id})"><i class='fas fa-shuffle'></i> Reorganizar</button>
@@ -776,6 +779,22 @@ function acaoAlocarSelecionadas() {
 function acaoAbrirViagem(viagemId) {
   if (!viagemId) return;
   window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
+}
+
+async function acaoLiberarMotorista(viagemId) {
+  if (!viagemId) return;
+  const r = await fetch(`/api/viagem/${Number(viagemId)}/liberar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || 'Nao foi possivel liberar motorista.', 'error');
+    return;
+  }
+  showToast('Motorista liberado com sucesso.', 'success');
+  loadDashboard();
 }
 
 async function acaoLinkPainelMotorista(motoristaId) {
