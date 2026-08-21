@@ -19,25 +19,32 @@ from typing import Any
 import requests
 from flask import current_app
 
-# URL base fixa combinada com o emitente. Pode ser sobreposta por variavel de
-# ambiente (ERP_ORDEM_FAT_API_URL) caso precise trocar de servidor/ambiente
-# sem alterar codigo (ex.: homologacao).
-_URL_BASE_PADRAO = "https://columbia.consultoriarf.net/producao/ordem-faturamento"
+# URLs base combinadas com o emitente.
+# - Conferencia FAT: /expedicao
+# - Conferencia ST (terceiro): /expedicao_terceiro
+#
+# Cada uma pode ser sobreposta por variavel de ambiente para homologacao:
+# - ERP_ORDEM_FAT_API_URL
+# - ERP_ORDEM_FAT_TERCEIRO_API_URL
+_URL_BASE_PADRAO = "https://columbia.consultoriarf.net/expedicao"
+_URL_BASE_TERCEIRO_PADRAO = "https://columbia.consultoriarf.net/expedicao_terceiro"
 
 
-def _url_base() -> str:
-    url = str(os.environ.get("ERP_ORDEM_FAT_API_URL", "") or "").strip()
+def _url_base(*, terceiro: bool = False) -> str:
+    env_key = "ERP_ORDEM_FAT_TERCEIRO_API_URL" if terceiro else "ERP_ORDEM_FAT_API_URL"
+    default_url = _URL_BASE_TERCEIRO_PADRAO if terceiro else _URL_BASE_PADRAO
+    url = str(os.environ.get(env_key, "") or "").strip()
     if url and not url.lower().startswith("https://"):
         # Nunca manda dado por http puro - ignora config invalida e cai no
         # padrao (https) em vez de vazar o payload em texto claro na rede.
         try:
             current_app.logger.warning(
-                "ERP_ORDEM_FAT_API_URL configurada sem https (%s); usando URL padrao.", url
+                "%s configurada sem https (%s); usando URL padrao.", env_key, url
             )
         except Exception:
             pass
         url = ""
-    return (url or _URL_BASE_PADRAO).rstrip("/")
+    return (url or default_url).rstrip("/")
 
 
 def _to_numero(valor: Any):
@@ -113,6 +120,7 @@ def atualizar_ordem_faturamento(
     peso_liquido: Any = None,
     peso_bruto: Any = None,
     liberado_para_faturamento: int | None = None,
+    terceiro: bool = False,
 ) -> None:
     """Dispara (assincrono) um PATCH para a API do emitente com os campos
     informados dessa ordem de faturamento. So entra no corpo o que for
@@ -129,5 +137,5 @@ def atualizar_ordem_faturamento(
         return
 
     app = current_app._get_current_object()
-    url = f"{_url_base()}/{cod_ordem_fat}"
+    url = f"{_url_base(terceiro=terceiro)}/{cod_ordem_fat}"
     threading.Thread(target=_enviar_async, args=(app, url, payload, cod_ordem_fat), daemon=True).start()
