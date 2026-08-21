@@ -69,11 +69,6 @@
                 <span class="eui-badge eui-badge--info"><i class="fas fa-route"></i> Solicitante &rarr; {{ destino }}</span>
             </div>
             <div class="eui-card__body">
-                {% if tipo == 'material' %}
-                <div class="eui-callout eui-callout--info" style="margin-bottom:var(--eui-space-4)">
-                    <i class="fas fa-lightbulb"></i> Na utilização, seja objetivo: diga para que serve, onde vai usar e como esse material entra na rotina. Não precisa texto grande.
-                </div>
-                {% endif %}
                 <div class="cwn-grid">
                     <div class="eui-field full">
                         <label class="eui-field__label" for="tipoSelect">Tipo de cadastro</label>
@@ -95,7 +90,7 @@
                             {% endfor %}
                         </select>
                         {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao','detalhe_utilizacao'] %}
-                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %} placeholder="{% if campo == 'detalhe_utilizacao' %}Ex.: usar na manutenção das mesas de montagem. Vai substituir item desgastado e será consumido na rotina semanal da produção.{% endif %}">{{ dados.get(campo,'') }}</textarea>
+                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %} placeholder="{% if campo == 'detalhe_utilizacao' %}Ex.: informar onde será usado, se entra em produção, manutenção, revenda, industrialização em terceiros ou serviço, e por que o cadastro é necessário.{% endif %}">{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
                         {% endif %}

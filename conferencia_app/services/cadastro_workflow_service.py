@@ -102,29 +102,69 @@ MATERIAL_COMPRAS_FIELDS = [
 
 MATERIAL_UTILIZACAO_RAPIDA = [
     {
-        "label": "Manutenção",
-        "utilizacao": "07",
-        "texto": "Será usado na manutenção de equipamento/componente existente, para reposição de item desgastado e continuidade da operação.",
+        "label": "Revenda",
+        "utilizacao": "00",
+        "texto": "Será cadastrado para compra e posterior revenda, sem transformação interna antes da comercialização.",
     },
     {
-        "label": "Produção",
+        "label": "Matéria-prima",
         "utilizacao": "01",
-        "texto": "Será usado diretamente no processo produtivo, compondo ou viabilizando a fabricação do produto final.",
-    },
-    {
-        "label": "Consumo interno",
-        "utilizacao": "07",
-        "texto": "Será consumido na rotina interna da área, sem incorporação ao produto final, para apoiar a execução das atividades diárias.",
+        "texto": "Será usado como matéria-prima no processo produtivo, compondo diretamente o item fabricado pela empresa.",
     },
     {
         "label": "Embalagem",
         "utilizacao": "02",
-        "texto": "Será usado na embalagem, proteção e expedição dos produtos, garantindo acondicionamento e envio adequados.",
+        "texto": "Será usado na embalagem, proteção, identificação ou expedição dos produtos, garantindo acondicionamento e envio adequados.",
+    },
+    {
+        "label": "Produto em processo",
+        "utilizacao": "03",
+        "texto": "Será enviado para industrialização em terceiros ou ficará em etapa intermediária de beneficiamento antes do retorno ao fluxo produtivo.",
+    },
+    {
+        "label": "Produto acabado",
+        "utilizacao": "04",
+        "texto": "Será usado para item finalizado pronto para estoque, expedição, venda ou aplicação como produto concluído.",
+    },
+    {
+        "label": "Subproduto",
+        "utilizacao": "05",
+        "texto": "Será controlado como subproduto gerado a partir do processo principal, com tratamento separado do produto final.",
+    },
+    {
+        "label": "Produto intermediário",
+        "utilizacao": "06",
+        "texto": "Será usado como item intermediário entre etapas produtivas, sem caracterizar ainda o produto final acabado.",
+    },
+    {
+        "label": "Uso e consumo",
+        "utilizacao": "07",
+        "texto": "Será consumido na rotina interna da área, manutenção, apoio operacional ou uso administrativo, sem incorporação ao produto final.",
     },
     {
         "label": "Imobilizado",
         "utilizacao": "08",
         "texto": "Será usado como bem durável da operação, com permanência no ativo e utilização recorrente pela área solicitante.",
+    },
+    {
+        "label": "Serviço",
+        "utilizacao": "09",
+        "texto": "Será usado para contratação de serviço documentado por NF de serviço, sem entrada física de material no estoque.",
+    },
+    {
+        "label": "Outros insumos",
+        "utilizacao": "10",
+        "texto": "Será usado como insumo de apoio ao processo, sem enquadramento mais adequado nas demais naturezas de utilização.",
+    },
+    {
+        "label": "Outras",
+        "utilizacao": "99",
+        "texto": "Será usado em situação específica que não se enquadra nas utilizações padrão, conforme justificativa da área solicitante.",
+    },
+    {
+        "label": "Manutenção",
+        "utilizacao": "07",
+        "texto": "Será usado na manutenção de equipamento ou componente existente, para reposição de item desgastado e continuidade da operação.",
     },
 ]
 
