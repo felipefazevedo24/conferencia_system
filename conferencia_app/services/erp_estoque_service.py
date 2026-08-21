@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import time
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from flask import current_app
@@ -115,6 +116,64 @@ def buscar_estoque_grv(empresa: int = 1, forcar_atualizacao: bool = False) -> di
     _CACHE["dados"] = resultado
     _CACHE["expira_em"] = agora + _CACHE_TTL_SEGUNDOS
     return resultado
+
+
+class LocalizacaoEstoqueNaoEncontrada(Exception):
+    """codigo_interno nao encontrado na tabela tproduto do ERP (HTTP 404)."""
+
+
+def atualizar_localizacao_estoque(codigo_interno: str, localizacao_estoque: str) -> dict:
+    """Atualiza a localizacao de estoque (rua/prateleira) de um produto
+    direto no ERP: PATCH .../producao/estoque/{codigo_interno}/localizacao,
+    body {"localizacao_estoque": "..."}.
+
+    Chamada sempre que o Modulo de Inventario registra ou recontа um item
+    com uma localizacao - sem isso, o campo no ERP fica desatualizado e
+    `qtde_grv_para` pode nao conseguir casar item+local (cai no fallback:
+    total agregado do codigo em todas as localizacoes, que aparenta
+    "quantidade de GRV errada" pra quem espera o saldo so daquele local)."""
+    codigo_interno = str(codigo_interno or "").strip()
+    localizacao_estoque = str(localizacao_estoque or "").strip()
+    if not codigo_interno:
+        raise ValueError("codigo_interno é obrigatório.")
+    if not localizacao_estoque:
+        raise ValueError("localizacao_estoque é obrigatório.")
+
+    app = current_app._get_current_object()
+    base_url = str(
+        os.environ.get("INVENTARIO_LOCALIZACAO_API_URL")
+        or app.config.get("INVENTARIO_LOCALIZACAO_API_URL")
+        or ""
+    ).strip().rstrip("/")
+    if not base_url:
+        raise ValueError("INVENTARIO_LOCALIZACAO_API_URL nao configurada.")
+    try:
+        timeout = int(
+            os.environ.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT")
+            or app.config.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT")
+            or 30
+        )
+    except (TypeError, ValueError):
+        timeout = 30
+
+    url = f"{base_url}/{quote(codigo_interno, safe='')}/localizacao"
+    resp = requests.patch(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"localizacao_estoque": localizacao_estoque},
+        timeout=timeout,
+    )
+    if resp.status_code == 404:
+        raise LocalizacaoEstoqueNaoEncontrada(f"Código interno '{codigo_interno}' não encontrado no ERP (tproduto).")
+    if resp.status_code == 422:
+        detalhe = ""
+        try:
+            detalhe = str(resp.json())
+        except ValueError:
+            pass
+        raise ValueError(f"Localização de estoque inválida ou não informada.{(' ' + detalhe) if detalhe else ''}")
+    resp.raise_for_status()
+    return resp.json() if resp.content else {}
 
 
 def qtde_grv_para(codigo_produto: str, local_codigo: str, estoque: dict[str, Any]) -> float | None:

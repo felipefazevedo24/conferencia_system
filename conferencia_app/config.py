@@ -139,6 +139,17 @@ class Config:
     )
     EXPEDICAO_ST_API_TIMEOUT = int(os.environ.get("EXPEDICAO_ST_API_TIMEOUT", "30"))
 
+    # Modulo de Inventario (Logistica): atualiza a localizacao de estoque
+    # (rua/prateleira) de um produto direto no ERP (tabela tproduto) sempre
+    # que o Inventario registra/reconta um item - mantem o campo em dia pra
+    # a comparacao de saldo com o GRV (erp_estoque_service.qtde_grv_para)
+    # conseguir casar item+local corretamente.
+    INVENTARIO_LOCALIZACAO_API_URL = os.environ.get(
+        "INVENTARIO_LOCALIZACAO_API_URL",
+        "https://columbia.consultoriarf.net/producao/estoque",
+    )
+    INVENTARIO_LOCALIZACAO_API_TIMEOUT = int(os.environ.get("INVENTARIO_LOCALIZACAO_API_TIMEOUT", "30"))
+
     # Sincronizacao automatica das ordens de Conferencia de Expedicao
     # (Faturamento + Servico de Terceiro). Solucao satelite: precisa buscar
     # continuamente no servidor para nao perder ordens que aparecem/somem no

@@ -15,7 +15,12 @@ import requests
 from ..auth import permission_required
 from ..extensions import db
 from ..models import LogisticaInventarioInicial
-from ..services.erp_estoque_service import buscar_estoque_grv, qtde_grv_para
+from ..services.erp_estoque_service import (
+    LocalizacaoEstoqueNaoEncontrada,
+    atualizar_localizacao_estoque,
+    buscar_estoque_grv,
+    qtde_grv_para,
+)
 
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
@@ -359,7 +364,23 @@ def criar_inventario_inicial():
     db.session.add(row)
     db.session.commit()
 
-    return jsonify({"sucesso": True, "registro": _fmt_registro(row)}), 201
+    # Sincroniza a localizacao no ERP (tproduto) - nao falha a contagem se
+    # o ERP estiver fora do ar, so avisa: o registro do inventario ja foi
+    # salvo com sucesso independente disso.
+    localizacao_erp = {"sincronizado": False}
+    try:
+        localizacao_erp["resposta"] = atualizar_localizacao_estoque(codigo_produto, local_codigo)
+        localizacao_erp["sincronizado"] = True
+    except LocalizacaoEstoqueNaoEncontrada as exc:
+        localizacao_erp["erro"] = str(exc)
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.warning(
+            "Falha ao sincronizar localização de estoque no ERP (código=%s, local=%s): %s",
+            codigo_produto, local_codigo, exc,
+        )
+        localizacao_erp["erro"] = str(exc)
+
+    return jsonify({"sucesso": True, "registro": _fmt_registro(row), "localizacao_erp": localizacao_erp}), 201
 
 
 @logistica_inventario_bp.route("/api/integracao/inventario/material-local", methods=["GET"])
