@@ -1574,6 +1574,187 @@ def anexar_solicitacao_viagem(vid: int, sid: int):
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True), "liberacao_revogada": liberacao_revogada})
 
 
+@viagem_bp.route("/montar-com-solicitacoes", methods=["POST"])
+@permission_required(PERM)
+def montar_viagem_com_solicitacoes():
+    payload = request.get_json(silent=True) or {}
+    ids_raw = payload.get("ids") if isinstance(payload.get("ids"), list) else []
+    ids: list[int] = []
+    for item in ids_raw:
+        sid = _parse_int(item)
+        if sid and sid > 0 and sid not in ids:
+            ids.append(sid)
+    if not ids:
+        return jsonify({"sucesso": False, "msg": "Informe as solicitações para montar a viagem."}), 400
+
+    modo = str(payload.get("modo") or "nova").strip().lower()
+    if modo not in {"nova", "anexar"}:
+        return jsonify({"sucesso": False, "msg": "Modo inválido. Use 'nova' ou 'anexar'."}), 400
+
+    rows = AgendamentoSolicitacao.query.filter(AgendamentoSolicitacao.id.in_(ids)).all()
+    por_id = {int(r.id): r for r in rows}
+    missing = [sid for sid in ids if sid not in por_id]
+    if missing:
+        return jsonify({"sucesso": False, "msg": f"Solicitações não encontradas: {', '.join(str(x) for x in missing)}."}), 404
+
+    solicitacoes = [por_id[sid] for sid in ids]
+    for sol in solicitacoes:
+        if str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
+            return jsonify({"sucesso": False, "msg": f"Solicitação {sol.codigo or sol.id} já está finalizada."}), 409
+        if not sol.veiculo_id or not sol.motorista_id:
+            return jsonify({"sucesso": False, "msg": f"Defina veículo e motorista da solicitação {sol.codigo or sol.id} antes de montar viagem."}), 409
+
+    veiculos = {int(sol.veiculo_id) for sol in solicitacoes if sol.veiculo_id}
+    motoristas = {int(sol.motorista_id) for sol in solicitacoes if sol.motorista_id}
+    if len(veiculos) != 1 or len(motoristas) != 1:
+        return jsonify({"sucesso": False, "msg": "Todas as solicitações precisam estar alocadas no mesmo veículo e motorista."}), 409
+
+    viagem_alvo = None
+    if modo == "anexar":
+        viagem_id = _parse_int(payload.get("viagem_id"))
+        if not viagem_id:
+            return jsonify({"sucesso": False, "msg": "Informe a viagem para anexar."}), 400
+        viagem_alvo = db.session.get(Viagem, viagem_id)
+        if not viagem_alvo:
+            return jsonify({"sucesso": False, "msg": "Viagem não encontrada."}), 404
+        if viagem_alvo.status in {"Concluida", "Cancelada"}:
+            return jsonify({"sucesso": False, "msg": "Viagem finalizada não pode receber novas paradas."}), 409
+
+    vinculos = (
+        db.session.query(ViagemParada.solicitacao_id, ViagemParada.viagem_id, Viagem.codigo)
+        .join(Viagem, Viagem.id == ViagemParada.viagem_id)
+        .filter(ViagemParada.solicitacao_id.in_(ids))
+        .filter(Viagem.status != "Cancelada")
+        .all()
+    )
+    vinculo_por_solicitacao = {int(sid): (int(vid), str(cod or "").strip()) for sid, vid, cod in vinculos}
+
+    if modo == "nova" and vinculo_por_solicitacao:
+        sid_conf = next(iter(vinculo_por_solicitacao.keys()))
+        vid_conf, cod_conf = vinculo_por_solicitacao[sid_conf]
+        return jsonify({
+            "sucesso": False,
+            "msg": f"Solicitação já vinculada à viagem {cod_conf or ('#' + str(vid_conf))}.",
+            "viagem_id": vid_conf,
+        }), 409
+
+    if modo == "anexar" and viagem_alvo:
+        for sid, (vid_conf, cod_conf) in vinculo_por_solicitacao.items():
+            if int(vid_conf) != int(viagem_alvo.id):
+                return jsonify({
+                    "sucesso": False,
+                    "msg": f"Solicitação já vinculada à viagem {cod_conf or ('#' + str(vid_conf))}.",
+                    "viagem_id": vid_conf,
+                }), 409
+
+    try:
+        if modo == "nova":
+            base = solicitacoes[0]
+            conflito = _validar_conflito_recurso(
+                veiculo_id=base.veiculo_id,
+                motorista_id=base.motorista_id,
+                saida=base.data_hora_saida_prevista,
+                retorno=base.data_hora_retorno_prevista,
+            )
+            if conflito:
+                return jsonify({"sucesso": False, "msg": conflito}), 409
+
+            motorista = AgendamentoMotorista.query.get(base.motorista_id) if base.motorista_id else None
+            viagem_alvo = Viagem(
+                codigo=_proximo_codigo(),
+                veiculo_id=base.veiculo_id,
+                motorista_id=base.motorista_id,
+                motorista_nome=base.motorista_nome or (motorista.nome if motorista else None),
+                tipo=(str(base.tipo or "").upper().strip() or "MISTA"),
+                status="Planejada",
+                titulo=f"Rota {str(base.codigo or ('#' + str(base.id))).strip()}",
+                saida_prevista=base.data_hora_saida_prevista,
+                retorno_previsto=base.data_hora_retorno_prevista,
+                origem_label=str(base.departamento_solicitante or "Logística").strip() or "Logística",
+                criado_por=_user(),
+                criado_em=datetime.now(),
+                atualizado_em=datetime.now(),
+            )
+            db.session.add(viagem_alvo)
+            db.session.flush()
+
+        if not viagem_alvo:
+            return jsonify({"sucesso": False, "msg": "Não foi possível determinar a viagem alvo."}), 400
+
+        if int(viagem_alvo.veiculo_id or 0) != int(next(iter(veiculos))):
+            return jsonify({"sucesso": False, "msg": "Solicitações estão em veículo diferente da viagem selecionada."}), 409
+        if int(viagem_alvo.motorista_id or 0) != int(next(iter(motoristas))):
+            return jsonify({"sucesso": False, "msg": "Solicitações estão com motorista diferente da viagem selecionada."}), 409
+
+        seq = (db.session.query(func.max(ViagemParada.sequencia)).filter(ViagemParada.viagem_id == viagem_alvo.id).scalar() or 0) + 1
+        tipos_existentes = {
+            str(p.tipo or "").upper().strip()
+            for p in ViagemParada.query.filter_by(viagem_id=viagem_alvo.id).all()
+            if str(p.tipo or "").strip()
+        }
+
+        anexadas = 0
+        for sol in solicitacoes:
+            # Quando ja estiver anexada na mesma viagem, apenas sincroniza e segue.
+            vinculo_mesma = vinculo_por_solicitacao.get(int(sol.id))
+            if vinculo_mesma and int(vinculo_mesma[0]) == int(viagem_alvo.id):
+                _sync_solicitacao_viagem(sol, viagem_alvo, "EmRota" if viagem_alvo.status == "EmAndamento" else "Alocada")
+                continue
+
+            parada = _parada_dict_from_solicitacao(sol.id, sequencia=seq)
+            if not parada:
+                db.session.rollback()
+                return jsonify({"sucesso": False, "msg": f"Não foi possível gerar parada para a solicitação {sol.codigo or sol.id}."}), 409
+            parada.viagem_id = viagem_alvo.id
+            db.session.add(parada)
+            seq += 1
+            tipos_existentes.add(str(sol.tipo or "").upper().strip())
+
+            _sync_solicitacao_viagem(sol, viagem_alvo, "EmRota" if viagem_alvo.status == "EmAndamento" else "Alocada")
+            anexadas += 1
+
+        tipos_validos = {t for t in tipos_existentes if t in {"COLETA", "ENTREGA"}}
+        if len(tipos_validos) >= 2:
+            viagem_alvo.tipo = "MISTA"
+        elif len(tipos_validos) == 1:
+            viagem_alvo.tipo = list(tipos_validos)[0]
+
+        liberacao_revogada = False
+        if viagem_alvo.liberada and viagem_alvo.status == "Planejada":
+            viagem_alvo.liberada = False
+            viagem_alvo.liberada_em = None
+            viagem_alvo.liberada_por = None
+            liberacao_revogada = True
+
+        viagem_alvo.atualizado_em = datetime.now()
+        _log_evento(
+            viagem_alvo.id,
+            "PARADA_EXTRA",
+            "Solicitações montadas em lote",
+            descricao=f"{anexadas} solicitação(ões) montadas pelo gestor {_user()}.",
+            severidade="info",
+        )
+        if liberacao_revogada:
+            _log_evento(
+                viagem_alvo.id,
+                "OBSERVACAO",
+                "Liberação revogada automaticamente",
+                descricao="A viagem foi alterada e precisa ser liberada novamente para o motorista.",
+                severidade="warning",
+            )
+
+        db.session.commit()
+        return jsonify({
+            "sucesso": True,
+            "viagem": _viagem_dict(viagem_alvo, detalhada=True),
+            "anexadas": anexadas,
+            "liberacao_revogada": liberacao_revogada,
+        })
+    except Exception:
+        db.session.rollback()
+        raise
+
+
 @viagem_bp.route("/planejadas-do-motorista/<int:mid>", methods=["GET"])
 @permission_required(PERM)
 def viagens_planejadas_do_motorista(mid: int):

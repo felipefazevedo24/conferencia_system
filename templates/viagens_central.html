@@ -1045,32 +1045,23 @@ function fecharMontagemPosAlocacao() {
 async function criarViagemComSolicitacoesSelecionadas() {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
   if (!ids.length) return;
-  let viagemId = null;
-  let anexadas = 0;
-  for (let i = 0; i < ids.length; i += 1) {
-    const sid = ids[i];
-    if (i === 0) {
-      const r = await fetch(`/api/viagem/nova-de-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.sucesso) {
-        showToast(d.msg || 'Falha ao criar viagem.', 'error');
-        return;
-      }
-      viagemId = d.viagem?.id;
-      anexadas += 1;
-      continue;
-    }
-    if (!viagemId) continue;
-    const r = await fetch(`/api/viagem/${Number(viagemId)}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.sucesso) {
-      showToast(d.msg || `Falha ao anexar solicitação ${sid} na viagem.`, 'error');
-      return;
-    }
-    anexadas += 1;
+  const r = await fetch('/api/viagem/montar-com-solicitacoes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ids,
+      modo: 'nova',
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || 'Falha ao criar viagem.', 'error');
+    return;
   }
+
   fecharMontagemPosAlocacao();
-  showToast(`Viagem montada com ${anexadas} solicitação(ões). Agora libere para o motorista.`, 'success');
+  showToast(`Viagem montada com ${Number(d.anexadas || ids.length)} solicitação(ões). Agora libere para o motorista.`, 'success');
+  const viagemId = d.viagem?.id;
   if (viagemId) {
     window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
   }
@@ -1080,16 +1071,23 @@ async function anexarSolicitacoesEmViagemSelecionada() {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
   const viagemId = Number(document.getElementById('vt-mv-select')?.value || 0);
   if (!ids.length || !viagemId) return;
-  let ok = 0;
-  let falhas = 0;
-  for (const sid of ids) {
-    const r = await fetch(`/api/viagem/${viagemId}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const d = await r.json().catch(() => ({}));
-    if (r.ok && d.sucesso) ok += 1;
-    else falhas += 1;
+  const r = await fetch('/api/viagem/montar-com-solicitacoes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ids,
+      modo: 'anexar',
+      viagem_id: viagemId,
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || 'Falha ao anexar solicitações.', 'error');
+    return;
   }
+
   fecharMontagemPosAlocacao();
-  showToast(`Solicitações anexadas. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
+  showToast(`Solicitações anexadas: ${Number(d.anexadas || 0)}.`, d.liberacao_revogada ? 'info' : 'success');
   window.location.href = `/logistica/viagens?vid=${viagemId}`;
 }
 
