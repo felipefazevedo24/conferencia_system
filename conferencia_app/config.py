@@ -78,13 +78,13 @@ class Config:
         else {
             "pool_pre_ping": True,
             "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "280")),
-            # Limita o total de conexoes por processo para nao estourar o
+            # Limita o total de conexões por processo para não estourar o
             # max_user_connections do MySQL (ex.: 22 no PythonAnywhere).
-            # pool_size + max_overflow = maximo de conexoes simultaneas.
+            # pool_size + max_overflow = máximo de conexões simultâneas.
             "pool_size": int(os.environ.get("DB_POOL_SIZE", "3")),
             "max_overflow": int(os.environ.get("DB_POOL_MAX_OVERFLOW", "2")),
             "pool_timeout": int(os.environ.get("DB_POOL_TIMEOUT_SECONDS", "20")),
-            # LIFO mantem menos conexoes "quentes" abertas em baixa carga.
+            # LIFO mantém menos conexões "quentes" abertas em baixa carga.
             "pool_use_lifo": True,
         }
     )
@@ -108,13 +108,26 @@ class Config:
         "GOOGLE_DRIVE_OAUTH_TOKEN_FILE",
         str(DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE) if DEFAULT_GOOGLE_DRIVE_OAUTH_TOKEN_FILE.exists() else "",
     )
+    INVENTREE_WMS_ENABLED = _env_bool("INVENTREE_WMS_ENABLED", "0")
+    INVENTREE_API_BASE = str(os.environ.get("INVENTREE_API_BASE", "")).strip().rstrip("/")
+    INVENTREE_API_TOKEN = str(os.environ.get("INVENTREE_API_TOKEN", "")).strip()
+    INVENTREE_ROOT_LOCATION_ID = _env_int("INVENTREE_ROOT_LOCATION_ID")
+    INVENTREE_PENDING_LOCATION_ID = _env_int("INVENTREE_PENDING_LOCATION_ID")
+    INVENTREE_DEFAULT_PART_CATEGORY_ID = _env_int("INVENTREE_DEFAULT_PART_CATEGORY_ID")
+    INVENTREE_TIMEOUT_SECONDS = int(os.environ.get("INVENTREE_TIMEOUT_SECONDS", "20"))
+    INVENTREE_STOCK_NOTE_PREFIX = str(os.environ.get("INVENTREE_STOCK_NOTE_PREFIX", "ERP/WMS")).strip() or "ERP/WMS"
+
     ERP_ESTOQUE_TIMEOUT = int(os.environ.get("ERP_ESTOQUE_TIMEOUT", "30"))
     ERP_ESTOQUE_PG_COMPANY = int(os.environ.get("ERP_ESTOQUE_PG_COMPANY", "1"))
+
+    # Sincronizacao automatica ERP -> WMS (estoque + enderecos)
+    ERP_SYNC_AUTO_ENABLED = os.environ.get("ERP_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
 
     # Conferencia de Expedicao: API externa que retorna as ordens de faturamento.
     EXPEDICAO_FAT_API_URL = os.environ.get(
         "EXPEDICAO_FAT_API_URL",
-        "https://columbia.consultoriarf.net/expedicao",
+        "https://copy-shadiness-justice.ngrok-free.dev/expedicao",
     )
     EXPEDICAO_FAT_API_TIMEOUT = int(os.environ.get("EXPEDICAO_FAT_API_TIMEOUT", "30"))
     # Conferencia de Expedicao (aba ST): API externa que retorna as ordens de
@@ -122,7 +135,7 @@ class Config:
     # a consumir SOMENTE este endpoint (nao usa mais o banco do CPS/bridge).
     EXPEDICAO_ST_API_URL = os.environ.get(
         "EXPEDICAO_ST_API_URL",
-        "https://columbia.consultoriarf.net/expedicao_terceiro",
+        "https://copy-shadiness-justice.ngrok-free.dev/expedicao_terceiro",
     )
     EXPEDICAO_ST_API_TIMEOUT = int(os.environ.get("EXPEDICAO_ST_API_TIMEOUT", "30"))
 
@@ -133,6 +146,25 @@ class Config:
     EXPEDICAO_SYNC_AUTO_ENABLED = os.environ.get("EXPEDICAO_SYNC_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
     EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("EXPEDICAO_SYNC_POLL_INTERVAL_SECONDS", "240"))
     EXPEDICAO_SYNC_ST_ENABLED = os.environ.get("EXPEDICAO_SYNC_ST_ENABLED", "1") not in ("0", "false", "False", "")
+
+    # Automacao de Solicitacoes Logisticas por modalidade de frete CIF.
+    #   Regra 1 (Coleta): Pedido de Compra (OC) com frete CIF -> gera Solicitacao
+    #     de Coleta com data programada = N dias antes da previsao de entrega.
+    #   Regra 2 (Entrega): Romaneio de saida CIF em status Pronto/Expedido -> gera
+    #     Solicitacao de Entrega herdando NF, cliente, endereco, volumes e peso.
+    # A coluna "frete por conta" da OC no ERP e descoberta dinamicamente (to_jsonb)
+    # e classificada como CIF via SOLICITACAO_CIF_VALORES_CIF (tolerante).
+    SOLICITACAO_CIF_AUTO_ENABLED = os.environ.get("SOLICITACAO_CIF_AUTO_ENABLED", "1") not in ("0", "false", "False", "")
+    SOLICITACAO_CIF_COLETA_ENABLED = os.environ.get("SOLICITACAO_CIF_COLETA_ENABLED", "1") not in ("0", "false", "False", "")
+    SOLICITACAO_CIF_ENTREGA_ENABLED = os.environ.get("SOLICITACAO_CIF_ENTREGA_ENABLED", "1") not in ("0", "false", "False", "")
+    SOLICITACAO_CIF_POLL_INTERVAL_SECONDS = int(os.environ.get("SOLICITACAO_CIF_POLL_INTERVAL_SECONDS", "1800"))
+    SOLICITACAO_CIF_COLETA_ANTECEDENCIA_DIAS = int(os.environ.get("SOLICITACAO_CIF_COLETA_ANTECEDENCIA_DIAS", "2"))
+    SOLICITACAO_CIF_OC_JANELA_DIAS = int(os.environ.get("SOLICITACAO_CIF_OC_JANELA_DIAS", "60"))
+    SOLICITACAO_CIF_SOLICITANTE = os.environ.get("SOLICITACAO_CIF_SOLICITANTE", "sistema")
+    # Valores da coluna "frete por conta" que representam CIF (frete por conta do
+    # remetente/emitente/fornecedor). Comparacao case-insensitive por igualdade ou
+    # substring. Ajuste apos ver os valores reais no log (ex.: "CIF,0,C").
+    SOLICITACAO_CIF_VALORES_CIF = os.environ.get("SOLICITACAO_CIF_VALORES_CIF", "CIF,REMETENTE,EMITENTE,FORNECEDOR")
 
     # Integracao automatica de lancamento ERP (Postgres tcompras).
     # Cada ciclo procura, na tcompras, NFs com (n_nf, dt_nf) iguais aos itens
@@ -237,9 +269,6 @@ class Config:
     MAIL_SMTP_USER = os.environ.get("MAIL_SMTP_USER", "")
     MAIL_SMTP_USE_SSL = os.environ.get("MAIL_SMTP_USE_SSL", "0") == "1"
     MAIL_SMTP_STARTTLS = os.environ.get("MAIL_SMTP_STARTTLS", "1") == "1"
-    MAIL_SMTP_TIMEOUT = int(os.environ.get("MAIL_SMTP_TIMEOUT", "90"))
-    MAIL_SMTP_MAX_ATTEMPTS = int(os.environ.get("MAIL_SMTP_MAX_ATTEMPTS", "3"))
-    MAIL_SMTP_RETRY_DELAY_SECONDS = float(os.environ.get("MAIL_SMTP_RETRY_DELAY_SECONDS", "2"))
     MAIL_SENDER = os.environ.get("MAIL_SENDER", "nfe@columbiamachine.com.br")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
     MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "NF-e | Columbia Machine Brasil")
@@ -254,33 +283,6 @@ class Config:
     NFE_EMAIL_BACKGROUND_SCHEDULER_ENABLED = os.environ.get("NFE_EMAIL_BACKGROUND_SCHEDULER_ENABLED", "0") == "1"
     NFE_EMAIL_AUTO_DESDE = os.environ.get("NFE_EMAIL_AUTO_DESDE", "2026-05-13")  # piso minimo: 2026-05-13
     NFE_EMAIL_POLL_INTERVAL_SECONDS = int(os.environ.get("NFE_EMAIL_POLL_INTERVAL_SECONDS", "300"))
-    # Lembrete de coleta FOB: primeira notificação + recorrencia a cada 2 dias
-    # enquanto o romaneio nao estiver com status "Expedido".
-    ROMANEIO_FOB_REMINDER_ENABLED = os.environ.get("ROMANEIO_FOB_REMINDER_ENABLED", "1") == "1"
-    ROMANEIO_FOB_REMINDER_POLL_INTERVAL_SECONDS = int(os.environ.get("ROMANEIO_FOB_REMINDER_POLL_INTERVAL_SECONDS", "3600"))
-    ROMANEIO_FOB_HORARIO_ATENDIMENTO = os.environ.get("ROMANEIO_FOB_HORARIO_ATENDIMENTO", "Segunda a sexta, das 06:00 as 16:00")
-    ROMANEIO_FOB_ENDERECO_RETIRADA = os.environ.get(
-        "ROMANEIO_FOB_ENDERECO_RETIRADA",
-        "Estrada Carlos Roberto Pratavieira, 600, Hortolandia, Sao Paulo, 13184-850",
-    )
-    # Token de autenticacao para API externa de expedicao.
-    # Quando vazio, o endpoint de integracao permanece aberto apenas para uso local.
-    EXPEDICAO_INTEGRACAO_TOKEN = str(os.environ.get("EXPEDICAO_INTEGRACAO_TOKEN", "") or "").strip()
-    # WhatsApp profissional para comunicacao FOB (Meta Cloud API)
-    WHATSAPP_FOB_ENABLED = os.environ.get("WHATSAPP_FOB_ENABLED", "0") == "1"
-    # Integracao Inventario -> sistema externo / GRV
-    INVENTARIO_INTEGRACAO_TOKEN = str(os.environ.get("INVENTARIO_INTEGRACAO_TOKEN", "") or "").strip()
-    INVENTARIO_GRV_API_URL = str(os.environ.get("INVENTARIO_GRV_API_URL", "") or "").strip()
-    INVENTARIO_GRV_API_TOKEN = str(os.environ.get("INVENTARIO_GRV_API_TOKEN", "") or "").strip()
-    INVENTARIO_GRV_API_TIMEOUT = int(os.environ.get("INVENTARIO_GRV_API_TIMEOUT", "30") or 30)
-    WHATSAPP_PROVIDER = str(os.environ.get("WHATSAPP_PROVIDER", "META_CLOUD") or "META_CLOUD").strip()
-    WHATSAPP_META_API_VERSION = str(os.environ.get("WHATSAPP_META_API_VERSION", "v21.0") or "v21.0").strip()
-    WHATSAPP_META_PHONE_NUMBER_ID = str(os.environ.get("WHATSAPP_META_PHONE_NUMBER_ID", "") or "").strip()
-    WHATSAPP_META_ACCESS_TOKEN = str(os.environ.get("WHATSAPP_META_ACCESS_TOKEN", "") or "").strip()
-    WHATSAPP_TIMEOUT_SECONDS = int(os.environ.get("WHATSAPP_TIMEOUT_SECONDS", "15"))
-    WHATSAPP_DEFAULT_COUNTRY_CODE = str(os.environ.get("WHATSAPP_DEFAULT_COUNTRY_CODE", "55") or "55").strip()
-    WHATSAPP_MODO_TESTE = os.environ.get("WHATSAPP_MODO_TESTE", "1") == "1"
-    WHATSAPP_TESTE_DESTINO = str(os.environ.get("WHATSAPP_TESTE_DESTINO", "") or "").strip()
     # E-mails sempre em copia em qualquer envio de NF-e (separados por virgula)
     NFE_EMAIL_CC = os.environ.get("NFE_EMAIL_CC", "")
     # Roteamento por CFOP: quando algum item da NF tiver um destes CFOPs, o envio
@@ -301,8 +303,8 @@ class Config:
     DANFE_PREFER_FISCAL_ENGINE = os.environ.get("DANFE_PREFER_FISCAL_ENGINE", "1") == "1"
 
     # Identidade da empresa — exibida em documentos impressos como a Ficha EPI NR-6
-    # (EMPRESA_CNPJ ja tem um default definido acima, na linha ~87 — nao redeclarar aqui.)
     EMPRESA_NOME = os.environ.get("EMPRESA_NOME", "Columbia")
+    EMPRESA_CNPJ = os.environ.get("EMPRESA_CNPJ", "")
     # Caminho para o logotipo da empresa (relativo a /static/ ou URL completa).
     # Exemplo: "img/logo.png"  ou  "https://example.com/logo.png"
     EMPRESA_LOGO_URL = os.environ.get("EMPRESA_LOGO_URL", "https://www.columbiamachine.com.br/img/columbia_logo.png")
