@@ -379,7 +379,7 @@ function getRows() {
     return base.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
   }
   if (state.subfiltro === 'EM_ANDAMENTO') {
-    return base.filter((r) => ['EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
+    return base.filter((r) => ['Alocada', 'EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
   }
   if (state.subfiltro === 'CONCLUIDAS') {
     return base.filter((r) => ['Concluida'].includes(String(r.status || '').trim()));
@@ -1253,6 +1253,11 @@ async function criarViagemComSolicitacoesSelecionadas() {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.sucesso) {
+    if (d && d.viagem_id) {
+      showToast(d.msg || 'Solicitações já vinculadas a outra viagem. Abrindo viagem existente.', 'info');
+      window.location.href = `/logistica/viagens?vid=${Number(d.viagem_id)}`;
+      return;
+    }
     showToast(d.msg || 'Falha ao criar viagem.', 'error');
     return;
   }
@@ -1281,6 +1286,11 @@ async function anexarSolicitacoesEmViagemSelecionada() {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.sucesso) {
+    if (d && d.viagem_id) {
+      showToast(d.msg || 'Solicitações já vinculadas a outra viagem. Abrindo viagem existente.', 'info');
+      window.location.href = `/logistica/viagens?vid=${Number(d.viagem_id)}`;
+      return;
+    }
     showToast(d.msg || 'Falha ao anexar solicitações.', 'error');
     return;
   }
