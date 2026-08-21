@@ -249,7 +249,9 @@ const state = {
   ocConsulta: null,
   veiculos: [],
   motoristas: [],
-  selectedIds: []
+  selectedIds: [],
+  posAlocacaoIds: [],
+  posAlocacaoMotoristaId: null
 };
 
 const subFiltros = [
@@ -495,6 +497,7 @@ function renderTable() {
               <span class="vt-group-meta">Solicitacoes: ${item.rows.length}</span>
               <span class="vt-group-meta">Selecionadas: ${selecionadasViagem}</span>
               ${statusViagem ? `<span class="vt-group-meta">Status: ${statusViagem}</span>` : ''}
+              ${item.viagem?.id ? `<button class="eui-btn eui-btn--ghost" style="margin-left:auto;" onclick="acaoAbrirViagem(${Number(item.viagem.id)})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>` : ''}
             </div>
           </td>
         </tr>
@@ -658,9 +661,14 @@ function openActionsMenu(id, x, y) {
   const menu = document.getElementById('vt-actions-menu');
   const row = rowById(id);
   if (!row) return;
+  const viagemId = row.viagem?.id || '';
+  const motoristaId = row.motorista?.id || '';
   menu.innerHTML = `
     <button onclick="acaoVisualizar(${id})"><i class='fas fa-eye'></i> Visualizar detalhes</button>
     <button onclick="acaoAlocar(${id})"><i class='fas fa-truck-fast'></i> Alocar rota e motorista</button>
+    <button onclick="acaoMontarViagem(${id})"><i class='fas fa-route'></i> Montar/anexar em viagem</button>
+    ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-paper-plane'></i> Abrir viagem e liberar motorista</button>` : ''}
+    ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
     <button onclick="acaoReorganizar(${id})"><i class='fas fa-shuffle'></i> Reorganizar</button>
     <button onclick="acaoPrioridade(${id})"><i class='fas fa-arrow-up-9-1'></i> Alterar prioridade</button>
@@ -765,6 +773,136 @@ function acaoAlocarSelecionadas() {
   openModal('modalAlocar');
 }
 
+function acaoAbrirViagem(viagemId) {
+  if (!viagemId) return;
+  window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
+}
+
+async function acaoLinkPainelMotorista(motoristaId) {
+  if (!motoristaId) return;
+  const r = await fetch(`/api/viagem/motorista/${Number(motoristaId)}/painel-link`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || 'Falha ao gerar link do motorista.', 'error');
+    return;
+  }
+  const link = d.url || '';
+  if (link && navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(link); } catch (_) {}
+  }
+  if (d.whatsapp) {
+    window.open(d.whatsapp, '_blank', 'noopener');
+    showToast('Link copiado e WhatsApp aberto.', 'success');
+    return;
+  }
+  showToast(link ? 'Link do motorista copiado.' : 'Link do motorista gerado.', 'success');
+}
+
+async function acaoMontarViagem(id) {
+  const row = rowById(id);
+  if (!row) return;
+  const motoristaId = Number(row.motorista?.id || 0);
+  if (!motoristaId) {
+    showToast('Aloque um motorista antes de montar viagem.', 'error');
+    return;
+  }
+  state.posAlocacaoIds = [Number(id)];
+  state.posAlocacaoMotoristaId = motoristaId;
+  await abrirMontagemPosAlocacao();
+}
+
+async function abrirMontagemPosAlocacao() {
+  const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+  const motoristaId = Number(state.posAlocacaoMotoristaId || 0);
+  if (!ids.length || !motoristaId) return;
+
+  let existentes = [];
+  try {
+    const r = await fetch(`/api/viagem/planejadas-do-motorista/${motoristaId}`);
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) existentes = d.viagens || [];
+  } catch (_) {}
+
+  const opcoes = existentes.length
+    ? `<select id="vt-mv-select" class="eui-select">${existentes.map((v) => `<option value="${v.id}">${v.codigo || ('#' + v.id)} · ${v.qtd_paradas || 0} parada(s)</option>`).join('')}</select>`
+    : '<div class="vt-mini">Nenhuma viagem planejada para este motorista.</div>';
+
+  const html = `
+    <div id="vt-mv-modal" class="vt-modal open">
+      <div class="vt-modal__box" style="max-width:620px;">
+        <div class="vt-modal__head">
+          <strong>Montar viagem após alocação</strong>
+          <button class="eui-btn eui-btn--ghost" onclick="fecharMontagemPosAlocacao()"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="vt-modal__body">
+          <div class="vt-mini">Solicitações alocadas: <strong>${ids.length}</strong>. Agora monte a viagem para poder liberar ao motorista.</div>
+          <div style="display:grid; gap:8px;">
+            <button class="eui-btn eui-btn--primary" onclick="criarViagemComSolicitacoesSelecionadas()"><i class="fas fa-plus-circle"></i> Nova viagem com estas solicitações</button>
+          </div>
+          <div style="border:1px solid var(--eui-border); border-radius:10px; padding:10px; display:grid; gap:8px;">
+            <strong style="font-size:13px;">Anexar em viagem existente</strong>
+            ${opcoes}
+            ${existentes.length ? '<button class="eui-btn eui-btn--ghost" onclick="anexarSolicitacoesEmViagemSelecionada()"><i class="fas fa-link"></i> Anexar agora</button>' : ''}
+          </div>
+        </div>
+        <div class="vt-modal__foot">
+          <button class="eui-btn eui-btn--ghost" onclick="fecharMontagemPosAlocacao()">Depois</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const antigo = document.getElementById('vt-mv-modal');
+  if (antigo) antigo.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function fecharMontagemPosAlocacao() {
+  const el = document.getElementById('vt-mv-modal');
+  if (el) el.remove();
+}
+
+async function criarViagemComSolicitacoesSelecionadas() {
+  const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+  if (!ids.length) return;
+  let viagemId = null;
+  for (let i = 0; i < ids.length; i += 1) {
+    const sid = ids[i];
+    if (i === 0) {
+      const r = await fetch(`/api/viagem/nova-de-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.sucesso) {
+        showToast(d.msg || 'Falha ao criar viagem.', 'error');
+        return;
+      }
+      viagemId = d.viagem?.id;
+      continue;
+    }
+    if (!viagemId) continue;
+    await fetch(`/api/viagem/${Number(viagemId)}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  }
+  fecharMontagemPosAlocacao();
+  showToast('Viagem montada. Agora libere para o motorista.', 'success');
+  if (viagemId) {
+    window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
+  }
+}
+
+async function anexarSolicitacoesEmViagemSelecionada() {
+  const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+  const viagemId = Number(document.getElementById('vt-mv-select')?.value || 0);
+  if (!ids.length || !viagemId) return;
+  let ok = 0;
+  let falhas = 0;
+  for (const sid of ids) {
+    const r = await fetch(`/api/viagem/${viagemId}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (r.ok) ok += 1;
+    else falhas += 1;
+  }
+  fecharMontagemPosAlocacao();
+  showToast(`Solicitações anexadas. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
+  window.location.href = `/logistica/viagens?vid=${viagemId}`;
+}
+
 async function confirmarAlocacao() {
   const id = Number(document.getElementById('alocar-id').value);
 
@@ -788,7 +926,29 @@ async function confirmarAlocacao() {
 
   let ok = 0;
   let falhas = 0;
-  for (const sid of ids) {
+  if (ids.length > 1) {
+    const r = await fetch('/api/logistica/agendamento-veiculos/solicitacoes/alocar-lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ids,
+        veiculo_id: Number(veiculo_id),
+        motorista_id: Number(motorista_id),
+        data_hora_saida_prevista,
+        data_hora_retorno_prevista: data_hora_retorno_prevista || null,
+        departamento_solicitante,
+        observacoes_logistica,
+      })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(d.error || 'Falha ao alocar em lote.', 'error');
+      return;
+    }
+    ok = Number(d.total || ids.length);
+    falhas = Math.max(0, ids.length - ok);
+  } else {
+    const sid = ids[0];
     const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/alocar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -801,17 +961,19 @@ async function confirmarAlocacao() {
         observacoes_logistica,
       })
     });
-    if (r.ok) {
-      ok += 1;
-    } else {
-      falhas += 1;
-    }
+    if (r.ok) ok = 1;
+    else falhas = 1;
   }
 
+  state.posAlocacaoIds = falhas ? [] : [...ids];
+  state.posAlocacaoMotoristaId = Number(motorista_id);
   state.selectedIds = [];
   closeModal('modalAlocar');
   showToast(`Alocação concluída. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
   loadDashboard();
+  if (!falhas && state.posAlocacaoIds.length) {
+    setTimeout(() => { abrirMontagemPosAlocacao(); }, 250);
+  }
 }
 
 function acaoReorganizar(id) {

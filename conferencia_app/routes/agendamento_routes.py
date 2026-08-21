@@ -1650,6 +1650,160 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
     return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
 
 
+@agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/alocar-lote", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def alocar_solicitacoes_lote_agendamento():
+    payload = request.get_json(silent=True) or {}
+    ids_raw = payload.get("ids") if isinstance(payload.get("ids"), list) else []
+    ids: list[int] = []
+    for item in ids_raw:
+        try:
+            sid = int(item)
+        except (TypeError, ValueError):
+            continue
+        if sid > 0 and sid not in ids:
+            ids.append(sid)
+    if not ids:
+        return jsonify({"error": "Informe as solicitações para alocação em lote."}), 400
+
+    try:
+        veiculo_id = int(payload.get("veiculo_id")) if payload.get("veiculo_id") not in (None, "") else None
+    except (TypeError, ValueError):
+        veiculo_id = None
+    veiculo = AgendamentoVeiculo.query.get(veiculo_id) if veiculo_id else None
+    if not veiculo:
+        codigo = str(payload.get("veiculo_codigo") or "").strip().upper()
+        veiculo = AgendamentoVeiculo.query.filter_by(codigo=codigo, ativo=True).first() if codigo else None
+    if not veiculo:
+        return jsonify({"error": "Selecione um veículo válido."}), 400
+
+    try:
+        motorista_id = int(payload.get("motorista_id")) if payload.get("motorista_id") not in (None, "") else None
+    except (TypeError, ValueError):
+        motorista_id = None
+    motorista = AgendamentoMotorista.query.get(motorista_id) if motorista_id else None
+    if not motorista:
+        return jsonify({"error": "Selecione um motorista válido."}), 400
+
+    try:
+        saida = _parse_datetime(payload.get("data_hora_saida_prevista"), "a data e hora de saída", required=True)
+        retorno = _parse_datetime(payload.get("data_hora_retorno_prevista"), "a previsão de retorno")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if retorno and retorno <= saida:
+        return jsonify({"error": "A previsão de retorno deve ser maior que a saída."}), 400
+
+    departamento = str(payload.get("departamento_solicitante") or "").strip().upper()
+    departamentos_validos = ["COMPRAS", "ASSISTÊNCIA TÉCNICA", "ENGENHARIA/PCP", "LOGÍSTICA", "FACILITIES"]
+    if not departamento or departamento not in departamentos_validos:
+        return jsonify({"error": "Selecione o departamento solicitante."}), 400
+
+    rows = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.id.in_(ids)).all()
+    found_ids = {int(r.id) for r in rows}
+    missing = [sid for sid in ids if sid not in found_ids]
+    if missing:
+        return jsonify({"error": f"Solicitações não encontradas: {', '.join(str(x) for x in missing)}."}), 404
+
+    for row in rows:
+        if str(row.status or "").strip() in {"Concluida", "Cancelada"}:
+            return jsonify({"error": f"Solicitação {row.codigo or row.id} já está finalizada e não pode ser alocada."}), 409
+
+    buffer_min = int(
+        getattr(veiculo, "janela_conflito_min", 0)
+        or current_app.config.get("AGENDAMENTO_CONFLITO_MINUTOS", 30)
+    )
+    inicio_atual, fim_atual = _intervalo_planejado(AgendamentoSolicitacao(), veiculo=veiculo, inicio_override=saida, fim_override=retorno)
+
+    query_veiculo = _query_solicitacoes_visiveis().filter(
+        AgendamentoSolicitacao.veiculo_id == veiculo.id,
+        AgendamentoSolicitacao.status.in_(["Alocada", "EmRota"]),
+        AgendamentoSolicitacao.id.notin_(ids),
+    )
+    for existente in query_veiculo.all():
+        outro_inicio, outro_fim = _intervalo_planejado(existente)
+        if not outro_inicio or not outro_fim:
+            continue
+        if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
+            fim_atual + timedelta(minutes=buffer_min)
+        ) > (outro_inicio - timedelta(minutes=buffer_min)):
+            return jsonify({"error": f"{veiculo.nome_exibicao} já possui uma saída programada para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."}), 409
+
+    query_motorista = _query_solicitacoes_visiveis().filter(
+        AgendamentoSolicitacao.motorista_id == motorista.id,
+        AgendamentoSolicitacao.status.in_(["Alocada", "EmAndamento", "EmRota"]),
+        AgendamentoSolicitacao.id.notin_(ids),
+    )
+    for existente in query_motorista.all():
+        outro_inicio, outro_fim = _intervalo_planejado(existente)
+        if not outro_inicio or not outro_fim:
+            continue
+        if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
+            fim_atual + timedelta(minutes=buffer_min)
+        ) > (outro_inicio - timedelta(minutes=buffer_min)):
+            return jsonify({"error": f"{motorista.nome} ja possui uma viagem programada para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."}), 409
+
+    observacao = str(payload.get("observacoes_logistica") or "").strip()
+    usuario = session.get("username", "desconhecido")
+    atualizados = 0
+    for row in rows:
+        status_anterior = str(row.status or "").strip()
+        row.veiculo_id = veiculo.id
+        row.motorista_id = motorista.id
+        row.motorista_nome = str(motorista.nome or "").strip() or None
+        row.data_hora_saida_prevista = saida
+        row.data_hora_retorno_prevista = retorno
+        row.alocado_por = usuario
+        row.alocado_em = datetime.now()
+        row.status = "Alocada"
+        row.atualizado_em = datetime.now()
+        row.departamento_solicitante = departamento
+        if observacao:
+            row.observacoes_logistica = observacao
+
+        rota = estimar_rota_agendamento(
+            {
+                "logradouro": row.logradouro,
+                "numero": row.numero,
+                "bairro": row.bairro,
+                "cidade": row.cidade,
+                "uf": row.uf,
+                "cep": row.cep,
+                "latitude": row.destino_latitude,
+                "longitude": row.destino_longitude,
+            },
+            origem_latitude=payload.get("origem_latitude"),
+            origem_longitude=payload.get("origem_longitude"),
+        )
+        row.origem_latitude = rota.get("origem_latitude")
+        row.origem_longitude = rota.get("origem_longitude")
+        row.destino_latitude = rota.get("destino_latitude")
+        row.destino_longitude = rota.get("destino_longitude")
+        row.km_estimado = rota.get("km_estimado")
+        row.km_estimado_retorno = rota.get("km_estimado_retorno")
+
+        detalhe = f"Alocada em lote no veículo {veiculo.nome_exibicao} para {saida.strftime('%d/%m/%Y %H:%M')}. Motorista: {motorista.nome}."
+        _registrar_historico(
+            row.id,
+            evento="ALOCADA",
+            usuario=usuario,
+            status_anterior=status_anterior,
+            status_novo="Alocada",
+            detalhe=detalhe,
+            payload={
+                "lote": True,
+                "ids": ids,
+                "veiculo_id": veiculo.id,
+                "motorista_id": motorista.id,
+                "data_hora_saida_prevista": payload.get("data_hora_saida_prevista"),
+                "data_hora_retorno_prevista": payload.get("data_hora_retorno_prevista"),
+            },
+        )
+        atualizados += 1
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "total": atualizados})
+
+
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/status", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def atualizar_status_agendamento(solicitacao_id: int):
