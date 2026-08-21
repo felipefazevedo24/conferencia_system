@@ -1233,6 +1233,63 @@ def create_app() -> Flask:
             app.logger.exception("Falha ao consultar saldo Facilities no GRV")
             return jsonify({"sucesso": False, "erro": str(exc)}), 500
 
+    @app.post("/api/erp/cadastro-workflow/materiais/buscar")
+    def cadastro_workflow_buscar_materiais_grv():
+        cfg = _config()
+        if not _authorized(cfg):
+            return jsonify({"erro": "nao_autorizado"}), 401
+        if not cfg["host"] or not cfg["database"] or not cfg["user"]:
+            return jsonify({"erro": "postgres_nao_configurado"}), 500
+        try:
+            payload = request.get_json(silent=True) or {}
+            codigo = str(payload.get("codigo") or "").strip().lower()
+            descricao = str(payload.get("descricao") or "").strip().lower()
+            limite = max(1, min(int(payload.get("limite") or 12), 30))
+            if not codigo and not descricao:
+                return jsonify({"sucesso": True, "materiais": []})
+
+            filtros = []
+            params: list[Any] = [1]
+            if codigo:
+                filtros.append("lower(coalesce(nullif(trim(p.codigo_interno), ''), p.codigo::text, '')) like %s")
+                params.append(f"%{codigo}%")
+            if descricao:
+                filtros.append("lower(coalesce(nullif(trim(p.nome), ''), '')) like %s")
+                params.append(f"%{descricao}%")
+            params.append(limite)
+
+            sql = f"""
+                select
+                    p.codigo::text as codigo_grv,
+                    coalesce(nullif(trim(p.codigo_interno), ''), p.codigo::text) as codigo_material,
+                    coalesce(nullif(trim(p.nome), ''), '') as descricao,
+                    coalesce(nullif(trim(p.unidade), ''), nullif(trim(p.unidade_compra), ''), '') as unidade,
+                    coalesce(f.nome, '') as familia,
+                    coalesce(p.cod_grupo::text, '') as grupo,
+                    coalesce(nullif(trim(p.localizacao_estoque), ''), '') as localizacao_estoque,
+                    coalesce(p.inativo, 0) as inativo
+                from public.tproduto p
+                left join public.tfamilia f
+                  on f.cod_empresa = p.cod_empresa
+                 and f.codigo = p.cod_familia
+                where p.cod_empresa = %s
+                  and coalesce(nullif(trim(p.nome), ''), '') <> ''
+                  and ({' or '.join(filtros)})
+                order by coalesce(p.inativo, 0), p.codigo desc
+                limit %s
+            """
+
+            with _conectar(cfg) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, tuple(params))
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+            return jsonify({"sucesso": True, "materiais": rows})
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar materiais do cadastro workflow no GRV")
+            return jsonify({"sucesso": False, "erro": str(exc)}), 500
+
     @app.post("/api/erp/lancamentos")
     def consultar_lancamentos():
         cfg = _config()

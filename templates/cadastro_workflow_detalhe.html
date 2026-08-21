@@ -29,6 +29,11 @@
     .cwd-check { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); background: var(--eui-surface-2); }
     .cwd-check span { font-size: 13px; color: var(--eui-text); font-weight: 500; }
     .cwd-check select { max-width: 170px; }
+    .cwd-suggest { display: grid; gap: 8px; margin-top: 12px; }
+    .cwd-suggest-card { border: 1px solid var(--eui-border); border-radius: var(--eui-radius-sm); background: var(--eui-surface-2); padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .cwd-suggest-card strong { font-size: 13px; color: var(--eui-text); display: block; }
+    .cwd-suggest-card span { display: block; margin-top: 4px; font-size: 11px; color: var(--eui-text-soft); }
+    .cwd-suggest-card button { flex-shrink: 0; }
 
     .cwd-timeline { display: grid; gap: 10px; }
     .cwd-event { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); }
@@ -54,13 +59,15 @@
 {%- endmacro %}
 
 {% block content %}
-{% set pode_editar = (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
+{% set campos_texto_longo = ['endereco','descricao_complementar','dados_bancarios','aplicacao','detalhe_utilizacao','parecer_contabil','plano_contas_descricao','ncm_sugestao_justificativa'] %}
+{% set pode_editar = (can_contabil and solicitacao.departamento_atual == 'Contabil') or (can_compras and solicitacao.departamento_atual == 'Compras') or (can_fiscal and solicitacao.departamento_atual == 'Fiscal') %}
 {% set titulo = dados.get('razao_social') or dados.get('descricao') or dados.get('documento') or tipos[solicitacao.tipo].label %}
-{% set status_label = solicitacao.status|replace('Validacao','Validação')|replace('Correcao','Correção') %}
-{% set etapa_label = solicitacao.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído') %}
+{% set status_label = solicitacao.status|replace('Validacao','Validação')|replace('Correcao','Correção')|replace('Contabil','Contábil') %}
+{% set etapa_label = solicitacao.etapa_atual|replace('Decisao','Decisão')|replace('Conclusao','Conclusão')|replace('Concluido','Concluído')|replace('Contabil','Contábil') %}
 {% set cadastro_direto_fiscal = solicitacao.tipo in ['cliente','fornecedor','transportadora'] %}
-{% set etapas = ['Abertura', 'Fiscal', 'Conclusão'] if cadastro_direto_fiscal else ['Abertura', 'Compras', 'Fiscal', 'Decisão', 'Conclusão'] %}
+{% set etapas = ['Abertura', 'Fiscal', 'Conclusão'] if cadastro_direto_fiscal else (['Abertura', 'Contábil', 'Compras', 'Fiscal', 'Conclusão'] if solicitacao.tipo == 'material' else ['Abertura', 'Compras', 'Fiscal', 'Conclusão']) %}
 {% set status_badge = {
+    'Em Validacao Contabil': 'eui-badge--warning',
     'Em Validacao Compras': 'eui-badge--info',
     'Em Validacao Fiscal': 'eui-badge--violet',
     'Pendente de Correcao': 'eui-badge--warning',
@@ -98,10 +105,10 @@
         <div class="eui-card__body">
             <div class="cwd-steps">
                 {% for etapa in etapas %}
-                {% set active = (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusão' and solicitacao.status == 'Cadastrado') %}
+                {% set active = (etapa == 'Contábil' and solicitacao.departamento_atual == 'Contabil') or (etapa == 'Compras' and solicitacao.departamento_atual == 'Compras') or (etapa == 'Fiscal' and solicitacao.departamento_atual == 'Fiscal') or (etapa == 'Conclusão' and solicitacao.status == 'Cadastrado') %}
                 <div class="cwd-step {% if active %}is-active{% elif loop.index == 1 %}is-done{% endif %}">
                     <div class="cwd-step__node">
-                        {% if etapa == 'Decisão' %}<i class="fas fa-question"></i>{% elif etapa == 'Conclusão' %}<i class="fas fa-check"></i>{% else %}{{ loop.index }}{% endif %}
+                        {% if etapa == 'Conclusão' %}<i class="fas fa-check"></i>{% else %}{{ loop.index }}{% endif %}
                     </div>
                     <span class="cwd-step__label">{{ etapa }}</span>
                 </div>
@@ -126,12 +133,13 @@
 
     {% if solicitacao.tipo == 'material' %}
     {% for grupo_key, grupo_titulo, campos in tipos[solicitacao.tipo].field_groups %}
-    {% set grupo_editavel = pode_editar and ((grupo_key == 'compras' and solicitacao.departamento_atual == 'Compras' and can_compras) or (grupo_key == 'fiscal' and solicitacao.departamento_atual == 'Fiscal' and can_fiscal)) %}
+    {% set grupo_editavel = pode_editar and ((grupo_key == 'contabil' and solicitacao.departamento_atual == 'Contabil' and can_contabil) or (grupo_key == 'compras' and solicitacao.departamento_atual == 'Compras' and can_compras) or (grupo_key == 'fiscal' and solicitacao.departamento_atual == 'Fiscal' and can_fiscal)) %}
     <div class="eui-card">
         <div class="eui-card__head">
             <h3 class="eui-card__title"><i class="fas fa-layer-group"></i> {{ grupo_titulo }}</h3>
             <span class="eui-badge eui-badge--neutral">
                 {% if grupo_key == 'solicitante' %}Informado na abertura
+                {% elif grupo_key == 'contabil' %}Validado pelo Contábil
                 {% elif grupo_key == 'compras' %}Preenchido por Compras
                 {% else %}Validado pelo Fiscal{% endif %}
             </span>
@@ -142,7 +150,7 @@
                 <input type="hidden" name="acao" value="salvar_dados">
                 <div class="cwd-grid">
                     {% for campo, label, obrigatorio in campos %}
-                    <div class="eui-field {% if campo in ['ncm_sugestao_justificativa'] %}full{% endif %}">
+                    <div class="eui-field {% if campo in campos_texto_longo %}full{% endif %}">
                         <label class="eui-field__label">{{ label }}{% if campo == 'ncm_sugerido' %}<span class="cwd-chip">sugerido</span>{% endif %}</label>
                         {% if campo_opcoes.get(campo) %}
                         <select class="eui-select" name="campo_{{ campo }}">
@@ -151,11 +159,19 @@
                             <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
                             {% endfor %}
                         </select>
+                        {% elif campo == 'plano_contas' %}
+                        <input class="eui-input" name="campo_{{ campo }}" id="campo_plano_contas" value="{{ dados.get(campo,'') }}" list="planoContasSugestoes" inputmode="numeric" placeholder="Ex.: 3.1.01.001">
+                        <datalist id="planoContasSugestoes"></datalist>
+                        <span class="eui-field__hint">Digite o código da conta. Se existir no domínio contábil, a descrição será sugerida abaixo.</span>
+                        {% elif campo in campos_texto_longo %}
+                        <textarea class="eui-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
                         {% endif %}
                         {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
                         <span class="eui-field__hint">{{ dados.get('ncm_sugestao_justificativa') }}</span>
+                        {% elif campo == 'detalhe_utilizacao' %}
+                        <span class="eui-field__hint">Use o mínimo necessário: por que precisa, onde vai usar e como esse material entra na operação.</span>
                         {% endif %}
                     </div>
                     {% endfor %}
@@ -169,7 +185,7 @@
             {% else %}
             <div class="cwd-grid">
                 {% for campo, label, obrigatorio in campos %}
-                <div class="eui-field">
+                <div class="eui-field {% if campo in campos_texto_longo %}full{% endif %}">
                     <label class="eui-field__label">{{ label }}{% if campo == 'ncm_sugerido' %}<span class="cwd-chip">sugerido</span>{% endif %}</label>
                     <div class="cwd-readonly">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
                     {% if campo == 'ncm_sugerido' and dados.get('ncm_sugestao_justificativa') %}
@@ -257,7 +273,7 @@
                 <input type="hidden" name="acao" value="salvar_dados">
                 <div class="cwd-grid">
                     {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
-                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                    <div class="eui-field {% if campo in campos_texto_longo %}full{% endif %}">
                         <label class="eui-field__label">{{ label }}</label>
                         {% if campo_opcoes.get(campo) %}
                         <select class="eui-select" name="campo_{{ campo }}">
@@ -266,7 +282,7 @@
                             <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
                             {% endfor %}
                         </select>
-                        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
+                        {% elif campo in campos_texto_longo %}
                         <textarea class="eui-textarea" name="campo_{{ campo }}">{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}">
@@ -283,7 +299,7 @@
             {% else %}
             <div class="cwd-grid">
                 {% for campo, label, obrigatorio in tipos[solicitacao.tipo].fields %}
-                <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                <div class="eui-field {% if campo in campos_texto_longo %}full{% endif %}">
                     <label class="eui-field__label">{{ label }}</label>
                     <div class="cwd-readonly">{{ valor_campo(campo, dados, campo_opcoes) }}</div>
                 </div>
@@ -306,7 +322,7 @@
                 <div class="cwd-grid">
                     {% set campos_correcao = tipos[solicitacao.tipo].solicitante_fields if tipos[solicitacao.tipo].solicitante_fields is defined else tipos[solicitacao.tipo].fields %}
                     {% for campo, label, obrigatorio in campos_correcao %}
-                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                    <div class="eui-field {% if campo in campos_texto_longo %}full{% endif %}">
                         <label class="eui-field__label">{{ label }}</label>
                         {% if campo_opcoes.get(campo) %}
                         <select class="eui-select" name="campo_{{ campo }}" {% if obrigatorio %}required{% endif %}>
@@ -315,6 +331,8 @@
                             <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
                             {% endfor %}
                         </select>
+                        {% elif campo in campos_texto_longo %}
+                        <textarea class="eui-textarea" name="campo_{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" name="campo_{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
                         {% endif %}
@@ -350,13 +368,22 @@
                     </label>
                     {% endfor %}
                 </div>
+                {% set opcoes_motivo = motivos_padrao.get('devolver_solicitante', []) %}
+                <div class="eui-field" style="margin-top:var(--eui-space-4)">
+                    <label class="eui-field__label">Motivo padrão</label>
+                    <select class="eui-select" name="motivo_padrao" id="motivoPadraoSelect">
+                        <option value="">Selecione quando quiser padronizar o histórico...</option>
+                    </select>
+                </div>
                 <div class="eui-field" style="margin-top:var(--eui-space-4)">
                     <label class="eui-field__label">Comentário</label>
                     <textarea class="eui-textarea" name="comentario"></textarea>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:var(--eui-space-4)">
                     <div>
-                        {% if solicitacao.departamento_atual == 'Compras' %}
+                        {% if solicitacao.departamento_atual == 'Contabil' %}
+                        <button class="eui-btn eui-btn--primary" name="acao" value="aprovar_contabil" type="submit"><i class="fas fa-share"></i> Encaminhar Compras</button>
+                        {% elif solicitacao.departamento_atual == 'Compras' %}
                         <button class="eui-btn eui-btn--primary" name="acao" value="aprovar_compras" type="submit"><i class="fas fa-share"></i> Encaminhar Fiscal</button>
                         {% elif solicitacao.departamento_atual == 'Fiscal' %}
                         <button class="eui-btn eui-btn--primary" name="acao" value="finalizar" type="submit"><i class="fas fa-check"></i> Finalizar</button>
@@ -365,12 +392,15 @@
                     <div class="eui-kebab">
                         <button type="button" class="eui-btn eui-btn--ghost" data-action="toggle-kebab"><i class="fas fa-ellipsis-vertical"></i> Mais ações</button>
                         <div class="eui-kebab__menu">
-                            <button name="acao" value="devolver_solicitante" type="submit"><i class="fas fa-rotate-left"></i> Solicitar correção</button>
+                            <button name="acao" value="devolver_solicitante" type="submit" data-motivo-acao="devolver_solicitante"><i class="fas fa-rotate-left"></i> Solicitar correção</button>
+                            {% if solicitacao.tipo == 'material' and solicitacao.departamento_atual in ['Compras','Fiscal'] %}
+                            <button name="acao" value="devolver_contabil" type="submit" data-motivo-acao="devolver_contabil"><i class="fas fa-arrow-left"></i> Devolver para Contábil</button>
+                            {% endif %}
                             {% if solicitacao.departamento_atual == 'Fiscal' and not cadastro_direto_fiscal %}
-                            <button name="acao" value="devolver_compras" type="submit"><i class="fas fa-arrow-left"></i> Devolver para Compras</button>
+                            <button name="acao" value="devolver_compras" type="submit" data-motivo-acao="devolver_compras"><i class="fas fa-arrow-left"></i> Devolver para Compras</button>
                             {% endif %}
                             <div class="eui-kebab__divider"></div>
-                            <button name="acao" value="reprovar" type="submit" class="is-danger"><i class="fas fa-xmark"></i> Reprovar cadastro</button>
+                            <button name="acao" value="reprovar" type="submit" class="is-danger" data-motivo-acao="reprovar"><i class="fas fa-xmark"></i> Reprovar cadastro</button>
                         </div>
                     </div>
                 </div>
@@ -408,6 +438,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script type="application/json" id="cw-motivos-padrao-json">{{ motivos_padrao|tojson }}</script>
+<script type="application/json" id="cw-plano-contexto-json">{{ {'descricao': dados.get('descricao',''), 'utilizacao': dados.get('utilizacao',''), 'fornecedor_sugerido': dados.get('fornecedor_sugerido',''), 'detalhe_utilizacao': dados.get('detalhe_utilizacao','')}|tojson }}</script>
 <script>
 document.addEventListener('click', (ev) => {
     const toggle = ev.target.closest('[data-action="toggle-kebab"]');
@@ -422,5 +454,89 @@ document.addEventListener('click', (ev) => {
         document.querySelectorAll('.eui-kebab.is-open').forEach((el) => el.classList.remove('is-open'));
     }
 });
+
+const planoInput = document.getElementById('campo_plano_contas');
+const planoLista = document.getElementById('planoContasSugestoes');
+const planoDesc = document.querySelector('[name="campo_plano_contas_descricao"]');
+const motivoPadraoSelect = document.getElementById('motivoPadraoSelect');
+const motivosPadrao = JSON.parse(document.getElementById('cw-motivos-padrao-json').textContent || '{}');
+const utilzDados = JSON.parse(document.getElementById('cw-plano-contexto-json').textContent || '{}');
+let planoTimer = null;
+
+async function carregarPlanos(termo) {
+    const res = await fetch(`/cadastros/api/plano-contas?q=${encodeURIComponent(termo)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.planos) ? data.planos : [];
+}
+
+if (planoInput && planoLista) {
+    planoInput.addEventListener('input', () => {
+        const termo = planoInput.value.trim();
+        window.clearTimeout(planoTimer);
+        if (termo.length < 2) {
+            planoLista.innerHTML = '';
+            return;
+        }
+        planoTimer = window.setTimeout(async () => {
+            const planos = await carregarPlanos(termo);
+            planoLista.innerHTML = planos.map((p) => `<option value="${p.codigo}">${p.codigo} - ${p.nome}</option>`).join('');
+            const exato = planos.find((p) => p.codigo === termo || `${p.codigo} - ${p.nome}` === termo);
+            if (exato && planoDesc && !planoDesc.value.trim()) {
+                planoDesc.value = exato.nome || '';
+            }
+        }, 180);
+    });
+}
+
+function preencherMotivos(acao) {
+    if (!motivoPadraoSelect) return;
+    const opcoes = Array.isArray(motivosPadrao[acao]) ? motivosPadrao[acao] : [];
+    motivoPadraoSelect.innerHTML = '<option value="">Selecione quando quiser padronizar o histórico...</option>' + opcoes.map((item) => `<option value="${item}">${item}</option>`).join('');
+}
+
+document.querySelectorAll('[data-motivo-acao]').forEach((btn) => {
+    btn.addEventListener('click', () => preencherMotivos(btn.dataset.motivoAcao));
+});
+
+if (motivoPadraoSelect) {
+    preencherMotivos('devolver_solicitante');
+}
+
+async function sugerirPlanosMaterial() {
+    const box = document.getElementById('planoContasSugestaoBox');
+    if (!box) return;
+    const params = new URLSearchParams(utilzDados);
+    box.innerHTML = '<div class="eui-field__hint"><i class="fas fa-spinner fa-spin"></i> Buscando sugestões de conta...</div>';
+    try {
+        const res = await fetch(`/cadastros/api/plano-contas/sugerir?${params.toString()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const planos = Array.isArray(data.planos) ? data.planos : [];
+        if (!planos.length) {
+            box.innerHTML = '<div class="eui-field__hint">Nenhuma sugestão automática encontrada. Você ainda pode digitar a conta manualmente.</div>';
+            return;
+        }
+        box.innerHTML = '<div class="cwd-suggest">' + planos.map((p) => `<div class="cwd-suggest-card"><div><strong>${p.codigo} - ${p.nome}</strong><span>${p.classificacao || 'Sem classificação'}${p.motivo ? ` · Base: ${p.motivo}` : ''}</span></div><button type="button" class="eui-btn eui-btn--ghost eui-btn--sm" data-plano-codigo="${p.codigo}" data-plano-nome="${(p.nome || '').replace(/"/g, '&quot;')}">Usar</button></div>`).join('') + '</div>';
+        box.querySelectorAll('[data-plano-codigo]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (planoInput) planoInput.value = btn.dataset.planoCodigo || '';
+                if (planoDesc) planoDesc.value = btn.dataset.planoNome || '';
+            });
+        });
+    } catch (err) {
+        box.innerHTML = `<div class="eui-field__hint">Não foi possível gerar sugestões agora: ${err.message}</div>`;
+    }
+}
+
+if (planoInput) {
+    const wrapper = planoInput.closest('.eui-field');
+    if (wrapper && !document.getElementById('planoContasSugestaoBox')) {
+        const hint = document.createElement('div');
+        hint.id = 'planoContasSugestaoBox';
+        wrapper.appendChild(hint);
+        sugerirPlanosMaterial();
+    }
+}
 </script>
 {% endblock %}

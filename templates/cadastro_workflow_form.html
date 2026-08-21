@@ -7,12 +7,22 @@
 <style>
     .cwn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--eui-space-4); }
     .cwn-grid .eui-field.full { grid-column: 1 / -1; }
+    .cwn-dup-list { display: grid; gap: 10px; }
+    .cwn-dup-card { border: 1px solid var(--eui-border); border-radius: var(--eui-radius); background: var(--eui-surface); padding: 14px; display: grid; gap: 8px; }
+    .cwn-dup-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+    .cwn-dup-title { font-size: 14px; font-weight: 700; color: var(--eui-text); }
+    .cwn-dup-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+    .cwn-dup-meta span { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: var(--eui-surface-2); color: var(--eui-text-soft); }
+    .cwn-hint { margin-top: 6px; font-size: 12px; color: var(--eui-text-soft); }
+    .cwn-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+    .cwn-quick button { border: 1px solid var(--eui-border); background: var(--eui-surface-2); color: var(--eui-text); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .cwn-quick button:hover { border-color: var(--eui-primary); color: var(--eui-primary); }
     @media (max-width: 760px) { .cwn-grid { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
 {% block content %}
-{% set destino = 'Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras' %}
+{% set destino = 'Contábil' if tipo == 'material' else ('Fiscal' if tipo in ['cliente','fornecedor','transportadora'] else 'Compras') %}
 <div class="eui-scope" style="display:grid; gap: var(--eui-space-5);">
     <header class="eui-page-header">
         <div>
@@ -28,10 +38,24 @@
     {% endif %}
     {% if duplicidades %}
     <div class="eui-callout eui-callout--warning" style="flex-direction:column; align-items:stretch; gap:6px;">
-        <div><i class="fas fa-copy"></i> Foram encontrados registros semelhantes. A solicitação ainda pode ser aberta, mas o alerta ficará registrado.</div>
-        {% for dup in duplicidades %}
-        <div><strong>{{ dup.numero }}</strong> - {{ dup.motivo }} - {{ dup.resumo }}</div>
-        {% endfor %}
+        <div><i class="fas fa-copy"></i> Foram encontrados materiais semelhantes no GRV. A solicitação ainda pode ser aberta, mas o alerta ficará registrado.</div>
+        <div class="cwn-dup-list">
+            {% for dup in duplicidades %}
+            <div class="cwn-dup-card">
+                <div class="cwn-dup-head">
+                    <div>
+                        <div class="cwn-dup-title">{{ dup.codigo_material or dup.codigo_grv or 'Sem código' }}{% if dup.descricao %} · {{ dup.descricao }}{% endif %}</div>
+                        <div class="cwn-hint">{{ dup.motivo }}{% if dup.score %} · Similaridade {{ '%.0f'|format((dup.score or 0) * 100) }}%{% endif %}</div>
+                    </div>
+                    <div class="cwn-dup-meta">
+                        {% if dup.familia %}<span>Família: {{ dup.familia }}</span>{% endif %}
+                        {% if dup.grupo %}<span>Grupo: {{ dup.grupo }}</span>{% endif %}
+                        {% if dup.unidade %}<span>UM: {{ dup.unidade }}</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 
@@ -45,6 +69,11 @@
                 <span class="eui-badge eui-badge--info"><i class="fas fa-route"></i> Solicitante &rarr; {{ destino }}</span>
             </div>
             <div class="eui-card__body">
+                {% if tipo == 'material' %}
+                <div class="eui-callout eui-callout--info" style="margin-bottom:var(--eui-space-4)">
+                    <i class="fas fa-lightbulb"></i> Na utilização, seja objetivo: diga para que serve, onde vai usar e como esse material entra na rotina. Não precisa texto grande.
+                </div>
+                {% endif %}
                 <div class="cwn-grid">
                     <div class="eui-field full">
                         <label class="eui-field__label" for="tipoSelect">Tipo de cadastro</label>
@@ -56,7 +85,7 @@
                     </div>
                     {% set campos_form = tipos[tipo].solicitante_fields if tipos[tipo].solicitante_fields is defined else tipos[tipo].fields %}
                     {% for campo, label, obrigatorio in campos_form %}
-                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}full{% endif %}">
+                    <div class="eui-field {% if campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao','detalhe_utilizacao'] %}full{% endif %}">
                         <label class="eui-field__label" for="{{ campo }}">{{ label }}{% if obrigatorio %} *{% endif %}</label>
                         {% if campo_opcoes.get(campo) %}
                         <select class="eui-select" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>
@@ -65,10 +94,20 @@
                             <option value="{{ valor }}" {% if dados.get(campo,'') == valor %}selected{% endif %}>{{ texto }}</option>
                             {% endfor %}
                         </select>
-                        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao'] %}
-                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %}>{{ dados.get(campo,'') }}</textarea>
+                        {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao','detalhe_utilizacao'] %}
+                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %} placeholder="{% if campo == 'detalhe_utilizacao' %}Ex.: usar na manutenção das mesas de montagem. Vai substituir item desgastado e será consumido na rotina semanal da produção.{% endif %}">{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
+                        {% endif %}
+                        {% if campo == 'utilizacao' %}
+                        <div class="cwn-hint">Escolha a natureza do material. O detalhe de uso você informa no campo abaixo.</div>
+                        {% elif campo == 'detalhe_utilizacao' %}
+                        <div class="cwn-hint">Responda de forma simples: por que precisa, onde vai usar e como vai aplicar.</div>
+                        <div class="cwn-quick">
+                            {% for opcao in utilizacao_rapida %}
+                            <button type="button" class="js-utilizacao-rapida" data-utilizacao="{{ opcao.utilizacao }}" data-texto="{{ opcao.texto }}">{{ opcao.label }}</button>
+                            {% endfor %}
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}
@@ -90,7 +129,7 @@
             </div>
             <div class="eui-card__foot" style="justify-content:flex-start;">
                 <button class="eui-btn eui-btn--primary" type="submit"><i class="fas fa-paper-plane"></i> Enviar para {{ destino }}</button>
-                <button class="eui-btn eui-btn--ghost" type="button" id="btnVerificarDuplicidade" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade</button>
+                <button class="eui-btn eui-btn--ghost" type="button" id="btnVerificarDuplicidade" onclick="verificarDuplicidade()"><i class="fas fa-magnifying-glass"></i> Verificar duplicidade no GRV</button>
             </div>
         </div>
         <div id="dupBox" style="margin-top:var(--eui-space-4)"></div>
@@ -103,6 +142,8 @@
 const tipoAtual = "{{ tipo }}";
 const tiposPessoaJuridica = new Set(["cliente", "fornecedor", "transportadora"]);
 const docInput = document.getElementById("documento");
+const utilizacaoInput = document.getElementById('utilizacao');
+const detalheUtilizacaoInput = document.getElementById('detalhe_utilizacao');
 if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
   docInput.setAttribute("inputmode", "numeric");
   docInput.setAttribute("maxlength", "18");
@@ -116,6 +157,20 @@ if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
       .replace(/(\d{4})(\d)/, "$1-$2");
   });
 }
+
+document.querySelectorAll('.js-utilizacao-rapida').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        if (utilizacaoInput && btn.dataset.utilizacao) {
+            utilizacaoInput.value = btn.dataset.utilizacao;
+        }
+        if (detalheUtilizacaoInput && btn.dataset.texto) {
+            detalheUtilizacaoInput.value = btn.dataset.texto;
+            detalheUtilizacaoInput.focus();
+            detalheUtilizacaoInput.setSelectionRange(detalheUtilizacaoInput.value.length, detalheUtilizacaoInput.value.length);
+        }
+    });
+});
+
 async function verificarDuplicidade(){
   const box = document.getElementById('dupBox');
   const btn = document.getElementById('btnVerificarDuplicidade');
@@ -137,10 +192,14 @@ async function verificarDuplicidade(){
     }
     const data = await res.json();
     if (!data.duplicidades || !data.duplicidades.length) {
-      box.innerHTML = '<div class="eui-callout eui-callout--success">Nenhuma duplicidade encontrada.</div>';
+            box.innerHTML = '<div class="eui-callout eui-callout--success">Nenhum material semelhante encontrado no GRV.</div>';
       return;
     }
-    box.innerHTML = '<div class="eui-callout eui-callout--warning" style="flex-direction:column; align-items:stretch; gap:6px;">' + data.duplicidades.map(d => `<div><strong>${d.numero}</strong> - ${d.motivo} - ${d.resumo}</div>`).join('') + '</div>';
+        box.innerHTML = '<div class="eui-callout eui-callout--warning" style="flex-direction:column; align-items:stretch; gap:10px;"><div><i class="fas fa-copy"></i> Materiais semelhantes encontrados no GRV.</div><div class="cwn-dup-list">' + data.duplicidades.map((d) => {
+            const badges = [d.familia ? `Família: ${d.familia}` : '', d.grupo ? `Grupo: ${d.grupo}` : '', d.unidade ? `UM: ${d.unidade}` : ''].filter(Boolean).map((txt) => `<span>${txt}</span>`).join('');
+            const score = d.score ? ` · Similaridade ${Math.round(Number(d.score) * 100)}%` : '';
+            return `<div class="cwn-dup-card"><div class="cwn-dup-head"><div><div class="cwn-dup-title">${d.codigo_material || d.codigo_grv || 'Sem código'}${d.descricao ? ` · ${d.descricao}` : ''}</div><div class="cwn-hint">${d.motivo || 'Sem motivo'}${score}</div></div><div class="cwn-dup-meta">${badges}</div></div></div>`;
+        }).join('') + '</div></div>';
   } catch (err) {
     box.innerHTML = `<div class="eui-callout eui-callout--danger"><i class="fas fa-triangle-exclamation"></i> Não foi possível verificar duplicidade: ${err.message}</div>`;
   } finally {
