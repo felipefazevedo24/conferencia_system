@@ -424,9 +424,6 @@ function renderTable() {
 
     body.innerHTML = rows.map((v) => {
       const st = String(v.status || '').trim();
-      const podeLiberar = st === 'Planejada' && !v.liberada;
-      const podeCancelar = st !== 'Concluida' && st !== 'Cancelada';
-      const podeApagar = IS_ADMIN;
       return `
       <tr>
         <td><strong>${v.codigo || ('#' + v.id)}</strong></td>
@@ -436,15 +433,32 @@ function renderTable() {
         <td>${v.veiculo_label || '-'}</td>
         <td>${formatDateTime(v.saida_prevista)}</td>
         <td>${Number(v.qtd_paradas || 0)}</td>
-        <td style="text-align:right; display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
-          <button class="eui-btn eui-btn--ghost" onclick="acaoAbrirViagem(${Number(v.id)})"><i class="fas fa-route"></i> Abrir viagem</button>
-          ${podeLiberar ? `<button class="eui-btn eui-btn--primary" onclick="acaoLiberarMotorista(${Number(v.id)})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>` : ''}
-          ${podeCancelar ? `<button class="eui-btn eui-btn--ghost" onclick="acaoCancelarViagem(${Number(v.id)}, '${String(v.codigo || ('#' + v.id)).replace(/'/g, "&#39;")}')"><i class="fas fa-ban"></i> Cancelar</button>` : ''}
-          ${IS_ADMIN ? `<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${Number(v.id)}, '${String(v.codigo || ('#' + v.id)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar</button>` : ''}
+        <td style="text-align:right;">
+          <button class="vt-actions-btn vt-actions-btn-viagem"
+                  data-vid="${Number(v.id)}"
+                  data-codigo="${String(v.codigo || ('#' + v.id)).replace(/"/g, '&quot;')}"
+                  data-status="${String(st).replace(/"/g, '&quot;')}"
+                  data-liberada="${v.liberada ? '1' : '0'}">
+            <i class="fas fa-ellipsis-vertical"></i>
+          </button>
         </td>
       </tr>
     `;
     }).join('');
+
+    body.querySelectorAll('.vt-actions-btn-viagem').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openViagemActionsMenu(
+          Number(btn.dataset.vid || 0),
+          String(btn.dataset.codigo || ''),
+          String(btn.dataset.status || ''),
+          String(btn.dataset.liberada || '') === '1',
+          ev.clientX,
+          ev.clientY,
+        );
+      });
+    });
 
     const porStatus = rows.reduce((acc, v) => {
       const st = String(v.status || '-');
@@ -936,6 +950,36 @@ function openActionsMenu(id, x, y) {
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
   menu.style.maxHeight = `${Math.max(180, vh - top - 12)}px`;
+  menu.style.overflowY = 'auto';
+  menu.classList.add('open');
+}
+
+function openViagemActionsMenu(viagemId, codigo, status, liberada, x, y) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+
+  const menu = document.getElementById('vt-actions-menu');
+  const codigoSafe = String(codigo || ('#' + vid)).replace(/'/g, '&#39;');
+  const st = String(status || '').trim();
+  const podeLiberar = st === 'Planejada' && !liberada;
+  const podeCancelar = st !== 'Concluida' && st !== 'Cancelada';
+
+  menu.innerHTML = `
+    <button onclick="acaoAbrirViagem(${vid})"><i class='fas fa-route'></i> Abrir viagem</button>
+    ${podeLiberar ? `<button onclick="acaoLiberarMotorista(${vid})"><i class='fas fa-paper-plane'></i> Liberar motorista</button>` : ''}
+    ${podeCancelar ? `<button onclick="acaoCancelarViagem(${vid}, '${codigoSafe}')"><i class='fas fa-ban'></i> Cancelar viagem</button>` : ''}
+    ${IS_ADMIN ? `<button class='danger' onclick="acaoExcluirViagem(${vid}, '${codigoSafe}')"><i class='fas fa-trash'></i> Apagar viagem</button>` : ''}
+  `;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const w = 270;
+  const h = 220;
+  const left = Math.max(8, Math.min(x, vw - w - 8));
+  const top = Math.max(8, Math.min(y, vh - h - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.maxHeight = `${Math.max(160, vh - top - 12)}px`;
   menu.style.overflowY = 'auto';
   menu.classList.add('open');
 }
