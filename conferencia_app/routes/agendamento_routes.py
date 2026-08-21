@@ -6,10 +6,10 @@ import json
 import re
 from datetime import datetime, timedelta
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session, send_file
 from sqlalchemy import or_
 
-from ..auth import permission_required
+from ..auth import permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoCliente,
@@ -46,6 +46,7 @@ from ..services.agendamento_service import (
     serializar_motorista,
     status_label_agendamento,
 )
+from ..services.agendamento_ordem_coleta_pdf import gerar_ordem_coleta_pdf
 
 try:
     from openpyxl import load_workbook
@@ -602,6 +603,174 @@ def dashboard_central_viagens():
             "entregas": entregas,
             "counts": {"coletas": len(coletas), "entregas": len(entregas)},
         }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/oc/<numero_oc>")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_consultar_oc(numero_oc: str):
+    numero_oc_limpo = str(numero_oc or "").strip()
+    if not numero_oc_limpo:
+        return jsonify({"error": "Informe o número da OC."}), 400
+    resultado = consultar_oc_agendamento(numero_oc_limpo)
+    if not resultado.get("encontrada"):
+        return jsonify(resultado), 404
+
+    parceiro = resultado.get("fornecedor") if isinstance(resultado.get("fornecedor"), dict) else {}
+    return jsonify(
+        {
+            "encontrada": True,
+            "numero_oc": resultado.get("numero_oc") or numero_oc_limpo,
+            "fornecedor": parceiro,
+            "itens": resultado.get("itens") or [],
+            "warning": resultado.get("warning") or "",
+            "fonte": resultado.get("fonte") or {},
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/oc/criar", methods=["POST"])
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_criar_coleta_por_oc():
+    if not _is_admin_or_compras():
+        return jsonify({"error": "Somente Compras e Administrador podem gerar coleta por OC."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    prioridade = str(payload.get("prioridade") or "Media").strip()
+    if prioridade not in PRIORIDADES_SOLICITACAO:
+        prioridade = "Media"
+    if not numero_oc:
+        return jsonify({"error": "Informe o número da OC."}), 400
+
+    existente = (
+        _query_solicitacoes_visiveis()
+        .filter(
+            AgendamentoSolicitacao.tipo == "COLETA",
+            AgendamentoSolicitacao.numero_oc == numero_oc,
+            AgendamentoSolicitacao.status != "Cancelada",
+        )
+        .first()
+    )
+    if existente:
+        return jsonify({"error": f"A OC {numero_oc} já possui coleta aberta na Central."}), 409
+
+    consulta = consultar_oc_agendamento(numero_oc)
+    if not consulta.get("encontrada"):
+        return jsonify({"error": consulta.get("error") or "OC não encontrada na bridge."}), 404
+
+    parceiro = consulta.get("fornecedor") if isinstance(consulta.get("fornecedor"), dict) else {}
+    parceiro_payload = {
+        "codigo": str(parceiro.get("codigo") or "").strip(),
+        "nome": str(parceiro.get("nome") or parceiro.get("razao_social") or "").strip(),
+        "razao_social": str(parceiro.get("razao_social") or parceiro.get("nome") or "").strip(),
+        "cnpj_cpf": str(parceiro.get("cnpj_cpf") or "").strip(),
+        "contato": str(parceiro.get("contato") or "").strip(),
+        "telefone": str(parceiro.get("telefone") or "").strip(),
+        "email": str(parceiro.get("email") or "").strip(),
+        "logradouro": str(parceiro.get("logradouro") or "").strip() or "Endereço de coleta a confirmar",
+        "numero": str(parceiro.get("numero") or "").strip(),
+        "complemento": str(parceiro.get("complemento") or "").strip(),
+        "bairro": str(parceiro.get("bairro") or "").strip(),
+        "cidade": str(parceiro.get("cidade") or "").strip() or "A confirmar",
+        "uf": (str(parceiro.get("uf") or "").strip()[:2] or "SP").upper(),
+        "cep": str(parceiro.get("cep") or "").strip(),
+        "observacoes": str(consulta.get("warning") or "").strip(),
+    }
+
+    usuario = session.get("username", "sistema")
+    agora = datetime.now()
+    fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
+    sol = AgendamentoSolicitacao(
+        tipo="COLETA",
+        status="Pendente",
+        prioridade=prioridade,
+        prazo_limite=None,
+        data_desejada=None,
+        solicitante=usuario,
+        criado_em=agora,
+        atualizado_em=agora,
+        documento_tipo="OC",
+        documento_numero=numero_oc,
+        numero_oc=numero_oc,
+        origem_documento="ORDEM_DE_COMPRA",
+        observacoes_solicitante="Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
+        observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
+        payload_origem=_json_text(
+            {
+                "origem": "oc_digitada_central",
+                "numero_oc": numero_oc,
+                "fonte": fonte,
+                "warning": consulta.get("warning") or "",
+            }
+        ),
+    )
+
+    ok, msg = _aplicar_parceiro(sol, parceiro_payload, "Fornecedor")
+    if not ok:
+        return jsonify({"error": msg or "Não foi possível aplicar os dados do fornecedor retornados pela bridge."}), 409
+
+    db.session.add(sol)
+    db.session.flush()
+    sol.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{sol.id:04d}"
+
+    itens = consulta.get("itens") if isinstance(consulta.get("itens"), list) else []
+    if not _sincronizar_itens(sol, itens):
+        _sincronizar_itens(
+            sol,
+            [
+                {
+                    "descricao": f"Coleta referente à OC {numero_oc}",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "volumes": 1,
+                    "observacoes": "Item padrão criado automaticamente.",
+                }
+            ],
+        )
+
+    _registrar_historico(
+        sol.id,
+        evento="CRIADA_OC_BRIDGE",
+        usuario=usuario,
+        status_novo="Pendente",
+        detalhe=f"Solicitação criada a partir da OC {numero_oc} via bridge.",
+        payload={"numero_oc": numero_oc, "fonte": fonte},
+    )
+    db.session.commit()
+
+    veiculo = AgendamentoVeiculo.query.get(sol.veiculo_id) if sol.veiculo_id else None
+    return jsonify(
+        {
+            "sucesso": True,
+            "solicitacao": _serializar_solicitacao(sol, veiculo=veiculo),
+            "pdf_url": f"/api/logistica/central-viagens/solicitacoes/{sol.id}/ordem-coleta.pdf",
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/ordem-coleta.pdf")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_ordem_coleta_pdf(solicitacao_id: int):
+    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+    if str(row.tipo or "").strip() != "COLETA":
+        return jsonify({"error": "Ordem de coleta disponível apenas para solicitações de coleta."}), 409
+
+    itens = (
+        AgendamentoSolicitacaoItem.query
+        .filter_by(solicitacao_id=row.id)
+        .order_by(AgendamentoSolicitacaoItem.sequencia.asc())
+        .all()
+    )
+    pdf_bytes = gerar_ordem_coleta_pdf(row, itens)
+    nome = f"ordem_coleta_{str(row.numero_oc or row.id).replace(' ', '_')}.pdf"
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=nome,
     )
 
 

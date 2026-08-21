@@ -7,8 +7,6 @@ $zipPath = Join-Path $distDir "pythonanywhere_bundle.zip"
 
 $excludeNames = @(
     ".git",
-    ".claude",
-    ".vscode",
     ".venv",
     ".pytest_cache",
     ".pytest_tmp",
@@ -21,12 +19,7 @@ $excludeNames = @(
     "manual_test_runs",
     "runtime_admin_check",
     "test_tmp",
-    "build",
-    "docs",
-    "dist",
-    "instance",
-    "motorista_app",
-    "tests"
+    "dist"
 )
 
 $excludePatterns = @(
@@ -39,7 +32,7 @@ $excludeFilePatterns = @(
     "*.pyc"
 )
 
-function Test-SkipDir([string]$name) {
+function Should-SkipDir([string]$name) {
     if ($excludeNames -contains $name) {
         return $true
     }
@@ -53,7 +46,7 @@ function Test-SkipDir([string]$name) {
     return $false
 }
 
-function Test-SkipFile([string]$name) {
+function Should-SkipFile([string]$name) {
     foreach ($pattern in $excludeFilePatterns) {
         if ($name -like $pattern) {
             return $true
@@ -74,7 +67,7 @@ function Copy-Tree($source, $destination) {
 
     foreach ($item in $items) {
         if ($item.PSIsContainer) {
-            if (Test-SkipDir $item.Name) {
+            if (Should-SkipDir $item.Name) {
                 continue
             }
 
@@ -82,7 +75,7 @@ function Copy-Tree($source, $destination) {
             continue
         }
 
-        if (Test-SkipFile $item.Name) {
+        if (Should-SkipFile $item.Name) {
             continue
         }
 
