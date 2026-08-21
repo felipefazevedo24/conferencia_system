@@ -1130,10 +1130,13 @@
                 `PO <strong>${escapeHtml(p.po_numero)}</strong> — ${escapeHtml(p.po_status || "Rascunho")}` +
                 (p.po_enviada_em ? `<br>Enviada em ${p.po_enviada_em} por ${escapeHtml(p.po_enviada_por || "")}` : "");
         }
-        $("cx-po-email-wrap").classList.toggle("hidden", !temPo);
+        // "Enviar para" fica disponivel desde a criacao da PO (nao so
+        // depois de salva) - o botao "Enviar" salva a PO na hora, se
+        // ainda nao tiver sido salva, antes de mandar o e-mail.
+        $("cx-po-email-wrap").classList.remove("hidden");
         $("cx-po-btn-pdf").classList.toggle("hidden", !temPo);
         if (temPo) $("cx-po-btn-pdf").href = `/api/comex/processos/${p.id}/po.pdf`;
-        if (temPo) popularSelectFornecedores($("cx-po-email-fornecedor-select"));
+        popularSelectFornecedores($("cx-po-email-fornecedor-select"));
 
         $("cx-modal-po").classList.add("open");
 
@@ -1186,16 +1189,17 @@
         return Array.from($("cx-po-outras-ocs").querySelectorAll("input[type=checkbox]:checked")).map((c) => parseInt(c.value, 10));
     }
 
-    async function salvarPo(finalizar) {
-        if (!processoPoAtual) return;
+    async function salvarPo(finalizar, opts) {
+        opts = opts || {};
+        if (!processoPoAtual) return false;
         const direcao = $("cx-po-direcao").value;
-        if (!direcao) { toast("Selecione a direção (Importação ou Exportação).", "error"); return; }
+        if (!direcao) { toast("Selecione a direção (Importação ou Exportação).", "error"); return false; }
         const modal = $("cx-po-modal").value;
-        if (!modal) { toast("Selecione o modal (Aéreo ou Marítimo).", "error"); return; }
+        if (!modal) { toast("Selecione o modal (Aéreo ou Marítimo).", "error"); return false; }
         const pagador = $("cx-po-pagador-frete").value;
-        if (!pagador) { toast("Selecione o pagador do frete.", "error"); return; }
+        if (!pagador) { toast("Selecione o pagador do frete.", "error"); return false; }
         try {
-            const resp = await api(`/api/comex/processos/${processoPoAtual.id}/po`, {
+            await api(`/api/comex/processos/${processoPoAtual.id}/po`, {
                 method: "POST",
                 body: JSON.stringify({
                     direcao_operacao: direcao,
@@ -1210,10 +1214,16 @@
                 method: "POST",
                 body: JSON.stringify({ itens: itensPoAtual }),
             });
-            toast(finalizar ? "PO finalizada!" : "PO salva!", "success");
-            fecharModalPo();
-            carregar();
-        } catch (err) { toast(err.message, "error"); }
+            if (!opts.silencioso) {
+                toast(finalizar ? "PO finalizada!" : "PO salva!", "success");
+                fecharModalPo();
+                carregar();
+            }
+            return true;
+        } catch (err) {
+            toast(err.message, "error");
+            return false;
+        }
     }
     $("cx-po-btn-salvar").addEventListener("click", () => salvarPo(false));
     $("cx-po-btn-finalizar").addEventListener("click", () => salvarPo(true));
@@ -1248,6 +1258,12 @@
         const btn = $("cx-po-btn-enviar-email");
         btn.disabled = true;
         try {
+            // Garante que a PO (e os itens) ja estao salvos antes de
+            // enviar - assim o operador pode clicar direto em "Enviar" na
+            // primeira vez que cria a PO, sem precisar salvar antes numa
+            // etapa separada.
+            const salvou = await salvarPo(false, { silencioso: true });
+            if (!salvou) return;
             await api(`/api/comex/processos/${processoPoAtual.id}/po/enviar-email`, {
                 method: "POST",
                 body: JSON.stringify({ destinatarios }),
