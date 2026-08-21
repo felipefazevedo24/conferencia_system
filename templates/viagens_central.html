@@ -833,9 +833,9 @@ function renderMetrics(resumo, counts) {
   document.getElementById('count-viagens').textContent = state.viagens.length || 0;
 }
 
-async function loadViagens() {
+async function loadViagens(force = false) {
   const cacheKey = `${state.q}::${state.subfiltro}`;
-  if (state.viagensCacheKey === cacheKey) {
+  if (!force && state.viagensCacheKey === cacheKey) {
     return;
   }
 
@@ -852,6 +852,7 @@ async function loadViagens() {
   if (!r.ok) {
     state.viagens = [];
     state.viagensCacheKey = '';
+    showToast(d.msg || d.error || 'Falha ao carregar viagens.', 'error');
     return;
   }
   let viagens = Array.isArray(d) ? d : [];
@@ -880,7 +881,7 @@ async function loadDashboard() {
   renderTable();
 
   if (state.tab === 'VIAGENS') {
-    await loadViagens();
+    await loadViagens(true);
     renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
     renderTable();
   }
@@ -1052,7 +1053,7 @@ async function abrirModalRealocarParada(paradaId, viagemOrigemId, parceiroNome) 
   const stateBox = document.getElementById('realocar-state');
   if (stateBox) stateBox.textContent = 'Carregando viagens planejadas...';
 
-  const r = await fetch('/api/viagem/lista?status=Planejada');
+  const r = await fetch(`/api/viagem/lista?status=Planejada&_=${Date.now()}`);
   const d = await r.json().catch(() => ([]));
   if (!r.ok) {
     showToast('Nao foi possivel carregar viagens de destino.', 'error');
@@ -1100,6 +1101,7 @@ async function confirmarRealocacaoParada() {
   closeModal('modalRealocarParada');
   closeModal('modalDetalhe');
   showToast(d.msg || 'Parada realocada com sucesso.', (d.liberacao_revogada_origem || d.liberacao_revogada_destino) ? 'info' : 'success');
+  state.viagensCacheKey = '';
   await loadDashboard();
   if (d.viagem_destino_id) {
     await acaoAbrirViagem(Number(d.viagem_destino_id));
@@ -1127,6 +1129,7 @@ async function acaoExcluirViagem(viagemId, codigoLabel) {
 
   closeModal('modalDetalhe');
   showToast('Viagem apagada com sucesso.', 'success');
+  state.viagensCacheKey = '';
   await loadDashboard();
 }
 
@@ -1254,6 +1257,7 @@ async function criarViagemComSolicitacoesSelecionadas() {
   fecharMontagemPosAlocacao();
   showToast(`Viagem montada com ${Number(d.anexadas || ids.length)} solicitação(ões). Agora libere para o motorista.`, 'success');
   const viagemId = d.viagem?.id;
+  state.viagensCacheKey = '';
   if (viagemId) {
     window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
   }
@@ -1280,6 +1284,7 @@ async function anexarSolicitacoesEmViagemSelecionada() {
 
   fecharMontagemPosAlocacao();
   showToast(`Solicitações anexadas: ${Number(d.anexadas || 0)}.`, d.liberacao_revogada ? 'info' : 'success');
+  state.viagensCacheKey = '';
   window.location.href = `/logistica/viagens?vid=${viagemId}`;
 }
 
@@ -1514,7 +1519,7 @@ Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
     state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : 'PENDENTES';
     if (state.tab === 'VIAGENS') state.selectedIds = [];
     if (state.tab === 'VIAGENS') {
-      await loadViagens();
+      await loadViagens(true);
       document.getElementById('count-viagens').textContent = String(state.viagens.length || 0);
     }
     renderFilters();
@@ -1554,7 +1559,20 @@ if (btnExcluirSelecionadas) {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     const tabViagens = document.querySelector('.vt-tab[data-tab="VIAGENS"]');
     if (tabViagens) tabViagens.classList.add('is-active');
-    await loadViagens();
+    await loadViagens(true);
+    const rdet = await fetch(`/api/viagem/${vid}`);
+    const ddet = await rdet.json().catch(() => ({}));
+    if (rdet.ok && ddet?.status) {
+      const st = String(ddet.status).trim();
+      if (st === 'EmAndamento') {
+        state.subfiltro = 'EM_ANDAMENTO';
+      } else if (st === 'Concluida' || st === 'Cancelada') {
+        state.subfiltro = 'CONCLUIDAS';
+      } else {
+        state.subfiltro = 'PROGRAMADAS';
+      }
+      await loadViagens(true);
+    }
     renderFilters();
     renderTable();
     await acaoAbrirViagem(vid);
