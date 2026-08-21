@@ -198,8 +198,13 @@
         <label class="eui-field__label">Número da Ordem de Compra (OC)</label>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <input type="text" id="oc-numero" class="eui-input" placeholder="Ex.: 123456" style="flex:1; min-width:220px;">
-          <button class="eui-btn eui-btn--ghost" onclick="consultarOcBridge()"><i class="fas fa-magnifying-glass"></i> Consultar na Bridge</button>
+          <button class="eui-btn eui-btn--ghost" onclick="consultarOcBridge()"><i class="fas fa-magnifying-glass"></i> Consultar</button>
         </div>
+            </div>
+            <div class="eui-field">
+        <label class="eui-field__label">Anexo opcional para impressão</label>
+        <input type="file" id="oc-anexo" class="eui-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+        <div class="vt-mini">Se informado, o documento fica anexado à solicitação e pode ser aberto/imresso pelo gestor.</div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
@@ -209,7 +214,7 @@
             <div class="vt-preview">
                 <table class="erp-table">
           <thead><tr><th>OC</th><th>Fornecedor</th><th>CNPJ</th><th>Cidade/UF</th><th>Endereço</th><th>Itens</th></tr></thead>
-          <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar na Bridge.</td></tr></tbody>
+          <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar.</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -1100,6 +1105,7 @@ document.addEventListener('click', () => {
 function acaoVisualizar(id) {
   const row = rowById(id);
   if (!row) return;
+  const anexoUrl = row.anexo?.url || '';
   document.getElementById('detalheBody').innerHTML = `
     <div><strong>Código:</strong> ${row.codigo || '-'}</div>
     <div><strong>Tipo:</strong> ${row.tipo_label || row.tipo}</div>
@@ -1111,6 +1117,7 @@ function acaoVisualizar(id) {
     <div><strong>Prioridade:</strong> ${row.prioridade_label || row.prioridade}</div>
     <div><strong>Data Prevista:</strong> ${row.data_desejada_label || row.prazo_limite_label || '-'}</div>
     <div><strong>Transportadora:</strong> ${row.observacoes_logistica || '-'}</div>
+    ${anexoUrl ? `<div><strong>Anexo:</strong> <a href="${anexoUrl}" target="_blank" rel="noopener">Abrir / imprimir documento</a></div>` : ''}
   `;
   openModal('modalDetalhe');
 }
@@ -1766,7 +1773,7 @@ async function consultarOcBridge() {
     showToast('Informe o número da OC.', 'error');
     return;
   }
-  document.getElementById('importState').textContent = 'Consultando OC na bridge...';
+  document.getElementById('importState').textContent = 'Consultando OC...';
   document.getElementById('importErrors').textContent = '';
   const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(numeroOc)}`);
   const d = await r.json().catch(() => ({}));
@@ -1784,7 +1791,7 @@ async function consultarOcBridge() {
 
   const f = d.fornecedor || {};
   const itens = Array.isArray(d.itens) ? d.itens.length : 0;
-  document.getElementById('importState').textContent = `OC ${d.numero_oc || numeroOc} localizada. Fonte: ${d.fonte?.label || 'Bridge ERP'}.`;
+  document.getElementById('importState').textContent = `OC ${d.numero_oc || numeroOc} localizada.`;
   document.getElementById('importErrors').textContent = d.warning || '';
   document.getElementById('previewBody').innerHTML = `
     <tr>
@@ -1804,10 +1811,13 @@ async function confirmarImportacaoOc() {
     showToast('Informe o número da OC.', 'error');
     return;
   }
+  const anexo = document.getElementById('oc-anexo').files?.[0] || null;
+  const body = new FormData();
+  body.append('numero_oc', numeroOc);
+  if (anexo) body.append('anexo', anexo);
   const r = await fetch('/api/logistica/central-viagens/oc/criar', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ numero_oc: numeroOc })
+    body,
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) {
@@ -1818,6 +1828,7 @@ async function confirmarImportacaoOc() {
   if (d.pdf_url) {
     window.location.href = d.pdf_url;
   }
+  document.getElementById('oc-anexo').value = '';
   closeModal('modalImportar');
   loadDashboard();
 }

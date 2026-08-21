@@ -3,11 +3,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import re
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, send_file
 from sqlalchemy import or_, true
+from werkzeug.utils import secure_filename
 
 from ..auth import is_admin_session, permission_required, permission_required_any
 from ..extensions import db
@@ -59,6 +61,50 @@ except Exception:  # pragma: no cover
 agendamento_bp = Blueprint("agendamento", __name__)
 
 PRIORIDADE_ORDEM = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
+ANEXO_SOLICITACAO_SUBDIR = "agendamento_solicitacoes_anexos"
+
+
+def _solicitacao_anexo_dir() -> str:
+    pasta = os.path.join(current_app.instance_path, ANEXO_SOLICITACAO_SUBDIR)
+    os.makedirs(pasta, exist_ok=True)
+    return pasta
+
+
+def _extrair_anexo_payload(payload_origem: dict) -> dict:
+    anexo = payload_origem.get("anexo")
+    return anexo if isinstance(anexo, dict) else {}
+
+
+def _salvar_anexo_solicitacao(arquivo, solicitacao_id: int) -> dict | None:
+    if not arquivo or not getattr(arquivo, "filename", ""):
+        return None
+    nome = secure_filename(arquivo.filename)
+    extensao = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+    if extensao not in {"pdf", "jpg", "jpeg", "png", "webp"}:
+        return None
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome_final = f"solicitacao_{solicitacao_id}_{stamp}_{nome}"
+    caminho = os.path.join(_solicitacao_anexo_dir(), nome_final)
+    arquivo.save(caminho)
+    return {
+        "nome_original": str(arquivo.filename or "").strip(),
+        "nome_arquivo": nome_final,
+        "caminho_relativo": os.path.join(ANEXO_SOLICITACAO_SUBDIR, nome_final).replace("\\", "/"),
+        "mimetype": str(getattr(arquivo, "mimetype", "") or "").strip() or None,
+    }
+
+
+def _atualizar_payload_origem_anexo(registro: AgendamentoSolicitacao, anexo_meta: dict | None) -> None:
+    if not anexo_meta:
+        return
+    payload = {}
+    if registro.payload_origem:
+        try:
+            payload = json.loads(registro.payload_origem) or {}
+        except Exception:
+            payload = {}
+    payload["anexo"] = anexo_meta
+    registro.payload_origem = _json_text(payload)
 
 
 def _notificar_solicitante_agendamento(row: AgendamentoSolicitacao, titulo: str, detalhe: str = "") -> None:
@@ -360,6 +406,7 @@ def _serializar_solicitacao(
             payload_origem = json.loads(registro.payload_origem)
         except Exception:
             payload_origem = {}
+    anexo = _extrair_anexo_payload(payload_origem)
     endereco = {
         "logradouro": str(registro.logradouro or "").strip(),
         "numero": str(registro.numero or "").strip(),
@@ -454,6 +501,13 @@ def _serializar_solicitacao(
         "atrasada": atrasada,
         "itens": [_serializar_item(item) for item in itens or []],
         "historico": [_serializar_historico(item) for item in historico or []],
+        "anexo": {
+            "nome_original": str(anexo.get("nome_original") or "").strip(),
+            "nome_arquivo": str(anexo.get("nome_arquivo") or "").strip(),
+            "caminho_relativo": str(anexo.get("caminho_relativo") or "").strip(),
+            "mimetype": str(anexo.get("mimetype") or "").strip(),
+            "url": f"/api/logistica/central-viagens/solicitacoes/{registro.id}/anexo" if anexo.get("caminho_relativo") else "",
+        },
     }
 
 
@@ -738,8 +792,9 @@ def central_viagens_criar_coleta_por_oc():
         return jsonify({"error": "Somente Compras e Administrador podem gerar coleta por OC."}), 403
 
     payload = request.get_json(silent=True) or {}
-    numero_oc = str(payload.get("numero_oc") or "").strip()
-    prioridade = str(payload.get("prioridade") or "Media").strip()
+    form = request.form if request.form else {}
+    numero_oc = str((form.get("numero_oc") if form else None) or payload.get("numero_oc") or "").strip()
+    prioridade = str((form.get("prioridade") if form else None) or payload.get("prioridade") or "Media").strip()
     if prioridade not in PRIORIDADES_SOLICITACAO:
         prioridade = "Media"
     if not numero_oc:
@@ -823,6 +878,10 @@ def central_viagens_criar_coleta_por_oc():
             [
                 {
                     "descricao": f"Coleta referente à OC {numero_oc}",
+
+    anexo_meta = _salvar_anexo_solicitacao(request.files.get("anexo"), sol.id)
+    if anexo_meta:
+        _atualizar_payload_origem_anexo(sol, anexo_meta)
                     "quantidade": 1,
                     "unidade": "UN",
                     "volumes": 1,
@@ -848,6 +907,36 @@ def central_viagens_criar_coleta_por_oc():
             "solicitacao": _serializar_solicitacao(sol, veiculo=veiculo),
             "pdf_url": f"/api/logistica/central-viagens/solicitacoes/{sol.id}/ordem-coleta.pdf",
         }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/anexo")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_anexo_solicitacao(solicitacao_id: int):
+    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+
+    payload_origem = {}
+    if row.payload_origem:
+        try:
+            payload_origem = json.loads(row.payload_origem) or {}
+        except Exception:
+            payload_origem = {}
+    anexo = _extrair_anexo_payload(payload_origem)
+    caminho_relativo = str(anexo.get("caminho_relativo") or "").strip()
+    if not caminho_relativo:
+        return jsonify({"error": "Esta solicitação não possui anexo."}), 404
+
+    caminho = os.path.join(current_app.instance_path, caminho_relativo)
+    if not os.path.isfile(caminho):
+        return jsonify({"error": "Arquivo do anexo não encontrado."}), 404
+
+    return send_file(
+        caminho,
+        mimetype=str(anexo.get("mimetype") or "application/octet-stream") or "application/octet-stream",
+        as_attachment=False,
+        download_name=str(anexo.get("nome_original") or os.path.basename(caminho)),
     )
 
 
