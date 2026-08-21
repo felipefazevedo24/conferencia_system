@@ -14,7 +14,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-aa
+
 os.environ.setdefault("NFE_EMAIL_AUTO_ENABLED", "0")
 os.environ.setdefault("ERP_SYNC_AUTO_ENABLED", "0")
 os.environ.setdefault("ERP_LANCAMENTO_AUTO_ENABLED", "0")
