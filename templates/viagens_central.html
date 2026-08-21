@@ -497,9 +497,12 @@ function renderFilters() {
     `<button class="vt-filter-chip ${state.subfiltro === f.value ? 'is-active' : ''}" data-subfiltro="${f.value}">${f.label}</button>`
   ).join('');
   box.querySelectorAll('button').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       state.subfiltro = btn.dataset.subfiltro || 'PENDENTES';
       if (state.tab !== 'VIAGENS') state.selectedIds = [];
+      if (state.tab === 'VIAGENS') {
+        await loadViagens(true);
+      }
       renderFilters();
       renderTable();
     });
@@ -989,17 +992,14 @@ async function loadViagens(force = false) {
     return;
   }
   let viagens = Array.isArray(d) ? d : [];
-  viagens = viagens.map((v) => {
-    const totalParadas = Number(v.qtd_paradas || 0);
-    const paradasOk = Number(v.qtd_paradas_ok || 0);
-    const st = String(v.status || '').trim();
-    if (totalParadas > 0 && paradasOk >= totalParadas && (st === 'Planejada' || st === 'EmAndamento')) {
-      return { ...v, status: 'Concluida' };
-    }
-    return v;
-  });
   if (state.subfiltro === 'CONCLUIDAS') {
-    viagens = viagens.filter((v) => ['Concluida', 'Cancelada'].includes(String(v.status || '').trim()));
+    viagens = viagens.filter((v) => {
+      const st = String(v.status || '').trim();
+      if (['Concluida', 'Cancelada'].includes(st)) return true;
+      const totalParadas = Number(v.qtd_paradas || 0);
+      const paradasOk = Number(v.qtd_paradas_ok || 0);
+      return totalParadas > 0 && paradasOk >= totalParadas && ['Planejada', 'EmAndamento'].includes(st);
+    });
   }
   state.viagens = viagens;
   state.viagensCacheKey = cacheKey;
