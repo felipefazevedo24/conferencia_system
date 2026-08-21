@@ -19,6 +19,8 @@ from ..models import (
     AgendamentoSolicitacaoHistorico,
     AgendamentoSolicitacaoItem,
     AgendamentoVeiculo,
+    Viagem,
+    ViagemParada,
     Usuario,
 )
 from ..services.email_service import enviar_email_agendamento_update
@@ -580,6 +582,43 @@ def dashboard_central_viagens():
     veiculos = {row.id: row for row in listar_veiculos_agendamento()}
     motoristas = listar_motoristas_agendamento()
     cards = [_serializar_solicitacao(row, veiculo=veiculos.get(row.veiculo_id)) for row in automaticas]
+
+    viagem_por_solicitacao: dict[int, dict] = {}
+    try:
+        ids_solicitacao = [int(c.get("id")) for c in cards if c.get("id") is not None]
+        if ids_solicitacao:
+            vinculos = (
+                db.session.query(
+                    ViagemParada.solicitacao_id,
+                    Viagem.id,
+                    Viagem.codigo,
+                    Viagem.status,
+                )
+                .join(Viagem, Viagem.id == ViagemParada.viagem_id)
+                .filter(ViagemParada.solicitacao_id.in_(ids_solicitacao))
+                .filter(Viagem.status != "Cancelada")
+                .order_by(Viagem.id.desc())
+                .all()
+            )
+            for solicitacao_id, viagem_id, viagem_codigo, viagem_status in vinculos:
+                sid = int(solicitacao_id)
+                if sid in viagem_por_solicitacao:
+                    continue
+                viagem_por_solicitacao[sid] = {
+                    "id": int(viagem_id),
+                    "codigo": str(viagem_codigo or "").strip() or f"VG-{viagem_id}",
+                    "status": str(viagem_status or "").strip(),
+                }
+    except Exception:
+        # Compatibilidade defensiva: em ambientes legados, não quebrar dashboard.
+        viagem_por_solicitacao = {}
+
+    for card in cards:
+        sid = int(card.get("id")) if card.get("id") is not None else None
+        viagem = viagem_por_solicitacao.get(sid) if sid is not None else None
+        card["viagem"] = viagem
+        card["viagem_codigo"] = viagem.get("codigo") if viagem else ""
+
     coletas = [c for c in cards if c.get("tipo") == "COLETA"]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
 
