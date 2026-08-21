@@ -361,7 +361,12 @@ function renderTable() {
   }
 
   const idsVisiveis = rows.map((r) => Number(r.id));
-  state.selectedIds = state.selectedIds.filter((id) => idsVisiveis.includes(id));
+  const idsValidos = new Set(
+    [...state.coletas, ...state.entregas]
+      .map((r) => Number(r.id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  );
+  state.selectedIds = state.selectedIds.filter((id) => idsValidos.has(id));
 
   if (state.subfiltro === 'PENDENTES') {
     const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
