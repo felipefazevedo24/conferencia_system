@@ -558,9 +558,17 @@ def dashboard_central_viagens():
         query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
 
-    # Mostra também registros legados/manuais para não perder visibilidade
-    # operacional na Central, mesmo com criação manual já descontinuada.
-    automaticas = list(rows)
+    # Regra operacional: coleta na Central deve representar apenas fluxo de OC
+    # (importada/gerada pelo Compras). Entregas continuam no fluxo automatico
+    # por romaneio/expedicao.
+    automaticas = [
+        row for row in rows
+        if str(row.tipo or "").strip() == "ENTREGA"
+        or (
+            str(row.tipo or "").strip() == "COLETA"
+            and str(row.origem_documento or "").strip() == "ORDEM_DE_COMPRA"
+        )
+    ]
     if termo:
         def match(row: AgendamentoSolicitacao) -> bool:
             haystack = " ".join(
