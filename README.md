@@ -46,6 +46,7 @@ Use Alembic para alteracoes permanentes de schema. Os scripts em `scripts/` exis
 - Bridge ERP: [docs/BRIDGE_ERP_ATUALIZACAO.md](docs/BRIDGE_ERP_ATUALIZACAO.md)
 - API de dados de expedicao: [docs/API_DADOS_ENVIO.md](docs/API_DADOS_ENVIO.md)
 - Especificacao Comex: [docs/COMEX_ESPECIFICACAO.md](docs/COMEX_ESPECIFICACAO.md)
+- Atualizacao do PythonAnywhere (subida normal e com alteracao de banco): [docs/PYTHONANYWHERE_ATUALIZACAO.md](docs/PYTHONANYWHERE_ATUALIZACAO.md)
 
 Para gerar o pacote do PythonAnywhere:
 
