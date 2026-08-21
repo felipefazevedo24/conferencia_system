@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, send_file
-from sqlalchemy import inspect, or_, true
+from sqlalchemy import or_, true
 
 from ..auth import permission_required, permission_required_any
 from ..extensions import db
@@ -135,19 +135,8 @@ def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:
     return False
 
 
-def _has_solicitacao_excluida_column() -> bool:
-    try:
-        bind = db.session.get_bind() or db.engine
-        cols = inspect(bind).get_columns("agendamento_solicitacao")
-        return any(str(c.get("name") or "").strip().lower() == "excluida" for c in cols)
-    except Exception:
-        return False
-
-
 def _filtro_solicitacao_visivel():
-    if not _has_solicitacao_excluida_column():
-        return true()
-    return or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None))
+    return true()
 
 
 def _query_solicitacoes_visiveis():
@@ -433,10 +422,6 @@ def _serializar_solicitacao(
         "qtd_itens": int(registro.qtd_itens or 0),
         "qtd_volumes": float(registro.qtd_volumes or 0.0),
         "resumo_itens": str(registro.resumo_itens or "").strip(),
-        "excluida": bool(getattr(registro, "excluida", False)),
-        "excluida_em": registro.excluida_em.isoformat(timespec="minutes") if getattr(registro, "excluida_em", None) else "",
-        "excluida_por": str(getattr(registro, "excluida_por", "") or "").strip(),
-        "motivo_exclusao": str(getattr(registro, "motivo_exclusao", "") or "").strip(),
         "motorista": {
             "id": registro.motorista_id,
             "nome": str(registro.motorista_nome or "").strip(),
@@ -1020,18 +1005,12 @@ def central_viagens_excluir(solicitacao_id: int):
     row = _get_solicitacao_visivel(solicitacao_id)
     if not row or not _is_origem_automatica(row):
         return jsonify({"error": "Viagem não encontrada."}), 404
-    if not _has_solicitacao_excluida_column():
-        return jsonify({"error": "Base desatualizada na homologação. Execute alembic upgrade head antes de excluir."}), 503
     if row.status == "EmRota":
         return jsonify({"error": "Não é possível excluir viagem em rota."}), 409
     payload = request.get_json(silent=True) or {}
     usuario = session.get("username", "sistema")
     motivo = str(payload.get("motivo") or "").strip() or "Excluida na Central de Viagens."
     status_anterior = str(row.status or "").strip()
-    row.excluida = True
-    row.excluida_em = datetime.now()
-    row.excluida_por = usuario
-    row.motivo_exclusao = motivo
     row.atualizado_em = datetime.now()
     if status_anterior not in {"Concluida", "Cancelada"}:
         row.status = "Cancelada"

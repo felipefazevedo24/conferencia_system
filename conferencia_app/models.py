@@ -1123,10 +1123,6 @@ class AgendamentoSolicitacao(db.Model):
     qtd_volumes = db.Column(db.Float, nullable=False, default=0.0)
     resumo_itens = db.Column(db.String(100), nullable=False, default="0 itens / 0 volumes")
     payload_origem = db.Column(db.Text)
-    excluida = db.Column(db.Boolean, nullable=False, default=False, index=True)
-    excluida_em = db.Column(db.DateTime, index=True)
-    excluida_por = db.Column(db.String(100), index=True)
-    motivo_exclusao = db.Column(db.String(500))
 
 
 class AgendamentoSolicitacaoItem(db.Model):

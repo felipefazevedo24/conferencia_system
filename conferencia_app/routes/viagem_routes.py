@@ -10,7 +10,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file, session, url_for
-from sqlalchemy import func, inspect, or_, true
+from sqlalchemy import func, or_, true
 from werkzeug.utils import secure_filename
 
 from ..auth import permission_required, permission_required_any
@@ -616,8 +616,6 @@ def _sync_solicitacao_viagem(sol: AgendamentoSolicitacao | None, v: Viagem, stat
     """Mantem a solicitacao de transporte alinhada com a viagem consolidada."""
     if not sol:
         return
-    if bool(getattr(sol, "excluida", False)):
-        return
     status_atual = str(sol.status or "").strip()
     if status_atual in {"Concluida", "Cancelada"} and status != "Concluida":
         return
@@ -646,7 +644,7 @@ def _sync_solicitacoes_da_viagem(v: Viagem, status: str) -> None:
 
 
 def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
-    if not sol or bool(getattr(sol, "excluida", False)) or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
+    if not sol or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return
     sol.status = "Pendente"
     sol.veiculo_id = None
@@ -660,15 +658,7 @@ def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
 
 
 def _filtro_solicitacao_visivel_viagem():
-    try:
-        bind = db.session.get_bind() or db.engine
-        cols = inspect(bind).get_columns("agendamento_solicitacao")
-        has_excluida = any(str(c.get("name") or "").strip().lower() == "excluida" for c in cols)
-    except Exception:
-        has_excluida = False
-    if not has_excluida:
-        return true()
-    return or_(AgendamentoSolicitacao.excluida.is_(False), AgendamentoSolicitacao.excluida.is_(None))
+    return true()
 
 
 # --------------------------------------------------------------------------- LISTAGEM / DASHBOARD
