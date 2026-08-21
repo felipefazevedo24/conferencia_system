@@ -1,0 +1,544 @@
+{% extends "base.html" %}
+
+{% block title %}Central de Viagens{% endblock %}
+{% block shell_title %}Central de Viagens{% endblock %}
+
+{% block extra_head %}
+<style>
+    .vt-wrap { display: grid; gap: 16px; }
+    .vt-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--eui-radius); background: var(--eui-surface-2); border: 1px solid var(--eui-border); }
+    .vt-tab { border: none; background: transparent; color: var(--eui-muted); font-weight: 700; font-size: 13px; padding: 8px 14px; border-radius: calc(var(--eui-radius) - 3px); cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+    .vt-tab.is-active { background: var(--eui-surface); color: var(--eui-primary); box-shadow: var(--eui-shadow-sm); }
+    .vt-tab .count { min-width: 22px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 999px; background: var(--eui-surface-3); padding: 2px 8px; }
+    .vt-tab.is-active .count { background: var(--eui-primary); color: #fff; }
+    .vt-toolbar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+    .vt-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+    .vt-filter-chip { border: 1px solid var(--eui-border); background: var(--eui-surface); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .vt-filter-chip.is-active { border-color: var(--eui-primary); color: var(--eui-primary); }
+    .vt-table-wrap { overflow-x: auto; }
+    .vt-empty { padding: 36px 18px; text-align: center; color: var(--eui-text-muted); }
+    .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
+    .vt-type.coleta { background: #e8f3ff; color: #155eef; }
+    .vt-type.entrega { background: #ecfdf3; color: #067647; }
+    .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
+    .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
+    .vt-actions-menu.open { display: flex; }
+    .vt-actions-menu button { border: none; background: transparent; text-align: left; width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .vt-actions-menu button:hover { background: var(--eui-surface-2); }
+    .vt-actions-menu .danger { color: var(--eui-danger); }
+    .vt-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .55); z-index: 10020; padding: 18px; }
+    .vt-modal.open { display: flex; }
+    .vt-modal__box { width: min(860px, 100%); max-height: 88vh; overflow: auto; border-radius: 14px; border: 1px solid var(--eui-border); background: var(--eui-surface); }
+    .vt-modal__head { padding: 14px 16px; border-bottom: 1px solid var(--eui-border); display: flex; justify-content: space-between; align-items: center; }
+    .vt-modal__body { padding: 14px 16px; display: grid; gap: 10px; }
+    .vt-modal__foot { padding: 12px 16px; border-top: 1px solid var(--eui-border); display: flex; justify-content: flex-end; gap: 8px; }
+    .vt-preview { max-height: 42vh; overflow: auto; border: 1px solid var(--eui-border); border-radius: 10px; }
+    .vt-mini { font-size: 12px; color: var(--eui-text-muted); }
+    @media (max-width: 760px) {
+        .vt-toolbar { align-items: stretch; }
+        .vt-tabs { width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eui-scope vt-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">LOGÍSTICA • TRANSPORTES</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-route"></i> Central de Viagens</h1>
+            <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            {% if user_role in ['Admin','Compras'] %}
+            <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="eui-stats" id="vt-metrics">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-box-open"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas Pendentes</span><span class="eui-stat__value" id="m-coletas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-truck-ramp-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entregas Pendentes</span><span class="eui-stat__value" id="m-entregas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-road"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Em Andamento</span><span class="eui-stat__value" id="m-andamento">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Finalizadas</span><span class="eui-stat__value" id="m-finalizadas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Canceladas</span><span class="eui-stat__value" id="m-canceladas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--neutral"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Total de Viagens</span><span class="eui-stat__value" id="m-total">0</span></div></div>
+    </div>
+
+    <div class="eui-card">
+        <div class="eui-card__head" style="display:grid; gap:10px;">
+            <div class="vt-tabs">
+                <button class="vt-tab is-active" data-tab="COLETA">Coletas <span class="count" id="count-coletas">0</span></button>
+                <button class="vt-tab" data-tab="ENTREGA">Entregas <span class="count" id="count-entregas">0</span></button>
+            </div>
+            <div class="vt-toolbar">
+                <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
+                    <i class="fas fa-search"></i>
+                    <input id="vt-busca" class="eui-input" type="search" placeholder="Buscar por OC, Romaneio, Cliente, Fornecedor, Cidade, Transportadora ou Status...">
+                </div>
+                <div class="vt-filters" id="vt-filtros"></div>
+            </div>
+        </div>
+        <div class="eui-card__body eui-card__body--tight">
+            <div style="padding:12px 16px;" id="vt-subtitulo" class="vt-mini"></div>
+            <div class="vt-table-wrap">
+                <table class="erp-table" id="vt-table">
+                    <thead id="vt-head"></thead>
+                    <tbody id="vt-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="vt-actions-menu" class="vt-actions-menu"></div>
+
+<div id="modalDetalhe" class="vt-modal">
+    <div class="vt-modal__box">
+        <div class="vt-modal__head">
+            <strong>Detalhes da Viagem</strong>
+            <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDetalhe')"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="vt-modal__body" id="detalheBody"></div>
+        <div class="vt-modal__foot"><button class="eui-btn eui-btn--ghost" onclick="closeModal('modalDetalhe')">Fechar</button></div>
+    </div>
+</div>
+
+<div id="modalReorganizar" class="vt-modal">
+    <div class="vt-modal__box" style="max-width:520px;">
+        <div class="vt-modal__head">
+            <strong>Reorganizar Viagem</strong>
+            <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalReorganizar')"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="vt-modal__body">
+            <input type="hidden" id="reo-id">
+            <div class="eui-field">
+                <label class="eui-field__label">Agrupamento</label>
+                <select id="reo-agrupamento" class="eui-select">
+                    <option value="regiao">Agrupar por região</option>
+                    <option value="transportadora">Agrupar por transportadora</option>
+                    <option value="fila">Organização da fila operacional</option>
+                </select>
+            </div>
+            <div class="eui-field">
+                <label class="eui-field__label">Prioridade</label>
+                <select id="reo-prioridade" class="eui-select">
+                    <option value="Baixa">Baixa</option>
+                    <option value="Media" selected>Média</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Critica">Crítica</option>
+                </select>
+            </div>
+        </div>
+        <div class="vt-modal__foot">
+            <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalReorganizar')">Cancelar</button>
+            <button class="eui-btn eui-btn--primary" onclick="confirmarReorganizacao()">Aplicar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalImportar" class="vt-modal">
+    <div class="vt-modal__box">
+        <div class="vt-modal__head">
+      <strong>Gerar Coleta por OC</strong>
+            <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalImportar')"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="vt-modal__body">
+            <div class="eui-field">
+        <label class="eui-field__label">Número da Ordem de Compra (OC)</label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" id="oc-numero" class="eui-input" placeholder="Ex.: 123456" style="flex:1; min-width:220px;">
+          <button class="eui-btn eui-btn--ghost" onclick="consultarOcBridge()"><i class="fas fa-magnifying-glass"></i> Consultar na Bridge</button>
+        </div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="eui-btn eui-btn--primary" id="btnConfirmarImport" onclick="confirmarImportacaoOc()" disabled><i class="fas fa-plus"></i> Gerar Coleta</button>
+            </div>
+            <div id="importState" class="vt-mini"></div>
+            <div id="importErrors" class="vt-mini" style="color:var(--eui-danger);"></div>
+            <div class="vt-preview">
+                <table class="erp-table">
+          <thead><tr><th>OC</th><th>Fornecedor</th><th>CNPJ</th><th>Cidade/UF</th><th>Endereço</th><th>Itens</th></tr></thead>
+          <tbody id="previewBody"><tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar na Bridge.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="vt-modal__foot">
+            <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalImportar')">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const state = {
+  tab: 'COLETA',
+  status: '',
+  q: '',
+  coletas: [],
+  entregas: [],
+  ocConsulta: null
+};
+
+const filtrosStatus = [
+  { value: '', label: 'Todos' },
+  { value: 'Pendente', label: 'Pendente' },
+  { value: 'EmAnalise', label: 'Em análise' },
+  { value: 'Alocada', label: 'Alocada' },
+  { value: 'EmAndamento', label: 'Em andamento' },
+  { value: 'EmRota', label: 'Em rota' },
+  { value: 'Concluida', label: 'Concluída' },
+  { value: 'Cancelada', label: 'Cancelada' }
+];
+
+function showToast(msg, type = 'info') {
+  if (window.EUI && window.EUI.toast) {
+    window.EUI.toast(msg, type);
+    return;
+  }
+  alert(msg);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function badgeStatus(status) {
+  const map = {
+    'Pendente': 'eui-badge--warning',
+    'EmAnalise': 'eui-badge--info',
+    'Alocada': 'eui-badge--info',
+    'EmAndamento': 'eui-badge--violet',
+    'EmRota': 'eui-badge--violet',
+    'Concluida': 'eui-badge--success',
+    'Cancelada': 'eui-badge--danger'
+  };
+  return map[status] || 'eui-badge--neutral';
+}
+
+function getRows() {
+  return state.tab === 'COLETA' ? state.coletas : state.entregas;
+}
+
+function renderFilters() {
+  const box = document.getElementById('vt-filtros');
+  box.innerHTML = filtrosStatus.map((f) =>
+    `<button class="vt-filter-chip ${state.status === f.value ? 'is-active' : ''}" data-status="${f.value}">${f.label}</button>`
+  ).join('');
+  box.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.status = btn.dataset.status || '';
+      loadDashboard();
+    });
+  });
+}
+
+function renderTable() {
+  const rows = getRows();
+  const body = document.getElementById('vt-body');
+  const head = document.getElementById('vt-head');
+  const subtitulo = document.getElementById('vt-subtitulo');
+
+  if (state.tab === 'COLETA') {
+    subtitulo.innerHTML = '<strong>Solicitações de Coleta</strong><br>Coletas geradas automaticamente através da importação de Ordens de Compra.';
+    head.innerHTML = '<tr><th>Tipo</th><th>Ordem de Compra</th><th>Fornecedor</th><th>Cidade/UF Origem</th><th>Data Prevista</th><th>Transportadora</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
+  } else {
+    subtitulo.innerHTML = '<strong>Solicitações de Entrega</strong><br>Entregas geradas automaticamente através dos Romaneios da Expedição.';
+    head.innerHTML = '<tr><th>Tipo</th><th>Romaneio</th><th>Cliente</th><th>Cidade/UF Destino</th><th>NF</th><th>Transportadora</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
+  }
+
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="8" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map((row) => {
+    const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+    const nf = row.numero_nf || row.documento_numero || '-';
+    const transp = (row.observacoes_logistica || '').replace(/^Transportadora:\s*/i, '') || '-';
+    return `
+      <tr>
+        <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+        <td>${doc}</td>
+        <td>${row.parceiro_nome || '-'}</td>
+        <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+        <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+        <td>${state.tab === 'COLETA' ? transp : transp}</td>
+        <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
+        <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+      </tr>
+    `;
+  }).join('');
+
+  body.querySelectorAll('.vt-actions-btn').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openActionsMenu(Number(btn.dataset.id), ev.clientX, ev.clientY);
+    });
+  });
+}
+
+function renderMetrics(resumo, counts) {
+  document.getElementById('m-coletas').textContent = resumo.coletas_pendentes || 0;
+  document.getElementById('m-entregas').textContent = resumo.entregas_pendentes || 0;
+  document.getElementById('m-andamento').textContent = resumo.em_andamento || 0;
+  document.getElementById('m-finalizadas').textContent = resumo.finalizadas || 0;
+  document.getElementById('m-canceladas').textContent = resumo.canceladas || 0;
+  document.getElementById('m-total').textContent = resumo.total || 0;
+  document.getElementById('count-coletas').textContent = counts.coletas || 0;
+  document.getElementById('count-entregas').textContent = counts.entregas || 0;
+}
+
+async function loadDashboard() {
+  const p = new URLSearchParams();
+  if (state.q) p.set('q', state.q);
+  if (state.status) p.set('status', state.status);
+  const r = await fetch(`/api/logistica/central-viagens/dashboard?${p.toString()}`);
+  const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao carregar central.', 'error');
+    return;
+  }
+  state.coletas = d.coletas || [];
+  state.entregas = d.entregas || [];
+  renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
+  renderFilters();
+  renderTable();
+}
+
+function rowById(id) {
+  return [...state.coletas, ...state.entregas].find((r) => r.id === id);
+}
+
+function openActionsMenu(id, x, y) {
+  const menu = document.getElementById('vt-actions-menu');
+  const row = rowById(id);
+  if (!row) return;
+  menu.innerHTML = `
+    <button onclick="acaoVisualizar(${id})"><i class='fas fa-eye'></i> Visualizar detalhes</button>
+    <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
+    <button onclick="acaoReorganizar(${id})"><i class='fas fa-shuffle'></i> Reorganizar</button>
+    <button onclick="acaoPrioridade(${id})"><i class='fas fa-arrow-up-9-1'></i> Alterar prioridade</button>
+    <button class='danger' onclick="acaoCancelar(${id})"><i class='fas fa-ban'></i> Cancelar viagem</button>
+    <button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Excluir viagem</button>
+  `;
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  menu.classList.add('open');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('vt-actions-menu').classList.remove('open');
+});
+
+function acaoVisualizar(id) {
+  const row = rowById(id);
+  if (!row) return;
+  document.getElementById('detalheBody').innerHTML = `
+    <div><strong>Código:</strong> ${row.codigo || '-'}</div>
+    <div><strong>Tipo:</strong> ${row.tipo_label || row.tipo}</div>
+    <div><strong>Origem:</strong> ${row.origem_documento_label || row.origem_documento || '-'}</div>
+    <div><strong>Documento:</strong> ${row.documento_tipo || '-'} ${row.documento_numero || '-'}</div>
+    <div><strong>Parceiro:</strong> ${row.parceiro_nome || '-'}</div>
+    <div><strong>Cidade/UF:</strong> ${(row.endereco?.cidade || '-') + ' / ' + (row.endereco?.uf || '-')}</div>
+    <div><strong>Status:</strong> ${row.status_label || row.status}</div>
+    <div><strong>Prioridade:</strong> ${row.prioridade_label || row.prioridade}</div>
+    <div><strong>Data Prevista:</strong> ${row.data_desejada_label || row.prazo_limite_label || '-'}</div>
+    <div><strong>Transportadora:</strong> ${row.observacoes_logistica || '-'}</div>
+  `;
+  openModal('modalDetalhe');
+}
+
+function acaoAbrirOrigem(id) {
+  const row = rowById(id);
+  if (!row) return;
+  if (row.tipo === 'ENTREGA') {
+    const q = encodeURIComponent(row.romaneio_numero || row.orcamento || '');
+    window.open(`/expedicao/romaneio${q ? ('?q=' + q) : ''}`, '_blank');
+    return;
+  }
+  if (row.numero_oc || row.documento_numero) {
+    const termo = encodeURIComponent(row.numero_oc || row.documento_numero);
+    window.open(`/compras?q=${termo}`, '_blank');
+    return;
+  }
+  showToast('Documento de origem não encontrado.', 'error');
+}
+
+function acaoReorganizar(id) {
+  document.getElementById('reo-id').value = String(id);
+  openModal('modalReorganizar');
+}
+
+async function confirmarReorganizacao() {
+  const id = Number(document.getElementById('reo-id').value);
+  const agrupamento = document.getElementById('reo-agrupamento').value;
+  const prioridade = document.getElementById('reo-prioridade').value;
+  const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/reorganizar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regra: 'fila_operacional', agrupamento, prioridade })
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao reorganizar.', 'error');
+    return;
+  }
+  closeModal('modalReorganizar');
+  showToast('Reorganização aplicada.', 'success');
+  loadDashboard();
+}
+
+async function acaoPrioridade(id) {
+  const valor = prompt('Nova prioridade: Baixa, Media, Alta ou Critica', 'Media');
+  if (!valor) return;
+  const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/prioridade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prioridade: valor })
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao alterar prioridade.', 'error');
+    return;
+  }
+  showToast('Prioridade atualizada.', 'success');
+  loadDashboard();
+}
+
+async function acaoCancelar(id) {
+  const motivo = prompt('Informe o motivo do cancelamento:');
+  if (!motivo) return;
+  const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/cancelar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motivo })
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao cancelar viagem.', 'error');
+    return;
+  }
+  showToast('Viagem cancelada.', 'success');
+  loadDashboard();
+}
+
+async function acaoExcluir(id) {
+  if (!confirm('Excluir esta viagem?')) return;
+  const motivo = (prompt('Motivo da exclusão (será registrado no log):', 'Registro inválido ou cancelado na origem.') || '').trim();
+  const r = await fetch(`/api/logistica/central-viagens/solicitacoes/${id}/excluir`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motivo })
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao excluir viagem.', 'error');
+    return;
+  }
+  showToast('Viagem excluída.', 'success');
+  loadDashboard();
+}
+
+async function consultarOcBridge() {
+  const numeroOc = (document.getElementById('oc-numero').value || '').trim();
+  if (!numeroOc) {
+    showToast('Informe o número da OC.', 'error');
+    return;
+  }
+  document.getElementById('importState').textContent = 'Consultando OC na bridge...';
+  document.getElementById('importErrors').textContent = '';
+  const r = await fetch(`/api/logistica/central-viagens/oc/${encodeURIComponent(numeroOc)}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    state.ocConsulta = null;
+    document.getElementById('btnConfirmarImport').disabled = true;
+    document.getElementById('importState').textContent = '';
+    document.getElementById('previewBody').innerHTML = '<tr><td colspan="6" class="vt-empty">Nenhum dado para esta OC.</td></tr>';
+    showToast(d.error || 'OC não encontrada na bridge.', 'error');
+    return;
+  }
+
+  state.ocConsulta = d;
+  document.getElementById('btnConfirmarImport').disabled = false;
+
+  const f = d.fornecedor || {};
+  const itens = Array.isArray(d.itens) ? d.itens.length : 0;
+  document.getElementById('importState').textContent = `OC ${d.numero_oc || numeroOc} localizada. Fonte: ${d.fonte?.label || 'Bridge ERP'}.`;
+  document.getElementById('importErrors').textContent = d.warning || '';
+  document.getElementById('previewBody').innerHTML = `
+    <tr>
+      <td>${d.numero_oc || '-'}</td>
+      <td>${f.nome || f.razao_social || '-'}</td>
+      <td>${f.cnpj_cpf || '-'}</td>
+      <td>${f.cidade || '-'} / ${f.uf || '-'}</td>
+      <td>${f.logradouro || '-'} ${f.numero || ''}</td>
+      <td>${itens}</td>
+    </tr>
+  `;
+}
+
+async function confirmarImportacaoOc() {
+  const numeroOc = (document.getElementById('oc-numero').value || '').trim();
+  if (!numeroOc) {
+    showToast('Informe o número da OC.', 'error');
+    return;
+  }
+  const r = await fetch('/api/logistica/central-viagens/oc/criar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ numero_oc: numeroOc })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    showToast(d.error || 'Falha ao gerar coleta pela OC.', 'error');
+    return;
+  }
+  showToast('Coleta gerada com sucesso.', 'success');
+  if (d.pdf_url) {
+    window.open(d.pdf_url, '_blank');
+  }
+  closeModal('modalImportar');
+  loadDashboard();
+}
+
+const buscaInput = document.getElementById('vt-busca');
+let timerBusca = null;
+buscaInput.addEventListener('input', () => {
+  clearTimeout(timerBusca);
+  timerBusca = setTimeout(() => {
+    state.q = buscaInput.value.trim();
+    loadDashboard();
+  }, 250);
+});
+
+Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
+    tab.classList.add('is-active');
+    state.tab = tab.dataset.tab;
+    renderTable();
+  });
+});
+
+const btnImportar = document.getElementById('btnImportarOc');
+if (btnImportar) {
+  btnImportar.addEventListener('click', () => {
+    document.getElementById('oc-numero').value = '';
+    document.getElementById('previewBody').innerHTML = '<tr><td colspan="6" class="vt-empty">Digite a OC e clique em Consultar na Bridge.</td></tr>';
+    document.getElementById('btnConfirmarImport').disabled = true;
+    document.getElementById('importState').textContent = '';
+    document.getElementById('importErrors').textContent = '';
+    state.ocConsulta = null;
+    openModal('modalImportar');
+  });
+}
+
+loadDashboard();
+</script>
+{% endblock %}

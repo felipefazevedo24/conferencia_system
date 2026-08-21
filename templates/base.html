@@ -327,9 +327,8 @@
                         <div class="submenu-subgroup" data-subgroup="transporte">
                             <button type="button" class="submenu-subtitle" data-subgroup-toggle><i class="fas fa-truck-fast submenu-icon"></i> Transporte &amp; Frota <i class="fas fa-chevron-down submenu-chevron"></i></button>
                             <div class="submenu-items">
-                                {% if can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a href="/logistica/viagens" class="list-group-item list-group-item-action"><i class="fas fa-route"></i> Gestão de Viagens</a>{% endif %}
+                                {% if can_access('PAGE_LOGISTICA_VIAGEM') or can_access('PAGE_LOGISTICA_AGENDAMENTO') %}<a href="/logistica/viagens" class="list-group-item list-group-item-action"><i class="fas fa-route"></i> Central de Viagens</a>{% endif %}
                                 {% if can_access('PAGE_LOGISTICA_VIAGEM') %}<a href="/logistica/mapa-frota" class="list-group-item list-group-item-action"><i class="fas fa-map-location-dot"></i> Mapa da Frota</a>{% endif %}
-                                {% if can_access('PAGE_LOGISTICA_SOLICITACAO') %}<a href="/logistica/solicitar-transporte" class="list-group-item list-group-item-action"><i class="fas fa-file-circle-plus"></i> Solicitar Transporte</a>{% endif %}
                             </div>
                         </div>
                         {% endif %}

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 import re
 from datetime import datetime, timedelta
 
-from flask import Blueprint, current_app, jsonify, request, session
-from sqlalchemy import or_
+from flask import Blueprint, current_app, jsonify, request, session, send_file
+from sqlalchemy import or_, true
 
-from ..auth import permission_required
+from ..auth import permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoCliente,
@@ -43,6 +46,12 @@ from ..services.agendamento_service import (
     serializar_motorista,
     status_label_agendamento,
 )
+from ..services.agendamento_ordem_coleta_pdf import gerar_ordem_coleta_pdf
+
+try:
+    from openpyxl import load_workbook
+except Exception:  # pragma: no cover
+    load_workbook = None
 
 
 agendamento_bp = Blueprint("agendamento", __name__)
@@ -107,8 +116,176 @@ def _origem_documento_label(origem: str | None) -> str:
         "ERPPostgres": "ERP/Postgres",
         "Manual": "Manual",
         "AutoCIF": "Automático (CIF)",
+        "ORDEM_DE_COMPRA": "Ordem de Compra",
+        "ROMANEIO": "Romaneio",
     }
     return mapping.get(str(origem or "").strip(), str(origem or "").strip() or "---")
+
+
+def _is_admin_or_compras() -> bool:
+    return session.get("role") in {"Admin", "Compras"}
+
+
+def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:
+    origem = str(row.origem_documento or "").strip()
+    if str(row.tipo or "").strip() == "COLETA":
+        return origem in {"ORDEM_DE_COMPRA", "AutoCIF"}
+    if str(row.tipo or "").strip() == "ENTREGA":
+        return origem in {"AutoCIF", "ROMANEIO"}
+    return False
+
+
+def _filtro_solicitacao_visivel():
+    return true()
+
+
+def _query_solicitacoes_visiveis():
+    return AgendamentoSolicitacao.query.filter(_filtro_solicitacao_visivel())
+
+
+def _get_solicitacao_visivel(solicitacao_id: int) -> AgendamentoSolicitacao | None:
+    return _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.id == solicitacao_id).first()
+
+
+def _normalizar_cabecalho(texto: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(texto or "").strip().lower())
+
+
+def _parse_float_br(valor) -> float | None:
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    texto = texto.replace(".", "").replace(",", ".") if "," in texto else texto
+    try:
+        return float(texto)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_data_livre(valor) -> datetime | None:
+    if isinstance(valor, datetime):
+        return valor
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(texto[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _extrair_linhas_oc_upload(file_storage) -> list[dict]:
+    nome = str(getattr(file_storage, "filename", "") or "").strip()
+    ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+    if ext not in {"csv", "xlsx", "xls"}:
+        raise ValueError("Formato inválido. Envie arquivo XLSX, XLS ou CSV.")
+
+    rows: list[list] = []
+    if ext == "csv":
+        raw = file_storage.read()
+        try:
+            file_storage.seek(0)
+        except Exception:
+            pass
+        text = raw.decode("utf-8-sig", errors="ignore")
+        reader = csv.reader(io.StringIO(text), delimiter=";")
+        rows = [list(r) for r in reader]
+        if len(rows) <= 1 or len(rows[0]) == 1:
+            reader = csv.reader(io.StringIO(text), delimiter=",")
+            rows = [list(r) for r in reader]
+    else:
+        if load_workbook is None:
+            raise ValueError("Dependência openpyxl indisponível para leitura de XLSX/XLS.")
+        data = file_storage.read()
+        try:
+            file_storage.seek(0)
+        except Exception:
+            pass
+        wb = load_workbook(filename=io.BytesIO(data), read_only=True, data_only=True)
+        try:
+            ws = wb.active
+            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        finally:
+            wb.close()
+
+    if not rows:
+        raise ValueError("Arquivo vazio.")
+
+    header = [_normalizar_cabecalho(c) for c in rows[0]]
+    idx = {h: i for i, h in enumerate(header) if h}
+
+    def col(*aliases):
+        for alias in aliases:
+            if alias in idx:
+                return idx[alias]
+        return None
+
+    c_oc = col("oc", "numerooc", "ordemdecompra", "ordemcompra", "nrooc")
+    c_forn = col("fornecedor", "nomefornecedor", "razaosocial", "parceiro")
+    c_cid = col("cidade", "cidadeorigem")
+    c_uf = col("uf", "estado")
+    c_val = col("valor", "valoroc", "valortotal", "total")
+    c_data = col("dataprevista", "previsao", "previsaodeentrega", "dataentrega")
+    c_transp = col("transportadora", "transporte")
+    c_end = col("endereco", "logradouro", "localcoleta")
+
+    parsed: list[dict] = []
+    for line_no, row in enumerate(rows[1:], start=2):
+        if not row or not any(str(v or "").strip() for v in row):
+            continue
+        numero_oc = str(row[c_oc] if c_oc is not None and c_oc < len(row) else "").strip()
+        fornecedor = str(row[c_forn] if c_forn is not None and c_forn < len(row) else "").strip()
+        cidade = str(row[c_cid] if c_cid is not None and c_cid < len(row) else "").strip()
+        uf = str(row[c_uf] if c_uf is not None and c_uf < len(row) else "").strip().upper()[:2]
+        valor_raw = row[c_val] if c_val is not None and c_val < len(row) else ""
+        data_raw = row[c_data] if c_data is not None and c_data < len(row) else ""
+        transportadora = str(row[c_transp] if c_transp is not None and c_transp < len(row) else "").strip()
+        endereco = str(row[c_end] if c_end is not None and c_end < len(row) else "").strip()
+
+        valor = _parse_float_br(valor_raw)
+        data_prevista = _parse_data_livre(data_raw)
+        parsed.append(
+            {
+                "line": line_no,
+                "numero_oc": numero_oc,
+                "fornecedor": fornecedor,
+                "cidade": cidade,
+                "uf": uf,
+                "valor": valor,
+                "valor_raw": str(valor_raw or "").strip(),
+                "data_prevista": data_prevista,
+                "data_prevista_raw": str(data_raw or "").strip(),
+                "transportadora": transportadora,
+                "endereco": endereco,
+            }
+        )
+    return parsed
+
+
+def _validar_linhas_oc(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    validas: list[dict] = []
+    erros: list[str] = []
+    for row in rows:
+        faltas = []
+        if not row.get("numero_oc"):
+            faltas.append("Número da OC")
+        if not row.get("fornecedor"):
+            faltas.append("Fornecedor")
+        if not row.get("cidade"):
+            faltas.append("Cidade")
+        if not row.get("uf"):
+            faltas.append("UF")
+        if row.get("valor") is None:
+            faltas.append("Valor")
+        if row.get("data_prevista") is None:
+            faltas.append("Data Prevista")
+        if faltas:
+            erros.append(f"Linha {row.get('line')}: faltando/invalidos -> {', '.join(faltas)}")
+            continue
+        validas.append(row)
+    return validas, erros
 
 
 def _kanban_coluna(registro: AgendamentoSolicitacao, veiculo: AgendamentoVeiculo | None) -> str:
@@ -175,6 +352,12 @@ def _serializar_solicitacao(
     itens: list[AgendamentoSolicitacaoItem] | None = None,
     historico: list[AgendamentoSolicitacaoHistorico] | None = None,
 ) -> dict:
+    payload_origem = {}
+    if registro.payload_origem:
+        try:
+            payload_origem = json.loads(registro.payload_origem)
+        except Exception:
+            payload_origem = {}
     endereco = {
         "logradouro": str(registro.logradouro or "").strip(),
         "numero": str(registro.numero or "").strip(),
@@ -203,6 +386,7 @@ def _serializar_solicitacao(
         "numero_oc": str(registro.numero_oc or "").strip(),
         "numero_nf": str(registro.numero_nf or "").strip(),
         "orcamento": str(getattr(registro, "orcamento", "") or "").strip(),
+        "romaneio_numero": str(payload_origem.get("romaneio_numero") or "").strip(),
         "origem_documento": str(registro.origem_documento or "").strip(),
         "origem_documento_label": _origem_documento_label(registro.origem_documento),
         "parceiro_tipo": str(registro.parceiro_tipo or "").strip(),
@@ -295,7 +479,7 @@ def dashboard_agendamento_veiculos():
     prioridade = str(request.args.get("prioridade") or "").strip()
     incluir_canceladas = str(request.args.get("incluir_canceladas") or "").strip().lower() in {"1", "true", "sim"}
 
-    query = AgendamentoSolicitacao.query
+    query = _query_solicitacoes_visiveis()
     if not incluir_canceladas:
         query = query.filter(AgendamentoSolicitacao.status != "Cancelada")
     if status:
@@ -361,12 +545,500 @@ def dashboard_agendamento_veiculos():
     )
 
 
+@agendamento_bp.route("/api/logistica/central-viagens/dashboard")
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def dashboard_central_viagens():
+    termo = str(request.args.get("q") or "").strip().lower()
+    status = str(request.args.get("status") or "").strip()
+
+    query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA"]))
+    if status:
+        query = query.filter(AgendamentoSolicitacao.status == status)
+    rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
+
+    automaticas = [row for row in rows if _is_origem_automatica(row)]
+    if termo:
+        def match(row: AgendamentoSolicitacao) -> bool:
+            haystack = " ".join(
+                [
+                    str(row.numero_oc or ""),
+                    str(row.numero_nf or ""),
+                    str(row.documento_numero or ""),
+                    str(row.parceiro_nome or ""),
+                    str(row.cidade or ""),
+                    str(row.uf or ""),
+                    str(row.status or ""),
+                    str(row.observacoes_logistica or ""),
+                ]
+            ).lower()
+            return termo in haystack
+
+        automaticas = [row for row in automaticas if match(row)]
+
+    veiculos = {row.id: row for row in listar_veiculos_agendamento()}
+    cards = [_serializar_solicitacao(row, veiculo=veiculos.get(row.veiculo_id)) for row in automaticas]
+    coletas = [c for c in cards if c.get("tipo") == "COLETA"]
+    entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
+
+    def _pendentes(arr: list[dict]) -> int:
+        return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Alocada"})
+
+    resumo = {
+        "coletas_pendentes": _pendentes(coletas),
+        "entregas_pendentes": _pendentes(entregas),
+        "em_andamento": sum(1 for c in cards if c.get("status") in {"EmAndamento", "EmRota", "Alocada"}),
+        "finalizadas": sum(1 for c in cards if c.get("status") == "Concluida"),
+        "canceladas": sum(1 for c in cards if c.get("status") == "Cancelada"),
+        "total": len(cards),
+    }
+
+    return jsonify(
+        {
+            "resumo": resumo,
+            "coletas": coletas,
+            "entregas": entregas,
+            "counts": {"coletas": len(coletas), "entregas": len(entregas)},
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/oc/<numero_oc>")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_consultar_oc(numero_oc: str):
+    numero_oc_limpo = str(numero_oc or "").strip()
+    if not numero_oc_limpo:
+        return jsonify({"error": "Informe o número da OC."}), 400
+    resultado = consultar_oc_agendamento(numero_oc_limpo)
+    if not resultado.get("encontrada"):
+        return jsonify(resultado), 404
+
+    parceiro = resultado.get("fornecedor") if isinstance(resultado.get("fornecedor"), dict) else {}
+    return jsonify(
+        {
+            "encontrada": True,
+            "numero_oc": resultado.get("numero_oc") or numero_oc_limpo,
+            "fornecedor": parceiro,
+            "itens": resultado.get("itens") or [],
+            "warning": resultado.get("warning") or "",
+            "fonte": resultado.get("fonte") or {},
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/oc/criar", methods=["POST"])
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_criar_coleta_por_oc():
+    if not _is_admin_or_compras():
+        return jsonify({"error": "Somente Compras e Administrador podem gerar coleta por OC."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    prioridade = str(payload.get("prioridade") or "Media").strip()
+    if prioridade not in PRIORIDADES_SOLICITACAO:
+        prioridade = "Media"
+    if not numero_oc:
+        return jsonify({"error": "Informe o número da OC."}), 400
+
+    existente = (
+        _query_solicitacoes_visiveis()
+        .filter(
+            AgendamentoSolicitacao.tipo == "COLETA",
+            AgendamentoSolicitacao.numero_oc == numero_oc,
+            AgendamentoSolicitacao.status != "Cancelada",
+        )
+        .first()
+    )
+    if existente:
+        return jsonify({"error": f"A OC {numero_oc} já possui coleta aberta na Central."}), 409
+
+    consulta = consultar_oc_agendamento(numero_oc)
+    if not consulta.get("encontrada"):
+        return jsonify({"error": consulta.get("error") or "OC não encontrada na bridge."}), 404
+
+    parceiro = consulta.get("fornecedor") if isinstance(consulta.get("fornecedor"), dict) else {}
+    parceiro_payload = {
+        "codigo": str(parceiro.get("codigo") or "").strip(),
+        "nome": str(parceiro.get("nome") or parceiro.get("razao_social") or "").strip(),
+        "razao_social": str(parceiro.get("razao_social") or parceiro.get("nome") or "").strip(),
+        "cnpj_cpf": str(parceiro.get("cnpj_cpf") or "").strip(),
+        "contato": str(parceiro.get("contato") or "").strip(),
+        "telefone": str(parceiro.get("telefone") or "").strip(),
+        "email": str(parceiro.get("email") or "").strip(),
+        "logradouro": str(parceiro.get("logradouro") or "").strip() or "Endereço de coleta a confirmar",
+        "numero": str(parceiro.get("numero") or "").strip(),
+        "complemento": str(parceiro.get("complemento") or "").strip(),
+        "bairro": str(parceiro.get("bairro") or "").strip(),
+        "cidade": str(parceiro.get("cidade") or "").strip() or "A confirmar",
+        "uf": (str(parceiro.get("uf") or "").strip()[:2] or "SP").upper(),
+        "cep": str(parceiro.get("cep") or "").strip(),
+        "observacoes": str(consulta.get("warning") or "").strip(),
+    }
+
+    usuario = session.get("username", "sistema")
+    agora = datetime.now()
+    fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
+    sol = AgendamentoSolicitacao(
+        tipo="COLETA",
+        status="Pendente",
+        prioridade=prioridade,
+        prazo_limite=None,
+        data_desejada=None,
+        solicitante=usuario,
+        criado_em=agora,
+        atualizado_em=agora,
+        documento_tipo="OC",
+        documento_numero=numero_oc,
+        numero_oc=numero_oc,
+        origem_documento="ORDEM_DE_COMPRA",
+        observacoes_solicitante="Coleta gerada automaticamente pela Central de Viagens a partir de OC digitada.",
+        observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
+        payload_origem=_json_text(
+            {
+                "origem": "oc_digitada_central",
+                "numero_oc": numero_oc,
+                "fonte": fonte,
+                "warning": consulta.get("warning") or "",
+            }
+        ),
+    )
+
+    ok, msg = _aplicar_parceiro(sol, parceiro_payload, "Fornecedor")
+    if not ok:
+        return jsonify({"error": msg or "Não foi possível aplicar os dados do fornecedor retornados pela bridge."}), 409
+
+    db.session.add(sol)
+    db.session.flush()
+    sol.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{sol.id:04d}"
+
+    itens = consulta.get("itens") if isinstance(consulta.get("itens"), list) else []
+    if not _sincronizar_itens(sol, itens):
+        _sincronizar_itens(
+            sol,
+            [
+                {
+                    "descricao": f"Coleta referente à OC {numero_oc}",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "volumes": 1,
+                    "observacoes": "Item padrão criado automaticamente.",
+                }
+            ],
+        )
+
+    _registrar_historico(
+        sol.id,
+        evento="CRIADA_OC_BRIDGE",
+        usuario=usuario,
+        status_novo="Pendente",
+        detalhe=f"Solicitação criada a partir da OC {numero_oc} via bridge.",
+        payload={"numero_oc": numero_oc, "fonte": fonte},
+    )
+    db.session.commit()
+
+    veiculo = AgendamentoVeiculo.query.get(sol.veiculo_id) if sol.veiculo_id else None
+    return jsonify(
+        {
+            "sucesso": True,
+            "solicitacao": _serializar_solicitacao(sol, veiculo=veiculo),
+            "pdf_url": f"/api/logistica/central-viagens/solicitacoes/{sol.id}/ordem-coleta.pdf",
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/ordem-coleta.pdf")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def central_viagens_ordem_coleta_pdf(solicitacao_id: int):
+    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+    if str(row.tipo or "").strip() != "COLETA":
+        return jsonify({"error": "Ordem de coleta disponível apenas para solicitações de coleta."}), 409
+
+    itens = (
+        AgendamentoSolicitacaoItem.query
+        .filter_by(solicitacao_id=row.id)
+        .order_by(AgendamentoSolicitacaoItem.sequencia.asc())
+        .all()
+    )
+    pdf_bytes = gerar_ordem_coleta_pdf(row, itens)
+    nome = f"ordem_coleta_{str(row.numero_oc or row.id).replace(' ', '_')}.pdf"
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=nome,
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/importar-oc/preview", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_importar_oc_preview():
+    if not _is_admin_or_compras():
+        return jsonify({"error": "Somente Compras e Administrador podem importar OC."}), 403
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not getattr(arquivo, "filename", ""):
+        return jsonify({"error": "Selecione um arquivo para importar."}), 400
+    try:
+        linhas = _extrair_linhas_oc_upload(arquivo)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    validas, erros = _validar_linhas_oc(linhas)
+    preview = [
+        {
+            "line": row["line"],
+            "numero_oc": row["numero_oc"],
+            "fornecedor": row["fornecedor"],
+            "cidade": row["cidade"],
+            "uf": row["uf"],
+            "valor": row["valor"],
+            "data_prevista": row["data_prevista"].strftime("%Y-%m-%d") if row.get("data_prevista") else "",
+            "transportadora": row.get("transportadora") or "",
+            "endereco": row.get("endereco") or "",
+        }
+        for row in validas[:300]
+    ]
+    return jsonify(
+        {
+            "preview": preview,
+            "totais": {
+                "lidas": len(linhas),
+                "validas": len(validas),
+                "invalidas": len(erros),
+            },
+            "erros": erros[:200],
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/importar-oc/confirmar", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_importar_oc_confirmar():
+    if not _is_admin_or_compras():
+        return jsonify({"error": "Somente Compras e Administrador podem importar OC."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
+    if not rows:
+        return jsonify({"error": "Nenhum registro enviado para importação."}), 400
+
+    parsed = []
+    for idx, raw in enumerate(rows, start=1):
+        parsed.append(
+            {
+                "line": int(raw.get("line") or idx),
+                "numero_oc": str(raw.get("numero_oc") or "").strip(),
+                "fornecedor": str(raw.get("fornecedor") or "").strip(),
+                "cidade": str(raw.get("cidade") or "").strip(),
+                "uf": str(raw.get("uf") or "").strip().upper()[:2],
+                "valor": _parse_float_br(raw.get("valor")),
+                "data_prevista": _parse_data_livre(raw.get("data_prevista")),
+                "transportadora": str(raw.get("transportadora") or "").strip(),
+                "endereco": str(raw.get("endereco") or "").strip(),
+            }
+        )
+    validas, erros = _validar_linhas_oc(parsed)
+    if not validas:
+        return jsonify({"error": "Nenhuma linha válida para importar.", "erros": erros}), 400
+
+    usuario = session.get("username", "sistema")
+    criadas = 0
+    ignoradas = 0
+    for row in validas:
+        numero_oc = row["numero_oc"]
+        existente = (
+            _query_solicitacoes_visiveis()
+            .filter(
+                AgendamentoSolicitacao.tipo == "COLETA",
+                AgendamentoSolicitacao.numero_oc == numero_oc,
+                AgendamentoSolicitacao.status != "Cancelada",
+            )
+            .first()
+        )
+        if existente:
+            ignoradas += 1
+            continue
+
+        agora = datetime.now()
+        sol = AgendamentoSolicitacao(
+            tipo="COLETA",
+            status="Pendente",
+            prioridade="Media",
+            prazo_limite=row.get("data_prevista"),
+            data_desejada=row.get("data_prevista"),
+            solicitante=usuario,
+            criado_em=agora,
+            atualizado_em=agora,
+            documento_tipo="OC",
+            documento_numero=numero_oc,
+            numero_oc=numero_oc,
+            origem_documento="ORDEM_DE_COMPRA",
+            observacoes_solicitante=f"Coleta gerada automaticamente pela importação de OC. Valor informado: {row.get('valor')}",
+            observacoes_logistica=(f"Transportadora: {row.get('transportadora')}" if row.get("transportadora") else None),
+            payload_origem=_json_text({"origem": "importacao_oc", "valor": row.get("valor"), "line": row.get("line")}),
+        )
+        ok, msg = _aplicar_parceiro(
+            sol,
+            {
+                "nome": row.get("fornecedor"),
+                "logradouro": row.get("endereco") or "A definir",
+                "cidade": row.get("cidade"),
+                "uf": row.get("uf"),
+            },
+            "Fornecedor",
+        )
+        if not ok:
+            ignoradas += 1
+            continue
+
+        db.session.add(sol)
+        db.session.flush()
+        sol.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{sol.id:04d}"
+        _sincronizar_itens(
+            sol,
+            [
+                {
+                    "descricao": f"Coleta referente à OC {numero_oc}",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "volumes": 1,
+                    "observacoes": f"Fornecedor: {row.get('fornecedor')}",
+                }
+            ],
+        )
+        _registrar_historico(
+            sol.id,
+            evento="CRIADA_IMPORT_OC",
+            usuario=usuario,
+            status_novo="Pendente",
+            detalhe=f"Solicitação criada automaticamente pela importação da OC {numero_oc}.",
+            payload=row,
+        )
+        criadas += 1
+
+    db.session.commit()
+    return jsonify({"sucesso": True, "criadas": criadas, "ignoradas": ignoradas, "erros": erros[:100]})
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/prioridade", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_alterar_prioridade(solicitacao_id: int):
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row or not _is_origem_automatica(row):
+        return jsonify({"error": "Viagem não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    prioridade = str(payload.get("prioridade") or "").strip()
+    if prioridade not in PRIORIDADES_SOLICITACAO:
+        return jsonify({"error": "Prioridade inválida."}), 400
+    anterior = row.prioridade
+    row.prioridade = prioridade
+    row.atualizado_em = datetime.now()
+    _registrar_historico(
+        row.id,
+        evento="PRIORIDADE_ALTERADA",
+        usuario=session.get("username", "sistema"),
+        detalhe=f"Prioridade alterada de {anterior} para {prioridade}.",
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/reorganizar", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_reorganizar(solicitacao_id: int):
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row or not _is_origem_automatica(row):
+        return jsonify({"error": "Viagem não encontrada."}), 404
+    payload = request.get_json(silent=True) or {}
+    regra = str(payload.get("regra") or "").strip()
+    agrupamento = str(payload.get("agrupamento") or "").strip()
+    prioridade = str(payload.get("prioridade") or "").strip()
+    if prioridade and prioridade in PRIORIDADES_SOLICITACAO:
+        row.prioridade = prioridade
+    row.atualizado_em = datetime.now()
+    _registrar_historico(
+        row.id,
+        evento="REORGANIZADA_CENTRAL",
+        usuario=session.get("username", "sistema"),
+        detalhe=f"Reorganização aplicada. Regra: {regra or 'manual'} · Agrupamento: {agrupamento or 'nenhum'}.",
+        payload=payload,
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/cancelar", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_cancelar(solicitacao_id: int):
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row or not _is_origem_automatica(row):
+        return jsonify({"error": "Viagem não encontrada."}), 404
+    if row.status in {"Concluida", "Cancelada"}:
+        return jsonify({"error": "Viagem já finalizada."}), 409
+    payload = request.get_json(silent=True) or {}
+    motivo = str(payload.get("motivo") or "").strip()
+    if not motivo:
+        return jsonify({"error": "Informe o motivo do cancelamento."}), 400
+    row.status = "Cancelada"
+    row.cancelado_por = session.get("username", "sistema")
+    row.cancelado_em = datetime.now()
+    row.motivo_cancelamento = motivo
+    row.cancelamento_pendente = False
+    row.atualizado_em = datetime.now()
+    _registrar_historico(
+        row.id,
+        evento="CANCELAMENTO_CENTRAL",
+        usuario=session.get("username", "sistema"),
+        status_anterior="",
+        status_novo="Cancelada",
+        detalhe=motivo,
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/excluir", methods=["DELETE"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_excluir(solicitacao_id: int):
+    if session.get("role") != "Admin":
+        return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row or not _is_origem_automatica(row):
+        return jsonify({"error": "Viagem não encontrada."}), 404
+    if row.status == "EmRota":
+        return jsonify({"error": "Não é possível excluir viagem em rota."}), 409
+    payload = request.get_json(silent=True) or {}
+    usuario = session.get("username", "sistema")
+    motivo = str(payload.get("motivo") or "").strip() or "Excluida na Central de Viagens."
+    status_anterior = str(row.status or "").strip()
+    row.atualizado_em = datetime.now()
+    if status_anterior not in {"Concluida", "Cancelada"}:
+        row.status = "Cancelada"
+    if not row.cancelado_em:
+        row.cancelado_em = datetime.now()
+    if not row.cancelado_por:
+        row.cancelado_por = usuario
+    if not row.motivo_cancelamento:
+        row.motivo_cancelamento = motivo
+    _registrar_historico(
+        row.id,
+        evento="EXCLUIDA_CENTRAL",
+        usuario=usuario,
+        status_anterior=status_anterior,
+        status_novo=str(row.status or "").strip(),
+        detalhe=motivo,
+        payload=payload,
+    )
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/minhas-solicitacoes")
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def minhas_solicitacoes_agendamento():
     usuario = session.get("username", "desconhecido")
     rows = (
-        AgendamentoSolicitacao.query
+        _query_solicitacoes_visiveis()
         .filter(AgendamentoSolicitacao.solicitante == usuario)
         .order_by(AgendamentoSolicitacao.criado_em.desc())
         .limit(30)
@@ -391,7 +1063,7 @@ def agenda_agendamento_veiculos():
     fim = inicio + timedelta(days=1 if modo == "dia" else 7)
     veiculos = {row.id: row for row in listar_veiculos_agendamento()}
     rows = (
-        AgendamentoSolicitacao.query
+        _query_solicitacoes_visiveis()
         .filter(
             AgendamentoSolicitacao.status.in_(list(STATUS_ATIVOS) + ["Concluida"]),
             AgendamentoSolicitacao.data_hora_saida_prevista.isnot(None),
@@ -645,7 +1317,7 @@ def obter_solicitacao_agendamento(solicitacao_id: int):
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def atualizar_documento_solicitacao(solicitacao_id: int):
     """Gestor informa/corrige OC ou NF — salva e enriquece automaticamente com dados do pedido."""
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if row.status in ("Cancelada",):
@@ -782,151 +1454,13 @@ def atualizar_documento_solicitacao(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def criar_solicitacao_agendamento():
-    payload = request.get_json(silent=True) or {}
-    tipo = str(payload.get("tipo") or "").strip().upper()
-    prioridade = str(payload.get("prioridade") or "Media").strip()
-    if tipo not in TIPOS_SOLICITACAO:
-        return jsonify({"error": "Tipo de solicitação inválido."}), 400
-    if prioridade not in PRIORIDADES_SOLICITACAO:
-        return jsonify({"error": "Prioridade inválida."}), 400
-
-    avulsa = payload.get("avulsa") if isinstance(payload.get("avulsa"), dict) else {}
-
-    numero_oc = str(payload.get("numero_oc") or "").strip()
-    numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
-    referencia_avulsa = str(payload.get("referencia_avulsa") or "").strip()
-    try:
-        prazo_limite = _parse_datetime(payload.get("prazo_limite"), "o prazo")
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    try:
-        data_desejada = _parse_datetime(payload.get("data_desejada"), "a data desejada")
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    observacoes_solicitante = str(payload.get("observacoes_solicitante") or "").strip()
-    if tipo == "AVULSA":
-        extras_avulsa = []
-        for label, value in [
-            ("Finalidade", avulsa.get("finalidade")),
-            ("Centro de custo", avulsa.get("centro_custo")),
-            ("Responsavel", avulsa.get("responsavel")),
-            ("Local de retirada", avulsa.get("local_retirada")),
-            ("Previsao de devolucao", avulsa.get("previsao_devolucao")),
-        ]:
-            value = str(value or "").strip()
-            if value:
-                extras_avulsa.append(f"{label}: {value}")
-        if extras_avulsa:
-            observacoes_solicitante = "\n".join([observacoes_solicitante, *extras_avulsa]).strip()
-
-    if tipo == "AVULSA":
-        consulta = {"encontrada": False, "itens": []}
-        parceiro = {
-            "nome": "Uso avulso de veículo",
-            "logradouro": "Sem destino definido",
-            "cidade": "A definir",
-            "uf": "NA",
-            "observacoes": observacoes_solicitante,
-        }
-    else:
-        if (tipo == "COLETA" and numero_oc) or (tipo == "ENTREGA" and numero_nf):
-            consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
-        else:
-            consulta = {"encontrada": False, "itens": []}
-        parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
-        if not parceiro:
-            parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
-        # Fallback for simplified requests where user only fills in the location
-        local_solicitante = str(payload.get("local_solicitante") or "").strip()
-        if local_solicitante and not parceiro.get("logradouro"):
-            parceiro["logradouro"] = local_solicitante
-            if not parceiro.get("cidade"):
-                parceiro["cidade"] = local_solicitante.split("/")[-1].strip() if "/" in local_solicitante else "A definir"
-            if not parceiro.get("uf"):
-                parceiro["uf"] = "--"
-        if not (parceiro.get("nome") or parceiro.get("razao_social")):
-            parceiro["nome"] = "A definir"
-        if not parceiro.get("logradouro"):
-            parceiro["logradouro"] = str(payload.get("local_solicitante") or "A definir").strip() or "A definir"
-        if not parceiro.get("cidade"):
-            parceiro["cidade"] = "A definir"
-        if not parceiro.get("uf"):
-            parceiro["uf"] = "--"
-
-    origem_documento = "Manual"
-    if tipo == "COLETA" and consulta.get("encontrada"):
-        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "GoogleSheets").strip() or "GoogleSheets"
-    elif tipo == "ENTREGA" and consulta.get("encontrada"):
-        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "ERPPostgres").strip() or "ERPPostgres"
-
-    usuario = session.get("username", "desconhecido")
-    agora = datetime.now()
-    row = AgendamentoSolicitacao(
-        tipo=tipo,
-        status="Pendente",
-        prioridade=prioridade,
-        prazo_limite=prazo_limite,
-        data_desejada=data_desejada,
-        solicitante=usuario,
-        criado_em=agora,
-        atualizado_em=agora,
-        documento_tipo="OC" if tipo == "COLETA" else ("NF" if tipo == "ENTREGA" else "AVULSO"),
-        documento_numero=numero_oc if tipo == "COLETA" else (numero_nf if tipo == "ENTREGA" else (referencia_avulsa or f"AVULSO-{agora.strftime('%Y%m%d%H%M')}")),
-        numero_oc=numero_oc or None,
-        numero_nf=numero_nf or None,
-        origem_documento=origem_documento,
-        observacoes_solicitante=observacoes_solicitante or None,
-        observacoes_logistica=str(payload.get("observacoes_logistica") or "").strip() or None,
-        payload_origem=_json_text({"request": payload, "consulta": {"encontrada": consulta.get("encontrada"), "fonte": consulta.get("fonte")}}),
-    )
-    ok, msg = _aplicar_parceiro(row, parceiro, "Fornecedor" if tipo == "COLETA" else ("Cliente" if tipo == "ENTREGA" else "Avulso"))
-    if not ok:
-        return jsonify({"error": msg}), 400
-
-    rota = estimar_rota_agendamento({
-        "logradouro": row.logradouro,
-        "numero": row.numero,
-        "bairro": row.bairro,
-        "cidade": row.cidade,
-        "uf": row.uf,
-        "cep": row.cep
-    })
-    if rota.get("km_estimado") is not None:
-        row.origem_latitude = rota.get("origem_latitude")
-        row.origem_longitude = rota.get("origem_longitude")
-        row.destino_latitude = rota.get("destino_latitude")
-        row.destino_longitude = rota.get("destino_longitude")
-        row.km_estimado = rota.get("km_estimado")
-        row.km_estimado_retorno = rota.get("km_estimado_retorno")
-
-    itens = payload.get("itens")
-    if not isinstance(itens, list) or not itens:
-        itens = list(consulta.get("itens") or [])
-    if tipo == "AVULSA" and (
-        not isinstance(itens, list)
-        or not any(str(item.get("descricao") or "").strip() for item in itens if isinstance(item, dict))
-    ):
-        itens = [{"descricao": "Reserva avulsa de veículo", "quantidade": 1, "unidade": "UN", "volumes": 0}]
-    if not isinstance(itens, list) or not itens:
-        itens = [{"descricao": "A definir pela logística", "quantidade": 1, "unidade": "UN", "volumes": 0}]
-
-    db.session.add(row)
-    db.session.flush()
-    row.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{row.id:04d}"
-    if not _sincronizar_itens(row, itens):
-        db.session.rollback()
-        return jsonify({"error": "Adicione pelo menos 1 item válido para continuar."}), 400
-    _registrar_historico(row.id, evento="CRIADA", usuario=usuario, status_novo="Pendente", detalhe=f"Solicitação criada via {row.documento_tipo} {row.documento_numero}.", payload=payload)
-    db.session.commit()
-    _notificar_solicitante_agendamento(row, "Solicitacao de transporte criada", "Sua solicitacao foi enviada para a logistica.")
-    return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row)}), 201
+    return jsonify({"error": "Criação manual de solicitação de viagem foi descontinuada. Use a Central de Viagens."}), 410
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/alocar", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def alocar_solicitacao_agendamento(solicitacao_id: int):
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if str(row.status or "").strip() in {"Concluida", "Cancelada"}:
@@ -972,7 +1506,7 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         getattr(veiculo, "janela_conflito_min", 0)
         or current_app.config.get("AGENDAMENTO_CONFLITO_MINUTOS", 30)
     )
-    query = AgendamentoSolicitacao.query.filter(
+    query = _query_solicitacoes_visiveis().filter(
         AgendamentoSolicitacao.veiculo_id == veiculo.id,
         AgendamentoSolicitacao.status.in_(["Alocada", "EmRota"]),
         AgendamentoSolicitacao.id != row.id,
@@ -988,7 +1522,7 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
             return jsonify({"error": f"{veiculo.nome_exibicao} já possui uma saída programada para {outro_inicio.strftime('%d/%m/%Y %H:%M')}."}), 409
 
     if motorista:
-        query_motorista = AgendamentoSolicitacao.query.filter(
+        query_motorista = _query_solicitacoes_visiveis().filter(
             AgendamentoSolicitacao.motorista_id == motorista.id,
             AgendamentoSolicitacao.status.in_(["Alocada", "EmAndamento", "EmRota"]),
             AgendamentoSolicitacao.id != row.id,
@@ -1060,7 +1594,7 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/status", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def atualizar_status_agendamento(solicitacao_id: int):
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     status_atual = str(row.status or "").strip()
@@ -1133,7 +1667,7 @@ def atualizar_status_agendamento(solicitacao_id: int):
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def cancelar_solicitacao_agendamento(solicitacao_id: int):
     """Logística solicita cancelamento — o solicitante precisa aprovar."""
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if str(row.status or "").strip() == "Concluida":
@@ -1188,7 +1722,7 @@ def cancelar_solicitacao_agendamento(solicitacao_id: int):
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def aprovar_cancelamento_solicitacao(solicitacao_id: int):
     """Solicitante aprova o cancelamento pedido pela logistica."""
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if not row.cancelamento_pendente:
@@ -1218,7 +1752,7 @@ def aprovar_cancelamento_solicitacao(solicitacao_id: int):
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def rejeitar_cancelamento_solicitacao(solicitacao_id: int):
     """Solicitante rejeita o cancelamento pedido pela logistica."""
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if not row.cancelamento_pendente:
@@ -1255,6 +1789,7 @@ def motoristas_km_dashboard():
             AgendamentoSolicitacao.motorista_id.isnot(None),
             AgendamentoSolicitacao.km_estimado.isnot(None),
             AgendamentoSolicitacao.status.in_(["Alocada", "EmRota", "Concluida"]),
+            _filtro_solicitacao_visivel(),
             AgendamentoSolicitacao.criado_em >= desde,
         )
         .group_by(AgendamentoSolicitacao.motorista_id, AgendamentoSolicitacao.motorista_nome)
@@ -1293,6 +1828,7 @@ def disponibilidade_veiculos():
         AgendamentoSolicitacao.veiculo_id.isnot(None),
         AgendamentoSolicitacao.data_hora_saida_prevista.isnot(None),
         AgendamentoSolicitacao.status.in_(["Alocada", "EmAndamento", "EmRota"]),
+        _filtro_solicitacao_visivel(),
         AgendamentoSolicitacao.data_hora_saida_prevista >= data_inicio,
         AgendamentoSolicitacao.data_hora_saida_prevista <= data_fim,
     ).all()
@@ -1351,6 +1887,7 @@ def sugestao_rota():
 
     q = AgendamentoSolicitacao.query.filter(
         AgendamentoSolicitacao.status.in_(["Alocada", "EmAndamento"]),
+        _filtro_solicitacao_visivel(),
         AgendamentoSolicitacao.data_hora_saida_prevista.isnot(None),
         AgendamentoSolicitacao.data_hora_saida_prevista >= dia_inicio,
         AgendamentoSolicitacao.data_hora_saida_prevista < dia_fim,
@@ -1433,6 +1970,7 @@ def _auto_transicao_em_andamento():
     hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     rows = AgendamentoSolicitacao.query.filter(
         AgendamentoSolicitacao.status == "Alocada",
+        _filtro_solicitacao_visivel(),
         AgendamentoSolicitacao.data_hora_saida_prevista.isnot(None),
         AgendamentoSolicitacao.data_hora_saida_prevista < hoje + timedelta(days=1),
     ).all()
@@ -1461,7 +1999,7 @@ def minhas_viagens_motorista():
     if not motorista:
         return jsonify({"viagens": [], "motorista": None})
     rows = (
-        AgendamentoSolicitacao.query
+        _query_solicitacoes_visiveis()
         .filter(
             AgendamentoSolicitacao.motorista_id == motorista.id,
             AgendamentoSolicitacao.status.in_(STATUS_ATIVOS | {"Concluida"}),
@@ -1488,7 +2026,7 @@ def motorista_finalizar_viagem(solicitacao_id: int):
     motorista = AgendamentoMotorista.query.filter_by(usuario_username=username).first()
     if not motorista:
         return jsonify({"error": "Motorista não encontrado para este usuário."}), 404
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if row.motorista_id != motorista.id:
@@ -1525,7 +2063,7 @@ def motorista_iniciar_viagem(solicitacao_id: int):
     motorista = AgendamentoMotorista.query.filter_by(usuario_username=username).first()
     if not motorista:
         return jsonify({"error": "Motorista não encontrado para este usuário."}), 404
-    row = AgendamentoSolicitacao.query.get(solicitacao_id)
+    row = _get_solicitacao_visivel(solicitacao_id)
     if not row:
         return jsonify({"error": "Solicitação não encontrada."}), 404
     if row.motorista_id != motorista.id:

@@ -12,7 +12,7 @@ from ..models import CadastroWorkflowSLAConfig, CadastroWorkflowSolicitacao, Pla
 from ..services.cadastro_workflow_service import (
     CAMPO_OPCOES,
     CATEGORIAS_VISIVEIS,
-    MATERIAL_UTILIZACAO_RAPIDA,
+    MATERIAL_UTILIZACAO_SUGESTOES,
     MOTIVOS_PADRAO_POR_ACAO,
     STATUS,
     TIPOS_CADASTRO,
@@ -233,7 +233,7 @@ def novo():
         dados=dados,
         duplicidades=duplicidades,
         campo_opcoes=CAMPO_OPCOES,
-        utilizacao_rapida=MATERIAL_UTILIZACAO_RAPIDA,
+        utilizacao_sugestoes=MATERIAL_UTILIZACAO_SUGESTOES,
     )
 
 

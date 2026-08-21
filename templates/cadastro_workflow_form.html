@@ -14,9 +14,6 @@
     .cwn-dup-meta { display: flex; gap: 8px; flex-wrap: wrap; }
     .cwn-dup-meta span { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: var(--eui-surface-2); color: var(--eui-text-soft); }
     .cwn-hint { margin-top: 6px; font-size: 12px; color: var(--eui-text-soft); }
-    .cwn-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
-    .cwn-quick button { border: 1px solid var(--eui-border); background: var(--eui-surface-2); color: var(--eui-text); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .cwn-quick button:hover { border-color: var(--eui-primary); color: var(--eui-primary); }
     @media (max-width: 760px) { .cwn-grid { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
@@ -90,19 +87,14 @@
                             {% endfor %}
                         </select>
                         {% elif campo in ['endereco','descricao_complementar','dados_bancarios','aplicacao','detalhe_utilizacao'] %}
-                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %} placeholder="{% if campo == 'detalhe_utilizacao' %}Ex.: informar onde será usado, se entra em produção, manutenção, revenda, industrialização em terceiros ou serviço, e por que o cadastro é necessário.{% endif %}">{{ dados.get(campo,'') }}</textarea>
+                        <textarea class="eui-textarea" id="{{ campo }}" name="{{ campo }}" {% if obrigatorio %}required{% endif %} placeholder="{% if campo == 'detalhe_utilizacao' %}Descreva a utilização do material.{% endif %}">{{ dados.get(campo,'') }}</textarea>
                         {% else %}
                         <input class="eui-input" id="{{ campo }}" name="{{ campo }}" value="{{ dados.get(campo,'') }}" {% if obrigatorio %}required{% endif %}>
                         {% endif %}
                         {% if campo == 'utilizacao' %}
-                        <div class="cwn-hint">Escolha a natureza do material. O detalhe de uso você informa no campo abaixo.</div>
+                        <div class="cwn-hint">Escolha a natureza do material. O sistema sugere um texto base no campo abaixo conforme a opção selecionada.</div>
                         {% elif campo == 'detalhe_utilizacao' %}
-                        <div class="cwn-hint">Responda de forma simples: por que precisa, onde vai usar e como vai aplicar.</div>
-                        <div class="cwn-quick">
-                            {% for opcao in utilizacao_rapida %}
-                            <button type="button" class="js-utilizacao-rapida" data-utilizacao="{{ opcao.utilizacao }}" data-texto="{{ opcao.texto }}">{{ opcao.label }}</button>
-                            {% endfor %}
-                        </div>
+                        <div class="cwn-hint">Campo livre para detalhar conforme a necessidade da operação.</div>
                         {% endif %}
                     </div>
                     {% endfor %}
@@ -133,12 +125,15 @@
 {% endblock %}
 
 {% block extra_js %}
+<script type="application/json" id="cw-utilizacao-sugestoes-json">{{ utilizacao_sugestoes|tojson }}</script>
 <script>
 const tipoAtual = "{{ tipo }}";
 const tiposPessoaJuridica = new Set(["cliente", "fornecedor", "transportadora"]);
 const docInput = document.getElementById("documento");
 const utilizacaoInput = document.getElementById('utilizacao');
 const detalheUtilizacaoInput = document.getElementById('detalhe_utilizacao');
+const utilizacaoSugestoes = JSON.parse(document.getElementById('cw-utilizacao-sugestoes-json').textContent || '{}');
+let ultimaSugestaoUtilizacao = '';
 if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
   docInput.setAttribute("inputmode", "numeric");
   docInput.setAttribute("maxlength", "18");
@@ -153,18 +148,26 @@ if (docInput && tiposPessoaJuridica.has(tipoAtual)) {
   });
 }
 
-document.querySelectorAll('.js-utilizacao-rapida').forEach((btn) => {
-    btn.addEventListener('click', () => {
-        if (utilizacaoInput && btn.dataset.utilizacao) {
-            utilizacaoInput.value = btn.dataset.utilizacao;
-        }
-        if (detalheUtilizacaoInput && btn.dataset.texto) {
-            detalheUtilizacaoInput.value = btn.dataset.texto;
-            detalheUtilizacaoInput.focus();
-            detalheUtilizacaoInput.setSelectionRange(detalheUtilizacaoInput.value.length, detalheUtilizacaoInput.value.length);
-        }
-    });
-});
+function aplicarSugestaoUtilizacao(forcar = false) {
+    if (!utilizacaoInput || !detalheUtilizacaoInput) return;
+    const sugestao = utilizacaoSugestoes[utilizacaoInput.value] || '';
+    if (!sugestao) return;
+    const atual = detalheUtilizacaoInput.value.trim();
+    if (forcar || !atual || atual === ultimaSugestaoUtilizacao) {
+        detalheUtilizacaoInput.value = sugestao;
+        ultimaSugestaoUtilizacao = sugestao;
+    }
+}
+
+if (utilizacaoInput && detalheUtilizacaoInput) {
+    const sugestaoInicial = detalheUtilizacaoInput.value.trim();
+    if (sugestaoInicial) {
+        ultimaSugestaoUtilizacao = sugestaoInicial;
+    } else {
+        aplicarSugestaoUtilizacao(true);
+    }
+    utilizacaoInput.addEventListener('change', () => aplicarSugestaoUtilizacao(false));
+}
 
 async function verificarDuplicidade(){
   const box = document.getElementById('dupBox');

@@ -1,6 +1,10 @@
 from types import SimpleNamespace
 
-from conferencia_app.services.entrada_chapa_email_service import _eh_entrada_chapa
+from conferencia_app import create_app
+from conferencia_app.extensions import db
+from conferencia_app.models import ItemNota
+
+from conferencia_app.services.entrada_chapa_email_service import _anexar_qtd_chapas_und, _eh_entrada_chapa
 from scripts.erp_lancamento_api_bridge import _montar_entrada_chapa
 
 
@@ -75,3 +79,36 @@ def test_montar_entrada_chapa_usa_cliente_para_cfop_1924():
 
     assert entrada["parceiro_nome"] == "Cliente Triangulacao SA"
     assert entrada["itens"][0]["cfop"] == "1924"
+
+
+def test_anexar_qtd_chapas_und_casa_por_codigo_grv_ou_descricao():
+    app = create_app()
+    app.config.update(
+        SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
+        TESTING=True,
+    )
+
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        db.session.add(
+            ItemNota(
+                numero_nota="999",
+                codigo="COD-XML",
+                codigo_grv="CHAPA-001",
+                descricao="CHAPA ASTM A36 6,35MM",
+                status="Concluído",
+                qtd_chapas_und=12,
+            )
+        )
+        db.session.commit()
+
+        itens = [
+            {"cod_interno": "CHAPA-001", "descricao": "Descricao divergente"},
+            {"cod_interno": "", "descricao": "CHAPA ASTM A36 6,35MM"},
+        ]
+
+        _anexar_qtd_chapas_und("999", itens)
+
+        assert itens[0]["qtd_chapas_und"] == 12
+        assert itens[1]["qtd_chapas_und"] == 12
