@@ -242,7 +242,7 @@
 <script>
 const state = {
   tab: 'COLETA',
-  status: '',
+  subfiltro: 'PENDENTES',
   q: '',
   coletas: [],
   entregas: [],
@@ -252,13 +252,10 @@ const state = {
   selectedIds: []
 };
 
-const filtrosStatus = [
-  { value: '', label: 'Todos' },
-  { value: 'Pendente', label: 'Pendente' },
-  { value: 'Alocada', label: 'Alocada' },
-  { value: 'EmRota', label: 'Em rota' },
-  { value: 'Concluida', label: 'Concluída' },
-  { value: 'Cancelada', label: 'Cancelada' }
+const subFiltros = [
+  { value: 'PENDENTES', label: 'Pendentes' },
+  { value: 'EM_ANDAMENTO', label: 'Em andamento' },
+  { value: 'CONCLUIDAS', label: 'Concluidas' }
 ];
 
 function showToast(msg, type = 'info') {
@@ -291,18 +288,30 @@ function badgeStatus(status) {
 }
 
 function getRows() {
-  return state.tab === 'COLETA' ? state.coletas : state.entregas;
+  const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
+  if (state.subfiltro === 'PENDENTES') {
+    return base.filter((r) => ['Pendente', 'EmAnalise', 'Alocada'].includes(String(r.status || '').trim()));
+  }
+  if (state.subfiltro === 'EM_ANDAMENTO') {
+    return base.filter((r) => ['EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
+  }
+  if (state.subfiltro === 'CONCLUIDAS') {
+    return base.filter((r) => ['Concluida'].includes(String(r.status || '').trim()));
+  }
+  return base;
 }
 
 function renderFilters() {
   const box = document.getElementById('vt-filtros');
-  box.innerHTML = filtrosStatus.map((f) =>
-    `<button class="vt-filter-chip ${state.status === f.value ? 'is-active' : ''}" data-status="${f.value}">${f.label}</button>`
+  box.innerHTML = subFiltros.map((f) =>
+    `<button class="vt-filter-chip ${state.subfiltro === f.value ? 'is-active' : ''}" data-subfiltro="${f.value}">${f.label}</button>`
   ).join('');
   box.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.status = btn.dataset.status || '';
-      loadDashboard();
+      state.subfiltro = btn.dataset.subfiltro || 'PENDENTES';
+      state.selectedIds = [];
+      renderFilters();
+      renderTable();
     });
   });
 }
@@ -332,6 +341,67 @@ function renderTable() {
   const idsVisiveis = rows.map((r) => Number(r.id));
   state.selectedIds = state.selectedIds.filter((id) => idsVisiveis.includes(id));
 
+  if (state.subfiltro === 'PENDENTES') {
+    body.innerHTML = rows.map((row) => {
+      const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+      const nf = row.numero_nf || row.documento_numero || '-';
+      const motorista = row.motorista?.nome || row.motorista_nome || '-';
+      const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+      return `
+        <tr>
+          <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
+          <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+          <td>${doc}</td>
+          <td>${row.parceiro_nome || '-'}</td>
+          <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+          <td>${motorista}</td>
+          <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+          <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
+          <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+        </tr>
+      `;
+    }).join('');
+
+    resumoMotoristas.innerHTML = '';
+
+    const checkAllPendentes = document.getElementById('vt-check-all');
+    if (checkAllPendentes) {
+      checkAllPendentes.checked = rows.length > 0 && rows.every((r) => state.selectedIds.includes(Number(r.id)));
+      checkAllPendentes.addEventListener('change', () => {
+        if (checkAllPendentes.checked) {
+          const merged = new Set([...state.selectedIds, ...idsVisiveis]);
+          state.selectedIds = Array.from(merged);
+        } else {
+          state.selectedIds = state.selectedIds.filter((id) => !idsVisiveis.includes(id));
+        }
+        renderTable();
+        atualizarSelecionadasUI();
+      });
+    }
+
+    body.querySelectorAll('.vt-check-row').forEach((el) => {
+      el.addEventListener('change', () => {
+        const id = Number(el.dataset.id);
+        if (el.checked) {
+          if (!state.selectedIds.includes(id)) state.selectedIds.push(id);
+        } else {
+          state.selectedIds = state.selectedIds.filter((x) => x !== id);
+        }
+        atualizarSelecionadasUI();
+      });
+    });
+
+    body.querySelectorAll('.vt-actions-btn').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openActionsMenu(Number(btn.dataset.id), ev.clientX, ev.clientY);
+      });
+    });
+
+    atualizarSelecionadasUI();
+    return;
+  }
+
   const gruposMap = rows.reduce((acc, row) => {
     const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
     if (!acc[nome]) acc[nome] = [];
@@ -360,13 +430,33 @@ function renderTable() {
       return acc;
     }, {});
 
-    const viagens = Object.values(viagensMap).sort((a, b) => {
-      const ac = a.viagem?.codigo || '';
-      const bc = b.viagem?.codigo || '';
-      if (!ac) return 1;
-      if (!bc) return -1;
-      return ac.localeCompare(bc, 'pt-BR');
-    });
+    const linhasSemViagem = (viagensMap.__SEM_VIAGEM__?.rows || []).map((row) => {
+      const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+      const nf = row.numero_nf || row.documento_numero || '-';
+      const motorista = row.motorista?.nome || row.motorista_nome || '-';
+      const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+      return `
+        <tr>
+          <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
+          <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+          <td>${doc}</td>
+          <td>${row.parceiro_nome || '-'}</td>
+          <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+          <td>${motorista}</td>
+          <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+          <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
+          <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+        </tr>
+      `;
+    }).join('');
+
+    const viagens = Object.values(viagensMap)
+      .filter((item) => item.viagem && item.viagem.codigo)
+      .sort((a, b) => {
+        const ac = a.viagem?.codigo || '';
+        const bc = b.viagem?.codigo || '';
+        return ac.localeCompare(bc, 'pt-BR');
+      });
 
     const blocosViagem = viagens.map((item, tripIdx) => {
       const idsViagem = item.rows.map((r) => Number(r.id));
@@ -374,8 +464,7 @@ function renderTable() {
       const viagemMarcada = idsViagem.length > 0 && selecionadasViagem === idsViagem.length ? 'checked' : '';
       const codigoViagem = item.viagem?.codigo || '';
       const statusViagem = item.viagem?.status || '';
-      const textoViagem = codigoViagem ? `VIAGEM ${codigoViagem}` : 'Sem viagem consolidada';
-      const tripCodeClass = codigoViagem ? 'vt-trip-code' : 'vt-trip-code muted';
+      const textoViagem = `VIAGEM ${codigoViagem}`;
 
       const linhas = item.rows.map((row) => {
         const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
@@ -402,8 +491,8 @@ function renderTable() {
           <td colspan="9">
             <div class="vt-trip-head">
               <input type="checkbox" class="vt-check vt-check-trip" data-group-index="${idx}" data-trip-index="${tripIdx}" ${viagemMarcada}>
-              <span class="${tripCodeClass}">${textoViagem}</span>
-              <span class="vt-group-meta">Solicitações: ${item.rows.length}</span>
+              <span class="vt-trip-code">${textoViagem}</span>
+              <span class="vt-group-meta">Solicitacoes: ${item.rows.length}</span>
               <span class="vt-group-meta">Selecionadas: ${selecionadasViagem}</span>
               ${statusViagem ? `<span class="vt-group-meta">Status: ${statusViagem}</span>` : ''}
             </div>
@@ -424,6 +513,7 @@ function renderTable() {
           </div>
         </td>
       </tr>
+      ${linhasSemViagem}
       ${blocosViagem}
     `;
   }).join('');
@@ -495,11 +585,9 @@ function renderTable() {
         acc[key].rows.push(row);
         return acc;
       }, {});
-      const viagens = Object.values(viagensMap).sort((a, b) => {
+      const viagens = Object.values(viagensMap).filter((item) => item.viagem && item.viagem.codigo).sort((a, b) => {
         const ac = a.viagem?.codigo || '';
         const bc = b.viagem?.codigo || '';
-        if (!ac) return 1;
-        if (!bc) return -1;
         return ac.localeCompare(bc, 'pt-BR');
       });
       const trip = viagens[tripIdx];
@@ -547,7 +635,6 @@ function renderMetrics(resumo, counts) {
 async function loadDashboard() {
   const p = new URLSearchParams();
   if (state.q) p.set('q', state.q);
-  if (state.status) p.set('status', state.status);
   const r = await fetch(`/api/logistica/central-viagens/dashboard?${p.toString()}`);
   const d = await r.json();
   if (!r.ok) {
