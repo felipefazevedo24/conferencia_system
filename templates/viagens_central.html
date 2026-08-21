@@ -84,6 +84,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="COLETA">Coletas <span class="count" id="count-coletas">0</span></button>
                 <button class="vt-tab" data-tab="ENTREGA">Entregas <span class="count" id="count-entregas">0</span></button>
+              <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
             </div>
             <div class="vt-toolbar">
                 <div class="eui-toolbar__search" style="min-width:300px; flex:1;">
@@ -92,8 +93,7 @@
                 </div>
               <div class="vt-bulkbar">
                 <span id="vt-selected" class="vt-mini">Selecionadas: 0</span>
-                <button id="btnAlocarSelecionadas" class="eui-btn eui-btn--primary" disabled><i class="fas fa-people-arrows-left-right"></i> Alocar selecionadas</button>
-                <button id="btnCriarViagemSelecionadas" class="eui-btn eui-btn--ghost" disabled><i class="fas fa-route"></i> Criar viagem com selecionadas</button>
+                <button id="btnCriarViagemSelecionadas" class="eui-btn eui-btn--primary" disabled><i class="fas fa-route"></i> Criar viagem com selecionadas</button>
               </div>
                 <div class="vt-filters" id="vt-filtros"></div>
             </div>
@@ -247,6 +247,7 @@ const state = {
   q: '',
   coletas: [],
   entregas: [],
+  viagens: [],
   ocConsulta: null,
   veiculos: [],
   motoristas: [],
@@ -255,11 +256,30 @@ const state = {
   posAlocacaoMotoristaId: null
 };
 
-const subFiltros = [
+const subFiltrosSolicitacoes = [
   { value: 'PENDENTES', label: 'Pendentes' },
   { value: 'EM_ANDAMENTO', label: 'Em andamento' },
   { value: 'CONCLUIDAS', label: 'Concluidas' }
 ];
+
+const subFiltrosViagens = [
+  { value: 'PROGRAMADAS', label: 'Programadas' },
+  { value: 'EM_ANDAMENTO', label: 'Em andamento' },
+  { value: 'CONCLUIDAS', label: 'Concluidas' }
+];
+
+function formatDateTime(valor) {
+  if (!valor) return '-';
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
 
 function showToast(msg, type = 'info') {
   if (window.EUI && window.EUI.toast) {
@@ -311,9 +331,22 @@ function renderSolicitacaoRow(row) {
 }
 
 function getRows() {
+  if (state.tab === 'VIAGENS') {
+    if (state.subfiltro === 'PROGRAMADAS') {
+      return state.viagens.filter((v) => String(v.status || '').trim() === 'Planejada');
+    }
+    if (state.subfiltro === 'EM_ANDAMENTO') {
+      return state.viagens.filter((v) => String(v.status || '').trim() === 'EmAndamento');
+    }
+    if (state.subfiltro === 'CONCLUIDAS') {
+      return state.viagens.filter((v) => ['Concluida', 'Cancelada'].includes(String(v.status || '').trim()));
+    }
+    return state.viagens;
+  }
+
   const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
   if (state.subfiltro === 'PENDENTES') {
-    return base.filter((r) => ['Pendente', 'EmAnalise', 'Alocada'].includes(String(r.status || '').trim()));
+    return base.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
   }
   if (state.subfiltro === 'EM_ANDAMENTO') {
     return base.filter((r) => ['EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
@@ -326,13 +359,14 @@ function getRows() {
 
 function renderFilters() {
   const box = document.getElementById('vt-filtros');
-  box.innerHTML = subFiltros.map((f) =>
+  const filtrosAtivos = state.tab === 'VIAGENS' ? subFiltrosViagens : subFiltrosSolicitacoes;
+  box.innerHTML = filtrosAtivos.map((f) =>
     `<button class="vt-filter-chip ${state.subfiltro === f.value ? 'is-active' : ''}" data-subfiltro="${f.value}">${f.label}</button>`
   ).join('');
   box.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.subfiltro = btn.dataset.subfiltro || 'PENDENTES';
-      state.selectedIds = [];
+      if (state.tab !== 'VIAGENS') state.selectedIds = [];
       renderFilters();
       renderTable();
     });
@@ -345,6 +379,42 @@ function renderTable() {
   const head = document.getElementById('vt-head');
   const subtitulo = document.getElementById('vt-subtitulo');
   const resumoMotoristas = document.getElementById('vt-resumo-motoristas');
+  const bulkBar = document.querySelector('.vt-bulkbar');
+
+  if (state.tab === 'VIAGENS') {
+    if (bulkBar) bulkBar.style.display = 'none';
+    subtitulo.innerHTML = '<strong>Viagens</strong><br>Programadas, em andamento e concluídas.';
+    head.innerHTML = '<tr><th>Código</th><th>Status</th><th>Tipo</th><th>Motorista</th><th>Veículo</th><th>Saída prevista</th><th>Paradas</th><th style="text-align:right;">Ações</th></tr>';
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+      resumoMotoristas.innerHTML = '';
+      return;
+    }
+
+    body.innerHTML = rows.map((v) => `
+      <tr>
+        <td><strong>${v.codigo || ('#' + v.id)}</strong></td>
+        <td><span class="eui-badge ${badgeStatus(v.status)}">${v.status || '-'}</span></td>
+        <td>${v.tipo || '-'}</td>
+        <td>${v.motorista_nome || '-'}</td>
+        <td>${v.veiculo_label || '-'}</td>
+        <td>${formatDateTime(v.saida_prevista)}</td>
+        <td>${Number(v.qtd_paradas || 0)}</td>
+        <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" onclick="acaoAbrirViagem(${Number(v.id)})"><i class="fas fa-route"></i> Abrir viagem</button></td>
+      </tr>
+    `).join('');
+
+    const porStatus = rows.reduce((acc, v) => {
+      const st = String(v.status || '-');
+      acc[st] = (acc[st] || 0) + 1;
+      return acc;
+    }, {});
+    resumoMotoristas.innerHTML = Object.entries(porStatus).map(([st, qtd]) => `<span class="vt-chip">${st}: ${qtd}</span>`).join('');
+    return;
+  }
+
+  if (bulkBar) bulkBar.style.display = 'flex';
 
   if (state.tab === 'COLETA') {
     subtitulo.innerHTML = '<strong>Solicitações de Coleta</strong><br>Coletas geradas automaticamente através da importação de Ordens de Compra.';
@@ -371,49 +441,10 @@ function renderTable() {
 
   if (state.subfiltro === 'PENDENTES') {
     const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
-    const alocadas = rows.filter((r) => String(r.status || '').trim() === 'Alocada');
 
     let html = '';
     if (pendentesNaoAlocadas.length) {
       html += pendentesNaoAlocadas.map((row) => renderSolicitacaoRow(row)).join('');
-    }
-
-    if (alocadas.length) {
-      const viagensMap = alocadas.reduce((acc, row) => {
-        const nomeMotorista = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
-        const viagem = row.viagem || null;
-        const viagemKey = viagem?.codigo ? String(viagem.codigo) : `SEM_VIAGEM_${nomeMotorista}`;
-        if (!acc[viagemKey]) {
-          acc[viagemKey] = { motorista: nomeMotorista, viagem, rows: [] };
-        }
-        acc[viagemKey].rows.push(row);
-        return acc;
-      }, {});
-
-      const blocos = Object.values(viagensMap).sort((a, b) => {
-        const ac = String(a.viagem?.codigo || a.motorista || '');
-        const bc = String(b.viagem?.codigo || b.motorista || '');
-        return ac.localeCompare(bc, 'pt-BR');
-      });
-
-      html += blocos.map((bloco) => {
-        const viagemId = Number(bloco.viagem?.id || 0);
-        const tituloViagem = bloco.viagem?.codigo ? `VIAGEM ${bloco.viagem.codigo}` : 'ALOCADA (sem viagem montada)';
-        const linhas = bloco.rows.map((row) => renderSolicitacaoRow(row)).join('');
-        return `
-          <tr class="vt-trip-row">
-            <td colspan="9">
-              <div class="vt-trip-head">
-                <span class="vt-trip-code ${bloco.viagem?.codigo ? '' : 'muted'}">${tituloViagem}</span>
-                <span class="vt-group-meta">Motorista: ${bloco.motorista}</span>
-                <span class="vt-group-meta">Solicitacoes: ${bloco.rows.length}</span>
-                ${viagemId ? `<button class="eui-btn eui-btn--ghost" style="margin-left:auto;" onclick="acaoAbrirViagem(${viagemId})"><i class="fas fa-route"></i> Abrir viagem</button>` : ''}
-              </div>
-            </td>
-          </tr>
-          ${linhas}
-        `;
-      }).join('');
     }
 
     body.innerHTML = html || '<tr><td colspan="9" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
@@ -681,12 +712,10 @@ function renderTable() {
 
 function atualizarSelecionadasUI() {
   const box = document.getElementById('vt-selected');
-  const btn = document.getElementById('btnAlocarSelecionadas');
   const btnCriarViagem = document.getElementById('btnCriarViagemSelecionadas');
   const total = state.selectedIds.length;
   if (box) box.textContent = `Selecionadas: ${total}`;
-  if (btn) btn.disabled = total === 0;
-  if (btnCriarViagem) btnCriarViagem.disabled = total === 0;
+  if (btnCriarViagem) btnCriarViagem.disabled = total === 0 || state.tab === 'VIAGENS';
 }
 
 async function acaoCriarViagemSelecionadas() {
@@ -704,7 +733,8 @@ async function acaoCriarViagemSelecionadas() {
 
   const invalidas = rows.filter((r) => String(r.status || '').trim() !== 'Alocada');
   if (invalidas.length) {
-    showToast('Para criar viagem em lote, todas as selecionadas precisam estar em status Alocada.', 'error');
+    showToast('Defina motorista/veículo das selecionadas para montar a viagem.', 'info');
+    acaoAlocarSelecionadas();
     return;
   }
 
@@ -728,6 +758,19 @@ function renderMetrics(resumo, counts) {
   document.getElementById('m-total').textContent = resumo.total || 0;
   document.getElementById('count-coletas').textContent = counts.coletas || 0;
   document.getElementById('count-entregas').textContent = counts.entregas || 0;
+  document.getElementById('count-viagens').textContent = state.viagens.length || 0;
+}
+
+async function loadViagens() {
+  const p = new URLSearchParams();
+  if (state.q) p.set('q', state.q);
+  const r = await fetch(`/api/viagem/lista?${p.toString()}`);
+  const d = await r.json().catch(() => ([]));
+  if (!r.ok) {
+    state.viagens = [];
+    return;
+  }
+  state.viagens = Array.isArray(d) ? d : [];
 }
 
 async function loadDashboard() {
@@ -743,6 +786,7 @@ async function loadDashboard() {
   state.entregas = d.entregas || [];
   state.veiculos = d.veiculos || [];
   state.motoristas = d.motoristas || [];
+  await loadViagens();
   renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
   renderFilters();
   renderTable();
@@ -767,10 +811,6 @@ function openActionsMenu(id, x, y) {
     ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-route'></i> Abrir viagem</button>` : ''}
     ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
-    <button onclick="acaoReorganizar(${id})"><i class='fas fa-shuffle'></i> Reorganizar</button>
-    <button onclick="acaoPrioridade(${id})"><i class='fas fa-arrow-up-9-1'></i> Alterar prioridade</button>
-    <button class='danger' onclick="acaoCancelar(${id})"><i class='fas fa-ban'></i> Cancelar viagem</button>
-    <button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Excluir viagem</button>
   `;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -929,6 +969,10 @@ async function abrirMontagemPosAlocacao() {
   const motoristaId = Number(state.posAlocacaoMotoristaId || 0);
   if (!ids.length || !motoristaId) return;
 
+  const rowsSelecionadas = ids.map((sid) => rowById(sid)).filter(Boolean);
+  const motoristaNome = rowsSelecionadas[0]?.motorista?.nome || rowsSelecionadas[0]?.motorista_nome || '-';
+  const veiculoNome = rowsSelecionadas[0]?.veiculo?.nome || rowsSelecionadas[0]?.veiculo?.codigo || '-';
+
   let existentes = [];
   try {
     const r = await fetch(`/api/viagem/planejadas-do-motorista/${motoristaId}`);
@@ -949,6 +993,7 @@ async function abrirMontagemPosAlocacao() {
         </div>
         <div class="vt-modal__body">
           <div class="vt-mini">Solicitações alocadas: <strong>${ids.length}</strong>. Agora monte a viagem para poder liberar ao motorista.</div>
+          <div class="vt-mini">Motorista: <strong>${motoristaNome}</strong> · Veículo: <strong>${veiculoNome}</strong></div>
           <div style="display:grid; gap:8px;">
             <button class="eui-btn eui-btn--primary" onclick="criarViagemComSolicitacoesSelecionadas()"><i class="fas fa-plus-circle"></i> Nova viagem com estas solicitações</button>
           </div>
@@ -1253,6 +1298,9 @@ Array.from(document.querySelectorAll('.vt-tab')).forEach((tab) => {
     document.querySelectorAll('.vt-tab').forEach((x) => x.classList.remove('is-active'));
     tab.classList.add('is-active');
     state.tab = tab.dataset.tab;
+    state.subfiltro = state.tab === 'VIAGENS' ? 'PROGRAMADAS' : 'PENDENTES';
+    if (state.tab === 'VIAGENS') state.selectedIds = [];
+    renderFilters();
     renderTable();
   });
 });
@@ -1268,11 +1316,6 @@ if (btnImportar) {
     state.ocConsulta = null;
     openModal('modalImportar');
   });
-}
-
-const btnAlocarSelecionadas = document.getElementById('btnAlocarSelecionadas');
-if (btnAlocarSelecionadas) {
-  btnAlocarSelecionadas.addEventListener('click', acaoAlocarSelecionadas);
 }
 
 const btnCriarViagemSelecionadas = document.getElementById('btnCriarViagemSelecionadas');
