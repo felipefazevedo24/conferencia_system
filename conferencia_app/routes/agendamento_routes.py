@@ -612,6 +612,7 @@ def dashboard_central_viagens():
             vinculos = (
                 db.session.query(
                     ViagemParada.solicitacao_id,
+                    ViagemParada.status,
                     Viagem.id,
                     Viagem.codigo,
                     Viagem.status,
@@ -623,7 +624,7 @@ def dashboard_central_viagens():
                 .order_by(Viagem.id.desc())
                 .all()
             )
-            for solicitacao_id, viagem_id, viagem_codigo, viagem_status, viagem_liberada in vinculos:
+            for solicitacao_id, parada_status, viagem_id, viagem_codigo, viagem_status, viagem_liberada in vinculos:
                 sid = int(solicitacao_id)
                 if sid in viagem_por_solicitacao:
                     continue
@@ -631,26 +632,47 @@ def dashboard_central_viagens():
                     "id": int(viagem_id),
                     "codigo": str(viagem_codigo or "").strip() or f"VG-{viagem_id}",
                     "status": str(viagem_status or "").strip(),
+                    "parada_status": str(parada_status or "").strip(),
                     "liberada": bool(viagem_liberada),
                 }
     except Exception:
         # Compatibilidade defensiva: em ambientes legados, não quebrar dashboard.
         viagem_por_solicitacao = {}
 
+    rows_por_id = {int(r.id): r for r in automaticas}
+    alterou_status = False
+
     for card in cards:
         sid = int(card.get("id")) if card.get("id") is not None else None
         viagem = viagem_por_solicitacao.get(sid) if sid is not None else None
         card["viagem"] = viagem
         card["viagem_codigo"] = viagem.get("codigo") if viagem else ""
-        if viagem and card.get("status") in {"Pendente", "EmAnalise"}:
+        if viagem and card.get("status") in {"Pendente", "EmAnalise", "Alocada", "EmAndamento", "EmRota"}:
             status_viagem = str(viagem.get("status") or "").strip()
+            status_parada = str(viagem.get("parada_status") or "").strip()
+            status_novo = None
             if status_viagem == "Concluida":
-                card["status"] = "Concluida"
+                if status_parada == "Nao_realizada":
+                    status_novo = "Pendente"
+                else:
+                    status_novo = "Concluida"
             elif status_viagem == "EmAndamento":
-                card["status"] = "EmRota"
-            elif status_viagem == "Planejada":
-                card["status"] = "Alocada"
-            card["status_label"] = status_label_agendamento(card.get("status"))
+                status_novo = "EmRota"
+            elif status_viagem == "Planejada" and card.get("status") in {"Pendente", "EmAnalise", "Alocada"}:
+                status_novo = "Alocada"
+
+            if status_novo and status_novo != card.get("status"):
+                card["status"] = status_novo
+                card["status_label"] = status_label_agendamento(status_novo)
+
+                if sid is not None and sid in rows_por_id:
+                    row = rows_por_id[sid]
+                    row.status = status_novo
+                    row.atualizado_em = datetime.now()
+                    alterou_status = True
+
+    if alterou_status:
+        db.session.commit()
 
     coletas = [c for c in cards if c.get("tipo") == "COLETA"]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
