@@ -1108,6 +1108,71 @@ def central_viagens_excluir(solicitacao_id: int):
     return jsonify({"sucesso": True})
 
 
+@agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/excluir-lote", methods=["DELETE"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def central_viagens_excluir_lote():
+    if session.get("role") != "Admin":
+        return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    ids_raw = payload.get("ids") if isinstance(payload.get("ids"), list) else []
+    ids: list[int] = []
+    for item in ids_raw:
+        try:
+            sid = int(str(item).strip())
+        except (TypeError, ValueError):
+            continue
+        if sid > 0 and sid not in ids:
+            ids.append(sid)
+
+    if not ids:
+        return jsonify({"error": "Informe ao menos uma solicitação para excluir."}), 400
+
+    usuario = session.get("username", "sistema")
+    motivo = str(payload.get("motivo") or "").strip() or "Excluida em massa na Central de Viagens."
+    excluidas = 0
+    falhas: list[dict] = []
+
+    for sid in ids:
+        row = _get_solicitacao_visivel(sid)
+        if not row or not _is_origem_automatica(row):
+            falhas.append({"id": sid, "erro": "Viagem não encontrada."})
+            continue
+        if row.status == "EmRota":
+            falhas.append({"id": sid, "erro": "Não é possível excluir viagem em rota."})
+            continue
+
+        status_anterior = str(row.status or "").strip()
+        row.atualizado_em = datetime.now()
+        if status_anterior not in {"Concluida", "Cancelada"}:
+            row.status = "Cancelada"
+        if not row.cancelado_em:
+            row.cancelado_em = datetime.now()
+        if not row.cancelado_por:
+            row.cancelado_por = usuario
+        if not row.motivo_cancelamento:
+            row.motivo_cancelamento = motivo
+
+        _registrar_historico(
+            row.id,
+            evento="EXCLUIDA_CENTRAL_LOTE",
+            usuario=usuario,
+            status_anterior=status_anterior,
+            status_novo=str(row.status or "").strip(),
+            detalhe=motivo,
+            payload={"origem": "lote", "ids_total": len(ids)},
+        )
+        excluidas += 1
+
+    db.session.commit()
+    return jsonify({
+        "sucesso": True,
+        "total": len(ids),
+        "excluidas": excluidas,
+        "falhas": falhas,
+    })
+
+
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/minhas-solicitacoes")
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def minhas_solicitacoes_agendamento():

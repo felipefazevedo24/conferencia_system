@@ -94,6 +94,7 @@
               <div class="vt-bulkbar">
                 <span id="vt-selected" class="vt-mini">Selecionadas: 0</span>
                 <button id="btnCriarViagemSelecionadas" class="eui-btn eui-btn--primary" disabled><i class="fas fa-route"></i> Criar viagem com selecionadas</button>
+                <button id="btnExcluirSelecionadas" class="eui-btn eui-btn--danger" style="display:none;" disabled><i class="fas fa-trash"></i> Excluir selecionadas</button>
               </div>
                 <div class="vt-filters" id="vt-filtros"></div>
             </div>
@@ -744,9 +745,14 @@ function renderTable() {
 function atualizarSelecionadasUI() {
   const box = document.getElementById('vt-selected');
   const btnCriarViagem = document.getElementById('btnCriarViagemSelecionadas');
+  const btnExcluir = document.getElementById('btnExcluirSelecionadas');
   const total = state.selectedIds.length;
   if (box) box.textContent = `Selecionadas: ${total}`;
   if (btnCriarViagem) btnCriarViagem.disabled = total === 0 || state.tab === 'VIAGENS';
+  if (btnExcluir) {
+    btnExcluir.style.display = (state.tab !== 'VIAGENS' && IS_ADMIN) ? 'inline-flex' : 'none';
+    btnExcluir.disabled = total === 0 || state.tab === 'VIAGENS';
+  }
 }
 
 async function acaoCriarViagemSelecionadas() {
@@ -764,7 +770,6 @@ async function acaoCriarViagemSelecionadas() {
 
   const invalidas = rows.filter((r) => String(r.status || '').trim() !== 'Alocada');
   if (invalidas.length) {
-    showToast('Defina motorista/veículo das selecionadas para montar a viagem.', 'info');
     acaoAlocarSelecionadas();
     return;
   }
@@ -778,6 +783,42 @@ async function acaoCriarViagemSelecionadas() {
   state.posAlocacaoIds = ids;
   state.posAlocacaoMotoristaId = motoristas[0];
   await abrirMontagemPosAlocacao();
+}
+
+async function acaoExcluirSelecionadasLote() {
+  if (!IS_ADMIN) {
+    showToast('Somente admin pode excluir solicitações.', 'error');
+    return;
+  }
+
+  const ids = [...state.selectedIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+  if (!ids.length) {
+    showToast('Selecione pelo menos uma solicitação.', 'error');
+    return;
+  }
+
+  const ok = window.confirm(`Confirmar exclusao em massa de ${ids.length} solicitação(ões)?`);
+  if (!ok) return;
+
+  const r = await fetch('/api/logistica/central-viagens/solicitacoes/excluir-lote', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ids,
+      motivo: 'Exclusão em massa na Central de Viagens.'
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.error || 'Falha ao excluir solicitações selecionadas.', 'error');
+    return;
+  }
+
+  state.selectedIds = [];
+  const falhas = Array.isArray(d.falhas) ? d.falhas.length : 0;
+  const excluidas = Number(d.excluidas || 0);
+  showToast(`Exclusão em massa concluída. Excluídas: ${excluidas}. Falhas: ${falhas}.`, falhas ? 'info' : 'success');
+  await loadDashboard();
 }
 
 function renderMetrics(resumo, counts) {
@@ -1497,6 +1538,11 @@ if (btnImportar) {
 const btnCriarViagemSelecionadas = document.getElementById('btnCriarViagemSelecionadas');
 if (btnCriarViagemSelecionadas) {
   btnCriarViagemSelecionadas.addEventListener('click', acaoCriarViagemSelecionadas);
+}
+
+const btnExcluirSelecionadas = document.getElementById('btnExcluirSelecionadas');
+if (btnExcluirSelecionadas) {
+  btnExcluirSelecionadas.addEventListener('click', acaoExcluirSelecionadasLote);
 }
 
 (async () => {
