@@ -93,6 +93,7 @@
               <div class="vt-bulkbar">
                 <span id="vt-selected" class="vt-mini">Selecionadas: 0</span>
                 <button id="btnAlocarSelecionadas" class="eui-btn eui-btn--primary" disabled><i class="fas fa-people-arrows-left-right"></i> Alocar selecionadas</button>
+                <button id="btnCriarViagemSelecionadas" class="eui-btn eui-btn--ghost" disabled><i class="fas fa-route"></i> Criar viagem com selecionadas</button>
               </div>
                 <div class="vt-filters" id="vt-filtros"></div>
             </div>
@@ -681,9 +682,41 @@ function renderTable() {
 function atualizarSelecionadasUI() {
   const box = document.getElementById('vt-selected');
   const btn = document.getElementById('btnAlocarSelecionadas');
+  const btnCriarViagem = document.getElementById('btnCriarViagemSelecionadas');
   const total = state.selectedIds.length;
   if (box) box.textContent = `Selecionadas: ${total}`;
   if (btn) btn.disabled = total === 0;
+  if (btnCriarViagem) btnCriarViagem.disabled = total === 0;
+}
+
+async function acaoCriarViagemSelecionadas() {
+  const ids = [...state.selectedIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+  if (!ids.length) {
+    showToast('Selecione pelo menos uma solicitação.', 'error');
+    return;
+  }
+
+  const rows = ids.map((id) => rowById(id)).filter(Boolean);
+  if (rows.length !== ids.length) {
+    showToast('Nao foi possivel localizar todas as solicitações selecionadas. Atualize a tela.', 'error');
+    return;
+  }
+
+  const invalidas = rows.filter((r) => String(r.status || '').trim() !== 'Alocada');
+  if (invalidas.length) {
+    showToast('Para criar viagem em lote, todas as selecionadas precisam estar em status Alocada.', 'error');
+    return;
+  }
+
+  const motoristas = Array.from(new Set(rows.map((r) => Number(r.motorista?.id || 0)).filter((id) => id > 0)));
+  if (motoristas.length !== 1) {
+    showToast('As solicitações precisam estar alocadas para o mesmo motorista.', 'error');
+    return;
+  }
+
+  state.posAlocacaoIds = ids;
+  state.posAlocacaoMotoristaId = motoristas[0];
+  await abrirMontagemPosAlocacao();
 }
 
 function renderMetrics(resumo, counts) {
@@ -1240,6 +1273,11 @@ if (btnImportar) {
 const btnAlocarSelecionadas = document.getElementById('btnAlocarSelecionadas');
 if (btnAlocarSelecionadas) {
   btnAlocarSelecionadas.addEventListener('click', acaoAlocarSelecionadas);
+}
+
+const btnCriarViagemSelecionadas = document.getElementById('btnCriarViagemSelecionadas');
+if (btnCriarViagemSelecionadas) {
+  btnCriarViagemSelecionadas.addEventListener('click', acaoCriarViagemSelecionadas);
 }
 
 loadDashboard();
