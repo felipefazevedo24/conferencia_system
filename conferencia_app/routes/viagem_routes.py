@@ -437,7 +437,13 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
     return out
 
 
-def _viagem_lista_dict(v: Viagem, *, veiculo: AgendamentoVeiculo | None = None, qtd_paradas: int = 0) -> dict:
+def _viagem_lista_dict(
+    v: Viagem,
+    *,
+    veiculo: AgendamentoVeiculo | None = None,
+    qtd_paradas: int = 0,
+    qtd_paradas_ok: int = 0,
+) -> dict:
     motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
     return {
         "id": v.id,
@@ -455,6 +461,7 @@ def _viagem_lista_dict(v: Viagem, *, veiculo: AgendamentoVeiculo | None = None, 
         "saida_real": v.saida_real.isoformat() if v.saida_real else None,
         "retorno_real": v.retorno_real.isoformat() if v.retorno_real else None,
         "qtd_paradas": int(qtd_paradas or 0),
+        "qtd_paradas_ok": int(qtd_paradas_ok or 0),
         "liberada": bool(v.liberada),
         "criado_em": v.criado_em.isoformat() if v.criado_em else None,
         "criado_por": v.criado_por,
@@ -993,6 +1000,7 @@ def listar():
 
     ids = [int(v.id) for v in regs]
     qtd_paradas_por_viagem: dict[int, int] = {}
+    qtd_paradas_ok_por_viagem: dict[int, int] = {}
     if ids:
         rows = (
             db.session.query(ViagemParada.viagem_id, func.count(ViagemParada.id))
@@ -1001,6 +1009,13 @@ def listar():
             .all()
         )
         qtd_paradas_por_viagem = {int(vid): int(qtd or 0) for vid, qtd in rows}
+        rows_ok = (
+            db.session.query(ViagemParada.viagem_id, func.count(ViagemParada.id))
+            .filter(ViagemParada.viagem_id.in_(ids), ViagemParada.status == "Concluida")
+            .group_by(ViagemParada.viagem_id)
+            .all()
+        )
+        qtd_paradas_ok_por_viagem = {int(vid): int(qtd or 0) for vid, qtd in rows_ok}
 
     veiculo_ids = {int(v.veiculo_id) for v in regs if v.veiculo_id}
     veiculos = {}
@@ -1012,6 +1027,7 @@ def listar():
             v,
             veiculo=veiculos.get(int(v.veiculo_id)) if v.veiculo_id else None,
             qtd_paradas=qtd_paradas_por_viagem.get(int(v.id), 0),
+            qtd_paradas_ok=qtd_paradas_ok_por_viagem.get(int(v.id), 0),
         )
         for v in regs
     ])

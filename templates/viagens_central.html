@@ -859,6 +859,15 @@ async function loadViagens(force = false) {
     return;
   }
   let viagens = Array.isArray(d) ? d : [];
+  viagens = viagens.map((v) => {
+    const totalParadas = Number(v.qtd_paradas || 0);
+    const paradasOk = Number(v.qtd_paradas_ok || 0);
+    const st = String(v.status || '').trim();
+    if (totalParadas > 0 && paradasOk >= totalParadas && (st === 'Planejada' || st === 'EmAndamento')) {
+      return { ...v, status: 'Concluida' };
+    }
+    return v;
+  });
   if (state.subfiltro === 'CONCLUIDAS') {
     viagens = viagens.filter((v) => ['Concluida', 'Cancelada'].includes(String(v.status || '').trim()));
   }
