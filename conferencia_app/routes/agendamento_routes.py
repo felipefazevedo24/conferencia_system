@@ -561,14 +561,28 @@ def dashboard_central_viagens():
     # Regra operacional: coleta na Central deve representar apenas fluxo de OC
     # (importada/gerada pelo Compras). Entregas continuam no fluxo automatico
     # por romaneio/expedicao.
-    automaticas = [
-        row for row in rows
-        if str(row.tipo or "").strip() == "ENTREGA"
-        or (
-            str(row.tipo or "").strip() == "COLETA"
-            and str(row.origem_documento or "").strip() == "ORDEM_DE_COMPRA"
-        )
-    ]
+    automaticas = []
+    for row in rows:
+        tipo = str(row.tipo or "").strip()
+        status_row = str(row.status or "").strip()
+        origem = str(row.origem_documento or "").strip()
+
+        if tipo == "ENTREGA":
+            automaticas.append(row)
+            continue
+
+        if tipo != "COLETA":
+            continue
+
+        # Regra operacional:
+        # - pendentes de coleta devem vir apenas do fluxo de OC
+        # - se a coleta ja estiver alocada/em rota/em andamento/concluida,
+        #   ela precisa continuar visivel na Central para gestao.
+        if status_row in {"Alocada", "EmRota", "EmAndamento", "Concluida"}:
+            automaticas.append(row)
+            continue
+        if origem == "ORDEM_DE_COMPRA":
+            automaticas.append(row)
     if termo:
         def match(row: AgendamentoSolicitacao) -> bool:
             haystack = " ".join(
