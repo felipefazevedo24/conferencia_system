@@ -124,6 +124,29 @@
     </div>
 </div>
 
+<div id="modalRealocarParada" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:620px;">
+    <div class="vt-modal__head">
+      <strong>Realocar Rota</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRealocarParada')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <input type="hidden" id="realocar-parada-id">
+      <input type="hidden" id="realocar-origem-viagem-id">
+      <div class="vt-mini" id="realocar-info">Selecione a viagem de destino para mover a parada.</div>
+      <div class="eui-field">
+        <label class="eui-field__label">Viagem de destino (Planejada)</label>
+        <select id="realocar-destino" class="eui-select"></select>
+      </div>
+      <div class="vt-mini" id="realocar-state"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalRealocarParada')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarRealocacaoParada()"><i class="fas fa-shuffle"></i> Realocar</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalReorganizar" class="vt-modal">
     <div class="vt-modal__box" style="max-width:520px;">
         <div class="vt-modal__head">
@@ -241,6 +264,9 @@
 
 {% block extra_js %}
 <script>
+const CURRENT_USER_ROLE = {{ (user_role or '')|tojson }};
+const IS_ADMIN = String(CURRENT_USER_ROLE || '').toLowerCase().includes('admin');
+
 const state = {
   tab: 'COLETA',
   subfiltro: 'PENDENTES',
@@ -254,7 +280,8 @@ const state = {
   motoristas: [],
   selectedIds: [],
   posAlocacaoIds: [],
-  posAlocacaoMotoristaId: null
+  posAlocacaoMotoristaId: null,
+  detalheViagemId: null
 };
 
 const subFiltrosSolicitacoes = [
@@ -402,7 +429,10 @@ function renderTable() {
         <td>${v.veiculo_label || '-'}</td>
         <td>${formatDateTime(v.saida_prevista)}</td>
         <td>${Number(v.qtd_paradas || 0)}</td>
-        <td style="text-align:right;"><button class="eui-btn eui-btn--ghost" onclick="acaoAbrirViagem(${Number(v.id)})"><i class="fas fa-route"></i> Abrir viagem</button></td>
+        <td style="text-align:right; display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+          <button class="eui-btn eui-btn--ghost" onclick="acaoAbrirViagem(${Number(v.id)})"><i class="fas fa-route"></i> Abrir viagem</button>
+          ${IS_ADMIN ? `<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${Number(v.id)}, '${String(v.codigo || ('#' + v.id)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar</button>` : ''}
+        </td>
       </tr>
     `).join('');
 
@@ -942,11 +972,19 @@ async function acaoAbrirViagem(viagemId) {
     showToast(d.msg || 'Nao foi possivel abrir os detalhes da viagem.', 'error');
     return;
   }
+  state.detalheViagemId = vid;
 
   const paradas = Array.isArray(d.paradas) ? d.paradas : [];
   const paradasHtml = paradas.length
-    ? `<ol style="margin:6px 0 0 18px; padding:0;">${paradas.map((p) => `<li style="margin-bottom:4px;"><strong>${p.tipo || 'PARADA'}</strong> · ${p.parceiro_nome || '-'} · ${(p.cidade || '-')}/${(p.uf || '-')}</li>`).join('')}</ol>`
+    ? `<ol style="margin:6px 0 0 18px; padding:0;">${paradas.map((p) => {
+        const podeRealocar = Number(p.solicitacao_id || 0) > 0 && String(p.status || '').trim() === 'Pendente';
+        return `<li style="margin-bottom:8px;"><strong>${p.tipo || 'PARADA'}</strong> · ${p.parceiro_nome || '-'} · ${(p.cidade || '-')}/${(p.uf || '-')} <span class="vt-mini">(${p.status || '-'})</span>${podeRealocar ? ` <button class="eui-btn eui-btn--ghost" style="margin-left:6px;" onclick="abrirModalRealocarParada(${Number(p.id)}, ${vid}, '${String(p.parceiro_nome || '').replace(/'/g, "&#39;")}')"><i class='fas fa-shuffle'></i> Realocar</button>` : ''}</li>`;
+      }).join('')}</ol>`
     : '<div class="vt-mini">Sem paradas cadastradas.</div>';
+
+  const acoesHtml = IS_ADMIN
+    ? `<div style="margin-top:12px; display:flex; justify-content:flex-end;"><button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar viagem</button></div>`
+    : '';
 
   document.getElementById('detalheBody').innerHTML = `
     <div><strong>Código:</strong> ${d.codigo || ('#' + vid)}</div>
@@ -958,8 +996,97 @@ async function acaoAbrirViagem(viagemId) {
     <div><strong>Retorno previsto:</strong> ${formatDateTime(d.retorno_previsto)}</div>
     <div><strong>Paradas:</strong> ${Number(d.qtd_paradas || 0)}</div>
     <div style="margin-top:8px;"><strong>Roteiro:</strong>${paradasHtml}</div>
+    ${acoesHtml}
   `;
   openModal('modalDetalhe');
+}
+
+async function abrirModalRealocarParada(paradaId, viagemOrigemId, parceiroNome) {
+  const pid = Number(paradaId);
+  const origemId = Number(viagemOrigemId);
+  if (!pid || !origemId) return;
+
+  const destinoSel = document.getElementById('realocar-destino');
+  const info = document.getElementById('realocar-info');
+  const stateBox = document.getElementById('realocar-state');
+  if (stateBox) stateBox.textContent = 'Carregando viagens planejadas...';
+
+  const r = await fetch('/api/viagem/lista?status=Planejada');
+  const d = await r.json().catch(() => ([]));
+  if (!r.ok) {
+    showToast('Nao foi possivel carregar viagens de destino.', 'error');
+    if (stateBox) stateBox.textContent = '';
+    return;
+  }
+
+  const viagens = (Array.isArray(d) ? d : []).filter((v) => Number(v.id) !== origemId);
+  if (!viagens.length) {
+    showToast('Nao ha outra viagem planejada para realocar.', 'info');
+    if (stateBox) stateBox.textContent = '';
+    return;
+  }
+
+  document.getElementById('realocar-parada-id').value = String(pid);
+  document.getElementById('realocar-origem-viagem-id').value = String(origemId);
+  if (info) info.textContent = `Parada: ${parceiroNome || ('#' + pid)}. Escolha a viagem de destino.`;
+  destinoSel.innerHTML = viagens.map((v) => `<option value="${v.id}">${v.codigo || ('#' + v.id)} · ${v.motorista_nome || '-'} · ${Number(v.qtd_paradas || 0)} parada(s)</option>`).join('');
+  if (stateBox) stateBox.textContent = '';
+  openModal('modalRealocarParada');
+}
+
+async function confirmarRealocacaoParada() {
+  const pid = Number(document.getElementById('realocar-parada-id').value || 0);
+  const destinoId = Number(document.getElementById('realocar-destino').value || 0);
+  const stateBox = document.getElementById('realocar-state');
+  if (!pid || !destinoId) {
+    showToast('Selecione a viagem de destino.', 'error');
+    return;
+  }
+
+  if (stateBox) stateBox.textContent = 'Realocando parada...';
+  const r = await fetch(`/api/viagem/paradas/${pid}/realocar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ viagem_destino_id: destinoId })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    if (stateBox) stateBox.textContent = '';
+    showToast(d.msg || 'Falha ao realocar parada.', 'error');
+    return;
+  }
+
+  closeModal('modalRealocarParada');
+  closeModal('modalDetalhe');
+  showToast(d.msg || 'Parada realocada com sucesso.', (d.liberacao_revogada_origem || d.liberacao_revogada_destino) ? 'info' : 'success');
+  await loadDashboard();
+  if (d.viagem_destino_id) {
+    await acaoAbrirViagem(Number(d.viagem_destino_id));
+  }
+}
+
+async function acaoExcluirViagem(viagemId, codigoLabel) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+  if (!IS_ADMIN) {
+    showToast('Somente admin pode apagar viagem.', 'error');
+    return;
+  }
+
+  const nome = codigoLabel || ('#' + vid);
+  const ok = window.confirm(`Confirmar exclusao da viagem ${nome}? Esta acao nao pode ser desfeita.`);
+  if (!ok) return;
+
+  const r = await fetch(`/api/viagem/${vid}`, { method: 'DELETE' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || d.error || 'Falha ao apagar viagem.', 'error');
+    return;
+  }
+
+  closeModal('modalDetalhe');
+  showToast('Viagem apagada com sucesso.', 'success');
+  await loadDashboard();
 }
 
 async function acaoLiberarMotorista(viagemId) {

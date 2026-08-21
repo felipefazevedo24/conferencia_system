@@ -643,6 +643,21 @@ def _sync_solicitacoes_da_viagem(v: Viagem, status: str) -> None:
         _sync_solicitacao_viagem(db.session.get(AgendamentoSolicitacao, parada.solicitacao_id), v, status)
 
 
+def _atualizar_tipo_viagem_por_paradas(v: Viagem | None) -> None:
+    if not v:
+        return
+    tipos = {
+        str(p.tipo or "").upper().strip()
+        for p in ViagemParada.query.filter_by(viagem_id=v.id).all()
+        if str(p.tipo or "").strip()
+    }
+    tipos_validos = {t for t in tipos if t in {"COLETA", "ENTREGA"}}
+    if len(tipos_validos) >= 2:
+        v.tipo = "MISTA"
+    elif len(tipos_validos) == 1:
+        v.tipo = list(tipos_validos)[0]
+
+
 def _solicitacao_volta_pendente(sol: AgendamentoSolicitacao | None) -> None:
     if not sol or str(sol.status or "").strip() in {"Concluida", "Cancelada"}:
         return
@@ -1020,7 +1035,7 @@ def editar(vid: int):
 
 
 @viagem_bp.route("/<int:vid>", methods=["DELETE"])
-@permission_required(PERM)
+@permission_required(PERM, "Admin")
 def excluir(vid: int):
     v = db.session.get(Viagem, vid)
     if not v:
@@ -1322,6 +1337,137 @@ def parada_excluir(pid: int):
         )
     db.session.commit()
     return jsonify({"sucesso": True, "viagem_id": vid, "liberacao_revogada": revogou})
+
+
+@viagem_bp.route("/paradas/<int:pid>/realocar", methods=["POST"])
+@permission_required(PERM)
+def parada_realocar(pid: int):
+    parada = db.session.get(ViagemParada, pid)
+    if not parada:
+        return jsonify({"sucesso": False, "msg": "Parada não encontrada."}), 404
+    if not parada.solicitacao_id:
+        return jsonify({"sucesso": False, "msg": "Somente paradas vinculadas a solicitação podem ser realocadas."}), 409
+
+    origem = db.session.get(Viagem, parada.viagem_id)
+    if not origem:
+        return jsonify({"sucesso": False, "msg": "Viagem de origem não encontrada."}), 404
+    if origem.status in {"Concluida", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Viagem finalizada não pode ser alterada."}), 409
+
+    if parada.status != "Pendente":
+        return jsonify({"sucesso": False, "msg": "Só é possível realocar paradas pendentes."}), 409
+
+    payload = request.get_json(silent=True) or {}
+    destino_id = _parse_int(payload.get("viagem_destino_id"))
+    if not destino_id:
+        return jsonify({"sucesso": False, "msg": "Informe a viagem de destino."}), 400
+
+    destino = db.session.get(Viagem, destino_id)
+    if not destino:
+        return jsonify({"sucesso": False, "msg": "Viagem de destino não encontrada."}), 404
+    if destino.status in {"Concluida", "Cancelada"}:
+        return jsonify({"sucesso": False, "msg": "Viagem de destino finalizada não pode receber paradas."}), 409
+    if int(destino.id) == int(origem.id):
+        return jsonify({"sucesso": True, "msg": "Parada já está na viagem informada.", "viagem_id": destino.id})
+
+    if destino.status != "Planejada":
+        return jsonify({"sucesso": False, "msg": "Realocação permitida apenas para viagens de destino Planejadas."}), 409
+
+    sol = db.session.get(AgendamentoSolicitacao, parada.solicitacao_id)
+    if not sol:
+        return jsonify({"sucesso": False, "msg": "Solicitação da parada não encontrada."}), 404
+
+    if sol.veiculo_id and destino.veiculo_id and int(sol.veiculo_id) != int(destino.veiculo_id):
+        return jsonify({"sucesso": False, "msg": "Solicitação está em veículo diferente da viagem de destino. Realoque antes de mover."}), 409
+    if sol.motorista_id and destino.motorista_id and int(sol.motorista_id) != int(destino.motorista_id):
+        return jsonify({"sucesso": False, "msg": "Solicitação está com motorista diferente da viagem de destino. Realoque antes de mover."}), 409
+
+    duplicada = ViagemParada.query.filter(
+        ViagemParada.viagem_id == destino.id,
+        ViagemParada.solicitacao_id == parada.solicitacao_id,
+        ViagemParada.id != parada.id,
+    ).first()
+    if duplicada:
+        return jsonify({"sucesso": False, "msg": "Solicitação já existe na viagem de destino."}), 409
+
+    liberacao_revogada_origem = False
+    liberacao_revogada_destino = False
+
+    origem_id = origem.id
+    origem_codigo = origem.codigo or f"#{origem.id}"
+    destino_codigo = destino.codigo or f"#{destino.id}"
+    solicitacao_label = sol.codigo or sol.id
+
+    paradas_origem = ViagemParada.query.filter_by(viagem_id=origem.id).order_by(ViagemParada.sequencia.asc()).all()
+    for seq, p in enumerate([p for p in paradas_origem if p.id != parada.id], start=1):
+        p.sequencia = seq
+
+    proxima_seq_destino = (db.session.query(func.max(ViagemParada.sequencia)).filter(ViagemParada.viagem_id == destino.id).scalar() or 0) + 1
+    parada.viagem_id = destino.id
+    parada.sequencia = proxima_seq_destino
+
+    _sync_solicitacao_viagem(sol, destino, "EmRota" if destino.status == "EmAndamento" else "Alocada")
+    _atualizar_tipo_viagem_por_paradas(origem)
+    _atualizar_tipo_viagem_por_paradas(destino)
+
+    if origem.liberada and origem.status == "Planejada":
+        origem.liberada = False
+        origem.liberada_em = None
+        origem.liberada_por = None
+        liberacao_revogada_origem = True
+
+    if destino.liberada and destino.status == "Planejada":
+        destino.liberada = False
+        destino.liberada_em = None
+        destino.liberada_por = None
+        liberacao_revogada_destino = True
+
+    origem.atualizado_em = datetime.now()
+    destino.atualizado_em = datetime.now()
+
+    _log_evento(
+        origem.id,
+        "OBSERVACAO",
+        "Parada realocada para outra viagem",
+        descricao=f"Solicitação {solicitacao_label} movida para {destino_codigo} por {_user()}.",
+        parada_id=pid,
+        severidade="warning",
+    )
+    _log_evento(
+        destino.id,
+        "PARADA_EXTRA",
+        "Parada realocada de outra viagem",
+        descricao=f"Solicitação {solicitacao_label} movida de {origem_codigo} por {_user()}.",
+        parada_id=pid,
+        severidade="info",
+    )
+    if liberacao_revogada_origem:
+        _log_evento(
+            origem.id,
+            "OBSERVACAO",
+            "Liberação revogada automaticamente",
+            descricao="A viagem foi alterada e precisa ser liberada novamente para o motorista.",
+            severidade="warning",
+        )
+    if liberacao_revogada_destino:
+        _log_evento(
+            destino.id,
+            "OBSERVACAO",
+            "Liberação revogada automaticamente",
+            descricao="A viagem foi alterada e precisa ser liberada novamente para o motorista.",
+            severidade="warning",
+        )
+
+    db.session.commit()
+    return jsonify({
+        "sucesso": True,
+        "msg": "Parada realocada com sucesso.",
+        "parada_id": pid,
+        "viagem_origem_id": origem_id,
+        "viagem_destino_id": destino.id,
+        "liberacao_revogada_origem": liberacao_revogada_origem,
+        "liberacao_revogada_destino": liberacao_revogada_destino,
+    })
 
 
 # --------------------------------------------------------------------------- LIBERAR / REVOGAR VIAGEM PARA O MOTORISTA
