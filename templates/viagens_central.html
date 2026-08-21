@@ -36,6 +36,9 @@
     .vt-preview { max-height: 42vh; overflow: auto; border: 1px solid var(--eui-border); border-radius: 10px; }
     .vt-mini { font-size: 12px; color: var(--eui-text-muted); }
     .vt-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .vt-bulkbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .vt-check { width: 16px; height: 16px; cursor: pointer; }
+    .vt-chip { border: 1px solid var(--eui-border); background: var(--eui-surface-2); border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 700; color: var(--eui-text-muted); }
     @media (max-width: 760px) {
         .vt-toolbar { align-items: stretch; }
         .vt-tabs { width: 100%; }
@@ -79,11 +82,16 @@
                     <i class="fas fa-search"></i>
                     <input id="vt-busca" class="eui-input" type="search" placeholder="Buscar por OC, Romaneio, Cliente, Fornecedor, Cidade, Transportadora ou Status...">
                 </div>
+              <div class="vt-bulkbar">
+                <span id="vt-selected" class="vt-mini">Selecionadas: 0</span>
+                <button id="btnAlocarSelecionadas" class="eui-btn eui-btn--primary" disabled><i class="fas fa-people-arrows-left-right"></i> Alocar selecionadas</button>
+              </div>
                 <div class="vt-filters" id="vt-filtros"></div>
             </div>
         </div>
         <div class="eui-card__body eui-card__body--tight">
             <div style="padding:12px 16px;" id="vt-subtitulo" class="vt-mini"></div>
+            <div style="padding:0 16px 8px 16px; display:flex; gap:6px; flex-wrap:wrap;" id="vt-resumo-motoristas"></div>
             <div class="vt-table-wrap">
                 <table class="erp-table" id="vt-table">
                     <thead id="vt-head"></thead>
@@ -232,15 +240,14 @@ const state = {
   entregas: [],
   ocConsulta: null,
   veiculos: [],
-  motoristas: []
+  motoristas: [],
+  selectedIds: []
 };
 
 const filtrosStatus = [
   { value: '', label: 'Todos' },
   { value: 'Pendente', label: 'Pendente' },
-  { value: 'EmAnalise', label: 'Em análise' },
   { value: 'Alocada', label: 'Alocada' },
-  { value: 'EmAndamento', label: 'Em andamento' },
   { value: 'EmRota', label: 'Em rota' },
   { value: 'Concluida', label: 'Concluída' },
   { value: 'Cancelada', label: 'Cancelada' }
@@ -297,37 +304,82 @@ function renderTable() {
   const body = document.getElementById('vt-body');
   const head = document.getElementById('vt-head');
   const subtitulo = document.getElementById('vt-subtitulo');
+  const resumoMotoristas = document.getElementById('vt-resumo-motoristas');
 
   if (state.tab === 'COLETA') {
     subtitulo.innerHTML = '<strong>Solicitações de Coleta</strong><br>Coletas geradas automaticamente através da importação de Ordens de Compra.';
-    head.innerHTML = '<tr><th>Tipo</th><th>Ordem de Compra</th><th>Fornecedor</th><th>Cidade/UF Origem</th><th>Data Prevista</th><th>Transportadora</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Ordem de Compra</th><th>Fornecedor</th><th>Cidade/UF Origem</th><th>Motorista</th><th>Data Prevista</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
   } else {
     subtitulo.innerHTML = '<strong>Solicitações de Entrega</strong><br>Entregas geradas automaticamente através dos Romaneios da Expedição.';
-    head.innerHTML = '<tr><th>Tipo</th><th>Romaneio</th><th>Cliente</th><th>Cidade/UF Destino</th><th>NF</th><th>Transportadora</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Romaneio</th><th>Cliente</th><th>Cidade/UF Destino</th><th>Motorista</th><th>NF</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
   }
 
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="8" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+    resumoMotoristas.innerHTML = '';
+    atualizarSelecionadasUI();
     return;
   }
+
+  const idsVisiveis = rows.map((r) => Number(r.id));
+  state.selectedIds = state.selectedIds.filter((id) => idsVisiveis.includes(id));
 
   body.innerHTML = rows.map((row) => {
     const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
     const nf = row.numero_nf || row.documento_numero || '-';
-    const transp = (row.observacoes_logistica || '').replace(/^Transportadora:\s*/i, '') || '-';
+    const motorista = row.motorista?.nome || row.motorista_nome || '-';
+    const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
     return `
       <tr>
+        <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
         <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
         <td>${doc}</td>
         <td>${row.parceiro_nome || '-'}</td>
         <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+        <td>${motorista}</td>
         <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
-        <td>${state.tab === 'COLETA' ? transp : transp}</td>
         <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
         <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
       </tr>
     `;
   }).join('');
+
+  const porMotorista = rows.reduce((acc, row) => {
+    const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
+    acc[nome] = (acc[nome] || 0) + 1;
+    return acc;
+  }, {});
+  resumoMotoristas.innerHTML = Object.entries(porMotorista)
+    .sort((a, b) => b[1] - a[1])
+    .map(([nome, qtd]) => `<span class="vt-chip">${nome}: ${qtd}</span>`)
+    .join('');
+
+  const checkAll = document.getElementById('vt-check-all');
+  if (checkAll) {
+    checkAll.checked = rows.length > 0 && rows.every((r) => state.selectedIds.includes(Number(r.id)));
+    checkAll.addEventListener('change', () => {
+      if (checkAll.checked) {
+        const merged = new Set([...state.selectedIds, ...idsVisiveis]);
+        state.selectedIds = Array.from(merged);
+      } else {
+        state.selectedIds = state.selectedIds.filter((id) => !idsVisiveis.includes(id));
+      }
+      renderTable();
+      atualizarSelecionadasUI();
+    });
+  }
+
+  body.querySelectorAll('.vt-check-row').forEach((el) => {
+    el.addEventListener('change', () => {
+      const id = Number(el.dataset.id);
+      if (el.checked) {
+        if (!state.selectedIds.includes(id)) state.selectedIds.push(id);
+      } else {
+        state.selectedIds = state.selectedIds.filter((x) => x !== id);
+      }
+      atualizarSelecionadasUI();
+    });
+  });
 
   body.querySelectorAll('.vt-actions-btn').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
@@ -335,6 +387,16 @@ function renderTable() {
       openActionsMenu(Number(btn.dataset.id), ev.clientX, ev.clientY);
     });
   });
+
+  atualizarSelecionadasUI();
+}
+
+function atualizarSelecionadasUI() {
+  const box = document.getElementById('vt-selected');
+  const btn = document.getElementById('btnAlocarSelecionadas');
+  const total = state.selectedIds.length;
+  if (box) box.textContent = `Selecionadas: ${total}`;
+  if (btn) btn.disabled = total === 0;
 }
 
 function renderMetrics(resumo, counts) {
@@ -459,9 +521,31 @@ function acaoAlocar(id) {
   openModal('modalAlocar');
 }
 
+function acaoAlocarSelecionadas() {
+  if (!state.selectedIds.length) {
+    showToast('Selecione pelo menos uma solicitação.', 'error');
+    return;
+  }
+  document.getElementById('alocar-id').value = '';
+  document.getElementById('alocar-state').textContent = `Alocação em lote: ${state.selectedIds.length} solicitações selecionadas.`;
+  document.getElementById('alocar-obs').value = '';
+  document.getElementById('alocar-saida').value = '';
+  document.getElementById('alocar-retorno').value = '';
+
+  const veiculoSel = document.getElementById('alocar-veiculo');
+  const motoristaSel = document.getElementById('alocar-motorista');
+  veiculoSel.innerHTML = '<option value="">Selecione...</option>' + (state.veiculos || []).map((v) =>
+    `<option value="${v.id}">${v.nome || v.codigo || ('Veículo ' + v.id)}</option>`
+  ).join('');
+  motoristaSel.innerHTML = '<option value="">Selecione...</option>' + (state.motoristas || []).map((m) =>
+    `<option value="${m.id}">${m.nome || ('Motorista ' + m.id)}</option>`
+  ).join('');
+
+  openModal('modalAlocar');
+}
+
 async function confirmarAlocacao() {
   const id = Number(document.getElementById('alocar-id').value);
-  if (!id) return;
 
   const veiculo_id = document.getElementById('alocar-veiculo').value;
   const motorista_id = document.getElementById('alocar-motorista').value;
@@ -475,25 +559,37 @@ async function confirmarAlocacao() {
     return;
   }
 
-  const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/alocar`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      veiculo_id: Number(veiculo_id),
-      motorista_id: Number(motorista_id),
-      data_hora_saida_prevista,
-      data_hora_retorno_prevista: data_hora_retorno_prevista || null,
-      departamento_solicitante,
-      observacoes_logistica,
-    })
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    showToast(d.error || 'Falha ao salvar alocação.', 'error');
+  const ids = id ? [id] : [...state.selectedIds];
+  if (!ids.length) {
+    showToast('Nenhuma solicitação selecionada.', 'error');
     return;
   }
+
+  let ok = 0;
+  let falhas = 0;
+  for (const sid of ids) {
+    const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/alocar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        veiculo_id: Number(veiculo_id),
+        motorista_id: Number(motorista_id),
+        data_hora_saida_prevista,
+        data_hora_retorno_prevista: data_hora_retorno_prevista || null,
+        departamento_solicitante,
+        observacoes_logistica,
+      })
+    });
+    if (r.ok) {
+      ok += 1;
+    } else {
+      falhas += 1;
+    }
+  }
+
+  state.selectedIds = [];
   closeModal('modalAlocar');
-  showToast('Alocação salva com sucesso.', 'success');
+  showToast(`Alocação concluída. Sucesso: ${ok} · Falhas: ${falhas}`, falhas ? 'info' : 'success');
   loadDashboard();
 }
 
@@ -663,6 +759,11 @@ if (btnImportar) {
     state.ocConsulta = null;
     openModal('modalImportar');
   });
+}
+
+const btnAlocarSelecionadas = document.getElementById('btnAlocarSelecionadas');
+if (btnAlocarSelecionadas) {
+  btnAlocarSelecionadas.addEventListener('click', acaoAlocarSelecionadas);
 }
 
 loadDashboard();
