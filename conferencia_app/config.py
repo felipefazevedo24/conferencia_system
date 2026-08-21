@@ -127,7 +127,7 @@ class Config:
     # Conferencia de Expedicao: API externa que retorna as ordens de faturamento.
     EXPEDICAO_FAT_API_URL = os.environ.get(
         "EXPEDICAO_FAT_API_URL",
-        "https://copy-shadiness-justice.ngrok-free.dev/expedicao",
+        "https://columbia.consultoriarf.net/expedicao",
     )
     EXPEDICAO_FAT_API_TIMEOUT = int(os.environ.get("EXPEDICAO_FAT_API_TIMEOUT", "30"))
     # Conferencia de Expedicao (aba ST): API externa que retorna as ordens de
@@ -135,7 +135,7 @@ class Config:
     # a consumir SOMENTE este endpoint (nao usa mais o banco do CPS/bridge).
     EXPEDICAO_ST_API_URL = os.environ.get(
         "EXPEDICAO_ST_API_URL",
-        "https://copy-shadiness-justice.ngrok-free.dev/expedicao_terceiro",
+        "https://columbia.consultoriarf.net/expedicao_terceiro",
     )
     EXPEDICAO_ST_API_TIMEOUT = int(os.environ.get("EXPEDICAO_ST_API_TIMEOUT", "30"))
 
