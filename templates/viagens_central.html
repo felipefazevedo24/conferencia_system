@@ -422,7 +422,12 @@ function renderTable() {
       return;
     }
 
-    body.innerHTML = rows.map((v) => `
+    body.innerHTML = rows.map((v) => {
+      const st = String(v.status || '').trim();
+      const podeLiberar = st === 'Planejada' && !v.liberada;
+      const podeCancelar = st !== 'Concluida' && st !== 'Cancelada';
+      const podeApagar = IS_ADMIN;
+      return `
       <tr>
         <td><strong>${v.codigo || ('#' + v.id)}</strong></td>
         <td><span class="eui-badge ${badgeStatus(v.status)}">${v.status || '-'}</span></td>
@@ -433,10 +438,13 @@ function renderTable() {
         <td>${Number(v.qtd_paradas || 0)}</td>
         <td style="text-align:right; display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
           <button class="eui-btn eui-btn--ghost" onclick="acaoAbrirViagem(${Number(v.id)})"><i class="fas fa-route"></i> Abrir viagem</button>
+          ${podeLiberar ? `<button class="eui-btn eui-btn--primary" onclick="acaoLiberarMotorista(${Number(v.id)})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>` : ''}
+          ${podeCancelar ? `<button class="eui-btn eui-btn--ghost" onclick="acaoCancelarViagem(${Number(v.id)}, '${String(v.codigo || ('#' + v.id)).replace(/'/g, "&#39;")}')"><i class="fas fa-ban"></i> Cancelar</button>` : ''}
           ${IS_ADMIN ? `<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${Number(v.id)}, '${String(v.codigo || ('#' + v.id)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar</button>` : ''}
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const porStatus = rows.reduce((acc, v) => {
       const st = String(v.status || '-');
@@ -1037,8 +1045,21 @@ async function acaoAbrirViagem(viagemId) {
       }).join('')}</ol>`
     : '<div class="vt-mini">Sem paradas cadastradas.</div>';
 
-  const acoesHtml = IS_ADMIN
-    ? `<div style="margin-top:12px; display:flex; justify-content:flex-end;"><button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar viagem</button></div>`
+  const st = String(d.status || '').trim();
+  const podeLiberar = st === 'Planejada' && !d.liberada;
+  const podeCancelar = st !== 'Concluida' && st !== 'Cancelada';
+  const acoesDetalhe = [];
+  if (podeLiberar) {
+    acoesDetalhe.push(`<button class="eui-btn eui-btn--primary" onclick="acaoLiberarMotorista(${vid})"><i class="fas fa-paper-plane"></i> Liberar motorista</button>`);
+  }
+  if (podeCancelar) {
+    acoesDetalhe.push(`<button class="eui-btn eui-btn--ghost" onclick="acaoCancelarViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-ban"></i> Cancelar viagem</button>`);
+  }
+  if (IS_ADMIN) {
+    acoesDetalhe.push(`<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar viagem</button>`);
+  }
+  const acoesHtml = acoesDetalhe.length
+    ? `<div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">${acoesDetalhe.join('')}</div>`
     : '';
 
   document.getElementById('detalheBody').innerHTML = `
@@ -1142,6 +1163,36 @@ async function acaoExcluirViagem(viagemId, codigoLabel) {
 
   closeModal('modalDetalhe');
   showToast('Viagem apagada com sucesso.', 'success');
+  state.viagensCacheKey = '';
+  await loadDashboard();
+}
+
+async function acaoCancelarViagem(viagemId, codigoLabel) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+
+  const nome = codigoLabel || ('#' + vid);
+  const motivo = window.prompt(`Motivo do cancelamento da viagem ${nome}:`, 'Cancelamento solicitado pela logística.');
+  if (motivo === null) return;
+  const texto = String(motivo || '').trim();
+  if (!texto) {
+    showToast('Informe o motivo do cancelamento.', 'error');
+    return;
+  }
+
+  const r = await fetch(`/api/viagem/${vid}/cancelar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motivo: texto })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || d.error || 'Falha ao cancelar viagem.', 'error');
+    return;
+  }
+
+  closeModal('modalDetalhe');
+  showToast('Viagem cancelada. Solicitações voltaram para pendente.', 'success');
   state.viagensCacheKey = '';
   await loadDashboard();
 }
