@@ -642,6 +642,15 @@ def dashboard_central_viagens():
         viagem = viagem_por_solicitacao.get(sid) if sid is not None else None
         card["viagem"] = viagem
         card["viagem_codigo"] = viagem.get("codigo") if viagem else ""
+        if viagem and card.get("status") in {"Pendente", "EmAnalise"}:
+            status_viagem = str(viagem.get("status") or "").strip()
+            if status_viagem == "Concluida":
+                card["status"] = "Concluida"
+            elif status_viagem == "EmAndamento":
+                card["status"] = "EmRota"
+            elif status_viagem == "Planejada":
+                card["status"] = "Alocada"
+            card["status_label"] = status_label_agendamento(card.get("status"))
 
     coletas = [c for c in cards if c.get("tipo") == "COLETA"]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]

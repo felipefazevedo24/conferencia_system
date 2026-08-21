@@ -437,6 +437,30 @@ def _viagem_dict(v: Viagem, detalhada: bool = False) -> dict:
     return out
 
 
+def _viagem_lista_dict(v: Viagem, *, veiculo: AgendamentoVeiculo | None = None, qtd_paradas: int = 0) -> dict:
+    motorista = AgendamentoMotorista.query.get(v.motorista_id) if v.motorista_id else None
+    return {
+        "id": v.id,
+        "codigo": v.codigo,
+        "tipo": v.tipo,
+        "status": v.status,
+        "titulo": v.titulo,
+        "observacao": v.observacao,
+        "veiculo_id": v.veiculo_id,
+        "veiculo_label": _veiculo_label(veiculo),
+        "motorista_id": v.motorista_id,
+        "motorista_nome": v.motorista_nome or (motorista.nome if motorista else None),
+        "saida_prevista": v.saida_prevista.isoformat() if v.saida_prevista else None,
+        "retorno_previsto": v.retorno_previsto.isoformat() if v.retorno_previsto else None,
+        "saida_real": v.saida_real.isoformat() if v.saida_real else None,
+        "retorno_real": v.retorno_real.isoformat() if v.retorno_real else None,
+        "qtd_paradas": int(qtd_paradas or 0),
+        "liberada": bool(v.liberada),
+        "criado_em": v.criado_em.isoformat() if v.criado_em else None,
+        "criado_por": v.criado_por,
+    }
+
+
 def _parada_dict(p: ViagemParada) -> dict:
     try:
         fotos = json.loads(p.foto_paths) if p.foto_paths else []
@@ -916,6 +940,7 @@ def agenda_viagens():
 @viagem_bp.route("/lista", methods=["GET"])
 @permission_required(PERM)
 def listar():
+    resumo = str(request.args.get("resumo") or "").strip().lower() in {"1", "true", "sim", "yes"}
     q = Viagem.query
     termo = str(request.args.get("q") or "").strip()
     status = request.args.get("status")
@@ -963,7 +988,33 @@ def listar():
             )
         )
     regs = q.order_by(Viagem.criado_em.desc()).limit(300).all()
-    return jsonify([_viagem_dict(v) for v in regs])
+    if not resumo:
+        return jsonify([_viagem_dict(v) for v in regs])
+
+    ids = [int(v.id) for v in regs]
+    qtd_paradas_por_viagem: dict[int, int] = {}
+    if ids:
+        rows = (
+            db.session.query(ViagemParada.viagem_id, func.count(ViagemParada.id))
+            .filter(ViagemParada.viagem_id.in_(ids))
+            .group_by(ViagemParada.viagem_id)
+            .all()
+        )
+        qtd_paradas_por_viagem = {int(vid): int(qtd or 0) for vid, qtd in rows}
+
+    veiculo_ids = {int(v.veiculo_id) for v in regs if v.veiculo_id}
+    veiculos = {}
+    if veiculo_ids:
+        veiculos = {int(v.id): v for v in AgendamentoVeiculo.query.filter(AgendamentoVeiculo.id.in_(veiculo_ids)).all()}
+
+    return jsonify([
+        _viagem_lista_dict(
+            v,
+            veiculo=veiculos.get(int(v.veiculo_id)) if v.veiculo_id else None,
+            qtd_paradas=qtd_paradas_por_viagem.get(int(v.id), 0),
+        )
+        for v in regs
+    ])
 
 
 @viagem_bp.route("/<int:vid>", methods=["GET"])
