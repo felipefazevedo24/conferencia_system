@@ -3,24 +3,32 @@ import os
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 
 from ..auth import has_permission, login_required, permission_required
 from ..extensions import db
-from ..models import CadastroWorkflowSLAConfig, CadastroWorkflowSolicitacao
+from ..models import CadastroWorkflowSLAConfig, CadastroWorkflowSolicitacao, PlanoContaDominio
 from ..services.cadastro_workflow_service import (
     CAMPO_OPCOES,
     CATEGORIAS_VISIVEIS,
+    MATERIAL_UTILIZACAO_RAPIDA,
+    MOTIVOS_PADRAO_POR_ACAO,
     STATUS,
     TIPOS_CADASTRO,
     buscar_duplicidades,
+    buscar_materiais_grv,
     categoria_visivel,
     consultar_cartao_cnpj,
     criar_solicitacao,
     executar_acao,
     get_dados,
     get_sla_horas,
+    montar_comentario_acao,
+    motivos_padrao_por_acao,
     prazo_restante,
+    role_contabil,
+    sugerir_plano_contas_material,
     tempo_na_etapa,
 )
 
@@ -32,6 +40,10 @@ ALLOWED_ANEXO_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".
 
 def _can_operar_compras() -> bool:
     return session.get("role") in {"Compras", "Admin"}
+
+
+def _can_operar_contabil() -> bool:
+    return role_contabil(session.get("role")) or session.get("role") == "Admin"
 
 
 def _can_operar_fiscal() -> bool:
@@ -111,7 +123,7 @@ def _query_visibilidade():
     role = session.get("role")
     username = session.get("username")
     query = CadastroWorkflowSolicitacao.query
-    if role in {"Compras", "Fiscal", "Admin"}:
+    if role in {"Compras", "Fiscal", "Admin"} or role_contabil(role):
         return query
     return query.filter(CadastroWorkflowSolicitacao.solicitante == username)
 
@@ -124,9 +136,11 @@ def _filtro_categoria(query, categoria: str):
         return query.filter(Sol.status == "Cadastrado")
     if categoria == "em_analise":
         return query.filter(
-            Sol.status.in_(["Em Validacao Compras", "Em Validacao Fiscal"]),
+            Sol.status.in_(["Em Validacao Contabil", "Em Validacao Compras", "Em Validacao Fiscal"]),
             Sol.responsavel_atual.is_(None),
         )
+    if categoria == "atendimento_contabil":
+        return query.filter(Sol.status == "Em Validacao Contabil", Sol.responsavel_atual.isnot(None))
     if categoria == "atendimento_compras":
         return query.filter(Sol.status == "Em Validacao Compras", Sol.responsavel_atual.isnot(None))
     if categoria == "atendimento_fiscal":
@@ -174,6 +188,7 @@ def dashboard():
         categorias=CATEGORIAS_VISIVEIS,
         contagens=contagens,
         categoria_visivel=categoria_visivel,
+        can_contabil=_can_operar_contabil(),
         can_compras=_can_operar_compras(),
         can_fiscal=_can_operar_fiscal(),
     )
@@ -218,6 +233,7 @@ def novo():
         dados=dados,
         duplicidades=duplicidades,
         campo_opcoes=CAMPO_OPCOES,
+        utilizacao_rapida=MATERIAL_UTILIZACAO_RAPIDA,
     )
 
 
@@ -225,7 +241,7 @@ def novo():
 @permission_required("PAGE_CADASTRO_WORKFLOW")
 def detalhe(solicitacao_id):
     sol = CadastroWorkflowSolicitacao.query.get_or_404(solicitacao_id)
-    if session.get("role") not in {"Admin", "Compras", "Fiscal"} and sol.solicitante != session.get("username"):
+    if session.get("role") not in {"Admin", "Compras", "Fiscal"} and not role_contabil(session.get("role")) and sol.solicitante != session.get("username"):
         return render_template("acesso_negado.html", user=session.get("username")), 403
     return render_template(
         "cadastro_workflow_detalhe.html",
@@ -237,9 +253,11 @@ def detalhe(solicitacao_id):
         anexos_info=_parse_anexos(sol.anexos),
         tempo_na_etapa=tempo_na_etapa(sol),
         prazo=prazo_restante(sol),
+        can_contabil=_can_operar_contabil(),
         can_compras=_can_operar_compras(),
         can_fiscal=_can_operar_fiscal(),
         is_solicitante=sol.solicitante == session.get("username"),
+        motivos_padrao=motivos_padrao_por_acao(),
     )
 
 
@@ -256,7 +274,7 @@ def anexo_imagem(filename):
 @permission_required("PAGE_CADASTRO_WORKFLOW")
 def acao(solicitacao_id):
     sol = CadastroWorkflowSolicitacao.query.get_or_404(solicitacao_id)
-    if session.get("role") not in {"Admin", "Compras", "Fiscal"} and sol.solicitante != session.get("username"):
+    if session.get("role") not in {"Admin", "Compras", "Fiscal"} and not role_contabil(session.get("role")) and sol.solicitante != session.get("username"):
         return render_template("acesso_negado.html", user=session.get("username")), 403
     acao_nome = request.form.get("acao", "")
     try:
@@ -285,7 +303,7 @@ def configurar_sla():
     if session.get("role") != "Admin":
         return render_template("acesso_negado.html", user=session.get("username")), 403
     if request.method == "POST":
-        for depto in ("Compras", "Fiscal"):
+        for depto in ("Contabil", "Compras", "Fiscal"):
             horas = max(1, int(request.form.get(f"sla_{depto}", 48) or 48))
             cfg = CadastroWorkflowSLAConfig.query.filter_by(departamento=depto).first()
             if not cfg:
@@ -299,6 +317,7 @@ def configurar_sla():
     return render_template(
         "cadastro_workflow_sla.html",
         user=session.get("username"),
+        sla_contabil=get_sla_horas("Contabil"),
         sla_compras=get_sla_horas("Compras"),
         sla_fiscal=get_sla_horas("Fiscal"),
     )
@@ -316,6 +335,65 @@ def api_duplicidade():
         "descricao": request.args.get("descricao", ""),
     }
     return jsonify({"duplicidades": buscar_duplicidades(tipo, dados)})
+
+
+@cadastro_workflow_bp.get("/api/materiais-grv")
+@login_required
+def api_materiais_grv():
+    if not has_permission("PAGE_CADASTRO_WORKFLOW"):
+        return jsonify({"error": "Acesso negado"}), 403
+    codigo = request.args.get("codigo", "")
+    descricao = request.args.get("descricao", "")
+    return jsonify({"materiais": buscar_materiais_grv(codigo=codigo, descricao=descricao, limite=12)})
+
+
+@cadastro_workflow_bp.get("/api/plano-contas")
+@login_required
+def api_plano_contas():
+    if not has_permission("PAGE_CADASTRO_WORKFLOW"):
+        return jsonify({"error": "Acesso negado"}), 403
+    termo = (request.args.get("q", "") or "").strip()
+    if not termo:
+        return jsonify({"planos": []})
+    rows = (
+        PlanoContaDominio.query
+        .filter(
+            or_(
+                PlanoContaDominio.codigo_conta.ilike(f"%{termo}%"),
+                PlanoContaDominio.nome_conta.ilike(f"%{termo}%"),
+            )
+        )
+        .order_by(PlanoContaDominio.codigo_conta.asc())
+        .limit(20)
+        .all()
+    )
+    return jsonify(
+        {
+            "planos": [
+                {
+                    "codigo": row.codigo_conta,
+                    "nome": row.nome_conta,
+                    "classificacao": row.classificacao_conta or "",
+                    "tipo": row.tipo_conta or "",
+                }
+                for row in rows
+            ]
+        }
+    )
+
+
+@cadastro_workflow_bp.get("/api/plano-contas/sugerir")
+@login_required
+def api_sugerir_plano_contas():
+    if not has_permission("PAGE_CADASTRO_WORKFLOW"):
+        return jsonify({"error": "Acesso negado"}), 403
+    dados = {
+        "descricao": request.args.get("descricao", ""),
+        "utilizacao": request.args.get("utilizacao", ""),
+        "fornecedor_sugerido": request.args.get("fornecedor_sugerido", ""),
+        "detalhe_utilizacao": request.args.get("detalhe_utilizacao", ""),
+    }
+    return jsonify({"planos": sugerir_plano_contas_material(dados, limite=6)})
 
 
 @cadastro_workflow_bp.get("/api/cnpj")

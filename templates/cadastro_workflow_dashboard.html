@@ -25,6 +25,7 @@
 {% set cat_atual = filtros.get('categoria', '') %}
 {% macro cat_href(chave) %}{{ url_for('cadastro_workflow.dashboard', categoria=(chave if cat_atual != chave else None), tipo=filtros.get('tipo') or None, status=filtros.get('status') or None, numero=filtros.get('numero') or None) }}{% endmacro %}
 {% set status_badge = {
+    'Em Validacao Contabil': 'eui-badge--warning',
     'Em Validacao Compras': 'eui-badge--info',
     'Em Validacao Fiscal': 'eui-badge--violet',
     'Pendente de Correcao': 'eui-badge--warning',
@@ -34,6 +35,7 @@
 } %}
 {% set cat_icons = {
     'em_analise': ('fa-hourglass-half', 'warning'),
+    'atendimento_contabil': ('fa-calculator', 'warning'),
     'atendimento_compras': ('fa-cart-shopping', 'info'),
     'atendimento_fiscal': ('fa-scale-balanced', 'violet'),
     'finalizado': ('fa-circle-check', 'success'),
@@ -43,7 +45,7 @@
         <div>
             <div class="eui-page-header__eyebrow">Cadastros ERP</div>
             <h1 class="eui-page-header__title"><i class="fas fa-diagram-project"></i> Workflow de Cadastros</h1>
-            <p class="eui-page-header__sub">Acompanhe materiais, clientes, fornecedores e transportadoras em uma esteira única.</p>
+            <p class="eui-page-header__sub">Acompanhe materiais, clientes, fornecedores e transportadoras em uma esteira única, com validação Contábil, Compras e Fiscal.</p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
             {% if session.get('role') == 'Admin' %}

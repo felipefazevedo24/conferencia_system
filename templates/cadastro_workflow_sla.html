@@ -9,7 +9,7 @@
         <div>
             <div class="eui-page-header__eyebrow">Cadastros ERP</div>
             <h1 class="eui-page-header__title"><i class="fas fa-clock"></i> Configurar SLA</h1>
-            <p class="eui-page-header__sub">Defina o prazo de atendimento, em horas, para Compras e Fiscal.</p>
+            <p class="eui-page-header__sub">Defina o prazo de atendimento, em horas, para Contábil, Compras e Fiscal.</p>
         </div>
         <a class="eui-btn eui-btn--ghost" href="{{ url_for('cadastro_workflow.dashboard') }}"><i class="fas fa-arrow-left"></i> Voltar</a>
     </header>
@@ -17,7 +17,11 @@
     <div class="eui-card">
         <div class="eui-card__body">
             <form method="post">
-                <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap: var(--eui-space-4);">
+                <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap: var(--eui-space-4);">
+                    <div class="eui-field">
+                        <label class="eui-field__label">SLA Contábil (horas)</label>
+                        <input class="eui-input" type="number" min="1" name="sla_Contabil" value="{{ sla_contabil }}">
+                    </div>
                     <div class="eui-field">
                         <label class="eui-field__label">SLA Compras (horas)</label>
                         <input class="eui-input" type="number" min="1" name="sla_Compras" value="{{ sla_compras }}">
