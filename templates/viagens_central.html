@@ -289,6 +289,26 @@ function badgeStatus(status) {
   return map[status] || 'eui-badge--neutral';
 }
 
+function renderSolicitacaoRow(row) {
+  const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+  const nf = row.numero_nf || row.documento_numero || '-';
+  const motorista = row.motorista?.nome || row.motorista_nome || '-';
+  const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+  return `
+    <tr>
+      <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
+      <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+      <td>${doc}</td>
+      <td>${row.parceiro_nome || '-'}</td>
+      <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+      <td>${motorista}</td>
+      <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+      <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
+      <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+    </tr>
+  `;
+}
+
 function getRows() {
   const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
   if (state.subfiltro === 'PENDENTES') {
@@ -344,27 +364,63 @@ function renderTable() {
   state.selectedIds = state.selectedIds.filter((id) => idsVisiveis.includes(id));
 
   if (state.subfiltro === 'PENDENTES') {
-    body.innerHTML = rows.map((row) => {
-      const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
-      const nf = row.numero_nf || row.documento_numero || '-';
-      const motorista = row.motorista?.nome || row.motorista_nome || '-';
-      const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
-      return `
-        <tr>
-          <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-          <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
-          <td>${doc}</td>
-          <td>${row.parceiro_nome || '-'}</td>
-          <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
-          <td>${motorista}</td>
-          <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
-          <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
-          <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
-        </tr>
-      `;
-    }).join('');
+    const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
+    const alocadas = rows.filter((r) => String(r.status || '').trim() === 'Alocada');
 
-    resumoMotoristas.innerHTML = '';
+    let html = '';
+    if (pendentesNaoAlocadas.length) {
+      html += pendentesNaoAlocadas.map((row) => renderSolicitacaoRow(row)).join('');
+    }
+
+    if (alocadas.length) {
+      const viagensMap = alocadas.reduce((acc, row) => {
+        const nomeMotorista = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
+        const viagem = row.viagem || null;
+        const viagemKey = viagem?.codigo ? String(viagem.codigo) : `SEM_VIAGEM_${nomeMotorista}`;
+        if (!acc[viagemKey]) {
+          acc[viagemKey] = { motorista: nomeMotorista, viagem, rows: [] };
+        }
+        acc[viagemKey].rows.push(row);
+        return acc;
+      }, {});
+
+      const blocos = Object.values(viagensMap).sort((a, b) => {
+        const ac = String(a.viagem?.codigo || a.motorista || '');
+        const bc = String(b.viagem?.codigo || b.motorista || '');
+        return ac.localeCompare(bc, 'pt-BR');
+      });
+
+      html += blocos.map((bloco) => {
+        const viagemId = Number(bloco.viagem?.id || 0);
+        const tituloViagem = bloco.viagem?.codigo ? `VIAGEM ${bloco.viagem.codigo}` : 'ALOCADA (sem viagem montada)';
+        const linhas = bloco.rows.map((row) => renderSolicitacaoRow(row)).join('');
+        return `
+          <tr class="vt-trip-row">
+            <td colspan="9">
+              <div class="vt-trip-head">
+                <span class="vt-trip-code ${bloco.viagem?.codigo ? '' : 'muted'}">${tituloViagem}</span>
+                <span class="vt-group-meta">Motorista: ${bloco.motorista}</span>
+                <span class="vt-group-meta">Solicitacoes: ${bloco.rows.length}</span>
+                ${viagemId ? `<button class="eui-btn eui-btn--ghost" style="margin-left:auto;" onclick="acaoAbrirViagem(${viagemId})"><i class="fas fa-route"></i> Abrir viagem</button>` : ''}
+              </div>
+            </td>
+          </tr>
+          ${linhas}
+        `;
+      }).join('');
+    }
+
+    body.innerHTML = html || '<tr><td colspan="9" class="vt-empty">Nenhuma viagem encontrada para os filtros atuais.</td></tr>';
+
+    const porMotoristaPendentes = rows.reduce((acc, row) => {
+      const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
+      acc[nome] = (acc[nome] || 0) + 1;
+      return acc;
+    }, {});
+    resumoMotoristas.innerHTML = Object.entries(porMotoristaPendentes)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, qtd]) => `<span class="vt-chip">${nome}: ${qtd}</span>`)
+      .join('');
 
     const checkAllPendentes = document.getElementById('vt-check-all');
     if (checkAllPendentes) {
@@ -884,6 +940,7 @@ async function criarViagemComSolicitacoesSelecionadas() {
   const ids = (state.posAlocacaoIds || []).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
   if (!ids.length) return;
   let viagemId = null;
+  let anexadas = 0;
   for (let i = 0; i < ids.length; i += 1) {
     const sid = ids[i];
     if (i === 0) {
@@ -894,13 +951,20 @@ async function criarViagemComSolicitacoesSelecionadas() {
         return;
       }
       viagemId = d.viagem?.id;
+      anexadas += 1;
       continue;
     }
     if (!viagemId) continue;
-    await fetch(`/api/viagem/${Number(viagemId)}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const r = await fetch(`/api/viagem/${Number(viagemId)}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.sucesso) {
+      showToast(d.msg || `Falha ao anexar solicitação ${sid} na viagem.`, 'error');
+      return;
+    }
+    anexadas += 1;
   }
   fecharMontagemPosAlocacao();
-  showToast('Viagem montada. Agora libere para o motorista.', 'success');
+  showToast(`Viagem montada com ${anexadas} solicitação(ões). Agora libere para o motorista.`, 'success');
   if (viagemId) {
     window.location.href = `/logistica/viagens?vid=${Number(viagemId)}`;
   }
@@ -914,7 +978,8 @@ async function anexarSolicitacoesEmViagemSelecionada() {
   let falhas = 0;
   for (const sid of ids) {
     const r = await fetch(`/api/viagem/${viagemId}/anexar-solicitacao/${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    if (r.ok) ok += 1;
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.sucesso) ok += 1;
     else falhas += 1;
   }
   fecharMontagemPosAlocacao();
@@ -980,8 +1045,12 @@ async function confirmarAlocacao() {
         observacoes_logistica,
       })
     });
-    if (r.ok) ok = 1;
-    else falhas = 1;
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(d.error || 'Falha ao alocar solicitação.', 'error');
+      return;
+    }
+    ok = 1;
   }
 
   state.posAlocacaoIds = falhas ? [] : [...ids];

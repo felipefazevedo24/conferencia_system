@@ -1577,6 +1577,16 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         outro_inicio, outro_fim = _intervalo_planejado(existente)
         if not outro_inicio or not outro_fim:
             continue
+        mesma_janela = (
+            inicio_atual == outro_inicio
+            and (
+                (fim_atual is None and outro_fim is None)
+                or (fim_atual is not None and outro_fim is not None and fim_atual == outro_fim)
+            )
+        )
+        if motorista and mesma_janela and int(existente.motorista_id or 0) == int(motorista.id):
+            # Permite consolidar multiplas solicitacoes na mesma saida operacional.
+            continue
         if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
             fim_atual + timedelta(minutes=buffer_min)
         ) > (outro_inicio - timedelta(minutes=buffer_min)):
@@ -1591,6 +1601,15 @@ def alocar_solicitacao_agendamento(solicitacao_id: int):
         for existente in query_motorista.all():
             outro_inicio, outro_fim = _intervalo_planejado(existente)
             if not outro_inicio or not outro_fim:
+                continue
+            mesma_janela = (
+                inicio_atual == outro_inicio
+                and (
+                    (fim_atual is None and outro_fim is None)
+                    or (fim_atual is not None and outro_fim is not None and fim_atual == outro_fim)
+                )
+            )
+            if mesma_janela and int(existente.veiculo_id or 0) == int(veiculo.id):
                 continue
             if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
                 fim_atual + timedelta(minutes=buffer_min)
@@ -1725,6 +1744,15 @@ def alocar_solicitacoes_lote_agendamento():
         outro_inicio, outro_fim = _intervalo_planejado(existente)
         if not outro_inicio or not outro_fim:
             continue
+        mesma_janela = (
+            inicio_atual == outro_inicio
+            and (
+                (fim_atual is None and outro_fim is None)
+                or (fim_atual is not None and outro_fim is not None and fim_atual == outro_fim)
+            )
+        )
+        if mesma_janela and int(existente.motorista_id or 0) == int(motorista.id):
+            continue
         if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
             fim_atual + timedelta(minutes=buffer_min)
         ) > (outro_inicio - timedelta(minutes=buffer_min)):
@@ -1738,6 +1766,15 @@ def alocar_solicitacoes_lote_agendamento():
     for existente in query_motorista.all():
         outro_inicio, outro_fim = _intervalo_planejado(existente)
         if not outro_inicio or not outro_fim:
+            continue
+        mesma_janela = (
+            inicio_atual == outro_inicio
+            and (
+                (fim_atual is None and outro_fim is None)
+                or (fim_atual is not None and outro_fim is not None and fim_atual == outro_fim)
+            )
+        )
+        if mesma_janela and int(existente.veiculo_id or 0) == int(veiculo.id):
             continue
         if (inicio_atual - timedelta(minutes=buffer_min)) < (outro_fim + timedelta(minutes=buffer_min)) and (
             fim_atual + timedelta(minutes=buffer_min)
