@@ -1097,6 +1097,13 @@ def editar(vid: int):
     v.atualizado_em = datetime.now()
     if v.status in ("Planejada", "EmAndamento"):
         _sync_solicitacoes_da_viagem(v, "EmRota" if v.status == "EmAndamento" else "Alocada")
+    _log_evento(
+        v.id,
+        "OBSERVACAO",
+        "Dados da viagem atualizados",
+        descricao=f"Alteração realizada por {_user()}.",
+        severidade="info",
+    )
     db.session.commit()
     return jsonify({"sucesso": True, "viagem": _viagem_dict(v, detalhada=True)})
 
@@ -2000,7 +2007,6 @@ def motorista_minhas_viagens():
         Viagem.query
         .filter(
             Viagem.motorista_id == mot.id,
-            Viagem.liberada == True,  # noqa: E712
             Viagem.status.in_(["Planejada", "EmAndamento"]),
         )
         .order_by(Viagem.saida_prevista.asc())

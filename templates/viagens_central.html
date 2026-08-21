@@ -940,6 +940,7 @@ function openActionsMenu(id, x, y) {
     ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-route'></i> Abrir viagem</button>` : ''}
     ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
     <button onclick="acaoAbrirOrigem(${id})"><i class='fas fa-file-arrow-up'></i> Abrir documento de origem</button>
+    ${IS_ADMIN ? `<button class='danger' onclick="acaoExcluir(${id})"><i class='fas fa-trash'></i> Apagar solicitação</button>` : ''}
   `;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -1099,6 +1100,9 @@ async function acaoAbrirViagem(viagemId) {
   if (podeCancelar) {
     acoesDetalhe.push(`<button class="eui-btn eui-btn--ghost" onclick="acaoCancelarViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-ban"></i> Cancelar viagem</button>`);
   }
+  if (st !== 'Concluida' && st !== 'Cancelada') {
+    acoesDetalhe.push(`<button class="eui-btn eui-btn--ghost" onclick="acaoAdicionarSolicitacaoNaViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-plus"></i> Adicionar solicitação</button>`);
+  }
   if (IS_ADMIN) {
     acoesDetalhe.push(`<button class="eui-btn eui-btn--danger" onclick="acaoExcluirViagem(${vid}, '${String(d.codigo || ('#' + vid)).replace(/'/g, "&#39;")}')"><i class="fas fa-trash"></i> Apagar viagem</button>`);
   }
@@ -1239,6 +1243,50 @@ async function acaoCancelarViagem(viagemId, codigoLabel) {
   showToast('Viagem cancelada. Solicitações voltaram para pendente.', 'success');
   state.viagensCacheKey = '';
   await loadDashboard();
+}
+
+async function acaoAdicionarSolicitacaoNaViagem(viagemId, codigoLabel) {
+  const vid = Number(viagemId);
+  if (!vid) return;
+
+  const entrada = window.prompt(`Informe o ID da solicitação para anexar na viagem ${codigoLabel || ('#' + vid)}:`);
+  if (entrada === null) return;
+  const txt = String(entrada || '').trim();
+  if (!txt) {
+    showToast('Informe o ID da solicitação.', 'error');
+    return;
+  }
+
+  let sid = Number(txt);
+  if (!Number.isFinite(sid) || sid <= 0) {
+    const row = [...state.coletas, ...state.entregas].find((r) => String(r.codigo || '').trim().toUpperCase() === txt.toUpperCase());
+    sid = Number(row?.id || 0);
+  }
+  if (!sid || sid <= 0) {
+    showToast('Solicitação não localizada na tela atual. Informe o ID numérico.', 'error');
+    return;
+  }
+
+  const r = await fetch(`/api/viagem/${vid}/anexar-solicitacao/${sid}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    if (d && d.viagem_id) {
+      showToast(d.msg || 'Solicitação já vinculada em outra viagem. Abrindo viagem atual.', 'info');
+      window.location.href = `/logistica/viagens?vid=${Number(d.viagem_id)}`;
+      return;
+    }
+    showToast(d.msg || d.error || 'Falha ao anexar solicitação na viagem.', 'error');
+    return;
+  }
+
+  showToast('Solicitação anexada com sucesso.', d.liberacao_revogada ? 'info' : 'success');
+  state.viagensCacheKey = '';
+  await loadDashboard();
+  await acaoAbrirViagem(vid);
 }
 
 async function acaoLiberarMotorista(viagemId) {
