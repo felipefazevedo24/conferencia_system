@@ -66,6 +66,20 @@ def _env_int(name: str, default: str = "") -> int | None:
         return None
 
 
+def _resolver_url_expedicao(env_name: str, sufixo_padrao: str) -> str:
+    """Resolve URL da API de expedicao com fallback seguro.
+
+    Se o ambiente ainda estiver com URL antiga de ngrok, troca
+    automaticamente para o dominio oficial.
+    """
+    raw = str(os.environ.get(env_name, "") or "").strip()
+    if raw and "ngrok-free.dev" in raw:
+        return f"https://columbia.consultoriarf.net/{sufixo_padrao}"
+    if raw:
+        return raw
+    return f"https://columbia.consultoriarf.net/{sufixo_padrao}"
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "fam_2026_sistema_total")
     _db_path = Path(os.environ.get("DB_PATH", BASE_DIR / "database.db")).expanduser()
@@ -125,18 +139,12 @@ class Config:
     ERP_SYNC_POLL_INTERVAL_SECONDS = int(os.environ.get("ERP_SYNC_POLL_INTERVAL_SECONDS", "600"))
 
     # Conferencia de Expedicao: API externa que retorna as ordens de faturamento.
-    EXPEDICAO_FAT_API_URL = os.environ.get(
-        "EXPEDICAO_FAT_API_URL",
-        "https://columbia.consultoriarf.net/expedicao",
-    )
+    EXPEDICAO_FAT_API_URL = _resolver_url_expedicao("EXPEDICAO_FAT_API_URL", "expedicao")
     EXPEDICAO_FAT_API_TIMEOUT = int(os.environ.get("EXPEDICAO_FAT_API_TIMEOUT", "30"))
     # Conferencia de Expedicao (aba ST): API externa que retorna as ordens de
     # compra com material de Servico de Terceiro (ST) a enviar. A aba ST passou
     # a consumir SOMENTE este endpoint (nao usa mais o banco do CPS/bridge).
-    EXPEDICAO_ST_API_URL = os.environ.get(
-        "EXPEDICAO_ST_API_URL",
-        "https://columbia.consultoriarf.net/expedicao_terceiro",
-    )
+    EXPEDICAO_ST_API_URL = _resolver_url_expedicao("EXPEDICAO_ST_API_URL", "expedicao_terceiro")
     EXPEDICAO_ST_API_TIMEOUT = int(os.environ.get("EXPEDICAO_ST_API_TIMEOUT", "30"))
 
     # Modulo de Inventario (Logistica): atualiza a localizacao de estoque
