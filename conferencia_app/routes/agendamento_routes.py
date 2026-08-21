@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, current_app, jsonify, request, session, send_file
 from sqlalchemy import or_, true
 
-from ..auth import permission_required, permission_required_any
+from ..auth import is_admin_session, permission_required, permission_required_any
 from ..extensions import db
 from ..models import (
     AgendamentoCliente,
@@ -1075,7 +1075,7 @@ def central_viagens_cancelar(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/<int:solicitacao_id>/excluir", methods=["DELETE"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_excluir(solicitacao_id: int):
-    if session.get("role") != "Admin":
+    if not is_admin_session():
         return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
     row = _get_solicitacao_visivel(solicitacao_id)
     if not row or not _is_origem_automatica(row):
@@ -1111,7 +1111,7 @@ def central_viagens_excluir(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/central-viagens/solicitacoes/excluir-lote", methods=["DELETE"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def central_viagens_excluir_lote():
-    if session.get("role") != "Admin":
+    if not is_admin_session():
         return jsonify({"error": "Somente administrador pode excluir viagens."}), 403
 
     payload = request.get_json(silent=True) or {}
