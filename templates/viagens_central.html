@@ -39,6 +39,10 @@
     .vt-bulkbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .vt-check { width: 16px; height: 16px; cursor: pointer; }
     .vt-chip { border: 1px solid var(--eui-border); background: var(--eui-surface-2); border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 700; color: var(--eui-text-muted); }
+    .vt-group-row td { background: var(--eui-surface-2); border-top: 1px solid var(--eui-border); border-bottom: 1px solid var(--eui-border); }
+    .vt-group-head { display: flex; align-items: center; gap: 10px; padding: 8px 4px; }
+    .vt-group-name { font-size: 12px; font-weight: 800; color: var(--eui-text); }
+    .vt-group-meta { font-size: 11px; color: var(--eui-text-muted); border: 1px solid var(--eui-border); border-radius: 999px; padding: 2px 8px; background: var(--eui-surface); }
     @media (max-width: 760px) {
         .vt-toolbar { align-items: stretch; }
         .vt-tabs { width: 100%; }
@@ -324,23 +328,55 @@ function renderTable() {
   const idsVisiveis = rows.map((r) => Number(r.id));
   state.selectedIds = state.selectedIds.filter((id) => idsVisiveis.includes(id));
 
-  body.innerHTML = rows.map((row) => {
-    const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
-    const nf = row.numero_nf || row.documento_numero || '-';
-    const motorista = row.motorista?.nome || row.motorista_nome || '-';
-    const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+  const gruposMap = rows.reduce((acc, row) => {
+    const nome = (row.motorista?.nome || row.motorista_nome || '').trim() || 'Sem motorista';
+    if (!acc[nome]) acc[nome] = [];
+    acc[nome].push(row);
+    return acc;
+  }, {});
+  const grupos = Object.entries(gruposMap)
+    .sort((a, b) => {
+      if (a[0] === 'Sem motorista') return 1;
+      if (b[0] === 'Sem motorista') return -1;
+      return b[1].length - a[1].length || a[0].localeCompare(b[0], 'pt-BR');
+    });
+
+  body.innerHTML = grupos.map(([nomeMotorista, itens], idx) => {
+    const idsGrupo = itens.map((r) => Number(r.id));
+    const selecionadasGrupo = idsGrupo.filter((id) => state.selectedIds.includes(id)).length;
+    const grupoMarcado = idsGrupo.length > 0 && selecionadasGrupo === idsGrupo.length ? 'checked' : '';
+    const linhas = itens.map((row) => {
+      const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+      const nf = row.numero_nf || row.documento_numero || '-';
+      const motorista = row.motorista?.nome || row.motorista_nome || '-';
+      const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+      return `
+        <tr>
+          <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
+          <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+          <td>${doc}</td>
+          <td>${row.parceiro_nome || '-'}</td>
+          <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
+          <td>${motorista}</td>
+          <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+          <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
+          <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+        </tr>
+      `;
+    }).join('');
+
     return `
-      <tr>
-        <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-        <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
-        <td>${doc}</td>
-        <td>${row.parceiro_nome || '-'}</td>
-        <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
-        <td>${motorista}</td>
-        <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
-        <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
-        <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
+      <tr class="vt-group-row">
+        <td colspan="9">
+          <div class="vt-group-head">
+            <input type="checkbox" class="vt-check vt-check-group" data-group-index="${idx}" ${grupoMarcado}>
+            <span class="vt-group-name">${nomeMotorista}</span>
+            <span class="vt-group-meta">Total: ${itens.length}</span>
+            <span class="vt-group-meta">Selecionadas: ${selecionadasGrupo}</span>
+          </div>
+        </td>
       </tr>
+      ${linhas}
     `;
   }).join('');
 
@@ -377,6 +413,22 @@ function renderTable() {
       } else {
         state.selectedIds = state.selectedIds.filter((x) => x !== id);
       }
+      atualizarSelecionadasUI();
+    });
+  });
+
+  body.querySelectorAll('.vt-check-group').forEach((el) => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.dataset.groupIndex);
+      const grupo = grupos[idx]?.[1] || [];
+      const idsGrupo = grupo.map((r) => Number(r.id));
+      if (el.checked) {
+        const merged = new Set([...state.selectedIds, ...idsGrupo]);
+        state.selectedIds = Array.from(merged);
+      } else {
+        state.selectedIds = state.selectedIds.filter((id) => !idsGrupo.includes(id));
+      }
+      renderTable();
       atualizarSelecionadasUI();
     });
   });
