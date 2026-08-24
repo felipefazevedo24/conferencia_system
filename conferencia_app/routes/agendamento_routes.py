@@ -248,38 +248,69 @@ def _to_date(value) -> date | None:
         return None
 
 
-def _parse_week_ref(data_ref: str) -> date:
-    data_ref = str(data_ref or "").strip()
-    if data_ref:
-        try:
-            return datetime.strptime(data_ref, "%Y-%m-%d").date()
-        except ValueError:
-            pass
-    return date.today()
+def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, aviso: str = "") -> dict:
+    dias = []
+    cursor = inicio
+    while cursor <= fim:
+        dias.append(
+            {
+                "data": cursor.isoformat(),
+                "qtd_total": 0,
+                "qtd_coletas": 0,
+                "qtd_entregas": 0,
+                "qtd_sem_viagem": 0,
+                "qtd_atrasadas": 0,
+            }
+        )
+        cursor += timedelta(days=1)
+    return {
+        "mes": f"{ano:04d}-{mes:02d}",
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "resumo": {
+            "total": 0,
+            "coletas": 0,
+            "entregas": 0,
+            "coletas_sem_viagem": 0,
+            "atrasadas": 0,
+            "pico_dia": 0,
+        },
+        "dias": dias,
+        "eventos": [],
+        "aviso": aviso,
+    }
 
 
-def _periodo_recebimento(visao: str, mes_ref: str, data_ref: str) -> tuple[date, date, date]:
-    if visao == "mes":
-        try:
-            mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
-        except ValueError as exc:
-            raise ValueError("Parâmetro 'mes' inválido. Use YYYY-MM.") from exc
-        ano = mes_base.year
-        mes = mes_base.month
-        dia_final = monthrange(ano, mes)[1]
-        inicio = date(ano, mes, 1)
-        fim = date(ano, mes, dia_final)
-        return inicio, fim, inicio
+@agendamento_bp.route("/api/logistica/recebimento/calendario")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_dados():
+    mes_ref = str(request.args.get("mes") or "").strip()
+    try:
+        mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
+    except ValueError:
+        return jsonify({"error": "Parâmetro 'mes' inválido. Use YYYY-MM."}), 400
 
-    ref = _parse_week_ref(data_ref)
-    inicio = ref - timedelta(days=ref.weekday())
-    fim = inicio + timedelta(days=6)
-    return inicio, fim, ref
+    ano = mes_base.year
+    mes = mes_base.month
+    dia_final = monthrange(ano, mes)[1]
+    inicio = date(ano, mes, 1)
+    fim = date(ano, mes, dia_final)
+    hoje = date.today()
 
-
-def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], dict]:
-    ocs = compras_service.ordens_compra_entregas(limite=5000)
-    cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    try:
+        ocs = compras_service.ordens_compra_entregas(limite=5000)
+        cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    except Exception as exc:
+        current_app.logger.exception("Falha ao consultar OCs para calendário de recebimento")
+        return jsonify(
+            _payload_vazio_recebimento(
+                ano,
+                mes,
+                inicio,
+                fim,
+                "Nao foi possivel consultar o ERP agora. Tente recarregar em alguns instantes.",
+            )
+        )
     cif_por_oc: dict[str, bool] = {}
     for row in cif_rows:
         oc_num = str(row.get("cod_ordem_compra") or "").strip()
@@ -306,21 +337,24 @@ def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], d
             }
         )
 
-    ocs_periodo = sorted({e["numero_oc"] for e in eventos_base})
+    ocs_mes = sorted({e["numero_oc"] for e in eventos_base})
     solicitacao_por_oc: dict[str, AgendamentoSolicitacao] = {}
-    if ocs_periodo:
-        solicitacoes = (
-            _query_solicitacoes_visiveis()
-            .filter(AgendamentoSolicitacao.tipo == "COLETA")
-            .filter(AgendamentoSolicitacao.numero_oc.in_(ocs_periodo))
-            .filter(AgendamentoSolicitacao.status != "Cancelada")
-            .order_by(AgendamentoSolicitacao.id.desc())
-            .all()
-        )
-        for sol in solicitacoes:
-            oc_num = str(sol.numero_oc or "").strip()
-            if oc_num and oc_num not in solicitacao_por_oc:
-                solicitacao_por_oc[oc_num] = sol
+    if ocs_mes:
+        try:
+            solicitacoes = (
+                _query_solicitacoes_visiveis()
+                .filter(AgendamentoSolicitacao.tipo == "COLETA")
+                .filter(AgendamentoSolicitacao.numero_oc.in_(ocs_mes))
+                .filter(AgendamentoSolicitacao.status != "Cancelada")
+                .order_by(AgendamentoSolicitacao.id.desc())
+                .all()
+            )
+            for sol in solicitacoes:
+                oc_num = str(sol.numero_oc or "").strip()
+                if oc_num and oc_num not in solicitacao_por_oc:
+                    solicitacao_por_oc[oc_num] = sol
+        except Exception:
+            current_app.logger.exception("Falha ao consultar solicitacoes de coleta no calendário de recebimento")
 
     viagem_por_solicitacao: dict[int, dict] = {}
     if solicitacao_por_oc:
@@ -353,12 +387,21 @@ def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], d
             }
 
     eventos: list[dict] = []
-    total_coletas = total_entregas = sem_viagem = 0
+    dias: dict[str, dict] = {}
+    total_coletas = total_entregas = sem_viagem = atrasadas = 0
     for row in eventos_base:
         previsao = row["previsao"]
         numero_oc = row["numero_oc"]
         solicitacao = solicitacao_por_oc.get(numero_oc)
         viagem = viagem_por_solicitacao.get(int(solicitacao.id)) if solicitacao else None
+        risco = "normal"
+        if previsao < hoje:
+            risco = "atrasado"
+            atrasadas += 1
+        elif previsao == hoje:
+            risco = "hoje"
+        elif previsao <= (hoje + timedelta(days=3)):
+            risco = "proximos_3"
 
         tipo_logistico = row["tipo_logistico"]
         if tipo_logistico == "COLETA":
@@ -370,13 +413,19 @@ def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], d
 
         can_schedule = bool(tipo_logistico == "COLETA" and not viagem and _is_admin_or_compras())
         data_key = previsao.isoformat()
-
-        if tipo_logistico == "COLETA" and viagem:
-            programacao = "Coleta em viagem"
-        elif tipo_logistico == "COLETA":
-            programacao = "Coleta sem viagem"
+        dia_ref = dias.setdefault(
+            data_key,
+            {"data": data_key, "qtd_total": 0, "qtd_coletas": 0, "qtd_entregas": 0, "qtd_sem_viagem": 0, "qtd_atrasadas": 0},
+        )
+        dia_ref["qtd_total"] += 1
+        if tipo_logistico == "COLETA":
+            dia_ref["qtd_coletas"] += 1
         else:
-            programacao = "Entrega fornecedor"
+            dia_ref["qtd_entregas"] += 1
+        if tipo_logistico == "COLETA" and not viagem:
+            dia_ref["qtd_sem_viagem"] += 1
+        if risco == "atrasado":
+            dia_ref["qtd_atrasadas"] += 1
 
         eventos.append(
             {
@@ -385,7 +434,8 @@ def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], d
                 "fornecedor": row["fornecedor"],
                 "status_oc": row["status_oc_nome"],
                 "tipo_logistico": tipo_logistico,
-                "programacao": programacao,
+                "tipo_logistico_label": "Coleta (nossa frota)" if tipo_logistico == "COLETA" else "Entrega do fornecedor",
+                "risco": risco,
                 "solicitacao": {
                     "id": int(solicitacao.id),
                     "codigo": str(solicitacao.codigo or f"LOG-{solicitacao.id}").strip(),
@@ -397,97 +447,23 @@ def _coletar_eventos_recebimento(inicio: date, fim: date) -> tuple[list[dict], d
             }
         )
 
-    return sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])), {
-        "total": len(eventos),
-        "coletas": total_coletas,
-        "entregas": total_entregas,
-        "coletas_sem_viagem": sem_viagem,
-    }
-
-
-@agendamento_bp.route("/api/logistica/recebimento/calendario")
-@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
-def recebimento_calendario_dados():
-    mes_ref = str(request.args.get("mes") or "").strip()
-    data_ref = str(request.args.get("data_ref") or "").strip()
-    visao_req = str(request.args.get("visao") or "").strip().lower()
-    admin_mode = session.get("role") == "Admin"
-    visao = "mes" if (visao_req == "mes" and admin_mode) else "semana"
-
-    try:
-        inicio, fim, referencia = _periodo_recebimento(visao, mes_ref, data_ref)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    eventos, resumo = _coletar_eventos_recebimento(inicio, fim)
-    dias_map: dict[str, dict] = {}
-    cursor = inicio
-    while cursor <= fim:
-        key = cursor.isoformat()
-        dias_map[key] = {"data": key, "qtd_total": 0, "qtd_sem_viagem": 0}
-        cursor += timedelta(days=1)
-
-    for evento in eventos:
-        dia_ref = dias_map.setdefault(evento["data"], {"data": evento["data"], "qtd_total": 0, "qtd_sem_viagem": 0})
-        dia_ref["qtd_total"] += 1
-        if evento["tipo_logistico"] == "COLETA" and not evento.get("viagem"):
-            dia_ref["qtd_sem_viagem"] += 1
-
-    dias = sorted(dias_map.values(), key=lambda d: d["data"])
-    dias_com_recebimento = sum(1 for d in dias if int(d.get("qtd_total") or 0) > 0)
+    pico_dia = max((d["qtd_total"] for d in dias.values()), default=0)
     return jsonify(
         {
-            "visao": visao,
-            "modo_mensal_habilitado": bool(admin_mode),
-            "mes": f"{inicio.year:04d}-{inicio.month:02d}",
-            "data_ref": referencia.isoformat(),
+            "mes": f"{ano:04d}-{mes:02d}",
             "inicio": inicio.isoformat(),
             "fim": fim.isoformat(),
             "resumo": {
-                **resumo,
-                "dias_com_recebimento": dias_com_recebimento,
+                "total": len(eventos),
+                "coletas": total_coletas,
+                "entregas": total_entregas,
+                "coletas_sem_viagem": sem_viagem,
+                "atrasadas": atrasadas,
+                "pico_dia": pico_dia,
             },
-            "dias": dias,
-            "eventos": eventos,
+            "dias": sorted(dias.values(), key=lambda d: d["data"]),
+            "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
         }
-    )
-
-
-@agendamento_bp.route("/api/logistica/recebimento/calendario/relatorio-dia")
-@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
-def recebimento_calendario_relatorio_dia():
-    data_ref = str(request.args.get("data") or "").strip()
-    alvo = _to_date(data_ref)
-    if not alvo:
-        return jsonify({"error": "Parâmetro 'data' inválido. Use YYYY-MM-DD."}), 400
-
-    eventos, _ = _coletar_eventos_recebimento(alvo, alvo)
-    nome_arquivo = f"recebimento_{alvo.strftime('%Y%m%d')}.csv"
-    stream = io.StringIO()
-    writer = csv.writer(stream, delimiter=";")
-    writer.writerow(["Data", "OC", "Fornecedor", "Viagem", "Programacao", "Status OC"])
-    for evento in eventos:
-        viagem = evento.get("viagem") or {}
-        viagem_txt = str(viagem.get("codigo") or "").strip()
-        if viagem_txt and viagem.get("status"):
-            viagem_txt = f"{viagem_txt} ({viagem.get('status')})"
-        writer.writerow(
-            [
-                evento.get("data") or "",
-                evento.get("numero_oc") or "",
-                evento.get("fornecedor") or "",
-                viagem_txt,
-                evento.get("programacao") or "",
-                evento.get("status_oc") or "",
-            ]
-        )
-
-    payload = ("\ufeff" + stream.getvalue()).encode("utf-8")
-    return send_file(
-        io.BytesIO(payload),
-        mimetype="text/csv; charset=utf-8",
-        as_attachment=True,
-        download_name=nome_arquivo,
     )
 
 

@@ -1,40 +1,63 @@
 {% extends "base.html" %}
 
-{% block title %}Recebimento da Semana{% endblock %}
-{% block shell_title %}Recebimento da Semana{% endblock %}
+{% block title %}Calendário de Recebimento{% endblock %}
+{% block shell_title %}Calendário de Recebimento{% endblock %}
 
 {% block extra_head %}
 <style>
-    .rcv-wrap { display: grid; gap: 16px; }
-    .rcv-toolbar { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .rcv-nav { display: inline-flex; gap: 6px; align-items: center; }
-    .rcv-title { font-size: 16px; font-weight: 800; min-width: 210px; text-align: center; }
+    .rcv-wrap { display: grid; gap: 18px; }
+    .rcv-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+    .rcv-month-nav { display: inline-flex; gap: 6px; align-items: center; }
+    .rcv-month-title { font-size: 16px; font-weight: 800; color: var(--eui-text); min-width: 180px; text-align: center; }
 
-    .rcv-grid { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
-    .rcv-week-list { display: grid; gap: 8px; }
-    .rcv-day-card {
+    .rcv-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 16px; }
+    .rcv-cal-card .eui-card__body { padding-top: 10px; }
+
+    .rcv-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+    .rcv-weekdays div { font-size: 11px; font-weight: 700; color: var(--eui-muted); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+
+    .rcv-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+    .rcv-day {
         border: 1px solid var(--eui-border);
         border-radius: var(--eui-radius);
         background: var(--eui-surface);
-        padding: 10px;
+        min-height: 96px;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        align-content: start;
         cursor: pointer;
+        transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
     }
-    .rcv-day-card.is-selected { border-color: var(--eui-primary); box-shadow: 0 0 0 2px rgba(15,98,201,.14); }
-    .rcv-day-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-    .rcv-day-name { font-size: 13px; font-weight: 800; }
-    .rcv-day-date { font-size: 12px; color: var(--eui-muted); }
-    .rcv-chip { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; background: var(--eui-surface-3); }
-    .rcv-chip.warn { background: #fff7ed; color: #9a3412; }
+    .rcv-day:hover { box-shadow: var(--eui-shadow-sm); transform: translateY(-1px); }
+    .rcv-day.is-out { opacity: .45; }
+    .rcv-day.is-selected { border-color: var(--eui-primary); box-shadow: 0 0 0 2px rgba(15,98,201,.16); }
 
-    .rcv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .rcv-empty { text-align: center; color: var(--eui-muted); padding: 20px; font-weight: 600; }
+    .rcv-day__n { font-size: 12px; font-weight: 800; color: var(--eui-text); }
+    .rcv-day__kpi { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .rcv-chip { border-radius: 999px; padding: 1px 8px; font-size: 10px; font-weight: 700; }
+    .rcv-chip.total { background: var(--eui-surface-3); color: var(--eui-text); }
+    .rcv-chip.coleta { background: #e0f2fe; color: #075985; }
+    .rcv-chip.entrega { background: #ecfccb; color: #365314; }
+    .rcv-chip.risco { background: #fee2e2; color: #991b1b; }
 
-    @media (max-width: 1120px) {
+    .rcv-list-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+    .rcv-list-head h3 { margin: 0; font-size: 14px; }
+    .rcv-list-head .muted { color: var(--eui-muted); font-size: 12px; }
+
+    .rcv-badge { border-radius: 999px; font-size: 11px; font-weight: 700; padding: 2px 9px; }
+    .rcv-badge.coleta { background: #eef2ff; color: #4338ca; }
+    .rcv-badge.entrega { background: #dcfce7; color: #166534; }
+    .rcv-badge.atrasado { background: #fee2e2; color: #b91c1c; }
+    .rcv-badge.hoje { background: #fef3c7; color: #92400e; }
+    .rcv-badge.proximos_3 { background: #e0f2fe; color: #0c4a6e; }
+    .rcv-badge.normal { background: var(--eui-surface-3); color: var(--eui-text-soft); }
+
+    .rcv-mini { font-size: 12px; color: var(--eui-muted); }
+    .rcv-empty { text-align: center; color: var(--eui-muted); padding: 22px; font-weight: 600; }
+
+    @media (max-width: 1180px) {
         .rcv-grid { grid-template-columns: 1fr; }
-    }
-
-    @media print {
-        .no-print { display: none !important; }
     }
 </style>
 {% endblock %}
@@ -43,82 +66,82 @@
 <div class="eui-scope rcv-wrap">
     <header class="eui-page-header">
         <div>
-            <div class="eui-page-header__eyebrow">LOGISTICA • RECEBIMENTO</div>
-            <h1 class="eui-page-header__title"><i class="fas fa-calendar-week"></i> Recebimento da Semana</h1>
-            <p class="eui-page-header__sub">Visao enxuta para operacao diaria. Clique no dia para imprimir o que vai chegar.</p>
+            <div class="eui-page-header__eyebrow">LOGÍSTICA • RECEBIMENTO</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-calendar-days"></i> Calendário de Recebimento</h1>
+            <p class="eui-page-header__sub">Planeje as chegadas por data prevista, com destaque de coletas, viagens e risco operacional.</p>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;" class="no-print">
-            <a class="eui-btn eui-btn--ghost" href="/logistica/viagens"><i class="fas fa-route"></i> Central de Viagens</a>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="eui-btn eui-btn--ghost" href="/logistica/viagens"><i class="fas fa-route"></i> Abrir Central de Viagens</a>
         </div>
     </header>
 
-    <div class="eui-stats">
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--neutral"><i class="fas fa-calendar-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Previstos no periodo</span><span class="eui-stat__value" id="m-total">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-calendar-day"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Dias com recebimento</span><span class="eui-stat__value" id="m-dias">0</span></div></div>
-        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-truck-ramp-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas sem viagem</span><span class="eui-stat__value" id="m-sem-viagem">0</span></div></div>
+    <div class="eui-stats" id="rcv-metrics">
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--neutral"><i class="fas fa-calendar-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Previstos no mês</span><span class="eui-stat__value" id="m-total">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-truck-ramp-box"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas</span><span class="eui-stat__value" id="m-coletas">0</span></div></div>
         <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-building-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Entregas fornecedor</span><span class="eui-stat__value" id="m-entregas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-route"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Coletas sem viagem</span><span class="eui-stat__value" id="m-sem-viagem">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--danger"><i class="fas fa-triangle-exclamation"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Atrasadas</span><span class="eui-stat__value" id="m-atrasadas">0</span></div></div>
+        <div class="eui-stat"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Pico diário (OCs)</span><span class="eui-stat__value" id="m-pico">0</span></div></div>
     </div>
 
-    <div class="rcv-toolbar no-print">
-        <div class="rcv-nav">
+    <div class="rcv-toolbar">
+        <div class="rcv-month-nav">
             <button class="eui-btn eui-btn--ghost eui-btn--sm" id="btn-prev"><i class="fas fa-chevron-left"></i></button>
-            <div class="rcv-title" id="period-label">-</div>
+            <div class="rcv-month-title" id="month-label">-</div>
             <button class="eui-btn eui-btn--ghost eui-btn--sm" id="btn-next"><i class="fas fa-chevron-right"></i></button>
         </div>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            {% if is_admin %}
-            <select id="view-mode" class="eui-select" style="min-width:160px;">
-                <option value="semana">Visao semanal</option>
-                <option value="mes">Visao mensal (Admin)</option>
-            </select>
-            {% endif %}
-            <button class="eui-btn eui-btn--subtle eui-btn--sm" id="btn-hoje"><i class="fas fa-calendar-day"></i> Hoje</button>
+        <div style="display:flex; gap:8px;">
+            <button class="eui-btn eui-btn--subtle eui-btn--sm" id="btn-hoje"><i class="fas fa-calendar-day"></i> Mês atual</button>
             <button class="eui-btn eui-btn--subtle eui-btn--sm" id="btn-recarregar"><i class="fas fa-rotate"></i> Recarregar</button>
         </div>
     </div>
 
     <div class="rcv-grid">
-        <section class="eui-card">
+        <div class="eui-card rcv-cal-card">
             <div class="eui-card__head">
-                <h2 class="eui-card__title"><i class="fas fa-list"></i> Dias do periodo</h2>
-                <p class="eui-card__sub">Selecione o dia para ver detalhe e imprimir.</p>
+                <h2 class="eui-card__title"><i class="fas fa-calendar"></i> Visão mensal</h2>
+                <p class="eui-card__sub">Capacidade diária com total de OCs, coletas e entregas.</p>
             </div>
             <div class="eui-card__body">
-                <div class="rcv-week-list" id="days-list"></div>
+                <div class="rcv-weekdays">
+                    <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+                </div>
+                <div class="rcv-days" id="days-grid"></div>
             </div>
-        </section>
+        </div>
 
-        <section class="eui-card">
+        <div class="eui-card">
             <div class="eui-card__head">
                 <div>
-                    <h2 class="eui-card__title"><i class="fas fa-print"></i> Relatorio do dia</h2>
-                    <p class="eui-card__sub" id="day-title">-</p>
-                </div>
-                <div class="rcv-head-actions no-print">
-                    <a class="eui-btn eui-btn--ghost eui-btn--sm" id="btn-exportar-dia" href="#"><i class="fas fa-file-csv"></i> CSV do dia</a>
-                    <button class="eui-btn eui-btn--primary eui-btn--sm" id="btn-imprimir"><i class="fas fa-print"></i> Imprimir dia</button>
+                    <h2 class="eui-card__title"><i class="fas fa-list-check"></i> Planejamento do dia</h2>
+                    <p class="eui-card__sub">OCs previstas, tipo logístico, viagem e ação de programação de coleta.</p>
                 </div>
             </div>
             <div class="eui-card__body eui-card__body--tight">
-                <div style="padding: 8px 14px; color: var(--eui-muted); font-size: 12px;" id="day-count">0 ocorrencia(s)</div>
+                <div class="rcv-list-head" style="padding:10px 14px 0 14px;">
+                    <h3 id="day-title">-</h3>
+                    <span class="muted" id="day-count">0 ocorrência(s)</span>
+                </div>
                 <div class="ce-table-wrap">
-                    <table class="erp-table" id="day-table">
+                    <table class="erp-table">
                         <thead>
                             <tr>
                                 <th>OC</th>
                                 <th>Fornecedor</th>
+                                <th>Tipo</th>
                                 <th>Viagem</th>
-                                <th>Programacao</th>
-                                <th style="text-align:right;" class="no-print">Acao</th>
+                                <th>Risco</th>
+                                <th style="text-align:right;">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="day-body">
-                            <tr><td colspan="5" class="rcv-empty">Carregando...</td></tr>
+                            <tr><td colspan="6" class="rcv-empty">Carregando...</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <div class="rcv-mini" style="padding:10px 14px 14px 14px;" id="day-footnote"></div>
             </div>
-        </section>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -126,142 +149,144 @@
 {% block extra_js %}
 <script>
 (() => {
-    const canUseMonthly = {{ 'true' if is_admin else 'false' }};
     const state = {
-        mode: canUseMonthly ? (localStorage.getItem('rcv-view-mode') || 'semana') : 'semana',
-        refDate: new Date(),
+        monthRef: new Date(),
         selectedDate: null,
         payload: { dias: [], eventos: [], resumo: {} },
         loading: false,
     };
 
-    const listEl = document.getElementById('days-list');
-    const dayBody = document.getElementById('day-body');
+    const monthLabel = document.getElementById('month-label');
+    const daysGrid = document.getElementById('days-grid');
     const dayTitle = document.getElementById('day-title');
     const dayCount = document.getElementById('day-count');
-    const periodLabel = document.getElementById('period-label');
-    const btnExportarDia = document.getElementById('btn-exportar-dia');
+    const dayBody = document.getElementById('day-body');
+    const dayFootnote = document.getElementById('day-footnote');
+    let avisoBackend = '';
 
-    function esc(v) {
-        return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function fmtMonth(dateObj) {
+        return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(dateObj);
     }
 
-    function fmtIso(d) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
+    function fmtDateISO(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     }
 
-    function fmtMes(d) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
+    function fmtMonthRef(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
         return `${y}-${m}`;
     }
 
-    function fmtBr(iso) {
-        const [y, m, d] = String(iso || '').split('-');
-        if (!y || !m || !d) return String(iso || '-');
+    function fmtDateBr(iso) {
+        if (!iso) return '-';
+        const [y, m, d] = String(iso).split('-');
+        if (!y || !m || !d) return String(iso);
         return `${d}/${m}/${y}`;
     }
 
-    function nomeDia(iso) {
-        try {
-            return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR', { weekday: 'long' });
-        } catch (_) {
-            return iso;
-        }
+    function riscoLabel(risco) {
+        if (risco === 'atrasado') return 'Atrasado';
+        if (risco === 'hoje') return 'Hoje';
+        if (risco === 'proximos_3') return 'Próx. 3 dias';
+        return 'Normal';
+    }
+
+    function badgeTipo(tipo) {
+        if (tipo === 'COLETA') return '<span class="rcv-badge coleta">Coleta</span>';
+        return '<span class="rcv-badge entrega">Entrega</span>';
     }
 
     function setMetrics(resumo) {
         document.getElementById('m-total').textContent = Number(resumo.total || 0);
-        document.getElementById('m-dias').textContent = Number(resumo.dias_com_recebimento || 0);
-        document.getElementById('m-sem-viagem').textContent = Number(resumo.coletas_sem_viagem || 0);
+        document.getElementById('m-coletas').textContent = Number(resumo.coletas || 0);
         document.getElementById('m-entregas').textContent = Number(resumo.entregas || 0);
+        document.getElementById('m-sem-viagem').textContent = Number(resumo.coletas_sem_viagem || 0);
+        document.getElementById('m-atrasadas').textContent = Number(resumo.atrasadas || 0);
+        document.getElementById('m-pico').textContent = Number(resumo.pico_dia || 0);
     }
 
-    function updatePeriodLabel() {
-        if (state.mode === 'mes') {
-            periodLabel.textContent = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(state.refDate);
-            return;
-        }
-        const ini = state.payload.inicio || fmtIso(state.refDate);
-        const fim = state.payload.fim || ini;
-        periodLabel.textContent = `${fmtBr(ini)} a ${fmtBr(fim)}`;
+    function diaMap() {
+        const map = new Map();
+        for (const d of (state.payload.dias || [])) map.set(d.data, d);
+        return map;
     }
 
-    function rowsDoDia() {
-        const key = state.selectedDate;
-        return (state.payload.eventos || []).filter((e) => e.data === key);
-    }
+    function renderMonth() {
+        monthLabel.textContent = fmtMonth(state.monthRef);
+        const year = state.monthRef.getFullYear();
+        const month = state.monthRef.getMonth();
+        const first = new Date(year, month, 1);
+        const last = new Date(year, month + 1, 0);
+        const startOffset = first.getDay();
+        const totalDays = last.getDate();
+        const info = diaMap();
 
-    function renderDias() {
-        const dias = state.payload.dias || [];
-        if (!state.selectedDate || !dias.some((d) => d.data === state.selectedDate)) {
-            state.selectedDate = (dias.find((d) => Number(d.qtd_total || 0) > 0) || dias[0] || {}).data || null;
+        const cells = [];
+        for (let i = 0; i < startOffset; i += 1) {
+            cells.push('<div class="rcv-day is-out"></div>');
         }
 
-        if (!dias.length) {
-            listEl.innerHTML = '<div class="rcv-empty">Sem dados para o periodo.</div>';
-            return;
+        for (let d = 1; d <= totalDays; d += 1) {
+            const current = new Date(year, month, d);
+            const key = fmtDateISO(current);
+            const dia = info.get(key) || { qtd_total: 0, qtd_coletas: 0, qtd_entregas: 0, qtd_atrasadas: 0 };
+            const selected = state.selectedDate === key ? 'is-selected' : '';
+            cells.push(`
+                <button type="button" class="rcv-day ${selected}" data-date="${key}">
+                    <div class="rcv-day__n">${d}</div>
+                    <div class="rcv-day__kpi">
+                        <span class="rcv-chip total">${Number(dia.qtd_total || 0)} OC</span>
+                        <span class="rcv-chip coleta">${Number(dia.qtd_coletas || 0)} C</span>
+                        <span class="rcv-chip entrega">${Number(dia.qtd_entregas || 0)} E</span>
+                        ${Number(dia.qtd_atrasadas || 0) > 0 ? `<span class="rcv-chip risco">${Number(dia.qtd_atrasadas || 0)} atraso</span>` : ''}
+                    </div>
+                </button>
+            `);
         }
 
-        listEl.innerHTML = dias.map((d) => `
-            <button type="button" class="rcv-day-card ${d.data === state.selectedDate ? 'is-selected' : ''}" data-day="${d.data}">
-                <div class="rcv-day-head">
-                    <div class="rcv-day-name">${esc(nomeDia(d.data))}</div>
-                    <div class="rcv-day-date">${esc(fmtBr(d.data))}</div>
-                </div>
-                <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <span class="rcv-chip">${Number(d.qtd_total || 0)} chegada(s)</span>
-                    ${Number(d.qtd_sem_viagem || 0) > 0 ? `<span class="rcv-chip warn">${Number(d.qtd_sem_viagem || 0)} sem viagem</span>` : ''}
-                </div>
-            </button>
-        `).join('');
-
-        listEl.querySelectorAll('[data-day]').forEach((btn) => {
+        daysGrid.innerHTML = cells.join('');
+        daysGrid.querySelectorAll('.rcv-day[data-date]').forEach((btn) => {
             btn.addEventListener('click', () => {
-                state.selectedDate = btn.dataset.day;
-                renderDias();
-                renderDiaSelecionado();
+                state.selectedDate = btn.dataset.date;
+                renderMonth();
+                renderDay();
             });
         });
     }
 
-    function renderDiaSelecionado() {
-        const data = state.selectedDate;
-        if (!data) {
-            dayTitle.textContent = 'Sem dia selecionado';
-            dayBody.innerHTML = '<tr><td colspan="5" class="rcv-empty">Sem dados.</td></tr>';
-            dayCount.textContent = '0 ocorrencia(s)';
-            return;
-        }
-
-        const rows = rowsDoDia();
-        dayTitle.textContent = `Recebimento de ${fmtBr(data)}`;
-        dayCount.textContent = `${rows.length} ocorrencia(s)`;
-        btnExportarDia.href = `/api/logistica/recebimento/calendario/relatorio-dia?data=${encodeURIComponent(data)}`;
+    function renderDay() {
+        const key = state.selectedDate || fmtDateISO(new Date(state.monthRef.getFullYear(), state.monthRef.getMonth(), 1));
+        const rows = (state.payload.eventos || []).filter((e) => e.data === key);
+        dayTitle.textContent = `Dia ${fmtDateBr(key)}`;
+        dayCount.textContent = `${rows.length} ocorrência(s)`;
 
         if (!rows.length) {
-            dayBody.innerHTML = '<tr><td colspan="5" class="rcv-empty">Nada previsto para este dia.</td></tr>';
+            dayBody.innerHTML = '<tr><td colspan="6" class="rcv-empty">Sem previsões para este dia.</td></tr>';
+            dayFootnote.textContent = avisoBackend || 'Dica: selecione outro dia ou mude o mês para planejar as coletas e entregas.';
             return;
         }
 
         dayBody.innerHTML = rows.map((r) => {
             const viagem = r.viagem && r.viagem.codigo ? `${r.viagem.codigo} (${r.viagem.status || '-'})` : '-';
-            let acao = '-';
+            const risco = `<span class="rcv-badge ${r.risco || 'normal'}">${riscoLabel(r.risco)}</span>`;
+            let actionHtml = '-';
             if (r.pode_programar_coleta) {
-                acao = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-programar="${esc(r.numero_oc)}"><i class="fas fa-route"></i> Programar coleta</button>`;
+                actionHtml = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-programar="${r.numero_oc}"><i class="fas fa-route"></i> Programar coleta</button>`;
             } else if (r.tipo_logistico === 'COLETA' && r.solicitacao) {
-                acao = `<a class="eui-btn eui-btn--ghost eui-btn--sm" href="/logistica/viagens?tab=COLETA&q=${encodeURIComponent(r.numero_oc)}"><i class="fas fa-eye"></i> Abrir Central</a>`;
+                actionHtml = `<a class="eui-btn eui-btn--ghost eui-btn--sm" href="/logistica/viagens?tab=COLETA&q=${encodeURIComponent(r.numero_oc)}"><i class="fas fa-eye"></i> Abrir Central</a>`;
             }
             return `
                 <tr>
-                    <td><strong>${esc(r.numero_oc)}</strong></td>
-                    <td>${esc(r.fornecedor || '-')}</td>
-                    <td>${esc(viagem)}</td>
-                    <td>${esc(r.programacao || '-')}</td>
-                    <td style="text-align:right;" class="no-print">${acao}</td>
+                    <td><strong>${r.numero_oc}</strong></td>
+                    <td>${r.fornecedor || '-'}</td>
+                    <td>${badgeTipo(r.tipo_logistico)}</td>
+                    <td>${viagem}</td>
+                    <td>${risco}</td>
+                    <td style="text-align:right;">${actionHtml}</td>
                 </tr>
             `;
         }).join('');
@@ -276,15 +301,15 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ numero_oc: numeroOc }),
                     });
-                    const dataJson = await resp.json().catch(() => ({}));
-                    if (!resp.ok || !dataJson.sucesso) {
-                        throw new Error(dataJson.error || 'Falha ao programar coleta.');
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok || !data.sucesso) {
+                        throw new Error(data.error || 'Falha ao programar coleta.');
                     }
                     if (window.EUI && window.EUI.toast) {
-                        window.EUI.toast(dataJson.mensagem || 'Coleta programada com sucesso.', 'success');
+                        window.EUI.toast(data.mensagem || 'Coleta programada com sucesso.', 'success');
                     }
-                    if (dataJson.central_url) {
-                        window.location.href = dataJson.central_url;
+                    if (data.central_url) {
+                        window.location.href = data.central_url;
                         return;
                     }
                     await load();
@@ -297,99 +322,48 @@
                 }
             });
         });
-    }
 
-    function imprimirDia() {
-        const data = state.selectedDate;
-        if (!data) return;
-        const rows = rowsDoDia();
-        const linhas = rows.map((r) => {
-            const viagem = r.viagem && r.viagem.codigo ? `${r.viagem.codigo} (${r.viagem.status || '-'})` : '-';
-            return `<tr><td>${esc(r.numero_oc)}</td><td>${esc(r.fornecedor || '-')}</td><td>${esc(viagem)}</td><td>${esc(r.programacao || '-')}</td></tr>`;
-        }).join('') || '<tr><td colspan="4">Nada previsto para este dia.</td></tr>';
-
-        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatorio ${fmtBr(data)}</title><style>
-            body{font-family:Arial,sans-serif;margin:24px;color:#111}
-            h1{font-size:20px;margin:0 0 4px}
-            p{margin:0 0 16px;color:#555}
-            table{width:100%;border-collapse:collapse}
-            th,td{border:1px solid #d1d5db;padding:8px;font-size:12px;text-align:left}
-            th{background:#f3f4f6}
-        </style></head><body>
-            <h1>Recebimento do dia ${fmtBr(data)}</h1>
-            <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
-            <table><thead><tr><th>OC</th><th>Fornecedor</th><th>Viagem</th><th>Programacao</th></tr></thead><tbody>${linhas}</tbody></table>
-        </body></html>`;
-
-        const win = window.open('', '_blank');
-        if (!win) return;
-        win.document.open();
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        win.print();
+        dayFootnote.textContent = avisoBackend || 'Quando não houver viagem para uma coleta, use Programar coleta para criar a solicitação na Central de Viagens.';
     }
 
     async function load() {
         if (state.loading) return;
         state.loading = true;
         try {
-            const params = new URLSearchParams();
-            params.set('visao', state.mode);
-            params.set('mes', fmtMes(state.refDate));
-            params.set('data_ref', fmtIso(state.refDate));
-            const resp = await fetch(`/api/logistica/recebimento/calendario?${params.toString()}`);
+            const mes = fmtMonthRef(state.monthRef);
+            const resp = await fetch(`/api/logistica/recebimento/calendario?mes=${encodeURIComponent(mes)}`);
             const data = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar recebimento.');
+            if (!resp.ok) throw new Error(data.error || 'Falha ao carregar calendário.');
             state.payload = data;
+            avisoBackend = String(data.aviso || '').trim();
+            if (!state.selectedDate || !String(state.selectedDate).startsWith(mes)) {
+                const firstDataDay = (data.dias || [])[0]?.data;
+                state.selectedDate = firstDataDay || `${mes}-01`;
+            }
             setMetrics(data.resumo || {});
-            updatePeriodLabel();
-            renderDias();
-            renderDiaSelecionado();
+            renderMonth();
+            renderDay();
         } catch (err) {
-            listEl.innerHTML = `<div class="rcv-empty">${esc(err.message || err)}</div>`;
-            dayBody.innerHTML = `<tr><td colspan="5" class="rcv-empty">${esc(err.message || err)}</td></tr>`;
+            daysGrid.innerHTML = '<div class="rcv-empty" style="grid-column:1/-1;">Erro ao carregar calendário.</div>';
+            dayBody.innerHTML = `<tr><td colspan="6" class="rcv-empty">${String(err.message || err)}</td></tr>`;
         } finally {
             state.loading = false;
         }
     }
 
     document.getElementById('btn-prev').addEventListener('click', async () => {
-        if (state.mode === 'mes') {
-            state.refDate = new Date(state.refDate.getFullYear(), state.refDate.getMonth() - 1, 1);
-        } else {
-            state.refDate = new Date(state.refDate.getFullYear(), state.refDate.getMonth(), state.refDate.getDate() - 7);
-        }
+        state.monthRef = new Date(state.monthRef.getFullYear(), state.monthRef.getMonth() - 1, 1);
         await load();
     });
-
     document.getElementById('btn-next').addEventListener('click', async () => {
-        if (state.mode === 'mes') {
-            state.refDate = new Date(state.refDate.getFullYear(), state.refDate.getMonth() + 1, 1);
-        } else {
-            state.refDate = new Date(state.refDate.getFullYear(), state.refDate.getMonth(), state.refDate.getDate() + 7);
-        }
+        state.monthRef = new Date(state.monthRef.getFullYear(), state.monthRef.getMonth() + 1, 1);
         await load();
     });
-
     document.getElementById('btn-hoje').addEventListener('click', async () => {
-        state.refDate = new Date();
+        state.monthRef = new Date();
         await load();
     });
-
     document.getElementById('btn-recarregar').addEventListener('click', load);
-    document.getElementById('btn-imprimir').addEventListener('click', imprimirDia);
-
-    const viewMode = document.getElementById('view-mode');
-    if (viewMode) {
-        if (state.mode !== 'semana' && state.mode !== 'mes') state.mode = 'semana';
-        viewMode.value = state.mode;
-        viewMode.addEventListener('change', async () => {
-            state.mode = viewMode.value === 'mes' ? 'mes' : 'semana';
-            localStorage.setItem('rcv-view-mode', state.mode);
-            await load();
-        });
-    }
 
     load();
 })();
