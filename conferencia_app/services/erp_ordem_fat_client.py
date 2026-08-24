@@ -19,32 +19,52 @@ from typing import Any
 import requests
 from flask import current_app
 
-# URLs base combinadas com o emitente.
-# - Conferencia FAT: /expedicao
-# - Conferencia ST (terceiro): /expedicao_terceiro
+# URL base combinada com o emitente.
+# O endpoint final esperado e: /producao/ordem-faturamento/{codigo}
 #
-# Cada uma pode ser sobreposta por variavel de ambiente para homologacao:
+# Pode ser sobreposta por variavel de ambiente:
 # - ERP_ORDEM_FAT_API_URL
 # - ERP_ORDEM_FAT_TERCEIRO_API_URL
-_URL_BASE_PADRAO = "https://columbia.consultoriarf.net/expedicao"
-_URL_BASE_TERCEIRO_PADRAO = "https://columbia.consultoriarf.net/expedicao_terceiro"
+#
+# A variavel pode apontar para:
+# 1) base da API (ex.: https://host/producao)
+# 2) prefixo do recurso (ex.: https://host/producao/ordem-faturamento)
+# 3) URL completa com placeholder (ex.: https://host/producao/ordem-faturamento/{codigo})
+_URL_BASE_PADRAO = "https://columbia.consultoriarf.net/producao"
+_URL_BASE_TERCEIRO_PADRAO = "https://columbia.consultoriarf.net/producao"
 
 
 def _url_base(*, terceiro: bool = False) -> str:
     env_key = "ERP_ORDEM_FAT_TERCEIRO_API_URL" if terceiro else "ERP_ORDEM_FAT_API_URL"
     default_url = _URL_BASE_TERCEIRO_PADRAO if terceiro else _URL_BASE_PADRAO
     url = str(os.environ.get(env_key, "") or "").strip()
-    if url and not url.lower().startswith("https://"):
-        # Nunca manda dado por http puro - ignora config invalida e cai no
-        # padrao (https) em vez de vazar o payload em texto claro na rede.
+    if url and not url.lower().startswith(("http://", "https://")):
+        # Aceita tanto HTTP quanto HTTPS (conforme ambiente da API FastAPI).
+        # Se vier sem esquema, ignora a config invalida e usa o padrao.
         try:
             current_app.logger.warning(
-                "%s configurada sem https (%s); usando URL padrao.", env_key, url
+                "%s configurada sem esquema http/https (%s); usando URL padrao.", env_key, url
             )
         except Exception:
             pass
         url = ""
     return (url or default_url).rstrip("/")
+
+
+def _url_destino(cod_ordem_fat: int, *, terceiro: bool = False) -> str:
+    """Monta URL final da ordem com tolerancia a formatos legados de config."""
+    base = _url_base(terceiro=terceiro).rstrip("/")
+
+    # Permite configurar a URL completa com placeholder.
+    if "{codigo}" in base:
+        return base.format(codigo=cod_ordem_fat)
+
+    # Se a config ja apontar para o recurso, so concatena o codigo.
+    if base.endswith("/ordem-faturamento"):
+        return f"{base}/{cod_ordem_fat}"
+
+    # Padrao oficial: /producao/ordem-faturamento/{codigo}
+    return f"{base}/ordem-faturamento/{cod_ordem_fat}"
 
 
 def _to_numero(valor: Any):
@@ -137,5 +157,5 @@ def atualizar_ordem_faturamento(
         return
 
     app = current_app._get_current_object()
-    url = f"{_url_base(terceiro=terceiro)}/{cod_ordem_fat}"
+    url = _url_destino(cod_ordem_fat, terceiro=terceiro)
     threading.Thread(target=_enviar_async, args=(app, url, payload, cod_ordem_fat), daemon=True).start()
