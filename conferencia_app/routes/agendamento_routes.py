@@ -66,6 +66,7 @@ agendamento_bp = Blueprint("agendamento", __name__)
 PRIORIDADE_ORDEM = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
 ANEXO_SOLICITACAO_SUBDIR = "agendamento_solicitacoes_anexos"
 _RECEBIMENTO_CACHE: dict[str, dict] = {}
+_RECEBIMENTO_RISCO_CACHE: dict[str, dict] = {}
 
 
 def _solicitacao_anexo_dir() -> str:
@@ -306,6 +307,134 @@ def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict
     return aliases
 
 
+def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict]) -> dict:
+    risco_estoque = "sem_dados"
+    risco_estoque_label = "Sem dados"
+    risco_estoque_detalhe = "Sem itens da OC ou sem saldo disponível para cálculo."
+
+    if not numero_oc or not estoque_aliases:
+        return {
+            "risco_estoque": risco_estoque,
+            "risco_estoque_label": risco_estoque_label,
+            "risco_estoque_detalhe": risco_estoque_detalhe,
+        }
+
+    try:
+        consulta = consultar_oc_agendamento(numero_oc)
+    except Exception:
+        return {
+            "risco_estoque": risco_estoque,
+            "risco_estoque_label": risco_estoque_label,
+            "risco_estoque_detalhe": risco_estoque_detalhe,
+        }
+
+    itens = consulta.get("itens") if isinstance(consulta, dict) else []
+    if not isinstance(itens, list):
+        itens = []
+
+    resumo_itens: dict[str, dict[str, float]] = {}
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        codigo = _codigo_item_oc(item)
+        if not codigo:
+            continue
+        qtd = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd") or item.get("volume") or 0)
+        if qtd <= 0:
+            qtd = 1.0
+        consumo = _to_float(item.get("consumo_diario") or item.get("consumo_medio_diario") or 0)
+        slot = resumo_itens.setdefault(codigo, {"qtd": 0.0, "consumo": 0.0})
+        slot["qtd"] += qtd
+        if consumo > 0:
+            slot["consumo"] = max(slot["consumo"], consumo)
+
+    if not resumo_itens:
+        return {
+            "risco_estoque": risco_estoque,
+            "risco_estoque_label": risco_estoque_label,
+            "risco_estoque_detalhe": risco_estoque_detalhe,
+        }
+
+    cobertura_critica = False
+    cobertura_atencao = False
+    faltas = 0
+    baixos = 0
+    for codigo_item, vals in resumo_itens.items():
+        qtd_oc = float(vals.get("qtd") or 0)
+        consumo_diario = float(vals.get("consumo") or 0)
+        saldo = float((estoque_aliases.get(codigo_item) or {}).get("qtde_total") or 0)
+        if consumo_diario > 0:
+            dias_cobertura = saldo / consumo_diario if consumo_diario else 0
+            if dias_cobertura < 3:
+                cobertura_critica = True
+                faltas += 1
+            elif dias_cobertura < 7:
+                cobertura_atencao = True
+                baixos += 1
+            continue
+        if saldo + 0.0001 < qtd_oc:
+            cobertura_critica = True
+            faltas += 1
+        elif saldo < (qtd_oc * 1.5):
+            cobertura_atencao = True
+            baixos += 1
+
+    if cobertura_critica:
+        risco_estoque = "critico"
+        risco_estoque_label = "Crítico"
+        risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
+    elif cobertura_atencao:
+        risco_estoque = "atencao"
+        risco_estoque_label = "Atenção"
+        risco_estoque_detalhe = f"{baixos} item(ns) com cobertura baixa de estoque."
+    else:
+        risco_estoque = "ok"
+        risco_estoque_label = "OK"
+        risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
+
+    return {
+        "risco_estoque": risco_estoque,
+        "risco_estoque_label": risco_estoque_label,
+        "risco_estoque_detalhe": risco_estoque_detalhe,
+    }
+
+
+def _calcular_risco_estoque_por_ocs(ocs: list[str]) -> dict[str, dict]:
+    numeros = []
+    vistos: set[str] = set()
+    for oc in ocs:
+        numero = str(oc or "").strip()
+        if not numero or numero in vistos:
+            continue
+        vistos.add(numero)
+        numeros.append(numero)
+
+    riscos: dict[str, dict] = {}
+    pendentes: list[str] = []
+    for numero in numeros:
+        cached = _RECEBIMENTO_RISCO_CACHE.get(numero)
+        if isinstance(cached, dict):
+            riscos[numero] = dict(cached)
+        else:
+            pendentes.append(numero)
+
+    if not pendentes:
+        return riscos
+
+    try:
+        estoque_payload = buscar_estoque_grv(forcar_atualizacao=False)
+        estoque_aliases = _mapa_estoque_aliases(estoque_payload.get("por_codigo") or {})
+    except Exception:
+        return riscos
+
+    for numero in pendentes:
+        risco_payload = _calcular_risco_estoque_oc(numero, estoque_aliases)
+        riscos[numero] = risco_payload
+        _RECEBIMENTO_RISCO_CACHE[numero] = dict(risco_payload)
+
+    return riscos
+
+
 def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, aviso: str = "") -> dict:
     dias = []
     cursor = inicio
@@ -433,41 +562,6 @@ def recebimento_calendario_dados():
         )
 
     ocs_mes = sorted({e["numero_oc"] for e in eventos_base})
-    estoque_por_codigo: dict[str, dict] = {}
-    estoque_aliases: dict[str, dict] = {}
-    try:
-        estoque_payload = buscar_estoque_grv(forcar_atualizacao=False)
-        estoque_por_codigo = estoque_payload.get("por_codigo") or {}
-        estoque_aliases = _mapa_estoque_aliases(estoque_por_codigo)
-    except Exception:
-        current_app.logger.warning("Calendário de recebimento sem risco de estoque: estoque GRV indisponível")
-
-    itens_por_oc: dict[str, dict[str, dict[str, float]]] = {}
-    for oc in ocs_mes:
-        try:
-            consulta = consultar_oc_agendamento(oc)
-        except Exception:
-            continue
-        itens = consulta.get("itens") if isinstance(consulta, dict) else []
-        if not isinstance(itens, list):
-            continue
-        resumo: dict[str, dict[str, float]] = {}
-        for item in itens:
-            if not isinstance(item, dict):
-                continue
-            codigo = _codigo_item_oc(item)
-            if not codigo:
-                continue
-            qtd = _to_float(item.get("quantidade") or item.get("qtde") or item.get("qtd") or item.get("volume") or 0)
-            if qtd <= 0:
-                qtd = 1.0
-            consumo = _to_float(item.get("consumo_diario") or item.get("consumo_medio_diario") or 0)
-            slot = resumo.setdefault(codigo, {"qtd": 0.0, "consumo": 0.0})
-            slot["qtd"] += qtd
-            if consumo > 0:
-                slot["consumo"] = max(slot["consumo"], consumo)
-        if resumo:
-            itens_por_oc[oc] = resumo
 
     solicitacao_por_oc: dict[str, AgendamentoSolicitacao] = {}
     if ocs_mes:
@@ -545,47 +639,17 @@ def recebimento_calendario_dados():
         can_schedule = bool(tipo_logistico == "COLETA" and not viagem and _is_admin_or_compras())
         data_key = previsao.isoformat()
 
-        risco_estoque = "sem_dados"
-        risco_estoque_label = "Sem dados"
-        risco_estoque_detalhe = "Sem itens da OC ou sem saldo disponível para cálculo."
-        resumo_itens = itens_por_oc.get(numero_oc) or {}
-        if resumo_itens and estoque_aliases:
-            cobertura_critica = False
-            cobertura_atencao = False
-            faltas = 0
-            baixos = 0
-            for codigo_item, vals in resumo_itens.items():
-                qtd_oc = float(vals.get("qtd") or 0)
-                consumo_diario = float(vals.get("consumo") or 0)
-                saldo = float((estoque_aliases.get(codigo_item) or {}).get("qtde_total") or 0)
-                if consumo_diario > 0:
-                    dias_cobertura = saldo / consumo_diario if consumo_diario else 0
-                    if dias_cobertura < 3:
-                        cobertura_critica = True
-                        faltas += 1
-                    elif dias_cobertura < 7:
-                        cobertura_atencao = True
-                        baixos += 1
-                    continue
-                if saldo + 0.0001 < qtd_oc:
-                    cobertura_critica = True
-                    faltas += 1
-                elif saldo < (qtd_oc * 1.5):
-                    cobertura_atencao = True
-                    baixos += 1
-
-            if cobertura_critica:
-                risco_estoque = "critico"
-                risco_estoque_label = "Crítico"
-                risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
-            elif cobertura_atencao:
-                risco_estoque = "atencao"
-                risco_estoque_label = "Atenção"
-                risco_estoque_detalhe = f"{baixos} item(ns) com cobertura baixa de estoque."
-            else:
-                risco_estoque = "ok"
-                risco_estoque_label = "OK"
-                risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
+        cached_risco = _RECEBIMENTO_RISCO_CACHE.get(numero_oc) if numero_oc else None
+        if isinstance(cached_risco, dict):
+            risco_estoque = str(cached_risco.get("risco_estoque") or "sem_dados")
+            risco_estoque_label = str(cached_risco.get("risco_estoque_label") or "Sem dados")
+            risco_estoque_detalhe = str(
+                cached_risco.get("risco_estoque_detalhe") or "Sem itens da OC ou sem saldo disponível para cálculo."
+            )
+        else:
+            risco_estoque = "pendente"
+            risco_estoque_label = "Calculando..."
+            risco_estoque_detalhe = "Risco de estoque será carregado ao abrir o dia."
         dia_ref = dias.setdefault(
             data_key,
             {"data": data_key, "qtd_total": 0, "qtd_coletas": 0, "qtd_entregas": 0, "qtd_sem_viagem": 0, "qtd_atrasadas": 0},
@@ -646,6 +710,19 @@ def recebimento_calendario_dados():
     }
     _RECEBIMENTO_CACHE[cache_key] = dict(payload)
     return jsonify(payload)
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario/risco-estoque", methods=["POST"])
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_risco_estoque():
+    payload = request.get_json(silent=True) or {}
+    ocs = payload.get("ocs") if isinstance(payload, dict) else None
+    if not isinstance(ocs, list):
+        return jsonify({"error": "Informe uma lista de OCs em 'ocs'."}), 400
+
+    ocs_limpo = [str(oc or "").strip() for oc in ocs if str(oc or "").strip()][:300]
+    riscos = _calcular_risco_estoque_por_ocs(ocs_limpo)
+    return jsonify({"sucesso": True, "riscos": riscos})
 
 
 @agendamento_bp.route("/api/logistica/recebimento/calendario/relatorio-dia")

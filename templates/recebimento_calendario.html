@@ -17,7 +17,7 @@
     .rcv-title { font-size: 16px; font-weight: 800; min-width: 210px; text-align: center; }
 
     .rcv-grid { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
-    .rcv-week-list { display: grid; gap: 8px; }
+    .rcv-week-list { display: grid; gap: 8px; max-height: 68vh; overflow: auto; padding-right: 2px; }
     .rcv-day-card {
         border: 1px solid #d6e2ef;
         border-left: 4px solid #90b9ea;
@@ -43,6 +43,17 @@
     .rcv-chip-risk.atencao { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
     .rcv-chip-risk.critico { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
     .rcv-chip-risk.sem_dados { background: #f4f4f5; color: #3f3f46; border-color: #e4e4e7; }
+    .rcv-chip-risk.pendente { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
+    .erp-table thead th {
+        position: sticky;
+        top: 0;
+        background: #f8fafc;
+        z-index: 1;
+    }
+    .erp-table tbody tr:nth-child(even) { background: #fcfdff; }
+    .erp-table tbody tr:hover { background: #f3f8ff; }
+    .erp-table td { vertical-align: middle; }
 
     .rcv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .rcv-empty { text-align: center; color: var(--eui-muted); padding: 20px; font-weight: 600; }
@@ -153,6 +164,7 @@
         selectedDate: null,
         payload: { dias: [], eventos: [], resumo: {} },
         loading: false,
+        riscoLoadToken: 0,
     };
 
     const listEl = document.getElementById('days-list');
@@ -300,6 +312,8 @@
             `;
         }).join('');
 
+        carregarRiscoEstoqueDia(rows);
+
         dayBody.querySelectorAll('[data-programar]').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const numeroOc = btn.dataset.programar;
@@ -331,6 +345,47 @@
                 }
             });
         });
+    }
+
+    async function carregarRiscoEstoqueDia(rows) {
+        const ocs = [...new Set((rows || [])
+            .map((r) => String(r.numero_oc || '').trim())
+            .filter((oc) => !!oc)
+            .filter((oc) => {
+                const ev = (state.payload.eventos || []).find((x) => x.numero_oc === oc && x.data === state.selectedDate);
+                return ev && String(ev.risco_estoque || '').toLowerCase() === 'pendente';
+            }))];
+
+        if (!ocs.length) return;
+
+        const token = ++state.riscoLoadToken;
+        try {
+            const resp = await fetch('/api/logistica/recebimento/calendario/risco-estoque', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ocs }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.sucesso) return;
+            if (token !== state.riscoLoadToken) return;
+
+            const riscos = data.riscos || {};
+            let atualizou = false;
+            (state.payload.eventos || []).forEach((ev) => {
+                const risco = riscos[ev.numero_oc];
+                if (!risco) return;
+                ev.risco_estoque = risco.risco_estoque || ev.risco_estoque;
+                ev.risco_estoque_label = risco.risco_estoque_label || ev.risco_estoque_label;
+                ev.risco_estoque_detalhe = risco.risco_estoque_detalhe || ev.risco_estoque_detalhe;
+                atualizou = true;
+            });
+
+            if (atualizou) {
+                renderDiaSelecionado();
+            }
+        } catch (_) {
+            // Mantém o valor atual sem interromper a operação.
+        }
     }
 
     function imprimirDia() {
