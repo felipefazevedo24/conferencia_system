@@ -33,7 +33,7 @@ UNIDADES_PADRAO = [
 ]
 
 
-def _fmt_registro(row: LogisticaInventarioInicial, estoque_grv: dict | None = None) -> dict:
+def _fmt_registro(row: LogisticaInventarioInicial, incluir_grv: bool = False) -> dict:
     dados = {
         "id": row.id,
         "local_codigo": row.local_codigo,
@@ -46,14 +46,21 @@ def _fmt_registro(row: LogisticaInventarioInicial, estoque_grv: dict | None = No
         "criado_em": row.criado_em.isoformat() if row.criado_em else None,
         "atualizado_em": row.atualizado_em.isoformat() if row.atualizado_em else None,
     }
-    # So calculado quando explicitamente pedido (tela de consulta/revisao).
-    # A tela de contagem (Novo Inventario) NUNCA passa estoque_grv, para nao
-    # vesar a conferencia com o saldo esperado - mesma logica da conferencia
-    # cega usada no resto do sistema.
-    if estoque_grv is not None:
-        qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv)
+    # So incluido quando explicitamente pedido (tela de consulta/revisao).
+    # A tela de contagem (Novo Inventario) NUNCA pede isso, pra nao vesar a
+    # conferencia com o saldo esperado - mesma logica da conferencia cega
+    # usada no resto do sistema.
+    #
+    # O saldo do GRV usado aqui e' o SNAPSHOT gravado no momento da contagem
+    # (ver criar_inventario_inicial), nao uma consulta em tempo real - senao
+    # uma contagem que batia com o GRV na hora em que foi feita passaria a
+    # aparecer como "divergente" so porque o estoque mudou depois (giro
+    # normal), sem relacao nenhuma com erro de contagem.
+    if incluir_grv:
+        qtde_grv = row.qtde_grv_no_momento
         dados["qtde_grv"] = qtde_grv
-        dados["divergente"] = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > 0.001)
+        dados["grv_consultado_em"] = row.grv_consultado_em.isoformat() if row.grv_consultado_em else None
+        dados["divergente"] = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > ajuste_svc.TOLERANCIA_DIVERGENCIA)
     return dados
 
 
@@ -237,21 +244,20 @@ def listar_inventario_inicial():
 
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).limit(limite).all()
 
-    # A comparacao com o GRV so e calculada quando explicitamente pedida
+    # A comparacao com o GRV so e incluida quando explicitamente pedida
     # (tela de consulta) - a tela de contagem nunca passa esse parametro,
     # entao nunca recebe o saldo esperado antes de fechar a contagem.
-    estoque_grv = None
-    erro_grv = None
-    if request.args.get("comparar_grv") == "1":
-        try:
-            estoque_grv = buscar_estoque_grv()
-        except Exception as exc:  # noqa: BLE001
-            current_app.logger.warning("Falha ao consultar estoque no GRV para comparacao: %s", exc)
-            erro_grv = str(exc)
+    # O valor usado e' o snapshot gravado no momento de cada contagem (ver
+    # criar_inventario_inicial), nao uma consulta em tempo real.
+    incluir_grv = request.args.get("comparar_grv") == "1"
 
-    resposta = {"registros": [_fmt_registro(row, estoque_grv) for row in rows]}
-    if request.args.get("comparar_grv") == "1":
-        resposta["grv_indisponivel"] = erro_grv if estoque_grv is None else None
+    resposta = {"registros": [_fmt_registro(row, incluir_grv) for row in rows]}
+    if incluir_grv:
+        # Quantas contagens retornadas nao conseguiram capturar o saldo do
+        # GRV no momento em que foram feitas (API fora do ar naquela hora,
+        # ou codigo nao encontrado no GRV) - a coluna "Qtd GRV" fica vazia
+        # pra essas, sem tentar reconsultar agora.
+        resposta["sem_grv_no_momento"] = sum(1 for row in rows if row.qtde_grv_no_momento is None)
     return jsonify(resposta)
 
 
@@ -264,13 +270,6 @@ def exportar_inventario_inicial_excel():
 
     query = _build_query(local=local, codigo=codigo)
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).all()
-
-    estoque_grv = None
-    if comparar_grv:
-        try:
-            estoque_grv = buscar_estoque_grv()
-        except Exception as exc:  # noqa: BLE001
-            current_app.logger.warning("Falha ao consultar estoque no GRV para exportar comparacao: %s", exc)
 
     wb = Workbook()
     ws = wb.active
@@ -302,8 +301,8 @@ def exportar_inventario_inicial_excel():
             row.criado_por,
         ]
         if comparar_grv:
-            qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv) if estoque_grv is not None else None
-            divergente = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > 0.001)
+            qtde_grv = row.qtde_grv_no_momento
+            divergente = (qtde_grv is not None) and (abs(float(row.quantidade or 0) - qtde_grv) > ajuste_svc.TOLERANCIA_DIVERGENCIA)
             linha += [qtde_grv if qtde_grv is not None else "N/D", "SIM" if divergente else "NAO"]
         ws.append(linha)
 
@@ -381,19 +380,28 @@ def criar_inventario_inicial():
         )
         localizacao_erp["erro"] = str(exc)
 
-    # Detecta divergencia contra o GRV e, se houver, abre automaticamente
-    # um ajuste no Modulo 02 (Validacao) pro gestor revisar - nao falha a
-    # contagem se o GRV estiver indisponivel, so nao cria o ajuste.
+    # Consulta o saldo do GRV UMA VEZ, no exato momento da contagem, e grava
+    # esse snapshot no proprio registro (qtde_grv_no_momento/grv_consultado_em)
+    # - a tela de consulta (Inventario Realizado) usa esse valor gravado em
+    # vez de reconsultar o GRV em tempo real depois, senao uma contagem que
+    # batia com o GRV na hora em que foi feita passaria a aparecer como
+    # divergente so porque o estoque girou normalmente depois. Tambem
+    # detecta divergencia e, se houver, abre automaticamente um ajuste no
+    # Modulo 02 (Validacao) pro gestor revisar - nao falha a contagem se o
+    # GRV estiver indisponivel, so fica sem snapshot e sem ajuste.
     ajuste_aberto = None
     try:
         estoque_grv = buscar_estoque_grv()
         qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv)
+        row.qtde_grv_no_momento = qtde_grv
+        row.grv_consultado_em = datetime.now()
+        db.session.commit()
         ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv)
         if ajuste:
             ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
     except Exception as exc:  # noqa: BLE001
         current_app.logger.warning(
-            "Falha ao comparar contagem com o GRV pra detectar divergencia (código=%s, local=%s): %s",
+            "Falha ao consultar o GRV pra gravar snapshot/detectar divergencia (código=%s, local=%s): %s",
             codigo_produto, local_codigo, exc,
         )
 
@@ -440,6 +448,7 @@ def sincronizar_inventario_grv():
 PERMISSION_VALIDACAO = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
 PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
 PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
+PERMISSION_PULAR_ETAPA = "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA"
 
 
 def _fmt_ajuste(a) -> dict:
@@ -476,6 +485,7 @@ def inventario_ajustes_page():
         pode_validar=has_permission(PERMISSION_VALIDACAO),
         pode_finance=has_permission(PERMISSION_FINANCE),
         pode_fiscal=has_permission(PERMISSION_FISCAL),
+        pode_pular_etapa=has_permission(PERMISSION_PULAR_ETAPA),
     )
 
 
@@ -486,6 +496,7 @@ def api_listar_ajustes():
     ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo)
     return jsonify({
         "ajustes": [_fmt_ajuste(a) for a in ajustes],
+        "pode_pular_etapa": has_permission(PERMISSION_PULAR_ETAPA),
         "pode_validar": has_permission(PERMISSION_VALIDACAO),
         "pode_finance": has_permission(PERMISSION_FINANCE),
         "pode_fiscal": has_permission(PERMISSION_FISCAL),
@@ -554,3 +565,23 @@ def api_fiscal_concluir_ajuste(ajuste_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"message": "NF de ajuste confirmada. Processo concluído.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/pular-etapa", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL, PERMISSION_PULAR_ETAPA)
+def api_pular_etapa_ajuste(ajuste_id):
+    """"Pular Etapa" - avanço SEM validação nenhuma pra próxima etapa do
+    ajuste, reservado pra casos excepcionais. Exige permissão extra de
+    gerência (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA), além do acesso normal
+    ao módulo."""
+    if not has_permission(PERMISSION_PULAR_ETAPA):
+        return jsonify({"error": "Você não tem permissão pra usar o Pular Etapa - fale com a gerência."}), 403
+    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    usuario = session.get("username", "desconhecido")
+    try:
+        ajuste = ajuste_svc.pular_etapa(ajuste, usuario)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": f"Etapa avançada para {ajuste.status_modulo}.", "ajuste": _fmt_ajuste(ajuste)})

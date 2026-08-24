@@ -59,6 +59,7 @@ PERMISSION_CATALOG = {
     "PAGE_LOGISTICA_INVENTARIO_VALIDACAO": "Logística > Inventário > Validação de diferenças (gestor)",
     "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
     "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
+    "PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA": "Logística > Inventário > Pular Etapa (gerência)",
 }
 
 

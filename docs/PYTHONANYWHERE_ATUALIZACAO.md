@@ -58,23 +58,27 @@ mudou.
 **Onde:** mesmo console Bash da Parte 1 (continue nele, já está na pasta
 certa).
 
-**Passo A — rodar a migration do Comex:**
-```bash
-python scripts/aplicar_migracao_comex.py
-```
-Deve terminar em:
+**Passo A — rodar a migration do módulo que mudou:**
+
+| Módulo que mudou | Comando |
+|---|---|
+| Comex | `python scripts/aplicar_migracao_comex.py` |
+| Inventário (snapshot do GRV) | `python scripts/aplicar_migracao_inventario_grv.py` |
+
+Deve terminar em algo como:
 ```
 Migration Comex aplicada com sucesso (idempotente - nada quebra se rodar de novo).
 ```
+(ou "Migration Inventario (snapshot GRV) aplicada com sucesso...", conforme o script rodado).
 
 **Se der erro `ArgumentError: Could not parse SQLAlchemy URL` ou `Access
 denied`:** vá pra seção "Se der erro na Parte 2" abaixo antes de continuar.
 
 **Passo B — voltar pra Parte 1, Passo 5** (Reload + testar).
 
-> Se o commit alterou banco de **outro módulo** que não o Comex (não existe
-> `scripts/aplicar_migracao_comex.py` pra ele), me avisa antes de dar
-> Reload — vai precisar de um script equivalente pra aquele módulo.
+> Se o commit alterou banco de um módulo que **não está na tabela acima**,
+> me avisa antes de dar Reload — vai precisar de um script equivalente pra
+> aquele módulo.
 
 ---
 
@@ -89,11 +93,13 @@ O comando abaixo resolve os dois erros mais comuns do Passo A
 (nome parecido com `/var/www/seuusuario_pythonanywhere_com_wsgi.py`) →
 copie o valor que está dentro das aspas na linha `DATABASE_URL`.
 
-**Passo 2 — rode o comando abaixo, trocando só o texto entre `'...'` pelo
-valor copiado (mantenha as aspas simples, exatamente como estão):**
+**Passo 2 — rode o comando abaixo, trocando o texto entre `'...'` pelo
+valor copiado e o nome do script pelo mesmo que você rodou no Passo A
+(mantenha as aspas simples, exatamente como estão):**
 ```bash
 DATABASE_URL='COLE_AQUI_A_URL_COPIADA' python scripts/aplicar_migracao_comex.py
 ```
+(ou `scripts/aplicar_migracao_inventario_grv.py`, se foi esse o módulo que mudou)
 
 ⚠️ **Tem que ser aspas simples `'...'`, não aspas duplas `"..."`.** O nome
 do banco tem um `$` no meio (ex.: `usuario$nome_do_banco`) — com aspas

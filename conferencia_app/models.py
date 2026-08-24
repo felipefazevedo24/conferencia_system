@@ -1622,6 +1622,15 @@ class LogisticaInventarioInicial(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
+    # Snapshot do saldo do GRV consultado no exato momento da contagem (logo
+    # apos salvar o registro) - null se o codigo nao existe no GRV ou se a
+    # API estava fora do ar naquele momento. Usado pela tela de consulta
+    # (Inventario Realizado) em vez de uma consulta em tempo real, pra nao
+    # mostrar como "divergente" uma contagem que batia com o GRV na hora em
+    # que foi feita mas o saldo mudou depois (movimentacao normal de estoque).
+    qtde_grv_no_momento = db.Column(db.Float)
+    grv_consultado_em = db.Column(db.DateTime)
+
 
 class LogisticaInventarioAjuste(db.Model):
     """Fluxo de ajuste de estoque pra itens divergentes do Inventario

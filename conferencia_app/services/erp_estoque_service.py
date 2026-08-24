@@ -1,10 +1,14 @@
 """Consulta o saldo de estoque do GRV via API bridge do ERP.
 
 Usado para comparar o inventario fisico feito pela Logistica (Modulo de
-Inventario) com o saldo que o GRV tem registrado - APENAS na tela de
-consulta/revisao. A contagem em si (Novo Inventario) nunca deve enxergar
-esse valor, para nao vesar a contagem (mesma logica da conferencia cega
-usada no resto do sistema)."""
+Inventario) com o saldo que o GRV tem registrado. A consulta acontece uma
+unica vez, no servidor, logo apos salvar cada contagem (Novo Inventario) -
+o resultado e' gravado como snapshot no proprio registro
+(LogisticaInventarioInicial.qtde_grv_no_momento) e e' isso que a tela de
+consulta/revisao exibe depois, nunca uma nova consulta em tempo real. O
+usuario que esta contando nunca ve esse valor na hora (mesma logica da
+conferencia cega usada no resto do sistema) - ele so aparece depois, na
+tela de consulta, como o saldo que o GRV tinha NAQUELE momento."""
 from __future__ import annotations
 
 import os

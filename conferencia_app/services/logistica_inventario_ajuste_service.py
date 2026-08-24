@@ -26,11 +26,27 @@ STATUS_SLUGS = {
     "Descartado": "descartado",
 }
 
+# Sequencia oficial do workflow (usada pela funcao "Pular Etapa" - mesma
+# ideia do "Pular Status" do Comex). "Descartado" fica de fora: e' um ramo
+# terminal que so sai de "Validacao" via descartar_divergencia, nao faz
+# parte do avanco normal.
+MODULOS_SEQUENCIA = ["Validacao", "Finance", "Fiscal", "Concluido"]
+
 TOLERANCIA_DIVERGENCIA = 0.001
 
 
 def status_slug(status_modulo: str) -> str:
     return STATUS_SLUGS.get(status_modulo, "validacao")
+
+
+def _proximo_modulo(atual: str) -> str | None:
+    try:
+        idx = MODULOS_SEQUENCIA.index(atual)
+    except ValueError:
+        return None
+    if idx + 1 >= len(MODULOS_SEQUENCIA):
+        return None
+    return MODULOS_SEQUENCIA[idx + 1]
 
 
 def ajuste_aberto_para(codigo_produto: str, local_codigo: str) -> LogisticaInventarioAjuste | None:
@@ -142,5 +158,43 @@ def concluir_fiscal(ajuste: LogisticaInventarioAjuste, usuario: str, nf_numero: 
     ajuste.fiscal_concluido_por = usuario
     ajuste.status_modulo = "Concluido"
     ajuste.status_slug = status_slug("Concluido")
+    db.session.commit()
+    return ajuste
+
+
+def pular_etapa(ajuste: LogisticaInventarioAjuste, usuario: str) -> LogisticaInventarioAjuste:
+    """Funcao "Pular Etapa" (requisito geral do Inventario, espelho do
+    "Pular Status" do Comex): avanca o ajuste manualmente pra proxima etapa
+    do workflow (Validacao -> Finance -> Fiscal -> Concluido), IGNORANDO as
+    validacoes normais de cada modulo (justificativa do gestor, observacao
+    do Finance, numero da NF do Fiscal) - reservada pra ajustes
+    excepcionais (ex.: decisao tomada fora do sistema, correcao rapida de
+    fluxo) e exige permissao extra de gerencia
+    (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA), alem do acesso normal ao
+    modulo. Nao pula pra fora do fluxo (nao reabre um "Descartado")."""
+    if ajuste.status_modulo == "Descartado":
+        raise ValueError("Este ajuste foi descartado - não há como avançar.")
+    proximo = _proximo_modulo(ajuste.status_modulo)
+    if proximo is None:
+        raise ValueError("Este ajuste já está na última etapa (Concluído) - não há como avançar mais.")
+
+    agora = datetime.now()
+    usuario = usuario or "desconhecido"
+    # Preenche os campos de rastreio da etapa que esta sendo pulada, so pra
+    # nao deixar a auditoria com "quem/quando" em branco pra uma etapa que
+    # o registro diz ter passado - mesma logica de nao perder historico que
+    # o restante do fluxo normal já segue.
+    if proximo == "Finance":
+        ajuste.gestor_confirmado_em = ajuste.gestor_confirmado_em or agora
+        ajuste.gestor_confirmado_por = ajuste.gestor_confirmado_por or usuario
+    elif proximo == "Fiscal":
+        ajuste.finance_concluido_em = ajuste.finance_concluido_em or agora
+        ajuste.finance_concluido_por = ajuste.finance_concluido_por or usuario
+    elif proximo == "Concluido":
+        ajuste.fiscal_concluido_em = ajuste.fiscal_concluido_em or agora
+        ajuste.fiscal_concluido_por = ajuste.fiscal_concluido_por or usuario
+
+    ajuste.status_modulo = proximo
+    ajuste.status_slug = status_slug(proximo)
     db.session.commit()
     return ajuste

@@ -96,6 +96,7 @@
     const PODE_VALIDAR = {{ pode_validar | tojson }};
     const PODE_FINANCE = {{ pode_finance | tojson }};
     const PODE_FISCAL = {{ pode_fiscal | tojson }};
+    const PODE_PULAR_ETAPA = {{ pode_pular_etapa | tojson }};
 
     function toast(msg, tipo) {
         const el = $("ia-toast");
@@ -202,19 +203,27 @@
     }
 
     // ── Menu de ações (kebab) ───────────────────────────────────────────
+    // "Pular Etapa" ignora toda validacao e so aparece pra quem tem a
+    // permissao extra de gerencia (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA) -
+    // mesmo padrao do "Pular Status" do Comex. Aparece em qualquer etapa em
+    // andamento (Validacao/Finance/Fiscal), mesmo pra quem nao tem a
+    // permissao normal daquela etapa especifica.
     function montarAcoes(a) {
         const it = (act, icon, label, danger) =>
             `<button data-act="${act}" data-id="${a.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+        const emAndamento = a.status_modulo !== "Concluido" && a.status_modulo !== "Descartado";
+        const btnPularEtapa = () => (PODE_PULAR_ETAPA && emAndamento) ? it("pular-etapa", "fa-forward-fast", "Pular Etapa", true) : "";
+        let itens = "";
         if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
-            return it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Descartar", true);
+            itens += it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Descartar", true);
+        } else if (a.status_modulo === "Finance" && PODE_FINANCE) {
+            itens += it("finance", "fa-coins", "Confirmar ajuste executado");
+        } else if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
+            itens += it("fiscal", "fa-file-invoice-dollar", "Confirmar NF emitida");
         }
-        if (a.status_modulo === "Finance" && PODE_FINANCE) {
-            return it("finance", "fa-coins", "Confirmar ajuste executado");
-        }
-        if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
-            return it("fiscal", "fa-file-invoice-dollar", "Confirmar NF emitida");
-        }
-        return '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
+        const pular = btnPularEtapa();
+        if (pular) itens += (itens ? "<hr>" : "") + pular;
+        return itens || '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
     }
 
     function acoesMenuEl() { return $("ia-acoes-menu"); }
@@ -262,6 +271,9 @@
             } else if (act === "fiscal") {
                 const nf_numero = prompt("Número da NF de ajuste emitida (opcional):") || "";
                 await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: "POST", body: JSON.stringify({ nf_numero }) });
+            } else if (act === "pular-etapa") {
+                if (!confirm("Pular direto para a próxima etapa? Isso ignora as validações normais da etapa atual - use só pra casos excepcionais.")) return;
+                await api(`/api/logistica/inventario-ajustes/${id}/pular-etapa`, { method: "POST" });
             } else {
                 return;
             }

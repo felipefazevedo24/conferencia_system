@@ -4738,32 +4738,15 @@ def test_canhoto_expedicao_faz_fallback_local_quando_drive_sem_cota(tmp_path):
 
 
 def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
-    """A listagem de inventario so calcula/retorna a comparacao com o GRV
-    quando comparar_grv=1 e passado explicitamente (usado so pela tela de
+    """A listagem de inventario so retorna a comparacao com o GRV quando
+    comparar_grv=1 e passado explicitamente (usado so pela tela de
     consulta) - a tela de contagem nunca deve receber esse campo, para nao
-    vesar a conferencia com o saldo esperado."""
+    vesar a conferencia com o saldo esperado. O valor comparado e' o
+    snapshot gravado no momento de CADA contagem (POST), nao uma nova
+    consulta ao GRV feita na hora da listagem."""
     app = build_test_app(tmp_path)
     client = app.test_client()
     login_admin(client)
-
-    with app.app_context():
-        from conferencia_app.models import LogisticaInventarioInicial
-
-        db.session.add(LogisticaInventarioInicial(
-            local_codigo="A01-02", codigo_produto="SKU-OK", unidade_medida="UN",
-            quantidade=10, criado_por="ADMIN",
-        ))
-        db.session.add(LogisticaInventarioInicial(
-            local_codigo="A01-03", codigo_produto="SKU-DIV", unidade_medida="UN",
-            quantidade=5, criado_por="ADMIN",
-        ))
-        db.session.commit()
-
-    # Tela de contagem (Novo Inventario): sem comparar_grv, sem vazamento.
-    resp_cego = client.get("/api/logistica/inventario-inicial?limit=10")
-    for registro in resp_cego.get_json()["registros"]:
-        assert "qtde_grv" not in registro
-        assert "divergente" not in registro
 
     estoque_fake = {
         "por_local": {
@@ -4779,13 +4762,72 @@ def test_inventario_logistica_comparacao_grv_e_cega_por_padrao(tmp_path):
         "conferencia_app.routes.logistica_inventario_routes.buscar_estoque_grv",
         return_value=estoque_fake,
     ):
-        resp_comparado = client.get("/api/logistica/inventario-inicial?limit=10&comparar_grv=1")
+        client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01-02", "codigo_produto": "SKU-OK",
+            "unidade_medida": "UN", "quantidade": 10,
+        })
+        client.post("/api/logistica/inventario-inicial", json={
+            "local_codigo": "A01-03", "codigo_produto": "SKU-DIV",
+            "unidade_medida": "UN", "quantidade": 5,
+        })
+
+    # Tela de contagem (Novo Inventario): sem comparar_grv, sem vazamento.
+    resp_cego = client.get("/api/logistica/inventario-inicial?limit=10")
+    for registro in resp_cego.get_json()["registros"]:
+        assert "qtde_grv" not in registro
+        assert "divergente" not in registro
+
+    # Tela de consulta: pede o snapshot gravado na contagem - sem precisar
+    # (nem poder) reconsultar o GRV agora.
+    resp_comparado = client.get("/api/logistica/inventario-inicial?limit=10&comparar_grv=1")
 
     registros = {r["codigo_produto"]: r for r in resp_comparado.get_json()["registros"]}
     assert registros["SKU-OK"]["qtde_grv"] == 10.0
     assert registros["SKU-OK"]["divergente"] is False
     assert registros["SKU-DIV"]["qtde_grv"] == 8.0
     assert registros["SKU-DIV"]["divergente"] is True
+
+
+def test_inventario_ajuste_pular_etapa_exige_permissao_extra_e_avanca_uma_etapa_por_vez(tmp_path):
+    """"Pular Etapa" (espelho do "Pular Status" do Comex) so avanca com a
+    permissao extra de gerencia (PAGE_LOGISTICA_INVENTARIO_PULAR_ETAPA) - o
+    acesso normal ao modulo (role Logística) nao basta - e sempre avanca UMA
+    etapa por chamada, ignorando quem normalmente faria aquela etapa."""
+    app = build_test_app(tmp_path)
+    client = app.test_client()
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+
+        ajuste = LogisticaInventarioAjuste(
+            codigo_produto="SKU-PULA", local_codigo="A01-09", unidade_medida="UN",
+            qtde_contada=12, qtde_estoque_no_momento=10, diferenca=2,
+            status_modulo="Validacao", status_slug="validacao",
+        )
+        db.session.add(ajuste)
+        db.session.commit()
+        ajuste_id = ajuste.id
+
+    # Role "Logística" tem acesso ao modulo, mas nao a permissao extra de
+    # Pular Etapa - deve ser barrado.
+    set_logged_user(client, "logistica_teste", "Logística")
+    resp_negado = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/pular-etapa")
+    assert resp_negado.status_code == 403
+
+    with app.app_context():
+        from conferencia_app.models import LogisticaInventarioAjuste
+        assert LogisticaInventarioAjuste.query.get(ajuste_id).status_modulo == "Validacao"
+
+    # Admin tem a permissao extra por padrao (catalogo inteiro) - avanca uma
+    # etapa por chamada: Validacao -> Finance -> Fiscal -> Concluido.
+    login_admin(client)
+    for esperado in ("Finance", "Fiscal", "Concluido"):
+        resp = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/pular-etapa")
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["ajuste"]["status_modulo"] == esperado
+
+    resp_fim = client.post(f"/api/logistica/inventario-ajustes/{ajuste_id}/pular-etapa")
+    assert resp_fim.status_code == 400
 
 
 def test_expedicao_fat_sync_preserva_id_dos_itens_entre_ciclos(tmp_path):

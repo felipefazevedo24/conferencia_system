@@ -217,9 +217,9 @@
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || data.msg || `HTTP ${resp.status}`);
             render(data.registros || []);
-            if (data.grv_indisponivel) {
+            if (data.sem_grv_no_momento) {
                 avisoGrv.style.display = '';
-                avisoGrv.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Não foi possível consultar o saldo do GRV agora; a coluna "Qtd GRV" ficará vazia até a próxima tentativa.';
+                avisoGrv.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${data.sem_grv_no_momento} contagem(ns) não conseguiram capturar o saldo do GRV no momento em que foram feitas (API fora do ar naquela hora); a coluna "Qtd GRV" fica vazia pra essas.`;
             } else {
                 avisoGrv.style.display = 'none';
             }
