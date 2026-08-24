@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from calendar import monthrange
 import csv
 import io
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, send_file
 from sqlalchemy import or_, true
@@ -26,6 +27,7 @@ from ..models import (
     Usuario,
 )
 from ..services.email_service import enviar_email_agendamento_update
+from ..compras.services import compras_service
 from ..services.agendamento_service import (
     PRIORIDADES_SOLICITACAO,
     STATUS_ATIVOS,
@@ -172,6 +174,374 @@ def _origem_documento_label(origem: str | None) -> str:
 
 def _is_admin_or_compras() -> bool:
     return session.get("role") in {"Admin", "Compras"}
+
+
+_FRETE_KEY_TOKENS = (
+    "frete_por_conta",
+    "fretepconta",
+    "frete_conta",
+    "conta_frete",
+    "modalidade_frete",
+    "frete_modalidade",
+    "tipo_frete",
+    "modfrete",
+    "mod_frete",
+    "incoterm",
+    "frete",
+)
+
+
+def _tokens_cif() -> list[str]:
+    raw = current_app.config.get("SOLICITACAO_CIF_VALORES_CIF") or ("CIF", "REMETENTE", "EMITENTE", "FORNECEDOR")
+    if isinstance(raw, str):
+        vals = [tok.strip().upper() for tok in raw.split(",") if tok and tok.strip()]
+    else:
+        vals = [str(tok).strip().upper() for tok in raw if str(tok).strip()]
+    return vals or ["CIF", "REMETENTE", "EMITENTE", "FORNECEDOR"]
+
+
+def _oc_modalidade_cif(oc_json) -> bool:
+    if isinstance(oc_json, str):
+        try:
+            oc_json = json.loads(oc_json)
+        except Exception:
+            oc_json = {}
+    if not isinstance(oc_json, dict):
+        return False
+
+    lowered = {str(k).lower(): v for k, v in oc_json.items()}
+    valor = ""
+    for token in _FRETE_KEY_TOKENS:
+        if token in lowered:
+            valor = str(lowered[token] or "").strip().upper()
+            break
+    if not valor:
+        for key, raw_val in lowered.items():
+            if "frete" in key and any(t in key for t in ("conta", "modalidade", "tipo", "cif", "incoterm")):
+                valor = str(raw_val or "").strip().upper()
+                break
+    if not valor:
+        return False
+
+    for token in _tokens_cif():
+        if valor == token or token in valor:
+            return True
+    return False
+
+
+def _to_date(value) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(text[:19], fmt).date()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text.replace("Z", "").split("+")[0]).date()
+    except ValueError:
+        return None
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_dados():
+    mes_ref = str(request.args.get("mes") or "").strip()
+    try:
+        mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
+    except ValueError:
+        return jsonify({"error": "Parâmetro 'mes' inválido. Use YYYY-MM."}), 400
+
+    ano = mes_base.year
+    mes = mes_base.month
+    dia_final = monthrange(ano, mes)[1]
+    inicio = date(ano, mes, 1)
+    fim = date(ano, mes, dia_final)
+    hoje = date.today()
+
+    ocs = compras_service.ordens_compra_entregas(limite=5000)
+    cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    cif_por_oc: dict[str, bool] = {}
+    for row in cif_rows:
+        oc_num = str(row.get("cod_ordem_compra") or "").strip()
+        if not oc_num or oc_num in cif_por_oc:
+            continue
+        cif_por_oc[oc_num] = _oc_modalidade_cif(row.get("oc_json"))
+
+    eventos_base: list[dict] = []
+    for row in ocs:
+        previsao = _to_date(row.get("previsao_entrega"))
+        if not previsao or previsao < inicio or previsao > fim:
+            continue
+        numero_oc = str(row.get("cod_ordem_compra") or "").strip()
+        if not numero_oc:
+            continue
+        is_coleta = bool(cif_por_oc.get(numero_oc, False))
+        eventos_base.append(
+            {
+                "numero_oc": numero_oc,
+                "fornecedor": str(row.get("fornecedor") or "").strip() or "(Sem fornecedor)",
+                "status_oc_nome": str(row.get("status_oc_nome") or "").strip(),
+                "previsao": previsao,
+                "tipo_logistico": "COLETA" if is_coleta else "ENTREGA",
+            }
+        )
+
+    ocs_mes = sorted({e["numero_oc"] for e in eventos_base})
+    solicitacao_por_oc: dict[str, AgendamentoSolicitacao] = {}
+    if ocs_mes:
+        solicitacoes = (
+            _query_solicitacoes_visiveis()
+            .filter(AgendamentoSolicitacao.tipo == "COLETA")
+            .filter(AgendamentoSolicitacao.numero_oc.in_(ocs_mes))
+            .filter(AgendamentoSolicitacao.status != "Cancelada")
+            .order_by(AgendamentoSolicitacao.id.desc())
+            .all()
+        )
+        for sol in solicitacoes:
+            oc_num = str(sol.numero_oc or "").strip()
+            if oc_num and oc_num not in solicitacao_por_oc:
+                solicitacao_por_oc[oc_num] = sol
+
+    viagem_por_solicitacao: dict[int, dict] = {}
+    if solicitacao_por_oc:
+        ids = [int(sol.id) for sol in solicitacao_por_oc.values()]
+        vinculos = (
+            db.session.query(
+                ViagemParada.solicitacao_id,
+                ViagemParada.status,
+                Viagem.id,
+                Viagem.codigo,
+                Viagem.status,
+                Viagem.liberada,
+            )
+            .join(Viagem, Viagem.id == ViagemParada.viagem_id)
+            .filter(ViagemParada.solicitacao_id.in_(ids))
+            .filter(Viagem.status != "Cancelada")
+            .order_by(Viagem.id.desc())
+            .all()
+        )
+        for solicitacao_id, parada_status, viagem_id, viagem_codigo, viagem_status, viagem_liberada in vinculos:
+            sid = int(solicitacao_id)
+            if sid in viagem_por_solicitacao:
+                continue
+            viagem_por_solicitacao[sid] = {
+                "id": int(viagem_id),
+                "codigo": str(viagem_codigo or "").strip() or f"VG-{viagem_id}",
+                "status": str(viagem_status or "").strip(),
+                "parada_status": str(parada_status or "").strip(),
+                "liberada": bool(viagem_liberada),
+            }
+
+    eventos: list[dict] = []
+    dias: dict[str, dict] = {}
+    total_coletas = total_entregas = sem_viagem = atrasadas = 0
+    for row in eventos_base:
+        previsao = row["previsao"]
+        numero_oc = row["numero_oc"]
+        solicitacao = solicitacao_por_oc.get(numero_oc)
+        viagem = viagem_por_solicitacao.get(int(solicitacao.id)) if solicitacao else None
+        risco = "normal"
+        if previsao < hoje:
+            risco = "atrasado"
+            atrasadas += 1
+        elif previsao == hoje:
+            risco = "hoje"
+        elif previsao <= (hoje + timedelta(days=3)):
+            risco = "proximos_3"
+
+        tipo_logistico = row["tipo_logistico"]
+        if tipo_logistico == "COLETA":
+            total_coletas += 1
+            if not viagem:
+                sem_viagem += 1
+        else:
+            total_entregas += 1
+
+        can_schedule = bool(tipo_logistico == "COLETA" and not viagem and _is_admin_or_compras())
+        data_key = previsao.isoformat()
+        dia_ref = dias.setdefault(
+            data_key,
+            {"data": data_key, "qtd_total": 0, "qtd_coletas": 0, "qtd_entregas": 0, "qtd_sem_viagem": 0, "qtd_atrasadas": 0},
+        )
+        dia_ref["qtd_total"] += 1
+        if tipo_logistico == "COLETA":
+            dia_ref["qtd_coletas"] += 1
+        else:
+            dia_ref["qtd_entregas"] += 1
+        if tipo_logistico == "COLETA" and not viagem:
+            dia_ref["qtd_sem_viagem"] += 1
+        if risco == "atrasado":
+            dia_ref["qtd_atrasadas"] += 1
+
+        eventos.append(
+            {
+                "data": data_key,
+                "numero_oc": numero_oc,
+                "fornecedor": row["fornecedor"],
+                "status_oc": row["status_oc_nome"],
+                "tipo_logistico": tipo_logistico,
+                "tipo_logistico_label": "Coleta (nossa frota)" if tipo_logistico == "COLETA" else "Entrega do fornecedor",
+                "risco": risco,
+                "solicitacao": {
+                    "id": int(solicitacao.id),
+                    "codigo": str(solicitacao.codigo or f"LOG-{solicitacao.id}").strip(),
+                    "status": str(solicitacao.status or "").strip(),
+                } if solicitacao else None,
+                "viagem": viagem,
+                "pode_programar_coleta": can_schedule,
+                "programar_hint": "Cria solicitação de coleta na Central de Viagens" if can_schedule else "",
+            }
+        )
+
+    pico_dia = max((d["qtd_total"] for d in dias.values()), default=0)
+    return jsonify(
+        {
+            "mes": f"{ano:04d}-{mes:02d}",
+            "inicio": inicio.isoformat(),
+            "fim": fim.isoformat(),
+            "resumo": {
+                "total": len(eventos),
+                "coletas": total_coletas,
+                "entregas": total_entregas,
+                "coletas_sem_viagem": sem_viagem,
+                "atrasadas": atrasadas,
+                "pico_dia": pico_dia,
+            },
+            "dias": sorted(dias.values(), key=lambda d: d["data"]),
+            "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
+        }
+    )
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario/programar-coleta", methods=["POST"])
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_programar_coleta():
+    if not _is_admin_or_compras():
+        return jsonify({"error": "Somente Compras e Administrador podem programar coleta."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    if not numero_oc:
+        return jsonify({"error": "Informe o número da OC."}), 400
+
+    existente = (
+        _query_solicitacoes_visiveis()
+        .filter(
+            AgendamentoSolicitacao.tipo == "COLETA",
+            AgendamentoSolicitacao.numero_oc == numero_oc,
+            AgendamentoSolicitacao.status != "Cancelada",
+        )
+        .first()
+    )
+    if existente:
+        return jsonify(
+            {
+                "sucesso": True,
+                "ja_existia": True,
+                "mensagem": f"A OC {numero_oc} já está na Central ({existente.codigo or ('LOG-' + str(existente.id))}).",
+                "solicitacao_id": int(existente.id),
+                "central_url": f"/logistica/viagens?tab=COLETA&q={numero_oc}",
+            }
+        )
+
+    consulta = consultar_oc_agendamento(numero_oc)
+    if not consulta.get("encontrada"):
+        return jsonify({"error": consulta.get("error") or "OC não encontrada na bridge."}), 404
+
+    parceiro = consulta.get("fornecedor") if isinstance(consulta.get("fornecedor"), dict) else {}
+    parceiro_payload = {
+        "codigo": str(parceiro.get("codigo") or "").strip(),
+        "nome": str(parceiro.get("nome") or parceiro.get("razao_social") or "").strip(),
+        "razao_social": str(parceiro.get("razao_social") or parceiro.get("nome") or "").strip(),
+        "cnpj_cpf": str(parceiro.get("cnpj_cpf") or "").strip(),
+        "contato": str(parceiro.get("contato") or "").strip(),
+        "telefone": str(parceiro.get("telefone") or "").strip(),
+        "email": str(parceiro.get("email") or "").strip(),
+        "logradouro": str(parceiro.get("logradouro") or "").strip() or "Endereço de coleta a confirmar",
+        "numero": str(parceiro.get("numero") or "").strip(),
+        "complemento": str(parceiro.get("complemento") or "").strip(),
+        "bairro": str(parceiro.get("bairro") or "").strip(),
+        "cidade": str(parceiro.get("cidade") or "").strip() or "A confirmar",
+        "uf": (str(parceiro.get("uf") or "").strip()[:2] or "SP").upper(),
+        "cep": str(parceiro.get("cep") or "").strip(),
+        "observacoes": str(consulta.get("warning") or "").strip(),
+    }
+
+    usuario = session.get("username", "sistema")
+    agora = datetime.now()
+    fonte = consulta.get("fonte") if isinstance(consulta.get("fonte"), dict) else {}
+    sol = AgendamentoSolicitacao(
+        tipo="COLETA",
+        status="Pendente",
+        prioridade="Media",
+        prazo_limite=None,
+        data_desejada=None,
+        solicitante=usuario,
+        criado_em=agora,
+        atualizado_em=agora,
+        documento_tipo="OC",
+        documento_numero=numero_oc,
+        numero_oc=numero_oc,
+        origem_documento="ORDEM_DE_COMPRA",
+        observacoes_solicitante="Coleta gerada automaticamente pelo calendário de recebimento.",
+        observacoes_logistica=(f"Bridge: {fonte.get('label')}" if fonte.get("label") else "Gerada via bridge de compras."),
+        payload_origem=_json_text(
+            {
+                "origem": "calendario_recebimento",
+                "numero_oc": numero_oc,
+                "fonte": fonte,
+                "warning": consulta.get("warning") or "",
+            }
+        ),
+    )
+    ok, msg = _aplicar_parceiro(sol, parceiro_payload, "Fornecedor")
+    if not ok:
+        return jsonify({"error": msg or "Não foi possível aplicar os dados do fornecedor retornados pela bridge."}), 409
+
+    db.session.add(sol)
+    db.session.flush()
+    sol.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{sol.id:04d}"
+
+    itens = consulta.get("itens") if isinstance(consulta.get("itens"), list) else []
+    if not _sincronizar_itens(sol, itens):
+        _sincronizar_itens(
+            sol,
+            [
+                {
+                    "descricao": f"Coleta referente à OC {numero_oc}",
+                    "quantidade": 1,
+                    "unidade": "UN",
+                    "volumes": 1,
+                    "observacoes": "Item padrão criado automaticamente.",
+                }
+            ],
+        )
+
+    _registrar_historico(
+        sol.id,
+        evento="CRIADA_OC_BRIDGE",
+        usuario=usuario,
+        status_novo="Pendente",
+        detalhe=f"Solicitação criada a partir da OC {numero_oc} via calendário de recebimento.",
+        payload={"numero_oc": numero_oc, "fonte": fonte},
+    )
+    db.session.commit()
+    return jsonify(
+        {
+            "sucesso": True,
+            "ja_existia": False,
+            "mensagem": f"Coleta da OC {numero_oc} criada na Central.",
+            "solicitacao_id": int(sol.id),
+            "solicitacao_codigo": str(sol.codigo or "").strip(),
+            "central_url": f"/logistica/viagens?tab=COLETA&q={numero_oc}",
+        }
+    )
 
 
 def _is_origem_automatica(row: AgendamentoSolicitacao) -> bool:

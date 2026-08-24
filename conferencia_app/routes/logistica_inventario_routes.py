@@ -248,7 +248,8 @@ def listar_inventario_inicial():
     # (tela de consulta) - a tela de contagem nunca passa esse parametro,
     # entao nunca recebe o saldo esperado antes de fechar a contagem.
     # O valor usado e' o snapshot gravado no momento de cada contagem (ver
-    # criar_inventario_inicial), nao uma consulta em tempo real.
+    # criar_inventario_inicial), nao uma consulta em tempo real - o
+    # "forcar_grv"/cache do buscar_estoque_grv() nao se aplica mais aqui.
     incluir_grv = request.args.get("comparar_grv") == "1"
 
     resposta = {"registros": [_fmt_registro(row, incluir_grv) for row in rows]}

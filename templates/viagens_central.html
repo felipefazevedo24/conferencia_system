@@ -70,6 +70,7 @@
             <p class="eui-page-header__sub">Coletas por Ordem de Compra e Entregas por Romaneio, geradas automaticamente.</p>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <a href="/logistica/recebimento-calendario" class="eui-btn eui-btn--ghost"><i class="fas fa-calendar-days"></i> Calendário de recebimento</a>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}

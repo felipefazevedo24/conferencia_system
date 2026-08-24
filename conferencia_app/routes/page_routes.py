@@ -1122,6 +1122,21 @@ def viagens_page():
     )
 
 
+@page_bp.route("/logistica/recebimento-calendario")
+@login_required
+def recebimento_calendario_page():
+    from conferencia_app.auth import has_permission
+
+    if not (has_permission("PAGE_LOGISTICA_AGENDAMENTO") or has_permission("PAGE_LOGISTICA_SOLICITACAO")):
+        return render_template("acesso_negado.html", user=session.get("username")), 403
+    return render_template(
+        "recebimento_calendario.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
+
+
 
 
 @page_bp.route("/admin/usuarios")

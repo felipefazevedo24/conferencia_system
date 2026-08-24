@@ -743,25 +743,50 @@ ENTRADAS_CHAPA_DESDE_SQL = """
 
 
 ESTOQUE_SQL = """
+    with estoque_deposito as (
+        select
+            cod_empresa,
+            cod_produto,
+            sum(coalesce(qtde_total, 0)) as qtde_total,
+            sum(coalesce(qtde_reservada, 0)) as qtde_reservada,
+            sum(coalesce(qtde_disponivel, 0)) as qtde_disponivel
+        from public.tproduto_deposito
+        group by cod_empresa, cod_produto
+    )
     select
         p.codigo_interno,
         p.nome as item,
         coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
-        coalesce(p.estoque_disponivel_uso, coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0), 0) as qtde_total,
-        coalesce(p.estoque_reservado, 0) as qtde_reservada,
-        coalesce(p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
+        -- Fonte principal: saldo por deposito (tproduto_deposito), que e o
+        -- saldo efetivo usado no GRV. Fallback para campos legados de
+        -- tproduto quando nao houver linha em tproduto_deposito.
+        coalesce(
+            d.qtde_total,
+            (
+                case
+                    when p.estoque is not null then coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0)
+                    when p.estoque_disponivel_uso is not null then coalesce(p.estoque_disponivel_uso, 0) + coalesce(p.estoque_reservado, 0)
+                    else null
+                end
+            ),
+            0
+        ) as qtde_total,
+        coalesce(d.qtde_reservada, p.estoque_reservado, 0) as qtde_reservada,
+        coalesce(d.qtde_disponivel, p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
         p.localizacao_estoque,
         coalesce(f.nome, '') as familia,
         coalesce(p.cod_grupo::text, '') as grupo
     from public.tproduto p
+    left join estoque_deposito d
+      on d.cod_empresa = p.cod_empresa
+     and d.cod_produto = p.codigo
     left join public.tfamilia f
       on f.cod_empresa = p.cod_empresa
      and f.codigo = p.cod_familia
     where p.cod_empresa = %s
       and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
-      and coalesce(nullif(trim(p.localizacao_estoque), ''), '') <> ''
       and coalesce(p.inativo, 0) = 0
-    order by p.localizacao_estoque, p.codigo_interno
+        order by coalesce(p.localizacao_estoque, ''), p.codigo_interno
 """
 
 
