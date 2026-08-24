@@ -2572,6 +2572,39 @@ def criar_solicitacao_agendamento():
     return jsonify({"error": "Criação manual de solicitação de viagem foi descontinuada. Use a Central de Viagens."}), 410
 
 
+@agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/aprovar-avulsa", methods=["POST"])
+@permission_required("PAGE_LOGISTICA_AGENDAMENTO")
+def aprovar_solicitacao_avulsa(solicitacao_id: int):
+    row = _get_solicitacao_visivel(solicitacao_id)
+    if not row:
+        return jsonify({"error": "Solicitação não encontrada."}), 404
+    if not is_admin_session():
+        return jsonify({"error": "Somente administrador pode aprovar solicitação avulsa."}), 403
+    if str(row.tipo or "").strip().upper() != "AVULSA":
+        return jsonify({"error": "Aprovação disponível apenas para solicitações AVULSAS."}), 409
+    status_atual = str(row.status or "").strip()
+    if status_atual in {"Concluida", "Cancelada"}:
+        return jsonify({"error": "Não é possível aprovar uma solicitação finalizada."}), 409
+    if status_atual == "Aprovada":
+        veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+        return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
+
+    usuario = session.get("username", "desconhecido")
+    row.status = "Aprovada"
+    row.atualizado_em = datetime.now()
+    _registrar_historico(
+        row.id,
+        evento="APROVADA_ADMIN_AVULSA",
+        usuario=usuario,
+        status_anterior=status_atual,
+        status_novo="Aprovada",
+        detalhe="Solicitação avulsa aprovada por administrador para liberação na montagem de viagem.",
+    )
+    db.session.commit()
+    veiculo = AgendamentoVeiculo.query.get(row.veiculo_id) if row.veiculo_id else None
+    return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row, veiculo=veiculo)})
+
+
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/alocar", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_AGENDAMENTO")
 def alocar_solicitacao_agendamento(solicitacao_id: int):
