@@ -320,6 +320,12 @@ def _calcular_risco_estoque_oc(
     consumo_kardex_por_codigo: dict[str, dict] | None = None,
     consulta_oc: dict | None = None,
 ) -> dict:
+    try:
+        dias_criticos = int(current_app.config.get("RECEBIMENTO_ESTOQUE_DIAS_CRITICOS", 2))
+    except (TypeError, ValueError):
+        dias_criticos = 2
+    dias_criticos = max(1, min(dias_criticos, 30))
+
     risco_estoque = "sem_base_calculo"
     risco_estoque_label = "Sem base de cálculo"
     risco_estoque_detalhe = "Sem itens válidos da OC para cálculo de cobertura."
@@ -399,7 +405,7 @@ def _calcular_risco_estoque_oc(
                 itens_com_consumo_kardex += 1
             dias_cobertura = saldo_referencia / consumo_diario if consumo_diario else 0
             menor_cobertura = dias_cobertura if menor_cobertura is None else min(menor_cobertura, dias_cobertura)
-            if dias_cobertura < 7:
+            if dias_cobertura < float(dias_criticos):
                 cobertura_critica = True
                 faltas += 1
             continue
@@ -419,7 +425,7 @@ def _calcular_risco_estoque_oc(
         risco_estoque_label = "Estoque crítico"
         if menor_cobertura is not None:
             risco_estoque_detalhe = (
-                f"Cobertura mínima de {menor_cobertura:.1f} dia(s); {faltas} item(ns) abaixo de 7 dias."
+                f"Cobertura mínima de {menor_cobertura:.1f} dia(s); {faltas} item(ns) abaixo de {dias_criticos} dia(s)."
             )
         else:
             risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."

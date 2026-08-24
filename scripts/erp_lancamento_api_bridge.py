@@ -1727,8 +1727,31 @@ def create_app() -> Flask:
                 saldo = row[4]
 
                 slot = agregados.setdefault(codigo, {"saida_total": 0.0, "dias_saida": set(), "saldos": []})
-                tokens_saida = ("SAIDA", "CONSUMO", "BAIXA", "EXPED", "VENDA", "S")
-                is_saida = quantidade < 0 or any(tok in tipo_mov for tok in tokens_saida)
+                tokens_saida = (
+                    "SAIDA",
+                    "CONSUMO",
+                    "BAIXA",
+                    "EXPED",
+                    "VENDA",
+                    "REQUIS",
+                    "REMESSA",
+                    "TRANSFERENCIA SAIDA",
+                )
+                tokens_entrada = (
+                    "ENTRADA",
+                    "COMPRA",
+                    "RETORNO",
+                    "AJUSTE ENTRADA",
+                    "TRANSFERENCIA ENTRADA",
+                    "DEVOLUCAO FORNECEDOR",
+                )
+                texto_mov = re.sub(r"\s+", " ", tipo_mov)
+                is_saida = quantidade < 0
+                if not is_saida and texto_mov:
+                    if any(tok in texto_mov for tok in tokens_entrada):
+                        is_saida = False
+                    elif any(tok in texto_mov for tok in tokens_saida):
+                        is_saida = True
                 if is_saida and quantidade != 0:
                     slot["saida_total"] += abs(quantidade)
                     if data_mov is not None:
