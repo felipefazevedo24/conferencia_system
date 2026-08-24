@@ -39,10 +39,10 @@
     .rcv-chip { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; background: var(--eui-surface-3); }
     .rcv-chip.warn { background: #fff7ed; color: #9a3412; }
     .rcv-chip-risk { border: 1px solid transparent; }
-    .rcv-chip-risk.ok { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
-    .rcv-chip-risk.atencao { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .rcv-chip-risk.normal { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
     .rcv-chip-risk.critico { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-    .rcv-chip-risk.sem_dados { background: #f4f4f5; color: #3f3f46; border-color: #e4e4e7; }
+    .rcv-chip-risk.sem_estoque { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .rcv-chip-risk.sem_base_calculo { background: #f4f4f5; color: #3f3f46; border-color: #e4e4e7; }
     .rcv-chip-risk.pendente { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
     .rcv-chip-status { border: 1px solid transparent; }
     .rcv-chip-status.recebida { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
@@ -299,9 +299,9 @@
 
         dayBody.innerHTML = rows.map((r) => {
             const viagem = r.viagem && r.viagem.codigo ? `${r.viagem.codigo} (${r.viagem.status || '-'})` : '-';
-            const risco = String(r.risco_estoque_label || 'Sem dados');
-            const riscoClasse = (r.risco_estoque || 'sem_dados').toLowerCase();
-            const riscoClasseUi = ['ok', 'atencao', 'critico', 'sem_dados', 'pendente'].includes(riscoClasse) ? riscoClasse : 'sem_dados';
+            const risco = String(r.risco_estoque_label || 'Sem base de cálculo');
+            const riscoClasse = (r.risco_estoque || 'sem_base_calculo').toLowerCase();
+            const riscoClasseUi = ['normal', 'critico', 'sem_estoque', 'sem_base_calculo', 'pendente'].includes(riscoClasse) ? riscoClasse : 'sem_base_calculo';
             const recebida = Boolean(r.oc_recebida);
             const situacaoLabel = recebida ? 'Recebida' : 'Pendente';
             const situacaoClasse = recebida ? 'recebida' : 'pendente';

@@ -315,9 +315,9 @@ def _oc_ja_recebida(status_oc_nome: str) -> bool:
 
 
 def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict]) -> dict:
-    risco_estoque = "sem_dados"
-    risco_estoque_label = "Sem dados"
-    risco_estoque_detalhe = "Sem itens da OC ou sem saldo disponível para cálculo."
+    risco_estoque = "sem_base_calculo"
+    risco_estoque_label = "Sem base de cálculo"
+    risco_estoque_detalhe = "Sem itens válidos da OC para cálculo de cobertura."
 
     if not numero_oc or not estoque_aliases:
         return {
@@ -366,10 +366,18 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
     cobertura_atencao = False
     faltas = 0
     baixos = 0
+    sem_cadastro_estoque = 0
+    itens_com_estoque = 0
     for codigo_item, vals in resumo_itens.items():
         qtd_oc = float(vals.get("qtd") or 0)
         consumo_diario = float(vals.get("consumo") or 0)
-        saldo = float((estoque_aliases.get(codigo_item) or {}).get("qtde_total") or 0)
+        estoque_item = estoque_aliases.get(codigo_item) or {}
+        if not estoque_item:
+            sem_cadastro_estoque += 1
+            continue
+
+        itens_com_estoque += 1
+        saldo = float(estoque_item.get("qtde_total") or 0)
         if consumo_diario > 0:
             dias_cobertura = saldo / consumo_diario if consumo_diario else 0
             if dias_cobertura < 3:
@@ -386,17 +394,32 @@ def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict])
             cobertura_atencao = True
             baixos += 1
 
-    if cobertura_critica:
+    if sem_cadastro_estoque > 0 and itens_com_estoque == 0:
+        risco_estoque = "sem_estoque"
+        risco_estoque_label = "Sem estoque"
+        risco_estoque_detalhe = (
+            f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV (nunca tiveram saldo registrado)."
+        )
+    elif cobertura_critica:
         risco_estoque = "critico"
-        risco_estoque_label = "Crítico"
+        risco_estoque_label = "Estoque crítico"
         risco_estoque_detalhe = f"{faltas} item(ns) sem cobertura de saldo para esta OC."
-    elif cobertura_atencao:
-        risco_estoque = "atencao"
-        risco_estoque_label = "Atenção"
-        risco_estoque_detalhe = f"{baixos} item(ns) com cobertura baixa de estoque."
+    elif cobertura_atencao or sem_cadastro_estoque > 0:
+        risco_estoque = "critico"
+        risco_estoque_label = "Estoque crítico"
+        if baixos > 0 and sem_cadastro_estoque > 0:
+            risco_estoque_detalhe = (
+                f"{baixos} item(ns) com cobertura curta e {sem_cadastro_estoque} sem registro no estoque GRV."
+            )
+        elif baixos > 0:
+            risco_estoque_detalhe = f"{baixos} item(ns) com cobertura curta de estoque."
+        else:
+            risco_estoque_detalhe = (
+                f"{sem_cadastro_estoque} item(ns) sem registro de estoque no GRV."
+            )
     else:
-        risco_estoque = "ok"
-        risco_estoque_label = "OK"
+        risco_estoque = "normal"
+        risco_estoque_label = "Estoque normal"
         risco_estoque_detalhe = "Itens da OC com cobertura de estoque no momento."
 
     return {
@@ -652,10 +675,10 @@ def recebimento_calendario_dados():
 
         cached_risco = _RECEBIMENTO_RISCO_CACHE.get(numero_oc) if numero_oc else None
         if isinstance(cached_risco, dict):
-            risco_estoque = str(cached_risco.get("risco_estoque") or "sem_dados")
-            risco_estoque_label = str(cached_risco.get("risco_estoque_label") or "Sem dados")
+            risco_estoque = str(cached_risco.get("risco_estoque") or "sem_base_calculo")
+            risco_estoque_label = str(cached_risco.get("risco_estoque_label") or "Sem base de cálculo")
             risco_estoque_detalhe = str(
-                cached_risco.get("risco_estoque_detalhe") or "Sem itens da OC ou sem saldo disponível para cálculo."
+                cached_risco.get("risco_estoque_detalhe") or "Sem itens válidos da OC para cálculo de cobertura."
             )
         else:
             risco_estoque = "pendente"
