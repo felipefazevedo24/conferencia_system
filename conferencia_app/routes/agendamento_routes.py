@@ -361,7 +361,8 @@ def recebimento_calendario_dados():
         cached = _RECEBIMENTO_CACHE.get(cache_key)
         if cached:
             resp = dict(cached)
-            resp["aviso"] = "ERP indisponível no momento. Exibindo último cache deste período."
+            resp["aviso"] = ""
+            resp["fonte_dados"] = "cache"
             return jsonify(resp)
         return jsonify(
             _payload_vazio_recebimento(

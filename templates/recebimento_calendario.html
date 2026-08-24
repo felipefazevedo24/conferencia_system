@@ -246,7 +246,7 @@
         btnExportarDia.href = `/api/logistica/recebimento/calendario/relatorio-dia?data=${encodeURIComponent(data)}`;
 
         const aviso = String(state.payload.aviso || '').trim();
-        if (aviso) {
+        if (aviso && rows.length === 0) {
             dayFootnote.style.display = '';
             dayFootnote.textContent = aviso;
         } else {
