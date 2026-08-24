@@ -2408,12 +2408,6 @@ const boardPrioridade=document.getElementById('boardPrioridade');
 const agendaModo=document.getElementById('agendaModo');
 const agendaData=document.getElementById('agendaData');
 const agendaGrid=document.getElementById('agendaGrid');
-
-function avulsaAguardandoAprovacao(sol){
-    const tipo = String(sol?.tipo || '').toUpperCase();
-    const status = String(sol?.status || '');
-    return tipo === 'AVULSA' && status !== 'Aprovada' && status !== 'Concluida' && status !== 'Cancelada';
-}
 const detalheBody=document.getElementById('detalheBody');
 const alocarForm=document.getElementById('alocarForm');
 const alocarSolicitacaoId=document.getElementById('alocarSolicitacaoId');
@@ -2571,8 +2565,7 @@ function renderTable(cards){
     const slice=sorted.slice(start,start+rtState.perPage);
     if(!total){erpTable.style.display='none';setBoard('Nenhuma solicitação encontrada.');return;}
     erpBody.innerHTML=slice.map(c=>{
-        const bloqueadaAvulsa = avulsaAguardandoAprovacao(c);
-        const canAlocar=(c.status==='Pendente'||c.status==='EmAnalise'||c.status==='Aprovada') && !bloqueadaAvulsa;
+        const canAlocar=c.status==='Pendente'||c.status==='EmAnalise';
         const canRota=c.veiculo&&(c.status==='Alocada'||c.status==='EmAndamento');
         const canConcluir=c.status==='EmRota'||c.status==='EmAndamento'||c.status==='Alocada';
         const st=statusOperacional(c);
@@ -2593,12 +2586,10 @@ function renderTable(cards){
             <td data-label="Ações" onclick="event.stopPropagation()">
                 <div class="rt-inline">
                 ${canAlocar?`<button class="btn btn-outline-primary btn-sm" onclick="openAlocarModal(${c.id})" title="Alocar"><i class="fas fa-truck"></i></button>`:''}
-                ${bloqueadaAvulsa && rtState.userRole==='Admin' ? `<button class="btn btn-outline-warning btn-sm" onclick="aprovarAvulsa(${c.id})" title="Aprovar avulsa"><i class="fas fa-user-check"></i></button>` : ''}
                 ${canRota?`<button class="btn btn-outline-success btn-sm" onclick="updateStatusSol(${c.id},'EmRota')" title="Em rota"><i class="fas fa-road"></i></button>`:''}
                 ${canConcluir&&rtState.userRole==='Admin'?`<button class="btn btn-success btn-sm" onclick="updateStatusSol(${c.id},'Concluida')" title="Concluir"><i class="fas fa-check"></i></button>`:''}
                 ${c.status!=='Concluida'&&c.status!=='Cancelada'&&!c.cancelamento_pendente?`<button class="btn btn-outline-danger btn-sm" onclick="openCancelarModal(${c.id})" title="${rtState.userRole==='Admin'?'Cancelar direto':'Solicitar cancelamento'}"><i class="fas fa-xmark"></i></button>`:''}
                 ${c.cancelamento_pendente?'<span class="rt-badge b-red" style="font-size:9px">Aguard. solicitante</span>':''}
-                ${bloqueadaAvulsa?'<span class="rt-badge b-yellow" style="font-size:9px">Aguard. aprovação admin</span>':''}
                 </div>
             </td>
         </tr>`;
@@ -2790,22 +2781,7 @@ async function salvarDocumento(id){
 async function updateStatusSol(id,status){const r=await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){showToast(d.error||'Falha ao alterar status.','error');return setBoard(d.error||'Falha ao alterar status.',true);}showToast(`Status atualizado para ${STEP_LABELS[status]||status}.`,'success');getDetalheModal().hide();await refreshAll();}
 async function refreshAll(){await Promise.all([loadDashboard(),loadAgenda(),loadMotoristas()]);}
 
-async function aprovarAvulsa(sid){
-    if(!confirm('Aprovar esta solicitação avulsa para permitir montagem de viagem?')) return;
-    try{
-        const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${sid}/aprovar-avulsa`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-        const d = await r.json();
-        if(!r.ok || !d.sucesso) throw new Error(d.error || 'Falha ao aprovar solicitação avulsa.');
-        showToast('Solicitação avulsa aprovada.', 'success');
-        await refreshAll();
-    }catch(e){
-        showToast(e.message || 'Falha ao aprovar solicitação avulsa.', 'error');
-    }
-}
-
 async function abrirMontarViagem(sid,mid,vid){
-    const card = rtState.allCards.find(c => Number(c.id) === Number(sid));
-    const isAvulsa = String(card?.tipo || '').toUpperCase() === 'AVULSA';
     let existentes=[];
     try{const r=await fetch(`/api/viagem/planejadas-do-motorista/${mid}`);if(r.ok){const d=await r.json();existentes=d.viagens||[];}}catch(_){}
     const optsExistentes=existentes.length
@@ -2822,7 +2798,6 @@ async function abrirMontarViagem(sid,mid,vid){
             <i class="fas fa-plus-circle" style="font-size:18px"></i>
             <div style="text-align:left;margin-left:6px"><b>Nova viagem só com esta parada</b><div style="font-size:12px;opacity:.9;font-weight:400">Cria imediatamente e leva você para a tela de liberação</div></div>
         </button>
-        ${isAvulsa ? `<button class="btn btn-warning" style="justify-content:flex-start;padding:14px;font-size:14px" onclick="criarViagemAvulsaAgora(${sid})"><i class="fas fa-user-clock" style="font-size:18px"></i><div style="text-align:left;margin-left:6px"><b>Criar viagem avulsa</b><div style="font-size:12px;opacity:.9;font-weight:400">Cria viagem avulsa sem paradas para esta solicitação</div></div></button>` : ''}
         <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fafbff">
             <b style="font-size:13px;color:#0f172a"><i class="fas fa-plus" style="color:#155eef;margin-right:6px"></i>Adicionar a viagem existente do motorista</b>
             ${optsExistentes}
@@ -2845,17 +2820,6 @@ async function criarViagemAgora(sid){
         document.getElementById('mvModal')?.remove();
         setTimeout(()=>{switchTab('viagens');carregarLista();carregarKPIs();if(d.viagem.id)abrirDetalhe(d.viagem.id);},700);
     }catch(e){showToast(e.message||'Falha ao criar viagem.','error');}
-}
-
-async function criarViagemAvulsaAgora(sid){
-    try{
-        const r=await fetch(`/api/viagem/nova-avulsa-de-solicitacao/${sid}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-        const d=await r.json();
-        if(!r.ok||!d.sucesso)throw new Error(d.msg||'Falha');
-        showToast(`Viagem avulsa ${d.viagem.codigo} criada ✓`,'success',6000);
-        document.getElementById('mvModal')?.remove();
-        setTimeout(()=>{switchTab('viagens');carregarLista();carregarKPIs();if(d.viagem.id)abrirDetalhe(d.viagem.id);},700);
-    }catch(e){showToast(e.message||'Falha ao criar viagem avulsa.','error');}
 }
 
 async function anexarAViagem(sid,vid){
