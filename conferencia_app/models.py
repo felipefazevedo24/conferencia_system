@@ -1623,6 +1623,55 @@ class LogisticaInventarioInicial(db.Model):
     atualizado_em = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
 
+class LogisticaInventarioAjuste(db.Model):
+    """Fluxo de ajuste de estoque pra itens divergentes do Inventario
+    (mesma ideia de workflow por status_modulo do modulo Comex, so que
+    reduzido a 4 etapas):
+
+    Modulo 01 (Contagem inicial) - LogisticaInventarioInicial, ja existente.
+    Modulo 02 (Validacao) - criado AQUI automaticamente quando uma contagem
+        e' comparada com o GRV e da divergente; o gestor confirma a
+        diferenca (ou nao) antes de mandar pro Finance.
+    Modulo 03 (Finance) - so tracking de status: confirma que o ajuste de
+        estoque foi executado FORA do sync (direto no ERP) e libera pro Fiscal.
+    Modulo 04 (Fiscal) - so tracking de status: confirma que a NF de ajuste
+        foi emitida FORA do sync.
+
+    qtde_contada/qtde_estoque_no_momento/diferenca sao um SNAPSHOT de
+    quando a divergencia foi detectada - nao recalculados depois, pra o
+    gestor sempre ver os mesmos numeros que geraram o alerta, mesmo que o
+    saldo do GRV mude enquanto o ajuste ainda esta em aberto."""
+
+    __tablename__ = "logistica_inventario_ajuste"
+
+    id = db.Column(db.Integer, primary_key=True)
+    contagem_id = db.Column(db.Integer, db.ForeignKey("logistica_inventario_inicial.id"), nullable=True, index=True)
+    codigo_produto = db.Column(db.String(120), nullable=False, index=True)
+    local_codigo = db.Column(db.String(120), nullable=False, index=True)
+    unidade_medida = db.Column(db.String(20), nullable=False, default="UN")
+
+    qtde_contada = db.Column(db.Float, nullable=False)
+    qtde_estoque_no_momento = db.Column(db.Float, nullable=False)
+    diferenca = db.Column(db.Float, nullable=False)  # qtde_contada - qtde_estoque_no_momento
+
+    status_modulo = db.Column(db.String(20), nullable=False, default="Validacao", index=True)  # Validacao|Finance|Fiscal|Concluido
+    status_slug = db.Column(db.String(20), nullable=False, default="validacao", index=True)
+
+    criado_em = db.Column(db.DateTime, default=datetime.now, nullable=False, index=True)
+
+    gestor_justificativa = db.Column(db.String(500))
+    gestor_confirmado_em = db.Column(db.DateTime)
+    gestor_confirmado_por = db.Column(db.String(100))
+
+    finance_concluido_em = db.Column(db.DateTime)
+    finance_concluido_por = db.Column(db.String(100))
+    finance_observacao = db.Column(db.String(500))
+
+    fiscal_concluido_em = db.Column(db.DateTime)
+    fiscal_concluido_por = db.Column(db.String(100))
+    fiscal_nf_numero = db.Column(db.String(60))
+
+
 class WMSPedidoSeparacao(db.Model):
     """Pedido/tarefa simples de separacao para expedir ou abastecer processo."""
     __tablename__ = "wms_pedido_separacao"

@@ -12,15 +12,16 @@ from flask import Blueprint, current_app, jsonify, render_template, request, ses
 from openpyxl import Workbook
 import requests
 
-from ..auth import permission_required
+from ..auth import has_permission, permission_required, permission_required_any
 from ..extensions import db
-from ..models import LogisticaInventarioInicial
+from ..models import LogisticaInventarioAjuste, LogisticaInventarioInicial
 from ..services.erp_estoque_service import (
     LocalizacaoEstoqueNaoEncontrada,
     atualizar_localizacao_estoque,
     buscar_estoque_grv,
     qtde_grv_para,
 )
+from ..services import logistica_inventario_ajuste_service as ajuste_svc
 
 
 logistica_inventario_bp = Blueprint("logistica_inventario", __name__)
@@ -380,7 +381,28 @@ def criar_inventario_inicial():
         )
         localizacao_erp["erro"] = str(exc)
 
-    return jsonify({"sucesso": True, "registro": _fmt_registro(row), "localizacao_erp": localizacao_erp}), 201
+    # Detecta divergencia contra o GRV e, se houver, abre automaticamente
+    # um ajuste no Modulo 02 (Validacao) pro gestor revisar - nao falha a
+    # contagem se o GRV estiver indisponivel, so nao cria o ajuste.
+    ajuste_aberto = None
+    try:
+        estoque_grv = buscar_estoque_grv()
+        qtde_grv = qtde_grv_para(row.codigo_produto, row.local_codigo, estoque_grv)
+        ajuste = ajuste_svc.detectar_divergencia(row, qtde_grv)
+        if ajuste:
+            ajuste_aberto = {"id": ajuste.id, "diferenca": ajuste.diferenca}
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.warning(
+            "Falha ao comparar contagem com o GRV pra detectar divergencia (código=%s, local=%s): %s",
+            codigo_produto, local_codigo, exc,
+        )
+
+    return jsonify({
+        "sucesso": True,
+        "registro": _fmt_registro(row),
+        "localizacao_erp": localizacao_erp,
+        "ajuste_aberto": ajuste_aberto,
+    }), 201
 
 
 @logistica_inventario_bp.route("/api/integracao/inventario/material-local", methods=["GET"])
@@ -412,3 +434,123 @@ def sincronizar_inventario_grv():
             "grv": grv,
         }
     )
+
+
+# ── Fluxo de ajuste de estoque (Modulos 02-04, itens divergentes) ─────────
+PERMISSION_VALIDACAO = "PAGE_LOGISTICA_INVENTARIO_VALIDACAO"
+PERMISSION_FINANCE = "PAGE_LOGISTICA_INVENTARIO_FINANCE"
+PERMISSION_FISCAL = "PAGE_LOGISTICA_INVENTARIO_FISCAL"
+
+
+def _fmt_ajuste(a) -> dict:
+    return {
+        "id": a.id,
+        "codigo_produto": a.codigo_produto,
+        "local_codigo": a.local_codigo,
+        "unidade_medida": a.unidade_medida,
+        "qtde_contada": a.qtde_contada,
+        "qtde_estoque_no_momento": a.qtde_estoque_no_momento,
+        "diferenca": a.diferenca,
+        "status_modulo": a.status_modulo,
+        "status_slug": a.status_slug,
+        "criado_em": a.criado_em.strftime("%d/%m/%Y %H:%M") if a.criado_em else None,
+        "gestor_justificativa": a.gestor_justificativa,
+        "gestor_confirmado_em": a.gestor_confirmado_em.strftime("%d/%m/%Y %H:%M") if a.gestor_confirmado_em else None,
+        "gestor_confirmado_por": a.gestor_confirmado_por,
+        "finance_observacao": a.finance_observacao,
+        "finance_concluido_em": a.finance_concluido_em.strftime("%d/%m/%Y %H:%M") if a.finance_concluido_em else None,
+        "finance_concluido_por": a.finance_concluido_por,
+        "fiscal_nf_numero": a.fiscal_nf_numero,
+        "fiscal_concluido_em": a.fiscal_concluido_em.strftime("%d/%m/%Y %H:%M") if a.fiscal_concluido_em else None,
+        "fiscal_concluido_por": a.fiscal_concluido_por,
+    }
+
+
+@logistica_inventario_bp.route("/logistica/inventario/ajustes")
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def inventario_ajustes_page():
+    return render_template(
+        "logistica_inventario_ajustes.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        pode_validar=has_permission(PERMISSION_VALIDACAO),
+        pode_finance=has_permission(PERMISSION_FINANCE),
+        pode_fiscal=has_permission(PERMISSION_FISCAL),
+    )
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes", methods=["GET"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_listar_ajustes():
+    status_modulo = request.args.get("status") or None
+    ajustes = ajuste_svc.listar_ajustes(status_modulo=status_modulo)
+    return jsonify({
+        "ajustes": [_fmt_ajuste(a) for a in ajustes],
+        "pode_validar": has_permission(PERMISSION_VALIDACAO),
+        "pode_finance": has_permission(PERMISSION_FINANCE),
+        "pode_fiscal": has_permission(PERMISSION_FISCAL),
+    })
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/confirmar", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_confirmar_ajuste(ajuste_id):
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = ajuste_svc.confirmar_divergencia(ajuste, session.get("username", "desconhecido"), payload.get("justificativa"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Divergência confirmada e enviada pro Finance.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/descartar", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_descartar_ajuste(ajuste_id):
+    if not has_permission(PERMISSION_VALIDACAO):
+        return jsonify({"error": "Você não tem permissão pra validar divergências - fale com a gerência."}), 403
+    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = ajuste_svc.descartar_divergencia(ajuste, session.get("username", "desconhecido"), payload.get("motivo"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Divergência descartada.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/finance-concluir", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_finance_concluir_ajuste(ajuste_id):
+    if not has_permission(PERMISSION_FINANCE):
+        return jsonify({"error": "Você não tem permissão de Finance nesse fluxo - fale com a gerência."}), 403
+    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = ajuste_svc.concluir_finance(ajuste, session.get("username", "desconhecido"), payload.get("observacao"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "Ajuste de estoque confirmado. Liberado pro Fiscal.", "ajuste": _fmt_ajuste(ajuste)})
+
+
+@logistica_inventario_bp.route("/api/logistica/inventario-ajustes/<int:ajuste_id>/fiscal-concluir", methods=["POST"])
+@permission_required_any(PERMISSION, PERMISSION_VALIDACAO, PERMISSION_FINANCE, PERMISSION_FISCAL)
+def api_fiscal_concluir_ajuste(ajuste_id):
+    if not has_permission(PERMISSION_FISCAL):
+        return jsonify({"error": "Você não tem permissão de Fiscal nesse fluxo - fale com a gerência."}), 403
+    ajuste = LogisticaInventarioAjuste.query.get(ajuste_id)
+    if not ajuste:
+        return jsonify({"error": "Ajuste não encontrado."}), 404
+    payload = request.get_json(silent=True) or {}
+    try:
+        ajuste = ajuste_svc.concluir_fiscal(ajuste, session.get("username", "desconhecido"), payload.get("nf_numero"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"message": "NF de ajuste confirmada. Processo concluído.", "ajuste": _fmt_ajuste(ajuste)})

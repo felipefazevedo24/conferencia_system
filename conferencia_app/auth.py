@@ -56,6 +56,9 @@ PERMISSION_CATALOG = {
     "PAGE_PLANEJAMENTO_TAREFAS": "Planejamento > Board de tarefas (Kanban)",
     "PAGE_COMEX": "Comex > Processos de importação/exportação",
     "PAGE_COMEX_PULAR_STATUS": "Comex > Pular Status (gerência)",
+    "PAGE_LOGISTICA_INVENTARIO_VALIDACAO": "Logística > Inventário > Validação de diferenças (gestor)",
+    "PAGE_LOGISTICA_INVENTARIO_FINANCE": "Logística > Inventário > Ajuste de estoque (Finance)",
+    "PAGE_LOGISTICA_INVENTARIO_FISCAL": "Logística > Inventário > Emissão de NF de ajuste (Fiscal)",
 }
 
 

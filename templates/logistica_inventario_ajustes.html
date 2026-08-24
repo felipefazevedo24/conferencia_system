@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Logistica | Ajuste de Estoque{% endblock %}
+{% block shell_title %}Ajuste de Estoque - Inventario{% endblock %}
+
+{% block extra_head %}
+<style>
+    .inv-cons-shell { max-width: 1200px; margin: 0 auto; padding: 14px; }
+    .inv-cons-head {
+        background: linear-gradient(120deg, #0f172a, #0b62ce 65%, #1f9cb8);
+        color: #fff;
+        border-radius: 15px;
+        padding: 18px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
+    }
+    .inv-cons-head h1 { margin: 0; font-size: 22px; }
+    .inv-cons-head p { margin: 7px 0 0; color: rgba(255,255,255,.87); }
+    .inv-cons-card {
+        margin-top: 12px;
+        background: #fff;
+        border: 1px solid #d9e4f2;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 8px 22px rgba(11, 35, 77, .08);
+    }
+    .inv-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .inv-step {
+        flex: 1; min-width: 150px;
+        border: 1px solid #d9e4f2; border-radius: 10px; padding: 8px 10px;
+        font-size: 11.5px; color: #546a84;
+    }
+    .inv-step strong { display: block; font-size: 13px; color: #17375d; }
+    .inv-actions { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .inv-btn {
+        border: 1px solid #c7d7ec;
+        border-radius: 10px;
+        background: #f8fbff;
+        color: #1f3d60;
+        font-weight: 700;
+        padding: 9px 12px;
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .inv-btn.primary { background: #0a6ed1; border-color: #0a6ed1; color: #fff; }
+    .inv-btn.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+    .inv-btn.sm { padding: 6px 10px; font-size: 12px; }
+    .inv-actions select { border: 1px solid #bfd0e3; border-radius: 10px; padding: 9px 11px; font-size: 13px; }
+    .inv-table-wrap { overflow: auto; }
+    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .inv-table th, .inv-table td { padding: 8px; border-bottom: 1px solid #e4ebf5; text-align: left; }
+    .inv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .35px; color: #3b5676; background: #f6faff; }
+    .inv-badge { display:inline-flex; align-items:center; gap:5px; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+    .inv-badge.validacao { background: #fef3c7; color: #92400e; }
+    .inv-badge.finance { background: #dbeafe; color: #1e40af; }
+    .inv-badge.fiscal { background: #ede9fe; color: #5b21b6; }
+    .inv-badge.concluido { background: #dcfce7; color: #166534; }
+    .inv-badge.descartado { background: #f1f5f9; color: #64748b; }
+    .inv-dif-pos { color: #166534; font-weight: 700; }
+    .inv-dif-neg { color: #991b1b; font-weight: 700; }
+    .inv-hist { font-size: 11px; color: #64748b; margin-top: 3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="inv-cons-shell">
+    <section class="inv-cons-head">
+        <h1><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</h1>
+        <p>Itens divergentes detectados automaticamente contra o GRV a cada contagem do Inventário.</p>
+    </section>
+
+    <section class="inv-cons-card">
+        <div class="inv-steps">
+            <div class="inv-step"><strong>01 · Contagem</strong>Registro no Inventário (já existente).</div>
+            <div class="inv-step"><strong>02 · Validação</strong>Gestor confirma a diferença ou descarta.</div>
+            <div class="inv-step"><strong>03 · Finance</strong>Confirma o ajuste feito fora do sync.</div>
+            <div class="inv-step"><strong>04 · Fiscal</strong>Confirma a NF de ajuste emitida fora do sync.</div>
+        </div>
+
+        <div class="inv-actions">
+            <select id="flt-status">
+                <option value="">Todos os status</option>
+                <option value="Validacao">Aguardando validação (gestor)</option>
+                <option value="Finance">Aguardando Finance</option>
+                <option value="Fiscal">Aguardando Fiscal</option>
+                <option value="Concluido">Concluído</option>
+                <option value="Descartado">Descartado</option>
+            </select>
+            <button class="inv-btn" id="btn-atualizar" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
+            <a class="inv-btn" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventário</a>
+            <a class="inv-btn" href="/logistica/inventario/consulta"><i class="fas fa-magnifying-glass"></i> Inventário Realizado</a>
+        </div>
+
+        <div class="inv-table-wrap">
+            <table class="inv-table">
+                <thead>
+                    <tr>
+                        <th>Detectado em</th>
+                        <th>Local</th>
+                        <th>Cód. Produto</th>
+                        <th>Qtd Contada</th>
+                        <th>Qtd Estoque</th>
+                        <th>Diferença</th>
+                        <th>Status</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="tb-ajustes">
+                    <tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const PODE_VALIDAR = {{ pode_validar | tojson }};
+    const PODE_FINANCE = {{ pode_finance | tojson }};
+    const PODE_FISCAL = {{ pode_fiscal | tojson }};
+
+    const tb = document.getElementById('tb-ajustes');
+    const fltStatus = document.getElementById('flt-status');
+
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function fmtQtd(v) {
+        return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+    }
+    async function api(url, options) {
+        const resp = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}));
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        return data;
+    }
+
+    const LABEL_STATUS = {
+        Validacao: 'Aguardando gestor', Finance: 'Aguardando Finance',
+        Fiscal: 'Aguardando Fiscal', Concluido: 'Concluído', Descartado: 'Descartado',
+    };
+    function badgeStatus(a) {
+        const cls = (a.status_slug || 'validacao');
+        return `<span class="inv-badge ${cls}">${esc(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
+    }
+
+    function historicoHtml(a) {
+        const linhas = [];
+        if (a.gestor_confirmado_em) linhas.push(`Gestor: ${esc(a.gestor_confirmado_por)} em ${esc(a.gestor_confirmado_em)}${a.gestor_justificativa ? ' — ' + esc(a.gestor_justificativa) : ''}`);
+        if (a.finance_concluido_em) linhas.push(`Finance: ${esc(a.finance_concluido_por)} em ${esc(a.finance_concluido_em)}${a.finance_observacao ? ' — ' + esc(a.finance_observacao) : ''}`);
+        if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${esc(a.fiscal_concluido_por)} em ${esc(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? ' — NF ' + esc(a.fiscal_nf_numero) : ''}`);
+        return linhas.length ? `<div class="inv-hist">${linhas.join('<br>')}</div>` : '';
+    }
+
+    function acaoHtml(a) {
+        if (a.status_modulo === 'Validacao' && PODE_VALIDAR) {
+            return `<button class="inv-btn sm primary" data-act="confirmar" data-id="${a.id}">Confirmar</button>
+                    <button class="inv-btn sm danger" data-act="descartar" data-id="${a.id}">Descartar</button>`;
+        }
+        if (a.status_modulo === 'Finance' && PODE_FINANCE) {
+            return `<button class="inv-btn sm primary" data-act="finance" data-id="${a.id}">Confirmar ajuste</button>`;
+        }
+        if (a.status_modulo === 'Fiscal' && PODE_FISCAL) {
+            return `<button class="inv-btn sm primary" data-act="fiscal" data-id="${a.id}">Confirmar NF</button>`;
+        }
+        return '<span style="color:#94a3b8; font-size:12px;">—</span>';
+    }
+
+    function render(ajustes) {
+        if (!ajustes || !ajustes.length) {
+            tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Nenhum ajuste encontrado.</td></tr>';
+            return;
+        }
+        tb.innerHTML = ajustes.map((a) => `
+            <tr>
+                <td>${esc(a.criado_em)}</td>
+                <td>${esc(a.local_codigo)}</td>
+                <td>${esc(a.codigo_produto)}</td>
+                <td>${fmtQtd(a.qtde_contada)} ${esc(a.unidade_medida)}</td>
+                <td>${fmtQtd(a.qtde_estoque_no_momento)} ${esc(a.unidade_medida)}</td>
+                <td class="${a.diferenca >= 0 ? 'inv-dif-pos' : 'inv-dif-neg'}">${a.diferenca >= 0 ? '+' : ''}${fmtQtd(a.diferenca)}</td>
+                <td>${badgeStatus(a)}${historicoHtml(a)}</td>
+                <td>${acaoHtml(a)}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function carregar() {
+        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>';
+        try {
+            const params = new URLSearchParams();
+            if (fltStatus.value) params.set('status', fltStatus.value);
+            const data = await api('/api/logistica/inventario-ajustes?' + params.toString());
+            render(data.ajustes || []);
+        } catch (err) {
+            tb.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    tb.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const id = btn.dataset.id;
+        const act = btn.dataset.act;
+        try {
+            if (act === 'confirmar') {
+                const justificativa = prompt('Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:') || '';
+                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: 'POST', body: JSON.stringify({ justificativa }) });
+            } else if (act === 'descartar') {
+                const motivo = prompt('Motivo do descarte (obrigatório - ex.: erro de contagem, não precisa de ajuste):') || '';
+                if (!motivo.trim()) return;
+                await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: 'POST', body: JSON.stringify({ motivo }) });
+            } else if (act === 'finance') {
+                const observacao = prompt('Observação (opcional) sobre o ajuste de estoque executado:') || '';
+                await api(`/api/logistica/inventario-ajustes/${id}/finance-concluir`, { method: 'POST', body: JSON.stringify({ observacao }) });
+            } else if (act === 'fiscal') {
+                const nf_numero = prompt('Número da NF de ajuste emitida (opcional):') || '';
+                await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: 'POST', body: JSON.stringify({ nf_numero }) });
+            }
+            carregar();
+        } catch (err) {
+            alert(err.message);
+        }
+    });
+
+    fltStatus.addEventListener('change', carregar);
+    document.getElementById('btn-atualizar').addEventListener('click', carregar);
+
+    carregar();
+})();
+</script>
+{% endblock %}
