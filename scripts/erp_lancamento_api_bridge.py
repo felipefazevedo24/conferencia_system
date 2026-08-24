@@ -1736,6 +1736,7 @@ def create_app() -> Flask:
                     "REQUIS",
                     "REMESSA",
                     "TRANSFERENCIA SAIDA",
+                    "AJUSTE SAIDA",
                 )
                 tokens_entrada = (
                     "ENTRADA",
@@ -1745,13 +1746,36 @@ def create_app() -> Flask:
                     "TRANSFERENCIA ENTRADA",
                     "DEVOLUCAO FORNECEDOR",
                 )
+                tokens_nao_mov_estoque = (
+                    "RESERVA",
+                    "RESERVADO",
+                    "SOLICITACAO",
+                    "SOLICITAÇÃO",
+                    "SC ",
+                    "COTACAO",
+                    "COTAÇÃO",
+                    "ORCAMENTO",
+                    "ORÇAMENTO",
+                    "PREVISAO",
+                    "PREVISAO",
+                    "PEDIDO DE COMPRA",
+                    "PED_COMPRA",
+                    "EM ANALISE",
+                    "PLANEJADO",
+                )
                 texto_mov = re.sub(r"\s+", " ", tipo_mov)
-                is_saida = quantidade < 0
-                if not is_saida and texto_mov:
-                    if any(tok in texto_mov for tok in tokens_entrada):
-                        is_saida = False
-                    elif any(tok in texto_mov for tok in tokens_saida):
+                is_nao_mov = bool(texto_mov and any(tok in texto_mov for tok in tokens_nao_mov_estoque))
+
+                is_saida = False
+                if not is_nao_mov:
+                    # Quantidade negativa e movimento de saida explicito contam como consumo real.
+                    if quantidade < 0:
                         is_saida = True
+                    if texto_mov:
+                        if any(tok in texto_mov for tok in tokens_entrada):
+                            is_saida = False
+                        elif any(tok in texto_mov for tok in tokens_saida):
+                            is_saida = True
                 if is_saida and quantidade != 0:
                     slot["saida_total"] += abs(quantidade)
                     if data_mov is not None:
