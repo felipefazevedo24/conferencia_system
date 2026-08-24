@@ -275,16 +275,7 @@ def _primeiro_valor(dicionario: dict, chaves: tuple[str, ...]):
     return None
 
 
-def buscar_itens_oc_no_erp(processo: ComexProcesso) -> list[dict]:
-    """Busca no ERP os itens (material) da OC do processo, ja tentando
-    mapear codigo/NCM/PN/descricao/quantidade/valores a partir do que a
-    consulta trouxer (tord_aux). So retorna sugestoes - o operador revisa e
-    ajusta na tela antes de salvar (ver `salvar_itens_po`)."""
-    if not processo.cod_ordem_compra:
-        return []
-    linhas = compras_service.itens_ordem_compra(
-        cod_ordem_compra=processo.cod_ordem_compra, cod_empresa=processo.cod_empresa
-    )
+def _mapear_itens_erp(linhas: list[dict]) -> list[dict]:
     itens = []
     for linha in linhas:
         item_json = linha.get("item_json") or {}
@@ -308,6 +299,41 @@ def buscar_itens_oc_no_erp(processo: ComexProcesso) -> list[dict]:
             "valor_unitario": valor_unitario,
             "valor_total": valor_total,
         })
+    return itens
+
+
+def buscar_itens_oc_no_erp(processo: ComexProcesso, outras_ocs_ids: list[int] | None = None) -> list[dict]:
+    """Busca no ERP os itens (material) da OC do processo, ja tentando
+    mapear codigo/NCM/PN/descricao/quantidade/valores a partir do que a
+    consulta trouxer (tord_aux). So retorna sugestoes - o operador revisa e
+    ajusta na tela antes de salvar (ver `salvar_itens_po`).
+
+    Quando mais de uma OC do mesmo fornecedor vira uma unica PO/embarque
+    (campo "Outras OCs do mesmo fornecedor" na tela), os itens de TODAS
+    elas precisam entrar na lista, nao so os da OC principal. `outras_ocs_ids`
+    traz o id (ComexProcesso.id) de cada OC extra marcada na tela agora; se
+    nao vier nada mas a PO ja tiver sido salva combinando OCs antes, cai no
+    fallback de `processo.po_ocs_vinculadas` (o que ja foi salvo)."""
+    codigos = [processo.cod_ordem_compra] if processo.cod_ordem_compra else []
+
+    if outras_ocs_ids:
+        outras = ComexProcesso.query.filter(ComexProcesso.id.in_(outras_ocs_ids)).all()
+        codigos += [o.cod_ordem_compra for o in outras if o.cod_ordem_compra]
+    elif processo.po_ocs_vinculadas:
+        try:
+            salvos = json.loads(processo.po_ocs_vinculadas)
+        except (TypeError, ValueError):
+            salvos = []
+        codigos += [c for c in salvos if c]
+
+    codigos_unicos = list(dict.fromkeys(codigos))  # remove duplicado, preserva ordem
+    if not codigos_unicos:
+        return []
+
+    itens = []
+    for codigo_oc in codigos_unicos:
+        linhas = compras_service.itens_ordem_compra(cod_ordem_compra=codigo_oc, cod_empresa=processo.cod_empresa)
+        itens.extend(_mapear_itens_erp(linhas))
     return itens
 
 

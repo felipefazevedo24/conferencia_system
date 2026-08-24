@@ -393,12 +393,19 @@ def api_buscar_itens_oc_erp(processo_id):
     """Puxa do ERP os itens da OC do processo (código/NCM/PN/descrição/
     quantidade/valores, quando encontrados) para pré-preencher a tabela de
     itens da PO. São só sugestões — não salva nada sozinho, o operador
-    revisa e clica em Salvar."""
+    revisa e clica em Salvar.
+
+    `outras_ocs_ids` (query string, ids separados por vírgula) traz as
+    outras OCs do mesmo fornecedor marcadas na tela agora - quando várias
+    OCs viram uma única PO/embarque, os itens de todas elas entram juntos
+    na lista."""
     processo = ComexProcesso.query.get(processo_id)
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404
+    outras_raw = request.args.get("outras_ocs_ids") or ""
+    outras_ocs_ids = [int(v) for v in outras_raw.split(",") if v.strip().isdigit()]
     try:
-        itens = svc.buscar_itens_oc_no_erp(processo)
+        itens = svc.buscar_itens_oc_no_erp(processo, outras_ocs_ids=outras_ocs_ids or None)
     except Exception as exc:
         current_app.logger.exception("Falha ao buscar itens da OC %s no ERP", processo.cod_ordem_compra)
         return jsonify({"error": f"Falha ao consultar o ERP: {exc}"}), 502

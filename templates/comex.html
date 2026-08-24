@@ -1052,7 +1052,7 @@
         const btn = $("cx-po-item-puxar-erp");
         btn.disabled = true;
         try {
-            const data = await api(`/api/comex/processos/${processoPoAtual.id}/oc-itens-erp`);
+            const data = await api(`/api/comex/processos/${processoPoAtual.id}/oc-itens-erp?outras_ocs_ids=${_ocsSelecionadas().join(",")}`);
             const itens = data.itens || [];
             if (!itens.length) {
                 toast("Nenhum item encontrado para essa OC no ERP — preencha manualmente.", "error");
@@ -1165,7 +1165,7 @@
         // ou preencher manualmente.
         if (!itensPoAtual.length) {
             try {
-                const dataErp = await api(`/api/comex/processos/${p.id}/oc-itens-erp`);
+                const dataErp = await api(`/api/comex/processos/${p.id}/oc-itens-erp?outras_ocs_ids=${_ocsSelecionadas().join(",")}`);
                 const itensErp = dataErp.itens || [];
                 if (itensErp.length) {
                     itensPoAtual = itensErp;
