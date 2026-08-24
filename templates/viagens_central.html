@@ -20,7 +20,6 @@
     .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
     .vt-type.entrega { background: #ecfdf3; color: #067647; }
-    .vt-type.avulsa { background: #fff7ed; color: #b45309; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -72,6 +71,7 @@
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <a href="/logistica/recebimento-calendario" class="eui-btn eui-btn--ghost"><i class="fas fa-calendar-days"></i> Calendário de recebimento</a>
+          <a href="/logistica/solicitar-transporte" class="eui-btn eui-btn--primary"><i class="fas fa-file-circle-plus"></i> Solicitação avulsa</a>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}
@@ -92,7 +92,6 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="COLETA">Coletas <span class="count" id="count-coletas">0</span></button>
                 <button class="vt-tab" data-tab="ENTREGA">Entregas <span class="count" id="count-entregas">0</span></button>
-                <button class="vt-tab" data-tab="AVULSA">Avulsas <span class="count" id="count-avulsas">0</span></button>
               <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
             </div>
             <div class="vt-toolbar">
@@ -348,7 +347,6 @@ const state = {
   q: '',
   coletas: [],
   entregas: [],
-  avulsas: [],
   viagens: [],
   viagensCacheKey: '',
   ocConsulta: null,
@@ -500,7 +498,7 @@ function getRows() {
     return state.viagens;
   }
 
-  const base = state.tab === 'COLETA' ? state.coletas : (state.tab === 'ENTREGA' ? state.entregas : state.avulsas);
+  const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
   if (state.subfiltro === 'PENDENTES') {
     return base.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada'].includes(String(r.status || '').trim()));
   }
@@ -620,7 +618,7 @@ function renderTable() {
 
   const idsVisiveis = rows.map((r) => Number(r.id));
   const idsValidos = new Set(
-    [...state.coletas, ...state.entregas, ...state.avulsas]
+    [...state.coletas, ...state.entregas]
       .map((r) => Number(r.id))
       .filter((id) => Number.isFinite(id) && id > 0)
   );
@@ -1003,7 +1001,6 @@ function renderMetrics(resumo, counts) {
   document.getElementById('m-total').textContent = resumo.total || 0;
   document.getElementById('count-coletas').textContent = counts.coletas || 0;
   document.getElementById('count-entregas').textContent = counts.entregas || 0;
-  document.getElementById('count-avulsas').textContent = counts.avulsas || 0;
   document.getElementById('count-viagens').textContent = state.viagens.length || 0;
 }
 
@@ -1055,22 +1052,21 @@ async function loadDashboard() {
   }
   state.coletas = d.coletas || [];
   state.entregas = d.entregas || [];
-  state.avulsas = d.avulsas || [];
   state.veiculos = d.veiculos || [];
   state.motoristas = d.motoristas || [];
-  renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0, avulsas: 0 });
+  renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
   renderFilters();
   renderTable();
 
   if (state.tab === 'VIAGENS') {
     await loadViagens(true);
-    renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0, avulsas: 0 });
+    renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
     renderTable();
   }
 }
 
 function rowById(id) {
-  return [...state.coletas, ...state.entregas, ...state.avulsas].find((r) => r.id === id);
+  return [...state.coletas, ...state.entregas].find((r) => r.id === id);
 }
 
 function openActionsMenu(id, x, y) {
