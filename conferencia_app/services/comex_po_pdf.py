@@ -156,7 +156,7 @@ def gerar_po_pdf(processo, ocs_vinculadas: list | None = None, itens: list | Non
         import json as _json
         try:
             codigos = _json.loads(processo.po_ocs_vinculadas)
-            po_numeros = " and ".join(str(c) for c in codigos if c)
+            po_numeros = "/".join(str(c) for c in codigos if c)
         except (TypeError, ValueError):
             pass
 

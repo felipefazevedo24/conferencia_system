@@ -495,15 +495,12 @@ def api_pular_status(processo_id):
 
 
 def _lista_ocs_texto(numeros: list[str]) -> str:
-    """Formata uma lista de numeros de OC em texto natural: "X", "X and Y"
-    ou "X, Y and Z" - usado no e-mail da PO pra listar todas as OCs
-    combinadas (a principal + as vinculadas)."""
+    """Formata uma lista de numeros de OC separados por "/" (ex.:
+    "12302/12097") - usado no e-mail e no PDF da PO pra listar todas as
+    OCs combinadas (a principal + as vinculadas), mesmo formato nos dois
+    lugares."""
     numeros = [str(n) for n in numeros if n]
-    if not numeros:
-        return "—"
-    if len(numeros) == 1:
-        return numeros[0]
-    return ", ".join(numeros[:-1]) + " and " + numeros[-1]
+    return "/".join(numeros) if numeros else "—"
 
 
 def _ocs_vinculadas_do_processo(processo: ComexProcesso) -> list[ComexProcesso]:
