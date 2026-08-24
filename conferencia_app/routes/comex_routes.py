@@ -97,7 +97,32 @@ def _processo_payload(p: ComexProcesso) -> dict:
         "cotacao_substatus": svc.cotacao_substatus(p),
         "po_subtotal_usd": svc.subtotal_itens_po(p),
         "taxa_cambio_referencia": p.taxa_cambio_referencia,
+        "po_ocs_vinculadas": _ocs_vinculadas_lista(p),
+        "po_processo_principal_id": p.po_processo_principal_id,
+        "po_processo_principal_id_op": _processo_principal_id_op(p),
     }
+
+
+def _ocs_vinculadas_lista(p: ComexProcesso) -> list:
+    """OCs combinadas na mesma PO deste processo (ele proprio incluso) -
+    usado pra mostrar "N OCs" na lista quando mais de uma OC vira um so
+    embarque."""
+    if not p.po_ocs_vinculadas:
+        return []
+    try:
+        return json.loads(p.po_ocs_vinculadas) or []
+    except (TypeError, ValueError):
+        return []
+
+
+def _processo_principal_id_op(p: ComexProcesso) -> str | None:
+    """Se este processo e' uma OC "secundaria" combinada na PO de outro
+    (ver `salvar_po`), traz o ID OP do processo dono da PO - pra mostrar
+    "Combinada com {id_op}" em vez do status OC parado."""
+    if not p.po_processo_principal_id:
+        return None
+    principal = ComexProcesso.query.get(p.po_processo_principal_id)
+    return principal.id_op if principal else None
 
 
 @comex_bp.route("/comex")
@@ -143,7 +168,9 @@ def api_obter_processo(processo_id):
 def api_ocs_mesmo_fornecedor(processo_id):
     """Outras OCs ja importadas (ainda em estagio OC) do mesmo fornecedor,
     para o operador escolher combinar na mesma PO (Modulo 2, requisito de
-    selecionar mais de uma OC desde que do mesmo fornecedor)."""
+    selecionar mais de uma OC desde que do mesmo fornecedor). Inclui as que
+    ja estao combinadas NESTE processo (pra aparecerem marcadas ao reabrir
+    a PO), mas exclui as ja combinadas em OUTRO processo (ja "usadas")."""
     processo = ComexProcesso.query.get(processo_id)
     if not processo:
         return jsonify({"error": "Processo não encontrado."}), 404
@@ -153,6 +180,10 @@ def api_ocs_mesmo_fornecedor(processo_id):
             ComexProcesso.id != processo.id,
             ComexProcesso.fornecedor == processo.fornecedor,
             ComexProcesso.status_modulo == "OC",
+            db.or_(
+                ComexProcesso.po_processo_principal_id.is_(None),
+                ComexProcesso.po_processo_principal_id == processo.id,
+            ),
         )
         .order_by(ComexProcesso.criado_em.desc())
         .all()
@@ -352,6 +383,7 @@ def api_enviar_instrucao(processo_id):
 def _item_payload(it: ComexPoItem) -> dict:
     return {
         "id": it.id,
+        "oc_origem": it.oc_origem,
         "codigo": it.codigo,
         "ncm": it.ncm,
         "pn": it.pn,

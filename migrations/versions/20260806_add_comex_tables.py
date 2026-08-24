@@ -225,6 +225,7 @@ def upgrade():
             ("instrucao_enviada_em", sa.DateTime()),
             ("instrucao_enviada_por", sa.String(length=100)),
             ("taxa_cambio_referencia", sa.Float()),
+            ("po_processo_principal_id", sa.Integer()),
         ]
         for nome, tipo in novas_colunas_processo:
             if nome not in cols_processo:
@@ -248,6 +249,11 @@ def upgrade():
             sa.ForeignKeyConstraint(["processo_id"], ["comex_processo.id"]),
             sa.PrimaryKeyConstraint("id"),
         )
+
+    if inspector.has_table("comex_po_item"):
+        cols_po_item = {c["name"] for c in inspector.get_columns("comex_po_item")}
+        if "oc_origem" not in cols_po_item:
+            op.add_column("comex_po_item", sa.Column("oc_origem", sa.String(length=80), nullable=True))
 
     # comex_cotacao nunca teve UI/uso real ate esta redefinicao (Modulo 3
     # ainda nao existia) - se a tabela ja foi criada localmente com o

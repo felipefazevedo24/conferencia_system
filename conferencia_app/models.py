@@ -2616,6 +2616,11 @@ class ComexProcesso(db.Model):
     # ── Modulo 2: PO ────────────────────────────────────────────────────
     po_numero = db.Column(db.String(40), index=True)
     po_ocs_vinculadas = db.Column(db.Text)  # JSON: lista de cod_ordem_compra (mesmo fornecedor)
+    # Preenchido nas OCs "secundarias" quando combinadas na PO de outro
+    # processo (a dona da PO/itens continua sendo o processo principal -
+    # ver salvar_po). Marca que esta OC nao segue mais sozinha no workflow;
+    # a tela mostra "Combinada com {principal}" em vez do status OC parado.
+    po_processo_principal_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), index=True)
     pagador_frete = db.Column(db.String(20))  # Columbia | Cliente-Fornecedor
     po_status = db.Column(db.String(20), default="Rascunho")  # Rascunho | Finalizada
     po_pdf_file_name = db.Column(db.String(260))
@@ -2831,6 +2836,7 @@ class ComexPoItem(db.Model):
     processo_id = db.Column(db.Integer, db.ForeignKey("comex_processo.id"), nullable=False, index=True)
 
     order_index = db.Column(db.Integer, nullable=False, default=0)
+    oc_origem = db.Column(db.String(80))          # numero da OC de onde este item veio (PO agrupada)
     codigo = db.Column(db.String(60))            # CODE (codigo interno do produto)
     ncm = db.Column(db.String(20))                # NCM / HS CODE
     pn = db.Column(db.String(80))                 # PN (part number)

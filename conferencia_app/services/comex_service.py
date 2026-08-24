@@ -275,7 +275,7 @@ def _primeiro_valor(dicionario: dict, chaves: tuple[str, ...]):
     return None
 
 
-def _mapear_itens_erp(linhas: list[dict]) -> list[dict]:
+def _mapear_itens_erp(linhas: list[dict], oc_origem: str | None = None) -> list[dict]:
     itens = []
     for linha in linhas:
         item_json = linha.get("item_json") or {}
@@ -298,6 +298,7 @@ def _mapear_itens_erp(linhas: list[dict]) -> list[dict]:
             "quantidade": quantidade,
             "valor_unitario": valor_unitario,
             "valor_total": valor_total,
+            "oc_origem": str(oc_origem) if oc_origem is not None else None,
         })
     return itens
 
@@ -333,7 +334,7 @@ def buscar_itens_oc_no_erp(processo: ComexProcesso, outras_ocs_ids: list[int] | 
     itens = []
     for codigo_oc in codigos_unicos:
         linhas = compras_service.itens_ordem_compra(cod_ordem_compra=codigo_oc, cod_empresa=processo.cod_empresa)
-        itens.extend(_mapear_itens_erp(linhas))
+        itens.extend(_mapear_itens_erp(linhas, oc_origem=codigo_oc))
     return itens
 
 
@@ -537,6 +538,19 @@ def salvar_po(
     processo.po_ocs_vinculadas = json.dumps(
         [processo.cod_ordem_compra, *[o.cod_ordem_compra for o in outros]], default=str
     )
+    # Marca as OCs combinadas como vinculadas a este processo (a dona da
+    # PO/itens) - assim elas param de aparecer soltas com status "OC"
+    # parado na lista principal. Se uma OC que estava vinculada antes saiu
+    # da selecao atual, desvincula ela de volta (volta a valer como OC
+    # independente, pode ganhar sua propria PO).
+    ids_atuais = {o.id for o in outros}
+    for antiga in ComexProcesso.query.filter_by(po_processo_principal_id=processo.id).all():
+        if antiga.id not in ids_atuais:
+            antiga.po_processo_principal_id = None
+    for outro in outros:
+        outro.po_processo_principal_id = processo.id
+        outro.atualizado_em = agora
+        outro.atualizado_por = usuario
     processo.po_status = "Finalizada" if finalizar else "Rascunho"
     if finalizar:
         processo.po_finalizada_sem_envio = True
@@ -588,6 +602,7 @@ def salvar_itens_po(processo: ComexProcesso, itens: list[dict]) -> list[ComexPoI
         novos.append(ComexPoItem(
             processo_id=processo.id,
             order_index=idx,
+            oc_origem=str(item.get("oc_origem") or "").strip() or None,
             codigo=str(item.get("codigo") or "").strip() or None,
             ncm=str(item.get("ncm") or "").strip() or None,
             pn=str(item.get("pn") or "").strip() or None,
@@ -727,7 +742,11 @@ def avancar_status(processo: ComexProcesso, usuario: str) -> ComexProcesso:
 
 
 def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[ComexProcesso]:
-    query = ComexProcesso.query
+    # OCs combinadas na PO de outro processo (po_processo_principal_id
+    # preenchido) somem da lista principal - passam a existir so "dentro"
+    # do processo consolidado (ver salvar_po e o checklist de itens, que
+    # mostra a origem por OC). Continuam no banco, so nao aparecem soltas.
+    query = ComexProcesso.query.filter(ComexProcesso.po_processo_principal_id.is_(None))
     if status_modulo:
         query = query.filter_by(status_modulo=status_modulo)
     processos = query.order_by(ComexProcesso.criado_em.desc()).all()
@@ -745,7 +764,12 @@ def listar_processos(status_modulo: str | None = None, busca: str = "") -> list[
 
 def metricas_por_modulo() -> dict:
     contagens = {slug: 0 for slug in STATUS_SLUGS.values()}
-    for processo in ComexProcesso.query.with_entities(ComexProcesso.status_slug).all():
+    query = (
+        ComexProcesso.query
+        .filter(ComexProcesso.po_processo_principal_id.is_(None))
+        .with_entities(ComexProcesso.status_slug)
+    )
+    for processo in query.all():
         contagens[processo.status_slug] = contagens.get(processo.status_slug, 0) + 1
     return contagens
 

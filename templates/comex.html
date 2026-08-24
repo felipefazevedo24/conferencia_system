@@ -249,6 +249,7 @@
                     <table class="erp-table" id="cx-po-itens-table">
                         <thead>
                             <tr>
+                                <th style="width:90px;">OC</th>
                                 <th style="width:130px;">Código</th>
                                 <th style="width:100px;">NCM/HS</th>
                                 <th style="width:100px;">PN</th>
@@ -667,6 +668,9 @@
     }
 
     function badgeStatus(p) {
+        if (p.po_processo_principal_id) {
+            return `<span class="eui-badge" style="background:#e2e8f0; color:#334155; border:1px solid #cbd5e1;" title="Os itens e o envio dessa OC ficam na PO do processo ${escapeHtml(p.po_processo_principal_id_op || '')}">Combinada com ${escapeHtml(p.po_processo_principal_id_op || "—")}</span>`;
+        }
         const cores = {
             oc: "#b45309", po: "#7c3aed", cotacao: "#0369a1", instrucao: "#0369a1",
             coleta: "#b45309", em_transito: "#0369a1", desembarque: "#0369a1",
@@ -675,6 +679,15 @@
         const cor = cores[p.status_slug] || "#475569";
         const label = p.cotacao_substatus ? `${p.status_modulo} · ${p.cotacao_substatus}` : p.status_modulo;
         return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(label)}</span>`;
+    }
+
+    function ocColunaHtml(p) {
+        const principal = escapeHtml(p.cod_ordem_compra || "—");
+        const extras = (p.po_ocs_vinculadas || []).length - 1; // -1 pra nao contar a propria OC principal
+        if (extras > 0) {
+            return `${principal} <span class="eui-badge" style="background:#eef2ff; color:#4338ca; border:1px solid #c7d2fe; margin-left:4px;" title="Essa PO agrupa ${extras + 1} OCs">+${extras} OC${extras > 1 ? "s" : ""}</span>`;
+        }
+        return principal;
     }
 
     function renderTabela(processos) {
@@ -688,7 +701,7 @@
                 <td><strong>${escapeHtml(p.id_op)}</strong></td>
                 <td>${escapeHtml(p.fornecedor || "—")}</td>
                 <td>${escapeHtml((p.direcao_operacao === "EXPO" ? "Exportação" : "Importação") + " · " + (p.modal_transporte || (p.tipo_operacao === "IA" ? "Aéreo" : "Marítimo")))}</td>
-                <td>${escapeHtml(p.cod_ordem_compra || "—")}</td>
+                <td>${ocColunaHtml(p)}</td>
                 <td>${escapeHtml(p.po_numero || "—")}</td>
                 <td>${escapeHtml(p.pagador_frete || "—")}</td>
                 <td>${badgeStatus(p)}</td>
@@ -997,10 +1010,11 @@
     function renderItensPo() {
         const tbody = $("cx-po-itens-tbody");
         if (!itensPoAtual.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="cx-empty" style="padding:14px;">Nenhum item adicionado ainda.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="cx-empty" style="padding:14px;">Nenhum item adicionado ainda.</td></tr>';
         } else {
             tbody.innerHTML = itensPoAtual.map((it, idx) => `
                 <tr>
+                    <td><input type="text" class="eui-input" data-idx="${idx}" data-field="oc_origem" value="${escapeHtml(it.oc_origem || "")}" placeholder="OC"></td>
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="codigo" value="${escapeHtml(it.codigo || "")}"></td>
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="ncm" value="${escapeHtml(it.ncm || "")}"></td>
                     <td><input type="text" class="eui-input" data-idx="${idx}" data-field="pn" value="${escapeHtml(it.pn || "")}"></td>
@@ -1043,7 +1057,7 @@
         renderItensPo();
     });
     $("cx-po-item-add").addEventListener("click", () => {
-        itensPoAtual.push({ codigo: "", ncm: "", pn: "", descricao: "", quantidade: null, valor_unitario: null, valor_total: null });
+        itensPoAtual.push({ oc_origem: "", codigo: "", ncm: "", pn: "", descricao: "", quantidade: null, valor_unitario: null, valor_total: null });
         renderItensPo();
     });
 
@@ -1144,7 +1158,7 @@
             const data = await api(`/api/comex/processos/${p.id}/ocs-mesmo-fornecedor`);
             const outras = data.processos || [];
             $("cx-po-outras-ocs").innerHTML = outras.length
-                ? outras.map((o) => `<label><input type="checkbox" value="${o.id}"> OC ${escapeHtml(o.cod_ordem_compra)} — ${escapeHtml(o.id_op)}</label>`).join("")
+                ? outras.map((o) => `<label><input type="checkbox" value="${o.id}" ${o.po_processo_principal_id === p.id ? "checked" : ""}> OC ${escapeHtml(o.cod_ordem_compra)} — ${escapeHtml(o.id_op)}</label>`).join("")
                 : '<span class="cx-empty-mini">Nenhuma outra OC deste fornecedor pendente.</span>';
         } catch (err) {
             $("cx-po-outras-ocs").innerHTML = `<span class="cx-empty-mini">${escapeHtml(err.message)}</span>`;
