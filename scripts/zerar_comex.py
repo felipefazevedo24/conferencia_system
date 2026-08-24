@@ -97,6 +97,17 @@ with app.app_context():
             db.session.commit()
     print(f"  comex_documento: {len(documentos)} apagado(s)")
 
+    # comex_processo.cotacao_vencedora_id referencia comex_cotacao (e
+    # comex_cotacao.processo_id referencia comex_processo de volta) - essa
+    # referencia circular precisa ser zerada antes de apagar qualquer uma
+    # das duas tabelas, senao a FK trava o DELETE.
+    zerados = ComexProcesso.query.filter(ComexProcesso.cotacao_vencedora_id.isnot(None)).update(
+        {ComexProcesso.cotacao_vencedora_id: None}, synchronize_session=False
+    )
+    db.session.commit()
+    if zerados:
+        print(f"  comex_processo.cotacao_vencedora_id: {zerados} zerado(s) (quebra referencia circular com comex_cotacao)")
+
     for modelo in TABELAS_EM_ORDEM:
         if modelo is ComexDocumento:
             continue  # ja tratado acima
