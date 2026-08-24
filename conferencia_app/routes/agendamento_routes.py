@@ -1454,7 +1454,7 @@ def dashboard_central_viagens():
     termo = str(request.args.get("q") or "").strip().lower()
     status = str(request.args.get("status") or "").strip()
 
-    query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA"]))
+    query = _query_solicitacoes_visiveis().filter(AgendamentoSolicitacao.tipo.in_(["COLETA", "ENTREGA", "AVULSA"]))
     if status:
         query = query.filter(AgendamentoSolicitacao.status == status)
     rows = query.order_by(AgendamentoSolicitacao.criado_em.desc()).limit(800).all()
@@ -1467,6 +1467,10 @@ def dashboard_central_viagens():
         tipo = str(row.tipo or "").strip()
         status_row = str(row.status or "").strip()
         origem = str(row.origem_documento or "").strip()
+
+        if tipo == "AVULSA":
+            automaticas.append(row)
+            continue
 
         if tipo == "ENTREGA":
             automaticas.append(row)
@@ -1577,13 +1581,15 @@ def dashboard_central_viagens():
 
     coletas = [c for c in cards if c.get("tipo") == "COLETA"]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
+    avulsas = [c for c in cards if c.get("tipo") == "AVULSA"]
 
     def _pendentes(arr: list[dict]) -> int:
-        return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Alocada"})
+        return sum(1 for c in arr if c.get("status") in {"Pendente", "EmAnalise", "Aprovada", "Alocada"})
 
     resumo = {
         "coletas_pendentes": _pendentes(coletas),
         "entregas_pendentes": _pendentes(entregas),
+        "avulsas_pendentes": _pendentes(avulsas),
         "em_andamento": sum(1 for c in cards if c.get("status") in {"EmAndamento", "EmRota", "Alocada"}),
         "finalizadas": sum(1 for c in cards if c.get("status") == "Concluida"),
         "canceladas": sum(1 for c in cards if c.get("status") == "Cancelada"),
@@ -1595,7 +1601,8 @@ def dashboard_central_viagens():
             "resumo": resumo,
             "coletas": coletas,
             "entregas": entregas,
-            "counts": {"coletas": len(coletas), "entregas": len(entregas)},
+            "avulsas": avulsas,
+            "counts": {"coletas": len(coletas), "entregas": len(entregas), "avulsas": len(avulsas)},
             "veiculos": [
                 {
                     "id": row.id,

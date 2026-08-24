@@ -20,6 +20,7 @@
     .vt-type { font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 9px; }
     .vt-type.coleta { background: #e8f3ff; color: #155eef; }
     .vt-type.entrega { background: #ecfdf3; color: #067647; }
+    .vt-type.avulsa { background: #fff7ed; color: #b45309; }
     .vt-actions-btn { border: 1px solid var(--eui-border); background: var(--eui-surface); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
     .vt-actions-btn i { color: var(--eui-text); }
     .vt-actions-menu { position: fixed; min-width: 230px; background: var(--eui-surface); border: 1px solid var(--eui-border); border-radius: 8px; box-shadow: var(--eui-shadow-lg); padding: 6px; z-index: 10010; display: none; flex-direction: column; gap: 4px; }
@@ -71,7 +72,6 @@
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <a href="/logistica/recebimento-calendario" class="eui-btn eui-btn--ghost"><i class="fas fa-calendar-days"></i> Calendário de recebimento</a>
-          <button id="btnNovaAvulsaCentral" class="eui-btn eui-btn--primary"><i class="fas fa-user-clock"></i> Criar viagem avulsa</button>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}
@@ -92,6 +92,7 @@
             <div class="vt-tabs">
                 <button class="vt-tab is-active" data-tab="COLETA">Coletas <span class="count" id="count-coletas">0</span></button>
                 <button class="vt-tab" data-tab="ENTREGA">Entregas <span class="count" id="count-entregas">0</span></button>
+                <button class="vt-tab" data-tab="AVULSA">Avulsas <span class="count" id="count-avulsas">0</span></button>
               <button class="vt-tab" data-tab="VIAGENS">Viagens <span class="count" id="count-viagens">0</span></button>
             </div>
             <div class="vt-toolbar">
@@ -275,48 +276,6 @@
   </div>
 </div>
 
-<div id="modalNovaAvulsaCentral" class="vt-modal">
-  <div class="vt-modal__box" style="max-width:620px;">
-    <div class="vt-modal__head">
-      <strong>Criar Viagem Avulsa</strong>
-      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalNovaAvulsaCentral')"><i class="fas fa-xmark"></i></button>
-    </div>
-    <div class="vt-modal__body">
-      <div class="vt-grid-2">
-        <div class="eui-field">
-          <label class="eui-field__label">Veículo</label>
-          <select id="avulsa-veiculo" class="eui-select"></select>
-        </div>
-        <div class="eui-field">
-          <label class="eui-field__label">Motorista (opcional)</label>
-          <select id="avulsa-motorista" class="eui-select"></select>
-        </div>
-        <div class="eui-field">
-          <label class="eui-field__label">Saída prevista</label>
-          <input id="avulsa-saida" type="datetime-local" class="eui-input">
-        </div>
-        <div class="eui-field">
-          <label class="eui-field__label">Retorno previsto (opcional)</label>
-          <input id="avulsa-retorno" type="datetime-local" class="eui-input">
-        </div>
-      </div>
-      <div class="eui-field">
-        <label class="eui-field__label">Funcionário responsável *</label>
-        <input id="avulsa-funcionario" type="text" class="eui-input" placeholder="Nome do funcionário responsável">
-      </div>
-      <div class="eui-field">
-        <label class="eui-field__label">Observação</label>
-        <textarea id="avulsa-observacao" class="eui-textarea" rows="3" placeholder="Opcional"></textarea>
-      </div>
-      <div id="avulsa-state" class="vt-mini"></div>
-    </div>
-    <div class="vt-modal__foot">
-      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalNovaAvulsaCentral')">Cancelar</button>
-      <button class="eui-btn eui-btn--primary" onclick="confirmarNovaAvulsaCentral()"><i class="fas fa-plus"></i> Criar avulsa</button>
-    </div>
-  </div>
-</div>
-
 <div id="modalConfirmacao" class="vt-modal">
   <div class="vt-modal__box" style="max-width:520px;">
     <div class="vt-modal__head">
@@ -389,6 +348,7 @@ const state = {
   q: '',
   coletas: [],
   entregas: [],
+  avulsas: [],
   viagens: [],
   viagensCacheKey: '',
   ocConsulta: null,
@@ -492,20 +452,34 @@ function badgeStatus(status) {
   return map[status] || 'eui-badge--neutral';
 }
 
+function isAvulsaNaoAprovada(row) {
+  if (!row) return false;
+  const tipo = String(row.tipo || '').trim();
+  if (tipo !== 'AVULSA') return false;
+  const status = String(row.status || '').trim();
+  return !['Aprovada', 'Alocada', 'EmAndamento', 'EmRota', 'Concluida'].includes(status);
+}
+
 function renderSolicitacaoRow(row) {
-  const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+  const doc = state.tab === 'COLETA'
+    ? (row.numero_oc || row.documento_numero || '-')
+    : (state.tab === 'ENTREGA' ? (row.romaneio_numero || row.orcamento || '-') : (row.codigo || row.documento_numero || '-'));
   const nf = row.numero_nf || row.documento_numero || '-';
   const motorista = row.motorista?.nome || row.motorista_nome || '-';
   const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+  const typeClass = state.tab === 'COLETA' ? 'coleta' : (state.tab === 'ENTREGA' ? 'entrega' : 'avulsa');
+  const dataCol = state.tab === 'COLETA'
+    ? (row.data_desejada_label || row.prazo_limite_label || '-')
+    : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
   return `
     <tr>
       <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-      <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+      <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
       <td>${doc}</td>
       <td>${row.parceiro_nome || '-'}</td>
       <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
       <td>${motorista}</td>
-      <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+      <td>${dataCol}</td>
       <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
       <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
     </tr>
@@ -526,9 +500,9 @@ function getRows() {
     return state.viagens;
   }
 
-  const base = state.tab === 'COLETA' ? state.coletas : state.entregas;
+  const base = state.tab === 'COLETA' ? state.coletas : (state.tab === 'ENTREGA' ? state.entregas : state.avulsas);
   if (state.subfiltro === 'PENDENTES') {
-    return base.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
+    return base.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada'].includes(String(r.status || '').trim()));
   }
   if (state.subfiltro === 'EM_ANDAMENTO') {
     return base.filter((r) => ['Alocada', 'EmAndamento', 'EmRota'].includes(String(r.status || '').trim()));
@@ -629,9 +603,12 @@ function renderTable() {
   if (state.tab === 'COLETA') {
     subtitulo.innerHTML = '<strong>Solicitações de Coleta</strong><br>Coletas geradas automaticamente através da importação de Ordens de Compra.';
     head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Ordem de Compra</th><th>Fornecedor</th><th>Cidade/UF Origem</th><th>Motorista</th><th>Data Prevista</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
-  } else {
+  } else if (state.tab === 'ENTREGA') {
     subtitulo.innerHTML = '<strong>Solicitações de Entrega</strong><br>Entregas geradas automaticamente através dos Romaneios da Expedição.';
     head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Romaneio</th><th>Cliente</th><th>Cidade/UF Destino</th><th>Motorista</th><th>NF</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
+  } else {
+    subtitulo.innerHTML = '<strong>Solicitações Avulsas</strong><br>Fluxo: Admin aprova a solicitação avulsa e depois a equipe aloca e monta viagem.';
+    head.innerHTML = '<tr><th style="width:34px;"><input id="vt-check-all" type="checkbox" class="vt-check"></th><th>Tipo</th><th>Solicitação</th><th>Solicitante</th><th>Cidade/UF</th><th>Motorista</th><th>Saída Prevista</th><th>Situação</th><th style="text-align:right;">Ações</th></tr>';
   }
 
   if (!rows.length) {
@@ -643,14 +620,14 @@ function renderTable() {
 
   const idsVisiveis = rows.map((r) => Number(r.id));
   const idsValidos = new Set(
-    [...state.coletas, ...state.entregas]
+    [...state.coletas, ...state.entregas, ...state.avulsas]
       .map((r) => Number(r.id))
       .filter((id) => Number.isFinite(id) && id > 0)
   );
   state.selectedIds = state.selectedIds.filter((id) => idsValidos.has(id));
 
   if (state.subfiltro === 'PENDENTES') {
-    const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise'].includes(String(r.status || '').trim()));
+    const pendentesNaoAlocadas = rows.filter((r) => ['Pendente', 'EmAnalise', 'Aprovada'].includes(String(r.status || '').trim()));
 
     let html = '';
     if (pendentesNaoAlocadas.length) {
@@ -736,19 +713,25 @@ function renderTable() {
     }, {});
 
     const linhasSemViagem = (viagensMap.__SEM_VIAGEM__?.rows || []).map((row) => {
-      const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+      const doc = state.tab === 'COLETA'
+        ? (row.numero_oc || row.documento_numero || '-')
+        : (state.tab === 'ENTREGA' ? (row.romaneio_numero || row.orcamento || '-') : (row.codigo || row.documento_numero || '-'));
       const nf = row.numero_nf || row.documento_numero || '-';
       const motorista = row.motorista?.nome || row.motorista_nome || '-';
       const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+      const typeClass = state.tab === 'COLETA' ? 'coleta' : (state.tab === 'ENTREGA' ? 'entrega' : 'avulsa');
+      const dataCol = state.tab === 'COLETA'
+        ? (row.data_desejada_label || row.prazo_limite_label || '-')
+        : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
       return `
         <tr>
           <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-          <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+          <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
           <td>${doc}</td>
           <td>${row.parceiro_nome || '-'}</td>
           <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
           <td>${motorista}</td>
-          <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+          <td>${dataCol}</td>
           <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
           <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
         </tr>
@@ -772,19 +755,25 @@ function renderTable() {
       const textoViagem = `VIAGEM ${codigoViagem}`;
 
       const linhas = item.rows.map((row) => {
-        const doc = state.tab === 'COLETA' ? (row.numero_oc || row.documento_numero || '-') : (row.romaneio_numero || row.orcamento || '-');
+        const doc = state.tab === 'COLETA'
+          ? (row.numero_oc || row.documento_numero || '-')
+          : (state.tab === 'ENTREGA' ? (row.romaneio_numero || row.orcamento || '-') : (row.codigo || row.documento_numero || '-'));
         const nf = row.numero_nf || row.documento_numero || '-';
         const motorista = row.motorista?.nome || row.motorista_nome || '-';
         const marcado = state.selectedIds.includes(Number(row.id)) ? 'checked' : '';
+        const typeClass = state.tab === 'COLETA' ? 'coleta' : (state.tab === 'ENTREGA' ? 'entrega' : 'avulsa');
+        const dataCol = state.tab === 'COLETA'
+          ? (row.data_desejada_label || row.prazo_limite_label || '-')
+          : (state.tab === 'ENTREGA' ? nf : (row.data_hora_saida_prevista_label || row.data_desejada_label || row.prazo_limite_label || '-'));
         return `
           <tr>
             <td><input type="checkbox" class="vt-check vt-check-row" data-id="${row.id}" ${marcado}></td>
-            <td><span class="vt-type ${state.tab === 'COLETA' ? 'coleta' : 'entrega'}">${state.tab}</span></td>
+            <td><span class="vt-type ${typeClass}">${state.tab}</span></td>
             <td>${doc}</td>
             <td>${row.parceiro_nome || '-'}</td>
             <td>${row.endereco?.cidade || row.cidade || '-'} / ${row.endereco?.uf || row.uf || '-'}</td>
             <td>${motorista}</td>
-            <td>${state.tab === 'COLETA' ? (row.data_desejada_label || row.prazo_limite_label || '-') : nf}</td>
+            <td>${dataCol}</td>
             <td><span class="eui-badge ${badgeStatus(row.status)}">${row.status_label || row.status}</span></td>
             <td style="text-align:right;"><button class="vt-actions-btn" data-id="${row.id}"><i class="fas fa-ellipsis-vertical"></i></button></td>
           </tr>
@@ -1014,6 +1003,7 @@ function renderMetrics(resumo, counts) {
   document.getElementById('m-total').textContent = resumo.total || 0;
   document.getElementById('count-coletas').textContent = counts.coletas || 0;
   document.getElementById('count-entregas').textContent = counts.entregas || 0;
+  document.getElementById('count-avulsas').textContent = counts.avulsas || 0;
   document.getElementById('count-viagens').textContent = state.viagens.length || 0;
 }
 
@@ -1065,21 +1055,22 @@ async function loadDashboard() {
   }
   state.coletas = d.coletas || [];
   state.entregas = d.entregas || [];
+  state.avulsas = d.avulsas || [];
   state.veiculos = d.veiculos || [];
   state.motoristas = d.motoristas || [];
-  renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
+  renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0, avulsas: 0 });
   renderFilters();
   renderTable();
 
   if (state.tab === 'VIAGENS') {
     await loadViagens(true);
-    renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0 });
+    renderMetrics(d.resumo || {}, d.counts || { coletas: 0, entregas: 0, avulsas: 0 });
     renderTable();
   }
 }
 
 function rowById(id) {
-  return [...state.coletas, ...state.entregas].find((r) => r.id === id);
+  return [...state.coletas, ...state.entregas, ...state.avulsas].find((r) => r.id === id);
 }
 
 function openActionsMenu(id, x, y) {
@@ -1089,10 +1080,13 @@ function openActionsMenu(id, x, y) {
   const viagemId = row.viagem?.id || '';
   const motoristaId = row.motorista?.id || '';
   const liberada = Boolean(row.viagem?.liberada);
+  const avulsaNaoAprovada = isAvulsaNaoAprovada(row);
+  const podeAprovarAvulsa = IS_ADMIN && String(row.tipo || '').trim() === 'AVULSA' && avulsaNaoAprovada;
   menu.innerHTML = `
     <button onclick="acaoVisualizar(${id})"><i class='fas fa-eye'></i> Visualizar detalhes</button>
-    <button onclick="acaoAlocar(${id})"><i class='fas fa-truck-fast'></i> Alocar rota e motorista</button>
-    <button onclick="acaoMontarViagem(${id})"><i class='fas fa-route'></i> Montar/anexar em viagem</button>
+    ${podeAprovarAvulsa ? `<button onclick="acaoAprovarAvulsa(${id})"><i class='fas fa-user-check'></i> Aprovar avulsa</button>` : ''}
+    <button ${avulsaNaoAprovada ? "disabled title='Aguardando aprovação de admin da solicitação avulsa.'" : `onclick="acaoAlocar(${id})"`}><i class='fas fa-truck-fast'></i> Alocar rota e motorista</button>
+    <button ${avulsaNaoAprovada ? "disabled title='Aguardando aprovação de admin da solicitação avulsa.'" : `onclick="acaoMontarViagem(${id})"`}><i class='fas fa-route'></i> Montar/anexar em viagem</button>
     ${viagemId && !liberada ? `<button onclick="acaoLiberarMotorista(${viagemId})"><i class='fas fa-paper-plane'></i> Liberar motorista agora</button>` : ''}
     ${viagemId ? `<button onclick="acaoAbrirViagem(${viagemId})"><i class='fas fa-route'></i> Abrir viagem</button>` : ''}
     ${motoristaId ? `<button onclick="acaoLinkPainelMotorista(${motoristaId})"><i class='fas fa-mobile-screen-button'></i> Link do painel do motorista</button>` : ''}
@@ -1110,6 +1104,33 @@ function openActionsMenu(id, x, y) {
   menu.style.maxHeight = `${Math.max(180, vh - top - 12)}px`;
   menu.style.overflowY = 'auto';
   menu.classList.add('open');
+}
+
+async function acaoAprovarAvulsa(id) {
+  if (!IS_ADMIN) {
+    showToast('Somente admin pode aprovar solicitação avulsa.', 'error');
+    return;
+  }
+  const row = rowById(id);
+  if (!row) return;
+  if (String(row.tipo || '').trim() !== 'AVULSA') {
+    showToast('Esta ação vale apenas para solicitações avulsas.', 'error');
+    return;
+  }
+  const r = await fetch(`/api/logistica/agendamento-veiculos/solicitacoes/${Number(id)}/aprovar-avulsa`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      observacao: 'Aprovada pela Central de Viagens.'
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    showToast(d.msg || d.error || 'Falha ao aprovar solicitação avulsa.', 'error');
+    return;
+  }
+  showToast(d.msg || 'Solicitação avulsa aprovada.', 'success');
+  await loadDashboard();
 }
 
 function openViagemActionsMenu(viagemId, codigo, status, liberada, x, y) {
@@ -1185,6 +1206,10 @@ function acaoAbrirOrigem(id) {
 function acaoAlocar(id) {
   const row = rowById(id);
   if (!row) return;
+  if (isAvulsaNaoAprovada(row)) {
+    showToast('Solicitação avulsa precisa ser aprovada por admin antes da alocação.', 'error');
+    return;
+  }
 
   document.getElementById('alocar-id').value = String(id);
   document.getElementById('alocar-state').textContent = `Alocando ${row.codigo || ('#' + id)} • ${row.parceiro_nome || '-'}`;
@@ -1204,71 +1229,6 @@ function acaoAlocar(id) {
 
   document.getElementById('vt-actions-menu').classList.remove('open');
   openModal('modalAlocar');
-}
-
-function abrirModalNovaAvulsaCentral() {
-  const veiculoSel = document.getElementById('avulsa-veiculo');
-  const motoristaSel = document.getElementById('avulsa-motorista');
-  const agora = new Date();
-  const local = new Date(agora.getTime() - (agora.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-
-  veiculoSel.innerHTML = (state.veiculos || []).map((v) => `<option value="${v.id}">${v.nome || v.codigo || ('Veículo ' + v.id)}</option>`).join('');
-  motoristaSel.innerHTML = `<option value="">Sem motorista definido</option>${(state.motoristas || []).map((m) => `<option value="${m.id}">${m.label || m.nome || ('Motorista ' + m.id)}</option>`).join('')}`;
-  document.getElementById('avulsa-saida').value = local;
-  document.getElementById('avulsa-retorno').value = '';
-  document.getElementById('avulsa-funcionario').value = '';
-  document.getElementById('avulsa-observacao').value = '';
-  document.getElementById('avulsa-state').textContent = '';
-  openModal('modalNovaAvulsaCentral');
-}
-
-async function confirmarNovaAvulsaCentral() {
-  const veiculo_id = Number(document.getElementById('avulsa-veiculo').value || 0);
-  const motorista_id = Number(document.getElementById('avulsa-motorista').value || 0);
-  const saida_prevista = document.getElementById('avulsa-saida').value;
-  const retorno_previsto = document.getElementById('avulsa-retorno').value;
-  const funcionario_responsavel = (document.getElementById('avulsa-funcionario').value || '').trim();
-  const observacao = (document.getElementById('avulsa-observacao').value || '').trim();
-  const stateBox = document.getElementById('avulsa-state');
-
-  if (!veiculo_id || !saida_prevista || !funcionario_responsavel) {
-    showToast('Preencha veículo, saída prevista e funcionário responsável.', 'error');
-    return;
-  }
-
-  stateBox.textContent = 'Criando viagem avulsa...';
-  const r = await fetch('/api/viagem/nova-avulsa-manual', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      veiculo_id,
-      motorista_id: motorista_id || null,
-      saida_prevista,
-      retorno_previsto: retorno_previsto || null,
-      funcionario_responsavel,
-      observacao,
-      origem_label: 'Logística'
-    })
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || !d.sucesso) {
-    stateBox.textContent = '';
-    showToast(d.msg || d.error || 'Falha ao criar viagem avulsa.', 'error');
-    return;
-  }
-
-  closeModal('modalNovaAvulsaCentral');
-  showToast(`Viagem avulsa ${d.viagem?.codigo || ''} criada.`, 'success');
-  state.viagensCacheKey = '';
-  await loadDashboard();
-  if (d.viagem?.id) {
-    state.tab = 'VIAGENS';
-    state.subfiltro = 'PROGRAMADAS';
-    renderFilters();
-    await loadViagens(true);
-    renderTable();
-    await acaoAbrirViagem(Number(d.viagem.id));
-  }
 }
 
 function acaoAlocarSelecionadas({ autoCriarViagem = false } = {}) {
@@ -1592,6 +1552,10 @@ async function acaoLinkPainelMotorista(motoristaId) {
 async function acaoMontarViagem(id) {
   const row = rowById(id);
   if (!row) return;
+  if (isAvulsaNaoAprovada(row)) {
+    showToast('Solicitação avulsa precisa ser aprovada por admin antes de montar/anexar viagem.', 'error');
+    return;
+  }
   const motoristaId = Number(row.motorista?.id || 0);
   if (!motoristaId) {
     showToast('Aloque um motorista antes de montar viagem.', 'error');
@@ -1736,6 +1700,12 @@ async function confirmarAlocacao() {
   const ids = id ? [id] : [...state.selectedIds];
   if (!ids.length) {
     showToast('Nenhuma solicitação selecionada.', 'error');
+    return;
+  }
+
+  const rowsSelecionadas = ids.map((sid) => rowById(Number(sid))).filter(Boolean);
+  if (rowsSelecionadas.some((r) => isAvulsaNaoAprovada(r))) {
+    showToast('Há solicitação avulsa sem aprovação de admin na seleção. Aprove antes de alocar.', 'error');
     return;
   }
 
@@ -1978,13 +1948,6 @@ if (btnImportar) {
     document.getElementById('importErrors').textContent = '';
     state.ocConsulta = null;
     openModal('modalImportar');
-  });
-}
-
-const btnNovaAvulsaCentral = document.getElementById('btnNovaAvulsaCentral');
-if (btnNovaAvulsaCentral) {
-  btnNovaAvulsaCentral.addEventListener('click', () => {
-    abrirModalNovaAvulsaCentral();
   });
 }
 
