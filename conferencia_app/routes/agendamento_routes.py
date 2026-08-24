@@ -230,10 +230,10 @@ def _oc_modalidade_cif(oc_json) -> bool:
 
 
 def _to_date(value) -> date | None:
-    if isinstance(value, date):
-        return value
     if isinstance(value, datetime):
         return value.date()
+    if isinstance(value, date):
+        return value
     text = str(value or "").strip()
     if not text:
         return None
