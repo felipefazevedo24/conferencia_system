@@ -785,9 +785,8 @@ ESTOQUE_SQL = """
      and f.codigo = p.cod_familia
     where p.cod_empresa = %s
       and coalesce(nullif(trim(p.codigo_interno), ''), '') <> ''
-      and coalesce(nullif(trim(p.localizacao_estoque), ''), '') <> ''
       and coalesce(p.inativo, 0) = 0
-    order by p.localizacao_estoque, p.codigo_interno
+        order by coalesce(p.localizacao_estoque, ''), p.codigo_interno
 """
 
 
