@@ -675,9 +675,22 @@ def estornar(processo: ComexProcesso, usuario: str) -> ComexProcesso:
     anterior = _modulo_anterior(processo.status_modulo)
     if anterior is None:
         raise ValueError("Este processo já está no primeiro módulo (OC) - não há como estornar mais.")
+    agora = datetime.now()
+
+    # Estornar a PO de volta pra OC desfaz o agrupamento: as OCs combinadas
+    # (que tinham sumido da lista principal - ver salvar_po) voltam a
+    # valer como OCs independentes, senao ficariam vinculadas pra sempre a
+    # uma PO que nao existe mais.
+    if anterior == "OC":
+        for vinculada in ComexProcesso.query.filter_by(po_processo_principal_id=processo.id).all():
+            vinculada.po_processo_principal_id = None
+            vinculada.atualizado_em = agora
+            vinculada.atualizado_por = usuario
+        processo.po_ocs_vinculadas = None
+
     processo.status_modulo = anterior
     processo.status_slug = status_slug(anterior)
-    processo.atualizado_em = datetime.now()
+    processo.atualizado_em = agora
     processo.atualizado_por = usuario
     db.session.commit()
     return processo
