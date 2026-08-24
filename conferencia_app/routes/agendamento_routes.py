@@ -2576,7 +2576,153 @@ def atualizar_documento_solicitacao(solicitacao_id: int):
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes", methods=["POST"])
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def criar_solicitacao_agendamento():
-    return jsonify({"error": "Criação manual de solicitação de viagem foi descontinuada. Use a Central de Viagens."}), 410
+    payload = request.get_json(silent=True) or {}
+    tipo = str(payload.get("tipo") or "").strip().upper()
+    prioridade = str(payload.get("prioridade") or "Media").strip()
+    if tipo not in TIPOS_SOLICITACAO:
+        return jsonify({"error": "Tipo de solicitação inválido."}), 400
+    if prioridade not in PRIORIDADES_SOLICITACAO:
+        return jsonify({"error": "Prioridade inválida."}), 400
+
+    avulsa = payload.get("avulsa") if isinstance(payload.get("avulsa"), dict) else {}
+
+    numero_oc = str(payload.get("numero_oc") or "").strip()
+    numero_nf = re.sub(r"\D", "", str(payload.get("numero_nf") or ""))
+    referencia_avulsa = str(payload.get("referencia_avulsa") or "").strip()
+    try:
+        prazo_limite = _parse_datetime(payload.get("prazo_limite"), "o prazo")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        data_desejada = _parse_datetime(payload.get("data_desejada"), "a data desejada")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    observacoes_solicitante = str(payload.get("observacoes_solicitante") or "").strip()
+    if tipo == "AVULSA":
+        extras_avulsa = []
+        for label, value in [
+            ("Finalidade", avulsa.get("finalidade")),
+            ("Centro de custo", avulsa.get("centro_custo")),
+            ("Responsavel", avulsa.get("responsavel")),
+            ("Local de retirada", avulsa.get("local_retirada")),
+            ("Previsao de devolucao", avulsa.get("previsao_devolucao")),
+        ]:
+            value = str(value or "").strip()
+            if value:
+                extras_avulsa.append(f"{label}: {value}")
+        if extras_avulsa:
+            observacoes_solicitante = "\n".join([observacoes_solicitante, *extras_avulsa]).strip()
+
+    if tipo == "AVULSA":
+        consulta = {"encontrada": False, "itens": []}
+        parceiro = {
+            "nome": "Uso avulso de veículo",
+            "logradouro": "Sem destino definido",
+            "cidade": "A definir",
+            "uf": "NA",
+            "observacoes": observacoes_solicitante,
+        }
+    else:
+        if (tipo == "COLETA" and numero_oc) or (tipo == "ENTREGA" and numero_nf):
+            consulta = consultar_oc_agendamento(numero_oc) if tipo == "COLETA" else consultar_nf_agendamento(numero_nf)
+        else:
+            consulta = {"encontrada": False, "itens": []}
+        parceiro = _resolver_parceiro_payload(payload, "fornecedor" if tipo == "COLETA" else "cliente")
+        if not parceiro:
+            parceiro = consulta.get("fornecedor") or consulta.get("cliente") or {}
+        local_solicitante = str(payload.get("local_solicitante") or "").strip()
+        if local_solicitante and not parceiro.get("logradouro"):
+            parceiro["logradouro"] = local_solicitante
+            if not parceiro.get("cidade"):
+                parceiro["cidade"] = local_solicitante.split("/")[-1].strip() if "/" in local_solicitante else "A definir"
+            if not parceiro.get("uf"):
+                parceiro["uf"] = "--"
+        if not (parceiro.get("nome") or parceiro.get("razao_social")):
+            parceiro["nome"] = "A definir"
+        if not parceiro.get("logradouro"):
+            parceiro["logradouro"] = str(payload.get("local_solicitante") or "A definir").strip() or "A definir"
+        if not parceiro.get("cidade"):
+            parceiro["cidade"] = "A definir"
+        if not parceiro.get("uf"):
+            parceiro["uf"] = "--"
+
+    origem_documento = "Manual"
+    if tipo == "COLETA" and consulta.get("encontrada"):
+        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "GoogleSheets").strip() or "GoogleSheets"
+    elif tipo == "ENTREGA" and consulta.get("encontrada"):
+        origem_documento = str((consulta.get("fonte") or {}).get("tipo") or "ERPPostgres").strip() or "ERPPostgres"
+
+    usuario = session.get("username", "desconhecido")
+    agora = datetime.now()
+    row = AgendamentoSolicitacao(
+        tipo=tipo,
+        status="Pendente",
+        prioridade=prioridade,
+        prazo_limite=prazo_limite,
+        data_desejada=data_desejada,
+        solicitante=usuario,
+        criado_em=agora,
+        atualizado_em=agora,
+        documento_tipo="OC" if tipo == "COLETA" else ("NF" if tipo == "ENTREGA" else "AVULSO"),
+        documento_numero=numero_oc if tipo == "COLETA" else (numero_nf if tipo == "ENTREGA" else (referencia_avulsa or f"AVULSO-{agora.strftime('%Y%m%d%H%M')}")),
+        numero_oc=numero_oc or None,
+        numero_nf=numero_nf or None,
+        origem_documento=origem_documento,
+        observacoes_solicitante=observacoes_solicitante or None,
+        observacoes_logistica=str(payload.get("observacoes_logistica") or "").strip() or None,
+        payload_origem=_json_text({"request": payload, "consulta": {"encontrada": consulta.get("encontrada"), "fonte": consulta.get("fonte")}}),
+    )
+    ok, msg = _aplicar_parceiro(row, parceiro, "Fornecedor" if tipo == "COLETA" else ("Cliente" if tipo == "ENTREGA" else "Avulso"))
+    if not ok:
+        return jsonify({"error": msg}), 400
+
+    rota = estimar_rota_agendamento(
+        {
+            "logradouro": row.logradouro,
+            "numero": row.numero,
+            "bairro": row.bairro,
+            "cidade": row.cidade,
+            "uf": row.uf,
+            "cep": row.cep,
+        }
+    )
+    if rota.get("km_estimado") is not None:
+        row.origem_latitude = rota.get("origem_latitude")
+        row.origem_longitude = rota.get("origem_longitude")
+        row.destino_latitude = rota.get("destino_latitude")
+        row.destino_longitude = rota.get("destino_longitude")
+        row.km_estimado = rota.get("km_estimado")
+        row.km_estimado_retorno = rota.get("km_estimado_retorno")
+
+    itens = payload.get("itens")
+    if not isinstance(itens, list) or not itens:
+        itens = list(consulta.get("itens") or [])
+    if tipo == "AVULSA" and (
+        not isinstance(itens, list)
+        or not any(str(item.get("descricao") or "").strip() for item in itens if isinstance(item, dict))
+    ):
+        itens = [{"descricao": "Reserva avulsa de veículo", "quantidade": 1, "unidade": "UN", "volumes": 0}]
+    if not isinstance(itens, list) or not itens:
+        itens = [{"descricao": "A definir pela logística", "quantidade": 1, "unidade": "UN", "volumes": 0}]
+
+    db.session.add(row)
+    db.session.flush()
+    row.codigo = f"LOG-{agora.strftime('%Y%m%d')}-{row.id:04d}"
+    if not _sincronizar_itens(row, itens):
+        db.session.rollback()
+        return jsonify({"error": "Adicione pelo menos 1 item válido para continuar."}), 400
+    _registrar_historico(
+        row.id,
+        evento="CRIADA",
+        usuario=usuario,
+        status_novo="Pendente",
+        detalhe=f"Solicitação criada via {row.documento_tipo} {row.documento_numero}.",
+        payload=payload,
+    )
+    db.session.commit()
+    _notificar_solicitante_agendamento(row, "Solicitacao de transporte criada", "Sua solicitacao foi enviada para a logistica.")
+    return jsonify({"sucesso": True, "solicitacao": _serializar_solicitacao(row)}), 201
 
 
 @agendamento_bp.route("/api/logistica/agendamento-veiculos/solicitacoes/<int:solicitacao_id>/aprovar-avulsa", methods=["POST"])

@@ -1039,7 +1039,12 @@ def expedicao_conferencia_page():
 @page_bp.route("/logistica/solicitar-transporte")
 @permission_required("PAGE_LOGISTICA_SOLICITACAO")
 def solicitar_transporte_page():
-    return redirect("/logistica/viagens", code=302)
+    return render_template(
+        "agendamento_solicitacao.html",
+        user=session["username"],
+        user_role=session.get("role", ""),
+        is_admin=session.get("role") == "Admin",
+    )
 
 
 @page_bp.route("/logistica/agendamento-veiculos")
