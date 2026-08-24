@@ -64,6 +64,7 @@ agendamento_bp = Blueprint("agendamento", __name__)
 
 PRIORIDADE_ORDEM = {"Critica": 0, "Alta": 1, "Media": 2, "Baixa": 3}
 ANEXO_SOLICITACAO_SUBDIR = "agendamento_solicitacoes_anexos"
+_RECEBIMENTO_CACHE: dict[str, dict] = {}
 
 
 def _solicitacao_anexo_dir() -> str:
@@ -264,7 +265,10 @@ def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, avis
         )
         cursor += timedelta(days=1)
     return {
+        "visao": "mes",
+        "modo_mensal_habilitado": False,
         "mes": f"{ano:04d}-{mes:02d}",
+        "data_ref": inicio.isoformat(),
         "inicio": inicio.isoformat(),
         "fim": fim.isoformat(),
         "resumo": {
@@ -274,6 +278,7 @@ def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, avis
             "coletas_sem_viagem": 0,
             "atrasadas": 0,
             "pico_dia": 0,
+            "dias_com_recebimento": 0,
         },
         "dias": dias,
         "eventos": [],
@@ -281,27 +286,59 @@ def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, avis
     }
 
 
+def _periodo_recebimento(visao: str, mes_ref: str, data_ref: str) -> tuple[date, date, date]:
+    if visao == "mes":
+        try:
+            mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
+        except ValueError as exc:
+            raise ValueError("Parâmetro 'mes' inválido. Use YYYY-MM.") from exc
+        ano = mes_base.year
+        mes = mes_base.month
+        fim_mes = monthrange(ano, mes)[1]
+        inicio = date(ano, mes, 1)
+        fim = date(ano, mes, fim_mes)
+        return inicio, fim, inicio
+
+    texto_ref = str(data_ref or "").strip()
+    if texto_ref:
+        ref = _to_date(texto_ref)
+        if ref is None:
+            raise ValueError("Parâmetro 'data_ref' inválido. Use YYYY-MM-DD.")
+    else:
+        ref = date.today()
+    inicio = ref - timedelta(days=ref.weekday())
+    fim = inicio + timedelta(days=6)
+    return inicio, fim, ref
+
+
 @agendamento_bp.route("/api/logistica/recebimento/calendario")
 @permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
 def recebimento_calendario_dados():
+    visao_req = str(request.args.get("visao") or "").strip().lower()
+    admin_mode = session.get("role") == "Admin"
+    visao = "mes" if (visao_req == "mes" and admin_mode) else "semana"
     mes_ref = str(request.args.get("mes") or "").strip()
+    data_ref = str(request.args.get("data_ref") or "").strip()
     try:
-        mes_base = datetime.strptime(mes_ref or datetime.now().strftime("%Y-%m"), "%Y-%m")
-    except ValueError:
-        return jsonify({"error": "Parâmetro 'mes' inválido. Use YYYY-MM."}), 400
+        inicio, fim, referencia = _periodo_recebimento(visao, mes_ref, data_ref)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    ano = mes_base.year
-    mes = mes_base.month
-    dia_final = monthrange(ano, mes)[1]
-    inicio = date(ano, mes, 1)
-    fim = date(ano, mes, dia_final)
+    ano = inicio.year
+    mes = inicio.month
     hoje = date.today()
+    cache_key = f"{visao}:{inicio.isoformat()}:{fim.isoformat()}"
 
     try:
         ocs = compras_service.ordens_compra_entregas(limite=5000)
         cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
-    except Exception as exc:
+    except Exception:
         current_app.logger.exception("Falha ao consultar OCs para calendário de recebimento")
+        cached = _RECEBIMENTO_CACHE.get(cache_key)
+        if cached:
+            resp = dict(cached)
+            resp["aviso"] = "ERP indisponível no momento. Exibindo último cache deste período."
+            return jsonify(resp)
         return jsonify(
             _payload_vazio_recebimento(
                 ano,
@@ -448,22 +485,89 @@ def recebimento_calendario_dados():
         )
 
     pico_dia = max((d["qtd_total"] for d in dias.values()), default=0)
-    return jsonify(
-        {
-            "mes": f"{ano:04d}-{mes:02d}",
-            "inicio": inicio.isoformat(),
-            "fim": fim.isoformat(),
-            "resumo": {
-                "total": len(eventos),
-                "coletas": total_coletas,
-                "entregas": total_entregas,
-                "coletas_sem_viagem": sem_viagem,
-                "atrasadas": atrasadas,
-                "pico_dia": pico_dia,
-            },
-            "dias": sorted(dias.values(), key=lambda d: d["data"]),
-            "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
-        }
+    payload = {
+        "visao": visao,
+        "modo_mensal_habilitado": bool(admin_mode),
+        "mes": f"{ano:04d}-{mes:02d}",
+        "data_ref": referencia.isoformat(),
+        "inicio": inicio.isoformat(),
+        "fim": fim.isoformat(),
+        "resumo": {
+            "total": len(eventos),
+            "coletas": total_coletas,
+            "entregas": total_entregas,
+            "coletas_sem_viagem": sem_viagem,
+            "atrasadas": atrasadas,
+            "pico_dia": pico_dia,
+            "dias_com_recebimento": sum(1 for d in dias.values() if int(d.get("qtd_total") or 0) > 0),
+        },
+        "dias": sorted(dias.values(), key=lambda d: d["data"]),
+        "eventos": sorted(eventos, key=lambda e: (e["data"], e["tipo_logistico"], e["numero_oc"])),
+        "aviso": "",
+    }
+    _RECEBIMENTO_CACHE[cache_key] = dict(payload)
+    return jsonify(payload)
+
+
+@agendamento_bp.route("/api/logistica/recebimento/calendario/relatorio-dia")
+@permission_required_any("PAGE_LOGISTICA_AGENDAMENTO", "PAGE_LOGISTICA_SOLICITACAO")
+def recebimento_calendario_relatorio_dia():
+    data_ref = str(request.args.get("data") or "").strip()
+    alvo = _to_date(data_ref)
+    if not alvo:
+        return jsonify({"error": "Parâmetro 'data' inválido. Use YYYY-MM-DD."}), 400
+
+    inicio = alvo
+    fim = alvo
+    ocs = compras_service.ordens_compra_entregas(limite=5000)
+    cif_rows = compras_service.ordens_compra_cif_recentes(janela_dias=730, limite=5000)
+    cif_por_oc: dict[str, bool] = {}
+    for row in cif_rows:
+        oc_num = str(row.get("cod_ordem_compra") or "").strip()
+        if not oc_num or oc_num in cif_por_oc:
+            continue
+        cif_por_oc[oc_num] = _oc_modalidade_cif(row.get("oc_json"))
+
+    eventos = []
+    for row in ocs:
+        previsao = _to_date(row.get("previsao_entrega"))
+        if not previsao or previsao < inicio or previsao > fim:
+            continue
+        numero_oc = str(row.get("cod_ordem_compra") or "").strip()
+        if not numero_oc:
+            continue
+        is_coleta = bool(cif_por_oc.get(numero_oc, False))
+        eventos.append(
+            {
+                "data": previsao.isoformat(),
+                "numero_oc": numero_oc,
+                "fornecedor": str(row.get("fornecedor") or "").strip() or "(Sem fornecedor)",
+                "status_oc": str(row.get("status_oc_nome") or "").strip(),
+                "programacao": "Coleta" if is_coleta else "Entrega fornecedor",
+            }
+        )
+
+    nome_arquivo = f"recebimento_{alvo.strftime('%Y%m%d')}.csv"
+    stream = io.StringIO()
+    writer = csv.writer(stream, delimiter=";")
+    writer.writerow(["Data", "OC", "Fornecedor", "Programacao", "Status OC"])
+    for evento in sorted(eventos, key=lambda e: e["numero_oc"]):
+        writer.writerow(
+            [
+                evento.get("data") or "",
+                evento.get("numero_oc") or "",
+                evento.get("fornecedor") or "",
+                evento.get("programacao") or "",
+                evento.get("status_oc") or "",
+            ]
+        )
+
+    payload = ("\ufeff" + stream.getvalue()).encode("utf-8")
+    return send_file(
+        io.BytesIO(payload),
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=nome_arquivo,
     )
 
 
