@@ -878,10 +878,6 @@ def central_viagens_criar_coleta_por_oc():
             [
                 {
                     "descricao": f"Coleta referente à OC {numero_oc}",
-
-    anexo_meta = _salvar_anexo_solicitacao(request.files.get("anexo"), sol.id)
-    if anexo_meta:
-        _atualizar_payload_origem_anexo(sol, anexo_meta)
                     "quantidade": 1,
                     "unidade": "UN",
                     "volumes": 1,
@@ -889,6 +885,10 @@ def central_viagens_criar_coleta_por_oc():
                 }
             ],
         )
+
+    anexo_meta = _salvar_anexo_solicitacao(request.files.get("anexo"), sol.id)
+    if anexo_meta:
+        _atualizar_payload_origem_anexo(sol, anexo_meta)
 
     _registrar_historico(
         sol.id,
