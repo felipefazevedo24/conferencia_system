@@ -307,6 +307,13 @@ def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict
     return aliases
 
 
+def _oc_ja_recebida(status_oc_nome: str) -> bool:
+    status = str(status_oc_nome or "").strip().upper()
+    if not status:
+        return False
+    return bool(re.search(r"RECEB|ENCERR|CONCL|FINAL|ATEND", status))
+
+
 def _calcular_risco_estoque_oc(numero_oc: str, estoque_aliases: dict[str, dict]) -> dict:
     risco_estoque = "sem_dados"
     risco_estoque_label = "Sem dados"
@@ -617,6 +624,8 @@ def recebimento_calendario_dados():
     for row in eventos_base:
         previsao = row["previsao"]
         numero_oc = row["numero_oc"]
+        status_oc_nome = row["status_oc_nome"]
+        oc_recebida = _oc_ja_recebida(status_oc_nome)
         solicitacao = solicitacao_por_oc.get(numero_oc)
         viagem = viagem_por_solicitacao.get(int(solicitacao.id)) if solicitacao else None
         risco = "normal"
@@ -636,7 +645,7 @@ def recebimento_calendario_dados():
         else:
             total_entregas += 1
 
-        can_schedule = bool(tipo_logistico == "COLETA" and not viagem and _is_admin_or_compras())
+        can_schedule = bool(tipo_logistico == "COLETA" and not viagem and not oc_recebida and _is_admin_or_compras())
         data_key = previsao.isoformat()
 
         cached_risco = _RECEBIMENTO_RISCO_CACHE.get(numero_oc) if numero_oc else None
@@ -669,7 +678,9 @@ def recebimento_calendario_dados():
                 "data": data_key,
                 "numero_oc": numero_oc,
                 "fornecedor": row["fornecedor"],
-                "status_oc": row["status_oc_nome"],
+                "status_oc": status_oc_nome,
+                "oc_recebida": oc_recebida,
+                "oc_recebida_label": "Recebida" if oc_recebida else "Pendente",
                 "tipo_logistico": tipo_logistico,
                 "tipo_logistico_label": "Coleta (nossa frota)" if tipo_logistico == "COLETA" else "Entrega do fornecedor",
                 "risco": risco,

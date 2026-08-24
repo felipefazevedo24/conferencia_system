@@ -44,6 +44,9 @@
     .rcv-chip-risk.critico { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
     .rcv-chip-risk.sem_dados { background: #f4f4f5; color: #3f3f46; border-color: #e4e4e7; }
     .rcv-chip-risk.pendente { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .rcv-chip-status { border: 1px solid transparent; }
+    .rcv-chip-status.recebida { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
+    .rcv-chip-status.pendente { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
 
     .erp-table thead th {
         position: sticky;
@@ -137,13 +140,14 @@
                                 <th>OC</th>
                                 <th>Fornecedor</th>
                                 <th>Viagem</th>
+                                <th>Situação</th>
                                 <th>Risco estoque</th>
                                 <th>Programação</th>
                                 <th style="text-align:right;" class="no-print">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="day-body">
-                            <tr><td colspan="6" class="rcv-empty">Carregando...</td></tr>
+                            <tr><td colspan="7" class="rcv-empty">Carregando...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -265,7 +269,7 @@
         const data = state.selectedDate;
         if (!data) {
             dayTitle.textContent = 'Sem dia selecionado';
-            dayBody.innerHTML = '<tr><td colspan="6" class="rcv-empty">Sem dados.</td></tr>';
+            dayBody.innerHTML = '<tr><td colspan="7" class="rcv-empty">Sem dados.</td></tr>';
             dayCount.textContent = '0 ocorrência(s)';
             return;
         }
@@ -285,7 +289,7 @@
         }
 
         if (!rows.length) {
-            dayBody.innerHTML = '<tr><td colspan="6" class="rcv-empty">Nada previsto para este dia.</td></tr>';
+            dayBody.innerHTML = '<tr><td colspan="7" class="rcv-empty">Nada previsto para este dia.</td></tr>';
             return;
         }
 
@@ -293,7 +297,10 @@
             const viagem = r.viagem && r.viagem.codigo ? `${r.viagem.codigo} (${r.viagem.status || '-'})` : '-';
             const risco = String(r.risco_estoque_label || 'Sem dados');
             const riscoClasse = (r.risco_estoque || 'sem_dados').toLowerCase();
-            const riscoClasseUi = ['ok', 'atencao', 'critico', 'sem_dados'].includes(riscoClasse) ? riscoClasse : 'sem_dados';
+            const riscoClasseUi = ['ok', 'atencao', 'critico', 'sem_dados', 'pendente'].includes(riscoClasse) ? riscoClasse : 'sem_dados';
+            const recebida = Boolean(r.oc_recebida);
+            const situacaoLabel = recebida ? 'Recebida' : 'Pendente';
+            const situacaoClasse = recebida ? 'recebida' : 'pendente';
             let acao = '-';
             if (r.pode_programar_coleta) {
                 acao = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-programar="${esc(r.numero_oc)}"><i class="fas fa-route"></i> Programar coleta</button>`;
@@ -305,6 +312,7 @@
                     <td><strong>${esc(r.numero_oc)}</strong></td>
                     <td>${esc(r.fornecedor || '-')}</td>
                     <td>${esc(viagem)}</td>
+                    <td><span class="rcv-chip rcv-chip-status ${situacaoClasse}" title="Status ERP: ${esc(r.status_oc || '-')}">${situacaoLabel}</span></td>
                     <td><span class="rcv-chip rcv-chip-risk ${riscoClasseUi}" title="${esc(r.risco_estoque_detalhe || '')}">${esc(risco)}</span></td>
                     <td>${esc(r.tipo_logistico === 'COLETA' ? (r.viagem ? 'Coleta em viagem' : 'Coleta sem viagem') : 'Entrega do fornecedor')}</td>
                     <td style="text-align:right;" class="no-print">${acao}</td>
@@ -438,7 +446,7 @@
             renderDiaSelecionado();
         } catch (err) {
             listEl.innerHTML = `<div class="rcv-empty">${esc(err.message || err)}</div>`;
-            dayBody.innerHTML = `<tr><td colspan="6" class="rcv-empty">${esc(err.message || err)}</td></tr>`;
+            dayBody.innerHTML = `<tr><td colspan="7" class="rcv-empty">${esc(err.message || err)}</td></tr>`;
         } finally {
             state.loading = false;
         }
