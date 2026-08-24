@@ -70,6 +70,14 @@
 
 {% block content %}
 <div class="cx-wrap">
+    <header class="eui-page-header">
+        <div>
+            <div class="eui-page-header__eyebrow">Comex</div>
+            <h1 class="eui-page-header__title"><i class="fas fa-ship"></i> Processos de Importação/Exportação</h1>
+            <p class="eui-page-header__sub">Fila de processos Comex.</p>
+        </div>
+    </header>
+
     <div class="eui-stats" id="cx-metrics">
         <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="cx-m-todos">0</span></div></div>
         <div class="eui-stat is-clickable" data-filter="OC"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-file-invoice"></i></div><div class="eui-stat__body"><span class="eui-stat__label">OC</span><span class="eui-stat__value" id="cx-m-oc">0</span></div></div>
@@ -85,11 +93,7 @@
     </div>
 
     <div class="eui-card">
-        <div class="eui-card__head">
-            <div>
-                <h2 class="eui-card__title"><i class="fas fa-ship"></i> Processos de Importação/Exportação</h2>
-                <p class="eui-card__sub" id="cx-subtitulo">Fila de processos Comex.</p>
-            </div>
+        <div class="eui-card__head" style="justify-content:flex-end;">
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="cx-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
                 <button class="eui-btn eui-btn--primary" id="cx-btn-importar-oc"><i class="fas fa-cloud-arrow-down"></i> Importar OC</button>
