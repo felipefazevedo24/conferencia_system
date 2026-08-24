@@ -242,9 +242,10 @@ def listar_inventario_inicial():
     # entao nunca recebe o saldo esperado antes de fechar a contagem.
     estoque_grv = None
     erro_grv = None
+    forcar_grv = request.args.get("forcar_grv") == "1"
     if request.args.get("comparar_grv") == "1":
         try:
-            estoque_grv = buscar_estoque_grv()
+            estoque_grv = buscar_estoque_grv(forcar_atualizacao=forcar_grv)
         except Exception as exc:  # noqa: BLE001
             current_app.logger.warning("Falha ao consultar estoque no GRV para comparacao: %s", exc)
             erro_grv = str(exc)
@@ -261,6 +262,7 @@ def exportar_inventario_inicial_excel():
     local = (request.args.get("local") or "").strip().lower()
     codigo = (request.args.get("codigo") or "").strip().lower()
     comparar_grv = request.args.get("comparar_grv") == "1"
+    forcar_grv = request.args.get("forcar_grv") == "1"
 
     query = _build_query(local=local, codigo=codigo)
     rows = query.order_by(LogisticaInventarioInicial.criado_em.desc()).all()
@@ -268,7 +270,7 @@ def exportar_inventario_inicial_excel():
     estoque_grv = None
     if comparar_grv:
         try:
-            estoque_grv = buscar_estoque_grv()
+            estoque_grv = buscar_estoque_grv(forcar_atualizacao=forcar_grv)
         except Exception as exc:  # noqa: BLE001
             current_app.logger.warning("Falha ao consultar estoque no GRV para exportar comparacao: %s", exc)
 

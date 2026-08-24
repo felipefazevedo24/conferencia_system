@@ -747,7 +747,20 @@ ESTOQUE_SQL = """
         p.codigo_interno,
         p.nome as item,
         coalesce(nullif(p.unidade, ''), nullif(p.unidade_compra, ''), 'UN') as unidade,
-        coalesce(p.estoque_disponivel_uso, coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0), 0) as qtde_total,
+        -- Regra do inventario: prioriza o saldo principal (p.estoque), que e o
+        -- valor exibido no GRV para o item/local. Algumas bases mantem
+        -- estoque_disponivel_uso sempre zerado e, se ele for priorizado,
+        -- derruba a qtd do GRV para 0 mesmo com saldo real.
+        coalesce(
+            (
+                case
+                    when p.estoque is not null then coalesce(p.estoque, 0) + coalesce(p.estoque_reservado, 0)
+                    when p.estoque_disponivel_uso is not null then coalesce(p.estoque_disponivel_uso, 0) + coalesce(p.estoque_reservado, 0)
+                    else null
+                end
+            ),
+            0
+        ) as qtde_total,
         coalesce(p.estoque_reservado, 0) as qtde_reservada,
         coalesce(p.estoque, coalesce(p.estoque_disponivel_uso, 0) - coalesce(p.estoque_reservado, 0), 0) as qtde_disponivel,
         p.localizacao_estoque,
