@@ -454,6 +454,8 @@ def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, avis
                 "qtd_entregas": 0,
                 "qtd_sem_viagem": 0,
                 "qtd_atrasadas": 0,
+                "qtd_recebidas": 0,
+                "qtd_pendentes": 0,
             }
         )
         cursor += timedelta(days=1)
@@ -661,9 +663,22 @@ def recebimento_calendario_dados():
             risco_estoque_detalhe = "Risco de estoque será carregado ao abrir o dia."
         dia_ref = dias.setdefault(
             data_key,
-            {"data": data_key, "qtd_total": 0, "qtd_coletas": 0, "qtd_entregas": 0, "qtd_sem_viagem": 0, "qtd_atrasadas": 0},
+            {
+                "data": data_key,
+                "qtd_total": 0,
+                "qtd_coletas": 0,
+                "qtd_entregas": 0,
+                "qtd_sem_viagem": 0,
+                "qtd_atrasadas": 0,
+                "qtd_recebidas": 0,
+                "qtd_pendentes": 0,
+            },
         )
         dia_ref["qtd_total"] += 1
+        if oc_recebida:
+            dia_ref["qtd_recebidas"] += 1
+        else:
+            dia_ref["qtd_pendentes"] += 1
         if tipo_logistico == "COLETA":
             dia_ref["qtd_coletas"] += 1
         else:

@@ -47,6 +47,8 @@
     .rcv-chip-status { border: 1px solid transparent; }
     .rcv-chip-status.recebida { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
     .rcv-chip-status.pendente { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .rcv-chip-day.recebida { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
+    .rcv-chip-day.pendente { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
 
     .erp-table thead th {
         position: sticky;
@@ -251,6 +253,8 @@
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
                     <span class="rcv-chip">${Number(d.qtd_total || 0)} chegada(s)</span>
+                    ${Number(d.qtd_recebidas || 0) > 0 ? `<span class="rcv-chip rcv-chip-day recebida">${Number(d.qtd_recebidas || 0)} recebida(s)</span>` : ''}
+                    ${Number(d.qtd_pendentes || 0) > 0 ? `<span class="rcv-chip rcv-chip-day pendente">${Number(d.qtd_pendentes || 0)} pendente(s)</span>` : ''}
                     ${Number(d.qtd_sem_viagem || 0) > 0 ? `<span class="rcv-chip warn">${Number(d.qtd_sem_viagem || 0)} sem viagem</span>` : ''}
                 </div>
             </button>
