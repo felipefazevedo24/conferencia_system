@@ -71,6 +71,7 @@
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <a href="/logistica/recebimento-calendario" class="eui-btn eui-btn--ghost"><i class="fas fa-calendar-days"></i> Calendário de recebimento</a>
+          <button id="btnNovaAvulsaCentral" class="eui-btn eui-btn--primary"><i class="fas fa-user-clock"></i> Criar viagem avulsa</button>
             {% if user_role in ['Admin','Compras'] %}
             <button id="btnImportarOc" class="eui-btn eui-btn--primary"><i class="fas fa-file-import"></i> Gerar Coleta por OC</button>
             {% endif %}
@@ -270,6 +271,48 @@
     <div class="vt-modal__foot">
       <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalAlocar')">Cancelar</button>
       <button class="eui-btn eui-btn--primary" onclick="confirmarAlocacao()">Salvar alocação</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalNovaAvulsaCentral" class="vt-modal">
+  <div class="vt-modal__box" style="max-width:620px;">
+    <div class="vt-modal__head">
+      <strong>Criar Viagem Avulsa</strong>
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalNovaAvulsaCentral')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="vt-modal__body">
+      <div class="vt-grid-2">
+        <div class="eui-field">
+          <label class="eui-field__label">Veículo</label>
+          <select id="avulsa-veiculo" class="eui-select"></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Motorista (opcional)</label>
+          <select id="avulsa-motorista" class="eui-select"></select>
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Saída prevista</label>
+          <input id="avulsa-saida" type="datetime-local" class="eui-input">
+        </div>
+        <div class="eui-field">
+          <label class="eui-field__label">Retorno previsto (opcional)</label>
+          <input id="avulsa-retorno" type="datetime-local" class="eui-input">
+        </div>
+      </div>
+      <div class="eui-field">
+        <label class="eui-field__label">Funcionário responsável *</label>
+        <input id="avulsa-funcionario" type="text" class="eui-input" placeholder="Nome do funcionário responsável">
+      </div>
+      <div class="eui-field">
+        <label class="eui-field__label">Observação</label>
+        <textarea id="avulsa-observacao" class="eui-textarea" rows="3" placeholder="Opcional"></textarea>
+      </div>
+      <div id="avulsa-state" class="vt-mini"></div>
+    </div>
+    <div class="vt-modal__foot">
+      <button class="eui-btn eui-btn--ghost" onclick="closeModal('modalNovaAvulsaCentral')">Cancelar</button>
+      <button class="eui-btn eui-btn--primary" onclick="confirmarNovaAvulsaCentral()"><i class="fas fa-plus"></i> Criar avulsa</button>
     </div>
   </div>
 </div>
@@ -1163,6 +1206,71 @@ function acaoAlocar(id) {
   openModal('modalAlocar');
 }
 
+function abrirModalNovaAvulsaCentral() {
+  const veiculoSel = document.getElementById('avulsa-veiculo');
+  const motoristaSel = document.getElementById('avulsa-motorista');
+  const agora = new Date();
+  const local = new Date(agora.getTime() - (agora.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+  veiculoSel.innerHTML = (state.veiculos || []).map((v) => `<option value="${v.id}">${v.nome || v.codigo || ('Veículo ' + v.id)}</option>`).join('');
+  motoristaSel.innerHTML = `<option value="">Sem motorista definido</option>${(state.motoristas || []).map((m) => `<option value="${m.id}">${m.label || m.nome || ('Motorista ' + m.id)}</option>`).join('')}`;
+  document.getElementById('avulsa-saida').value = local;
+  document.getElementById('avulsa-retorno').value = '';
+  document.getElementById('avulsa-funcionario').value = '';
+  document.getElementById('avulsa-observacao').value = '';
+  document.getElementById('avulsa-state').textContent = '';
+  openModal('modalNovaAvulsaCentral');
+}
+
+async function confirmarNovaAvulsaCentral() {
+  const veiculo_id = Number(document.getElementById('avulsa-veiculo').value || 0);
+  const motorista_id = Number(document.getElementById('avulsa-motorista').value || 0);
+  const saida_prevista = document.getElementById('avulsa-saida').value;
+  const retorno_previsto = document.getElementById('avulsa-retorno').value;
+  const funcionario_responsavel = (document.getElementById('avulsa-funcionario').value || '').trim();
+  const observacao = (document.getElementById('avulsa-observacao').value || '').trim();
+  const stateBox = document.getElementById('avulsa-state');
+
+  if (!veiculo_id || !saida_prevista || !funcionario_responsavel) {
+    showToast('Preencha veículo, saída prevista e funcionário responsável.', 'error');
+    return;
+  }
+
+  stateBox.textContent = 'Criando viagem avulsa...';
+  const r = await fetch('/api/viagem/nova-avulsa-manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      veiculo_id,
+      motorista_id: motorista_id || null,
+      saida_prevista,
+      retorno_previsto: retorno_previsto || null,
+      funcionario_responsavel,
+      observacao,
+      origem_label: 'Logística'
+    })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.sucesso) {
+    stateBox.textContent = '';
+    showToast(d.msg || d.error || 'Falha ao criar viagem avulsa.', 'error');
+    return;
+  }
+
+  closeModal('modalNovaAvulsaCentral');
+  showToast(`Viagem avulsa ${d.viagem?.codigo || ''} criada.`, 'success');
+  state.viagensCacheKey = '';
+  await loadDashboard();
+  if (d.viagem?.id) {
+    state.tab = 'VIAGENS';
+    state.subfiltro = 'PROGRAMADAS';
+    renderFilters();
+    await loadViagens(true);
+    renderTable();
+    await acaoAbrirViagem(Number(d.viagem.id));
+  }
+}
+
 function acaoAlocarSelecionadas({ autoCriarViagem = false } = {}) {
   state.autoCriarViagemAposAlocacao = Boolean(autoCriarViagem);
   if (!state.selectedIds.length) {
@@ -1870,6 +1978,13 @@ if (btnImportar) {
     document.getElementById('importErrors').textContent = '';
     state.ocConsulta = null;
     openModal('modalImportar');
+  });
+}
+
+const btnNovaAvulsaCentral = document.getElementById('btnNovaAvulsaCentral');
+if (btnNovaAvulsaCentral) {
+  btnNovaAvulsaCentral.addEventListener('click', () => {
+    abrirModalNovaAvulsaCentral();
   });
 }
 
