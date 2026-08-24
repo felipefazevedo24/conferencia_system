@@ -1579,7 +1579,8 @@ def dashboard_central_viagens():
     if alterou_status:
         db.session.commit()
 
-    coletas = [c for c in cards if c.get("tipo") == "COLETA"]
+    # Sem aba AVULSA na Central, exibir AVULSA junto de Coletas para não ocultar solicitações.
+    coletas = [c for c in cards if c.get("tipo") in {"COLETA", "AVULSA"}]
     entregas = [c for c in cards if c.get("tipo") == "ENTREGA"]
     avulsas = [c for c in cards if c.get("tipo") == "AVULSA"]
 
