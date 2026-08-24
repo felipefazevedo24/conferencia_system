@@ -5,7 +5,13 @@
 
 {% block extra_head %}
 <style>
-    .rcv-wrap { display: grid; gap: 16px; }
+    .rcv-wrap {
+        display: grid;
+        gap: 16px;
+        background: radial-gradient(circle at top left, #f8fbff 0%, #eef4fb 38%, #f9fafb 100%);
+        border-radius: 18px;
+        padding: 12px;
+    }
     .rcv-toolbar { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
     .rcv-nav { display: inline-flex; gap: 6px; align-items: center; }
     .rcv-title { font-size: 16px; font-weight: 800; min-width: 210px; text-align: center; }
@@ -13,18 +19,30 @@
     .rcv-grid { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
     .rcv-week-list { display: grid; gap: 8px; }
     .rcv-day-card {
-        border: 1px solid var(--eui-border);
-        border-radius: var(--eui-radius);
-        background: var(--eui-surface);
+        border: 1px solid #d6e2ef;
+        border-left: 4px solid #90b9ea;
+        border-radius: calc(var(--eui-radius) + 2px);
+        background: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%);
         padding: 10px;
         cursor: pointer;
+        transition: transform .12s ease, box-shadow .16s ease, border-color .16s ease;
     }
-    .rcv-day-card.is-selected { border-color: var(--eui-primary); box-shadow: 0 0 0 2px rgba(15,98,201,.14); }
+    .rcv-day-card:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(15, 23, 42, .08); }
+    .rcv-day-card.is-selected {
+        border-color: #0f62c9;
+        border-left-color: #0f62c9;
+        box-shadow: 0 0 0 2px rgba(15,98,201,.14);
+    }
     .rcv-day-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .rcv-day-name { font-size: 13px; font-weight: 800; }
     .rcv-day-date { font-size: 12px; color: var(--eui-muted); }
     .rcv-chip { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; background: var(--eui-surface-3); }
     .rcv-chip.warn { background: #fff7ed; color: #9a3412; }
+    .rcv-chip-risk { border: 1px solid transparent; }
+    .rcv-chip-risk.ok { background: #ecfdf3; color: #166534; border-color: #bbf7d0; }
+    .rcv-chip-risk.atencao { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .rcv-chip-risk.critico { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+    .rcv-chip-risk.sem_dados { background: #f4f4f5; color: #3f3f46; border-color: #e4e4e7; }
 
     .rcv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .rcv-empty { text-align: center; color: var(--eui-muted); padding: 20px; font-weight: 600; }
@@ -263,6 +281,7 @@
             const viagem = r.viagem && r.viagem.codigo ? `${r.viagem.codigo} (${r.viagem.status || '-'})` : '-';
             const risco = String(r.risco_estoque_label || 'Sem dados');
             const riscoClasse = (r.risco_estoque || 'sem_dados').toLowerCase();
+            const riscoClasseUi = ['ok', 'atencao', 'critico', 'sem_dados'].includes(riscoClasse) ? riscoClasse : 'sem_dados';
             let acao = '-';
             if (r.pode_programar_coleta) {
                 acao = `<button class="eui-btn eui-btn--primary eui-btn--sm" data-programar="${esc(r.numero_oc)}"><i class="fas fa-route"></i> Programar coleta</button>`;
@@ -274,7 +293,7 @@
                     <td><strong>${esc(r.numero_oc)}</strong></td>
                     <td>${esc(r.fornecedor || '-')}</td>
                     <td>${esc(viagem)}</td>
-                    <td><span class="rcv-chip ${riscoClasse === 'critico' ? 'warn' : ''}" title="${esc(r.risco_estoque_detalhe || '')}">${esc(risco)}</span></td>
+                    <td><span class="rcv-chip rcv-chip-risk ${riscoClasseUi}" title="${esc(r.risco_estoque_detalhe || '')}">${esc(risco)}</span></td>
                     <td>${esc(r.tipo_logistico === 'COLETA' ? (r.viagem ? 'Coleta em viagem' : 'Coleta sem viagem') : 'Entrega do fornecedor')}</td>
                     <td style="text-align:right;" class="no-print">${acao}</td>
                 </tr>

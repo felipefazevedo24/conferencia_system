@@ -266,11 +266,44 @@ def _to_float(value) -> float:
 
 
 def _codigo_item_oc(item: dict) -> str:
-    for key in ("cod_interno", "codigo", "codigo_produto", "produto_codigo"):
-        code = str(item.get(key) or "").strip().upper()
+    for key in (
+        "cod_interno",
+        "codigo",
+        "codigo_produto",
+        "produto_codigo",
+        "codigo_item",
+        "codigo_material",
+        "item_codigo",
+        "material",
+    ):
+        code = re.sub(r"[^A-Z0-9]", "", str(item.get(key) or "").strip().upper())
         if code:
             return code
     return ""
+
+
+def _mapa_estoque_aliases(estoque_por_codigo: dict[str, dict]) -> dict[str, dict]:
+    aliases: dict[str, dict] = {}
+    for codigo, payload in (estoque_por_codigo or {}).items():
+        bruto = str(codigo or "").strip().upper()
+        normalizado = re.sub(r"[^A-Z0-9]", "", bruto)
+        if not bruto and not normalizado:
+            continue
+
+        chaves = {bruto, normalizado}
+        sem_zero = normalizado.lstrip("0")
+        if sem_zero:
+            chaves.add(sem_zero)
+
+        somente_digitos = re.sub(r"\D", "", normalizado)
+        if somente_digitos:
+            chaves.add(somente_digitos)
+            chaves.add(somente_digitos.lstrip("0") or "0")
+
+        for chave in chaves:
+            if chave:
+                aliases.setdefault(chave, payload)
+    return aliases
 
 
 def _payload_vazio_recebimento(ano: int, mes: int, inicio: date, fim: date, aviso: str = "") -> dict:
@@ -401,9 +434,11 @@ def recebimento_calendario_dados():
 
     ocs_mes = sorted({e["numero_oc"] for e in eventos_base})
     estoque_por_codigo: dict[str, dict] = {}
+    estoque_aliases: dict[str, dict] = {}
     try:
         estoque_payload = buscar_estoque_grv(forcar_atualizacao=False)
         estoque_por_codigo = estoque_payload.get("por_codigo") or {}
+        estoque_aliases = _mapa_estoque_aliases(estoque_por_codigo)
     except Exception:
         current_app.logger.warning("Calendário de recebimento sem risco de estoque: estoque GRV indisponível")
 
@@ -514,7 +549,7 @@ def recebimento_calendario_dados():
         risco_estoque_label = "Sem dados"
         risco_estoque_detalhe = "Sem itens da OC ou sem saldo disponível para cálculo."
         resumo_itens = itens_por_oc.get(numero_oc) or {}
-        if resumo_itens and estoque_por_codigo:
+        if resumo_itens and estoque_aliases:
             cobertura_critica = False
             cobertura_atencao = False
             faltas = 0
@@ -522,7 +557,7 @@ def recebimento_calendario_dados():
             for codigo_item, vals in resumo_itens.items():
                 qtd_oc = float(vals.get("qtd") or 0)
                 consumo_diario = float(vals.get("consumo") or 0)
-                saldo = float((estoque_por_codigo.get(codigo_item) or {}).get("qtde_total") or 0)
+                saldo = float((estoque_aliases.get(codigo_item) or {}).get("qtde_total") or 0)
                 if consumo_diario > 0:
                     dias_cobertura = saldo / consumo_diario if consumo_diario else 0
                     if dias_cobertura < 3:
