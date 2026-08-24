@@ -682,12 +682,12 @@
     }
 
     function ocColunaHtml(p) {
-        const principal = escapeHtml(p.cod_ordem_compra || "—");
-        const extras = (p.po_ocs_vinculadas || []).length - 1; // -1 pra nao contar a propria OC principal
-        if (extras > 0) {
-            return `${principal} <span class="eui-badge" style="background:#eef2ff; color:#4338ca; border:1px solid #c7d2fe; margin-left:4px;" title="Essa PO agrupa ${extras + 1} OCs">+${extras} OC${extras > 1 ? "s" : ""}</span>`;
+        const vinculadas = p.po_ocs_vinculadas || [];
+        if (vinculadas.length > 1) {
+            const lista = vinculadas.map((oc) => escapeHtml(String(oc))).join("/");
+            return `<span title="Essa PO agrupa ${vinculadas.length} OCs">${lista}</span>`;
         }
-        return principal;
+        return escapeHtml(p.cod_ordem_compra || "—");
     }
 
     function renderTabela(processos) {
