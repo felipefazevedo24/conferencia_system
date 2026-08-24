@@ -1,232 +1,292 @@
 {% extends "base.html" %}
 
 {% block title %}Logistica | Ajuste de Estoque{% endblock %}
-{% block shell_title %}Ajuste de Estoque - Inventario{% endblock %}
+{% block shell_title %}Logística — Ajuste de Estoque{% endblock %}
 
 {% block extra_head %}
 <style>
-    .inv-cons-shell { max-width: 1200px; margin: 0 auto; padding: 14px; }
-    .inv-cons-head {
-        background: linear-gradient(120deg, #0f172a, #0b62ce 65%, #1f9cb8);
-        color: #fff;
-        border-radius: 15px;
-        padding: 18px;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
-    }
-    .inv-cons-head h1 { margin: 0; font-size: 22px; }
-    .inv-cons-head p { margin: 7px 0 0; color: rgba(255,255,255,.87); }
-    .inv-cons-card {
-        margin-top: 12px;
-        background: #fff;
-        border: 1px solid #d9e4f2;
-        border-radius: 12px;
-        padding: 14px;
-        box-shadow: 0 8px 22px rgba(11, 35, 77, .08);
-    }
-    .inv-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-    .inv-step {
-        flex: 1; min-width: 150px;
-        border: 1px solid #d9e4f2; border-radius: 10px; padding: 8px 10px;
-        font-size: 11.5px; color: #546a84;
-    }
-    .inv-step strong { display: block; font-size: 13px; color: #17375d; }
-    .inv-actions { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .inv-btn {
-        border: 1px solid #c7d7ec;
-        border-radius: 10px;
-        background: #f8fbff;
-        color: #1f3d60;
-        font-weight: 700;
-        padding: 9px 12px;
-        font-size: 13px;
-        text-decoration: none;
-        cursor: pointer;
-    }
-    .inv-btn.primary { background: #0a6ed1; border-color: #0a6ed1; color: #fff; }
-    .inv-btn.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
-    .inv-btn.sm { padding: 6px 10px; font-size: 12px; }
-    .inv-actions select { border: 1px solid #bfd0e3; border-radius: 10px; padding: 9px 11px; font-size: 13px; }
-    .inv-table-wrap { overflow: auto; }
-    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .inv-table th, .inv-table td { padding: 8px; border-bottom: 1px solid #e4ebf5; text-align: left; }
-    .inv-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .35px; color: #3b5676; background: #f6faff; }
-    .inv-badge { display:inline-flex; align-items:center; gap:5px; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
-    .inv-badge.validacao { background: #fef3c7; color: #92400e; }
-    .inv-badge.finance { background: #dbeafe; color: #1e40af; }
-    .inv-badge.fiscal { background: #ede9fe; color: #5b21b6; }
-    .inv-badge.concluido { background: #dcfce7; color: #166534; }
-    .inv-badge.descartado { background: #f1f5f9; color: #64748b; }
-    .inv-dif-pos { color: #166534; font-weight: 700; }
-    .inv-dif-neg { color: #991b1b; font-weight: 700; }
-    .inv-hist { font-size: 11px; color: #64748b; margin-top: 3px; }
+    .ia-wrap { display: grid; gap: 18px; }
+    .ia-table-wrap { overflow-x: auto; }
+    .ia-empty { padding: 40px 24px; text-align: center; color: var(--eui-muted); font-weight: 600; }
+    .eui-stat.is-clickable { cursor: pointer; }
+    .eui-stat.is-active { border-color: var(--eui-primary); box-shadow: var(--eui-shadow-md); }
+
+    /* Menu de ações (kebab) - mesmo padrão do Comex/Conferência de Expedição. */
+    .ia-actions-btn { border: 1px solid var(--eui-border, #d1d5db); background: var(--eui-surface, #fff); border-radius: 6px; width: 32px; height: 32px; cursor: pointer; color: var(--eui-text, #374151); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+    .ia-actions-btn:hover { background: var(--eui-surface-2, #f3f4f6); }
+    .ia-actions-menu { position: fixed; width: max-content; margin: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.18); min-width: 220px; z-index: 10001; padding: 6px; display: none; flex-direction: column; }
+    .ia-actions-menu.open { display: flex; }
+    .ia-actions-menu button { display: flex; align-items: center; gap: 8px; border: none; background: transparent; text-align: left; padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; width: 100%; }
+    .ia-actions-menu button:hover { background: #f3f4f6; }
+    .ia-actions-menu button.is-danger { color: #dc2626; }
+    .ia-actions-menu .ia-empty-mini { display: block; padding: 9px 10px; font-size: 12.5px; color: var(--eui-muted); }
+
+    .ia-dif-pos { color: var(--eui-success, #15803d); font-weight: 700; }
+    .ia-dif-neg { color: var(--eui-danger, #b91c1c); font-weight: 700; }
+    .ia-hist { font-size: 11px; color: var(--eui-muted); margin-top: 4px; line-height: 1.5; }
+    .ia-toast { position: fixed; top: 20px; right: 20px; z-index: 10200; background: var(--eui-surface); border: 1px solid var(--eui-border); border-left: 4px solid var(--eui-primary); border-radius: var(--eui-radius); box-shadow: var(--eui-shadow-md); padding: 14px 18px; font-size: 13px; font-weight: 600; color: var(--eui-text); max-width: 360px; display: none; }
+    .ia-toast.error { border-left-color: var(--eui-danger); }
+    .ia-toast.success { border-left-color: var(--eui-success); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="inv-cons-shell">
-    <section class="inv-cons-head">
-        <h1><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</h1>
-        <p>Itens divergentes detectados automaticamente contra o GRV a cada contagem do Inventário.</p>
-    </section>
+<div class="ia-wrap">
+    <div class="eui-stats" id="ia-metrics">
+        <div class="eui-stat is-clickable" data-filter=""><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-layer-group"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Todos</span><span class="eui-stat__value" id="ia-m-todos">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Validacao"><div class="eui-stat__icon eui-stat__icon--warning"><i class="fas fa-user-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando gestor</span><span class="eui-stat__value" id="ia-m-validacao">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Finance"><div class="eui-stat__icon eui-stat__icon--info"><i class="fas fa-coins"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Finance</span><span class="eui-stat__value" id="ia-m-finance">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Fiscal"><div class="eui-stat__icon eui-stat__icon--violet"><i class="fas fa-file-invoice-dollar"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Aguardando Fiscal</span><span class="eui-stat__value" id="ia-m-fiscal">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Concluido"><div class="eui-stat__icon eui-stat__icon--success"><i class="fas fa-circle-check"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Concluído</span><span class="eui-stat__value" id="ia-m-concluido">0</span></div></div>
+        <div class="eui-stat is-clickable" data-filter="Descartado"><div class="eui-stat__icon"><i class="fas fa-ban"></i></div><div class="eui-stat__body"><span class="eui-stat__label">Descartado</span><span class="eui-stat__value" id="ia-m-descartado">0</span></div></div>
+    </div>
 
-    <section class="inv-cons-card">
-        <div class="inv-steps">
-            <div class="inv-step"><strong>01 · Contagem</strong>Registro no Inventário (já existente).</div>
-            <div class="inv-step"><strong>02 · Validação</strong>Gestor confirma a diferença ou descarta.</div>
-            <div class="inv-step"><strong>03 · Finance</strong>Confirma o ajuste feito fora do sync.</div>
-            <div class="inv-step"><strong>04 · Fiscal</strong>Confirma a NF de ajuste emitida fora do sync.</div>
+    <div class="eui-card">
+        <div class="eui-card__head">
+            <div>
+                <h2 class="eui-card__title"><i class="fas fa-scale-balanced"></i> Ajuste de Estoque</h2>
+                <p class="eui-card__sub">Itens divergentes contra o GRV, do registro no Inventário até a conclusão com Finance e Fiscal.</p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="eui-btn eui-btn--subtle eui-btn--sm hidden" id="ia-btn-limpar-filtro"><i class="fas fa-filter-circle-xmark"></i> Limpar filtro</button>
+                <a class="eui-btn eui-btn--subtle" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventário</a>
+                <button class="eui-btn eui-btn--primary" id="ia-btn-atualizar"><i class="fas fa-rotate"></i> Atualizar</button>
+            </div>
         </div>
-
-        <div class="inv-actions">
-            <select id="flt-status">
-                <option value="">Todos os status</option>
-                <option value="Validacao">Aguardando validação (gestor)</option>
-                <option value="Finance">Aguardando Finance</option>
-                <option value="Fiscal">Aguardando Fiscal</option>
-                <option value="Concluido">Concluído</option>
-                <option value="Descartado">Descartado</option>
-            </select>
-            <button class="inv-btn" id="btn-atualizar" type="button"><i class="fas fa-rotate"></i> Atualizar</button>
-            <a class="inv-btn" href="/logistica/inventario/novo"><i class="fas fa-plus-circle"></i> Novo Inventário</a>
-            <a class="inv-btn" href="/logistica/inventario/consulta"><i class="fas fa-magnifying-glass"></i> Inventário Realizado</a>
+        <div class="eui-card__body eui-card__body--tight">
+            <div class="eui-toolbar" style="padding: 12px 16px;">
+                <div class="eui-input-group" style="flex:1; position:relative; max-width:420px;">
+                    <i class="fas fa-magnifying-glass" style="position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--eui-text-muted, #8a94a6); font-size:13px; pointer-events:none;"></i>
+                    <input type="search" id="ia-busca" class="eui-input" autocomplete="off" placeholder="Buscar por local ou código do produto…" style="width:100%; padding-left:34px;">
+                </div>
+            </div>
+            <div class="ia-table-wrap">
+                <table class="erp-table">
+                    <thead>
+                        <tr>
+                            <th>Detectado em</th>
+                            <th>Local</th>
+                            <th>Cód. Produto</th>
+                            <th>Qtd Contada</th>
+                            <th>Qtd Estoque</th>
+                            <th>Diferença</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ia-tbody"><tr><td colspan="8" class="ia-empty">Carregando…</td></tr></tbody>
+                </table>
+            </div>
         </div>
-
-        <div class="inv-table-wrap">
-            <table class="inv-table">
-                <thead>
-                    <tr>
-                        <th>Detectado em</th>
-                        <th>Local</th>
-                        <th>Cód. Produto</th>
-                        <th>Qtd Contada</th>
-                        <th>Qtd Estoque</th>
-                        <th>Diferença</th>
-                        <th>Status</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody id="tb-ajustes">
-                    <tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+    </div>
 </div>
+
+<div class="ia-actions-menu" id="ia-acoes-menu"></div>
+<div class="ia-toast" id="ia-toast"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
+    const $ = (id) => document.getElementById(id);
     const PODE_VALIDAR = {{ pode_validar | tojson }};
     const PODE_FINANCE = {{ pode_finance | tojson }};
     const PODE_FISCAL = {{ pode_fiscal | tojson }};
 
-    const tb = document.getElementById('tb-ajustes');
-    const fltStatus = document.getElementById('flt-status');
+    function toast(msg, tipo) {
+        const el = $("ia-toast");
+        el.textContent = msg;
+        el.className = "ia-toast" + (tipo ? " " + tipo : "");
+        el.style.display = "block";
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.style.display = "none"; }, 4200);
+    }
 
-    function esc(v) {
-        return String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-    function fmtQtd(v) {
-        return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
-    }
     async function api(url, options) {
-        const resp = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}));
+        const resp = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, options || {}));
         const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(data.error || ("Erro " + resp.status));
         return data;
     }
 
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function fmtQtd(v) {
+        return Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+    }
+
+    let ajustesCache = [];
+    let filtroAtual = "";
+
+    async function carregar() {
+        try {
+            const params = new URLSearchParams();
+            if (filtroAtual) params.set("status", filtroAtual);
+            const data = await api("/api/logistica/inventario-ajustes?" + params.toString());
+            ajustesCache = data.ajustes || [];
+            renderMetricas(ajustesCache);
+            renderTabela(filtrarPorBusca(ajustesCache));
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    }
+
+    function filtrarPorBusca(lista) {
+        const termo = $("ia-busca").value.trim().toLowerCase();
+        if (!termo) return lista;
+        return lista.filter((a) =>
+            (a.local_codigo || "").toLowerCase().includes(termo) ||
+            (a.codigo_produto || "").toLowerCase().includes(termo)
+        );
+    }
+
+    function renderMetricas(lista) {
+        const cont = { Validacao: 0, Finance: 0, Fiscal: 0, Concluido: 0, Descartado: 0 };
+        lista.forEach((a) => { cont[a.status_modulo] = (cont[a.status_modulo] || 0) + 1; });
+        $("ia-m-todos").textContent = lista.length;
+        $("ia-m-validacao").textContent = cont.Validacao;
+        $("ia-m-finance").textContent = cont.Finance;
+        $("ia-m-fiscal").textContent = cont.Fiscal;
+        $("ia-m-concluido").textContent = cont.Concluido;
+        $("ia-m-descartado").textContent = cont.Descartado;
+    }
+
+    const CORES_STATUS = {
+        Validacao: "#b45309", Finance: "#0369a1", Fiscal: "#7c3aed",
+        Concluido: "#15803d", Descartado: "#64748b",
+    };
     const LABEL_STATUS = {
-        Validacao: 'Aguardando gestor', Finance: 'Aguardando Finance',
-        Fiscal: 'Aguardando Fiscal', Concluido: 'Concluído', Descartado: 'Descartado',
+        Validacao: "Aguardando gestor", Finance: "Aguardando Finance",
+        Fiscal: "Aguardando Fiscal", Concluido: "Concluído", Descartado: "Descartado",
     };
     function badgeStatus(a) {
-        const cls = (a.status_slug || 'validacao');
-        return `<span class="inv-badge ${cls}">${esc(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
+        const cor = CORES_STATUS[a.status_modulo] || "#475569";
+        return `<span class="eui-badge" style="background:${cor}1a; color:${cor}; border:1px solid ${cor}40;">${escapeHtml(LABEL_STATUS[a.status_modulo] || a.status_modulo)}</span>`;
     }
 
     function historicoHtml(a) {
         const linhas = [];
-        if (a.gestor_confirmado_em) linhas.push(`Gestor: ${esc(a.gestor_confirmado_por)} em ${esc(a.gestor_confirmado_em)}${a.gestor_justificativa ? ' — ' + esc(a.gestor_justificativa) : ''}`);
-        if (a.finance_concluido_em) linhas.push(`Finance: ${esc(a.finance_concluido_por)} em ${esc(a.finance_concluido_em)}${a.finance_observacao ? ' — ' + esc(a.finance_observacao) : ''}`);
-        if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${esc(a.fiscal_concluido_por)} em ${esc(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? ' — NF ' + esc(a.fiscal_nf_numero) : ''}`);
-        return linhas.length ? `<div class="inv-hist">${linhas.join('<br>')}</div>` : '';
+        if (a.gestor_confirmado_em) linhas.push(`Gestor: ${escapeHtml(a.gestor_confirmado_por)} em ${escapeHtml(a.gestor_confirmado_em)}${a.gestor_justificativa ? " — " + escapeHtml(a.gestor_justificativa) : ""}`);
+        if (a.finance_concluido_em) linhas.push(`Finance: ${escapeHtml(a.finance_concluido_por)} em ${escapeHtml(a.finance_concluido_em)}${a.finance_observacao ? " — " + escapeHtml(a.finance_observacao) : ""}`);
+        if (a.fiscal_concluido_em) linhas.push(`Fiscal: ${escapeHtml(a.fiscal_concluido_por)} em ${escapeHtml(a.fiscal_concluido_em)}${a.fiscal_nf_numero ? " — NF " + escapeHtml(a.fiscal_nf_numero) : ""}`);
+        return linhas.length ? `<div class="ia-hist">${linhas.join("<br>")}</div>` : "";
     }
 
-    function acaoHtml(a) {
-        if (a.status_modulo === 'Validacao' && PODE_VALIDAR) {
-            return `<button class="inv-btn sm primary" data-act="confirmar" data-id="${a.id}">Confirmar</button>
-                    <button class="inv-btn sm danger" data-act="descartar" data-id="${a.id}">Descartar</button>`;
-        }
-        if (a.status_modulo === 'Finance' && PODE_FINANCE) {
-            return `<button class="inv-btn sm primary" data-act="finance" data-id="${a.id}">Confirmar ajuste</button>`;
-        }
-        if (a.status_modulo === 'Fiscal' && PODE_FISCAL) {
-            return `<button class="inv-btn sm primary" data-act="fiscal" data-id="${a.id}">Confirmar NF</button>`;
-        }
-        return '<span style="color:#94a3b8; font-size:12px;">—</span>';
-    }
-
-    function render(ajustes) {
-        if (!ajustes || !ajustes.length) {
-            tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Nenhum ajuste encontrado.</td></tr>';
+    function renderTabela(lista) {
+        const tb = $("ia-tbody");
+        if (!lista.length) {
+            tb.innerHTML = '<tr><td colspan="8" class="ia-empty">Nenhum ajuste encontrado</td></tr>';
             return;
         }
-        tb.innerHTML = ajustes.map((a) => `
+        tb.innerHTML = lista.map((a) => `
             <tr>
-                <td>${esc(a.criado_em)}</td>
-                <td>${esc(a.local_codigo)}</td>
-                <td>${esc(a.codigo_produto)}</td>
-                <td>${fmtQtd(a.qtde_contada)} ${esc(a.unidade_medida)}</td>
-                <td>${fmtQtd(a.qtde_estoque_no_momento)} ${esc(a.unidade_medida)}</td>
-                <td class="${a.diferenca >= 0 ? 'inv-dif-pos' : 'inv-dif-neg'}">${a.diferenca >= 0 ? '+' : ''}${fmtQtd(a.diferenca)}</td>
+                <td>${escapeHtml(a.criado_em)}</td>
+                <td>${escapeHtml(a.local_codigo)}</td>
+                <td>${escapeHtml(a.codigo_produto)}</td>
+                <td>${fmtQtd(a.qtde_contada)} ${escapeHtml(a.unidade_medida)}</td>
+                <td>${fmtQtd(a.qtde_estoque_no_momento)} ${escapeHtml(a.unidade_medida)}</td>
+                <td class="${a.diferenca >= 0 ? 'ia-dif-pos' : 'ia-dif-neg'}">${a.diferenca >= 0 ? "+" : ""}${fmtQtd(a.diferenca)}</td>
                 <td>${badgeStatus(a)}${historicoHtml(a)}</td>
-                <td>${acaoHtml(a)}</td>
+                <td style="text-align:right;"><button class="ia-actions-btn" data-kebab="${a.id}" title="Ações"><i class="fas fa-ellipsis-vertical"></i></button></td>
             </tr>
-        `).join('');
+        `).join("");
     }
 
-    async function carregar() {
-        tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:14px;">Carregando...</td></tr>';
-        try {
-            const params = new URLSearchParams();
-            if (fltStatus.value) params.set('status', fltStatus.value);
-            const data = await api('/api/logistica/inventario-ajustes?' + params.toString());
-            render(data.ajustes || []);
-        } catch (err) {
-            tb.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:14px;">Erro: ${esc(err.message)}</td></tr>`;
+    function ajustePorId(id) {
+        return ajustesCache.find((a) => String(a.id) === String(id));
+    }
+
+    // ── Menu de ações (kebab) ───────────────────────────────────────────
+    function montarAcoes(a) {
+        const it = (act, icon, label, danger) =>
+            `<button data-act="${act}" data-id="${a.id}"${danger ? ' class="is-danger"' : ""}><i class="fas ${icon}"></i> ${label}</button>`;
+        if (a.status_modulo === "Validacao" && PODE_VALIDAR) {
+            return it("confirmar", "fa-check", "Confirmar divergência") + it("descartar", "fa-ban", "Descartar", true);
         }
+        if (a.status_modulo === "Finance" && PODE_FINANCE) {
+            return it("finance", "fa-coins", "Confirmar ajuste executado");
+        }
+        if (a.status_modulo === "Fiscal" && PODE_FISCAL) {
+            return it("fiscal", "fa-file-invoice-dollar", "Confirmar NF emitida");
+        }
+        return '<span class="ia-empty-mini">Sem ação disponível pra você aqui.</span>';
     }
 
-    tb.addEventListener('click', async (e) => {
-        const btn = e.target.closest('button[data-act]');
+    function acoesMenuEl() { return $("ia-acoes-menu"); }
+    function toggleMenuAcoes(btnEl, id) {
+        const menu = acoesMenuEl();
+        const jaAberto = menu.classList.contains("open") && menu.dataset.id === String(id);
+        fecharMenuAcoes();
+        if (jaAberto) return;
+        const a = ajustePorId(id);
+        if (!a) return;
+        menu.innerHTML = montarAcoes(a);
+        menu.dataset.id = String(id);
+        const rect = btnEl.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = "auto";
+        menu.style.right = (window.innerWidth - rect.right) + "px";
+        menu.classList.add("open");
+    }
+    function fecharMenuAcoes() { acoesMenuEl().classList.remove("open"); }
+
+    document.addEventListener("click", (e) => {
+        const kebabBtn = e.target.closest("[data-kebab]");
+        if (kebabBtn) { toggleMenuAcoes(kebabBtn, kebabBtn.dataset.kebab); return; }
+        const menu = acoesMenuEl();
+        if (menu.classList.contains("open") && !menu.contains(e.target)) fecharMenuAcoes();
+    });
+
+    acoesMenuEl().addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-act]");
         if (!btn) return;
         const id = btn.dataset.id;
         const act = btn.dataset.act;
+        fecharMenuAcoes();
         try {
-            if (act === 'confirmar') {
-                const justificativa = prompt('Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:') || '';
-                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: 'POST', body: JSON.stringify({ justificativa }) });
-            } else if (act === 'descartar') {
-                const motivo = prompt('Motivo do descarte (obrigatório - ex.: erro de contagem, não precisa de ajuste):') || '';
+            if (act === "confirmar") {
+                const justificativa = prompt("Justificativa (opcional) pra confirmar essa divergência e enviar pro Finance:") || "";
+                await api(`/api/logistica/inventario-ajustes/${id}/confirmar`, { method: "POST", body: JSON.stringify({ justificativa }) });
+            } else if (act === "descartar") {
+                const motivo = prompt("Motivo do descarte (obrigatório - ex.: erro de contagem, não precisa de ajuste):") || "";
                 if (!motivo.trim()) return;
-                await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: 'POST', body: JSON.stringify({ motivo }) });
-            } else if (act === 'finance') {
-                const observacao = prompt('Observação (opcional) sobre o ajuste de estoque executado:') || '';
-                await api(`/api/logistica/inventario-ajustes/${id}/finance-concluir`, { method: 'POST', body: JSON.stringify({ observacao }) });
-            } else if (act === 'fiscal') {
-                const nf_numero = prompt('Número da NF de ajuste emitida (opcional):') || '';
-                await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: 'POST', body: JSON.stringify({ nf_numero }) });
+                await api(`/api/logistica/inventario-ajustes/${id}/descartar`, { method: "POST", body: JSON.stringify({ motivo }) });
+            } else if (act === "finance") {
+                const observacao = prompt("Observação (opcional) sobre o ajuste de estoque executado:") || "";
+                await api(`/api/logistica/inventario-ajustes/${id}/finance-concluir`, { method: "POST", body: JSON.stringify({ observacao }) });
+            } else if (act === "fiscal") {
+                const nf_numero = prompt("Número da NF de ajuste emitida (opcional):") || "";
+                await api(`/api/logistica/inventario-ajustes/${id}/fiscal-concluir`, { method: "POST", body: JSON.stringify({ nf_numero }) });
+            } else {
+                return;
             }
+            toast("Atualizado!", "success");
             carregar();
         } catch (err) {
-            alert(err.message);
+            toast(err.message, "error");
         }
     });
 
-    fltStatus.addEventListener('change', carregar);
-    document.getElementById('btn-atualizar').addEventListener('click', carregar);
+    // ── Filtro pelos cards de status ───────────────────────────────────
+    $("ia-metrics").addEventListener("click", (e) => {
+        const card = e.target.closest(".eui-stat[data-filter]");
+        if (!card) return;
+        filtroAtual = card.dataset.filter;
+        $("ia-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        card.classList.add("is-active");
+        $("ia-btn-limpar-filtro").classList.toggle("hidden", !filtroAtual);
+        carregar();
+    });
+    $("ia-btn-limpar-filtro").addEventListener("click", () => {
+        filtroAtual = "";
+        $("ia-metrics").querySelectorAll(".eui-stat").forEach((el) => el.classList.remove("is-active"));
+        $("ia-metrics").querySelector('.eui-stat[data-filter=""]').classList.add("is-active");
+        $("ia-btn-limpar-filtro").classList.add("hidden");
+        carregar();
+    });
+    $("ia-btn-atualizar").addEventListener("click", carregar);
+    $("ia-busca").addEventListener("input", () => renderTabela(filtrarPorBusca(ajustesCache)));
 
     carregar();
 })();
